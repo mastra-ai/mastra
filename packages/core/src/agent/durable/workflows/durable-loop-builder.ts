@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../../../error';
 import type { PubSub } from '../../../events/pubsub';
-import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
-import { AgenticLoopBuilder } from '../../../loop/loop-builder';
+import { BaseAgenticLoopBuilder } from '../../../loop/base-loop-builder';
+import type { LoopContinuationPredicate } from '../../../loop/base-loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
@@ -12,7 +12,13 @@ import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
-import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityInstance,
+  Span,
+  SpanType,
+} from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
@@ -43,6 +49,7 @@ import type {
   DurableAgenticExecutionOutput,
   DurableLLMStepOutput,
   DurableToolCallOutput,
+  RunRegistryEntry,
 } from '../types';
 import { createRunMessageList } from '../utils/run-message-list';
 import { runDurableFinishSideEffects } from './finalize-run';
@@ -196,6 +203,7 @@ const durableAgenticInputSchema = z.object({
  * Extends base schema with model list for fallback support.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  agentVersionId: z.string().optional(),
   // Model list for fallback support
   modelList: z.array(z.any()).optional(),
 });
@@ -233,12 +241,23 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
   // Not `getAgentById`, which reports a missing agent as an error; this runs on every step.
   const agent = Object.values(rt.mastra?.listAgents() ?? {}).find(registered => registered.id === rt.agentId);
   // An agent not registered here leaves the engine's bus to go by.
-  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
+  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub ?? agent?.__getStreamBus?.()?.pubsub;
   return agentBus?.__replaysTopic?.(topic) ?? true;
 }
 
+function liveOrRebuiltAgentSpan(
+  agentSpanData: ExportedSpan<SpanType.AGENT_RUN> | undefined,
+  reg: RunRegistryEntry | undefined,
+  observability: ObservabilityInstance | undefined,
+): Span<SpanType.AGENT_RUN> | undefined {
+  if (!agentSpanData) return undefined;
+  return (
+    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ?? observability?.rebuildSpan(agentSpanData)
+  );
+}
+
 /**
- * Builds the durable agent loop on the shared `AgenticLoopBuilder` topology.
+ * Builds the durable agent loop on the shared `BaseAgenticLoopBuilder` shape.
  *
  * The durable loop implements the same agentic loop pattern as the main loop
  * (LLM execution → tool-call foreach → mapping → background check → signal
@@ -246,21 +265,18 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
  * through workflow input/output so it is durable across process restarts and
  * execution engine replays.
  *
- * Migration status: every method is still a whole-method
- * override delegating to the durable step files. As the shared cores land,
- * these overrides shrink until only the runtime hooks remain (state
- * resolution via registry + serialized `messageListState`, pubsub chunk
- * transport, the evented `workflowFactory`, and snapshot policies).
+ * Every method delegates to the durable step files; behavior shared with the
+ * main loop lives in the shared step cores (`loop/shared`), not in a common
+ * superclass.
  */
-export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
+export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
   readonly #options?: DurableAgenticWorkflowOptions;
   readonly #maxSteps: number;
   readonly #shouldPersistSnapshot: ShouldPersistSnapshotFn;
 
   constructor(options?: DurableAgenticWorkflowOptions) {
-    // No main-loop params: the durable loop resolves its runtime from the run
-    // registry and serialized iteration state. Any base method that reads
-    // `this.params` on this path throws (see AgenticLoopBuilder).
+    // The durable loop resolves its runtime from the run registry and
+    // serialized iteration state rather than per-run params.
     super();
     this.#options = options;
     this.#maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
@@ -512,6 +528,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         return params.bail<IterationState>({
           ...update,
           ...(await storeAccumulatedSteps(params, accumulatedSteps)),
+          agentVersionId: initData.agentVersionId,
           modelList: initData.modelList,
         });
       }
@@ -581,6 +598,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             return {
               runId: state.runId,
               agentId: state.agentId,
+              agentVersionId: state.agentVersionId,
               agentName: state.agentName,
               messageListState: state.messageListState,
               initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
@@ -683,6 +701,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const newIterationState: IterationState = {
               ...baseUpdate,
               ...(await storeAccumulatedSteps(params, accumulatedSteps)),
+              agentVersionId: initData.agentVersionId,
               modelList: initData.modelList,
             };
 
@@ -1155,8 +1174,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            const textRewritten = !!lastStep && finishResult.outputTextChanged;
-            if (lastStep && finishResult.outputTextChanged) {
+            const rewrittenStepTexts = finishResult.rewrittenStepTexts;
+            const textRewritten = !!lastStep && (finishResult.outputTextChanged || !!rewrittenStepTexts);
+            if (rewrittenStepTexts) {
+              for (const [index, text] of rewrittenStepTexts.entries()) {
+                storedSteps[index] = { ...storedSteps[index]!, text };
+                steps[index] = { ...steps[index]!, text };
+              }
+              finalText = finishResult.outputText;
+            } else if (lastStep && finishResult.outputTextChanged) {
               lastStep.text = finishResult.outputText;
               steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
@@ -1216,12 +1242,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               state: state.state,
             };
 
+            // The state carries the facts across workers; the registry is the fallback for
+            // runs whose snapshots predate those fields.
+            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
-                messages: finishMessages,
+                messages: finishResult.finishMessages ?? finishMessages,
                 ...(textRewritten && { textRewritten }),
+                ...(stopCause && { stopCause }),
               });
             }
 
@@ -1229,11 +1261,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
-            // The state carries the facts across workers; the registry is the fallback for
-            // runs whose snapshots predate those fields.
-            const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
             const finishReason = finalOutput.stepResult?.reason;
-            const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
             const recordedTermination = state.tracingTermination ?? reg?.tracingTermination;
             if (!stopCause && (finishReason === 'stop' || finishReason === 'tool-calls')) {
               logger?.warn?.(
@@ -1294,23 +1322,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
                   });
                 }
-                if (agentSpanData) {
-                  const agentSpan =
-                    liveSegmentSpan(agentSpanData, reg?.resumeAgentSpan, reg?.agentSpan) ??
-                    observability.rebuildSpan(agentSpanData);
-                  agentSpan?.end({
-                    ...termination,
-                    output: { text: finalText },
-                    ...(clocks ? { attributes: clocks } : {}),
-                  });
-                }
+                liveOrRebuiltAgentSpan(agentSpanData, reg, observability)?.end({
+                  ...termination,
+                  output: { text: finalText },
+                  ...(clocks ? { attributes: clocks } : {}),
+                });
               }
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }
 
-            // A recovery that finds this step saved ends its own spans with the same outcome.
-            return { ...finalOutput, tracingTermination: termination };
+            // A recovery that finds this step saved ends its own spans with the same outcome and
+            // republishes FINISH with the same stop cause.
+            return { ...finalOutput, tracingTermination: termination, ...(stopCause && { stopCause }) };
           },
           { id: MAP_FINAL_OUTPUT_STEP_ID },
         )
@@ -1326,12 +1350,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   hydrateMessageListState(params, initData.messageListState),
                   hydrateMessageListState(params, inputData.messageListState),
                 ]);
+                const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
+                const { agentSpanData } = segmentSpanData(requestContext, initData.runId, initData, reg);
+                const agentSpan = liveOrRebuiltAgentSpan(
+                  agentSpanData,
+                  reg,
+                  (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext }),
+                );
                 void executeDurableAgentScorers({
                   initData: { ...initData, messageListState: initial },
                   finalOutput: { ...inputData, messageListState: final },
                   mastra: mastra as Mastra | undefined,
                   requestContext,
-                  tracingContext,
+                  tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
                   loadStoredMessages: loadRunStoredMessages(params),
                   scorerInstances: takeRunScorerInstances(initData.runId, mastra as Mastra | undefined),
                 }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));

@@ -431,8 +431,8 @@ export function RuleBuilderDialog({
           )}
           {!readOnly &&
             (step === 'review' || (initial && canSave) ? (
-              <Button variant="primary" disabled={!canSave || saving} onClick={save}>
-                {saving ? 'Saving…' : initial ? 'Save rule' : 'Create rule'}
+              <Button variant="primary" disabled={!canSave} onClick={save} loading={saving}>
+                {initial ? 'Save rule' : 'Create rule'}
               </Button>
             ) : (
               <Button

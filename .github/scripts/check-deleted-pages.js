@@ -47,6 +47,15 @@ function filePathToUrlPath(filePath) {
   return urlPath;
 }
 
+// URLs still served by pages generated at build time, so their old source files may be deleted without redirects.
+// The Gateway API reference is generated from the Gateway OpenAPI spec; `slug` frontmatter keeps the old URLs.
+export async function getGeneratedUrlPaths() {
+  const { GATEWAY_API_PAGES } = await import('../../docs/scripts/gateway-api/pages.ts');
+  const { PAGES_DIR } = await import('../../docs/scripts/gateway-api/constants.ts');
+  const base = PAGES_DIR.replace(/^src\/content\/en\//, '');
+  return new Set(Object.values(GATEWAY_API_PAGES).map(({ slug }) => `/${base}/${slug}`));
+}
+
 // Load redirects from vercel.json
 function getExistingRedirects() {
   try {
@@ -117,7 +126,7 @@ function hasRedirect(urlPath, redirects) {
 }
 
 // Main function
-function main() {
+async function main() {
   console.log('🔍 Checking for removed pages without redirects...\n');
 
   const deletedFiles = getDeletedMdxFiles();
@@ -134,10 +143,16 @@ function main() {
   const redirects = getExistingRedirects();
   console.log(`Found ${redirects.length} redirects in vercel.json\n`);
 
+  const generatedUrlPaths = await getGeneratedUrlPaths();
   const missingRedirects = [];
 
   for (const filePath of deletedFiles) {
     const urlPath = filePathToUrlPath(filePath);
+
+    if (generatedUrlPaths.has(urlPath)) {
+      console.log(`  ${urlPath} is still served by a generated page`);
+      continue;
+    }
 
     if (!hasRedirect(urlPath, redirects)) {
       missingRedirects.push({ filePath, urlPath });
@@ -166,5 +181,5 @@ function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main();
+  await main();
 }

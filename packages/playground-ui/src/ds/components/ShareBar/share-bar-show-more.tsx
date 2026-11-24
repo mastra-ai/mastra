@@ -37,7 +37,7 @@ export function ShowMore({
         </button>
       )}
       {left > 0 && (
-        <span className="ml-auto pr-2 text-body-sm text-placeholder tabular-nums">
+        <span className="ml-auto pr-2 text-body-sm text-subtle-foreground tabular-nums">
           {n.format(shown)} of {n.format(total)}
         </span>
       )}

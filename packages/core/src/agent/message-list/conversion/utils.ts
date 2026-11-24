@@ -88,14 +88,19 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
 
 /**
  * The parts as memory persists them: `updateWorkingMemory` tool steps removed, and
- * `<working_memory>` tags and surrounding whitespace stripped from text.
+ * `<working_memory>` tags and surrounding whitespace stripped from text. Observational
+ * memory's `data-om-*` marker parts are also left out: it writes them onto the stored copy
+ * only (when it has no live message list to add them to), so a stored copy that gained one
+ * is still the same message.
  */
 function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
-  return removeWorkingMemoryToolInvocationParts(parts).map(part =>
-    part.type === 'text'
-      ? { ...part, text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim() }
-      : part,
-  );
+  return removeWorkingMemoryToolInvocationParts(parts)
+    .filter(part => !part.type.startsWith('data-om-'))
+    .map(part =>
+      part.type === 'text'
+        ? { ...part, text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim() }
+        : part,
+    );
 }
 
 /**

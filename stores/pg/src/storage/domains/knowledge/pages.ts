@@ -3,6 +3,7 @@ import {
   knowledgePageKeyProblem,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
+  KnowledgeInvalidCursorError,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
@@ -13,6 +14,7 @@ import type {
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
+  KnowledgePageActivityInput,
   KnowledgePageActivityEvent,
   KnowledgePageBodyLink,
   KnowledgePageLinkCounts,
@@ -302,7 +304,7 @@ function decodeCursor(cursor: string, arity: number): string[] {
   } catch {
     // fall through
   }
-  throw new Error('Invalid Knowledge cursor');
+  throw new KnowledgeInvalidCursorError(cursor);
 }
 
 function clampLimit(limit: number | undefined, max: number): number {
@@ -398,6 +400,9 @@ function isUniqueViolation(error: unknown): boolean {
  * current home scopes), so a move or merge, which rewrites `scopeId` on the moved pages in the same
  * transaction, can never leave a stale denormalized copy.
  */
+/** Rounds of lock-and-reread before a move whose subtree keeps changing is refused. */
+const MOVE_LOCK_ROUNDS = 3;
+
 export class PgKnowledgePages implements KnowledgePageStore {
   readonly #client: DbClient;
   readonly #schemaName?: string;
@@ -522,6 +527,50 @@ export class PgKnowledgePages implements KnowledgePageStore {
       UNION ALL
       SELECT c."id" FROM ${this.#pages} c JOIN sub ON c."parentId" = sub."id" WHERE NOT c."isScope"
     )`;
+  }
+
+  /**
+   * Locks the live descendants of `rootId` and returns their ids once the set stops changing. One
+   * recursive locking read decides membership from its own snapshot, so a child committed while it
+   * waited for a lock is missed; a fresh read after locking sees it. Once every live member is
+   * locked, a new child can't be added under one (`createPage` locks its parent) until this
+   * transaction ends. Each read stops at `cap` rows, and a subtree that reaches it is refused before
+   * any of it is locked.
+   *
+   * Deleted pages aren't locked: they get no children and nothing writes them except a move or
+   * merge of a live ancestor, which holds that ancestor's lock. They still move with their parent.
+   */
+  async #lockStableSubtree(db: Queryable, rootId: string, cap: number): Promise<string[]> {
+    const core = await loadPagesCore();
+    const read = async () => {
+      const ids = (
+        await this.#rows(
+          db,
+          `WITH RECURSIVE sub("id") AS (
+             SELECT c."id" FROM ${this.#pages} c WHERE c."parentId" = $1 AND NOT c."isScope" AND c."deletedAt" IS NULL
+             UNION ALL
+             SELECT c."id" FROM ${this.#pages} c JOIN sub ON c."parentId" = sub."id" WHERE NOT c."isScope" AND c."deletedAt" IS NULL
+           ) SELECT "id" FROM sub LIMIT $2`,
+          [rootId, cap],
+        )
+      ).map(row => String(row.id));
+      // With the root, `cap` descendants already make one page too many.
+      if (ids.length >= cap) throw new core.KnowledgeMoveTooLargeError(rootId, ids.length + 1);
+      return ids;
+    };
+    const locked = new Set<string>();
+    let members = await read();
+    for (let round = 0; round < MOVE_LOCK_ROUNDS; round++) {
+      const fresh = members.filter(id => !locked.has(id));
+      if (fresh.length) {
+        await db.query(`SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1) ORDER BY "id" FOR UPDATE`, [fresh]);
+        for (const id of fresh) locked.add(id);
+      }
+      const again = await read();
+      if (again.length === locked.size && again.every(id => locked.has(id))) return again;
+      members = again;
+    }
+    throw new KnowledgeConflictError(rootId);
   }
 
   /** Live descendants, capped, and the deepest live level. */
@@ -802,6 +851,19 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   // Pages ----------------------------------------------------------------------------------------
 
+  /** Inside a transaction: locks the pages' rows until commit, in id order. */
+  async lockPages(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    await this.#client.query(`SELECT "id" FROM ${this.#pages} WHERE "id" = ANY($1) ORDER BY "id" FOR UPDATE`, [
+      [...new Set(ids)],
+    ]);
+  }
+
+  async lockSubtree(rootId: string): Promise<string[]> {
+    const core = await loadPagesCore();
+    return this.#lockStableSubtree(this.#client, rootId, core.MAX_KNOWLEDGE_MOVE_PAGES);
+  }
+
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const params = new Params();
     const id = params.add(input.id);
@@ -1065,6 +1127,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
       const parent = await this.#requireLivePage(tx, input.parentId);
+      const live = await this.#lockStableSubtree(tx, input.id, core.MAX_KNOWLEDGE_MOVE_PAGES);
       const stats = await this.#subtreeStats(tx, input.id);
       if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {
         throw new core.KnowledgeMoveTooLargeError(input.id, stats.live + 1);
@@ -1079,8 +1142,14 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const position = input.position ?? core.knowledgePositionBetween(await this.#lastPosition(tx, parent.id));
       const now = new Date();
       try {
+        await tx.query(`UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" = ANY($1)`, [
+          live,
+          newScopeId,
+          delta,
+        ]);
+        // Deleted pages under the subtree follow it, as on the other stores.
         await tx.query(
-          `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub)`,
+          `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub) AND "deletedAt" IS NOT NULL`,
           [input.id, newScopeId, delta],
         );
         const rows = await this.#rows(
@@ -1680,13 +1749,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
@@ -1694,8 +1762,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const where = [filter.readable('s'), `(a."noteId" IS NULL OR ${this.#noteVisible(filter, 'a."noteId"')})`];
     if (input.scopeId) where.push(`s."id" = ${params.add(input.scopeId)}`);
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
-    if (input.cursor) {
-      const [createdAt, id] = decodeCursor(input.cursor, 2);
+    if (input.since) where.push(`a."createdAt" >= ${params.add(iso(input.since))}::timestamptz`);
+    if (input.until) where.push(`a."createdAt" < ${params.add(iso(input.until))}::timestamptz`);
+    const position = input.before
+      ? [iso(input.before.createdAt), input.before.id]
+      : input.cursor
+        ? decodeCursor(input.cursor, 2)
+        : undefined;
+    if (position) {
+      const [createdAt, id] = position;
       where.push(`(a."createdAt", a."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(

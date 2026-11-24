@@ -115,10 +115,10 @@ function TokenRow({
           <Button
             size="sm"
             icon={<TrashIcon />}
-            disabled={removeMutation.isPending}
             onClick={() => removeMutation.mutate()}
+            loading={removeMutation.isPending}
           >
-            {removeMutation.isPending ? 'Removing…' : 'Remove'}
+            Remove
           </Button>
         )}
       </div>
@@ -173,10 +173,11 @@ function TokenEditor({
             variant="primary"
             size="sm"
             icon={<IconCheckmark2Medium />}
-            disabled={saveMutation.isPending || !draft.trim()}
+            disabled={!draft.trim()}
             onClick={save}
+            loading={saveMutation.isPending}
           >
-            {saveMutation.isPending ? 'Saving…' : 'Save'}
+            Save
           </Button>
         </div>
       </div>

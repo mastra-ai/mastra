@@ -146,7 +146,7 @@ const SHARED_HOOKS = [
  * it visible. It is not a `ParitySnapshot` field, so it cannot be declared through `differences`;
  * each engine is pinned at its current tail instead, and these pins go stale when COR-1390 lands.
  */
-const FINAL_HOOKS: Record<ParityEngine, string[]> = {
+const FINAL_HOOKS: Record<Exclude<ParityEngine, 'native-default' | 'native-evented'>, string[]> = {
   plain: [
     'out-a:processOutputStream:finish',
     'out-b:processOutputStream:finish',
@@ -284,7 +284,8 @@ describeParity('processor-order parity', target => {
       // entries, and the final `finish` reaches the output processors before `step-finish` /
       // `processOutputResult` on plain but after them on durable and evented. The harness records this
       // array without pairing it (see the file header), so the tail is pinned per engine here.
-      expect(hookNames(entries), `${engine}: hook sequence`).toEqual([...SHARED_HOOKS, ...FINAL_HOOKS[engine]]);
+      const hookEngine = engine === 'native-default' ? 'durable' : engine === 'native-evented' ? 'evented' : engine;
+      expect(hookNames(entries), `${engine}: hook sequence`).toEqual([...SHARED_HOOKS, ...FINAL_HOOKS[hookEngine]]);
     }
 
     // Plain pinned literally — the recorded harness `plain-none-post` cell

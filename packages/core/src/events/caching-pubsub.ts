@@ -175,6 +175,10 @@ export class CachingPubSub extends PubSub {
     return true;
   }
 
+  get deliversAcrossProcesses(): boolean {
+    return this.inner.deliversAcrossProcesses;
+  }
+
   get redeliversUnacked(): boolean {
     return this.inner.redeliversUnacked;
   }

@@ -59,7 +59,7 @@ Memory Gateway shuts down on December 31, 2026. After that date, requests with `
 | - | - |
 | `msk_` keys | `msk-gateway-` keys. Create a new key in [projects.mastra.ai](https://projects.mastra.ai). |
 | `x-thread-id` and `x-resource-id` headers | Gateway ignores these headers and doesn't store conversations. |
-| `/v1/memory/threads` | Removed. Use [Mastra Memory](/docs/memory/overview) in your agent. |
+| `/v1/memory/threads` | Not available with `msk-gateway-` keys. `msk_` keys keep it until Memory Gateway shuts down. Use [Mastra Memory](/docs/memory/overview) in your agent. |
 | `memory.thread` and `memory.resource` on a Mastra agent routed through Gateway | Configure [Memory](/docs/memory/overview) on the agent instead. |
 
 The base URL, `https://gateway-api.mastra.ai/v1`, is unchanged.

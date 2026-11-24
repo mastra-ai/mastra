@@ -14,7 +14,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import { MongoClient, ObjectId, ReadPreference } from 'mongodb';
+import { BSON, MongoClient, ObjectId, ReadPreference } from 'mongodb';
 import type {
   MongoClientOptions,
   Document,
@@ -120,8 +120,8 @@ export interface MongoDBHybridQueryParams {
  * Per-branch retrieval and optional native reranking options for {@link MongoDBVector.hybridQuery}.
  *
  * The result shape follows the collection: managed indexes return the managed `metadata` and
- * `document` fields; bring-your-own (BYO) indexes return the source document as `metadata`,
- * without its embedding.
+ * `document` fields; bring-your-own (BYO) indexes return the source document as `metadata`.
+ * The embedding is excluded unless `includeVector` is true, which also returns it as `vector`.
  */
 export interface MongoDBHybridQueryBranchParams {
   /** Logical Mastra index, resolving the collection and its registered search indexes. */
@@ -259,7 +259,7 @@ export interface MongoDBCreateIndexParams extends Omit<CreateIndexParams, 'dimen
    * candidate `_id`s, avoiding the 16 MB BSON limit on large result sets.
    * Filters that reference an undeclared field, or use an unsupported
    * operator, automatically fall back to the pre-filter, which fails once it
-   * matches more than 100,000 documents.
+   * matches more than 100,000 documents or its candidate `_id` array exceeds 12 MiB of BSON.
    *
    * With `collectionName` (bring-your-own), names are declared as root paths
    * as given (e.g. `lane`), matching `metadataMode: 'document'` filters.
@@ -590,12 +590,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * for long.
    */
   private static readonly INITIAL_SYNC_RETRY_DELAYS_MS = [250, 500, 1000, 2000, 2000];
-  /**
-   * Most `_id`s the pre-filter fallback loads for one query. The ids go into a single
-   * `$vectorSearch` command, which must stay under 16 MB; 100,000 ids leaves room for long
-   * string ids. Past this the query fails rather than silently dropping candidates.
-   */
+  /** Maximum number of matching `_id`s materialized by the pre-filter fallback. */
   private static readonly MAX_PREFILTER_CANDIDATES = 100_000;
+  /** BSON array budget, reserving 4 MiB of the 16 MiB command limit for the rest of the pipeline. */
+  private static readonly MAX_PREFILTER_ID_BYTES = 12 * 1024 * 1024;
   /**
    * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
    * conservative: filters using any operator outside this set fall back to the
@@ -3073,8 +3071,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // Recorded with its id by the P7 above.
       } else if (listedId && listedId === recordedId) {
         // The incarnation we recorded (§3.2): recreating it with a different `fields` mapping must
-        // change the mapping, by id.
-        await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, id: listedId, definition });
+        // change the mapping, by id. A refresh whose mapping the index is already building or has
+        // applied sends nothing, so racing identical refreshes don't hit Atlas's "indexes had
+        // duplicate ids" rejection of concurrent updates of one id. Refreshes that both list the
+        // index before either update lands can still both update and one of them fails.
+        // latestDefinition is the last requested mapping, so only a PENDING, BUILDING or READY index
+        // is building or has applied it; any other status (FAILED, STALE, unknown or missing) still
+        // needs the update, the only request that rebuilds it.
+        const row = created.outcome === 'attached' ? created.row : undefined;
+        const applied =
+          (row?.status === 'PENDING' || row?.status === 'BUILDING' || row?.status === 'READY') &&
+          !!row.latestDefinition &&
+          searchDefinitionsEquivalent(row.latestDefinition, definition);
+        if (!applied) {
+          await this.runSearchIndexCommand({ updateSearchIndex: collection.collectionName, id: listedId, definition });
+        }
       } else {
         if (ours) {
           this.logger.warn(
@@ -3921,18 +3932,27 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     operation: 'QUERY' | 'HYBRID_QUERY',
   ): Promise<unknown[]> {
     const max = MongoDBVector.MAX_PREFILTER_CANDIDATES;
-    const ids = await collection
-      .aggregate([{ $match: match }, { $project: { _id: 1 } }, { $limit: max + 1 }])
-      .map(doc => doc._id)
-      .toArray();
-    if (ids.length > max) {
-      throw new MastraError({
-        id: createVectorErrorId('MONGODB', operation, 'TOO_MANY_CANDIDATES'),
-        domain: ErrorDomain.STORAGE,
-        category: ErrorCategory.USER,
-        details: { indexName, maxCandidates: max },
-        text: `The filter for index "${indexName}" cannot run inside $vectorSearch and matches more than ${max} documents, so it would load every matching _id into memory. Declare the filtered fields with createIndex({ filterFields }) so the filter runs inside $vectorSearch, or narrow the filter.`,
-      });
+    const maxBytes = MongoDBVector.MAX_PREFILTER_ID_BYTES;
+    const ids: unknown[] = [];
+    let bytes = 5; // BSON document length and terminator for the array.
+    const cursor = collection.aggregate([{ $match: match }, { $project: { _id: 1 } }, { $limit: max + 1 }]);
+    try {
+      for await (const doc of cursor) {
+        // BSON arrays use decimal index keys; include their growing key lengths and the ID's type.
+        bytes += BSON.calculateObjectSize({ [ids.length]: doc._id }) - 5;
+        if (ids.length >= max || bytes > maxBytes) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', operation, 'TOO_MANY_CANDIDATES'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, maxCandidates: max, maxCandidateBytes: maxBytes },
+            text: `The filter for index "${indexName}" cannot run inside $vectorSearch and exceeds the pre-filter limit of ${max} matching documents or ${maxBytes} BSON bytes of candidate _ids. Declare the filtered fields with createIndex({ filterFields }) so the filter runs inside $vectorSearch, or narrow the filter.`,
+          });
+        }
+        ids.push(doc._id);
+      }
+    } finally {
+      await cursor.close();
     }
     return ids;
   }
@@ -5001,6 +5021,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * that doesn't start with underscore (MongoDB system fields).
    */
   private isMetadataField(key: string): boolean {
+    // __proto__ is stored as an own metadata property, not a reserved document field.
+    if (key === '__proto__') return true;
     // MongoDB system fields start with underscore
     if (key.startsWith('_')) return false;
 

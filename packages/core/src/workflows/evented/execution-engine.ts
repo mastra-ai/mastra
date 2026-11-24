@@ -24,8 +24,24 @@ import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { endedPaused, getStepId } from './workflow-event-processor/utils';
 
+type FinishWaiter = (event: Event) => void;
+
+interface FinishSubscription {
+  waiters: Map<string, Set<FinishWaiter>>;
+  callback: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+  /** Settles once the subscribe call does; every waiter that joins meanwhile shares it. */
+  ready: Promise<void>;
+}
+
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
+  /**
+   * One `workflows-finish` subscription per pubsub, shared by every caller of this engine that is
+   * waiting for a run to finish. Each finish event is routed to the waiters for its runId, so it
+   * costs one delivery no matter how many runs are in flight. The subscription is made when the
+   * first waiter arrives and dropped when the last one leaves.
+   */
+  #finishSubscriptions = new Map<PubSub, FinishSubscription>();
 
   constructor({
     mastra,
@@ -57,6 +73,73 @@ export class EventedExecutionEngine extends ExecutionEngine {
       return this.mastra.__getInternalWorkflow(workflowId, runId);
     }
     return this.mastra!.getWorkflow(workflowId);
+  }
+
+  /**
+   * Registers `waiter` for `runId`'s `workflows-finish` events. The waiter is in place before this
+   * returns, so a finish published after the caller awaits `ready` can't be missed. `ready` rejects
+   * if the shared subscription can't be made; the caller must still call `remove()`.
+   */
+  private waitForFinish(pubsub: PubSub, runId: string, waiter: FinishWaiter) {
+    let subscription = this.#finishSubscriptions.get(pubsub);
+    if (!subscription) {
+      const waiters = new Map<string, Set<FinishWaiter>>();
+      const callback = async (event: Event, ack?: () => Promise<void>) => {
+        await ack?.();
+        const forRun = event.runId ? waiters.get(event.runId) : undefined;
+        if (!forRun) return;
+        for (const notify of [...forRun]) {
+          try {
+            notify(event);
+          } catch (err) {
+            this.mastra?.getLogger()?.error('Failed to handle workflows-finish event:', err);
+          }
+        }
+      };
+      const created: FinishSubscription = {
+        waiters,
+        callback,
+        // Live-tail: persistent pubsubs replay retained events from 'earliest', which would hand
+        // waiters stale finish events (e.g. a run's own prior suspend). Safe because every caller
+        // awaits this before publishing its start/resume event.
+        ready: pubsub.subscribe('workflows-finish', callback, { startFrom: 'latest' }),
+      };
+      // A failed subscribe is dropped so the next caller tries again.
+      created.ready.catch(() => {
+        if (this.#finishSubscriptions.get(pubsub) === created) this.#finishSubscriptions.delete(pubsub);
+      });
+      this.#finishSubscriptions.set(pubsub, created);
+      subscription = created;
+    }
+
+    const { waiters } = subscription;
+    let forRun = waiters.get(runId);
+    if (!forRun) {
+      forRun = new Set();
+      waiters.set(runId, forRun);
+    }
+    forRun.add(waiter);
+
+    const current = subscription;
+    let removed = false;
+    const remove = () => {
+      if (removed) return;
+      removed = true;
+      forRun.delete(waiter);
+      if (forRun.size === 0 && waiters.get(runId) === forRun) waiters.delete(runId);
+      if (waiters.size > 0 || this.#finishSubscriptions.get(pubsub) !== current) return;
+      this.#finishSubscriptions.delete(pubsub);
+      void current.ready.then(
+        () =>
+          pubsub
+            .unsubscribe('workflows-finish', current.callback)
+            .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err)),
+        // A failed subscribe was already reported to the waiters that needed it.
+        () => {},
+      );
+    };
+
+    return { ready: current.ready, remove };
   }
 
   /**
@@ -190,16 +273,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     let pendingCleanupFinish: Event | undefined;
-    const finishCb = async (event: Event, ack?: () => Promise<void>) => {
+    const finish = this.waitForFinish(pubsub, params.runId, event => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
-      if (event.runId !== params.runId || isForeignExecution?.(event.data?.requestContext, params.requestContext)) {
-        await ack?.();
-        return;
-      }
-
+      if (isForeignExecution?.(event.data?.requestContext, params.requestContext)) return;
       if (
-        [
+        ![
           'workflow.end',
           'workflow.fail',
           'workflow.suspend',
@@ -207,43 +286,36 @@ export class EventedExecutionEngine extends ExecutionEngine {
           'workflow.finish-cleanup-complete',
         ].includes(event.type)
       ) {
-        await ack?.();
-        if (
-          (event.type === 'workflow.end' ||
-            event.type === 'workflow.fail' ||
-            event.type === 'workflow.publish-failed') &&
-          event.data.finishPendingCleanup
-        ) {
-          pendingCleanupFinish = event;
-          return;
-        }
-        if (event.type === 'workflow.finish-cleanup-complete') {
-          if (!pendingCleanupFinish) return;
-          event = pendingCleanupFinish;
-        }
-        await pubsub.unsubscribe('workflows-finish', finishCb);
-        if (event.type === 'workflow.publish-failed') {
-          rejectResult(new Error(event.data.message));
-          return;
-        }
-        // Re-hydrate serialized errors back to Error instances when workflow fails
-        if (event.type === 'workflow.fail' && event.data.stepResults) {
-          event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
-        }
-        resolveResult(event.data);
         return;
       }
+      if (
+        (event.type === 'workflow.end' || event.type === 'workflow.fail' || event.type === 'workflow.publish-failed') &&
+        event.data.finishPendingCleanup
+      ) {
+        pendingCleanupFinish = event;
+        return;
+      }
+      if (event.type === 'workflow.finish-cleanup-complete') {
+        if (!pendingCleanupFinish) return;
+        event = pendingCleanupFinish;
+      }
+      finish.remove();
+      if (event.type === 'workflow.publish-failed') {
+        rejectResult(new Error(event.data.message));
+        return;
+      }
+      // Re-hydrate serialized errors back to Error instances when workflow fails
+      if (event.type === 'workflow.fail' && event.data.stepResults) {
+        event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+      }
+      resolveResult(event.data);
+    });
 
-      await ack?.();
-    };
-
-    // AWAIT subscription first - ensures listener is registered before any events fire
+    // The waiter is registered; wait for the shared subscription before publishing so no finish is missed.
     try {
-      // Live-tail: persistent pubsubs replay retained events from 'earliest', which
-      // would hand this waiter stale finish events (e.g. this run's own prior suspend).
-      // Safe because we subscribe before publishing the start/resume event below.
-      await pubsub.subscribe('workflows-finish', finishCb, { startFrom: 'latest' });
+      await finish.ready;
     } catch (err) {
+      finish.remove();
       releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
@@ -252,10 +324,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
     // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
     const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
-      void pubsub
-        .unsubscribe('workflows-finish', finishCb)
-        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
-        .finally(() => rejectResult(error));
+      finish.remove();
+      rejectResult(error);
     });
     if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
 
@@ -371,8 +441,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
         });
       }
     } catch (err) {
-      // Clean up subscription and reject the promise on error
-      await pubsub.unsubscribe('workflows-finish', finishCb);
+      // Stop waiting and reject the promise on error
+      finish.remove();
       rejectResult(err);
       releaseTracking();
       throw err;

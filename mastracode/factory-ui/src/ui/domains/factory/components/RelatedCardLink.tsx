@@ -44,8 +44,14 @@ export function RelatedCardLink({
   const name = [`Open ${relatedCardName(item, repository)}`, phase, statusLabel].filter(Boolean).join(', ');
   const reference = workItemReference(item, repository);
   return (
-    <Button variant="ghost" size="sm" className="w-full justify-start" aria-label={name} render={<Link to={to} />}>
-      <WorkItemSourceIcon item={item} subscriptions={subscriptions} />
+    <Button
+      icon={<WorkItemSourceIcon item={item} subscriptions={subscriptions} />}
+      variant="ghost"
+      size="sm"
+      className="w-full justify-start"
+      aria-label={name}
+      render={<Link to={to} />}
+    >
       {reference === undefined ? null : (
         <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           {reference}

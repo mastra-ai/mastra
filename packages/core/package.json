@@ -1,12 +1,13 @@
 {
   "name": "@mastra/core",
-  "version": "1.85.0",
+  "version": "1.86.0-alpha.8",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "./**/*.d.ts"
   ],
   "exports": {

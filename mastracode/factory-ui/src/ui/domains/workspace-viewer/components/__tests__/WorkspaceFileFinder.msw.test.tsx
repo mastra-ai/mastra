@@ -297,10 +297,10 @@ describe('Go to file', () => {
     await waitFor(() => expect(client.getQueryState(queryKeys.workspaceTree(WORKSPACE, ''))?.dataUpdateCount).toBe(2));
     expect(treeRequests).toHaveLength(treeReads + 1);
     expect(heldRequests).toBe(1);
-    expect(screen.getByRole('button', { name: 'Refreshing workspace files' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Refresh workspace files', busy: true })).toBeInTheDocument();
 
     release();
-    expect(await screen.findByRole('button', { name: 'Refresh workspace files' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'Refresh workspace files', busy: false })).toBeEnabled();
   });
 
   it('opens a file from one checkout of a multi-repository session and shows it inside that checkout', async () => {

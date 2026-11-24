@@ -161,6 +161,13 @@ const result = await run.start({
       },
     ],
   },
+  {
+    name: 'perStep',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      'Run one step, then stop. The run reports status `paused`. See [Run one step at a time](#run-one-step-at-a-time) to continue it.',
+  },
 ]}
 />
 
@@ -206,6 +213,27 @@ const result = await run.start({
   },
   requestContext,
 })
+```
+
+## Run one step at a time
+
+Pass `perStep: true` to run only the next step. The run then reports status `paused`, and `steps` holds the output of the step that ran.
+
+A paused run isn't suspended, so `run.resume()` throws `This workflow run was not suspended`. Calling `run.start()` again reruns the workflow from its first step. To continue, call [`run.timeTravel()`](./timeTravel) on the same run with the ID of the next step. It reuses the stored results of the steps that already ran. If the previous step returned `null`, the next step receives `{}` instead, so return an object from steps that run before a `timeTravel()` continuation. The workflow needs configured [storage](/docs/storage), and the paused run's snapshot must still be in it. Otherwise, `timeTravel()` throws `Snapshot not found for run <runId>`:
+
+```typescript
+const run = await workflow.createRun()
+
+const first = await run.start({ inputData: { value: 1 }, perStep: true })
+// first.status === 'paused'
+
+// Run the next step only, then pause again
+const second = await run.timeTravel({ step: 'step-2', perStep: true })
+// second.status === 'paused'
+
+// Run the remaining steps to completion
+const final = await run.timeTravel({ step: 'step-3' })
+// final.status === 'success'
 ```
 
 ## Related

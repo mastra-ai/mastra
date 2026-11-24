@@ -3,8 +3,10 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -636,6 +638,11 @@ export class MssqlObservationalMemory {
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
           return stored;
         }
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
+          return stored;
+        }
 
         // Lines 0..reflectedLineCount were reflected on and are replaced by the buffered
         // reflection; lines added after reflection started are kept as-is.
@@ -653,7 +660,15 @@ export class MssqlObservationalMemory {
           input.tokenCount +
           Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-        return this.#rollOver(transaction, stored.id, newObservations, tokenCount, input.newRecordId, true);
+        const successor = await this.#rollOver(
+          transaction,
+          stored.id,
+          newObservations,
+          tokenCount,
+          input.newRecordId,
+          true,
+        );
+        return withBufferedReflectionVerified(successor, currentRecord);
       }, 'swapBufferedReflectionToActive');
     } catch (error) {
       rethrowOrWrap(error, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', { id: currentRecord.id });

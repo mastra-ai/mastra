@@ -3,6 +3,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { DurableAgent, EventedAgent } from '../../../../agent/durable';
+import type { MastraDBMessage } from '../../../../agent/message-list';
 import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../../events';
 import { CachingPubSub } from '../../../../events/caching-pubsub';
@@ -277,13 +278,174 @@ describeForAllEngines(
       await runColdObservation(false);
     }, 30_000);
 
-    // Known gap: durable scoring reuses the suspended transcript after approval,
-    // even though replayed text includes the final answer. Evented refreshes it.
-    const itFailsOnDurable = engine === 'durable' ? it.fails : it;
-    itFailsOnDurable(
-      'refreshes cold observer scoring output after an approval resume',
-      async () => {
-        await runColdObservation(true);
+    // The stored transcript can lag behind what the stream already showed (durable kept the
+    // suspended one), so the observer keeps the streamed response messages.
+    it('refreshes cold observer scoring output after an approval resume', async () => {
+      await runColdObservation(true);
+    }, 30_000);
+
+    // A run that looks something up, then answers. Readers on `readerHost` report the
+    // conversation the producer on `host` ran.
+    const startLookupRun = (setup: (build: () => DurableAgent, pubsub: PubSub, storage: InMemoryStore) => unknown) => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: { order: 'A-1' } }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Order A-1 has shipped.' });
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const build = () =>
+        wrap(
+          new Agent({
+            id: `lookup-${engine}`,
+            name: 'Support',
+            instructions: 'Answer.',
+            model: model(),
+            tools: {
+              lookup: createTool({
+                id: 'lookup',
+                description: 'Look up an order.',
+                inputSchema: z.object({ order: z.string() }),
+                execute: async () => {
+                  entered.resolve();
+                  await release.promise;
+                  return { status: 'shipped' };
+                },
+              }),
+            },
+          }),
+          pubsub,
+        );
+      const transport = new EventEmitterPubSub();
+      const pubsub = new CachingPubSub(transport, new InMemoryServerCache());
+      const storage = new InMemoryStore();
+      setup(build, pubsub, storage);
+      return { llm, entered, release, transport };
+    };
+    // What each message says, without per-list bookkeeping (ids, timestamps).
+    const conversation = (messages: MastraDBMessage[]) =>
+      messages.map(message => ({
+        role: message.role,
+        parts: message.content.parts.flatMap(part => {
+          if (part.type === 'text') return [{ type: part.type, text: part.text }];
+          if (part.type !== 'tool-invocation') return [];
+          const { toolName, args, state, result } = part.toolInvocation as typeof part.toolInvocation & {
+            result?: unknown;
+          };
+          return [{ type: part.type, toolInvocation: { toolName, args, state, result } }];
+        }),
+      }));
+    // A reader's list stamps each part it adds with its own `createdAt` (Mastra bookkeeping
+    // carried in `providerOptions.mastra`), so only those differ from the producer's.
+    const withoutPartStamps = (messages: unknown) =>
+      JSON.parse(JSON.stringify(messages, (key, value) => (key === 'mastra' ? undefined : value)));
+
+    // Technical: the cold observer rebuilt its transcript from storage on every step, which lags
+    // the stream (durable writes the snapshot after step-finish) or names an earlier iteration
+    // (evented). With running snapshots the final answer went missing. It now takes each step's
+    // response messages from the stream.
+    for (const persistRunning of [false, true]) {
+      it(`reports the producer's messages to an observer on another host${persistRunning ? ' (running snapshots)' : ''}`, async () => {
+        let host!: Mastra;
+        let readerHost!: Mastra;
+        let producer!: DurableAgent;
+        let observer!: DurableAgent;
+        const { llm, entered, release, transport } = startLookupRun((build, pubsub, storage) => {
+          producer = build();
+          observer = build();
+          const recovery = persistRunning ? { recovery: { durableAgents: 'auto' as const } } : {};
+          host = new Mastra({ agents: { producer }, storage, pubsub, logger: false, ...recovery });
+          readerHost = new Mastra({ agents: { observer }, storage, pubsub, logger: false });
+        });
+        const finished = { producer: Promise.withResolvers<unknown>(), observer: Promise.withResolvers<unknown>() };
+        const run = await producer.stream('Where is order A-1?', {
+          maxSteps: 3,
+          onFinish: event => finished.producer.resolve(event.messages),
+        });
+        const consuming = run.output.getFullOutput();
+        let observation: Awaited<ReturnType<typeof observer.observe>> | undefined;
+        try {
+          await entered.promise;
+          observation = await observer.observe(run.runId, {
+            onFinish: event => finished.observer.resolve(event.messages),
+          });
+          const observed = observation.output.getFullOutput();
+          release.resolve();
+          const [original, replay] = await Promise.all([consuming, observed]);
+          expect(replay.text).toBe('Order A-1 has shipped.');
+          const producerMessages = await finished.producer.promise;
+          expect(producerMessages).toMatchObject([
+            { role: 'assistant', content: [{ type: 'tool-call', toolName: 'lookup' }] },
+            { role: 'tool', content: [{ type: 'tool-result', output: { value: { status: 'shipped' } } }] },
+            { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] },
+          ]);
+          expect(withoutPartStamps(await finished.observer.promise)).toEqual(withoutPartStamps(producerMessages));
+          expect(conversation(replay.messages)).toEqual(conversation(original.messages));
+          expect(llm.getRequests()).toHaveLength(2);
+        } finally {
+          release.resolve();
+          observation?.detach();
+          await consuming;
+          run.cleanup?.();
+          await readerHost.shutdown();
+          await host.shutdown();
+          await transport.close();
+        }
+      }, 30_000);
+    }
+
+    // Technical: an API host with `workers: false` runs a run its workers execute. Its
+    // MessageList is the one it prepared, which no step updates, so onFinish and output
+    // messages held only the prompt (evented). It now takes them from the stream.
+    it.each(['stream', 'generate'] as const)(
+      'reports the messages of a run executed by workers on another host (%s)',
+      async method => {
+        let api!: Mastra;
+        let worker!: Mastra;
+        let apiAgent!: DurableAgent;
+        const { llm, release, transport } = startLookupRun((build, pubsub, storage) => {
+          apiAgent = build();
+          api = new Mastra({ agents: { apiAgent }, storage, pubsub, workers: false, logger: false });
+          worker = new Mastra({ agents: { workerAgent: build() }, storage, pubsub, logger: false });
+        });
+        release.resolve();
+        try {
+          await worker.startWorkers();
+          const finished = Promise.withResolvers<unknown>();
+          const options = { maxSteps: 3, onFinish: (event: { messages: unknown }) => finished.resolve(event.messages) };
+          let full: Awaited<ReturnType<typeof apiAgent.generate>>;
+          if (method === 'generate') {
+            full = await apiAgent.generate('Where is order A-1?', options);
+          } else {
+            const run = await apiAgent.stream('Where is order A-1?', options);
+            full = await run.output.getFullOutput();
+            run.cleanup?.();
+          }
+          expect(full.text).toBe('Order A-1 has shipped.');
+          const expected = [
+            { role: 'assistant', content: [{ type: 'tool-call', toolName: 'lookup' }] },
+            { role: 'tool', content: [{ type: 'tool-result', output: { value: { status: 'shipped' } } }] },
+            { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] },
+          ];
+          expect(await finished.promise).toMatchObject(expected);
+          expect(full.response.messages).toMatchObject(expected);
+          expect(conversation(full.messages)).toMatchObject([
+            { role: 'user', parts: [{ type: 'text', text: 'Where is order A-1?' }] },
+            {
+              role: 'assistant',
+              parts: [
+                { type: 'tool-invocation', toolInvocation: { toolName: 'lookup', result: { status: 'shipped' } } },
+                { type: 'text', text: 'Order A-1 has shipped.' },
+              ],
+            },
+          ]);
+          expect(llm.getRequests()).toHaveLength(2);
+        } finally {
+          await api.shutdown();
+          await worker.shutdown();
+          await transport.close();
+        }
       },
       30_000,
     );

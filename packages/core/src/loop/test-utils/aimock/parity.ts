@@ -114,7 +114,8 @@ import type { Agent } from '../../../agent/agent';
 import type { AgentExecutionOptions } from '../../../agent/agent.types';
 import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../agent/durable/create-evented-agent';
-import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
+import type { DurableAgent } from '../../../agent/durable/durable-agent';
+import type { DurableAgentStreamOptions } from '../../../agent/durable/types';
 import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import type { PubSub } from '../../../events/pubsub';
@@ -746,8 +747,14 @@ export function toolCallTape(
 // expectEngineParity — the main entry point for parity tests
 // ---------------------------------------------------------------------------
 
-export type ParityEngine = 'plain' | 'durable' | 'evented';
-export const PARITY_ENGINES: readonly ParityEngine[] = ['plain', 'durable', 'evented'];
+export type ParityEngine = 'plain' | 'durable' | 'evented' | 'native-default' | 'native-evented';
+export const PARITY_ENGINES: readonly ParityEngine[] = [
+  'plain',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+];
 
 /**
  * Stream options every engine types identically. `onStepFinish` and
@@ -976,11 +983,13 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
   // only resumable when the run's snapshot reached storage, and a deferred
   // background task is only dispatched when the host manages them and its
   // workers are running. Both need the host the engines actually share.
+  const executionEngine = engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
     ...scenario.host,
+    ...(executionEngine ? { durable: { executionEngine } } : {}),
   });
   // Workers are a host concern, not an agent one: the run only sees a bound
   // manager once they are up.
@@ -1082,13 +1091,12 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
 
   let scenarioFailed = false;
   try {
-    if (wrapper && engine === 'evented') {
-      // Without atomic storage the evented agent silently runs on the default
-      // engine, which would make "evented == plain" a durable-vs-plain check.
+    if (engine === 'evented' || engine === 'native-evented') {
+      // Without atomic storage, both evented variants can fall back to the default engine.
       // Checked inside the try so a failed check still shuts the host down.
-      const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
+      const engineType = (wrapper ? wrapper.getWorkflow() : agent['getWorkflow']()).engineType;
       if (engineType !== 'evented') {
-        throw new Error(`expectEngineParity: evented agent resolved to the '${engineType}' engine, not 'evented'`);
+        throw new Error(`expectEngineParity: ${engine} agent resolved to the '${engineType}' engine, not 'evented'`);
       }
     }
     if (scenario.run) await scenario.run(handle);

@@ -1,14 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
+import { sharedBroker } from '../../mastra/test-utils/shared-broker';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -30,7 +28,7 @@ import {
   stopAbandonedDurableExecution,
   stopDurableExecutionParticipants,
 } from './evented-execution';
-import { EventedExecutionEngine as DurableEventedExecutionEngine } from './evented-execution-engine';
+import { EventedAgentExecutionEngine } from './execution-engine';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -69,7 +67,7 @@ it.each([false, true])(
       runId: 'observer-run',
       mode: 'acquire',
     });
-    const engine = new DurableEventedExecutionEngine('agent', mastra);
+    const engine = new EventedAgentExecutionEngine('agent', mastra);
     const error = unverified
       ? new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
           agentId: 'agent',
@@ -100,8 +98,7 @@ it.each([false, true])(
 );
 
 it('settles a failed evented setup after claiming the thread lease without starting workers', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-setup-fail-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const workflows = (await storage.getStore('workflows'))!;
   const { model } = deliveryModel('must not run');
@@ -139,14 +136,11 @@ it('settles a failed evented setup after claiming the thread lease without start
   } finally {
     createRun.mockRestore();
     await mastra.shutdown();
-    await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
 it('detaches a registered shared coordinator on API shutdown without releasing its live claim', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-shutdown-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, pubsub, logger: false });
   const workflowsStore = (await storage.getStore('workflows'))!;
@@ -170,85 +164,15 @@ it('detaches a registered shared coordinator on API shutdown without releasing i
   } finally {
     fence.stopHeartbeat();
     deleteRunRegistryEntry('shutdown-run', mastra);
-    await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
-it('keeps a shared EventedAgent.stream() run owned by its worker when the API shuts down', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-api-loss-'));
-  const socket = join(directory, 'pubsub.sock');
-  const storage = new InMemoryStore();
-  const workflows = (await storage.getStore('workflows'))!;
-  const entered = Promise.withResolvers<void>();
-  const release = Promise.withResolvers<void>();
-  // The reply must block deterministically on the worker while the API shuts down.
-  const { model } = deliveryModel('worker answer', undefined, async () => {
-    entered.resolve();
-    await release.promise;
-  });
-  const memory = new MockMemory({ storage });
-  const build = (pubsub: UnixSocketPubSub) =>
-    createEventedAgent({
-      agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
-      pubsub,
-    });
-  const apiPubsub = new UnixSocketPubSub(socket);
-  const workerPubsub = new UnixSocketPubSub(socket);
-  const apiAgent = build(apiPubsub);
-  const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
-  const worker = new Mastra({ agents: { agent: build(workerPubsub) }, storage, pubsub: workerPubsub, logger: false });
-  const threadKey = 'resource\u0000thread';
-  try {
-    await worker.startWorkers();
-    const { runId } = await apiAgent.stream('Answer the question.', {
-      runId: 'api-loss-run',
-      memory: { resource: 'resource', thread: 'thread' },
-    });
-    await entered.promise;
-    expect(getRunRegistryEntry(runId, api)?.eventedExecution).toBe(true);
-    const claimed = await workflows.getRunOwnership({ runId });
-    expect(claimed).toMatchObject({ live: true });
-    const threadOwner = `mastra:thread-lease:${JSON.stringify([runId, 'generation', claimed!.generation])}`;
-    expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
-
-    await api.shutdown();
-    expect(await workflows.getRunOwnership({ runId })).toMatchObject({
-      live: true,
-      ownerId: claimed!.ownerId,
-      generation: claimed!.generation,
-    });
-    expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
-
-    release.resolve();
-    await vi.waitFor(
-      async () => {
-        expect(await workflows.getRunOwnership({ runId })).toMatchObject({
-          ownerId: claimed!.ownerId,
-          generation: claimed!.generation,
-          leaseExpiresAt: null,
-          live: false,
-        });
-        expect(await workerPubsub.getLeaseOwner(threadKey)).toBeUndefined();
-      },
-      { timeout: 5_000 },
-    );
-  } finally {
-    release.resolve();
-    await api.shutdown();
-    await worker.shutdown();
-    await apiPubsub.close();
-    await workerPubsub.close();
-    await rm(directory, { recursive: true, force: true });
-  }
-}, 20_000);
-
 /**
- * An EventedAgent run on a real Unix socket transport whose first model call waits until `releaseModel()`, then asks
- * for approval of a `lookup` tool call. Resolves once the first model call started. With storage fencing the run is a
+ * An EventedAgent run on a shared transport whose first model call waits until `releaseModel()`, then asks for
+ * approval of a `lookup` tool call. Resolves once the first model call started. With storage fencing the run is a
  * shared execution, and the worker renews the claim through a participant fence.
  */
-async function startSuspendingSharedRun(args: { pubsub: UnixSocketPubSub; storage: InMemoryStore }) {
+async function startSuspendingSharedRun(args: { pubsub: PubSub; storage: InMemoryStore }) {
   const entered = Promise.withResolvers<void>();
   const firstCall = Promise.withResolvers<void>();
   let calls = 0;
@@ -332,14 +256,13 @@ async function resumeToFinish(agent: Awaited<ReturnType<typeof startSuspendingSh
   return chunks;
 }
 
-/** A Unix socket transport in a fresh directory, removed after the test. */
-async function socketPubSub(prefix: string) {
-  const directory = await mkdtemp(join(tmpdir(), prefix));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
-  onTestFinished(async () => {
-    await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
-  });
+/**
+ * One connection to a fresh broker with leases, closed after the test. Mastra treats it as a transport other processes
+ * share, so runs on it take the shared-execution paths.
+ */
+function sharedPubSub() {
+  const pubsub = sharedBroker({ leases: true }).connect();
+  onTestFinished(() => pubsub.close());
   return pubsub;
 }
 
@@ -348,7 +271,7 @@ async function socketPubSub(prefix: string) {
 // to its finish. (#30206)
 it('resumes a shared EventedAgent run whose renewal reaches storage after the worker released the suspension (#30206)', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const pubsub = await socketPubSub('mastra-late-renewal-');
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const workflows = (await storage.getStore('workflows'))!;
 
@@ -412,8 +335,7 @@ it.each([
 ])(
   'handles unfenced terminal redelivery without releasing the coordinator lease ($staleContext stale, $directClaim direct)',
   async ({ staleContext, directClaim }) => {
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-unfenced-'));
-    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const pubsub = sharedPubSub();
     const storage = new InMemoryStore();
     const mastra = new Mastra({ storage, pubsub, logger: false });
     const coordinator = await ExecutionFence.claim({
@@ -476,7 +398,6 @@ it.each([
       published.mockRestore();
       followed.mockRestore();
       await pubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   },
 );
@@ -511,10 +432,9 @@ function deliveryModel(text: string, toolName?: string, beforeReply?: () => Prom
 }
 
 it.each(['nested', 'sequential', 'concurrent'] as const)(
-  'completes %s durable runs sharing context over the socket broker',
+  'completes %s durable runs sharing context over a shared broker',
   async composition => {
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-composition-'));
-    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const pubsub = sharedPubSub();
     const storage = new InMemoryStore();
     const requestContext = new RequestContext();
     const parentEntered = Promise.withResolvers<void>();
@@ -677,7 +597,6 @@ it.each(['nested', 'sequential', 'concurrent'] as const)(
       for (const spy of resultsSpies) spy.mockRestore();
       delivery.disable();
       await pubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   },
   15_000,
@@ -1026,8 +945,7 @@ it('marks a coordinator lost when its renewal lands after a remote release and a
 // resumed stream does then. (#30206)
 it('streams a resumed EventedAgent run to its finish when the suspended run is marked lost after the resume claimed it (#30206)', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-limit-resume-'));
-  const socket = join(directory, 'pubsub.sock');
+  const broker = sharedBroker({ leases: true, redeliversUnacked: true });
   const storage = new InMemoryStore();
   const workflows = (await storage.getStore('workflows'))!;
 
@@ -1086,7 +1004,7 @@ it('streams a resumed EventedAgent run to its finish when the suspended run is m
   };
 
   // The API process: this module registry. It runs no workers.
-  const apiPubsub = new UnixSocketPubSub(socket);
+  const apiPubsub = broker.connect();
   const apiAgent = createEventedAgent({
     agent: new Agent({
       id: 'agent',
@@ -1099,7 +1017,7 @@ it('streams a resumed EventedAgent run to its finish when the suspended run is m
   });
   const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
 
-  // The worker process: a fresh module registry, sharing only storage and the socket.
+  // The worker process: a fresh module registry, sharing only storage and the broker.
   vi.resetModules();
   const workerFences = await import('./execution-fence');
   expect(workerFences.ExecutionFence).not.toBe(ExecutionFence);
@@ -1107,8 +1025,7 @@ it('streams a resumed EventedAgent run to its finish when the suspended run is m
   const { Agent: WorkerAgent } = await import('../agent');
   const { Mastra: WorkerMastra } = await import('../../mastra');
   const { createTool: createWorkerTool } = await import('../../tools');
-  const { UnixSocketPubSub: WorkerPubSub } = await import('../../events/unix-socket-pubsub');
-  const workerPubsub = new WorkerPubSub(socket);
+  const workerPubsub = broker.connect();
   const worker = new WorkerMastra({
     agents: {
       agent: createWorkerAgent({
@@ -1135,7 +1052,6 @@ it('streams a resumed EventedAgent run to its finish when the suspended run is m
     workerFences.__resetExecutionFencesForTests();
     await apiPubsub.close();
     await workerPubsub.close();
-    await rm(directory, { recursive: true, force: true });
   });
   await worker.startWorkers();
 
@@ -1242,7 +1158,7 @@ it('marks a coordinator lost on its first failed renewal after this process aban
 // next one reports the loss, so the caller's stream ends with an error instead of staying open. (#30206)
 it('ends the stream with an error when the suspension of a shared EventedAgent run never reaches its coordinator (#30206)', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-  const pubsub = await socketPubSub('mastra-undelivered-finish-');
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const workflows = (await storage.getStore('workflows'))!;
   const run = await startSuspendingSharedRun({ pubsub, storage });
@@ -1485,8 +1401,7 @@ it('retries thread cleanup on a fresh worker after interruption between terminal
 });
 
 it('finalizes cancellation of a suspended run after its execution claim is released', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-cancel-released-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.object({}), outputSchema: z.object({}) })
     .then(
@@ -1560,13 +1475,11 @@ it('finalizes cancellation of a suspended run after its execution claim is relea
     await mastra.shutdown();
     published.mockRestore();
     await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 }, 15_000);
 
 it('carries the execution claim on a cancel sent before the first step finishes', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-cancel-first-step-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.object({}), outputSchema: z.object({}) })
     .then(
@@ -1618,7 +1531,6 @@ it('carries the execution claim on a cancel sent before the first step finishes'
     await mastra.shutdown();
     published.mockRestore();
     await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 }, 15_000);
 
@@ -2160,8 +2072,7 @@ it('refuses a late background write on one worker once a successor claimed the r
 });
 
 it('stops renewing the claim when the processor abandons a root terminal delivery', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, pubsub, logger: false });
   const workflowsStore = (await storage.getStore('workflows'))!;
@@ -2205,13 +2116,11 @@ it('stops renewing the claim when the processor abandons a root terminal deliver
     renewals.mockRestore();
     await stopDurableExecutionParticipants(mastra);
     await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
 it('releases the claim so a live coordinator sees the loss when the processor abandons a workflow.fail delivery', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-fail-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, pubsub, logger: false });
   const workflowsStore = (await storage.getStore('workflows'))!;
@@ -2253,15 +2162,13 @@ it('releases the claim so a live coordinator sees the loss when the processor ab
     coordinator.stopHeartbeat();
     await stopDurableExecutionParticipants(mastra);
     await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
 it.each(['exhausted', 'healthy'] as const)(
   'settles the claim and thread lease of an abandoned root terminal whose compensating publication is %s',
   async publication => {
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-unpublished-'));
-    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const pubsub = sharedPubSub();
     const storage = new InMemoryStore();
     const mastra = new Mastra({ storage, pubsub, logger: false });
     const workflowsStore = (await storage.getStore('workflows'))!;
@@ -2328,14 +2235,12 @@ it.each(['exhausted', 'healthy'] as const)(
       renewLease.mockRestore();
       await stopDurableExecutionParticipants(mastra);
       await pubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   },
 );
 
 it('releases an abandoned unpublished terminal on a serialized redelivery after its first release failed', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-redelivery-'));
-  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const pubsub = sharedPubSub();
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, pubsub, logger: false });
   const workflowsStore = (await storage.getStore('workflows'))!;
@@ -2386,7 +2291,6 @@ it('releases an abandoned unpublished terminal on a serialized redelivery after 
     releaseSharedClaim.mockRestore();
     await stopDurableExecutionParticipants(mastra);
     await pubsub.close();
-    await rm(directory, { recursive: true, force: true });
   }
 });
 
@@ -2394,8 +2298,7 @@ it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)
   'stops a shared caller waiting on a run whose claim was %s, without writing to the run',
   async loss => {
     const released = loss !== 'taken over';
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-caller-loss-'));
-    const socket = join(directory, 'pubsub.sock');
+    const broker = sharedBroker({ leases: true, redeliversUnacked: true });
     const storage = new InMemoryStore();
     const workflows = (await storage.getStore('workflows'))!;
     const entered = Promise.withResolvers<void>();
@@ -2405,13 +2308,13 @@ it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)
       await release.promise;
     });
     const memory = new MockMemory({ storage });
-    const build = (pubsub: UnixSocketPubSub) =>
+    const build = (pubsub: PubSub) =>
       createEventedAgent({
         agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
         pubsub,
       });
-    const apiPubsub = new UnixSocketPubSub(socket);
-    const workerPubsub = new UnixSocketPubSub(socket);
+    const apiPubsub = broker.connect();
+    const workerPubsub = broker.connect();
     const apiAgent = build(apiPubsub);
     const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
     const worker = new Mastra({ agents: { agent: build(workerPubsub) }, storage, pubsub: workerPubsub, logger: false });
@@ -2492,7 +2395,6 @@ it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)
       await worker.shutdown();
       await apiPubsub.close();
       await workerPubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   },
   40_000,

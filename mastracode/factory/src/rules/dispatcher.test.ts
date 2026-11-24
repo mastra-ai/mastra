@@ -3239,6 +3239,125 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
   });
 
+  describe("a phase's kickoff after the previous role's agent moved the card", () => {
+    // A rotated binding shares its thread with the run before it, which was built with the
+    // earlier role's tools (a builder has no factory_record_review_verdict). The kickoff waits
+    // for that run to end so the new phase starts a fresh run with its own role's tools.
+    const selfReview = {
+      type: 'invokeSkill',
+      role: 'review',
+      skillName: 'factory-self-review',
+      startsAfterOwnMove: true,
+    } as const;
+    it.each([
+      { name: "a self-review after the builder's own move", from: 'work', decision: selfReview, ledger: 'ours' },
+      {
+        // factory_start_session records its runs under the tools' owner id, not the dispatcher's.
+        name: 'a self-review after a builder run started from a Factory tool',
+        from: 'work',
+        decision: selfReview,
+        ledger: 'elsewhere',
+      },
+      {
+        // A goal continuation or a person's retry can run on the thread without a ledger entry.
+        name: 'a self-review after a builder run the dispatcher did not record',
+        from: 'work',
+        decision: selfReview,
+        ledger: 'none',
+      },
+      {
+        name: "a build after the planner's own move",
+        from: 'plan',
+        decision: { type: 'invokeSkill', role: 'work', prompt: 'Implement the plan.', startsAfterOwnMove: true },
+        ledger: 'ours',
+      },
+    ] as const)('waits for the live run on the thread before $name', async ({ from, decision, ledger }) => {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(
+        storage,
+        { ...decision, idempotencyKey: `after-own-move-${decision.role}` },
+        { armed: true },
+      );
+      const bind = async (role: 'plan' | 'work' | 'review') => {
+        const prepared = await storage.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: PROJECT_ID,
+          workItem: {
+            id: item.id,
+            input: {
+              externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+              title: 'Fix issue',
+              stages: ['execute'],
+              sessions: {},
+              metadata: {},
+            },
+          },
+          role,
+          session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: PROJECT_ID,
+          kickoffKey: `kickoff-${role}-${item.id}`,
+          kickoffMessage: null,
+        });
+        await storage.markPendingStart(prepared.binding.id, 'sent');
+        return prepared.binding;
+      };
+      const previous = await bind(from);
+      const next = await bind(decision.role);
+      expect(next.id).not.toBe(previous.id);
+      expect(next.threadId).toBe(previous.threadId);
+      const { controller, session, emitAgentEnd, getAgentEndListenerCount } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+        streamActive: true,
+      });
+      if (ledger !== 'none') {
+        await session.thread.setSetting({
+          key: FACTORY_OPEN_RUNS_SETTING,
+          value: [
+            {
+              kickoffId: 'previous-kickoff',
+              bindingId: previous.id,
+              role: previous.role,
+              startedBy: 'factory-rule-dispatcher',
+              orgId: previous.orgId,
+              factoryProjectId: previous.factoryProjectId,
+              workItemId: previous.workItemId,
+              sessionId: previous.sessionId,
+              threadId: previous.threadId,
+              branch: previous.branch,
+              ...(ledger === 'elsewhere' ? { ownerId: 'factory-tools:other', heartbeatAt: Date.now() } : {}),
+            },
+          ],
+        });
+      }
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'previous-run', threadId: previous.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        audit: seed.audit,
+        ownerId: 'worker-1',
+      });
+
+      const dispatch = dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await vi.waitFor(() => expect(getAgentEndListenerCount()).toBe(2));
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'leased' });
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatch;
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+  });
+
   describe('an intake route moving a card with a run in flight', () => {
     async function runningCard(phaseKey: string) {
       const seed = await createFactoryStorageForTests();
@@ -5462,6 +5581,45 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
     const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
+  });
+
+  // A board refusal is deterministic: retrying it with backoff only delayed the person who has to look.
+  it('fails a rule move the board refuses on the first attempt and pages a person', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'skip-planning' },
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'board-rule' },
+      outcome: { status: 'accepted' },
+      // Work declares no edge from Intake straight into Building.
+      decisions: [{ type: 'transition', board: 'work', stage: 'execute', idempotencyKey: 'skip-planning' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      lastError: expect.stringContaining('invalid_transition'),
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
   });
 
   // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
@@ -9552,6 +9710,8 @@ describe('review status comment lifecycle', () => {
     await storage.markPendingStart(prepared.binding.id, 'sent');
   }
 
+  const SESSION_REF = { sessionId: 'session-1', threadId: 'thread-1' };
+
   async function reviewRun(key: string, sessionOptions: Parameters<typeof createSession>[1] = {}) {
     const storage = (await createFactoryStorageForTests()).workItems;
     const queued = await queueDecision(
@@ -9587,6 +9747,8 @@ describe('review status comment lifecycle', () => {
     expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'completed']);
     expect(events[0]).not.toHaveProperty('startedAt');
     expect(events[1]!.startedAt).toBeInstanceOf(Date);
+    // Every step after delivery names the session, so a missed 'reviewing' write cannot lose the link.
+    expect(events.map(event => event.session)).toEqual([undefined, SESSION_REF, SESSION_REF]);
     expect(writes).toEqual({ created: 1, updated: 2 });
     expect(comments()).toHaveLength(1);
     const body = comments()[0]!.body;
@@ -9603,6 +9765,7 @@ describe('review status comment lifecycle', () => {
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
     expect(events.map(event => event.phase)).toEqual(['queued', 'reviewing', 'failed']);
+    expect(events[2]!.session).toEqual(SESSION_REF);
     expect(comments()).toHaveLength(1);
     expect(comments()[0]!.body).toContain('Review failed');
     expect(comments()[0]!.body).not.toContain('ChatGPT account');

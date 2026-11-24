@@ -10,7 +10,7 @@ import type { ReactNode } from 'react';
 export function OnboardingSearchInset({ search, children }: { search: ReactNode; children: ReactNode }) {
   const [scrolled, setScrolled] = useState(false);
   return (
-    <div className="bg-background flex min-w-0 flex-col overflow-hidden rounded-xl">
+    <div className="bg-nested flex min-w-0 flex-col overflow-hidden rounded-xl">
       <div
         data-scrolled={scrolled || undefined}
         className={cn(

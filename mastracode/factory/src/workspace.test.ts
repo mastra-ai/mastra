@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
@@ -825,8 +826,14 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('Behavior independently established');
     expect(gates).toContain('Verification executed');
     expect(gates).toContain('Existing signal dispositioned');
-    expect(gates).toContain('No pending bot');
-    expect(gates).toContain("regardless of the bot's history");
+    expect(gates).not.toContain('No pending bot');
+    for (const name of ['factory-gitlab-review', 'factory-gitlab-rereview']) {
+      const gitlab = await read(name);
+      expect(gitlab, `${name} does not block approval on a pending bot`).not.toMatch(
+        /do not approve\.|no known bot review is pending|remains an approval gap/,
+      );
+      expect(gitlab).toContain('non-blocking heads-up');
+    }
     expect(gates).toContain('Behavior is tested');
     expect(gates).toContain('Adversarial check survived');
     expect(gates).toContain('related-issue context and external CI status must still be reported in the handoff');
@@ -857,9 +864,11 @@ describe('bundled Factory skill assets', () => {
     const signal = section('## Phase 2: Existing Review Signal', '## Phase 3');
     expect(signal).toContain('pageInfo { hasNextPage endCursor }');
     expect(signal).toContain('Paginate to exhaustion');
-    // A bot that outlasts the wait blocks approval — the timeout releases the
-    // review, not the verdict.
-    expect(signal).toContain('fails the no-pending-bot approval gate');
+    // A bot that outlasts the wait is a non-blocking heads-up, never a
+    // request-changes verdict on its own, and plain CI checks are not waited on.
+    expect(signal).toContain('never by itself makes the verdict request changes');
+    expect(signal).toContain('Ordinary CI, build, security-scan, and status checks are not review bots');
+    expect(signal).not.toContain('no-pending-bot approval gate');
 
     // Blocking findings stay out of follow-up PRs, and only supplemental tests
     // qualify as follow-up work — both rules inside the follow-up procedure.
@@ -3140,9 +3149,7 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
     const mastra = {
-      getWorkspaceById: vi.fn(() => {
-        throw new Error('Workspace not found');
-      }),
+      getWorkspaceById: vi.fn(() => undefined),
       addWorkspace: vi.fn(),
     };
 
@@ -3676,9 +3683,9 @@ describe('GitHub session workspace preparation', () => {
         if (workspaces.has(workspaceKey)) return;
         workspaces.set(workspaceKey, workspace);
       });
-      const getWorkspaceById = vi.fn((id: string) => {
+      const getWorkspaceById = vi.fn((id: string, options?: { optional?: boolean }) => {
         const workspace = workspaces.get(id);
-        if (!workspace) throw new Error(`Workspace with id ${id} not found`);
+        if (!workspace && !options?.optional) throw new Error(`Workspace with id ${id} not found`);
         return workspace;
       });
       const removeWorkspace = vi.fn(async (id: string) => workspaces.delete(id));
@@ -3717,6 +3724,24 @@ describe('GitHub session workspace preparation', () => {
       });
 
       expect(mastra.getWorkspaceById('mfw-project-1-session-a-web-factory')).toBe(built);
+    });
+
+    it('registers with a real Mastra without logging the first, expected lookup miss', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = new Mastra({});
+      const trackException = vi.spyOn(mastra.getLogger(), 'trackException');
+
+      const built = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra,
+      });
+      const again = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra });
+
+      expect(mastra.getWorkspaceById('mfw-project-1-session-a-web-factory')).toBe(built);
+      expect(again).toBe(built);
+      expect(trackException).not.toHaveBeenCalled();
     });
 
     it('short-circuits on the second call for the same session without re-registering', async () => {

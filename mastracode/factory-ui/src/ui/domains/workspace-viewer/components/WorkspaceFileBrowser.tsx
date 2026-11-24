@@ -269,10 +269,10 @@ export function WorkspaceFileBrowser({
           size="icon-sm"
           variant="ghost"
           onClick={refresh}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+          aria-label="Refresh workspace files"
+          loading={isRefreshing}
         >
-          {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
+          <IconArrowRotateClockwise />
         </Button>
       </div>
       {marksNotice ? (

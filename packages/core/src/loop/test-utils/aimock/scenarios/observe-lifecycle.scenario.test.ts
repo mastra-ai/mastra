@@ -83,7 +83,7 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { content: 'Finished reply.' });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      await run.output.consumeStream();
+      await (run.output ?? run).consumeStream();
 
       try {
         const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
@@ -103,7 +103,7 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { error: { message: 'Provider down', type: 'invalid_request_error' }, status: 400 });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      await run.output.consumeStream().catch(() => undefined);
+      await (run.output ?? run).consumeStream().catch(() => undefined);
 
       try {
         const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
@@ -122,7 +122,7 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { content: 'Slow but alive.' }, { streamingProfile: { ttft: SILENCE_MS } });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      const producerDone = run.output.consumeStream();
+      const producerDone = (run.output ?? run).consumeStream();
 
       try {
         const startedAt = Date.now();
@@ -158,7 +158,7 @@ describeForAllEngines(
       });
       const { agent } = await createSharedAgent(llm, { engine, tools: { slow_lookup: slowLookup } });
       const run = await agent.stream('Go', { stopWhen: stepCountIs(3), maxSteps: 3 });
-      const producerDone = run.output.consumeStream();
+      const producerDone = (run.output ?? run).consumeStream();
 
       try {
         await toolStartedPromise;
