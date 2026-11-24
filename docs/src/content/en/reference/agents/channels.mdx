@@ -479,15 +479,15 @@ Runs on that adapter get a `render_card` tool whose description lists the availa
 
 ### Enable with Mastra Connect
 
-When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options instead of on the agent. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider), which accepts the same option:
+When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options instead of on the agent. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider), which accepts the same option. The agent doesn't set `channels.adapters`, so leave out `createSlackAdapter()`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { channels } from '@mastra/connect'
-import { supportAgent } from './agents/support-agent'
+import { assistant } from './agents/assistant'
 
 export const mastra = new Mastra({
-  agents: { supportAgent },
+  agents: { assistant },
   channels: await channels({
     providers: { slack: { providerOptions: { generativeUI: true } } },
   }),
