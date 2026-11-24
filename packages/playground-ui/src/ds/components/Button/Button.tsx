@@ -70,6 +70,7 @@ export const buttonVariants = cva(
           'border-0',
           raisedControlSurfaceStyle,
           controlIconState,
+          '[--control-icon-rest:var(--icon)]',
           'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung

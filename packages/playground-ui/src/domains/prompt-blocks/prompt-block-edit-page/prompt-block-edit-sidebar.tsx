@@ -17,7 +17,6 @@ import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
-import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@/lib/framework';
 import type { JsonSchema } from '@/utils/json-schema';
 
@@ -56,7 +55,6 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField className="mt-2" size="sm">
-            <IconPlusMedium />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -164,10 +162,7 @@ export function PromptBlockEditSidebar({
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField>
-                <IconPlusMedium />
-                Add variable
-              </JSONSchemaForm.AddField>
+              <JSONSchemaForm.AddField>Add variable</JSONSchemaForm.AddField>
             </div>
           </JSONSchemaForm.Root>
         </div>
@@ -202,51 +197,33 @@ export function PromptBlockEditSidebar({
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
-              {isSavingDraft ? (
-                <>
-                  <Spinner className="size-4" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <IconFloppyDisk1 />
-                  Save
-                </>
-              )}
+            <Button
+              icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
+              onClick={onSaveDraft}
+              disabled={!isDirty || isSavingDraft || isSubmitting}
+              className="flex-1"
+            >
+              {isSavingDraft ? 'Saving...' : 'Save'}
             </Button>
             <Button
+              icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               onClick={onPublish}
               disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
               className="flex-1"
             >
-              {isSubmitting ? (
-                <>
-                  <Spinner className="size-4" />
-                  Publishing...
-                </>
-              ) : (
-                <>
-                  <IconCheckmark2Medium />
-                  Publish
-                </>
-              )}
+              {isSubmitting ? 'Publishing...' : 'Publish'}
             </Button>
           </div>
         ) : (
-          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="size-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <IconCheckmark2Medium />
-                Create prompt block
-              </>
-            )}
+          <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
+            variant="primary"
+            onClick={onPublish}
+            disabled={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? 'Creating...' : 'Create prompt block'}
           </Button>
         )}
       </div>

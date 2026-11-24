@@ -98,11 +98,6 @@ async function startSuspendedNestedRun(engineName: EngineName, answerSchema: z.Z
 describe.each(['default', 'evented'] as const)(
   'timeTravel into a nested workflow on the %s engine (#29390)',
   engine => {
-    // Evented engine: nested time travel does not deliver resumeData to the
-    // inner suspended step for any value, truthy or falsy, with or without the
-    // #29390 fix. Not yet investigated.
-    const itDelivers = engine === 'evented' ? it.fails : it;
-
     it('suspends at the inner step before time travel', async () => {
       const { started } = await startSuspendedNestedRun(engine, z.boolean());
 
@@ -110,7 +105,7 @@ describe.each(['default', 'evented'] as const)(
     });
 
     describe.each(answers)('answer $label', ({ schema, value }) => {
-      itDelivers('delivers the answer when time traveling to the suspended inner step', async () => {
+      it('delivers the answer when time traveling to the suspended inner step', async () => {
         const { run, innerId, seenResumeData } = await startSuspendedNestedRun(engine, schema);
 
         const result = await run.timeTravel({ step: [innerId, 'ask'], resumeData: value });

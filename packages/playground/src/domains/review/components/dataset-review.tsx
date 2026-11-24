@@ -492,12 +492,10 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
+              icon={<IconGauge />}
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="xs">
-                <IconGauge />
-              </Icon>
               Create scorer
             </Button>
           )}

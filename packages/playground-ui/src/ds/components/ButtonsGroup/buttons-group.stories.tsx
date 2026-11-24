@@ -131,18 +131,9 @@ export const Vertical: Story = {
 export const VerticalWithIcons: Story = {
   render: () => (
     <ButtonsGroup orientation="vertical">
-      <Button>
-        <IconSquareBehindSquare1 />
-        Copy
-      </Button>
-      <Button>
-        <IconScissors1 />
-        Cut
-      </Button>
-      <Button>
-        <IconClipboard2 />
-        Paste
-      </Button>
+      <Button icon={<IconSquareBehindSquare1 />}>Copy</Button>
+      <Button icon={<IconScissors1 />}>Cut</Button>
+      <Button icon={<IconClipboard2 />}>Paste</Button>
     </ButtonsGroup>
   ),
 };

@@ -1,5 +1,108 @@
 # @mastra/connect
 
+## 1.5.0-alpha.3
+
+### Minor Changes
+
+- Added a Confluence toolset with 36 tools. Agents can read and search spaces, create, update, and delete pages and blog posts, manage page properties, footer comments, and inline comments, and read attachments and labeled content. ([#31197](https://github.com/mastra-ai/mastra/pull/31197))
+
+  Connect a Confluence account to your project first (`mastra connect add confluence`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const wikiAgent = new Agent({
+    id: 'wiki-agent',
+    name: 'Wiki agent',
+    instructions: 'Use the connected Confluence tools to find and update team documentation.',
+    model: 'openai/gpt-6.1-sol',
+    tools: tools({ providers: ['confluence'] }),
+  });
+  ```
+
+  Tools work against the Confluence site chosen when the account was connected, including `confluence_search_content`.
+
+- Added a Zendesk toolset with 36 tools. Agents can create, update, search, and delete tickets and add public replies or internal notes, manage users and organizations, read groups, ticket fields, ticket forms, views, and macros, and write Help Center content: categories, sections, and articles, including editing an article's text per language and archiving it. ([#31199](https://github.com/mastra-ai/mastra/pull/31199))
+
+  Connect a Zendesk account to your project first (`mastra connect add zendesk`). When running locally, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the app's environment so `tools()` can find the connection. Then add the tools to an agent:
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const supportAgent = new Agent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Use the connected Zendesk tools to triage tickets and keep Help Center articles current.',
+    model: 'openai/gpt-6.1-sol',
+    tools: tools({ providers: ['zendesk'] }),
+  });
+  ```
+
+  `zendesk_delete_section` and `zendesk_delete_category` also delete every article inside them, so consider asking for approval before they run:
+
+  ```ts
+  tools({
+    providers: ['zendesk'],
+    requireApproval: ['zendesk_delete_section', 'zendesk_delete_category'],
+  });
+  ```
+
+  New articles don't email section subscribers unless `notify_subscribers` is set.
+
+### Patch Changes
+
+- Fixed Jira and Confluence tools using an Atlassian site they looked up earlier after you chose a different site in the connection's metadata. A `cloudId` set on the connection now takes precedence over a site a tool discovered on its own, so the next call goes to the site you chose. ([#31197](https://github.com/mastra-ai/mastra/pull/31197))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+
+## 1.5.0-alpha.2
+
+### Minor Changes
+
+- Added `ConnectEvents`, a single class for receiving a project's provider events. It takes the client configuration and where to start in one options object, and you iterate it directly: ([#31222](https://github.com/mastra-ai/mastra/pull/31222))
+
+  ```ts
+  import { ConnectEvents } from '@mastra/connect';
+
+  const events = new ConnectEvents({
+    cursorStore: { load: () => db.get('events-cursor'), save: cursor => db.set('events-cursor', cursor) },
+    onGap: () => resyncFromProviders(),
+  });
+
+  for await (const event of events) {
+    await handle(event.integrationId, event.eventType, event.payload);
+  }
+  ```
+
+  **Breaking (prerelease only):** `EventsClient`, `EventSubscription`, `connectEvents()`, `ConnectClient.events`, the `eventsUrl` option on `ConnectClient`, and the `EventsClientOptions`, `SubscribeOptions` and `TopicEvent` types are no longer exported. Pass `eventsUrl` to `ConnectEvents` instead.
+
+- Added support for self-hosted GitLab. Connections on the platform's **GitLab (self-hosted)** integration (`gitlab-self-hosted`), which connect a self-managed instance with an access token and its hostname, now get the same `gitlab_*` tools as gitlab.com connections. Calls go to the instance the connection was made for. ([#30954](https://github.com/mastra-ai/mastra/pull/30954))
+
+  Configure both kinds under `providers.gitlab`. With both a gitlab.com and a self-hosted connection, the agent picks one per call through `gitlab__list_connections` and `connection_name`, or you pin one:
+
+  ```ts
+  const connectTools = tools({
+    providers: { gitlab: { connectionId: process.env.SELF_HOSTED_GITLAB_CONNECTION_ID } },
+  });
+  ```
+
+  Options keyed by `gitlab-self-hosted` are rejected with a message pointing at `providers.gitlab`.
+
+### Patch Changes
+
+- Raised the `@mastra/core` peer range to `>=1.86.0-0 <2.0.0-0`, matching `@mastra/slack`, which now needs the channel tool helpers added in that core release. ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+- Fixed the Google Analytics `run_pivot_report` tool so it accepts a property as `properties/123456789` as well as `123456789`, like `run_report` and `batch_run_reports`. Passing the prefixed form sent the request to the wrong URL and Google answered 404. ([#31194](https://github.com/mastra-ai/mastra/pull/31194))
+
+- Connect sessions now include `apiBaseUrl`, the Nango host the platform issued the session for. `POST /connect/:provider/sessions` returns it so browsers can reach a self-hosted Nango; it is `null` when the platform does not report one. ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/slack@1.10.0-alpha.1
+
 ## 1.5.0-alpha.1
 
 ### Minor Changes

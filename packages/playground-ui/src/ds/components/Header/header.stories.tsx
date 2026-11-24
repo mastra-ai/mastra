@@ -59,8 +59,7 @@ export const WithActions: Story = {
         <Button variant="ghost" size="icon-md">
           <IconMagnifyingGlass className="size-4" />
         </Button>
-        <Button size="md">
-          <IconPlusMedium className="size-4" />
+        <Button icon={<IconPlusMedium />} size="md">
           New agent
         </Button>
       </HeaderAction>
@@ -105,8 +104,7 @@ export const ComplexHeader: Story = {
         <Button variant="ghost" size="icon-md">
           <IconSettingsGear5 className="size-4" />
         </Button>
-        <Button size="md">
-          <IconPlusMedium className="size-4" />
+        <Button icon={<IconPlusMedium />} size="md">
           Create
         </Button>
       </HeaderAction>

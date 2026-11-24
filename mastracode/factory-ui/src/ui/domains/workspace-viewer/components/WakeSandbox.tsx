@@ -13,8 +13,12 @@ export function WakeSandbox({ workspacePath }: { workspacePath: string }) {
       <Txt as="span" variant="caption" tone="muted">
         The sandbox isn&apos;t running.
       </Txt>
-      <Button size="sm" onClick={() => start.mutate()} disabled={start.isPending}>
-        {start.isPending ? <Spinner size="sm" /> : <Power />}
+      <Button
+        icon={start.isPending ? <Spinner size="sm" /> : <Power />}
+        size="sm"
+        onClick={() => start.mutate()}
+        disabled={start.isPending}
+      >
         {start.isPending ? 'Waking sandbox…' : 'Wake sandbox'}
       </Button>
       {start.error ? (

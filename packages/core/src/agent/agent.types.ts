@@ -590,6 +590,26 @@ export type MultiPrimitiveExecutionOptions<OUTPUT = undefined> = NetworkOptions<
  */
 export type PublicNetworkOptions<OUTPUT = undefined> = NetworkOptions<OUTPUT>;
 
+/**
+ * Per-call options for `agent.generate(messages, options)` and `agent.stream(messages, options)`.
+ * Merged over the agent's `defaultOptions`; per-call values win.
+ *
+ * Most used: `maxSteps` (tool-call loop limit, 5 when unset), `memory` (`{ thread, resource }`),
+ * `requestContext`, `instructions` (override), `modelSettings` (`temperature`, `maxOutputTokens`, ...),
+ * `toolChoice`, `activeTools`, `abortSignal`, `onStepFinish`, `onFinish`. `structuredOutput` is
+ * accepted alongside these by `generate()` / `stream()`.
+ *
+ * @example
+ * ```ts
+ * await agent.generate('Plan my day', {
+ *   maxSteps: 10,
+ *   memory: { thread: 'thread-1', resource: 'user-1' },
+ *   modelSettings: { temperature: 0.2 },
+ * });
+ * ```
+ *
+ * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+ */
 export type AgentExecutionOptionsBase<OUTPUT> = {
   /**
    * Signal chunks to hide from this caller's stream: true hides all recognized signals,
@@ -670,10 +690,18 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   versions?: VersionOverrides;
 
-  /** Maximum number of steps to run */
+  /**
+   * Maximum number of model steps in this run. A step is one model call plus the tools it
+   * calls, so this bounds the tool-call loop. Overrides the agent's `defaultOptions.maxSteps`.
+   * When neither `maxSteps` nor `stopWhen` is set, the run stops after 5 steps. When both are
+   * set, the run stops at whichever is reached first.
+   */
   maxSteps?: number;
 
-  /** Conditions for stopping execution (e.g., step count, token limit) */
+  /**
+   * Custom stop condition(s): a function (or array of functions) of `{ steps }` returning
+   * whether to stop. Combined with `maxSteps` when both are set.
+   */
   stopWhen?: LoopOptions['stopWhen'];
 
   /** Provider-specific options passed to the language model */

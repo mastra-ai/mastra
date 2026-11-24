@@ -1,24 +1,40 @@
 ---
 title: "Sentry | Observability"
-description: "Export Mastra traces to Sentry AI monitoring with OpenTelemetry semantic conventions, zero-config setup, and optional SDK or exporter settings."
+description: "Give Mastra agents Sentry tools through Mastra Connect, and export Mastra traces to Sentry AI monitoring with OpenTelemetry semantic conventions."
 packages:
+  - "@mastra/connect"
   - "@mastra/sentry"
   - "@mastra/observability"
 ---
 
+import SentryMcpConnectTools from "@site/src/components/connect/generated/sentry-mcp.mdx";
+
 # Sentry
 
-[Sentry](https://sentry.io/) is an application monitoring platform with AI-specific tracing capabilities. The Sentry exporter sends your traces to Sentry using OpenTelemetry semantic conventions, providing insights into model performance and token usage, plus tool executions.
+[Sentry](https://sentry.io/) is an application monitoring platform with AI-specific tracing capabilities. Use it with Mastra in two ways:
 
-## Installation
+- **Agent tools** let an agent work with Sentry issues, events, and projects through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Tracing](#tracing)** exports your Mastra traces to Sentry.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<SentryMcpConnectTools />
+
+## Tracing
+
+The Sentry exporter sends your traces to Sentry using OpenTelemetry semantic conventions, providing insights into model performance and token usage, plus tool executions.
+
+### Installation
 
 ```bash npm2yarn
 npm install @mastra/sentry@latest
 ```
 
-## Configuration
+### Configuration
 
-### Prerequisites
+#### Prerequisites
 
 1. **Sentry Account**: Sign up at [sentry.io](https://sentry.io/)
 1. **DSN**: Get your [Data Source Name](https://docs.sentry.io/concepts/key-terms/dsn-explainer/) from Project Settings → Client Keys
@@ -32,7 +48,7 @@ SENTRY_ENVIRONMENT=production
 SENTRY_RELEASE=1.0.0
 ```
 
-### Zero-config setup
+#### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -53,7 +69,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Explicit configuration
+#### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -80,9 +96,9 @@ export const mastra = new Mastra({
 })
 ```
 
-## Configuration options
+### Configuration options
 
-### Complete configuration
+#### Complete configuration
 
 ```typescript
 new SentryExporter({
@@ -107,7 +123,7 @@ new SentryExporter({
 })
 ```
 
-### Sampling configuration
+#### Sampling configuration
 
 Control the percentage of transactions sent to Sentry. This is useful for high-volume applications:
 
@@ -122,7 +138,7 @@ new SentryExporter({
 Set to `1.0` (100%) for development and `0.1` to `0.2` (10-20%) for production high-load applications. To disable tracing entirely, don't set `tracesSampleRate` at all rather than setting it to `0`.
 :::
 
-## Span type mapping
+### Span type mapping
 
 Mastra span types are automatically mapped to Sentry operations:
 
@@ -145,7 +161,7 @@ Mastra span types are automatically mapped to Sentry operations:
 | `PROCESSOR_RUN` | `ai.processor` | |
 | `GENERIC` | `ai.span` | |
 
-## OpenTelemetry semantic conventions
+### OpenTelemetry semantic conventions
 
 The exporter uses standard GenAI semantic conventions with Sentry-specific attributes:
 
@@ -181,7 +197,7 @@ The exporter uses standard GenAI semantic conventions with Sentry-specific attri
 - `gen_ai.response.text`: Output text from child generation
 - `gen_ai.usage.*`: Token usage from child generation
 
-## Features
+### Features
 
 - **Hierarchical traces**: Maintains parent-child relationships
 - **Token tracking**: Automatic token usage tracking for generations

@@ -1219,7 +1219,11 @@ export class GithubRules {
     // project's intake routes decide, when it is filed, whether it joins that card.
     const relatedItem = (home?.reason === 'authored' ? home.card : undefined) ?? matchedItem;
     const pullRequestHome: FactoryPullRequestHome | undefined = home
-      ? { workItemId: home.card.id, reason: home.reason }
+      ? {
+          workItemId: home.card.id,
+          reason: home.reason,
+          ...(home.alsoCloses.length > 0 ? { alsoCloses: home.alsoCloses } : {}),
+        }
       : undefined;
     // One delivery can concern two cards — a merged pull request settles both
     // its own Review card and the Work item that authored it — and every
@@ -1721,7 +1725,7 @@ export class GithubRules {
     factoryAuthored: boolean;
     authorTrusted: boolean;
     body: string | undefined;
-  }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason'] } | undefined> {
+  }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason']; alsoCloses: string[] } | undefined> {
     const items = await this.options.storage.listShared({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
@@ -1743,6 +1747,18 @@ export class GithubRules {
       !isTerminalWorkItem(this.#boards(input), card) &&
       (card.externalSource.integrationId !== 'github' ||
         cardBelongsToRepository(card, input.repositoryId, input.repositoryName));
+    const closed = closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName }).flatMap(
+      issueNumber => {
+        const card = items.find(
+          item =>
+            (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
+              item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
+            eligible(item),
+        );
+        return card ? [card] : [];
+      },
+    );
+    const alsoCloses = (home: Card) => [...new Set(closed.map(card => card.id))].filter(id => id !== home.id);
     // Resolution can match a card by branch alone, so only a trusted (or Factory's) pull request
     // is taken as that card's own.
     if (
@@ -1751,18 +1767,11 @@ export class GithubRules {
       eligible(input.matchedItem) &&
       cardBoardFlow(this.#boards(input), input.matchedItem).pullRequestReview !== undefined
     ) {
-      return { card: input.matchedItem, reason: 'authored' };
+      return { card: input.matchedItem, reason: 'authored', alsoCloses: alsoCloses(input.matchedItem) };
     }
-    for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
-      const card = items.find(
-        item =>
-          (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
-            item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
-          eligible(item),
-      );
-      if (card) return { card: structuredClone(card), reason: 'closes' };
-    }
-    return undefined;
+    // It is held by the first issue it closes; the others link to it.
+    const first = closed[0];
+    return first ? { card: structuredClone(first), reason: 'closes', alsoCloses: alsoCloses(first) } : undefined;
   }
 
   async #relatedItem(

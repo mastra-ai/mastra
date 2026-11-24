@@ -184,7 +184,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-icon-xs shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-subtle-foreground size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
