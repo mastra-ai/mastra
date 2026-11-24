@@ -16,12 +16,6 @@ Follow-ups for agent version tags that are not in this branch. Remove this file 
 - Cover the other run routes that share those helpers (for example network and approval routes) or state that they are excluded.
 - Regenerate the client route types and CLI route metadata, add the case to `packages/editor/src/agent-version-tags.integration.test.ts`, and update `docs/src/content/en/reference/editor/versioning.mdx`.
 
-## Version tags in Studio for prompt blocks
-
-**Today:** prompt block tags work through the API (`metadata.versionTags`, `?tag=` on `GET /stored/prompt-blocks/:id`, and `requestContext.promptVersionTag` on agent runs). Studio has no controls for them.
-
-**Wanted:** the prompt editor lists, sets, moves and removes tags the way the agent version history panel does, reusing that panel's tag section.
-
 # Reference: the closed "labels" stack
 
 An earlier design for the same feature used dedicated storage and routes. Its pull requests were closed on 2026-11-24 in favor of the metadata-based tags in this branch. The branches were kept in case that design is needed later, for example if tags need their own history, per-tag permissions, or atomic moves.

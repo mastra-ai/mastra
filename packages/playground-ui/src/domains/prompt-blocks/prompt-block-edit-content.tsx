@@ -185,7 +185,7 @@ export function PromptBlockEditContent({
       {isViewingPreviousVersion && (
         <Notice variant="info" title="This is a previous version" className="m-4 mb-0">
           <Notice.Message>You are seeing a specific version of the prompt block.</Notice.Message>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={onClearVersion}>
               View latest version
             </Button>
