@@ -2,6 +2,7 @@ import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions'
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
 
 import { sourceMetadata } from './boardItems';
+import { githubAvatarUrl } from './githubAvatar';
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -37,7 +38,7 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
     return {
       id: `github:${author}`,
       name: author,
-      avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
+      avatarUrl: githubAvatarUrl(author),
     };
   }
   if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {

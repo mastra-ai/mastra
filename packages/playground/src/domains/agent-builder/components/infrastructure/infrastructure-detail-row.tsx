@@ -1,4 +1,4 @@
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsItem } from '@mastra/playground-ui/new/settings';
 
 export interface InfrastructureDetailRowProps {
   label: string;
@@ -6,7 +6,7 @@ export interface InfrastructureDetailRowProps {
 }
 
 export const InfrastructureDetailRow = ({ label, value }: InfrastructureDetailRowProps) => (
-  <SettingsRow label={label}>
+  <SettingsItem title={label}>
     <span className="truncate text-body-sm text-muted-foreground">{value}</span>
-  </SettingsRow>
+  </SettingsItem>
 );

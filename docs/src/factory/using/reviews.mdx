@@ -1,0 +1,35 @@
+---
+title: Review items | Core concepts
+description: Start a PR review, respond to findings, and understand re-review and completion in Factory.
+---
+
+# Review items
+
+Use the **Review** phase of the **Work** board to follow a pull request through agent review and human assessment. A pull request's Review card has its own session, even when Factory created the pull request from an existing work item.
+
+## Start and inspect a review
+
+1. Open the **Work** board and find the card in **Review** by its title or source number.
+1. Check its GitHub or GitLab link, base branch, and current changes.
+1. Select **Review** if the card is waiting, then open the session.
+1. Inspect findings, tool output, and any tests alongside the actual diff.
+
+Factory brings pull requests from your linked repositories into **Review**. If a pull request is missing, check that you've linked the correct repository and that its source connection is working.
+
+When a review run completes, the agent has finished its review. Merging the pull request and completing the original issue are separate steps.
+
+## Respond to feedback
+
+Request concrete changes with the affected behavior and expected outcome. For pull requests authored by Factory, changes-requested review feedback can reach the authoring work session.
+
+After another push, inspect the updated files and checks. Use **Re-review** on an eligible card for another pass. Factory can supersede an active review when a newer pass starts.
+
+## Finish or close a review
+
+| Action in the source | Review card | Original work item |
+| - | - | - |
+| Merge the pull request | Moves to Done. | Moves to Done, unless the work item has another pull request open. Then it stays in Review until that pull request merges. |
+| Close without merging | Can move to Canceled. | Still needs a decision about the underlying task. |
+| Push further changes to an open pull request | May require another review. | Continues implementation or follow-up as appropriate. |
+
+Make the merge decision through your repository's normal human review process. Check acceptance criteria and required checks before merging. Use [Work items](/using/work-and-approvals#understand-source-events) when the linked issue closes.

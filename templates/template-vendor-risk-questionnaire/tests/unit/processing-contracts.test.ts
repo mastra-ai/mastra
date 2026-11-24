@@ -27,10 +27,10 @@ describe('processing policy and deterministic result contracts', () => {
   });
   it('configures_new_defaults_without_rewriting_saved_policies', async () => {
     try {
-      vi.stubEnv('VRQ_MODEL', 'openai/gpt-5-mini');
+      vi.stubEnv('VRQ_MODEL', 'openai/gpt-6.1-terra');
       vi.resetModules();
       const configured = await import('../../src/mastra/contracts/execution-policy.ts');
-      expect(configured.defaultExecutionPolicy.model).toBe('openai/gpt-5-mini');
+      expect(configured.defaultExecutionPolicy.model).toBe('openai/gpt-6.1-terra');
       expect(configured.executionPolicySchema.parse(defaultExecutionPolicy).model).toBe(defaultExecutionPolicy.model);
       for (const model of ['anthropic/other', 'openai/', 'openai/bad name', `openai/${'a'.repeat(101)}`])
         expect(configured.executionPolicySchema.safeParse({ ...defaultExecutionPolicy, model }).success).toBe(false);

@@ -1182,7 +1182,8 @@ export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
 /**
  * Storage v2 run entries: one step result (`kind: 'step'`) or one state entry (`kind` `state`,
  * `state-patch`, `state-base` or `state-draft`, `step_id` null; see `WorkflowRunEntry`) per row,
- * ordered by `seq` within a run.
+ * ordered by `seq` within a run. `first_seq` is a step entry's `firstSeq`: the `seq` of the step's
+ * first entry, set when the entry replaced (deleted) the step's earlier ones.
  * @experimental
  */
 export const WORKFLOW_RUN_ENTRIES_SCHEMA: Record<string, StorageColumn> = {
@@ -1192,6 +1193,7 @@ export const WORKFLOW_RUN_ENTRIES_SCHEMA: Record<string, StorageColumn> = {
   kind: { type: 'text', nullable: false },
   step_id: { type: 'text', nullable: true },
   payload: { type: 'jsonb', nullable: true },
+  first_seq: { type: 'integer', nullable: true },
 };
 
 /**

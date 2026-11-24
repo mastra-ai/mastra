@@ -3,6 +3,7 @@ import {
   knowledgePageKeyProblem,
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
+  KnowledgeInvalidCursorError,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
@@ -13,6 +14,7 @@ import type {
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
+  KnowledgePageActivityInput,
   KnowledgePageActivityEvent,
   KnowledgePageBodyLink,
   KnowledgePageLinkCounts,
@@ -302,7 +304,7 @@ function decodeCursor(cursor: string, arity: number): string[] {
   } catch {
     // fall through
   }
-  throw new Error('Invalid Knowledge cursor');
+  throw new KnowledgeInvalidCursorError(cursor);
 }
 
 function clampLimit(limit: number | undefined, max: number): number {
@@ -1680,13 +1682,12 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
@@ -1694,8 +1695,15 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const where = [filter.readable('s'), `(a."noteId" IS NULL OR ${this.#noteVisible(filter, 'a."noteId"')})`];
     if (input.scopeId) where.push(`s."id" = ${params.add(input.scopeId)}`);
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
-    if (input.cursor) {
-      const [createdAt, id] = decodeCursor(input.cursor, 2);
+    if (input.since) where.push(`a."createdAt" >= ${params.add(iso(input.since))}::timestamptz`);
+    if (input.until) where.push(`a."createdAt" < ${params.add(iso(input.until))}::timestamptz`);
+    const position = input.before
+      ? [iso(input.before.createdAt), input.before.id]
+      : input.cursor
+        ? decodeCursor(input.cursor, 2)
+        : undefined;
+    if (position) {
+      const [createdAt, id] = position;
       where.push(`(a."createdAt", a."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(

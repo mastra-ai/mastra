@@ -280,6 +280,7 @@ function EditLayoutWrapper() {
               Download JSON
             </Button>
             <Button
+              icon={<IconPullRequest />}
               variant="primary"
               size="sm"
               disabled={!canOpenPr || isSavingDraft || isSubmitting}
@@ -292,7 +293,6 @@ function EditLayoutWrapper() {
                 });
               }}
             >
-              <IconPullRequest />
               Open PR
             </Button>
           </>
@@ -300,24 +300,16 @@ function EditLayoutWrapper() {
       ) : !isCodeAgentEditable ? null : (
         <>
           <Button
+            icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
             variant="ghost"
             size="sm"
             onClick={() => void handleSaveDraft()}
             disabled={!isDirty || isSavingDraft || isSubmitting}
           >
-            {isSavingDraft ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <IconFloppyDisk1 />
-                Save
-              </>
-            )}
+            {isSavingDraft ? 'Saving...' : 'Save'}
           </Button>
           <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             size="sm"
             onClick={() => void handlePublishVersion()}
@@ -327,17 +319,7 @@ function EditLayoutWrapper() {
                 : !hasDraft || isSubmitting || isSavingDraft
             }
           >
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Publishing...
-              </>
-            ) : (
-              <>
-                <IconCheckmark2Medium />
-                {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
-              </>
-            )}
+            {isSubmitting ? 'Publishing...' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
           </Button>
         </>
       )}
@@ -345,7 +327,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>

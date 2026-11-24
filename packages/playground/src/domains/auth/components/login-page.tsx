@@ -109,7 +109,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
+    <div className="flex items-start gap-2.5 rounded-md bg-nested p-3">
       <IconLock className="mt-0.5 size-icon-md shrink-0 text-muted-foreground" />
       <Txt tone="muted">{login.description}</Txt>
     </div>
@@ -216,8 +216,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       )}
 
       {hasSSO && sso && (
-        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
-          {sso.icon && <span className="mr-2">{sso.icon}</span>}
+        <Button icon={sso.icon} onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
           {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
         </Button>
       )}

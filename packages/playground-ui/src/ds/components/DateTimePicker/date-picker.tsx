@@ -105,10 +105,10 @@ function CalendarDayButton({ className, day: _day, modifiers, ...props }: React.
         'not-disabled:hover:bg-fill-hover',
         // Today: a dot under the number, so it never competes with a selection.
         'data-today:after:absolute data-today:after:bottom-1 data-today:after:size-1 data-today:after:rounded-full data-today:after:bg-current',
-        modifiers.outside && 'text-muted-foreground/60',
+        modifiers.outside && 'text-subtle-foreground',
         isSolid &&
           'bg-fill-inverse font-medium text-background not-disabled:hover:bg-fill-inverse-hover data-today:after:bg-background',
-        modifiers.disabled && 'cursor-not-allowed text-muted-foreground/40',
+        modifiers.disabled && 'cursor-not-allowed text-subtle-foreground',
         className,
       )}
       {...props}

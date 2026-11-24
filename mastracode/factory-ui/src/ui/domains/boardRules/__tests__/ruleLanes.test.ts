@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { rule } from './fixtures/rulesServer';
-import { arrivalFallback, intakePosition, newItemRules, ordinal } from '../ruleLanes';
+import { describeRule } from '../../settings/components/conditionFields';
+import { arrivalFallback, nameRepeats, newItemRules } from '../ruleLanes';
 
 const order = [
   { boardKey: 'ship', name: 'Ship' },
@@ -9,37 +10,45 @@ const order = [
   { boardKey: 'docs', name: 'Docs' },
 ];
 
-describe('intakePosition', () => {
+describe('nameRepeats', () => {
+  const security = {
+    operator: 'OR' as const,
+    conditions: [
+      { field: 'item.labels', value: 'security', operator: 'equals' as const },
+      { field: 'source.repository', value: ['SEC'], operator: 'in' as const },
+    ],
+  };
+  const outsider = {
+    operator: 'AND' as const,
+    conditions: [
+      { field: 'source.repository', value: ['mastra-ai/mastra'], operator: 'in' as const },
+      { field: 'item.trusted', value: false, operator: 'equals' as const },
+    ],
+  };
+
   it.each([
-    [order, 'work', 'Checked after Ship, before Docs'],
-    [order, 'ship', 'Checked first (no board before it), before Work'],
-    [order, 'docs', 'Checked last, after Work (no board after it)'],
-    [order.slice(0, 1), 'ship', 'The only board intake checks'],
-    [order, 'release', 'Not in the intake order yet'],
-  ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(intakePosition(boards, boardKey)).toBe(text));
+    ['When labels has security or project is SEC', `Pull request opened ${describeRule(security)} PR review`, true],
+    ['All work items on the board', `Issue closed ${describeRule(null)} Done`, true],
+    ['When labels has security, move to Backlog', `Issue opened ${describeRule(security)} Backlog`, true],
+    [
+      'When an outside author opens it in an open source project',
+      `Issue opened ${describeRule(outsider)} Intake`,
+      false,
+    ],
+    ['Closed issues go to Done', `Issue closed ${describeRule(null)} Done`, true],
+    ['Duplicates go to Canceled', `Issue closed ${describeRule(null)} Canceled`, false],
+    ['緊急対応', `Issue closed ${describeRule(null)} Done`, false],
+    ['Sécurité urgente', `Issue opened ${describeRule(security)} Backlog`, false],
+  ])('%#: "%s" over "%s" repeats: %s', (name, shown, repeats) => expect(nameRepeats(name, shown)).toBe(repeats));
 });
 
 describe('arrivalFallback', () => {
   it.each([
-    [order, 'ship', 'Otherwise: checked by Work next, then the boards after it, then Not routed'],
-    [order, 'work', 'Otherwise: checked by Docs next, then Not routed'],
-    [order, 'docs', 'Otherwise: Not routed (no board after this one)'],
-    [undefined, 'work', 'Otherwise: checked by the next board, then Not routed'],
+    [order, 'ship', 'Otherwise: Work is asked next'],
+    [order, 'work', 'Otherwise: Docs is asked next'],
+    [order, 'docs', 'Otherwise: Not routed'],
+    [undefined, 'work', 'Otherwise: the next board is asked'],
   ])('%#: %s reads "%s"', (boards, boardKey, text) => expect(arrivalFallback(boards, boardKey)).toBe(text));
-});
-
-describe('ordinal', () => {
-  it.each([
-    [1, '1st'],
-    [2, '2nd'],
-    [3, '3rd'],
-    [4, '4th'],
-    [11, '11th'],
-    [12, '12th'],
-    [13, '13th'],
-    [21, '21st'],
-    [112, '112th'],
-  ])('%i is %s', (n, text) => expect(ordinal(n)).toBe(text));
 });
 
 describe('newItemRules', () => {

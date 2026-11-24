@@ -3,14 +3,19 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { ChunkFrom } from '../../../stream/types';
 import { AGENT_STREAM_TOPIC } from '../../streams/constants';
 import { createDurableAgentStream, emitChunkEvent, emitFinishEvent, emitSuspendedEvent } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 const suspendedData = { toolCallId: 'call-1', toolName: 'askTool', suspendPayload: {} } as any;
 
 describe('durable stream adapter suspension ordering', () => {
-  it.each(['finish', 'error'])(
-    'settles concurrent %s deliveries once after an asynchronous generation check',
-    async type => {
+  it.each([
+    ['finish', 'generation'],
+    ['error', 'generation'],
+    ['finish', 'replay'],
+    ['error', 'replay'],
+  ] as const)(
+    'settles concurrent %s terminal deliveries once after an asynchronous %s filter resolves',
+    async (type, filter) => {
       const pubsub = new EventEmitterPubSub();
       const runId = `duplicate-${type}`;
       let release!: () => void;
@@ -24,7 +29,9 @@ describe('durable stream adapter suspension ordering', () => {
         runId,
         messageId: `msg-${runId}`,
         model: { modelId: 'test', provider: 'test', version: 'v3' },
-        rereadMinGeneration: () => generation,
+        ...(filter === 'generation'
+          ? { rereadMinGeneration: () => generation }
+          : { keepReplayEvent: async () => (await generation) === 1 }),
         onTerminalEvent: async status => {
           settled.push(status);
         },
@@ -186,7 +193,7 @@ describe('durable stream adapter suspension ordering', () => {
       onSuspended: () => {
         seenAtSuspend.push(chunkSeen);
       },
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
     const reading = (async () => {
       for await (const _chunk of output.fullStream) {

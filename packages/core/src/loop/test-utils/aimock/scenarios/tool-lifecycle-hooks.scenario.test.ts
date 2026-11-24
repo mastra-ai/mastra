@@ -5,7 +5,7 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import type { ToolsInput } from '../../../../agent';
-import type { DurableAgentStreamOptions } from '../../../../agent/durable/durable-agent';
+import type { DurableAgentStreamOptions } from '../../../../agent/durable/types';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
@@ -14,7 +14,7 @@ import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import type { ToolHooks } from '../../../../tools/types';
 import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
-import { SCENARIO_MODEL_ID } from '../types';
+import { nativeExecutionEngine, SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Regression class: tool lifecycle hooks (onInputAvailable, onOutput).
@@ -145,7 +145,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       llm,
       prompt: 'Look up alpha.',
       stopWhen: stepCountIs(5),
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { lookup_tool: lookupTool },
         hooks: {
           beforeToolCall: ({ toolName, input }) => {
@@ -194,7 +194,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       llm,
       prompt: 'Run the guarded tool.',
       stopWhen: stepCountIs(5),
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { guarded_tool: guardedTool },
         hooks: { beforeToolCall: agentBeforeToolCall },
         executionHooks: { beforeToolCall: runBeforeToolCall },
@@ -244,7 +244,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       engine,
       llm,
       prompt: 'Call the guarded tool.',
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { guarded_tool: tool },
         hooks: { beforeToolCall: agentBefore },
         executionHooks: { beforeToolCall: defaultBefore, afterToolCall: defaultAfter },
@@ -298,7 +298,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       engine,
       llm,
       prompt: 'Call the guarded tool.',
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { guarded_tool: tool },
         [configKey]: { beforeToolCall: guardBefore, afterToolCall: guardAfter },
       }),
@@ -895,7 +895,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       llm,
       prompt: 'Run the guarded tool.',
       stopWhen: stepCountIs(5),
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { guarded_tool: guardedTool },
         executionHooks: { beforeToolCall },
       }),
@@ -934,7 +934,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       llm,
       prompt: 'Call the traced tool.',
       stopWhen: stepCountIs(5),
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { traced_tool: tracedTool },
         hooks: { afterToolCall: agentAfterToolCall },
         executionHooks: { afterToolCall: runAfterToolCall },
@@ -974,7 +974,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       llm,
       prompt: 'Call the failing tool.',
       stopWhen: stepCountIs(5),
-      sharedAgent: buildHookedAgent(llm, {
+      sharedAgent: buildHookedAgent(llm, nativeExecutionEngine(engine), {
         tools: { failing_tool: failingTool },
         hooks: { afterToolCall },
       }),
@@ -1010,6 +1010,7 @@ let hookedAgentCounter = 0;
  */
 function buildHookedAgent(
   llm: LLMock,
+  executionEngine: ReturnType<typeof nativeExecutionEngine>,
   { tools, hooks, executionHooks }: { tools: ToolsInput; hooks?: ToolHooks; executionHooks?: ToolHooks },
 ): { agent: Agent; mastra: Mastra } {
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
@@ -1023,6 +1024,11 @@ function buildHookedAgent(
     ...(hooks ? { hooks } : {}),
     ...(executionHooks ? { defaultOptions: { hooks: executionHooks } } : {}),
   });
-  const mastra = new Mastra({ agents: { [id]: agent }, logger: false, storage: new InMemoryStore() });
+  const mastra = new Mastra({
+    agents: { [id]: agent },
+    logger: false,
+    storage: new InMemoryStore(),
+    ...(executionEngine ? { durable: { executionEngine } } : {}),
+  });
   return { agent: mastra.getAgent(id), mastra };
 }

@@ -9,10 +9,10 @@ import { FilterBar } from '@/ds/components/FilterBar/filter-bar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Txt } from '@/ds/components/Txt';
-import { IconCircleRecord } from '@/ds/icons/central/IconCircleRecord';
 import { IconKanbanView } from '@/ds/icons/central/IconKanbanView';
 import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { IconUser } from '@/ds/icons/central/IconUser';
+import { CircleDotIcon } from '@/ds/icons/CircleDotIcon';
 
 const layoutSchema = z.enum(['list', 'board']);
 const settingsSchema = z.object({ layout: layoutSchema.catch('list') });
@@ -22,7 +22,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
-    icon: IconCircleRecord,
+    icon: CircleDotIcon,
     operators: ['is', 'is-not'],
     strict: true,
     suggestions: [{ value: 'open' }, { value: 'closed' }],

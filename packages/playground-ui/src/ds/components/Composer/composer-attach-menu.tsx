@@ -109,6 +109,7 @@ export function ComposerAttachMenu({
                   className={cn(entry.className, index === separatorBefore && 'mt-1 border-t border-border pt-1')}
                 >
                   <Button
+                    icon={entry.icon}
                     variant="ghost"
                     className="h-11 w-full justify-start gap-3 px-3"
                     onClick={() => {
@@ -116,7 +117,6 @@ export function ComposerAttachMenu({
                       entry.onSelect();
                     }}
                   >
-                    {entry.icon}
                     {entry.label}
                   </Button>
                 </li>

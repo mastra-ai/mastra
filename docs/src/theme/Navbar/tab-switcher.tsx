@@ -2,7 +2,14 @@ import { cn } from '@site/src/lib/utils'
 import Link from '@docusaurus/Link'
 import { useLocation } from '@docusaurus/router'
 
-const docsTabs = [
+type DocsTab = {
+  id: string
+  label: string
+  href: string
+  basePath: string
+}
+
+const docsTabs: DocsTab[] = [
   {
     id: 'Docs',
     label: 'Docs',
@@ -26,12 +33,6 @@ const docsTabs = [
     label: 'Reference',
     href: '/reference',
     basePath: '/reference',
-  },
-  {
-    id: 'Learn',
-    label: 'Learn',
-    href: '/learn',
-    basePath: '/learn',
   },
   {
     id: 'Platform',
@@ -68,7 +69,6 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 aria-current={isActive ? 'page' : undefined}
               >
                 {tab.label}
-                {'badge' in tab && tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
 
                 {isActive && (
                   <div

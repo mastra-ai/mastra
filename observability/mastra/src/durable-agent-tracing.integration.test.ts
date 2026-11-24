@@ -13,7 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, getTimeToFirstChunkMs } from '@mastra/core/observability';
+import { SpanType, TracingEventType, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
@@ -424,6 +424,48 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     }
   });
 
+  it('DurableAgent resume: the MODEL_STEP that suspended keeps only its suspension end', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'use the tool',
+      model: toolThenTextModel('get_weather', { city: 'Paris' }, 'It is 21C in Paris.') as any,
+      tools: {
+        get_weather: createTool({
+          id: 'get_weather',
+          description: 'Get the weather',
+          inputSchema: z.object({ city: z.string() }),
+          requireApproval: true,
+          execute: async ({ city }) => ({ forecast: `Sunny in ${city}` }),
+        }),
+      },
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    const res = await wrapped.stream('weather in paris?');
+    for await (const chunk of res.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    const resumed = await wrapped.approveToolCall({ runId: res.runId });
+    for await (const _chunk of resumed.fullStream) {
+      // Drain the resumed segment.
+    }
+    await settle(testExporter);
+
+    // The suspension ended the step under the first generation; the resumed segment, whose
+    // own generation is new, must not end it again when the approved tool completes.
+    const [firstGeneration] = byStart(testExporter.getSpansByType(SpanType.MODEL_GENERATION));
+    const endsOf = (spanId: string) =>
+      testExporter
+        .getBySpanId(spanId)
+        .events.filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan.outcome);
+    const steps = byStart(testExporter.getSpansByType(SpanType.MODEL_STEP));
+    expect(steps).toHaveLength(2);
+    expect(parentOf(steps[0])).toBe(idOf(firstGeneration));
+    expect(endsOf(idOf(steps[0]))).toEqual(['suspend']);
+    expect(endsOf(idOf(steps[1]))).toEqual(['success']);
+  });
+
   it('DurableAgent simple run: generation and AGENT_RUN carry the inference clock', async () => {
     const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: textModel('Hello') as any });
     const { wrapped } = buildMastra(testExporter, agent, 'durable');
@@ -540,8 +582,11 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     await settle(testExporter);
 
     const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
-    expect(inferences.map(span => span.attributes?.finishReason)).toEqual(['retry', 'stop']);
+    expect(inferences).toHaveLength(2);
     const [failed, streamed] = inferences;
+    // The retry re-attempts the request within the same step, so the failed request ends with its error.
+    expect(failed.errorInfo?.message).toBe('provider unavailable');
+    expect(streamed.attributes?.finishReason).toBe('stop');
     expect(failed.timeToFirstTokenMs).toBeUndefined();
     expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
     const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;

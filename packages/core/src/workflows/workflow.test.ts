@@ -2,6 +2,7 @@ import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { TripWire } from '../agent/trip-wire';
 import { FGADeniedError } from '../auth/ee/fga-check';
 import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
@@ -624,6 +625,46 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       // Clean up spy
       consoleErrorSpy.mockRestore();
+    });
+
+    it('should not log a processor tripwire as a step error', async () => {
+      const mockLogger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        trackException: vi.fn(),
+      };
+
+      const blockingStep = createStep({
+        id: 'blocking-step',
+        execute: async () => {
+          throw new TripWire('blocked on purpose', {}, 'always-block');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'test-logger-tripwire',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ result: z.string() }),
+        steps: [blockingStep],
+      });
+      workflow.then(blockingStep).commit();
+      workflow.__setLogger(mockLogger as any);
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('tripwire');
+      expect((result as any).tripwire).toMatchObject({ reason: 'blocked on purpose', processorId: 'always-block' });
+      expect(mockLogger.error).not.toHaveBeenCalled();
+      expect(mockLogger.trackException).not.toHaveBeenCalled();
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringMatching(/blocking-step stopped by tripwire$/),
+        expect.objectContaining({ processorId: 'always-block', reason: 'blocked on purpose' }),
+      );
     });
   });
 

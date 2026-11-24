@@ -36,7 +36,13 @@ export function useBoardItems({
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const movingRef = useRef<Set<string>>(new Set());
 
-  const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
+  const requestTransition = (
+    item: WorkItem,
+    toBoard: string,
+    toStage: string,
+    options: MoveOptions = {},
+    onSettled?: () => void,
+  ) => {
     setTransitionReasons(current => {
       if (!(item.id in current)) return current;
       const next = { ...current };
@@ -52,7 +58,7 @@ export function useBoardItems({
     void transition
       .mutateAsync({
         item,
-        board: itemBoard(item),
+        board: toBoard,
         stage: toStage,
         cause: options.cause ?? 'card_action',
         ...(item.stages.length === 1 && item.stages[0] === toStage ? { reenter: true } : {}),
@@ -77,7 +83,17 @@ export function useBoardItems({
       if (!phase || (phase.id !== toStage && !phase.transitions.some(target => target.to === toStage))) return;
     }
     movingRef.current.add(id);
-    requestTransition(item, toStage, options, () => movingRef.current.delete(id));
+    requestTransition(item, itemBoard(item), toStage, options, () => movingRef.current.delete(id));
+  };
+
+  /** Moves a card to a phase on another board; the server keeps its id, history, and sessions. */
+  const moveToBoard = (id: string, toBoard: string, toStage: string) => {
+    const item = all.find(candidate => candidate.id === id);
+    if (!item || movingRef.current.has(id)) return;
+    if (itemBoard(item) === toBoard) return move(id, toStage);
+    // No declared-move gate here: the destination board's rules are the server's to judge.
+    movingRef.current.add(id);
+    requestTransition(item, toBoard, toStage, { cause: 'move_to_board' }, () => movingRef.current.delete(id));
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
@@ -91,6 +107,7 @@ export function useBoardItems({
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     move,
+    moveToBoard,
     remove: (id: string) => remove.mutate(id),
     handleDrop,
   };

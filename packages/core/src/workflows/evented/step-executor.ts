@@ -8,8 +8,8 @@ import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { CachingPubSub } from '../../events/caching-pubsub';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import { isRunLocalTopic } from '../../events/topics';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -91,8 +91,7 @@ export class StepExecutor extends MastraBase {
     if (inner instanceof CachingPubSub) {
       this.#stepPubsub = inner;
     } else if (cache) {
-      const processLocalLogs =
-        cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub);
+      const processLocalLogs = cache instanceof InMemoryServerCache && reachesOtherProcesses(inner);
       this.#stepPubsub = new CachingPubSub(inner, cache, {
         // Run-local watch events are per-process fan-out (often megabytes of
         // cumulative step results) and must never land in a shared cache.
@@ -243,14 +242,15 @@ export class StepExecutor extends MastraBase {
       params.stepResults[stepId]?.status === 'suspended' ? params.stepResults[stepId]?.suspendPayload : undefined;
 
     // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
-    // iteration's payload. When resuming a specific iteration, use that iteration's own payload
-    // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
-    // (e.g. another tool call's suspended run id).
+    // iteration's payload. A foreach item reads only its own record, so it never sees a sibling's
+    // data (e.g. another tool call's suspended run id); an item that never suspended gets none.
+    // Records suspended by earlier versions have no `foreachOutput`; the item's own output slot
+    // holds the same record there.
     if (suspendDataToUse && typeof params.foreachIdx === 'number') {
-      const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx];
-      if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
-        suspendDataToUse = iterationResult.suspendPayload;
-      }
+      const iterationResult =
+        suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx] ??
+        (params.stepResults[stepId] as { output?: any[] } | undefined)?.output?.[params.foreachIdx];
+      suspendDataToUse = iterationResult?.status === 'suspended' ? iterationResult.suspendPayload : undefined;
     }
 
     // Filter out internal workflow metadata before exposing to step code
@@ -504,11 +504,7 @@ export class StepExecutor extends MastraBase {
         },
       });
 
-      if (
-        isExecutionFenceError(error) &&
-        this.mastra &&
-        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
-      ) {
+      if (isExecutionFenceError(error) && this.mastra && reachesOtherProcesses(this.mastra.pubsub)) {
         if (isStorageFencedExecution(requestContext, runId, params.parentWorkflow)) throw error;
       }
 
@@ -522,8 +518,18 @@ export class StepExecutor extends MastraBase {
         },
         errorInstance,
       );
-      this.logger?.trackException(mastraError);
-      this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+      // A processor tripwire is an intentional block, not a failure: log it quietly without a stack.
+      // Check `error` not `errorInstance` (see below).
+      if (error instanceof TripWire) {
+        this.logger?.debug(`Step ${stepId} stopped by tripwire`, {
+          stepId,
+          processorId: error.processorId,
+          reason: error.message,
+        });
+      } else {
+        this.logger?.trackException(mastraError);
+        this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+      }
 
       return {
         ...(omitPriorSuspensionFields(stepInfo) as typeof stepInfo),

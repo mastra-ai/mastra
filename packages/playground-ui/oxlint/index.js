@@ -9,6 +9,7 @@
 //
 // Rules (plugin name `playground-ui`):
 //   playground-ui/icon-button-size   a <Button> holding only an icon uses an `icon-*` size
+//   playground-ui/button-icon-prop   an icon beside a <Button>'s label is its `icon` / `iconEnd`, not a child
 //   playground-ui/text-role          typography comes from a DS text role, not Tailwind's text-sm / text-[13px]
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
@@ -16,6 +17,8 @@
 //   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
 //   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
+//   playground-ui/no-page-width      a page takes its width from PageLayout, not a centred max-w-* column
+//   playground-ui/page-layout-props  every PageLayout names a variant and passes only the props that variant takes
 
 import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
@@ -119,6 +122,131 @@ function iconButtonSize(context) {
         node: openingElement,
         message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
       });
+    },
+  };
+}
+
+// --- button-icon-prop ----------------------------------------------------------------------------------
+// An icon beside a button's label goes through `icon` (before the label) or `iconEnd` (after it). The slot
+// sizes and spaces it, and the button knows which child is its icon. An icon between two parts of a label
+// stays a child, and so does anything that isn't an icon: an avatar, a badge, a key hint.
+// Options: { components: { Button: ['icon', 'iconEnd'] } }, the components to check and the props each takes.
+const BUTTON_ICON_PROPS = {
+  Button: ['icon', 'iconEnd'],
+  DialogAction: ['icon', 'iconEnd'],
+  'Notice.Button': ['icon'],
+  'JSONSchemaForm.AddField': ['icon', 'iconEnd'],
+};
+
+const jsxName = name =>
+  name.type === 'JSXMemberExpression' ? `${jsxName(name.object)}.${name.property.name}` : (name.name ?? '');
+
+const isBlank = node =>
+  (node.type === 'JSXText' && !node.value.trim()) ||
+  (node.type === 'JSXExpressionContainer' && node.expression.type === 'JSXEmptyExpression') ||
+  (node.type === 'JSXExpressionContainer' &&
+    node.expression.type === 'Literal' &&
+    typeof node.expression.value === 'string' &&
+    !node.expression.value.trim());
+
+const isNothing = node =>
+  (node.type === 'Literal' && (node.value === null || node.value === false || node.value === '')) ||
+  (node.type === 'Identifier' && node.name === 'undefined');
+
+// What a child can turn into: the branches of a condition, without the ones that render nothing.
+function branches(node) {
+  switch (node.type) {
+    case 'JSXExpressionContainer':
+    case 'TSAsExpression':
+    case 'TSNonNullExpression':
+    case 'ParenthesizedExpression':
+      return branches(node.expression);
+    case 'ConditionalExpression':
+      return [...branches(node.consequent), ...branches(node.alternate)];
+    case 'LogicalExpression':
+      return node.operator === '&&' ? branches(node.right) : [...branches(node.left), ...branches(node.right)];
+    default:
+      return isNothing(node) ? [] : [node];
+  }
+}
+
+const contentOf = node => node.children.filter(child => !isBlank(child) && branches(child).length > 0);
+
+// `<Icon>` and a bare `<span>` around an icon are the icon.
+function isIcon(node, iconImports) {
+  switch (node.type) {
+    case 'JSXElement': {
+      const name = jsxName(node.openingElement.name);
+      if (name === 'svg' || isIconName(name, iconImports) || /(^|\.)icon$/i.test(name)) return true;
+      const content = contentOf(node);
+      return name === 'span' && content.length > 0 && content.every(child => isIconChild(child, iconImports));
+    }
+    case 'JSXFragment': {
+      const content = contentOf(node);
+      return content.length > 0 && content.every(child => isIconChild(child, iconImports));
+    }
+    case 'Identifier':
+      return /^icon$|Icon$/.test(node.name);
+    case 'MemberExpression':
+      return !node.computed && /^icon$|Icon$/.test(node.property.name);
+    case 'ChainExpression':
+      return isIcon(node.expression, iconImports);
+    default:
+      return false;
+  }
+}
+
+function isIconChild(child, iconImports) {
+  const options = branches(child);
+  return options.length > 0 && options.every(option => isIcon(option, iconImports));
+}
+
+// The icons at one end of a label, looking inside fragments and the branches of a condition.
+function iconsAtEdge(content, side, iconImports) {
+  if (content.length === 0 || content.every(child => isIconChild(child, iconImports))) return [];
+  const edge = side === 'icon' ? content[0] : content.at(-1);
+  if (isIconChild(edge, iconImports)) return [edge];
+  return branches(edge).flatMap(option =>
+    option.type === 'JSXFragment' ? iconsAtEdge(contentOf(option), side, iconImports) : [],
+  );
+}
+
+// Every value the attribute can take is a literal text size (`size={compact ? 'sm' : 'md'}` counts).
+const isTextSize = value =>
+  value !== null &&
+  (value.type === 'Literal' ? [value] : branches(value)).every(
+    option => option.type === 'Literal' && typeof option.value === 'string' && !option.value.startsWith('icon-'),
+  );
+
+const setsSize = attribute => attribute.type === 'JSXSpreadAttribute' || attribute.name.name === 'size';
+
+function buttonIconProp(context) {
+  const { components = BUTTON_ICON_PROPS } = context.options[0] ?? {};
+  const iconImports = new Set();
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
+    },
+    JSXElement(node) {
+      const { openingElement } = node;
+      const name = jsxName(openingElement.name);
+      if (!Object.hasOwn(components, name)) return;
+      const attributes = new Map();
+      for (const attribute of openingElement.attributes)
+        if (attribute.type === 'JSXAttribute') attributes.set(attribute.name.name, attribute.value);
+      // An icon size ignores the props: its child is the glyph. A forwarded or spread size may be one.
+      if (attributes.has('size') && !isTextSize(attributes.get('size'))) return;
+      if (openingElement.attributes.findLast(setsSize)?.type === 'JSXSpreadAttribute') return;
+      const content = contentOf(node);
+      for (const prop of components[name]) {
+        if (attributes.has(prop)) continue;
+        for (const icon of iconsAtEdge(content, prop, iconImports))
+          context.report({
+            node: icon,
+            message: `Pass this icon through <${name}>'s \`${prop}\` prop, not as a child beside the label.`,
+          });
+      }
     },
   };
 }
@@ -320,10 +448,161 @@ function placeholderText(context) {
   };
 }
 
+// How to pick a PageLayout variant, shared by every message that sends someone to one.
+const PICK_PAGE_VARIANT =
+  'variant="form" for a create or edit form (title and back link, no breadcrumbs), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
+
+const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of building a centred max-w-* column. Use ${PICK_PAGE_VARIANT}`;
+
+const centredPageColumn = classStrings('^(?=[\\s\\S]*(^|\\s)mx-auto(\\s|$))(?=[\\s\\S]*(^|\\s)max-w-)');
+const noPageWidth = selectorRule(() => centredPageColumn.map(selector => ({ selector, message: PAGE_WIDTH_MESSAGE })));
+
+const PAGE_SPACING_MESSAGE = cls =>
+  `Drop ${cls}: PageLayout puts 16px under the header and 48px at the end of the page. Stack the page's sections with gap-6 (or space-y-6) and nothing else.`;
+
+const SPACING_UTILITY = /^-?(m|p)[xytrblse]?-/;
+const COLUMN_GAP_UTILITY = /^(space-y|gap-y|gap)-(.+)$/;
+
+const alternative = (literals = [], assumes = new Map()) => ({ literals, assumes });
+
+function merge(a, b) {
+  const assumes = new Map(a.assumes);
+  for (const [test, value] of b.assumes) {
+    if (assumes.has(test) && assumes.get(test) !== value) return null;
+    assumes.set(test, value);
+  }
+  return alternative([...a.literals, ...b.literals], assumes);
+}
+
+const product = parts =>
+  parts.reduce(
+    (combos, options) => combos.flatMap(combo => options.map(option => merge(combo, option)).filter(Boolean)),
+    [alternative()],
+  );
+
+const assuming = (options, test, value) =>
+  options.map(option => merge(option, alternative([], new Map([[test, value]])))).filter(Boolean);
+
+function classAlternatives(node, source) {
+  if (!node) return [alternative()];
+  const next = child => classAlternatives(child, source);
+  if (node.type === 'Literal' && /^['"]/.test(node.raw)) return [alternative([{ node, text: node.value }])];
+  if (node.type === 'TemplateLiteral')
+    return product([
+      [alternative(node.quasis.map(quasi => ({ node: quasi, text: quasi.value.raw })))],
+      ...node.expressions.map(next),
+    ]);
+  if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') return next(node.expression);
+  if (node.type === 'LogicalExpression') {
+    if (node.operator !== '&&') return [...next(node.left), ...next(node.right)];
+    const test = source.getText(node.left);
+    return [...assuming([alternative()], test, false), ...assuming(next(node.right), test, true)];
+  }
+  if (node.type === 'ConditionalExpression') {
+    const test = source.getText(node.test);
+    return [...assuming(next(node.consequent), test, true), ...assuming(next(node.alternate), test, false)];
+  }
+  if (node.type === 'CallExpression') return product(node.arguments.map(next));
+  if (node.type === 'ArrayExpression') return product(node.elements.map(next));
+  return [alternative()];
+}
+
+function pageRoots(node, { throughFragments = true } = {}, roots = []) {
+  if (!node) return roots;
+  const next = child => pageRoots(child, { throughFragments }, roots);
+  if (node.type === 'JSXElement') roots.push(node);
+  else if (node.type === 'JSXFragment' && throughFragments) node.children.forEach(next);
+  else if (node.type === 'JSXExpressionContainer' || node.type === 'ParenthesizedExpression') next(node.expression);
+  else if (node.type === 'LogicalExpression') next(node.right);
+  else if (node.type === 'ConditionalExpression') {
+    next(node.consequent);
+    next(node.alternate);
+  }
+  return roots;
+}
+
+function stacksColumn(classes) {
+  if (classes.some(cls => cls.startsWith('space-y-') || cls.startsWith('gap-y-'))) return true;
+  if (classes.includes('flex-col')) return true;
+  return classes.includes('grid') && !classes.some(cls => cls.startsWith('grid-cols-') && cls !== 'grid-cols-1');
+}
+
+function noPageSpacing(context) {
+  const check = (root, isBody) => {
+    const attribute = root.openingElement.attributes.find(
+      item => item.type === 'JSXAttribute' && item.name.name === 'className',
+    );
+    if (!attribute) return;
+    const reported = new Map();
+    for (const { literals } of classAlternatives(attribute.value, context.sourceCode)) {
+      const classes = literals.flatMap(({ text }) => text.split(/\s+/)).map(cls => cls.split(':').pop());
+      const column = stacksColumn(classes);
+      for (const { node, text } of literals) {
+        for (const raw of text.split(/\s+/).filter(Boolean)) {
+          const cls = raw.split(':').pop();
+          const gap = COLUMN_GAP_UTILITY.exec(cls);
+          const spacing = SPACING_UTILITY.test(cls) && cls !== 'mx-auto';
+          const offRhythmGap = isBody && gap && (gap[1] !== 'gap' || column) && gap[2] !== '6';
+          const seen = reported.get(node) ?? new Set();
+          if (!(spacing || offRhythmGap) || seen.has(raw)) continue;
+          reported.set(node, seen.add(raw));
+          context.report({ node, message: PAGE_SPACING_MESSAGE(raw) });
+        }
+      }
+    }
+  };
+  return {
+    JSXElement(node) {
+      const { name } = node.openingElement;
+      if (name.type !== 'JSXIdentifier' || name.name !== 'PageLayout') return;
+      const attribute = attributeName =>
+        node.openingElement.attributes.find(item => item.type === 'JSXAttribute' && item.name.name === attributeName);
+      const fixedBody = literalAttribute(attribute('body')?.value) === 'fixed';
+      if (!fixedBody) for (const child of node.children) for (const root of pageRoots(child)) check(root, true);
+      for (const root of pageRoots(attribute('header')?.value, { throughFragments: false })) check(root, false);
+    },
+  };
+}
+
+const PAGE_LAYOUT = "JSXOpeningElement[name.name='PageLayout']";
+// The variants PageLayout used to take, and what each became.
+const REMOVED_PAGE_LAYOUT_VARIANTS = {
+  container: `PageLayout has no container variant. Use ${PICK_PAGE_VARIANT}`,
+  fit: 'PageLayout has no fit variant. Use variant="page" body="fixed": the page stays put and its panels scroll on their own.',
+  narrow:
+    'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title and back link, no breadcrumbs) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
+};
+// Props a variant does not take. TypeScript rejects these too, but its union error does not say what to do instead.
+const PROPS_OFF_VARIANT = [
+  [
+    'form',
+    'breadcrumbs|headerActions|actionRow|header',
+    'A form has no breadcrumbs, header actions or header: its way out is the back link (backHref, backLabel) and its title is `title`. If this is not a create or edit form, use variant="settings" or variant="page".',
+  ],
+  ['form', 'body', 'Only variant="page" takes body. A form is a 640px column that scrolls with the page.'],
+  ['settings', 'body', 'Only variant="page" takes body. A settings page is a 640px column that scrolls with the page.'],
+];
+const pageLayoutProps = selectorRule(() => [
+  {
+    selector: `${PAGE_LAYOUT}:not(:has(> JSXAttribute[name.name='variant'], > JSXSpreadAttribute))`,
+    message: `PageLayout needs a variant. Use ${PICK_PAGE_VARIANT}`,
+  },
+  ...Object.entries(REMOVED_PAGE_LAYOUT_VARIANTS).map(([value, message]) => ({
+    selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='variant'][value.value='${value}']`,
+    message,
+  })),
+  ...PROPS_OFF_VARIANT.map(([variant, props, message]) => ({
+    selector: `${PAGE_LAYOUT}:has(> JSXAttribute[name.name='variant'][value.value='${variant}']) > JSXAttribute[name.name=/^(${props})$/]`,
+    message,
+  })),
+  { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
+]);
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
     'icon-button-size': { meta: { type: 'suggestion', schema: false }, create: iconButtonSize },
+    'button-icon-prop': { meta: { type: 'suggestion', schema: false }, create: buttonIconProp },
     'icon-size-from-parent': { meta: { type: 'suggestion', schema: false }, create: iconSizeFromParent },
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
@@ -332,12 +611,19 @@ const plugin = {
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
     'no-text-layout-spacing': noTextLayoutSpacing,
+    'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
+    'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
+    'no-page-spacing': { meta: { type: 'suggestion', schema: false }, create: noPageSpacing },
   },
 };
 
 export const copyRules = {
   'playground-ui/no-text-separators': 'error',
   'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const pageRules = {
+  'playground-ui/no-page-width': 'error',
 };
 
 export const copyRuleExclusions = {
@@ -349,12 +635,15 @@ export const copyRuleExclusions = {
 // (tests and stories, for example).
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
+  'playground-ui/button-icon-prop': 'error',
   'playground-ui/icon-size-from-parent': 'error',
   'playground-ui/text-role': 'error',
   'playground-ui/txt-tone': 'error',
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/page-layout-props': 'error',
+  'playground-ui/no-page-spacing': 'error',
   ...copyRules,
 };
 

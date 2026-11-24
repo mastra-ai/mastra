@@ -978,6 +978,11 @@ export class TestExporter extends BaseExporter {
     // Prefixed UUID pattern for embedded matches — non-global for test(), global for replace()
     const embeddedPrefixedUuidTest = /([a-z_]+)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
     const embeddedPrefixedUuidRegex = /([a-z_]+)_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi;
+    // Bare UUID inside a longer string, not part of a larger hex/word token
+    const embeddedBareUuidTest =
+      /(?<![0-9a-z_-])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-z_-])/i;
+    const embeddedBareUuidRegex =
+      /(?<![0-9a-z_-])[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![0-9a-z_-])/gi;
 
     // Helper to normalize a UUID with key-specific placeholders
     const normalizeUuid = (uuid: string, key: string): string => {
@@ -1025,10 +1030,18 @@ export class TestExporter extends BaseExporter {
           return `${prefix}_${normalizeUuid(uuid, prefix)}`;
         }
         // Check for embedded prefixed UUIDs (e.g., "workflow step: 'mapping_<uuid>'")
-        if (embeddedPrefixedUuidTest.test(value)) {
-          return value.replace(embeddedPrefixedUuidRegex, (_match, prefix, uuid) => {
+        let embedded = value;
+        if (embeddedPrefixedUuidTest.test(embedded)) {
+          embedded = embedded.replace(embeddedPrefixedUuidRegex, (_match, prefix, uuid) => {
             return `${prefix}_${normalizeUuid(uuid, prefix)}`;
           });
+        }
+        // Check for embedded bare UUIDs (e.g. a workflow runId inside a serialized tool result)
+        if (embeddedBareUuidTest.test(embedded)) {
+          embedded = embedded.replace(embeddedBareUuidRegex, uuid => normalizeUuid(uuid, 'uuid'));
+        }
+        if (embedded !== value) {
+          return embedded;
         }
       }
       if (Array.isArray(value)) {

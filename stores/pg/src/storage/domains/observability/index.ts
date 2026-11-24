@@ -354,6 +354,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -401,6 +402,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -448,6 +450,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -766,6 +769,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           r."environment", r."source", r."serviceName", r."scope",
           r."spanType", r."attributes", r."metadata", r."tags", r."links",
           r."input", r."output", r."error", r."isEvent",
+          r."outcome", r."stopReason", r."stopReasonContext", r."resumedFromSpanId",
           r."startedAtZ" as "startedAt", r."endedAtZ" as "endedAt",
           r."createdAtZ" as "createdAt", r."updatedAtZ" as "updatedAt"
         FROM ${tableName} r

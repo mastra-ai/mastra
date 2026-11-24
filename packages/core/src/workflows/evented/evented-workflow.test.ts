@@ -15,11 +15,15 @@ import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
 import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { noopLogger } from '../../logger/noop-logger';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
+import { ProcessorRunner } from '../../processors/runner';
 import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
+import { ChunkFrom } from '../../stream/types';
 import { createEventedEngineTestSuite } from '../test-utils/evented-engine-suite';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
@@ -517,6 +521,144 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
+  describe('processor chain abort signal (#29208)', () => {
+    // Real brokers JSON round-trip events, which turns an AbortSignal into `{}`.
+    // The outputStream phase is used because a MessageList does not survive that round trip either.
+    class SerializingPubSub extends EventEmitterPubSub {
+      async publish(topic: string, event: any) {
+        return super.publish(topic, JSON.parse(JSON.stringify(event)));
+      }
+    }
+
+    const setup = (
+      id: string,
+      onSecond?: () => Promise<void>,
+      pubsub: EventEmitterPubSub = new SerializingPubSub(),
+    ) => {
+      const received: Array<AbortSignal | undefined> = [];
+      const recorder = (stepId: string, wait?: () => Promise<void>): Processor => ({
+        id: stepId,
+        processOutputStream: async ({ part, abortSignal }) => {
+          received.push(abortSignal);
+          await wait?.();
+          return part;
+        },
+      });
+      const workflow = createWorkflow({
+        id,
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(recorder('first')))
+        .then(createStep(recorder('second', onSecond)))
+        .commit();
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub,
+      });
+      return { received, workflow, mastra };
+    };
+    const inputData = (signal?: AbortSignal) =>
+      ({
+        phase: 'outputStream',
+        part: { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+        streamParts: [],
+        abortSignal: signal,
+      }) as any;
+
+    it("passes the caller's live signal to every processor run by the processor runner", async () => {
+      // The runner's payload also carries a processorStates Map, which a serializing pubsub
+      // breaks before any processor runs, so this covers the runner wiring in-process.
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-chain',
+        undefined,
+        new EventEmitterPubSub(),
+      );
+      await mastra.startWorkers();
+      try {
+        const controller = new AbortController();
+        const runner = new ProcessorRunner({ logger: noopLogger, agentName: 'agent', outputProcessors: [workflow] });
+        const result = await runner.processPart(
+          { type: 'text-delta', runId: 'run', from: ChunkFrom.AGENT, payload: { id: '1', text: 'hi' } },
+          new Map(),
+          undefined,
+          undefined,
+          undefined,
+          0,
+          undefined,
+          controller.signal,
+        );
+
+        expect(result.blocked).toBe(false);
+        expect(received).toHaveLength(2);
+        expect(received.map(s => s?.aborted)).toEqual([false, false]);
+        controller.abort();
+        expect(received.map(s => s?.aborted)).toEqual([true, true]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('aborts the processor signal when the run is cancelled while a caller signal is set', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-caller-and-cancel',
+        async () => {
+          secondSignal = received[1];
+          secondStarted();
+          await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+        },
+        new EventEmitterPubSub(),
+      );
+      await mastra.startWorkers();
+      try {
+        const caller = new AbortController();
+        const run = await workflow.createRun();
+        mastra.__createRunScope(run.runId).set(PROCESSOR_ABORT_SIGNAL, caller.signal);
+        const result = run.start({ inputData: inputData(caller.signal) });
+        await started;
+
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        expect(caller.signal.aborted).toBe(false);
+        await result;
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('gives the next processor a signal that aborts when the run is cancelled', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup('evented-processor-abort-signal-cancel', async () => {
+        secondSignal = received[1];
+        secondStarted();
+        await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = run.start({ inputData: inputData(new AbortController().signal) });
+        await started;
+
+        expect(secondSignal).toBeInstanceOf(AbortSignal);
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        await result;
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   // Note: Streaming Legacy tests removed - they duplicated Streaming tests.
   // Basic stream event format tests are now in the shared test suite.
   // This file only contains evented-specific streaming tests.
@@ -999,6 +1141,98 @@ describe('Workflow (Evented Engine Specific)', () => {
         // Iteration 0 already succeeded and must not run a second time.
         expect(executions).toEqual([1, 2]);
         expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
+  // Runs whose concurrent foreach suspended on an earlier version stored the suspended record without
+  // `__workflow_meta.foreachOutput`. A resumed item must still get its own suspend payload: for an
+  // agent tool call, missing suspend data makes the call look fresh and can run a declined tool.
+  describe('foreach suspended before per-item records were kept in the suspended record', () => {
+    const approve = createStep({
+      id: 'upgrade-approve',
+      inputSchema: z.object({ item: z.number() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      outputSchema: z.object({ item: z.number() }),
+      execute: async ({ inputData, suspendData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({ item: inputData.item });
+        }
+        seen.push({ item: inputData.item, suspendData });
+        return { item: inputData.item };
+      },
+    });
+    let seen: { item: number; suspendData: unknown }[] = [];
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-upgrade',
+      inputSchema: z.array(z.object({ item: z.number() })),
+      outputSchema: z.array(z.object({ item: z.number() })),
+    });
+    workflow.foreach(approve, { concurrency: 3 }).commit();
+
+    const own = (...items: number[]) => items.map(item => ({ item, suspendData: { item } }));
+    const cases: {
+      name: string;
+      items: number[];
+      forEachIndex?: number;
+      clearSlot?: number;
+      expected: { item: number; suspendData: unknown }[];
+    }[] = [
+      { name: 'gives the only item its own suspend data', items: [0], forEachIndex: 0, expected: own(0) },
+      { name: 'gives item 1 of three its own suspend data', items: [0, 1, 2], forEachIndex: 1, expected: own(1) },
+      {
+        name: 'gives every item of three its own suspend data',
+        items: [0, 1, 2],
+        forEachIndex: undefined,
+        expected: own(0, 1, 2),
+      },
+      // With no record of its own, an item must not fall back to another item's payload.
+      {
+        name: 'gives an item with no stored record no suspend data',
+        items: [0, 1, 2],
+        forEachIndex: 1,
+        clearSlot: 1,
+        expected: [{ item: 1, suspendData: undefined }],
+      },
+    ];
+    it.each(cases.map(c => [c.name, c] as const))('%s on resume', async (_name, c) => {
+      const { items, forEachIndex, clearSlot, expected } = c;
+      seen = [];
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-upgrade': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const started = await run.start({ inputData: items.map(item => ({ item })) });
+        expect(started.status).toBe('suspended');
+
+        const workflowsStore = (await testStorage.getStore('workflows'))!;
+        const snapshot = (await workflowsStore.loadWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+        }))!;
+        const record = snapshot.context['upgrade-approve'] as any;
+        const meta = record.suspendPayload.__workflow_meta;
+        expect(meta.foreachOutput).toHaveLength(items.length);
+        delete meta.foreachOutput;
+        if (clearSlot !== undefined) record.output[clearSlot] = null;
+        await workflowsStore.persistWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+          snapshot,
+        });
+
+        await run.resume({ step: 'upgrade-approve', forEachIndex, resumeData: { approved: true } });
+
+        expect(seen.sort((a, b) => a.item - b.item)).toEqual(expected);
       } finally {
         await mastra.stopWorkers();
       }

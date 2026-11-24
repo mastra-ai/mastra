@@ -14,14 +14,12 @@ import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { BoardConfigEditor } from '../domains/boardConfig/components/BoardConfigEditor';
 import { BoardConfigHeader } from '../domains/boardConfig/components/BoardConfigHeader';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
+import { OVERVIEW_SURFACE, SETTINGS_COLUMN } from '../domains/boardConfig/settingsColumn';
 import { boardPath } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadErrorState } from '../ui/LoadErrorState';
 
-/** Settings read best in a short line, so the page keeps to a centered column narrower than the layout's. */
-const COLUMN = 'mx-auto w-full max-w-2xl';
-
-/** Factory › board › Configure: the board's General page, or one phase's page. The sidebar lists the pages. */
+/** Factory › board › Configure: the board's Overview page, or one phase's page. The sidebar lists the pages. */
 export function BoardConfigPage() {
   const factory = useActiveFactory();
   const route = useBoardConfigRoute();
@@ -63,52 +61,60 @@ export function BoardConfigPage() {
       ) : undefined,
   });
 
-  const header =
+  const configHeader =
     query.isSuccess && (!phaseKey || shownPhase) ? (
-      <div className={cn(COLUMN, 'pb-8')}>
-        <BoardConfigHeader
-          key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-          factoryId={factory.id}
-          boardId={boardId}
-          phaseKey={phaseKey}
-          response={query.data}
-        />
-      </div>
+      <BoardConfigHeader
+        key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+        factoryId={factory.id}
+        boardId={boardId}
+        phaseKey={phaseKey}
+        response={query.data}
+      />
     ) : undefined;
 
+  const body = query.isPending ? (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading board" rows={3} />
+    </SettingsContainer>
+  ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
+    <EmptyState variant="fill" titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>} />
+  ) : query.isError ? (
+    <LoadErrorState
+      title="Couldn’t load this board"
+      error={query.error}
+      onRetry={() => void query.refetch()}
+      retrying={query.isFetching}
+    />
+  ) : (
+    <BoardConfigEditor
+      key={`${boardId}:${query.data.board.revision ?? 'code'}`}
+      factory={factory}
+      boardId={boardId}
+      phaseKey={phaseKey}
+      response={query.data}
+      skills={skills.data?.skills}
+      skillsEditable={skills.data?.canEdit ?? false}
+      sidebarHidden={sidebarHidden}
+      onReload={() => void query.refetch()}
+    />
+  );
+
+  if (phaseKey) {
+    return (
+      <PageLayout variant="settings" header={configHeader} {...slots}>
+        {body}
+      </PageLayout>
+    );
+  }
+
   return (
-    <PageLayout variant="narrow" header={header} {...slots}>
-      <div className={COLUMN}>
-        {query.isPending ? (
-          <SettingsContainer>
-            <SettingsSkeleton label="Loading board" rows={3} />
-          </SettingsContainer>
-        ) : query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found' ? (
-          <EmptyState
-            variant="fill"
-            titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
-          />
-        ) : query.isError ? (
-          <LoadErrorState
-            title="Couldn’t load this board"
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            retrying={query.isFetching}
-          />
-        ) : (
-          <BoardConfigEditor
-            key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-            factory={factory}
-            boardId={boardId}
-            phaseKey={phaseKey}
-            response={query.data}
-            skills={skills.data?.skills}
-            skillsEditable={skills.data?.canEdit ?? false}
-            sidebarHidden={sidebarHidden}
-            onReload={() => void query.refetch()}
-          />
-        )}
-      </div>
+    <PageLayout
+      variant="page"
+      body="fixed"
+      header={configHeader && <div className={SETTINGS_COLUMN}>{configHeader}</div>}
+      {...slots}
+    >
+      <div className={query.isSuccess ? OVERVIEW_SURFACE : cn(SETTINGS_COLUMN, 'px-4')}>{body}</div>
     </PageLayout>
   );
 }

@@ -1,0 +1,62 @@
+---
+title: Linear | Configuration
+description: Connect a Linear workspace, select projects or teams for intake, and route their issues to a Factory.
+---
+
+# Linear
+
+Linear supplies issues from projects and teams to Factory boards. Connect a workspace before selecting the projects or teams you want to follow. Each selection also needs a destination Factory under the organization's routing settings.
+
+Platform-backed servers use their Platform connection. Servers with their own OAuth application can use the [self-managed configuration](#use-your-own-oauth-application).
+
+## Connect your workspace
+
+You need a running [Factory](/) and a linked target repository. You also need permission to authorize the intended Linear workspace.
+
+1. Open **Settings → Work Intake**.
+1. Under **Linear issues**, select **Connect Linear**.
+1. Authorize the intended workspace in Linear and return to Factory.
+1. Confirm the connected workspace name and that projects and teams are available.
+
+If the section says Linear isn't configured on the server, the server operator must enable a Platform-backed integration or configure a complete OAuth credential pair.
+
+## Select projects or teams and route issues
+
+In **Work Intake**, enable **Sync Linear issues** and select the projects or teams you want to follow in the **Linear projects and teams** picker. Projects are grouped by their Linear teams, and a whole team includes its projectless issues. Selections are organization-wide: the **Sources** section is marked **Org-wide**, and every member follows the same sources.
+
+On each selected source's row, choose a destination Factory. Routing is shared across the organization, and each source feeds one Factory. A source with **Not routed** selected supplies no issues, and Factory imports issues only when the source is selected and routed. The Factory's board rules determine which board receives the card.
+
+When a project and its team are both selected, the project is more specific: its destination applies to that project's issues, and the team covers the rest. A project created later inside a selected team is covered by that team, so it needs no extra intake configuration. Select the project too when it needs its own destination.
+
+| Setting | Scope | Expected result |
+| - | - | - |
+| Workspace connection | Connected organization/workspace | Lists the workspace's available projects and teams. |
+| Sync and project or team selection | Organization | Factory imports active issues from the selected projects and teams. Whole teams include projectless issues. |
+| Source routing | Organization | Each selected source has a destination Factory with the intended codebase. |
+
+Choose a destination Factory linked to the repository where the source's issues should be implemented. Confirm the destination before changing shared routing for teammates.
+
+## Verify issue intake
+
+1. Create one active issue in a selected, routed Linear project or team.
+1. Create one projectless issue in a selected Linear team to confirm team intake.
+1. Return to the destination Factory's **Work** board.
+1. Match the issue's Linear identifier, title, and source link.
+1. Select **Investigate** and inspect the session's understanding of the issue.
+
+Give synchronization time to run. Planning, implementation, and review then follow the [Work workflow](/using/work-and-approvals). When a linked Linear issue becomes completed or canceled, built-in rules can move its Work card to **Done** or **Canceled**. Those state changes are asynchronous.
+
+For connection errors, missing issues, or incorrect routing, see [Linear troubleshooting](/troubleshooting#linear-connection-or-intake-fails).
+
+## Use your own OAuth application
+
+For a self-managed connection, create an application using [Linear's OAuth documentation](https://linear.app/developers/oauth-2-0-authentication). Register the callback at your public origin plus `/auth/linear/callback`.
+
+Set both credentials on the Factory Server and restart it:
+
+```dotenv title=".env"
+LINEAR_CLIENT_ID=your-linear-client-id
+LINEAR_CLIENT_SECRET=your-linear-client-secret
+```
+
+The generated entry uses this explicit integration when both values are present. Preserve [credential encryption](/reference/environment-variables#stored-credential-encryption) and a deployment-stable [state signer](/reference/environment-variables#custom-integration-credentials). Users still complete workspace authorization, intake selection, and routing after the server is configured.

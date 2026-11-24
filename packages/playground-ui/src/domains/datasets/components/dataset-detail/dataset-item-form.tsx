@@ -1,0 +1,145 @@
+'use client';
+
+import { DatasetFieldErrors } from '../dataset-field-errors';
+import { Button } from '@/ds/components/Button';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Field, FieldDescription, FieldLabel } from '@/ds/components/Field';
+import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+
+/** Schema validation error from API */
+export interface SchemaValidationError {
+  field: 'input' | 'groundTruth' | 'toolMocks';
+  errors: Array<{ path: string; message: string }>;
+}
+
+/**
+ * Editable form view for updating dataset item
+ */
+export interface EditModeContentProps {
+  inputValue: string;
+  setInputValue: (value: string) => void;
+  groundTruthValue: string;
+  setGroundTruthValue: (value: string) => void;
+  metadataValue: string;
+  setMetadataValue: (value: string) => void;
+  trajectoryValue: string;
+  setTrajectoryValue: (value: string) => void;
+  toolMocksValue: string;
+  setToolMocksValue: (value: string) => void;
+  requestContextValue: string;
+  setRequestContextValue: (value: string) => void;
+  validationErrors: SchemaValidationError | null;
+  onSave: () => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}
+
+export function EditModeContent({
+  inputValue,
+  setInputValue,
+  groundTruthValue,
+  setGroundTruthValue,
+  metadataValue,
+  setMetadataValue,
+  trajectoryValue,
+  setTrajectoryValue,
+  toolMocksValue,
+  setToolMocksValue,
+  requestContextValue,
+  setRequestContextValue,
+  validationErrors,
+  onSave,
+  onCancel,
+  isSaving,
+}: EditModeContentProps) {
+  return (
+    <>
+      <div className="mb-4">
+        <Txt as="h3" variant="heading" className="flex items-center gap-2">
+          <IconPencil className="size-icon-lg" /> Edit Item
+        </Txt>
+      </div>
+
+      <div className="space-y-6">
+        <Field invalid={validationErrors?.field === 'input'}>
+          <FieldLabel required>Input (JSON)</FieldLabel>
+          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+          {validationErrors?.field === 'input' && <DatasetFieldErrors field="input" errors={validationErrors.errors} />}
+        </Field>
+
+        <Field invalid={validationErrors?.field === 'groundTruth'}>
+          <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
+          <CodeEditor
+            value={groundTruthValue}
+            onChange={setGroundTruthValue}
+            showCopyButton={false}
+            className="min-h-[100px]"
+          />
+          {validationErrors?.field === 'groundTruth' && (
+            <DatasetFieldErrors field="groundTruth" errors={validationErrors.errors} />
+          )}
+        </Field>
+
+        <Field>
+          <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
+          <CodeEditor
+            value={trajectoryValue}
+            onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </Field>
+
+        <Field invalid={validationErrors?.field === 'toolMocks'}>
+          <FieldLabel>Tool Mocks (JSON array, optional)</FieldLabel>
+          <FieldDescription>
+            Ordered static mocks served in place of executing the tool. Each entry is{' '}
+            <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
+            item; unmocked tools run live.
+          </FieldDescription>
+          <CodeEditor
+            value={toolMocksValue}
+            onChange={setToolMocksValue}
+            showCopyButton={false}
+            className="min-h-[100px]"
+          />
+          {validationErrors?.field === 'toolMocks' && (
+            <DatasetFieldErrors field="toolMocks" errors={validationErrors.errors} />
+          )}
+        </Field>
+
+        <Field>
+          <FieldLabel>Request Context (JSON, optional)</FieldLabel>
+          <CodeEditor
+            value={requestContextValue}
+            onChange={setRequestContextValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel>Metadata (JSON, optional)</FieldLabel>
+          <CodeEditor
+            value={metadataValue}
+            onChange={setMetadataValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </Field>
+
+        <div className="flex gap-2 pt-4">
+          <Button icon={<IconCheckmark2Medium />} variant="primary" onClick={onSave} disabled={isSaving}>
+            {isSaving ? 'Saving...' : 'Save changes'}
+          </Button>
+          <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}

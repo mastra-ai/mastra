@@ -36,8 +36,11 @@ export function FactoryDefaultModelForm({ scope, lane }: FactoryDefaultModelForm
         <Txt as="p" variant="caption" role="alert">
           {catalog.catalogError?.message ?? 'No models are available for this connection yet.'}
         </Txt>
-        <Button disabled={catalog.retrying} onClick={catalog.retry}>
-          {catalog.retrying && <Spinner size="sm" aria-hidden="true" />}
+        <Button
+          icon={catalog.retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
+          disabled={catalog.retrying}
+          onClick={catalog.retry}
+        >
           Retry
         </Button>
       </div>

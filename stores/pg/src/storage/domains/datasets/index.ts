@@ -1378,6 +1378,11 @@ export class DatasetsPG extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
 
       const rows = await client.manyOrNone(

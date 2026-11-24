@@ -63,14 +63,18 @@ async function reloadFromMemory({ live, saved }: { live: MastraDBMessage; saved:
   return { list, recalled };
 }
 
-// Memory trims text when it persists a message, so the stored copy of a sealed message
-// ending in a newline differs from the live one. On resume the list treated that copy
-// as new content and appended it under a new id with the same OpenAI item ids, and the
-// Responses API rejected the request with "Duplicate item found with id rs_...". (#29380)
+// Memory used to trim all text when it persisted a message, and rows saved then are still
+// trimmed, so the stored copy of a sealed message ending in a newline can differ from the
+// live one. On resume the list treated that copy as new content and appended it under a
+// new id with the same OpenAI item ids, and the Responses API rejected the request with
+// "Duplicate item found with id rs_...". (#29380)
 describe('Reloading a sealed assistant message from memory (#29380)', () => {
   it('keeps one message and one reasoning item when the stored copy was trimmed', async () => {
     const live = assistantMessage({ text: 'hello\n', sealed: true });
-    const { list, recalled } = await reloadFromMemory({ live, saved: live });
+    const { list, recalled } = await reloadFromMemory({
+      live,
+      saved: assistantMessage({ text: 'hello', sealed: true }),
+    });
 
     // The stored copy really was normalized: this is the case under test.
     expect(recalled).toHaveLength(1);
@@ -114,7 +118,7 @@ describe('Reloading a sealed assistant message from memory (#29380)', () => {
 
   it('keeps one message when an unsealed message was trimmed', async () => {
     const live = assistantMessage({ text: 'hello\n', sealed: false });
-    const { list } = await reloadFromMemory({ live, saved: live });
+    const { list } = await reloadFromMemory({ live, saved: assistantMessage({ text: 'hello', sealed: false }) });
 
     expect(list.get.all.db()).toHaveLength(1);
     expect(reasoningItemIds(list)).toEqual(['rs_example']);
@@ -231,7 +235,7 @@ describe('Reloading a sealed assistant message from memory (#29380)', () => {
     expect(messages[0]!.id).toBe('assistant-message');
     expect(messages[1]!.id).not.toBe('assistant-message');
     expect(messages[1]!.content.parts.find(part => part.type === 'text')).toMatchObject({
-      text: 'hello, and more text written after the seal',
+      text: 'hello, and more text written after the seal\n',
     });
   });
 });

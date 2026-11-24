@@ -93,7 +93,7 @@ export interface LoopScenarioResult {
  *   `setScenarioEngineHost`); the host then replaces the four in-repo variants.
  *   Skipping `'durable'` also skips `'inngest'`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs' | 'inngest';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'native-default' | 'native-evented' | 'fs' | 'inngest';
 
 /**
  * An engine provided from outside core (e.g. `@mastra/inngest`). When set, scenarios run only on
@@ -108,16 +108,28 @@ export interface ScenarioEngineHost {
 }
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = [
+  'normal',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+  'fs',
+] as const;
 
-/**
- * `true` for variants that run through the durable execution path
- * (`createDurableAgent` / `createEventedAgent`). Use this instead of
- * `engine === 'durable'` in scenarios so durable-conditional behavior
- * automatically covers the evented variant too.
- */
+export function nativeExecutionEngine(engine: EngineVariant | undefined): 'default' | 'evented' | undefined {
+  return engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
+}
+
+/** Whether the variant runs through durable execution, with or without a wrapper. */
 export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
-  return engine === 'durable' || engine === 'evented' || engine === 'inngest';
+  return (
+    engine === 'durable' ||
+    engine === 'evented' ||
+    engine === 'native-default' ||
+    engine === 'native-evented' ||
+    engine === 'inngest'
+  );
 }
 
 export interface RunLoopScenarioOptions {
@@ -146,11 +158,7 @@ export interface RunLoopScenarioOptions {
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.
    */
-  defaultOptions?: {
-    autoResumeSuspendedTools?: boolean;
-    inputProcessors?: any;
-    hooks?: ToolHooks;
-  };
+  defaultOptions?: AgentConfig['defaultOptions'];
   /** Per-call tool hooks forwarded to agent.stream(). */
   hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
@@ -400,6 +408,8 @@ export interface RunLoopScenarioOptions {
   memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
+  /** Forwarded to `agent.stream({ tracingOptions })`. */
+  tracingOptions?: TracingOptions;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
@@ -474,8 +484,14 @@ export interface RunApprovalScenarioOptions extends Pick<
   | 'observability'
   | 'afterStream'
   | 'agentOutputProcessors'
+  | 'memory'
+  | 'threadId'
+  | 'resourceId'
+  | 'defaultOptions'
 > {
   tracingOptions?: TracingOptions;
+  /** Options passed to every `approveToolCall` / `declineToolCall`, such as the resume call's `tracingOptions`. */
+  resumeOptions?: Record<string, unknown>;
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based

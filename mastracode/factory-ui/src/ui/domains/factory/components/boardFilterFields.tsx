@@ -18,6 +18,8 @@ import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
 import { IconPersona } from '@mastra/playground-ui/icons/central/IconPersona';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
@@ -28,6 +30,8 @@ export type BoardFilterField = FilterBarField & { id: BoardFilterFieldId; sugges
 const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: LucideIcon }> = {
   source: { label: 'Intake source', icon: IconInboxEmpty },
   linearProject: { label: 'Linear project', icon: IconKanbanView },
+  pullRequest: { label: 'Pull request', icon: IconPullRequest },
+  trust: { label: 'Trust', icon: IconShieldCheck },
   teammate: { label: 'Involves', icon: IconUserDuo },
   author: { label: 'Author', icon: IconUserEdit },
   assignee: { label: 'Assignee', icon: IconUserAdded },
@@ -83,12 +87,20 @@ export function boardFilterFields({
         (option.value === PULL_REQUEST_SOURCE_FILTER &&
           (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
         filters.source.has(option.value),
-    ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
+    ).map(option => ({ value: option.value, label: option.label, start: <BoardSourceIcon option={option} /> })),
     linearProject: linearProjects.map(project => ({
       value: project.id,
       label: project.name,
       start: <IconKanbanView aria-hidden />,
     })),
+    pullRequest: [
+      { value: 'with', label: 'Has a pull request', start: <IconPullRequest aria-hidden /> },
+      { value: 'without', label: 'No pull request', start: <IconPullRequest aria-hidden /> },
+    ],
+    trust: [
+      { value: 'trusted', label: 'Trusted', start: <IconShieldCheck aria-hidden /> },
+      { value: 'untrusted', label: 'From outside', start: <IconShieldCheck aria-hidden /> },
+    ],
     teammate: people,
     author: people,
     assignee: people,

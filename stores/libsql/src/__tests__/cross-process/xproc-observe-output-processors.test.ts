@@ -28,8 +28,16 @@ const uppercaser = (onCall: () => void) => ({
   },
 });
 
-for (const engine of ['durable', 'evented'] as const) {
-  describe(`COR-1411 xproc-${engine}: observe output state`, () => {
+// With `recovery: 'auto'` the producer persists running snapshots. An observer that
+// rebuilt its transcript from them on every step read an older transcript (the
+// attach-time iteration, or a snapshot written after the step it was rebuilding),
+// without the final answer.
+const cells = (['durable', 'evented'] as const).flatMap(engine =>
+  [false, true].map(persistRunning => ({ engine, persistRunning })),
+);
+
+for (const { engine, persistRunning } of cells) {
+  describe(`COR-1411 xproc-${engine}${persistRunning ? ' (running snapshots)' : ''}: observe output state`, () => {
     let env: XprocEnv;
     let storage: LibSQLStore | undefined;
     let mastra: Mastra | undefined;
@@ -50,7 +58,7 @@ for (const engine of ['durable', 'evented'] as const) {
       }
     });
 
-    const runObserved = async (returnScorerData?: true, blockRefresh = false) => {
+    const runObserved = async (returnScorerData?: true, failRunReadsAfterAttach = false) => {
       const id = randomUUID();
       const agentId = `cor1411-${engine}-${id}`;
       const runId = `cor1411-run-${id}`;
@@ -70,11 +78,17 @@ for (const engine of ['durable', 'evented'] as const) {
       });
       const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
       storage = new LibSQLStore({ id: `cor1411-${engine}-main-${id}`, url: env.dbUrl });
-      mastra = new Mastra({ agents: { producer: runner }, storage, pubsub: env.pubsub(), logger: false });
+      mastra = new Mastra({
+        agents: { producer: runner },
+        storage,
+        pubsub: env.pubsub(),
+        logger: false,
+        ...(persistRunning ? { recovery: { durableAgents: 'auto' as const } } : {}),
+      });
 
       const peer = await env.spawnPeer<Cor1411PeerArgs>(
         PEER_FIXTURE,
-        { engine, agentId, runId, finalText: FINAL_TEXT, prompt: PROMPT, blockRefresh },
+        { engine, agentId, runId, finalText: FINAL_TEXT, prompt: PROMPT, failRunReadsAfterAttach },
         { role: `observer-${engine}`, workers: false },
       );
       const producer = await runner.stream(PROMPT, {
@@ -92,15 +106,6 @@ for (const engine of ['durable', 'evented'] as const) {
       release.resolve();
 
       const produced = await producerOutput;
-      if (blockRefresh) {
-        await Promise.race([
-          peer.waitFor('refresh-started'),
-          peerResult.then(() => {
-            throw new Error('Observation completed before the final transcript refresh was blocked');
-          }),
-        ]);
-        peer.send('release-refresh', { runId });
-      }
       const observed = await peerResult;
       expect(await peer.exit()).toEqual({ code: 0, signal: null });
       return { observed, produced, producerProcessorCalls };
@@ -138,8 +143,10 @@ for (const engine of ['durable', 'evented'] as const) {
       CELL_TIMEOUT_MS,
     );
 
+    // The observer reads the run's setup and transcript once on attach; each step's
+    // response messages come from the stream.
     it(
-      'waits for the final transcript refresh before resolving terminal output',
+      'reports the final answer when the run store fails after the observer attached',
       async () => {
         const { observed } = await runObserved(undefined, true);
 

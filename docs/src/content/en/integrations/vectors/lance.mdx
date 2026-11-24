@@ -11,7 +11,7 @@ The LanceVectorStore class provides vector search using [LanceDB](https://lanced
 
 ## Factory method
 
-The LanceVectorStore uses a factory pattern for creation. You should use the static `create()` method rather than the constructor directly.
+The LanceVectorStore uses a factory pattern for creation. Use the static `create()` method rather than the constructor directly.
 
 <PropertiesTable
   content={[
@@ -405,7 +405,7 @@ Returns LanceDB `OptimizeStats` (compaction and pruning counts).
 
 `optimize()` adds new rows to the existing index without retraining it. If your data distribution has changed a lot, rebuild the index with `deleteIndex()` and `createIndex()` instead.
 
-LanceDB suggests optimizing after roughly 100,000 modified rows or 20 write operations. Use `getIndexCoverage()` to build your own policy:
+LanceDB suggests optimizing after about 100,000 modified rows or 20 write operations. Use `getIndexCoverage()` to build your own policy:
 
 ```typescript
 const [coverage] = await store.getIndexCoverage({ indexName: 'docs' })
@@ -545,7 +545,7 @@ try {
   - HNSW for better recall and performance when memory isn't constrained
   - IVF for better memory efficiency with large datasets
 - For optimal performance with large datasets, consider adjusting `numPartitions` and `numSubVectors` values
-- Use `close()` method to properly close connections when done with the database
+- Use the `close()` method to close connections when done with the database
 - Store metadata with a consistent schema to simplify filtering operations
 
 ## Related

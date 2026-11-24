@@ -12,11 +12,11 @@ Every workspace exposes two capabilities:
 - One **bucket** for filesystem storage, wrapped by [`PlatformFilesystem`](/reference/workspace/platform-filesystem). The bucket is a durable, environment-scoped store agents read from and write to across runs.
 - A pool of **on-demand sandboxes** for command execution, wrapped by [`PlatformSandbox`](/reference/workspace/platform-sandbox). Each `PlatformSandbox` instance provisions its own remote sandbox on `start()` and destroys it on `destroy()`. Agents typically spin up many sandboxes per session, use them for a task, and let them go.
 
-Workspaces are scoped to a single [environment](/docs/mastra-platform/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, authentication, and idle cleanup.
+Workspaces are scoped to a single [environment](/docs/mastra-platform/deploy/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, authentication, and idle cleanup.
 
 ## When workspaces are provisioned
 
-New projects have workspaces enabled by default. When you create an environment, the platform provisions a bucket for it automatically. The sandbox base image is warmed in the background so the first `PlatformSandbox` call starts quickly.
+New projects have workspaces enabled by default. When you create an environment, the platform provisions a bucket for it automatically. The sandbox base image is warmed in the background so the first `PlatformSandbox` call starts fast.
 
 Existing projects that haven't opted in show an **Enable workspaces** action in the Workspaces tab. Enabling provisions a bucket for every environment on the project.
 
@@ -101,16 +101,16 @@ Every deploy that runs on a platform environment with a workspace receives these
 
 | Variable | Contents |
 | - | - |
-| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform-issued JSON Web Token (JWT) the workspace providers use to authenticate. The token is scoped to the deploy's organization and project. |
+| `MASTRA_PLATFORM_ACCESS_TOKEN` | Platform-issued JSON Web Token (JWT) the workspace providers use to authenticate. The token is scoped to the deploy's organization and project. The platform injects it unless [observability](/docs/mastra-platform/observability/overview) is turned off for the project. |
 | `MASTRA_PROJECT_ID` | Project the deploy belongs to. |
 | `MASTRA_ENVIRONMENT_ID` | Environment the deploy belongs to. Selects which sandbox pool the platform uses. |
 | `MASTRA_PLATFORM_BUCKET_NAME` | Bucket name attached to the environment. Selects which bucket `PlatformFilesystem` reads and writes. |
 
-These names are reserved. If your project sets any of them explicitly, the platform-managed values take precedence.
+These names are reserved. The platform drops any value your project stores under them, even when it doesn't inject that variable itself.
 
 ## Local development
 
-Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` API token on your organization's settings page under **API Tokens**. Platform deploys use an injected JWT instead.
+Reuse the same providers locally by putting the four variables in your `.env` file. Get the project, environment, and bucket values from your project's **Workspaces** tab. For `MASTRA_PLATFORM_ACCESS_TOKEN`, create an `sk_` [access token](/docs/mastra-platform/access-tokens) on your organization's settings page under **API Keys**. Platform deploys use an injected JWT instead. If observability is turned off for the project, the platform doesn't inject a token: add an access token to the environment as `MASTRA_PLATFORM_SECRET_KEY`, which the providers read when `MASTRA_PLATFORM_ACCESS_TOKEN` is unset.
 
 ```bash title=".env"
 MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token
@@ -135,4 +135,4 @@ The Workspaces tab in your platform project shows, per environment:
 
 - [`PlatformFilesystem`](/reference/workspace/platform-filesystem): reference for the filesystem provider.
 - [`PlatformSandbox`](/reference/workspace/platform-sandbox): reference for the sandbox provider, including checkpoint recovery and cloning.
-- [Environments](/docs/mastra-platform/environments): how environments scope workspaces, variables, and databases.
+- [Environments](/docs/mastra-platform/deploy/environments): how environments scope workspaces, variables, and databases.

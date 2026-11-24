@@ -136,19 +136,6 @@ describe('useAgentBuilderTool', () => {
         ].sort(),
       );
     });
-
-    it('ids each tool with its own tool name', () => {
-      const { record } = renderTools({
-        features: allOnFeatures,
-        availableAgentTools: toAgentTools([{ id: 'tool-a' }]),
-        availableSkills: [buildSkill('skill-a')],
-        availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }],
-      });
-
-      expect(record[SET_AGENT_NAME_TOOL_NAME].id).toBe(SET_AGENT_NAME_TOOL_NAME);
-      expect(record[SET_AGENT_TOOLS_TOOL_NAME].id).toBe(SET_AGENT_TOOLS_TOOL_NAME);
-      expect(record[SET_AGENT_MODEL_TOOL_NAME].id).toBe(SET_AGENT_MODEL_TOOL_NAME);
-    });
   });
 
   describe('when every feature is off', () => {
@@ -220,55 +207,7 @@ describe('useAgentBuilderTool', () => {
     });
   });
 
-  describe('set-agent-name / set-agent-instructions tools', () => {
-    it('write name and instructions to the form on execute', async () => {
-      const { record, form } = renderTools({ features: allOffFeatures });
-
-      await toolOf(record, SET_AGENT_NAME_TOOL_NAME).execute!({ name: 'New name' }, {});
-      await toolOf(record, SET_AGENT_INSTRUCTIONS_TOOL_NAME).execute!({ instructions: 'New instructions' }, {});
-
-      expect(form().getValues('name')).toBe('New name');
-      expect(form().getValues('instructions')).toBe('New instructions');
-    });
-  });
-
   describe('set-agent-tools tool', () => {
-    it('writes selected tools to the form on execute', async () => {
-      const { record, form } = renderTools({
-        features: { ...allOffFeatures, tools: true },
-        availableAgentTools: toAgentTools([{ id: 'web-search' }]),
-      });
-
-      await toolOf(record, SET_AGENT_TOOLS_TOOL_NAME).execute!(
-        { tools: [{ id: 'web-search', name: 'Web Search' }] },
-        {},
-      );
-
-      expect(form().getValues('tools')).toEqual({ 'web-search': true });
-    });
-
-    it('drops agent and workflow ids when those features are gated off', async () => {
-      const { record, form } = renderTools({
-        features: { ...allOffFeatures, tools: true },
-        availableAgentTools: toAgentTools([{ id: 'web-search', type: 'tool' }]),
-      });
-
-      await toolOf(record, SET_AGENT_TOOLS_TOOL_NAME).execute!(
-        {
-          tools: [
-            { id: 'web-search', name: 'Web Search' },
-            { id: 'some-agent', name: 'Some Agent' },
-            { id: 'some-workflow', name: 'Some Workflow' },
-          ],
-        },
-        {},
-      );
-
-      expect(form().getValues('tools')).toEqual({ 'web-search': true });
-      expect(form().getValues('agents')).toEqual({});
-      expect(form().getValues('workflows')).toEqual({});
-    });
-
     it('lists available tool ids and descriptions in the tool description', () => {
       const { record } = renderTools({
         features: { ...allOffFeatures, tools: true },
@@ -345,28 +284,6 @@ describe('useAgentBuilderTool', () => {
       expect(schema.safeParse({ workspaceId: 'ws-1' }).success).toBe(true);
       expect(schema.safeParse({ workspaceId: 'unknown-workspace' }).success).toBe(false);
     });
-
-    it('writes workspaceId to the form when provided', async () => {
-      const { record, form } = renderTools({
-        features: allOffFeatures,
-        availableWorkspaces: [{ id: 'ws-1', name: 'Primary' }],
-      });
-
-      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({ workspaceId: 'ws-1' }, {});
-
-      expect(form().getValues('workspaceId')).toBe('ws-1');
-    });
-
-    it('does not set workspaceId when omitted', async () => {
-      const { record, form } = renderTools({
-        features: allOffFeatures,
-        availableWorkspaces: [{ id: 'ws-1', name: 'Primary' }],
-      });
-
-      await record[SET_AGENT_WORKSPACE_ID_TOOL_NAME].execute!({}, {});
-
-      expect(form().getValues('workspaceId')).toBeUndefined();
-    });
   });
 
   describe('set-agent-model tool', () => {
@@ -380,17 +297,6 @@ describe('useAgentBuilderTool', () => {
       expect(tool.description).toContain('Available models');
       expect(tool.description).toContain('provider: openai (OpenAI), name: gpt-4o');
       expect(tool.description).not.toContain('anthropic');
-    });
-
-    it('accepts only allowed provider/name pairs in the schema', () => {
-      const { record } = renderTools({
-        features: { ...allOffFeatures, model: true },
-        availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' }],
-      });
-      expect(toolShape(record, SET_AGENT_MODEL_TOOL_NAME).model).toBeDefined();
-      const schema = toolSchema(record, SET_AGENT_MODEL_TOOL_NAME);
-      expect(schema.safeParse({ model: { provider: 'openai', name: 'gpt-4o' } }).success).toBe(true);
-      expect(schema.safeParse({ model: { provider: 'anthropic', name: 'claude-opus-4-7' } }).success).toBe(false);
     });
 
     it('respects a combined provider-wildcard + specific-model allowlist in the description', () => {

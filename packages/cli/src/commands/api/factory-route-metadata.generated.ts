@@ -209,11 +209,13 @@ export const FACTORY_API_ROUTE_METADATA = {
       "label",
       "limit",
       "linearProject",
+      "pullRequest",
       "q",
       "reviewer",
       "sort",
       "source",
       "teammate",
+      "trust",
       "window",
       "worked"
     ],
@@ -500,6 +502,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "owner",
       "pin",
       "sort",
+      "source",
       "status",
       "updated",
       "window"
@@ -1184,7 +1187,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemTransition",
     "method": "POST",
     "path": "/web/factory/projects/:id/work-items/:workItemId/transition",
-    "description": "Transition a work item with its expected revision",
+    "description": "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
     "pathParams": [
       "id",
       "workItemId"
@@ -2598,6 +2601,12 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema0"
         },
         "label": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "pullRequest": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "trust": {
           "$ref": "#/$defs/__schema0"
         },
         "teammate": {
@@ -4978,6 +4987,22 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "24h",
             "7d",
             "30d"
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "user",
+                "slack"
+              ]
+            },
+            {
+              "type": "string",
+              "maxLength": 512,
+              "pattern": "^board:.+$"
+            }
           ]
         },
         "children": {

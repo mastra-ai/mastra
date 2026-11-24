@@ -8,6 +8,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import { describeNestedRestartCases } from './test-utils/nested-restart-cases';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -102,6 +103,8 @@ describe('nested workflow restart state', () => {
     }
   });
 
+  // A nested run stored as `pending` is restarted from its first step through the pending-with-input
+  // branch of createRestartExecutionParams (#16520), so its onStart doesn't run again.
   it('keeps the parent state when the nested run restarts before its first step', async () => {
     const storage1 = new MockStore();
     const store1 = (await storage1.getStore('workflows'))!;
@@ -176,3 +179,5 @@ describe('nested workflow restart state', () => {
     expect(pending).toHaveLength(owners.length);
   });
 });
+
+describeNestedRestartCases({ createStorage: async () => new MockStore() });

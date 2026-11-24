@@ -108,7 +108,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
 
 The scorer evaluates hallucination through contradiction detection and unsupported claim analysis.
 
-### Scoring Process
+### Scoring process
 
 1. Extracts claims from the output:
    - Breaks the agent's response into factual claims
@@ -126,7 +126,7 @@ The scorer evaluates hallucination through contradiction detection and unsupport
 
 Final score: `min(1, hallucinated_statements / total_statements) * (scale || 1)`, rounded to two decimal places, when `total_statements > 0`, otherwise `0`.
 
-### Important Considerations
+### Important considerations
 
 - Claims not present in context are treated as hallucinations
 - Subjective claims are hallucinations unless explicitly supported
@@ -152,7 +152,7 @@ The score represents the degree of hallucination - lower scores indicate better 
 
 ## Examples
 
-### Static Context
+### Static context
 
 Use static context when you have known ground truth to compare against:
 
@@ -171,7 +171,7 @@ const scorer = createHallucinationScorer({
 })
 ```
 
-### Dynamic Context with `getContext`
+### Dynamic context with `getContext`
 
 Use `getContext` for live scoring scenarios where context comes from tool results:
 
@@ -191,7 +191,7 @@ const scorer = createHallucinationScorer({
 })
 ```
 
-### Live Scoring with Agent
+### Live scoring with agent
 
 Attach the scorer to an agent for live evaluation:
 
@@ -221,7 +221,7 @@ const agent = new Agent({
 })
 ```
 
-### Batch Evaluation with `runEvals`
+### Batch evaluation with `runEvals`
 
 ```typescript title="src/example-batch-evals.ts"
 import { runEvals } from '@mastra/core/evals'

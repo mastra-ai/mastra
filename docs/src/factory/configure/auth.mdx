@@ -1,0 +1,46 @@
+---
+title: Auth | Configuration
+description: Use Mastra platform authentication or connect another Mastra auth provider for Factory sign-in.
+---
+
+# Auth
+
+Authentication controls who can sign in to Factory and access its server. New Factory projects use Mastra platform authentication by default. You can also use a [Mastra auth provider](https://mastra.ai/docs/auth/overview) that supports both Server and Studio authentication.
+
+To change how users sign in, configure the `auth` option on `MastraFactory` in your Factory Server's `src/mastra/index.ts`.
+
+## Mastra platform
+
+The generated server uses Mastra platform sign-in when no alternative provider is configured. Open Factory and sign in with your Mastra account.
+
+Configure [credential encryption](/reference/environment-variables#stored-credential-encryption) before users save model or integration credentials.
+
+## Other auth providers
+
+Factory works with [Mastra auth providers](https://mastra.ai/docs/auth/overview) that support both Server and Studio authentication. Follow your provider's setup instructions, then pass the configured instance to the `auth` option on `MastraFactory` in `src/mastra/index.ts`. For example, using WorkOS with your existing storage:
+
+```typescript title="src/mastra/index.ts"
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+import { MastraFactory } from '@mastra/factory'
+
+const factory = new MastraFactory({
+  storage,
+  auth: new MastraAuthWorkos({ fetchMemberships: true }),
+  // Keep your other Factory options.
+})
+```
+
+The generated server already includes WorkOS configuration as an alternative to the default Mastra platform sign-in. Follow the [WorkOS setup instructions](https://mastra.ai/integrations/auth/workos) to configure or customize it.
+
+Studio support provides the browser sign-in flow. See [Studio authentication](https://mastra.ai/docs/studio/auth) for supported sign-in methods.
+
+For [custom authentication providers](https://mastra.ai/docs/auth/custom-auth-provider), ensure your provider implements `IOrganizationsProvider` and that `authenticateToken()` returns a user with an `organizationId`. For multi-organization access, also return `memberOrgIds` or `memberships`.
+
+## Test authentication
+
+1. Restart Factory and open its public URL in a signed-out browser session.
+1. Sign in through the configured provider and confirm you return to Factory.
+1. Open a Factory and its sessions to confirm authenticated access works.
+1. Sign out and confirm that protected pages require sign-in again.
+
+For callback errors, see [Login returns to another application](/troubleshooting#login-returns-to-another-application). For all server variables, see [Environment variables](/reference/environment-variables#platform-authentication-and-integrations).
