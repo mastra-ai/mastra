@@ -2488,18 +2488,8 @@
       "permanent": true
     },
     {
-      "source": "/docs/getting-started.md",
-      "destination": "/docs.md",
-      "permanent": true
-    },
-    {
       "source": "/reference/cli/dev",
       "destination": "/reference/cli/mastra#mastra-dev",
-      "permanent": true
-    },
-    {
-      "source": "/reference/cli/dev.md",
-      "destination": "/reference/cli/mastra.md",
       "permanent": true
     },
     {

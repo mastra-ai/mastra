@@ -52,8 +52,7 @@ export function checkRedirectList(redirects: Redirect[], routes: Set<string>, li
       continue
     }
     if (destination.startsWith('/') && !isWildcard(destination) && isSectionPath(normalizeRoute(destination))) {
-      // Every page is also served as markdown at `<route>.md`.
-      if (!routes.has(normalizeRoute(destination.replace(/\.md$/, '')))) {
+      if (!routes.has(normalizeRoute(destination))) {
         findings.push(
           finding(
             'mastra/redirect-destination',

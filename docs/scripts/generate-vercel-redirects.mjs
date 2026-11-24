@@ -66,8 +66,6 @@ export function shouldGenerateLlmsRedirect(redirect) {
   if (!isInternalDocsDestination(source)) return false
   if (!isInternalDocsDestination(destination)) return false
   if (source.split('#', 1)[0].endsWith('/llms.txt')) return false
-  // Markdown twins (`<route>.md`) have no `/llms.txt` form of their own
-  if (source.split('#', 1)[0].endsWith('.md')) return false
   if (destination.split('#', 1)[0].endsWith('/llms.txt')) return false
 
   return true

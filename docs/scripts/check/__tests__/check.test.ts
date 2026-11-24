@@ -299,15 +299,6 @@ describe('redirect rules', () => {
     expect(checkRedirectList([{ source: '/docs/old', destination: '/docs/a' }], routes, new Map())).toEqual([])
   })
 
-  it('accepts the markdown twin of a page as a destination', () => {
-    expect(checkRedirectList([{ source: '/docs/old.md', destination: '/docs/a.md' }], routes, new Map())).toEqual([])
-    expect(
-      checkRedirectList([{ source: '/docs/old.md', destination: '/docs/missing.md' }], routes, new Map()).map(
-        f => f.ruleId,
-      ),
-    ).toEqual(['mastra/redirect-destination'])
-  })
-
   it('reports duplicates, chains, and missing destinations', () => {
     const findings = checkRedirectList(
       [
