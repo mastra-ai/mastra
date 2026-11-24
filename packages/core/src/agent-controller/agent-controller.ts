@@ -129,12 +129,6 @@ function assertRawControllerThreadAvailable({
 }
 
 /**
- * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
- * so the key is collision-proof for arbitrary strings: a scoped session can
- * never collide with an unscoped one or with a different resource/scope split
- * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
- */
-/**
  * True when controller storage refused a row because it carries shared-history
  * branch lineage. Checked by id rather than `instanceof MastraError` so it holds
  * when core is bundled more than once.
@@ -143,6 +137,12 @@ function isBranchingUnsupportedError(error: unknown): boolean {
   return (error as { id?: unknown } | null)?.id === 'BRANCHING_UNSUPPORTED';
 }
 
+/**
+ * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
+ * so the key is collision-proof for arbitrary strings: a scoped session can
+ * never collide with an unscoped one or with a different resource/scope split
+ * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
+ */
 function sessionRegistryKey(resourceId: string, scope?: string): string {
   return JSON.stringify([resourceId, scope ?? null]);
 }
