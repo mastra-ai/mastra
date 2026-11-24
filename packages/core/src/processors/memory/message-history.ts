@@ -402,10 +402,7 @@ export class MessageHistory implements Processor {
     const persistedIds = new Set(filtered.map(message => message.id));
     const persistedGeneratedIds = generatedMessageIds.filter(messageId => persistedIds.has(messageId));
     if (this.persistMessagesHook && (persistedGeneratedIds.length > 0 || this.persistMessagesCreatesThread)) {
-      await this.persistMessagesHook(
-        { messages: filtered, thread: threadToCreate },
-        persistedGeneratedIds,
-      );
+      await this.persistMessagesHook({ messages: filtered, thread: threadToCreate }, persistedGeneratedIds);
       return;
     }
 
