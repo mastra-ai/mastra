@@ -146,6 +146,58 @@ describe('bounded initial observation history', () => {
     },
   );
 
+  it('observes live growth on a below-threshold turn without draining stored history', async () => {
+    const { om, store, rows, model } = await setup('thread', false, true, 300);
+    const record = (await om.getRecord(threadId, resourceId))!;
+    await store.commitActiveObservations({
+      id: record.id,
+      observations: 'The previous request was observed.',
+      tokenCount: 8,
+      lastObservedAt: new Date(timestamp.getTime() - 1000),
+      observedMessageIds: [rows[0]!.id],
+      expectedActiveObservations: record.activeObservations,
+    });
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add(
+      {
+        ...message(1000, new Date(timestamp.getTime() + 1000)),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'Current live request.' }],
+        },
+      },
+      'input',
+    );
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+    const observer = vi.spyOn(model, 'doStream');
+    try {
+      const initial = await turn.step(0).prepare();
+      expect(initial.status.shouldObserve).toBe(false);
+      expect(observer).not.toHaveBeenCalled();
+      messageList.add(
+        {
+          ...message(1001, new Date(timestamp.getTime() + 2000)),
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: `Current live response. ${'fresh '.repeat(1000)}` }],
+          },
+        },
+        'response',
+      );
+      const next = await turn.step(1).prepare();
+      expect(next.observed).toBe(true);
+      const prompt = JSON.stringify(observer.mock.calls.map(call => call[0].prompt));
+      expect(prompt).toContain('Current live request.');
+      expect(prompt).toContain('Current live response.');
+      expect(prompt).not.toContain('Fact 0.');
+      expect(prompt).not.toContain('Fact 1.');
+    } finally {
+      await turn.end();
+    }
+  });
+
   it('observes an unread timestamp tie in a clone without re-observing the source prefix', async () => {
     const { om, rows, store, open, model } = await setup('thread', false, true, 100_000);
     const record = (await om.getRecord(threadId, resourceId))!;
@@ -160,6 +212,12 @@ describe('bounded initial observation history', () => {
     });
     const memory = open();
     const { thread } = await memory.cloneThread({ sourceThreadId: threadId });
+    const source = (await store.getObservationalMemory(threadId, resourceId))!;
+    expect(source.lastObservedAt).toEqual(timestamp);
+    expect(getObservationHistoryState(source)?.after).toEqual({ createdAt: timestamp.toISOString(), id: rows[0]!.id });
+    expect((await om.loadHistoryWindow(threadId, resourceId, source))?.messages.map(row => row.id)).toContain(
+      rows[1]!.id,
+    );
     const cloned = (await memory.omEngine)!;
     const observer = vi.spyOn(model, 'doStream');
     const result = await cloned.observe({ threadId: thread.id, resourceId, force: true });
