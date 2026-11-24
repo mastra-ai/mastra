@@ -582,7 +582,12 @@ export class MemoryLibSQL extends MemoryStorage {
       args: [...args, input.limit + 1],
     });
     return {
-      messages: result.rows.slice(0, input.limit).map(row => this.parseRow(row)),
+      messages: new MessageList()
+        .add(
+          result.rows.slice(0, input.limit).map(row => this.parseRow(row)),
+          'memory',
+        )
+        .get.all.db(),
       hasMore: result.rows.length > input.limit,
     };
   }

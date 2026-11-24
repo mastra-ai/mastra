@@ -3442,14 +3442,20 @@ ${formattedMessages}
 
     // Use provided messages or load from storage
     let unobservedMessages: MastraDBMessage[];
+    let hasMoreHistory = false;
     if (messages) {
       unobservedMessages = this.getUnobservedMessages(messages, record);
     } else {
-      const rawMessages = await this.loadMessagesFromStorage(
-        threadId,
-        resourceId,
-        record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-      );
+      const window = await this.loadHistoryWindow(threadId, resourceId, record);
+      const history = getObservationHistoryState(record);
+      hasMoreHistory = !!window && (window.hasMore || (!!history && !history.complete));
+      const rawMessages =
+        window?.messages ??
+        (await this.loadMessagesFromStorage(
+          threadId,
+          resourceId,
+          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+        ));
       unobservedMessages = this.getUnobservedMessages(rawMessages, record);
     }
 
@@ -3478,9 +3484,12 @@ ${formattedMessages}
     const asyncObservationEnabled = this.buffering.isAsyncObservationEnabled();
     const observationBlockAfter = asyncObservationEnabled ? this.getEffectiveObservationBlockAfter(record) : undefined;
     const inAsyncObservationBand =
-      observationBlockAfter !== undefined && pendingTokens >= threshold && pendingTokens < observationBlockAfter;
+      !hasMoreHistory &&
+      observationBlockAfter !== undefined &&
+      pendingTokens >= threshold &&
+      pendingTokens < observationBlockAfter;
     let shouldBuffer = false;
-    if (asyncObservationEnabled && (pendingTokens < threshold || inAsyncObservationBand)) {
+    if (!hasMoreHistory && asyncObservationEnabled && (pendingTokens < threshold || inAsyncObservationBand)) {
       const lockKey = this.buffering.getLockKey(threadId, resourceId);
       shouldBuffer = this.buffering.shouldTriggerAsyncObservation(
         pendingTokens,
@@ -3492,7 +3501,7 @@ ${formattedMessages}
     }
 
     // Should observe?
-    const shouldObserve = pendingTokens >= threshold;
+    const shouldObserve = hasMoreHistory || pendingTokens >= threshold;
 
     // Should reflect? (use per-record override if set)
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
@@ -3693,21 +3702,12 @@ ${formattedMessages}
     // cursors cannot represent the initial tuple boundary (including timestamp ties).
     const initialHistory = getObservationHistoryState(record);
     if (opts.messages && initialHistory && !initialHistory.complete) return { buffered: false, record };
-    if (
+    const shouldLoadStoredWindow =
       !opts.messages &&
       !record.bufferedObservationChunks?.length &&
       !record.isBufferingObservation &&
       supportsObservationHistoryPaging(this.storage) &&
-      (!record.lastObservedAt || getObservationHistoryState(record)?.end)
-    ) {
-      const window = await this.loadHistoryWindow(threadId, resourceId, record);
-      if (window && (window.hasMore || (initialHistory && !initialHistory.complete))) {
-        if (record.bufferedObservationChunks?.length) return { buffered: false, record };
-        await opts.beforeBuffer?.(window.messages);
-        const result = await this.observe({ ...opts, useStoredHistory: true });
-        return { buffered: false, record: result.record };
-      }
-    }
+      (!record.lastObservedAt || !!getObservationHistoryState(record)?.end);
 
     // Check if another process is already buffering (and the op is genuinely active)
     if (record.isBufferingObservation && isOpActiveInProcess(record.id, 'bufferingObservation')) {
@@ -3778,6 +3778,15 @@ ${formattedMessages}
     let flagCleared = false;
 
     try {
+      if (shouldLoadStoredWindow) {
+        const window = await this.loadHistoryWindow(threadId, resourceId, record);
+        if (window && (window.hasMore || (initialHistory && !initialHistory.complete))) {
+          if (record.bufferedObservationChunks?.length) return { buffered: false, record };
+          await opts.beforeBuffer?.(window.messages);
+          const result = await this.observe({ ...opts, useStoredHistory: true });
+          return { buffered: false, record: result.record };
+        }
+      }
       // Keep the caller's turn-scoped record current while using a fresh storage snapshot
       // for the asynchronous write path.
       record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
@@ -4462,20 +4471,27 @@ ${formattedMessages}
           ) {
             const completedAt = new Date(historyWindow.state.after?.createdAt ?? initialHistory.end!);
             // A tail containing only excluded state/system rows still completes catch-up.
-            await runOMCommit(lockKey, () =>
-              this.storage.commitActiveObservations({
-                id: freshRecord.id,
-                observations: freshRecord.activeObservations,
-                tokenCount: freshRecord.observationTokenCount,
-                lastObservedAt: completedAt,
-                expectedActiveObservations: freshRecord.activeObservations,
-                observationHistory: historyWindow.state,
-              }),
+            await runOMCommit(
+              lockKey,
+              () =>
+                this.storage.commitActiveObservations({
+                  id: freshRecord.id,
+                  observations: freshRecord.activeObservations,
+                  tokenCount: freshRecord.observationTokenCount,
+                  lastObservedAt: completedAt,
+                  expectedActiveObservations: freshRecord.activeObservations,
+                  observationHistory: historyWindow.state,
+                }),
+              { abortSignal: opts.abortSignal },
             );
             recordInsideLock = (await this.getRecord(threadId, resourceId)) ?? freshRecord;
             return;
           }
-          if (opts.force || (useWindow && getObservationHistoryState(freshRecord)?.end)) {
+          if (
+            opts.force ||
+            (useWindow &&
+              (historyWindow.hasMore || (initialHistory && !initialHistory.complete) || initialHistory?.end))
+          ) {
             if (unobservedMessages.length === 0) return;
           } else if (
             !this.meetsObservationThreshold({

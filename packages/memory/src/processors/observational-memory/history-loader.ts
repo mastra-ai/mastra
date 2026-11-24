@@ -157,13 +157,22 @@ export async function loadObservationHistory(args: {
       ) {
         throw new Error('Observation history forward page did not advance');
       }
+      // Skipped rows still count as processed, but an over-budget row must remain unread.
+      if (
+        observed.has(message.id) ||
+        !(await args.isObservable(message)) ||
+        (!prior && start && new Date(message.createdAt).getTime() <= Date.parse(start))
+      ) {
+        after = cursor;
+        continue;
+      }
+      const messageTokens = await args.tokenCounter.countMessageAsync(message);
+      if (messages.length > 0 && tokens + messageTokens > args.budget) {
+        return { messages, state: { after, ...(end ? { end } : {}) }, hasMore: true };
+      }
       after = cursor;
-      if (observed.has(message.id) || !(await args.isObservable(message))) continue;
-      // Legacy records excluded every message at lastObservedAt. Only the new tuple cursor
-      // allows a partially observed timestamp cohort to remain eligible.
-      if (!prior && start && new Date(message.createdAt).getTime() <= Date.parse(start)) continue;
       messages.push(message);
-      tokens += await args.tokenCounter.countMessageAsync(message);
+      tokens += messageTokens;
     }
     const hasMore = page.hasMore;
     if (tokens >= args.budget || !hasMore) {

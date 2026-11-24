@@ -3728,6 +3728,10 @@ Notes:
 
     cloned.threadId = newThreadId;
     cloned.resourceId = newResourceId;
+    // New IDs reorder timestamp ties, so the clone cannot reuse any source tuple boundary.
+    if (cloned.metadata?.observationHistory) {
+      delete cloned.metadata.observationHistory;
+    }
 
     // Remap observedMessageIds — drop any IDs not present in the clone's message set
     if (Array.isArray(cloned.observedMessageIds)) {

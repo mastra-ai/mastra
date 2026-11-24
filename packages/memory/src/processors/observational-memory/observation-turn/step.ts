@@ -660,7 +660,7 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: pendingMessages,
-        useStoredHistory: true,
+        useStoredHistory: drainsStoredHistory,
         messageList,
         trigger: 'turn-sync',
         agent: this.turn.agent,

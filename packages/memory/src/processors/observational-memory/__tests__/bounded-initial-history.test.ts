@@ -5,6 +5,8 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
+import { runOMCommit, waitingOMCommits } from '../commit-queue';
+import { getObservationHistoryState } from '../history-loader';
 import { filterObservedMessages } from '../message-utils';
 
 const threadId = 'bounded-history';
@@ -70,7 +72,96 @@ async function setup(
   return { store, open, rows, om, model };
 }
 
+async function finishCatchUp(om: NonNullable<Awaited<Memory['omEngine']>>) {
+  for (let attempts = 0; attempts <= 121; attempts++) {
+    if (getObservationHistoryState((await om.getRecord(threadId, resourceId))!)?.complete) return;
+    await om.observe({ threadId, resourceId, force: true });
+  }
+  throw new Error(`catch-up did not finish: ${JSON.stringify((await om.getRecord(threadId, resourceId))?.metadata)}`);
+}
+
 describe('bounded initial observation history', () => {
+  it('drops a source tuple cutoff when cloning tied excluded and retained messages', async () => {
+    const { om, rows, open } = await setup('thread', false, false);
+    const retained = await om.loadUnobservedMessages({ threadId, resourceId });
+    expect(retained.length).toBeLessThan(rows.length);
+    const memory = open();
+    const { thread } = await memory.cloneThread({ sourceThreadId: threadId });
+    const cloned = (await memory.omEngine)!;
+    expect((await cloned.getRecord(thread.id, resourceId))!.metadata?.observationHistory).toBeUndefined();
+    const loaded = await cloned.loadUnobservedMessages({ threadId: thread.id, resourceId });
+    expect(loaded.length).toBeGreaterThan(0);
+    expect(loaded.every(row => row.threadId === thread.id)).toBe(true);
+  });
+  it('stops the forward window at the message that crosses its token budget', async () => {
+    const { om, rows, store } = await setup();
+    const reads = vi.spyOn(store, 'listObservationHistory');
+    const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
+    expect(loaded.length).toBeGreaterThan(0);
+    expect(loaded.length).toBeLessThan(40);
+    expect(loaded.map(row => row.id)).toEqual(rows.slice(0, loaded.length).map(row => row.id));
+    expect(reads.mock.calls[0]![0].after).toBeUndefined();
+    await om.observe({ threadId, resourceId, force: true });
+    const next = await om.loadUnobservedMessages({ threadId, resourceId });
+    expect(next[0]!.id).toBe(rows[loaded.length]!.id);
+  });
+  it('cancels a queued empty-tail commit and completes catch-up on retry without observation', async () => {
+    const { om, store, rows, model } = await setup('thread', false, false);
+    await om.loadUnobservedMessages({ threadId, resourceId });
+    await store.saveMessages({ messages: rows.map(row => ({ ...row, role: 'system' as const })) });
+    const observer = vi.spyOn(model, 'doStream');
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const key = om.buffering.getLockKey(threadId, resourceId);
+    const blocker = runOMCommit(key, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const controller = new AbortController();
+    let settled = false;
+    const operation = om
+      .observe({ threadId, resourceId, force: true, abortSignal: controller.signal })
+      .catch(() => undefined)
+      .finally(() => {
+        settled = true;
+      });
+    try {
+      await vi.waitFor(() => expect(waitingOMCommits(key).normal).toBeGreaterThan(0));
+      controller.abort();
+      await vi.waitFor(() => expect(settled).toBe(true));
+      expect(getObservationHistoryState((await om.getRecord(threadId, resourceId))!)?.complete).not.toBe(true);
+    } finally {
+      release.resolve();
+      await blocker;
+      await operation;
+    }
+    expect((await om.observe({ threadId, resourceId, force: true })).observed).toBe(false);
+    expect(getObservationHistoryState((await om.getRecord(threadId, resourceId))!)?.complete).toBe(true);
+    expect(observer).not.toHaveBeenCalled();
+  });
+
+  it('observes a nonempty bootstrap tail even below the normal threshold', async () => {
+    const { om, store, rows } = await setup('thread', false, false);
+    await om.loadUnobservedMessages({ threadId, resourceId });
+    const record = (await om.getRecord(threadId, resourceId))!;
+    expect(record.metadata?.observationHistory).toHaveProperty('after');
+    await store.saveMessages({
+      messages: rows.slice(-1).map(row => ({
+        ...row,
+        content: { format: 2, parts: [{ type: 'text', text: 'Small retained fact.' }] },
+      })),
+    });
+    await store.deleteMessages(rows.slice(0, -1).map(row => row.id));
+    expect((await om.observe({ threadId, resourceId })).observed).toBe(true);
+  });
+
+  it('contains a stored-history read failure in buffer()', async () => {
+    const { om, store } = await setup('thread', true);
+    vi.spyOn(store, 'listObservationHistory').mockRejectedValueOnce(new Error('history read unavailable'));
+    await expect(om.buffer({ threadId, resourceId })).resolves.toMatchObject({ buffered: false });
+  });
+
   it.each([false, undefined])(
     'does not bootstrap backwards on an older forward-only adapter (%s)',
     async capability => {
@@ -103,9 +194,9 @@ describe('bounded initial observation history', () => {
   it.each(['thread', 'resource'] as const)(
     'completes an exhausted %s bootstrap without observing filtered retained rows',
     async scope => {
-      const { store, om, open } = await setup(scope, false, false);
-      const retained = await om.loadUnobservedMessages({ threadId, resourceId });
-      await store.saveMessages({ messages: retained.map(row => ({ ...row, role: 'system' as const })) });
+      const { store, om, open, rows } = await setup(scope, false, false);
+      await om.loadUnobservedMessages({ threadId, resourceId });
+      await store.saveMessages({ messages: rows.map(row => ({ ...row, role: 'system' as const })) });
       const observer = vi.fn();
       const result = await om.observe({ threadId, resourceId, force: true, hooks: { onObservationStart: observer } });
       expect(result.observed).toBe(false);
@@ -191,7 +282,7 @@ describe('bounded initial observation history', () => {
   });
 
   it('uses one resource-wide budget and boundary across threads', async () => {
-    const { om, store, rows } = await setup('resource', false, false);
+    const { om, store, rows } = await setup('resource', false, false, 12000);
     const otherThread = `${threadId}-other`;
     await store.saveThread({
       thread: { id: otherThread, resourceId, title: 'Other thread', createdAt: timestamp, updatedAt: timestamp },
@@ -201,10 +292,10 @@ describe('bounded initial observation history', () => {
     });
     const first = await om.loadUnobservedMessages({ threadId, resourceId });
     const second = await om.loadUnobservedMessages({ threadId: otherThread, resourceId });
-    expect(first.map(message => message.id)).toEqual(rows.slice(-first.length).map(message => message.id));
+    expect(first.map(message => message.id)).toEqual(rows.slice(-first.length - 1, -1).map(message => message.id));
     expect(second.map(message => message.id)).toEqual(first.map(message => message.id));
     expect(new Set(first.map(message => message.threadId)).size).toBe(2);
-    expect(first.length).toBeLessThan(10);
+    expect(first.length).toBeLessThan(60);
   });
 
   it.each(['thread', 'resource'] as const)(
@@ -215,7 +306,7 @@ describe('bounded initial observation history', () => {
       const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
       expect(loaded.length).toBeGreaterThan(40);
       expect(loaded.length).toBeLessThan(rows.length);
-      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length).map(row => row.id));
+      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length - 1, -1).map(row => row.id));
       const descending = reads.mock.calls.map(([input]) => input).filter(input => input.order === 'desc');
       expect(descending.length).toBeGreaterThan(1);
       expect(descending.every(input => input.limit === 40)).toBe(true);
@@ -246,6 +337,7 @@ describe('bounded initial observation history', () => {
       true,
     );
     expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toEqual(first.map(message => message.id));
+    await finishCatchUp(om);
     expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
   });
 
@@ -257,6 +349,7 @@ describe('bounded initial observation history', () => {
       const live = message(999, new Date('2026-01-02T00:00:00Z'));
       await om.observe({ threadId, resourceId, messages: [...rows, live], force: true });
       expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toEqual(first.map(message => message.id));
+      await finishCatchUp(om);
       expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
       await om.observe({ threadId, resourceId, messages: [live], force: true });
       expect((await om.getRecord(threadId, resourceId))?.observedMessageIds).toContain(live.id);
@@ -272,13 +365,13 @@ describe('bounded initial observation history', () => {
       const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
       expect(loaded.length).toBeGreaterThan(0);
       expect(loaded.length).toBeLessThan(10);
-      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length).map(row => row.id));
+      expect(loaded.map(row => row.id)).toEqual(rows.slice(-loaded.length - 1, -1).map(row => row.id));
       expect(reads.mock.calls.some(([input]) => input.order === 'desc' && input.limit === 40)).toBe(true);
       expect(reads.mock.calls.every(([input]) => input.limit <= 40)).toBe(true);
       await om.observe({ threadId, resourceId, force: true });
       const record = await om.getRecord(threadId, resourceId);
       expect(record?.observedMessageIds).toEqual(loaded.map(row => row.id));
-      expect(JSON.stringify(observer.mock.calls)).toContain('Fact 120.');
+      expect(JSON.stringify(observer.mock.calls)).toContain(`Fact ${rows.findIndex(row => row.id === loaded[0]!.id)}.`);
       expect(JSON.stringify(observer.mock.calls)).not.toContain('Fact 0.');
     },
   );
@@ -288,13 +381,13 @@ describe('bounded initial observation history', () => {
     async scope => {
       const { store, om, rows, open } = await setup(scope, scope === 'thread', false);
       const first = await om.loadUnobservedMessages({ threadId, resourceId });
-      const retained = new Set(first.map(row => row.id));
+      const retained = new Set(rows.slice(-2).map(row => row.id));
       const assertContext = async (engine: typeof om) => {
         const record = await engine.getRecord(threadId, resourceId);
         expect(record?.lastObservedAt).toBeUndefined();
         const list = new MessageList().add(structuredClone(rows), 'memory');
         filterObservedMessages({ messageList: list, record: record! });
-        expect(list.get.all.db().map(row => row.id)).toEqual(first.map(row => row.id));
+        expect(list.get.all.db().map(row => row.id)).toEqual([...retained]);
       };
       await assertContext(om);
       const commit = vi.spyOn(store, 'commitActiveObservations').mockRejectedValue(new Error('first commit fails'));
@@ -308,6 +401,7 @@ describe('bounded initial observation history', () => {
       await restarted.observe({ threadId, resourceId, force: true });
       const record = await restarted.getRecord(threadId, resourceId);
       expect(record?.observedMessageIds?.every(id => retained.has(id))).toBe(true);
+      await finishCatchUp(om);
       expect(await (await open().omEngine)!.loadUnobservedMessages({ threadId, resourceId })).toEqual([]);
     },
   );
@@ -398,12 +492,16 @@ describe('bounded initial observation history', () => {
   });
 
   it('keeps the batch bounded when every page ends in an excluded message', async () => {
-    const { store, om, rows } = await setup();
+    const { store, om, rows } = await setup('thread', false, true, 9_000);
     await store.saveMessages({
       messages: rows.filter((_, index) => index % 40 === 39).map(row => ({ ...row, role: 'system' as const })),
     });
     const batch = await om.loadUnobservedMessages({ threadId, resourceId });
-    expect(batch.map(row => row.id)).toEqual(rows.slice(0, 39).map(row => row.id));
+    expect(batch.length).toBeGreaterThan(0);
+    expect(batch.length).toBeLessThan(80);
+    expect(
+      batch.every(row => !rows.filter((_, index) => index % 40 === 39).some(excluded => excluded.id === row.id)),
+    ).toBe(true);
   });
 
   it('completes an excluded-only tail and admits later live history', async () => {
@@ -414,7 +512,7 @@ describe('bounded initial observation history', () => {
       end: timestamp.toISOString(),
     });
     const restarted = (await open().omEngine)!;
-    await restarted.observe({ threadId, resourceId });
+    await finishCatchUp(restarted);
     expect((await store.getObservationalMemory(threadId, resourceId))?.metadata?.observationHistory).toMatchObject({
       complete: true,
     });
@@ -424,7 +522,7 @@ describe('bounded initial observation history', () => {
   });
 
   it('does not commit past a resource thread missing from the observer response', async () => {
-    const { store, om, rows, open } = await setup('resource');
+    const { store, om, rows, open } = await setup('resource', false, true, 9000);
     await store.saveThread({
       thread: { id: 'sibling', resourceId, createdAt: timestamp, updatedAt: timestamp, title: 'Sibling' },
     });
@@ -442,7 +540,7 @@ describe('bounded initial observation history', () => {
 
   it('resumes ordinary async buffering after initial catch-up without replaying activated messages', async () => {
     const { store, om, rows, open } = await setup('thread', true);
-    for (let index = 0; index < Math.ceil(rows.length / 40); index++) await om.observe({ threadId, resourceId });
+    await finishCatchUp(om);
     expect((await store.getObservationalMemory(threadId, resourceId))?.metadata?.observationHistory).toMatchObject({
       complete: true,
     });

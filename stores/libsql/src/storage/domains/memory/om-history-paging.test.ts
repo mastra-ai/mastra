@@ -9,6 +9,32 @@ import { MemoryLibSQL } from './index';
 const createdAt = new Date('2026-01-01T00:00:00Z');
 
 describe('bounded observational history in LibSQL', () => {
+  it('normalizes legacy string-content rows into observable text parts', async () => {
+    const client = createClient({ url: ':memory:' });
+    const store = new MemoryLibSQL({ client });
+    try {
+      await store.init();
+      await store.saveThread({
+        thread: { id: 'legacy-thread', title: 'Legacy', resourceId: 'resource', createdAt, updatedAt: createdAt },
+      });
+      await store.saveMessages({
+        messages: [
+          {
+            id: 'legacy',
+            threadId: 'legacy-thread',
+            resourceId: 'resource',
+            createdAt,
+            role: 'user',
+            content: 'Legacy fact' as any,
+          },
+        ],
+      });
+      const page = await store.listObservationHistory({ threadId: 'legacy-thread', limit: 40 });
+      expect(page.messages[0]!.content).toMatchObject({ format: 2, parts: [{ type: 'text', text: 'Legacy fact' }] });
+    } finally {
+      client.close();
+    }
+  });
   it.each(['thread', 'resource'] as const)(
     'persists the initial %s lower boundary before an observation or restart',
     async scope => {

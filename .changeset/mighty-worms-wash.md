@@ -4,4 +4,6 @@
 '@mastra/libsql': patch
 ---
 
-Fixed large initial Observational Memory histories loading all at once with InMemory and LibSQL storage. When enabling OM on existing messages without an OM record, read backward from the newest messages until the observation blocking budget is reached. Persist the lower timestamp/ID boundary before observation so older history cannot return after a failure or restart, including resource-scoped history and equal timestamps. Existing OM records continue resuming their bounded history pages; adapters without reverse-bootstrap and atomic-initialization support retain their existing behavior. When a lower cutoff is required, commit that retained initial history before live asynchronous buffering resumes; histories that fit the budget keep normal explicit-message and buffering behavior.
+Fixed large initial Observational Memory histories loading all at once with InMemory and LibSQL storage. When enabling OM on existing messages without an OM record, retain only the newest history within the observation blocking budget. Older messages remain outside the model context, including after a failed observation or restart.
+
+Existing OM records catch up in bounded message and token batches before normal asynchronous buffering resumes. A single oversized message is still processed so catch-up cannot stall. Copied threads start with their own history boundary rather than skipping messages using the source thread's message IDs. Other storage adapters keep their existing loading behavior.
