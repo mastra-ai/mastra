@@ -97,6 +97,7 @@ Mastra uses state signals for long-lived context, and the same patterns apply to
 - The [browser](/docs/browser) context processor keeps the active page and tabs under `browser`.
 - [Goals](/docs/harness/goals) keep the current objective under the `goal` id.
 - [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
+- [`TimeSignalProvider`](/reference/signals/time-signal-provider) keeps the current time under `current-time`, adding a snapshot only when its interval moves on.
 - [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
 
 ## Persistence and truncation

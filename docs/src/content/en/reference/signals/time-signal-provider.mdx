@@ -1,0 +1,121 @@
+---
+title: "Reference: TimeSignalProvider | Signals"
+description: "Register TimeSignalProvider to keep a current-time state signal in the agent's context, updated at a configured interval without timers or extra runs."
+packages:
+  - "@mastra/core"
+---
+
+# TimeSignalProvider
+
+**Added in:** `@mastra/core@1.86.0`
+
+Keeps the agent aware of the current time through a `<current-time>` [state signal](/docs/signals/state-signals). The provider reads the clock each time the agent takes a model step and adds a new snapshot only when the configured interval has moved on, so the model always sees the time to that precision without calling a tool.
+
+Extends [`SignalProvider`](/reference/signals/signal-provider). It runs no timers and never wakes an idle thread: a thread that sits idle for a day gets one new snapshot when its next run starts. To make an agent act on a clock, use [schedules](/docs/harness/schedules) instead.
+
+## Usage example
+
+Register the provider on an agent that has `Memory`:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { TimeSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: '...',
+  model,
+  memory,
+  signals: [new TimeSignalProvider({ interval: 'minute', timeZone: 'America/New_York' })],
+})
+```
+
+The model then sees a state signal like this, refreshed as the minute changes:
+
+```xml
+<current-time timeZone="America/New_York">Tuesday, November 24, 2026 at 3:15 AM EST</current-time>
+```
+
+One provider instance can be listed on several agents and serves every thread.
+
+## Requirements and cost
+
+- **Memory is required.** Like every state signal, the time lane is tracked on a memory-backed thread. Listing the provider on an agent without memory makes every run fail with `computeStateSignal requires Mastra memory with an active resourceId and threadId`.
+- **Each snapshot stays in the context.** State signals are appended, not replaced: each new snapshot is a persisted message that remains in the prompt until memory trims it. A two-hour run at `interval: 'minute'` that takes a step every minute carries about 120 `<current-time>` messages. Choose the coarsest interval the agent needs.
+- If an earlier snapshot is trimmed from the context window, the provider adds a fresh one on the next step.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'interval',
+    type: "'minute' | 'hour' | 'day' | number",
+    isOptional: true,
+    defaultValue: "'minute'",
+    description:
+      'How often the time shown to the model moves on, as a name or in milliseconds. With `align: true` a number must be whole minutes that divide a day evenly (for example 15 minutes or 6 hours); other values throw.',
+  },
+  {
+    name: 'timeZone',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "the host's time zone",
+    description:
+      'IANA time zone used for display and for aligning intervals, for example `Europe/Paris`. An unknown zone throws.',
+  },
+  {
+    name: 'locale',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'en-US'",
+    description: 'Locale for the default format.',
+  },
+  {
+    name: 'format',
+    type: 'Intl.DateTimeFormatOptions | (date: Date, options: { timeZone: string; locale: string }) => string',
+    isOptional: true,
+    description:
+      'Overrides the text the model sees. By default the text matches the interval: the date for `day`, the date and hour for whole-hour intervals, and the date and time to the minute otherwise, each with the zone name.',
+  },
+  {
+    name: 'align',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'When `true`, the time moves on at wall-clock boundaries in `timeZone` (12:00, 12:15, ...). When `false`, it moves on once `interval` has passed since the last snapshot.',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'time-signals'",
+    description: 'Stable identifier for the provider instance.',
+  },
+]}
+/>
+
+## State signal
+
+| Field | Value |
+| - | - |
+| `id` | `current-time` |
+| `tagName` | `current-time` |
+| `mode` | `snapshot` |
+| `attributes` | `{ timeZone }` |
+| `value` | `{ iso, timeZone, interval }`: the time read, as ISO 8601 |
+
+## Methods
+
+### `getInputProcessors()`
+
+Returns the provider's time-lane processor. The Agent registers it on the input-processor chain when the provider is passed to `signals`, so you normally don't call it directly.
+
+Returns: `InputProcessorOrWorkflow[]`
