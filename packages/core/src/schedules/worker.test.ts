@@ -88,7 +88,7 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
 
-    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(editorGetById).toHaveBeenCalledWith('a1', undefined);
     expect(storedAgent.generate).toHaveBeenCalled();
     expect(result).toMatchObject({ status: 'fired', outcome: 'succeeded' });
     expect(storage.deleteSchedule).not.toHaveBeenCalled();
@@ -101,7 +101,7 @@ describe('AgentScheduleWorker — executeAgentSchedule', () => {
 
     const result = await executeAgentSchedule(mastra, 'agent_a1', makeTarget());
 
-    expect(editorGetById).toHaveBeenCalledWith('a1');
+    expect(editorGetById).toHaveBeenCalledWith('a1', undefined);
     expect(result.status).toBe('agent-missing');
     expect(storage.deleteSchedule).toHaveBeenCalledWith('agent_a1');
   });

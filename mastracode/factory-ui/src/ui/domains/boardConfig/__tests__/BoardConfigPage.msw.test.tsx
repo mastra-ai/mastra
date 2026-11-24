@@ -425,6 +425,93 @@ describe('Board configuration', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 
+  it('saves a typed condition value without leaving the field first, and warns before a reload drops it', async () => {
+    stubFactory();
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'pr-review'
+            ? {
+                ...phase,
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'pullRequest.trusted', operator: 'equals', value: true }],
+                },
+              }
+            : phase,
+        ),
+      }),
+    );
+    const saved = vi.fn();
+    server.use(
+      http.patch(BOARD_URL, async ({ request }) => {
+        const body = FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema.parse(await request.json());
+        saved(body);
+        return HttpResponse.json(storedWorkBoard({ ...body, revision: 2 }));
+      }),
+    );
+    const { client } = renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Review');
+    await user.click(screen.getByRole('combobox', { name: 'Field' }));
+    await user.click(await screen.findByRole('option', { name: 'Labels' }));
+    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'AUTO LINE');
+
+    // Still typing: a browser doesn't move focus to a disabled button, so Save has to be ready now.
+    expect(screen.getByRole('textbox', { name: 'Value' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    const reload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(reload);
+    expect(reload.defaultPrevented).toBe(true);
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(saved).toHaveBeenCalledOnce());
+    expect(saved.mock.calls[0][0].phases.find((phase: StoredPhaseInfo) => phase.key === 'pr-review')).toMatchObject({
+      autoStart: true,
+      autoStartWhen: {
+        operator: 'AND',
+        conditions: [{ field: 'item.labels', operator: 'equals', value: 'AUTO LINE' }],
+      },
+    });
+    await waitForMutationsIdle(client);
+    const afterSave = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(afterSave);
+    expect(afterSave.defaultPrevented).toBe(false);
+  });
+
+  it('puts the value from before typing back on Escape', async () => {
+    stubFactory();
+    const work = storedWorkBoard();
+    serveBoard(
+      storedWorkBoard({
+        phases: work.board.phases.map(phase =>
+          phase.key === 'pr-review'
+            ? {
+                ...phase,
+                autoStart: true,
+                autoStartWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'item.labels', operator: 'equals', value: 'AUTO LINE' }],
+                },
+              }
+            : phase,
+        ),
+      }),
+    );
+    renderAt(`/factories/${FACTORY_ID}/work/config`);
+
+    const user = await openPhase('Review');
+    const value = screen.getByRole('textbox', { name: 'Value' });
+    await user.clear(value);
+    await user.type(value, 'OTHER');
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await user.keyboard('{Escape}');
+    expect(value).toHaveValue('AUTO LINE');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
   it("puts a phase's saved conditions back on Discard", async () => {
     stubFactory();
     const work = storedWorkBoard();
