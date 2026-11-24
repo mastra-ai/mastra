@@ -112,7 +112,7 @@ const EditPageBody = () => {
       hasAgentTools={availableAgentTools.length > 0 || isIntegrationToolsLoading}
     >
       <EditPageProvider
-        storedAgent={storedAgent}
+        storedAgent={storedAgent!}
         availableAgentTools={availableAgentTools}
         onModeToggle={handleModeToggle}
       >
