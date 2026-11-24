@@ -62,7 +62,6 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
-import { clearTokenEstimates, clearTokenEstimatesInPlace } from './utils/token-estimates';
 import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
@@ -1905,7 +1904,7 @@ export class MessageList {
         });
 
         return {
-          ...clearTokenEstimates(part),
+          ...part,
           toolInvocation: {
             ...part.toolInvocation,
             args: transformedArgs,
@@ -1923,7 +1922,7 @@ export class MessageList {
       if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
         changed = true;
         return {
-          ...clearTokenEstimates(part),
+          ...part,
           data: this.transformToolStateDataForTranscript(
             part.data,
             part.type === 'data-tool-call-suspended' ? 'suspend' : 'approval',
@@ -2271,8 +2270,6 @@ export class MessageList {
       ...(part.title !== undefined && inputPart.title === undefined ? { title: part.title } : {}),
       ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
     };
-    // The result (and any `modelOutput`) changed, so the part's stored count no longer applies.
-    clearTokenEstimatesInPlace(mergedPart);
     if (part.updatedAt !== undefined && mergedPart.updatedAt === undefined) mergedPart.updatedAt = part.updatedAt;
     stampToolPartUpdate(mergedPart, part.toolInvocation, inputPart.updatedAt);
     msg.content.parts![i] = mergedPart;
@@ -2820,10 +2817,7 @@ export class MessageList {
           const storedPart = messageV2.content.parts.find(
             part => part.type === 'text' && part.text.trim() === incomingPart.text.trim(),
           );
-          if (storedPart?.type === 'text' && storedPart.text !== incomingPart.text) {
-            storedPart.text = incomingPart.text;
-            clearTokenEstimatesInPlace(storedPart);
-          }
+          if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
         }
         MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
       }

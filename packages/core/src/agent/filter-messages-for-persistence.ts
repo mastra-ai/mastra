@@ -3,7 +3,6 @@ import {
   removeWorkingMemoryToolInvocationParts,
   removeWorkingMemoryToolInvocations,
 } from '../memory/working-memory-utils';
-import { clearTokenEstimates } from './message-list/utils/token-estimates';
 import { isTransientSignalMessage } from './signals';
 import type { MastraDBMessage } from './types';
 
@@ -51,8 +50,10 @@ export function filterMessagesForPersistence(messages: MastraDBMessage[]): Mastr
             if (p.type === `text`) {
               const text = typeof p.text === 'string' ? p.text : '';
               const cleaned = removeWorkingMemoryTags(text);
-              if (cleaned === text) return p;
-              return clearTokenEstimates({ ...p, text: cleaned.trim() });
+              return {
+                ...p,
+                text: cleaned !== text ? cleaned.trim() : text,
+              };
             }
             return p;
           })

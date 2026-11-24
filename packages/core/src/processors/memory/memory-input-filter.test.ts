@@ -132,29 +132,6 @@ describe('MemoryInputFilter', () => {
     expect(parts[2]).toHaveProperty('providerMetadata');
   });
 
-  it('keeps a token count on assistant parts of an empty thread while dropping other provider metadata', async () => {
-    const { messageList, processor } = setup([]);
-    const tokenEstimate = { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens: 7 };
-    messageList.add(
-      [
-        message('u1', 'user', [{ type: 'text', text: 'question' }]),
-        message('a1', 'assistant', [
-          {
-            type: 'text',
-            text: 'answer',
-            providerMetadata: { openai: { itemId: 'msg_1' }, mastra: { tokenEstimate } },
-          },
-        ]),
-      ],
-      'input',
-    );
-
-    await process(processor, messageList);
-
-    const part = messageList.get.input.db()[1]?.content.parts[0];
-    expect(part).toHaveProperty('providerMetadata', { mastra: { tokenEstimate } });
-  });
-
   it('avoids storage lookup when the input is already an all-new user tail', async () => {
     const { listMessages, messageList, processor } = setup([]);
     messageList.add(message('u1', 'user', [{ type: 'text', text: 'new' }]), 'input');

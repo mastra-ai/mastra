@@ -1,6 +1,5 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { clearTokenEstimatesInPlace } from '@mastra/core/agent/message-list';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -114,29 +113,25 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(await new TokenCounter().countMessageAsync(fresh)).toBe(asyncCount);
   });
 
-  it('recounts nested result, args, and modelOutput edits once the edit clears the part count', async () => {
+  it('recounts nested result, args, and modelOutput edits once the edit changes the content hash', async () => {
     const counter = new TokenCounter();
     const part = toolPart(1);
     const message = assistant([part]);
     const initial = await counter.countMessageAsync(message);
 
     part.toolInvocation.result.payload = 'changed data '.repeat(900);
-    clearTokenEstimatesInPlace(part);
     const nested = await counter.countMessageAsync(message);
     expect(nested).not.toBe(initial);
 
     part.toolInvocation.args.path = 'changed argument '.repeat(600);
-    clearTokenEstimatesInPlace(part);
     const args = await counter.countMessageAsync(message);
     expect(args).not.toBe(nested);
 
     part.providerMetadata.mastra.modelOutput = { type: 'text', value: 'model-facing short output' };
-    clearTokenEstimatesInPlace(part);
     const mapped = await counter.countMessageAsync(message);
     expect(mapped).not.toBe(args);
 
     part.providerMetadata.mastra.modelOutput.value = 'model-facing different output '.repeat(800);
-    clearTokenEstimatesInPlace(part);
     const changedMapped = await counter.countMessageAsync(message);
     expect(changedMapped).not.toBe(mapped);
 

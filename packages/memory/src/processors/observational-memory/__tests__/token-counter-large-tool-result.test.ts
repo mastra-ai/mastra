@@ -248,11 +248,9 @@ describe('TokenCounter with oversized tool results', () => {
     expect(counter.countMessage(message)).toBe(expected);
     const part = (message.content as { parts: Array<{ providerMetadata?: Record<string, any> }> }).parts[0]!;
     const cache = part.providerMetadata?.mastra?.tokenEstimate as Record<string, { key: string }>;
-    expect(Object.values(cache).some(entry => entry.key.startsWith('trusted:tool-call-name'))).toBe(true);
-    expect(Object.values(cache).some(entry => entry.key.startsWith('trusted:tool-call-args-json'))).toBe(true);
-    expect(Object.values(cache).some(entry => entry.key.startsWith('trusted:tool-result-model-output-json'))).toBe(
-      true,
-    );
+    expect(Object.values(cache).some(entry => entry.key.startsWith('tool-call-name:'))).toBe(true);
+    expect(Object.values(cache).some(entry => entry.key.startsWith('tool-call-args-json:'))).toBe(true);
+    expect(Object.values(cache).some(entry => entry.key.startsWith('tool-result-model-output-json:'))).toBe(true);
   });
 
   it('reuses terminal signature and outcome token caches after message serialization', () => {
@@ -279,17 +277,17 @@ describe('TokenCounter with oversized tool results', () => {
     expect(firstCache).toBeTruthy();
     expect(
       Object.values(firstCache as Record<string, { key: string }>).some(entry =>
-        entry.key.startsWith('trusted:tool-call-name'),
+        entry.key.startsWith('tool-call-name:'),
       ),
     ).toBe(true);
     expect(
       Object.values(firstCache as Record<string, { key: string }>).some(entry =>
-        entry.key.startsWith('trusted:tool-call-args-json'),
+        entry.key.startsWith('tool-call-args-json:'),
       ),
     ).toBe(true);
     expect(
       Object.values(firstCache as Record<string, { key: string }>).some(entry =>
-        entry.key.startsWith('trusted:tool-result-json'),
+        entry.key.startsWith('tool-result-json:'),
       ),
     ).toBe(true);
     expect(secondCount).toBe(firstCount);

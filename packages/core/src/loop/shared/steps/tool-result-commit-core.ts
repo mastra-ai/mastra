@@ -1,5 +1,4 @@
 import type { MessageList } from '../../../agent/message-list';
-import { clearTokenEstimatesInPlace } from '../../../agent/message-list/utils/token-estimates';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
@@ -218,7 +217,6 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
       // Cleared: the model reads the (processed) raw result. Drop the key from the
       // part too, since the commit merges metadata and would otherwise keep it.
       delete processorMastra.modelOutput;
-      clearTokenEstimatesInPlace(part);
       return Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined;
     }
     return { ...withoutModelOutput, mastra: { ...mastraWithoutModelOutput, modelOutput } };

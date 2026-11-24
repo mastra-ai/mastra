@@ -79,6 +79,3 @@ export { CacheKeyGenerator } from './cache';
 
 // Merge exports
 export { MessageMerger } from './merge';
-
-/** @internal Shared with @mastra/memory's token counter; not a supported public API. */
-export { clearTokenEstimates, clearTokenEstimatesInPlace } from './utils/token-estimates';

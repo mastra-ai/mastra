@@ -6,7 +6,6 @@ import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import { TypeDetector } from '../detection/TypeDetector';
 import type { MastraDBMessage, MastraMessagePart } from '../state/types';
 import type { MessageInput } from '../types';
-import { clearTokenEstimates } from '../utils/token-estimates';
 
 /**
  * Convert CoreMessage content to a plain string.
@@ -88,25 +87,22 @@ export function messagesAreEqual(one: MessageInput, two: MessageInput): boolean 
 }
 
 /**
- * The parts in a whitespace-insensitive form for matching stored copies: `updateWorkingMemory`
- * tool steps removed, and `<working_memory>` tags and surrounding whitespace stripped from text.
+ * The parts as memory persists them: `updateWorkingMemory` tool steps removed, and
+ * `<working_memory>` tags and surrounding whitespace stripped from text.
  */
 function projectPartsForPersistence(parts: MastraMessagePart[]): MastraMessagePart[] {
   return removeWorkingMemoryToolInvocationParts(parts).map(part =>
     part.type === 'text'
-      ? {
-          ...clearTokenEstimates(part),
-          text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim(),
-        }
+      ? { ...part, text: removeWorkingMemoryTags(typeof part.text === 'string' ? part.text : '').trim() }
       : part,
   );
 }
 
 /**
  * Whether `stored` is the persisted copy of `live`: the same id, and the same parts once
- * both have working-memory tags and tool steps removed and text trimmed. Memory now trims
- * only text it removed tags from, but rows saved before that trimmed all text, so matching
- * ignores surrounding whitespace to recognize both verbatim and trimmed stored copies.
+ * both go through the cleanup memory applies when it saves a message. That cleanup makes
+ * `messagesAreEqual` treat a stored copy as a different message, for example when the live
+ * text ends in a newline.
  *
  * Saves through `MessageHistory` (observational memory's buffering) and the agent's save
  * queue first run `filterMessagesForPersistence`, which also drops streaming `partial-call`

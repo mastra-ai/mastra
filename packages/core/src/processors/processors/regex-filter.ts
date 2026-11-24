@@ -1,5 +1,4 @@
 import type { MastraDBMessage } from '../../agent/message-list';
-import { clearTokenEstimates } from '../../agent/message-list/utils/token-estimates';
 import { TripWire } from '../../agent/trip-wire';
 import type { ChunkType } from '../../stream';
 import type {
@@ -580,7 +579,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
         if (part.type === 'text' && 'text' in part) {
           const redacted = this.redactText((part as { type: 'text'; text: string }).text);
           collect(this.reportRedaction(phase, redacted.redactions, { messageId: msg.id, partIndex }));
-          return { ...clearTokenEstimates(part), text: redacted.text };
+          return { ...part, text: redacted.text };
         }
         return part;
       });

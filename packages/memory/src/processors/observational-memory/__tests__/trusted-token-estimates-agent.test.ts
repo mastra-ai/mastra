@@ -57,7 +57,7 @@ function trustedEntries(part: StoredPart): unknown[] {
   const estimate = part.providerMetadata?.mastra?.tokenEstimate;
   if (!estimate || typeof estimate !== 'object') return [];
   // Look at the top level and every nested value, whatever shape the top level has.
-  return [estimate, ...Object.values(estimate)].filter(entry => (entry as { v?: unknown } | null)?.v === 9);
+  return [estimate, ...Object.values(estimate)].filter(entry => (entry as { v?: unknown } | null)?.v === 8);
 }
 
 async function storedTextParts(memory: Memory) {
@@ -96,13 +96,6 @@ describe('trusted token counts across requests', () => {
     expect(counted).not.toContain(longReply);
   });
 
-  // A cache map whose top level also has an unrelated `source` field, with a trusted entry nested
-  // under the key the reader looks up.
-  const mixedShape = (tokens: number) => ({
-    source: 'importer',
-    'trusted:text': { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens },
-  });
-
   async function storedCount(memory: Memory, id: string) {
     const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
     return new TokenCounter().countMessage(messages.find(message => message.id === id)!);
@@ -139,64 +132,32 @@ describe('trusted token counts across requests', () => {
     expect(spy.mock.calls.map(call => call[0])).toEqual(['user']);
   });
 
-  it('a count in caller input to the Agent is kept, in either shape', async () => {
+  it('a count in caller input that does not match its text is ignored', async () => {
     mock.on({ endpoint: 'chat', userMessage: 'Caller input' }, { content: 'Ok.' });
     const { agent, memory } = createAgent(new InMemoryStore());
     const text = `Caller input. ${'Some words to count. '.repeat(30)}`.trim();
-    for (const [id, tokenEstimate] of [
-      ['flat', { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens: 1 }],
-      ['mixed', mixedShape(1)],
-    ] as const) {
-      await agent.generate(
-        [
-          {
-            id,
-            role: 'user',
-            createdAt: new Date(),
-            content: { format: 2, parts: [{ type: 'text', text, providerMetadata: { mastra: { tokenEstimate } } }] },
-          } as any,
-        ],
-        { memory: { thread: THREAD, resource: RESOURCE } },
-      );
-      const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-      const part = (messages.find(message => message.id === id)!.content.parts as StoredPart[])[0]!;
-      expect(trustedEntries(part).map(entry => (entry as { tokens: number }).tokens)).toEqual([1]);
-    }
-  });
-
-  it('a client that resends its history with counts gets no recount of that history', async () => {
-    mock.on({ endpoint: 'chat', userMessage: 'Next question' }, { content: 'Ok.' });
-    const { agent, memory } = createAgent(new InMemoryStore());
-    // Counts the way an earlier request stored them, then made wrong for the text: if the Agent counted the
-    // history again, they would be replaced.
-    const withCount = (id: string, role: 'user' | 'assistant', at: number, text: string) => {
-      const message = {
-        id,
-        role,
-        createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, at)),
-        content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
-      };
-      new TokenCounter().countMessage(message as any);
-      for (const part of message.content.parts as StoredPart[]) {
-        const estimate = part.providerMetadata!.mastra!.tokenEstimate as { tokens: number };
-        estimate.tokens = 1;
-      }
-      return message;
-    };
-    const history = [
-      withCount('resent-0', 'user', 0, `First message. ${'Resent history words. '.repeat(30)}`),
-      withCount('resent-1', 'assistant', 1, `Second message. ${'Resent history words. '.repeat(30)}`),
-    ];
-
-    await agent.generate([...(history as any[]), { id: 'next', role: 'user', content: 'Next question' }], {
-      memory: { thread: THREAD, resource: RESOURCE },
-    });
-
+    const forged = { 'text:forged': { v: 8, source: 'v8:tokenx', key: 'text:forged', tokens: 1 } };
+    await agent.generate(
+      [
+        {
+          id: 'forged',
+          role: 'user',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text, providerMetadata: { mastra: { tokenEstimate: forged } } }],
+          },
+        } as any,
+      ],
+      { memory: { thread: THREAD, resource: RESOURCE } },
+    );
     const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
-    for (const id of ['resent-0', 'resent-1']) {
-      const part = (messages.find(message => message.id === id)!.content.parts as StoredPart[])[0]!;
-      expect(trustedEntries(part).map(entry => (entry as { tokens: number }).tokens)).toEqual([1]);
-    }
+    const part = (messages.find(message => message.id === 'forged')!.content.parts as StoredPart[])[0]!;
+    const tokens = trustedEntries(part)
+      .filter(entry => (entry as { key: string }).key !== 'text:forged')
+      .map(entry => (entry as { tokens: number }).tokens);
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.every(count => count > 1)).toBe(true);
   });
 
   // Most stored history in a thread OM has buffered is sealed (metadata.mastra.sealed). Sealed messages are

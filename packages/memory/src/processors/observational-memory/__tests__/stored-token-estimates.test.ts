@@ -1,5 +1,4 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { clearTokenEstimates } from '@mastra/core/agent/message-list';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hashes = vi.hoisted(() => ({ count: 0 }));
@@ -49,23 +48,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-describe('stored per-part token counts', () => {
-  it('a stored count is read back with no hashing and no recount', () => {
-    const msg = message([{ type: 'text', text }, toolPart()]);
-    const first = new TokenCounter().countMessage(msg);
-    expect(Object.values(estimateOf(msg.content.parts[0]!)).map(entry => entry.v)).toEqual([9]);
-
+describe('hash-checked per-part token counts', () => {
+  it('a counted part is not hashed again by the same counter while its strings are unchanged', () => {
+    const counter = new TokenCounter();
+    const msg = message([{ type: 'text', text }]);
+    const first = counter.countMessage(msg);
     hashes.count = 0;
-    countSpy.mockClear();
-    // A new counter, as a fresh Agent in the next request would make.
-    expect(new TokenCounter().countMessage(msg)).toBe(first);
-    // Only the role label is counted; no part content is.
-    expect(countSpy.mock.calls.map(call => call[0])).toEqual(['assistant']);
+    expect(counter.countMessage(msg)).toBe(first);
     expect(hashes.count).toBe(0);
   });
 
-  it('survives a JSON round trip, as through storage', () => {
-    const msg = message([{ type: 'text', text }]);
+  it('a new counter reuses the stored count after the content hash matches, without recounting', () => {
+    const msg = message([{ type: 'text', text }, toolPart()]);
     const first = new TokenCounter().countMessage(msg);
     const stored = JSON.parse(JSON.stringify(msg)) as MastraDBMessage;
     countSpy.mockClear();
@@ -73,98 +67,56 @@ describe('stored per-part token counts', () => {
     expect(countSpy.mock.calls.map(call => call[0])).toEqual(['assistant']);
   });
 
-  it('never reads a v8 entry by presence, even one whose text was edited', () => {
-    const fresh = new TokenCounter().countMessage(message([{ type: 'text', text: 'short edited text' }]));
-    const msg = message([
+  it('recounts text edited outside Core', () => {
+    const msg = message([{ type: 'text', text }]);
+    const counter = new TokenCounter();
+    const before = counter.countMessage(msg);
+    (msg.content.parts[0] as { text: string }).text = text + ' And more words appended later on.';
+    expect(counter.countMessage(msg)).toBeGreaterThan(before);
+  });
+
+  it('recounts object tool results edited in place', () => {
+    const msg = message([toolPart()]);
+    const counter = new TokenCounter();
+    const before = counter.countMessage(msg);
+    const part = msg.content.parts[0] as any;
+    part.toolInvocation.result.rows[0].note += ' appended '.repeat(50);
+    expect(counter.countMessage(msg)).toBeGreaterThan(before);
+  });
+
+  it('ignores a forged or stale stored count', () => {
+    const msg = message([{ type: 'text', text }]);
+    const expected = new TokenCounter().countMessage(msg);
+    const forged = message([
       {
         type: 'text',
-        text: 'short edited text',
+        text,
         providerMetadata: {
-          mastra: { tokenEstimate: { v: 8, source: 'v8:tokenx', key: 'text:deadbeef', tokens: 9_999 } },
+          mastra: { tokenEstimate: { 'text:forged': { v: 8, source: 'v8:tokenx', key: 'text:forged', tokens: 1 } } },
         },
       } as Part,
     ]);
-    expect(new TokenCounter().countMessage(msg)).toBe(fresh);
-    const entries = estimateOf(msg.content.parts[0]!);
-    expect(entries['text:deadbeef']?.tokens).toBe(9_999);
-    expect(entries['trusted:text']?.v).toBe(9);
+    expect(new TokenCounter().countMessage(forged)).toBe(expected);
   });
 
-  it('a custom estimator never reads or writes stored counts', () => {
-    class Doubled extends TokenCounter {
-      override countString(value: string): number {
-        return super.countString(value) * 2;
+  it('a custom estimator never reads counts made by the stock one', () => {
+    const msg = message([{ type: 'text', text }]);
+    new TokenCounter().countMessage(msg);
+    class Flat extends TokenCounter {
+      override countString(value: string) {
+        return value ? 1 : 0;
       }
     }
-    const msg = message([{ type: 'text', text }]);
-    const stock = new TokenCounter().countMessage(msg);
-    const doubled = new Doubled().countMessage(msg);
-    expect(doubled).toBeGreaterThan(stock);
-    const custom = message([{ type: 'text', text }], 'm2');
-    new Doubled().countMessage(custom);
-    expect(Object.values(estimateOf(custom.content.parts[0]!)).some(entry => entry.v === 9)).toBe(false);
+    expect(new Flat().countMessage(msg)).toBeLessThan(new TokenCounter().countMessage(msg));
   });
 
-  it('a field-defined custom estimator never reads or writes stock stored counts', () => {
+  it('a field-defined custom estimator never reuses counts made by the stock one', () => {
     class Doubled extends TokenCounter {
       override countString = (value: string): number => super.countString(value) * 2;
     }
     const stored = message([{ type: 'text', text }]);
     new TokenCounter().countMessage(stored);
-    const custom = message([{ type: 'text', text }], 'm2');
-    const expected = new Doubled().countMessage(custom);
-    expect(new Doubled().countMessage(stored)).toBe(expected);
-    expect(Object.values(estimateOf(custom.content.parts[0]!)).some(entry => entry.v === 9)).toBe(false);
-  });
-
-  it.each([
-    ['a Map', () => new Map([['a', 1]])],
-    ['a Buffer', () => Buffer.from('hello world')],
-    [
-      'a class instance',
-      () =>
-        new (class Box {
-          value = 'x';
-        })(),
-    ],
-    [
-      'a cycle',
-      () => {
-        const result: Record<string, unknown> = { name: 'loop' };
-        result.self = result;
-        return result;
-      },
-    ],
-  ])('a tool result that is %s gets a stored count', (_label, make) => {
-    const part = toolPart() as any;
-    part.toolInvocation.result = make();
-    new TokenCounter().countMessage(message([part]));
-    const entries = estimateOf(part);
-    expect(entries['trusted:tool-result-json']).toMatchObject({ v: 9, source: 'v9:tokenx' });
-    expect(Object.values(entries).some(entry => entry.v === 8)).toBe(false);
-  });
-
-  it('an edit without a clear keeps the old count (the documented contract)', () => {
-    const msg = message([{ type: 'text', text }]);
-    const before = new TokenCounter().countMessage(msg);
-    (msg.content.parts[0] as { text: string }).text = 'tiny';
-    expect(new TokenCounter().countMessage(msg)).toBe(before);
-  });
-
-  it('clearing a copy leaves parts that shared its metadata untouched', () => {
-    const shared = {
-      mastra: {
-        tokenEstimate: { 'trusted:text': { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens: 5 } },
-        modelOutput: 'kept',
-      },
-      openai: { itemId: 'x' },
-    };
-    const a = { type: 'text', text: 'a', providerMetadata: shared } as Part;
-    const cleared = clearTokenEstimates(a) as any;
-    expect(cleared.providerMetadata).not.toBe(shared);
-    expect(cleared.providerMetadata.mastra).not.toBe(shared.mastra);
-    expect(cleared.providerMetadata.mastra).toEqual({ modelOutput: 'kept' });
-    expect(cleared.providerMetadata.openai).toEqual({ itemId: 'x' });
-    expect(shared.mastra.tokenEstimate['trusted:text'].tokens).toBe(5);
+    const fresh = message([{ type: 'text', text }], 'm2');
+    expect(new Doubled().countMessage(stored)).toBe(new Doubled().countMessage(fresh));
   });
 });

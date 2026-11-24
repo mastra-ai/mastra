@@ -2,7 +2,6 @@ import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-sdk-v5';
 
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
-import { clearTokenEstimates } from './message-list/utils/token-estimates';
 
 export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification';
 
@@ -470,7 +469,7 @@ function injectMarkerInline(
   for (const part of parts) {
     if (!wrapped && part.type === 'text') {
       wrapped = true;
-      out.push({ ...clearTokenEstimates(part), text: signalToXmlMarkup({ ...signal, contents: part.text }) });
+      out.push({ ...part, text: signalToXmlMarkup({ ...signal, contents: part.text }) });
     } else {
       out.push(part);
     }

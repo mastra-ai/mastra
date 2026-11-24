@@ -68,7 +68,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
-import { clearTokenEstimates } from './processors/observational-memory/core-token-estimates';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -1798,9 +1797,10 @@ ${workingMemory}`;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
-          const stripped = hideTags(text);
-          if (stripped === part.text) return part;
-          return { ...clearTokenEstimates(part), text: stripped };
+          return {
+            ...part,
+            text: hideTags(text),
+          };
         }
         return part;
       });
@@ -2990,16 +2990,9 @@ Notes:
       }
       return null;
     };
-    messages = messages.flatMap(rawUpdate => {
-      const stored = existingById.get(rawUpdate.id);
+    messages = messages.flatMap(update => {
+      const stored = existingById.get(update.id);
       if (!stored) return [];
-      // Edited parts come from the caller: never trust a token count they carry.
-      const update = Array.isArray(rawUpdate.content?.parts)
-        ? {
-            ...rawUpdate,
-            content: { ...rawUpdate.content, parts: rawUpdate.content.parts.map(clearTokenEstimates) },
-          }
-        : rawUpdate;
       const effective = {
         ...stored,
         ...update,

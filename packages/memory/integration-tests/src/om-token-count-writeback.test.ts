@@ -63,7 +63,7 @@ function trustedEntries(part: any): { key: string; tokens: number }[] {
   const estimate = part?.providerMetadata?.mastra?.tokenEstimate;
   if (!estimate) return [];
   const entries = 'source' in estimate ? [estimate] : Object.values(estimate);
-  return (entries as any[]).filter(entry => entry?.v === 9);
+  return (entries as any[]).filter(entry => entry?.v === 8);
 }
 
 describe('Observational Memory token counts for stored history', () => {

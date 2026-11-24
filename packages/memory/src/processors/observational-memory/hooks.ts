@@ -1,6 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 
-import { clearTokenEstimates } from './core-token-estimates';
 import type { ObserveTransformHooks } from './types';
 
 type MessagePart = MastraDBMessage['content']['parts'][number];
@@ -96,7 +95,7 @@ function redactLegacyToolInvocations(
  */
 function redactToolResult(part: ToolInvocationPart): ToolInvocationPart {
   const redacted: ToolInvocationPart = {
-    ...clearTokenEstimates(part),
+    ...part,
     toolInvocation: { ...part.toolInvocation, result: REDACTED_TOOL_RESULT },
   };
 

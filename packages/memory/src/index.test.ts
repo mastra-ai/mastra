@@ -366,50 +366,6 @@ describe('Memory', () => {
       expect(result?.content.content).toBe('Noted.');
     });
 
-    it('keeps the stored token count on text it saves unchanged', () => {
-      const part = {
-        type: 'text' as const,
-        text: '  hello\n',
-        providerMetadata: { mastra: { tokenEstimate: { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens: 3 } } },
-      };
-      const message: MastraDBMessage = {
-        id: 'test-count-kept',
-        role: 'assistant',
-        createdAt: new Date(),
-        content: { format: 2, parts: [part] },
-      };
-
-      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
-
-      expect(result?.content.parts).toEqual([part]);
-    });
-
-    it('clears the stored token count on text it changes by removing working-memory tags', () => {
-      const message: MastraDBMessage = {
-        id: 'test-count-cleared',
-        role: 'assistant',
-        createdAt: new Date(),
-        content: {
-          format: 2,
-          parts: [
-            {
-              type: 'text',
-              text: 'Noted.\n<working_memory># User</working_memory>\n',
-              providerMetadata: {
-                mastra: { tokenEstimate: { v: 9, source: 'v9:tokenx', key: 'trusted:text', tokens: 12 } },
-              },
-            },
-          ],
-        },
-      };
-
-      const result = memory.testUpdateMessageToHideWorkingMemoryV2(message);
-      const [stored] = result!.content.parts as any[];
-
-      expect(stored.text).toBe('Noted.');
-      expect(stored.providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
-    });
-
     describe('Gemini thought signatures on parallel updateWorkingMemory calls (#27231)', () => {
       const toolPart = (
         toolCallId: string,
