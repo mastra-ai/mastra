@@ -94,9 +94,9 @@ export const mastra = new Mastra({
   },
   {
     name: 'defaultOptions',
-    type: 'AgentExecutionOptions',
+    type: 'NetworkOptions',
     description:
-      'Default options passed to agent execution. These can include instructions, memory configuration, maxSteps, and other execution settings.',
+      'Default options passed to `agent.network()`. These can include memory configuration, `maxSteps`, `modelSettings`, routing, and completion settings.',
     isOptional: true,
   },
 ]}
