@@ -585,10 +585,13 @@ describe('releaseParkedRun on a thread-bound stream', () => {
 
       const resumed = await newer.resume('run-thread-successor', { a: 'yes' }, { memory });
       const resumedReader = (resumed.fullStream as ReadableStream<any>).getReader();
-      // Read the resumed segment to its own suspension.
+      // Read the resumed segment to its own suspension: the tool call it made, not a replay of the older one.
+      let successorCallId: string | undefined;
       for (;;) {
         const { done, value } = await resumedReader.read();
-        if (done || value.type === 'tool-call-suspended') break;
+        if (done) throw new Error('resumed stream ended before the successor suspended');
+        if (value.type === 'tool-call') successorCallId = value.payload.toolCallId;
+        if (value.type === 'tool-call-suspended' && value.payload.toolCallId === successorCallId) break;
       }
       await expect.poll(() => storedStatus(storage, 'run-thread-successor')).toBe('suspended');
       await expect.poll(() => agentThreadStreamRuntime.isRunParked('run-thread-successor', mastra.pubsub)).toBe(true);

@@ -909,10 +909,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
-          const output = liveOutput!;
           clearIdleTimer();
           if (!onTerminalEvent) await onChunkDelivery;
           if (!controller || terminated) return;
+          // Read after the await: a replay delivered while subscribing runs before the output is built.
+          const output = liveOutput!;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
           if (

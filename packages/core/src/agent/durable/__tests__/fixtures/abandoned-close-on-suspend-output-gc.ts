@@ -38,34 +38,39 @@ const agent = createDurableAgent({
 });
 new Mastra({ storage: new InMemoryStore(), logger: false, agents: { a: agent } });
 
-let collected = false;
-const finalizer = new FinalizationRegistry(() => {
-  collected = true;
-});
+// Each segment must park, so a segment that ends without parking can't pass as retained. The resume parks the
+// same tool call again, so its suspension only counts after the call resumed, not as a replay of the first one.
+async function drainToSuspension(stream: AsyncIterable<any>, resumed: boolean): Promise<void> {
+  let awaitingResume = resumed;
+  let suspended = false;
+  for await (const chunk of stream) {
+    if (chunk.type === 'tool-call-resumed') awaitingResume = false;
+    if (chunk.type === 'tool-call-suspended' && !awaitingResume) suspended = true;
+  }
+  if (!suspended) throw new Error(`${resumed ? 'resume' : 'stream'} ended without suspending`);
+}
 
-async function abandon(): Promise<void> {
+async function abandon(): Promise<WeakRef<object>> {
   // Threadless, closes at the suspension; the caller drains it and drops it.
   let result = await agent.stream('hi', { runId: 'abandoned', closeOnSuspend: true });
-  for await (const _chunk of result.fullStream) {
-    // drain to the suspension
-  }
+  await drainToSuspension(result.fullStream, false);
   if (process.env.SEGMENT === 'resume') {
     // A resume that suspends again parks its own output under the same run.
     result = await agent.resume('abandoned', { a: 'again' }, { closeOnSuspend: true });
-    for await (const _chunk of result.fullStream) {
-      // drain to the second suspension
-    }
+    await drainToSuspension(result.fullStream, true);
   }
   // The stream's MastraModelOutput, which the run's cleanup release captures; not the result wrapper.
-  finalizer.register(result.output, undefined);
+  return new WeakRef(result.output);
 }
 
-await abandon();
+const output = await abandon();
 // WAIT_MS below the cleanup timeout checks collection while the armed cleanup timer is still pending.
 await new Promise(resolve => setTimeout(resolve, Number(process.env.WAIT_MS ?? cleanupTimeoutMs + 200)));
+let collected = false;
 for (let attempt = 0; attempt < 100 && !collected; attempt++) {
   gc();
   await new Promise<void>(resolve => setImmediate(resolve));
+  collected = output.deref() === undefined;
 }
 if (!collected) throw new Error('Abandoned closeOnSuspend output was not garbage collected');
 process.send?.('ok');
