@@ -521,7 +521,11 @@ function dateLocale(context) {
     (node?.type === 'ArrayExpression' && node.elements.some(element => staticString(element) !== undefined));
   const optionsIn = (object, keys) =>
     object?.type === 'ObjectExpression'
-      ? object.properties.filter(property => property.type === 'Property' && keys.has(keyOf(property.key)))
+      ? object.properties.filter(
+          ({ type, key, computed }) =>
+            // `[hour12]: …` sets whatever option the variable names.
+            type === 'Property' && !(computed && key.type === 'Identifier') && keys.has(keyOf(key)),
+        )
       : [];
   const hasDateOptions = object => optionsIn(object, DATE_OPTIONS).length > 0;
   const forcedClocks = object => optionsIn(object, CLOCK_OPTIONS).filter(({ value }) => value.type === 'Literal');

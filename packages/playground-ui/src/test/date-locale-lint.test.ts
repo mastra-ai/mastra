@@ -37,6 +37,10 @@ tester.run('date-locale', plugin.rules['date-locale'], {
       code: 'const { hour12, hourCycle } = new Intl.DateTimeFormat().resolvedOptions();',
     },
     {
+      name: 'ignores an option named by a variable',
+      code: "new Intl.DateTimeFormat(undefined, { hour: 'numeric', [hour12]: 'short' });",
+    },
+    {
       name: 'ignores a clock setting that formats nothing',
       code: "save({ theme: 'dark', hour12: true });",
     },
