@@ -114,7 +114,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(inputs.unit_shards) }}
+        shard: [1,2,3,4,5,6]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -301,57 +301,20 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
+  # The required check. It only reads the test jobs' results, so a PR doesn't wait for a checkout
+  # and install after its last test job; the merged report is Test Report below.
   merge-reports:
     name: Merge Test Reports
-    runs-on: starsling-ubuntu-26.04
+    runs-on: starsling-ubuntu-26.04-2
     needs: [unit-test, affected-unit-test, e2e-test]
     # Required check: stays always() so a run cancelled mid-tests still reaches the
     # "Require every test job to finish" step and fails. A skipped required job counts
-    # as a pass. The implicit success() guard does not skip the heavy steps below once the
-    # run is cancelled (this job starts after the cancel and its own steps all succeed), so
-    # they skip when a test job ended cancelled: a superseded run then frees its runner in
-    # seconds instead of checking out, installing and merging reports nobody reads. A shard
-    # that hit its timeout also ends cancelled, which skips the merged report too; each
-    # shard's own log still lists its failures.
+    # as a pass.
     if: always()
-    permissions:
-      actions: read
-      contents: read
-      id-token: write
+    permissions: {}
 
     steps:
-      - name: Skip tests when no test selection is needed
-        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.has_unit_tests != 'true' && inputs.e2e_test_files == '')
-        run: echo "No unit or E2E tests selected; skipping report merge."
-
-      - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          fetch-depth: 1
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
-        with:
-          pattern: vitest-blob-*
-          path: .vitest-reports
-          merge-multiple: true
-
-      - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled')
-        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
-
-      # A test job that failed or was cancelled before uploading its blob would otherwise
-      # be missing from the merged report, and this required check would pass without it.
       - name: Require every test job to finish
-        if: always()
         env:
           UNIT: ${{ needs.unit-test.result }}
           AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
@@ -367,3 +330,36 @@ jobs:
             fi
           done
           exit $status
+
+  # A superseded run skips the merge, and so does a shard that hit its timeout (it ends
+  # cancelled); each shard's own log still lists its failures.
+  test-report:
+    name: Test Report
+    runs-on: starsling-ubuntu-26.04
+    needs: [unit-test, affected-unit-test, e2e-test]
+    if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') && !contains(needs.*.result, 'cancelled') }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Download test results
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        run: pnpm vitest --merge-reports=.vitest-reports --reporter=default --reporter=github-actions --passWithNoTests
