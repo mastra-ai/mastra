@@ -102,6 +102,23 @@ describe('KnowledgePageExplorer', () => {
     expect(alert.classList.contains('text-destructive-foreground')).toBe(true);
   });
 
+  it('says the graph could not refresh while it keeps showing the last one', () => {
+    renderWithProviders(
+      <KnowledgePageExplorer
+        graph={graph}
+        graphError="Knowledge is too large to read at once."
+        source={source}
+        selectedPageId={null}
+        onSelect={() => {}}
+        view="graph"
+        onViewChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Couldn’t refresh the graph. Knowledge is too large to read at once.',
+    );
+  });
+
   it('marks pinned pages in the tree', () => {
     renderWithProviders(
       <KnowledgePageExplorer

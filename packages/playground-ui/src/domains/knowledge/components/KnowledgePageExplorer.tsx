@@ -1465,13 +1465,13 @@ export function KnowledgePageExplorer({
               The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
             </Txt>
           ) : null}
-          {!overview && graphError !== undefined && !showPage ? (
+          {graphError !== undefined && !showPage ? (
             <Txt
               role="alert"
               variant="caption"
               className={cn('text-destructive-foreground', flush && 'px-3 pt-2', noticeSurface)}
             >
-              Couldn’t load the full graph. {graphError}
+              {overview ? 'Couldn’t refresh the graph.' : 'Couldn’t load the full graph.'} {graphError}
             </Txt>
           ) : null}
           {selectedPageId && !showPage && isNotFound(selected.error) ? (
