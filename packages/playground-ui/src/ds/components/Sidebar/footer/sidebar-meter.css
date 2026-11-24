@@ -1,7 +1,7 @@
-/* Credits card (Sidebar.Meter): one card in both states, 70px tall, 34px in the rail, where the label and status
- * lines fold away and the amount shrinks to the rail's size, centred on the card. */
+/* Credits card (Sidebar.Meter): one card in both states, 52px tall, 34px in the rail, where the label and status
+ * fold away and the amount shrinks to the rail's size, centred on the card. */
 [data-slot='sidebar-meter'] {
-  height: 70px;
+  height: 52px;
 }
 
 /* The amount is as wide as its text (a placeholder, as wide as its bar). In the rail it moves to a fixed point, the
@@ -31,7 +31,7 @@
   overflow: hidden;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] {
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-row] {
   margin-top: 0;
 }
 

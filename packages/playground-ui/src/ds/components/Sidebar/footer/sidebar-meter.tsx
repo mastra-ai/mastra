@@ -106,7 +106,7 @@ type SidebarMeterLinkProps =
 export type SidebarMeterProps = SidebarMeterBaseProps & SidebarMeterLinkProps;
 
 /**
- * One card in both states. In the rail the label and status lines fold away and the amount, the same element
+ * One card in both states. In the rail the label and status fold away and the amount, the same element
  * throughout, shrinks in place: the sidebar's collapse animates between the two (`sidebar-meter.css`).
  */
 export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(function SidebarMeter(
@@ -164,53 +164,57 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
             <MeterLineSkeleton line="text-column" bar="h-2.5 w-14" />
           ) : (
             <div className="flex min-w-0 items-center gap-1.5">
-              {tone === 'neutral' ? null : icon}
+              {/* Zero-height, so the icon and action don't make the line taller than its letters; they overflow, centred. */}
+              {icon && tone !== 'neutral' ? <span className="inline-flex h-0 items-center">{icon}</span> : null}
               <Txt as="span" variant="column" tone="muted" className={trimToLetters}>
                 {label}
               </Txt>
-              {/* Zero-height, so the action doesn't make the line taller than its letters; it overflows, centred. */}
-              {action ? <span className="pointer-events-auto inline-flex h-0 items-center">{action}</span> : null}
+              {action ? (
+                <span className="pointer-events-auto -ml-0.5 inline-flex h-0 items-center">{action}</span>
+              ) : null}
             </div>
           )}
         </div>
-        <div data-meter-value="" className="mt-2.5">
-          {loading ? (
-            <MeterLineSkeleton line="text-heading" bar="h-3 w-12" />
-          ) : (
-            <Txt variant="heading" tone="ink" className={cn('tabular-nums', trimToLetters)}>
-              {railValue === undefined ? (
-                value
-              ) : (
-                <>
-                  <span data-meter-full="" aria-hidden={isCollapsed || undefined}>
-                    {value}
-                  </span>
-                  <span data-meter-rail="" aria-hidden={!isCollapsed || undefined}>
-                    {railValue}
-                  </span>
-                </>
-              )}
-            </Txt>
-          )}
-        </div>
-        {status ? (
-          <div data-meter-fold="" data-meter-status="" className="mt-2.5" inert={isCollapsed}>
+        <div data-meter-row="" className="mt-2.5 flex items-baseline justify-between gap-2">
+          <div data-meter-value="" className="shrink-0">
             {loading ? (
-              <MeterLineSkeleton line="text-meta" bar="h-2 w-24" />
+              <MeterLineSkeleton line="text-heading" bar="h-3 w-12" />
             ) : (
-              // Descenders hang below the crop, so a status that truncates clips only sideways.
-              <p
-                className={cn(
-                  'min-w-0 overflow-x-clip text-meta text-ellipsis whitespace-nowrap',
-                  trimToLetters,
-                  current.text,
+              <Txt variant="heading" tone="ink" className={cn('tabular-nums', trimToLetters)}>
+                {railValue === undefined ? (
+                  value
+                ) : (
+                  <>
+                    <span data-meter-full="" aria-hidden={isCollapsed || undefined}>
+                      {value}
+                    </span>
+                    <span data-meter-rail="" aria-hidden={!isCollapsed || undefined}>
+                      {railValue}
+                    </span>
+                  </>
                 )}
-              >
-                {status}
-              </p>
+              </Txt>
             )}
           </div>
-        ) : null}
+          {status ? (
+            <div data-meter-fold="" data-meter-status="" className="min-w-0" inert={isCollapsed}>
+              {loading ? (
+                <MeterLineSkeleton line="w-20 text-meta" bar="h-2 w-full" />
+              ) : (
+                // Descenders hang below the crop, so a status that truncates clips only sideways.
+                <p
+                  className={cn(
+                    'overflow-x-clip text-meta text-ellipsis whitespace-nowrap',
+                    trimToLetters,
+                    current.text,
+                  )}
+                >
+                  {status}
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
