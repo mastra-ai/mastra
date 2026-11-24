@@ -75,7 +75,7 @@ Processes workflow events from the PubSub `workflows` topic. Requires a pull-cap
 Polls storage for due cron schedules and publishes a `workflow.start` event to the `workflows` topic for each fire. The orchestration worker runs default-engine workflows in-process and evented workflows step by step.
 
 - **Name**: `scheduler`
-- **Multiple instances**: Instances that share storage claim each fire atomically, so only one instance claims each fire. The scheduler retries a failed publish up to three times, so a retry after a lost broker response can publish the same fire again. A fire whose publish attempts all fail isn't replayed automatically.
+- **Multiple instances**: Instances that share storage claim each fire atomically, so only one instance claims each fire. The scheduler makes up to three publish attempts per fire (two retries), so a retry after a lost broker response can publish the same fire again. A fire whose publish attempts all fail isn't replayed automatically.
 
 ### BackgroundTaskWorker
 
