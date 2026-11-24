@@ -1,3 +1,10 @@
+const REMOTE_PROTOCOLS = new Set(['libsql', 'http', 'https', 'ws', 'wss']);
+
+/** True when the client talks to a database server rather than a local file or memory. */
+export function isRemoteClient(client: Pick<SqliteClient, 'protocol'>): boolean {
+  return REMOTE_PROTOCOLS.has(client.protocol);
+}
+
 export type SqliteValue = null | string | number | bigint | ArrayBuffer;
 
 export type SqliteInValue = SqliteValue | boolean | Date | Uint8Array;
