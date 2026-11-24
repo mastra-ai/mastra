@@ -1,5 +1,9 @@
+/** A Platform access token, or a function that returns a fresh one for each request. */
+export type PlatformAccessToken = string | (() => string | Promise<string>);
+
 export interface PlatformClientOptions {
-  accessToken?: string;
+  /** A token, or a function called before every request so long-lived sandboxes never hold an expired one. */
+  accessToken?: PlatformAccessToken;
   projectId?: string;
   actingUserId?: string;
   sandboxProvider?: SandboxProvider;
@@ -52,7 +56,7 @@ function resolveProxyUrl(): string {
  */
 const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
 
-export function requireOption(value: string | undefined, name: string): string {
+export function requireOption<T>(value: T | undefined, name: string): T {
   if (!value) throw new Error(`${name} is required`);
   return value;
 }
@@ -134,7 +138,7 @@ export class PlatformApiError extends Error {
 }
 
 export class PlatformClient {
-  readonly accessToken: string;
+  readonly accessToken: PlatformAccessToken;
   readonly projectId: string;
   readonly actingUserId: string | undefined;
   readonly proxyUrl: string;
@@ -172,7 +176,8 @@ export class PlatformClient {
     }
 
     const headers = new Headers(options.headers);
-    headers.set('authorization', `Bearer ${this.accessToken}`);
+    const token = typeof this.accessToken === 'function' ? await this.accessToken() : this.accessToken;
+    headers.set('authorization', `Bearer ${token}`);
     if (this.actingUserId) headers.set('x-acting-user-id', this.actingUserId);
     // Advisory correlation headers — the proxy folds them into its log lines
     // so proxy-side events can be joined back to the calling factory session

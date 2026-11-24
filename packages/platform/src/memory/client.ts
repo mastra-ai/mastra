@@ -1,6 +1,9 @@
+import type { PlatformAccessToken } from '@mastra/platform-workspace';
+
 export interface PlatformMemoryClientOptions {
   /** Platform access token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`. */
-  accessToken?: string;
+  /** A token, or a function called before every request so long-lived clients never hold an expired one. */
+  accessToken?: PlatformAccessToken;
   /** Memory instance id. Falls back to `MASTRA_MEMORY_INSTANCE_ID`. */
   instanceId?: string;
   /** Falls back to `MASTRA_PROJECT_ID`. Sent as a hint; ownership is enforced server-side from the token. */
@@ -152,7 +155,7 @@ function env(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
-function required(value: string | undefined, name: string): string {
+function required<T>(value: T | undefined, name: string): T {
   if (!value) throw new Error(`PlatformMemory: ${name} is required`);
   return value;
 }
@@ -382,7 +385,8 @@ export class PlatformMemoryClient {
     for (const [key, value] of Object.entries(init.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
-    const headers: Record<string, string> = { authorization: `Bearer ${this.opts.accessToken}` };
+    const token = typeof this.opts.accessToken === 'function' ? await this.opts.accessToken() : this.opts.accessToken;
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     if (this.opts.actingUserId) headers['x-acting-user-id'] = this.opts.actingUserId;
     if (this.opts.projectId) headers['x-mastra-project-id'] = this.opts.projectId;
     if (this.opts.environmentId) headers['x-mastra-environment-id'] = this.opts.environmentId;

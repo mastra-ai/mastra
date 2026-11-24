@@ -34,6 +34,23 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('calls an access token getter before every request', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test/');
+    const fetchMock = vi.fn().mockImplementation(async () => response('{}', { status: 200 }));
+    let minted = 0;
+    const client = new PlatformClient({
+      accessToken: async () => `tok_${++minted}`,
+      projectId: 'proj_123',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+    await client.request('/sandbox');
+
+    const auth = fetchMock.mock.calls.map(([, init]) => (init.headers as Headers).get('authorization'));
+    expect(auth).toEqual(['Bearer tok_1', 'Bearer tok_2']);
+  });
+
   it('uses E2B provider routes when SANDBOX_PROVIDER is unset', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', undefined);
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');

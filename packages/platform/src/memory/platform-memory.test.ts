@@ -617,6 +617,25 @@ describe('PlatformMemoryClient', () => {
     expect(client.mcpUrl).toBe('https://memory-api.mastra.ai/v1/memory/mem_1/mcp');
   });
 
+  it('calls an access token getter before every request', async () => {
+    const auth: (string | null)[] = [];
+    let minted = 0;
+    const client = new PlatformMemoryClient({
+      accessToken: async () => `tok_${++minted}`,
+      instanceId: 'mem_1',
+      apiUrl: 'https://platform.test',
+      fetch: async (_url, init) => {
+        auth.push(new Headers(init?.headers).get('authorization'));
+        return new Response(JSON.stringify({ id: 'thread_1' }));
+      },
+    });
+
+    await client.getThread('thread_1');
+    await client.getThread('thread_1');
+
+    expect(auth).toEqual(['Bearer tok_1', 'Bearer tok_2']);
+  });
+
   it('requires an access token and instance id', () => {
     expect(() => new PlatformMemoryClient({ instanceId: 'mem_1' })).toThrow(/accessToken/);
     expect(() => new PlatformMemoryClient({ accessToken: 't' })).toThrow(/instanceId/);
