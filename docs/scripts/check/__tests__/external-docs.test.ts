@@ -106,6 +106,20 @@ describe('external-docs check', () => {
     expect(summary(findings)).toEqual([])
   })
 
+  it('routes a page with a frontmatter id and no slug by its id, like Docusaurus', async () => {
+    const site = (link: string) =>
+      run({
+        'index.mdx': page(`# Home\n\nSee [the guide](${link}).`),
+        'guide.mdx': page('# Guide\n\n## Setup\n\nText.', 'title: Guide\nid: renamed'),
+        'topics/index.mdx': page('# Topics', 'title: Topics\nid: overview'),
+        'sidebars.js': sidebar(['index', 'renamed', 'topics/overview']),
+      })
+    expect(summary(await site('/renamed#setup'))).toEqual([])
+    expect(summary(await site('/topics'))).toEqual([])
+    expect(summary(await site('/guide#setup'))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+    expect(summary(await site('/topics/overview'))).toEqual(['mastra/external-internal-link src/site/index.mdx:7'])
+  })
+
   it('reports a missing or broken sidebars.js', async () => {
     expect(summary(await run({ 'index.mdx': page('# Home') }))).toEqual([
       'mastra/external-sidebar-invalid src/site/sidebars.js',

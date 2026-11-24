@@ -41,7 +41,10 @@ export function routeWithin(base: string, relativePath: string, frontmatter: Rec
   if (name.toLowerCase() === 'index' || name.toLowerCase() === 'readme' || name === parent) {
     return normalizeRoute(`${base}/${dir}`)
   }
-  return normalizeRoute(`${base}/${withinSection}`)
+  // Without a slug, a frontmatter `id` replaces the file name in the route.
+  const id = frontmatter?.id
+  const baseName = typeof id === 'string' && id.trim() !== '' ? id.trim() : name
+  return normalizeRoute(`${base}/${dir ? `${dir}/` : ''}${baseName}`)
 }
 
 export interface RouteIndex {
