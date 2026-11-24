@@ -93,6 +93,14 @@ const sidebars = {
             icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
           },
         },
+        {
+          type: 'doc',
+          id: 'email-calendar/sendgrid',
+          label: 'SendGrid',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sendgrid.svg',
+          },
+        },
       ],
     },
     {
@@ -740,6 +748,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'tools/anthropic',
+          label: 'Anthropic',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/anthropic/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/anthropic/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'tools/brightdata',
           label: 'Bright Data',
           customProps: { icon: '/img/integrations/bright-data.svg' },
@@ -749,6 +766,14 @@ const sidebars = {
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/gitlab',
+          label: 'GitLab',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gitlab?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -1308,6 +1333,14 @@ const sidebars = {
           label: 'Fireflies.ai',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/google-analytics',
+          label: 'Google Analytics',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googleanalytics?viewbox=auto&size=28',
           },
         },
         {
