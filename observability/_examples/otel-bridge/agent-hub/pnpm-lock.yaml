@@ -17,7 +17,7 @@ overrides:
   ajv@>=8.0.0 <8.20.0: 8.20.0
   fast-uri@<3.1.9: 3.1.9
   fast-uri@>=4.0.0 <4.2.3: 4.2.3
-  '@fastify/proxy-addr@<=5.1.0': 5.1.1
+  '@fastify/proxy-addr@<5.1.3': 5.1.3
   proxy-addr: 2.0.8
   '@isaacs/brace-expansion@<=5.0.1': 5.0.1
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
@@ -180,8 +180,8 @@ packages:
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
 
-  '@fastify/proxy-addr@5.1.1':
-    resolution: {integrity: sha512-zv07Y9GEuDsJPegZoDFd4SDWaZOW8N2pa0GSrYmKpId/tjt1Hgo3BjZBVjdVpfVrHaA+Qv5jawtS2O50J5xM9g==}
+  '@fastify/proxy-addr@5.1.3':
+    resolution: {integrity: sha512-ptgIgB+abBNTs5lsKNvFaKMCauPaTOE6ZIjxJr3FxCLehmYQQKYGg4srwwNICR9QQlFrYw59jWAo+i9GalVCaw==}
 
   '@grpc/grpc-js@1.14.5':
     resolution: {integrity: sha512-7VZM+SVdEcUUqSQeNI3zM8Qs/BhQKZndPo2h5VkYkAM8Iz0wJIa8mKV5ekQGqG8UUsnkQ0NMxIxwkIHYvj0qOw==}
@@ -1761,7 +1761,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@fastify/proxy-addr@5.1.1':
+  '@fastify/proxy-addr@5.1.3':
     dependencies:
       '@fastify/forwarded': 3.0.2
       ipaddr.js: 2.3.0
@@ -2814,7 +2814,7 @@ snapshots:
       '@fastify/ajv-compiler': 4.0.5
       '@fastify/error': 4.2.0
       '@fastify/fast-json-stringify-compiler': 5.0.3
-      '@fastify/proxy-addr': 5.1.1
+      '@fastify/proxy-addr': 5.1.3
       abstract-logging: 2.0.1
       avvio: 9.2.0
       fast-json-stringify: 7.0.1
