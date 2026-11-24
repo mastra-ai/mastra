@@ -151,6 +151,23 @@ export const FixedBody: Story = {
   },
 };
 
+export const LongPage: Story = {
+  args: { children: Array.from({ length: 20 }, (_, index) => <div key={index}>{resourceList}</div>) },
+  parameters: {
+    docs: {
+      description: {
+        story: 'A page taller than its frame scrolls to a plain edge, with no fade at the top or bottom.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const body = within(canvasElement).getAllByText('Research agent')[0]?.closest<HTMLElement>('[style*="overflow"]');
+    if (!body) throw new Error('Missing the scrolling body');
+    await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    await expect(getComputedStyle(body).maskImage).toBe('none');
+  },
+};
+
 export const PageWithActionRow: Story = {
   args: {
     actionRow: (
