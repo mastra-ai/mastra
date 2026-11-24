@@ -1753,8 +1753,9 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
       // Note: getGatewayClient() must stay behind the isGatewayAgentAsync gate — calling it earlier would
       // cache a null client for the process when MASTRA_GATEWAY_API_KEY is absent.
       const gwAgent = await getAgentFromContext({ mastra, agentId, requestContext });
-      const gwClient = getGatewayClient(mastra);
-      if (gwAgent && (await isGatewayAgentAsync(gwAgent, requestContext)) && gwClient) {
+      const gwClient =
+        gwAgent && (await isGatewayAgentAsync(gwAgent, requestContext)) ? getGatewayClient(mastra) : null;
+      if (gwClient) {
         const threadResult = await gwClient.getThread(effectiveThreadId!);
         if (!threadResult) throwThreadBranchNotFound();
         const gatewayThread = toLocalThread(threadResult.thread);
