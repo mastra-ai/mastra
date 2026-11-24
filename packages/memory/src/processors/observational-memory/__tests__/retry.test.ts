@@ -131,6 +131,17 @@ describe('isExhaustedAccountError', () => {
     expect(isExhaustedAccountError(new Error('observer failed', { cause: { error } }))).toBe(true);
   });
 
+  it('reads the quota code from the parsed body when the raw body is gone', () => {
+    const error = new APICallError({
+      message: 'Too Many Requests',
+      url: 'https://api.openai.com/v1/responses',
+      requestBodyValues: {},
+      statusCode: 429,
+      data: { error: { type: 'insufficient_quota', code: 'insufficient_quota' } },
+    });
+    expect(isExhaustedAccountError(error)).toBe(true);
+  });
+
   it('finds the error beside an unrelated cause, and through a cyclic wrapper', () => {
     const sibling = Object.assign(new Error('observer failed', { cause: new Error('stream closed') }), {
       error: openAiNoCredits(),

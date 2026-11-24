@@ -280,6 +280,34 @@ function createThrowingObserverModel(error: () => Error) {
   return model;
 }
 
+/** An observer that fails with `error` until `recover()` is called, then observes. */
+function createRecoveringObserverModel(error: () => Error) {
+  const working = createFlakyObserverModel(observationsText, 0);
+  const prompts: string[] = [];
+  let failing = true;
+  const model = {
+    ...working,
+    calls: 0,
+    prompts,
+    recover() {
+      failing = false;
+    },
+    async doGenerate(options: { prompt: unknown }) {
+      model.calls++;
+      if (failing) throw error();
+      prompts.push(JSON.stringify(options.prompt));
+      return working.doGenerate();
+    },
+    async doStream(options: { prompt: unknown }) {
+      model.calls++;
+      if (failing) throw error();
+      prompts.push(JSON.stringify(options.prompt));
+      return working.doStream();
+    },
+  };
+  return model;
+}
+
 function createObserverRunner(maxRetries?: number) {
   return new ObserverRunner({
     observationConfig: {
@@ -495,4 +523,44 @@ describe('OM transient-error retry', { timeout: 30_000 }, () => {
       expect(result.tripwire?.reason).toContain(error().message);
     },
   );
+
+  it('keeps the unobserved messages after stopping on an account with no credits, and observes them once it works', async () => {
+    const store = new InMemoryStore();
+    const observerModel = createRecoveringObserverModel(openAiNoCredits);
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          observation: { model: observerModel as any, messageTokens: 20, bufferTokens: false, maxRetries: 3 },
+          reflection: { observationTokens: 50_000 },
+        },
+      },
+    });
+    const agent = new Agent({
+      id: 'recovering-observer-test-agent',
+      name: 'Recovering Observer Test Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockActorModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory,
+    });
+    const thread = { thread: 'recovering-observer-thread', resource: 'recovering-observer-resource' };
+    const memoryStore = (await store.getStore('memory'))!;
+
+    const failed = await agent.generate('First question: what is the capital of France?', { memory: thread });
+    expect(failed.tripwire?.reason).toContain(openAiNoCredits().message);
+    expect(observerModel.calls).toBe(1);
+    const afterFailure = await memoryStore.getObservationalMemory(thread.thread, thread.resource);
+    expect(afterFailure?.activeObservations ?? '').toBe('');
+    expect(afterFailure?.lastObservedAt).toBeFalsy();
+
+    // Credits are added; the next turn observes the window the failed turn left behind.
+    observerModel.recover();
+    const next = await agent.generate('Second question.', { memory: thread });
+    expect(next.tripwire).toBeFalsy();
+    expect(observerModel.prompts.join('\n')).toContain('capital of France');
+    const afterRecovery = await memoryStore.getObservationalMemory(thread.thread, thread.resource);
+    expect(afterRecovery?.activeObservations).toContain('User greeted');
+  });
 });

@@ -1,3 +1,5 @@
+import { classifyProviderError } from '@mastra/core/error';
+
 import { omDebug } from './debug';
 
 /**
@@ -50,12 +52,6 @@ const TRANSIENT_MESSAGE_SUBSTRINGS = [
   // Core raises this when a stream closes with finishReason 'other' before any output.
   'finished with finishreason "other"',
 ];
-
-// OpenAI answers an account with no credits or quota left with HTTP 429, the status of a rate
-// limit, but the account stays unusable until someone adds credits, so retrying only repeats the
-// failure. Its error code is the reliable signal; the message is a fallback when the body is gone.
-// Not "exceeded your current quota": Gemini uses that text for per-minute limits that do clear.
-const EXHAUSTED_ACCOUNT_SUBSTRINGS = ['insufficient_quota', 'no credits remaining'];
 
 const INCOMPLETE_FINISH_REASONS = new Set(['other', 'unknown']);
 
@@ -226,29 +222,15 @@ export function isTransientLLMError(error: unknown): boolean {
 }
 
 /**
- * Returns true when the error says the provider account has no credits or quota left. These
- * carry a retryable status (OpenAI's are HTTP 429), so `withRetry` stops on them even though
- * `isTransientLLMError` matches. A plain rate limit is not matched and is still retried.
- * Walks the `cause`/`error` chain and reads both the message and the raw response body.
+ * Returns true when the error says the provider account has no credits or quota left, as core's
+ * provider-error classifier decides it. These can carry a retryable status (OpenAI's are HTTP 429,
+ * the status of a rate limit), so `withRetry` stops on them even though `isTransientLLMError`
+ * matches: the account stays unusable until someone adds credits. Rate limits are still retried.
  *
  * @internal
  */
 export function isExhaustedAccountError(error: unknown): boolean {
-  const visited = new Set<object>();
-
-  function visit(candidate: unknown): boolean {
-    if (!isRecord(candidate) || visited.has(candidate)) return false;
-    visited.add(candidate);
-    for (const field of [candidate.message, candidate.responseBody]) {
-      if (typeof field !== 'string') continue;
-      const text = field.toLowerCase();
-      if (EXHAUSTED_ACCOUNT_SUBSTRINGS.some(sub => text.includes(sub))) return true;
-    }
-    // Both wrapper shapes are walked: an error can carry an unrelated `cause` next to the real `error`.
-    return visit(candidate.cause) || visit(candidate.error);
-  }
-
-  return visit(error);
+  return classifyProviderError(error) === 'quota';
 }
 
 /**
