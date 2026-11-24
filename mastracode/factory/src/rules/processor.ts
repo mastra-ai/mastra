@@ -963,7 +963,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     if (committed.status !== 'committed' || !this.options.boardEngine) return;
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
-      await this.options.boardEngine.requestMove({
+      const ingress = { type: 'rule' as const, identity: `decision:${entry.idempotencyKey}` };
+      const result = await this.options.boardEngine.requestMove({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: item.id,
@@ -972,12 +973,28 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         ...(entry.reenter ? { reenter: true } : {}),
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
-        ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
+        ingress,
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
         ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
         ...(toolResult.status === 'success' ? { completedTool: toolResult.toolName } : {}),
       });
+      // The dispatcher replays this same decision later. Record the engine's refusal under its
+      // ingress so the replay keeps it instead of asking again without this tool result's context.
+      // A lost revision race is not a refusal and stays unrecorded, like the transition service.
+      if (result.status === 'rejected' && result.code !== 'stale') {
+        await this.options.storage.commitTransition({
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: item.id,
+          expectedRevision: item.revision,
+          destinationStage: entry.stage,
+          actorId: 'factory-tool-result-rule',
+          ingress: { identity: ingress.identity, transitionId: result.transitionId },
+          causalChain: [{ ingressId, decisionType: entry.type }],
+          evaluation: { outcome: 'rejected', code: result.code, reason: result.reason },
+        });
+      }
     }
   }
 }

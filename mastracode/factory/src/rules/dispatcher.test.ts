@@ -3409,6 +3409,24 @@ describe('FactoryDecisionDispatcher', () => {
       expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ id: `${lost.id}:resume:2` });
     });
 
+    it('resumes, rather than restarting the prompt, when sending the continuation failed', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-build-send-fails', Date.now() - 60_000);
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => Promise.reject(new Error('signal bus down')));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      for (const [signal] of session.sendSignal.mock.calls) {
+        expect(signal).toMatchObject({
+          id: expect.stringMatching(new RegExp(`^${lost.id}:.*resume:\\d+$`)),
+          contents: expect.stringContaining('Your previous run was interrupted'),
+        });
+      }
+    });
+
     it('does not resume, and keeps the lost run, when its end cannot be recorded', async () => {
       const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
         'lost-build-audit-down',

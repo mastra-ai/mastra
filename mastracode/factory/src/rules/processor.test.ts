@@ -6,12 +6,14 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
 import { setFactoryToolsRole } from './binding-context.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -1031,6 +1033,75 @@ describe('FactoryPhaseStateProcessor', () => {
         }),
       }),
     ]);
+  });
+
+  it("keeps a tool-result move the host's board engine refused undone when the dispatcher replays it", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        finish: {
+          onResult: () => ({ type: 'transition' as const, idempotencyKey: 'finish', board: 'custom', stage: 'done' }),
+        },
+      },
+    });
+    const boards = boardRegistryOf([board]);
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
+    };
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const defaultEngine = new DispatcherBoardEngine({ transitionService });
+    const asked: string[] = [];
+    // A host engine that refuses a move an agent's tool result asks for, but would take the same move from a rule.
+    const boardEngine: FactoryBoardEngine = {
+      requestMove: async request => {
+        asked.push(request.cause ?? 'none');
+        if (request.cause !== 'tool_result_rule') return defaultEngine.requestMove(request);
+        return {
+          status: 'rejected',
+          transitionId: 'host-refusal',
+          itemId: request.workItemId,
+          code: 'forbidden',
+          reason: 'Agents cannot close cards on this host.',
+        };
+      },
+      requestPlacement: placement => defaultEngine.requestPlacement(placement),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      boardEngine,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { listActiveThreadRuns: () => [] } as never,
+      storage,
+      boards,
+      transitionService,
+      boardEngine,
+      ownerId: 'replay-worker',
+    });
+    await dispatcher.runOnce(new Date(Date.now() + 60_000));
+
+    expect(asked).toEqual(['tool_result_rule']);
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['building']);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.idempotencyKey === 'finish'),
+    ).toMatchObject({
+      status: 'failed',
+      lastError: expect.stringContaining('Agents cannot close cards on this host.'),
+    });
   });
 
   it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {

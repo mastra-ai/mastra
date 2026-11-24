@@ -92,7 +92,12 @@ import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } fr
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
+import type {
+  FactoryCommitDecision,
+  FactoryRuleActor,
+  FactoryRuleCausalEntry,
+  FactoryRuleRejectionCode,
+} from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
 import { eventRouteIngress, foldUpdate, updateGroup } from './update-fold.js';
 import {
@@ -1709,9 +1714,17 @@ export class FactoryDecisionDispatcher {
               `Factory binding ${binding.id} changed while waiting for its open run to end.`,
             );
           }
-          // A landed kickoff whose run died with its worker resumes here instead of being taken as done.
-          const interrupted = (await kickoffLanded())
-            ? await this.#interruptedRuns(session, binding, kickoffId, runStillActive)
+          // A landed kickoff whose run died with its worker resumes here instead of being taken as
+          // done. Any delivery of this decision counts: a retry after a failed continuation resumes too.
+          const deliveryLanded = async () =>
+            (await session.thread.listActiveMessages()).some(
+              message =>
+                message.id === record.id ||
+                message.id.startsWith(`${record.id}:retry:`) ||
+                message.id.startsWith(`${record.id}:resume:`),
+            );
+          const interrupted = (await deliveryLanded())
+            ? await this.#interruptedRuns(session, binding, record.id, runStillActive)
             : [];
           if (interrupted.length > 0 && !(await kickoffStale())) {
             if (await this.#runStopRequested(record.orgId, binding.id)) throw new FactoryRunStopped();
@@ -2680,6 +2693,12 @@ export class FactoryDecisionDispatcher {
       `decision:${record.idempotencyKey}`,
     );
     if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
+    // A refusal already recorded for this decision (the engine refused the tool-result move that
+    // queued it, say) stands: the engine is not asked again under another cause.
+    if (replay?.status === 'rejected') {
+      const code = replay.code as FactoryRuleRejectionCode;
+      throw new FactoryRuleRejectedError(code, String(replay.reason), code !== 'stale');
+    }
     const result = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -3244,14 +3263,14 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * The runs of this kickoff (or of an earlier resume of it) that died with their worker: still
+   * The runs of this decision's deliveries (a kickoff, its retries and resumes) that died with their worker: still
    * open on the ledger, but heartbeating nowhere and not running here. A run that ended normally
    * left the ledger when its end was observed, so an entry that outlived its owner never finished.
    */
   async #interruptedRuns(
     session: BoundDispatcherSession,
     binding: FactoryRunBindingRecord,
-    kickoffId: string,
+    decisionId: string,
     runStillActive: () => boolean,
   ): Promise<string[]> {
     if (runStillActive()) return [];
@@ -3260,7 +3279,7 @@ export class FactoryDecisionDispatcher {
       .filter(
         entry =>
           entry.bindingId === binding.id &&
-          (entry.kickoffId === kickoffId || entry.kickoffId.startsWith(`${kickoffId}:resume:`)) &&
+          (entry.kickoffId === decisionId || entry.kickoffId.startsWith(`${decisionId}:`)) &&
           !isOpenRunLiveElsewhere(entry, this.#ownerId),
       )
       .map(entry => entry.kickoffId);
