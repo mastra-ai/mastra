@@ -378,6 +378,41 @@ describe('Observational Memory token counts for stored history', () => {
     expect(trustedEntries(saved!.content.parts[0])).toHaveLength(1);
   });
 
+  it('still saves an unstored message whole when the count patch for a stored one fails', async () => {
+    const { storage, memory } = open(join(dbDir, 'patch-fails.db'));
+    const threadId = randomUUID();
+    const storedId = `${threadId}-stored`;
+    const unstoredId = `${threadId}-unstored`;
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const build = (id: string, createdAt: Date): MastraDBMessage => ({
+      id,
+      threadId,
+      resourceId: RESOURCE,
+      role: 'user',
+      createdAt,
+      content: { format: 2, parts: [{ type: 'text', text: `${id} `.repeat(40) }] },
+    });
+    await memory.saveMessages({ messages: [build(storedId, new Date(0))] });
+    const stored = build(storedId, new Date(0));
+    const unstored = build(unstoredId, new Date(1000));
+    new TokenCounter().countMessage(stored);
+    new TokenCounter().countMessage(unstored);
+    const memoryStore = (await storage.getStore('memory'))!;
+    vi.spyOn(memoryStore, 'updateMessages').mockRejectedValue(new Error('patch failed'));
+
+    const om = (await memory.omEngine)!;
+    await om.persistMessages([stored, unstored], threadId, RESOURCE, new Set([storedId, unstoredId]));
+
+    const rows = (await memoryStore.listMessagesById({ messageIds: [storedId, unstoredId] })).messages;
+    const byId = new Map(rows.map(row => [row.id, row]));
+    // The unstored message reaches storage with its count, even though patching the stored one failed.
+    expect(trustedEntries(byId.get(unstoredId)!.content.parts[0])).toHaveLength(1);
+    // The failed patch left the stored message uncounted, to be counted again on read.
+    expect(trustedEntries(byId.get(storedId)!.content.parts[0])).toHaveLength(0);
+  });
+
   it('saves a sealed message holding a completed boundary whole, so its end marker and count both reach storage', async () => {
     const { storage, memory } = open(join(dbDir, 'resave-boundary.db'));
     const threadId = randomUUID();

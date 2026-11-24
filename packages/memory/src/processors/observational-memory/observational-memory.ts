@@ -2300,9 +2300,17 @@ export class ObservationalMemory {
       });
       if (changed) updates.push({ id: row.id, content: { ...row.content, parts } as MastraDBMessage['content'] });
     }
-    if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
+    // Decided before patching: a failed patch must not hide the messages that still need a whole save.
     const storedIds = new Set(stored.map(row => row.id));
-    return messages.filter(message => !storedIds.has(message.id));
+    const notStored = messages.filter(message => !storedIds.has(message.id));
+    if (updates.length > 0) {
+      try {
+        await this.storage.updateMessages({ messages: updates });
+      } catch (error) {
+        omError('[OM] Failed to save token counts for stored messages', error);
+      }
+    }
+    return notStored;
   }
 
   /**
