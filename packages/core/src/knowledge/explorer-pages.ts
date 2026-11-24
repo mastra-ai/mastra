@@ -375,7 +375,10 @@ type GraphNotes = { notes: Pick<KnowledgeNote, 'pageId' | 'mentions'>[]; truncat
 
 /** Optional bulk reads. Local stores and older hosted services can use the paginated primitives. */
 export interface KnowledgePageGraphStore extends KnowledgePageStore {
-  /** undefined means the service lacks this operation. null means the root was not found. */
+  /**
+   * The graph this reader would build from `input.read`, so nothing outside it. undefined means the service
+   * lacks this operation. null means the root is missing or unreadable.
+   */
   readPageGraph?(input: KnowledgePageGraphInput): Promise<KnowledgePageGraph | null | undefined>;
   /** Apply visibility before limiting mentions. Return truncated if either limit omits results. */
   listGraphNoteMentions?(input: {
