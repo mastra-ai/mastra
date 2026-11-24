@@ -25,7 +25,12 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import { InMemoryMemory } from '../storage/domains/memory/inmemory';
-import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import type {
+  ObservationalMemoryRecord,
+  StorageCloneThreadInput,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
@@ -1255,8 +1260,8 @@ export class AgentController<TState = {}> {
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
-      cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata, options, requestContext }) =>
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, options, requestContext }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1316,6 +1321,7 @@ export class AgentController<TState = {}> {
     resourceId,
     title,
     metadata,
+    options,
     requestContext,
   }: {
     session: Session<TState>;
@@ -1323,6 +1329,7 @@ export class AgentController<TState = {}> {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
@@ -1334,7 +1341,13 @@ export class AgentController<TState = {}> {
       );
     }
 
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    const result = await memory.cloneThread({
+      sourceThreadId,
+      resourceId,
+      title,
+      metadata,
+      ...(options ? { options } : {}),
+    });
     const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
