@@ -57,14 +57,14 @@ export function PageFrame({
                 ? // Locked to the viewport height, so the panels inside scroll on their own instead of the page.
                   cn('grid size-full min-h-0 grid-cols-1', header ? 'grid-rows-[auto_minmax(0,1fr)]' : 'grid-rows-1')
                 : cn(
-                    'mx-auto w-full max-w-(--breakpoint-2xl)',
+                    'mx-auto w-full max-w-(--breakpoint-2xl) pb-8',
                     header ? scrollBodyWithHeader : 'h-full min-h-min',
                     pageLoader,
                   )
             }
           >
             {header && (
-              <div data-slot="page-layout-header" className={fixed ? 'p-4' : 'pb-6'}>
+              <div data-slot="page-layout-header" className={fixed ? 'p-4' : 'pb-4'}>
                 {header}
               </div>
             )}

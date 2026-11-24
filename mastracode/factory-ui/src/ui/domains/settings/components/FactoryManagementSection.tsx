@@ -47,12 +47,12 @@ export function FactoryManagementSection() {
               <AlertDialog.Trigger
                 render={
                   <Button
+                    icon={<TrashIcon />}
                     size="sm"
                     variant="destructive-ghost"
                     disabled={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <TrashIcon />
                     Delete
                   </Button>
                 }

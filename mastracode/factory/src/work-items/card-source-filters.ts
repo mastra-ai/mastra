@@ -30,6 +30,11 @@ export function pickedBoardSources(filters: SourceFilters): ReadonlySet<string> 
   return LINEAR_ONLY;
 }
 
+/** Whether the picks of a two-way filter keep a card the fact is true or false for; none picked keeps all. */
+export function matchesYesNo(picked: ReadonlySet<string>, yes: string, no: string, fact: boolean): boolean {
+  return picked.size === 0 || picked.has(fact ? yes : no);
+}
+
 /** Whether the view's source and Linear project filters keep the item. */
 export function matchesSourceFilters(item: SourceFacts & { hasPullRequest: boolean }, filters: SourceFilters): boolean {
   const sources = pickedBoardSources(filters);

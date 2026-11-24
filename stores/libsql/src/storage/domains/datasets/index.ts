@@ -1062,6 +1062,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
         const perPage = normalizePerPage(perPageInput, 100);
         const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+        if (perPage === 0) {
+          return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
+        }
+
         const limitValue = perPageInput === false ? total : perPage;
         const end = perPageInput === false ? total : start + perPage;
 
@@ -1117,6 +1122,11 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
       const perPage = normalizePerPage(perPageInput, 100);
       const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      if (perPage === 0) {
+        return { items: [], pagination: { total, page, perPage: perPageForResponse, hasMore: true } };
+      }
+
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
 

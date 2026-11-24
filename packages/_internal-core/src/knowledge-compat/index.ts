@@ -245,6 +245,19 @@ export function knowledgePagesResetMessage(reason: string): string {
 }
 
 /**
+ * A list cursor the store cannot decode (malformed, or from another store or version). Defined
+ * here so every adapter can throw it on any core version; core re-exports it from
+ * `@mastra/core/storage`. Recognise it by `name`.
+ * @experimental
+ */
+export class KnowledgeInvalidCursorError extends Error {
+  constructor(readonly cursor: string) {
+    super('Invalid Knowledge cursor: this store cannot decode it');
+    this.name = 'KnowledgeInvalidCursorError';
+  }
+}
+
+/**
  * The page-store runtime pieces adapters take from `@mastra/core/storage`. They are loaded through
  * `createKnowledgePagesCoreLoader` instead of static imports so adapters keep loading on cores
  * older than the `knowledge-pages` feature without raising their `@mastra/core` peer floor.

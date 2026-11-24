@@ -18,6 +18,7 @@ import {
 } from '../../rules/event-rules.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
+import { CLOSES_WORK_ITEM_IDS_KEY } from '../../work-items/change-requests.js';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>
@@ -170,6 +171,9 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
       ...(context.mergeRequest.createdAt ? { sourceCreatedAt: context.mergeRequest.createdAt } : {}),
       factoryAuthored: context.mergeRequest.factoryAuthored,
       authorTrusted: context.mergeRequest.authorTrusted,
+      ...(context.pullRequestHome?.alsoCloses
+        ? { [CLOSES_WORK_ITEM_IDS_KEY]: context.pullRequestHome.alsoCloses }
+        : {}),
       autoStartCandidate:
         ((trustedGitLabActor(context) && context.mergeRequest.authorTrusted) || context.mergeRequest.factoryAuthored) &&
         createdAfterFactory(context.mergeRequest.createdAt, context.factory.createdAt),
@@ -196,11 +200,7 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   // An issue card re-reviews only while its PR review covers this merge request.
   if (
     context.item.source !== 'gitlab-pr' &&
-    !(
-      attachedMergeRequest(context) &&
-      reviewing &&
-      reviewsThisMergeRequest(context)
-    )
+    !(attachedMergeRequest(context) && reviewing && reviewsThisMergeRequest(context))
   )
     return;
   // A resting card has not started a review pass yet.

@@ -46,8 +46,7 @@ const pageHeader = (
     <PageHeader.Title>Resources</PageHeader.Title>
     <PageHeader.Description>Agents, workflows and tools available in this workspace.</PageHeader.Description>
     <PageHeader.Action>
-      <Button variant="primary">
-        <IconPlusMedium />
+      <Button icon={<IconPlusMedium />} variant="primary">
         Create resource
       </Button>
     </PageHeader.Action>

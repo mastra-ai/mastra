@@ -35,8 +35,11 @@ export function OnboardingAccountLanes({
         <Txt variant="caption" role="alert">
           {catalogError.message}
         </Txt>
-        <Button disabled={retrying} onClick={retry}>
-          {retrying && <Spinner size="sm" aria-hidden="true" />}
+        <Button
+          icon={retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
+          disabled={retrying}
+          onClick={retry}
+        >
           Retry
         </Button>
       </div>

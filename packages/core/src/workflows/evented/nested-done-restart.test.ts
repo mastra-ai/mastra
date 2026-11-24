@@ -246,6 +246,53 @@ describe.each(['default', 'evented'] as Engine[])('%s restart after a nested wor
   }, 60_000);
 });
 
+// The parent saves its nested step as running before the child run saves anything. On the default
+// engine, a crash in between left a parent that failed on restart with "This workflow run was not
+// active" (COR-1348). The evented engine already recovers this case; the loop case above still
+// fails on it.
+describe.each(['default', 'evented'] as Engine[])('%s restart before the nested run was saved', engine => {
+  it('starts the nested workflow with the input the parent recorded', async () => {
+    const log: Entry[] = [];
+    const runId = `nested-unsaved-${engine}`;
+    const scenario = createRestartScenario({
+      kind: 'workflow',
+      runId,
+      hold: { when: s => (s.context as any)?.['unsaved-child']?.status === 'running' },
+      build: ({ core, generation }) => {
+        const { createWorkflow } = factories(core, engine);
+        const child = createWorkflow({ id: 'unsaved-child', inputSchema: N, outputSchema: N })
+          .then(inc(core, engine, log, generation, 'inner'))
+          .commit();
+        return createWorkflow({ id: 'unsaved-parent', inputSchema: N, outputSchema: N })
+          .then(inc(core, engine, log, generation, 'first'))
+          .then(child)
+          .then(inc(core, engine, log, generation, 'last'))
+          .commit();
+      },
+    });
+    scenarios.push(scenario);
+    const original = await scenario.start(async ({ workflow }) =>
+      (await workflow.createRun({ runId })).start({ inputData: { n: 1 } }),
+    );
+    const held = await Promise.race([original.held!.then(() => true), original.settled.then(() => false)]);
+    expect(held, 'not exercised: the parent never saved the nested step as running').toBe(true);
+    const checkpoint = await original.checkpoint();
+    original.releaseHold();
+    expect(checkpoint.rows.filter(row => row.workflowName === 'unsaved-child')).toEqual([]);
+    expect((findRow(checkpoint, 'unsaved-parent', runId)?.snapshot.context as any)['unsaved-child']).toMatchObject({
+      status: 'running',
+      payload: { n: 2 },
+    });
+    const { result } = await scenario.restart(checkpoint);
+
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ n: 4 });
+    expect(starts(log, 'first')).toEqual([]);
+    expect(starts(log, 'inner')).toEqual([{ n: 2 }]);
+    expect(starts(log, 'last')).toEqual([{ n: 3 }]);
+  }, 60_000);
+});
+
 describe('evented restart does not reuse a finished child from another occurrence (COR-1351)', () => {
   // Only a parent that was restarted before carries iteration 1's child id into
   // iteration 2's record: a first run hands the loop the snapshot it had before

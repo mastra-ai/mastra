@@ -39,8 +39,7 @@ export function WorkspaceAddSkill({ labeled = false }: { labeled?: boolean }) {
   return (
     <>
       {labeled ? (
-        <Button variant="ghost" onClick={() => setOpen(true)}>
-          <IconMagicWand />
+        <Button icon={<IconMagicWand />} variant="ghost" onClick={() => setOpen(true)}>
           Add skill
         </Button>
       ) : (

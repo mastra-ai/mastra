@@ -173,8 +173,11 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
         <DialogFooter>
           <JSONImportStatus validation={validation} />
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={handleImport} disabled={validation.status !== 'ready'}>
-            {isImporting && <Spinner />}
+          <DialogAction
+            icon={isImporting ? <Spinner /> : undefined}
+            onConfirm={handleImport}
+            disabled={validation.status !== 'ready'}
+          >
             {validation.status === 'ready'
               ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
               : 'Import'}

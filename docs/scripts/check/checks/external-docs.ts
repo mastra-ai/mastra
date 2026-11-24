@@ -25,6 +25,8 @@ interface Node {
 interface Target {
   name: string
   source: string
+  repo: string
+  routeBasePath?: string
 }
 
 interface SyncedPage {
@@ -115,7 +117,12 @@ async function loadSidebarIds(sidebarPath: string): Promise<Set<string>> {
   return ids
 }
 
-async function loadPage(docsRoot: string, sourceDir: string, absolutePath: string): Promise<SyncedPage> {
+async function loadPage(
+  docsRoot: string,
+  sourceDir: string,
+  routeBase: string,
+  absolutePath: string,
+): Promise<SyncedPage> {
   const relativeToDocs = toPosix(path.relative(docsRoot, absolutePath))
   const withinSource = toPosix(path.relative(sourceDir, absolutePath))
   const file = parseContentFile(docsRoot, relativeToDocs, await fs.readFile(absolutePath, 'utf-8'))
@@ -125,8 +132,7 @@ async function loadPage(docsRoot: string, sourceDir: string, absolutePath: strin
   return {
     file,
     docId: docIdFor(withinSource, file.frontmatter),
-    // Synced sites serve their docs at the site root.
-    route: routeWithin('', withinSource, file.frontmatter),
+    route: routeWithin(routeBase, withinSource, file.frontmatter),
     anchors: parseError ? null : collectAnchors(tree as Node, ids),
     parseError,
     tree: tree as Node,
@@ -195,10 +201,10 @@ function checkPageLinks(page: SyncedPage, byRoute: Map<string, SyncedPage>, byPa
   return findings
 }
 
-async function checkTarget(target: Target, repoRoot: string, docsRoot: string): Promise<Finding[]> {
-  const findings: Finding[] = []
+async function loadTargetPages(target: Target, repoRoot: string, docsRoot: string): Promise<SyncedPage[]> {
   const sourceDir = path.join(repoRoot, target.source)
-  const pages = await Promise.all(
+  const routeBase = target.routeBasePath && target.routeBasePath !== '/' ? target.routeBasePath : ''
+  return Promise.all(
     (await walkMdx(sourceDir))
       // Docusaurus skips `_`-prefixed partials.
       .filter(
@@ -207,9 +213,13 @@ async function checkTarget(target: Target, repoRoot: string, docsRoot: string): 
             .split('/')
             .some(segment => segment.startsWith('_')),
       )
-      .map(file => loadPage(docsRoot, sourceDir, file)),
+      .map(file => loadPage(docsRoot, sourceDir, routeBase, file)),
   )
+}
 
+/** Checks the links of every page of one site; its sections (targets) can link to each other. */
+function checkSiteLinks(pages: SyncedPage[]): Finding[] {
+  const findings: Finding[] = []
   const byRoute = new Map(pages.map(page => [page.route, page]))
   const byPath = new Map(pages.map(page => [page.file.path, page]))
   for (const page of pages) {
@@ -224,7 +234,12 @@ async function checkTarget(target: Target, repoRoot: string, docsRoot: string): 
     }
     findings.push(...checkPageLinks(page, byRoute, byPath))
   }
+  return findings
+}
 
+async function checkSidebar(target: Target, pages: SyncedPage[], repoRoot: string, docsRoot: string) {
+  const findings: Finding[] = []
+  const sourceDir = path.join(repoRoot, target.source)
   const sidebarPath = path.join(sourceDir, 'sidebars.js')
   const sidebarFile = toPosix(path.relative(docsRoot, sidebarPath))
   let sidebarIds: Set<string>
@@ -300,7 +315,15 @@ export async function checkExternalDocs(options: {
     return problems.map(problem => finding('mastra/external-manifest-invalid', problem, { file: manifestFile }))
   }
 
-  return (await Promise.all(targets.map(target => checkTarget(target, repoRoot, docsRoot)))).flat()
+  const pagesByTarget = await Promise.all(targets.map(target => loadTargetPages(target, repoRoot, docsRoot)))
+  const findings: Finding[] = []
+  for (const repo of new Set(targets.map(target => target.repo))) {
+    findings.push(...checkSiteLinks(targets.flatMap((target, i) => (target.repo === repo ? pagesByTarget[i] : []))))
+  }
+  for (const [i, target] of targets.entries()) {
+    findings.push(...(await checkSidebar(target, pagesByTarget[i], repoRoot, docsRoot)))
+  }
+  return findings
 }
 
 export const externalDocsCheck: Check = {
