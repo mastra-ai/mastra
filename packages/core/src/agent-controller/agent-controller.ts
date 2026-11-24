@@ -1395,7 +1395,7 @@ export class AgentController<TState = {}> {
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
-      saveThread: ({ thread }) => this.persistThreadRow(session, thread, undefined, getConfiguredMemory),
+      saveThread: ({ thread }) => this.persistThreadRow(session, thread),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
         this.cloneThreadRow({
@@ -1413,13 +1413,21 @@ export class AgentController<TState = {}> {
     };
   }
 
-  /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
+  /**
+   * Persist a thread row into the controller's own storage (gateway primitive for
+   * the Session thread domain).
+   *
+   * Thread rows are controller state — settings, titles and clone bookkeeping all
+   * read them back from controller storage — so they go there even when a
+   * configured memory resolves per caller to a different store. `callerMemory` is
+   * passed only by clone, whose row also has to exist beside the messages the
+   * caller's memory now holds.
+   */
   private async persistThreadRow(
-    session: Session<TState> | undefined,
+    _session: Session<TState> | undefined,
     thread: AgentControllerThread,
-    requestContext?: RequestContext,
-    resolveSessionMemory?: () => Promise<MastraMemory | undefined>,
-    mirrorToStorage = false,
+    _requestContext?: RequestContext,
+    callerMemory?: MastraMemory,
   ): Promise<void> {
     assertNoReservedThreadBranchMetadata(thread.metadata);
     const persistedThread = {
@@ -1430,32 +1438,18 @@ export class AgentController<TState = {}> {
       updatedAt: thread.updatedAt,
       metadata: thread.metadata,
     };
-    if (this.config.memory) {
-      const memory = resolveSessionMemory
-        ? await resolveSessionMemory()
-        : session
-          ? await this.resolveMemory(session)
-          : await this.resolveMemoryForRequestContext(requestContext ?? new RequestContext());
-      if (memory) {
-        const existing = await memory.getThreadById({ threadId: persistedThread.id });
-        if (existing) {
-          await memory.updateThread({
-            id: persistedThread.id,
-            title: persistedThread.title,
-            metadata: persistedThread.metadata,
-          });
-        } else {
-          await memory.saveThread({ thread: persistedThread });
-        }
-        // A per-user memory may live in a different store than the controller's
-        // thread rows, so the caller-side write does not make the row visible to
-        // controller-side reads. Mirror it into controller storage when asked.
-        if (mirrorToStorage) await this.saveThreadRowToStorage(persistedThread);
-      }
+    if (this.#resolveStorage()) await this.saveThreadRowToStorage(persistedThread);
+    if (!callerMemory) return;
+    const existing = await callerMemory.getThreadById({ threadId: persistedThread.id });
+    if (existing) {
+      await callerMemory.updateThread({
+        id: persistedThread.id,
+        title: persistedThread.title,
+        metadata: persistedThread.metadata,
+      });
       return;
     }
-    if (!this.#resolveStorage()) return;
-    await this.saveThreadRowToStorage(persistedThread);
+    await callerMemory.saveThread({ thread: persistedThread });
   }
 
   /** Write a thread row into the controller's own memory storage (no configured-memory path). */
@@ -1558,7 +1552,7 @@ export class AgentController<TState = {}> {
     // thread rows; mirror the row so getById, listing, and ownership checks see it.
     if (callerMemory) {
       try {
-        await this.persistThreadRow(session, cloned, undefined, () => Promise.resolve(callerMemory), true);
+        await this.persistThreadRow(session, cloned, undefined, callerMemory);
       } catch (error) {
         // Without the controller row the clone is unreachable; remove it rather than orphan it.
         await callerMemory.deleteThread(cloned.id).catch(() => {});
