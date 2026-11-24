@@ -3159,7 +3159,7 @@ export interface operations {
           name: string;
           factoryEnabled?: boolean;
           /** @enum {string} */
-          region?: 'eu' | 'us';
+          region?: 'eu' | 'us' | 'pdx' | 'iad' | 'sfo' | 'ams';
         };
       };
     };

@@ -28,7 +28,7 @@ import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failu
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
-import { isEuRegion } from '../../utils/platform-region.js';
+import { DEPLOY_REGIONS, isDeployRegion, isEuRegion } from '../../utils/platform-region.js';
 import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
@@ -955,7 +955,7 @@ export async function resolveProject(
 /* ------------------------------------------------------------------ */
 
 function toServerProjectRegion(region: string | undefined): ServerProjectRegion | undefined {
-  return region === 'eu' || region === 'us' ? region : undefined;
+  return region !== undefined && isDeployRegion(region) ? region : undefined;
 }
 
 /**
@@ -1488,8 +1488,10 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
   if (opts.workers !== undefined && opts.workers !== 'dedicated' && opts.workers !== 'in-process') {
     throw new Error(`--workers must be "dedicated" or "in-process" (got "${String(opts.workers)}")`);
   }
-  if (opts.region !== undefined && opts.region !== 'us' && opts.region !== 'eu') {
-    throw new Error(`--region must be "us" or "eu" (got "${String(opts.region)}")`);
+  if (opts.region !== undefined && !isDeployRegion(opts.region)) {
+    throw new Error(
+      `--region must be one of ${DEPLOY_REGIONS.map(region => `"${region}"`).join(', ')} (got "${String(opts.region)}")`,
+    );
   }
   const analytics = getAnalytics();
   if (!analytics) {
