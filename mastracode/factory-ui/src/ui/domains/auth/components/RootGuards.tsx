@@ -88,7 +88,7 @@ function FactoriesUnavailableScreen({ retrying, onRetry }: { retrying: boolean; 
         <Txt as="p" variant="body" tone="muted">
           Try again in a moment.
         </Txt>
-        <Button onClick={onRetry} disabled={retrying}>
+        <Button onClick={onRetry} loading={retrying}>
           Retry
         </Button>
       </div>

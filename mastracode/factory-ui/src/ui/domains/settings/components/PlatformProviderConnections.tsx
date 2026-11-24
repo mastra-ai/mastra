@@ -68,8 +68,8 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())}>
-            {pending ? 'Connecting…' : 'Connect'}
+          <DialogAction disabled={!apiKey.trim()} onConfirm={() => onSubmit(apiKey.trim())} loading={pending}>
+            Connect
           </DialogAction>
         </DialogFooter>
       </DialogContent>
@@ -133,11 +133,11 @@ export function ProviderConnectControl({
         variant={variant}
         icon={icon}
         className={className}
-        disabled={pending}
-        aria-label={buttonLabel && !pending ? label : undefined}
+        aria-label={buttonLabel ? label : undefined}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
+        loading={pending}
       >
-        {pending ? 'Connecting…' : (buttonLabel ?? label)}
+        {buttonLabel ?? label}
       </Button>
       {collectingApiKey && (
         <ApiKeyDialog

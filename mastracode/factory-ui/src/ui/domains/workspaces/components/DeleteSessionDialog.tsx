@@ -44,7 +44,7 @@ export function DeleteSessionDialog({
         </DialogHeader>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction onConfirm={onConfirm}>{pending ? 'Deleting…' : 'Delete'}</DialogAction>
+          <DialogAction onConfirm={onConfirm}>Delete</DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>
