@@ -116,6 +116,7 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsActivityDateRange: true,
     } as const;
   }
 

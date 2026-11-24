@@ -452,7 +452,20 @@ export const triggerExperimentBodySchema = z
       .describe(
         'Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment.',
       ),
-    maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+    maxConcurrency: z.number().int().positive().optional().describe('Maximum concurrent executions'),
+    itemTimeout: z.number().int().positive().optional().describe('Per-item timeout in milliseconds'),
+    maxRetries: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe('Retries per item after a failed attempt (tool-mock and abort errors are never retried)'),
+    durable: z
+      .boolean()
+      .optional()
+      .describe(
+        'Start the experiment as a durable evented workflow instead of in this process. Its events go on the Mastra pubsub, so it only runs where something handles them. Only serializable options are allowed.',
+      ),
     provenance: z
       .object({
         source: z.string().optional(),

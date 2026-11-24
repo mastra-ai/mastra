@@ -165,14 +165,20 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(systemText(prompts[0]!)).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
   });
 
-  it('gives no tools by default; { read: true } the three read tools; true all five; pinnedContext adds knowledge_pin', () => {
+  it('gives no tools by default; { read: true } the four read tools; true all six; pinnedContext adds knowledge_pin', () => {
     const names = (config: Omit<ConstructorParameters<typeof Knowledge>[0], 'scopes'>) =>
       Object.keys(new Knowledge({ ...config, scopes }).createTools()).sort();
     expect(names({})).toEqual([]);
     expect(new Knowledge({ scopes }).getInstructions()).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
-    expect(names({ tools: { read: true } })).toEqual(['knowledge_list', 'knowledge_read', 'knowledge_search']);
+    expect(names({ tools: { read: true } })).toEqual([
+      'knowledge_activity',
+      'knowledge_list',
+      'knowledge_read',
+      'knowledge_search',
+    ]);
     expect(names({ tools: { write: true } })).toEqual(['knowledge_note', 'knowledge_page']);
     expect(names({ tools: true })).toEqual([
+      'knowledge_activity',
       'knowledge_list',
       'knowledge_note',
       'knowledge_page',
@@ -180,6 +186,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
       'knowledge_search',
     ]);
     expect(names({ tools: true, pinnedContext: true })).toEqual([
+      'knowledge_activity',
       'knowledge_list',
       'knowledge_note',
       'knowledge_page',

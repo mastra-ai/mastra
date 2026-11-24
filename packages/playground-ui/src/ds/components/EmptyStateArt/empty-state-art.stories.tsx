@@ -74,8 +74,7 @@ export const SettingUp: Story = {
       descriptionSlot="Creating a dedicated Postgres database for this project. This page updates when it’s ready."
       iconSlot={<EmptyStateArt name="knowledge" state="working" />}
       actionSlot={
-        <Button variant="primary" disabled>
-          <Spinner />
+        <Button icon={<Spinner />} variant="primary" disabled>
           Setting up
         </Button>
       }

@@ -67,7 +67,7 @@ export async function seedDocs(orgId: string, docs: Doc[]) {
 
 Agents whose runs hold `org:acme` can now find these pages with search and read them. If you set `vector` and `embedder`, `upsertPage()` also embeds each page for [search by meaning](/docs/knowledge/search#add-search-by-meaning).
 
-To add a dated fact or a comment to a page, add a note. The `[[docs:acme#releases/2026-12]]` mention becomes a link once that page exists:
+To add a dated fact or a comment to a page, add a note. The `[[docs:acme#releases/2026-12]]` mention becomes a link only if that page already exists when you add the note. Creating the page later doesn't turn an earlier mention into a link, so add the note after the target page exists, or update the note once it does:
 
 ```typescript title="src/seed-docs.ts"
 await knowledge.addNote({

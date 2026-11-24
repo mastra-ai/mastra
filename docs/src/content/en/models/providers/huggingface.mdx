@@ -7,7 +7,7 @@ description: "Browse Hugging Face model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/huggingface.svg" alt="Hugging Face logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Hugging Face
 
-Access 93 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
+Access 94 Hugging Face models through Mastra's model router. Authentication is handled automatically using the `HF_TOKEN` environment variable.
 
 Learn more in the [Hugging Face documentation](https://huggingface.co).
 
@@ -944,6 +944,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 1,
     "outputCost": 4.05
+  },
+  {
+    "model": "huggingface/thinkingmachines/Inkling-2-Mini",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.12,
+    "outputCost": 0.5
   },
   {
     "model": "huggingface/thinkingmachines/Inkling-2-Small",

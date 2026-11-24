@@ -7,7 +7,6 @@ type DocsTab = {
   label: string
   href: string
   basePath: string
-  badge?: string
 }
 
 const docsTabs: DocsTab[] = [
@@ -34,12 +33,6 @@ const docsTabs: DocsTab[] = [
     label: 'Reference',
     href: '/reference',
     basePath: '/reference',
-  },
-  {
-    id: 'Learn',
-    label: 'Learn',
-    href: '/learn',
-    basePath: '/learn',
   },
   {
     id: 'Platform',
@@ -76,7 +69,6 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
                 aria-current={isActive ? 'page' : undefined}
               >
                 {tab.label}
-                {tab.badge && <span className="learn-tab-badge">{tab.badge}</span>}
 
                 {isActive && (
                   <div

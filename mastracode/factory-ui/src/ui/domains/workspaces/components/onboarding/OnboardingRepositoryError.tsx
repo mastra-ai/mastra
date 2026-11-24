@@ -16,8 +16,13 @@ export function OnboardingRepositoryError({
       <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
         {message}
       </Txt>
-      <Button variant="ghost" size="sm" disabled={retrying} onClick={onRetry}>
-        {retrying && <Spinner size="sm" aria-hidden="true" />}
+      <Button
+        icon={retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
+        variant="ghost"
+        size="sm"
+        disabled={retrying}
+        onClick={onRetry}
+      >
         Retry
       </Button>
     </div>

@@ -10678,6 +10678,39 @@ export class Agent<
     }
   }
 
+  /**
+   * Runs the agent to completion and resolves with a {@link FullOutput}: final `text`, every
+   * step, all tool calls and results, usage, and `object` when `structuredOutput` is set.
+   * Use `stream()` instead to consume output as it is produced.
+   *
+   * - `messages`: a string, a message object (`{ role, content }`, AI SDK UI/model messages
+   *   included), or an array mixing both.
+   * - `options`: per-call {@link AgentExecutionOptionsBase} (`maxSteps`, `memory`,
+   *   `requestContext`, `modelSettings`, `toolChoice`, ...). They are merged over the
+   *   agent's `defaultOptions`.
+   * - Tool calls loop until the model stops calling tools or the step limit is hit
+   *   (`maxSteps`; 5 steps when neither `maxSteps` nor `stopWhen` is set).
+   * - Rejects with the run's error if the run fails.
+   * - Tool data is wrapped in `payload`: read `result.toolCalls[i].payload.args` and
+   *   `result.toolResults[i].payload.result`.
+   *
+   * This overload: `structuredOutput.schema` is a schema such as a Zod object, so
+   * `result.object` is typed from that schema.
+   *
+   * @example
+   * ```ts
+   * const result = await agent.generate('What is the weather in Paris?', { maxSteps: 3 });
+   * console.log(result.text);
+   * for (const call of result.toolCalls) console.log(call.payload.toolName, call.payload.args);
+   * for (const res of result.toolResults) console.log(res.payload.toolName, res.payload.result);
+   *
+   * const { object } = await agent.generate('List three colors', {
+   *   structuredOutput: { schema: z.object({ colors: z.array(z.string()) }) },
+   * });
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10687,18 +10720,44 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
+  /**
+   * Runs the agent to completion with `structuredOutput`, typing `result.object` as `OUTPUT`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
+  /**
+   * Runs the agent to completion with per-call options and no `structuredOutput`; resolves
+   * with a {@link FullOutput} (`text`, `steps`, `toolCalls`, `toolResults`, `usage`, ...).
+   * Tool data is under `payload`, e.g. `result.toolCalls[0].payload.args`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
+  /**
+   * Runs the agent to completion using its `defaultOptions`; resolves with a {@link FullOutput}.
+   * `messages` is a string, a message object, or an array of either.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @example
+   * ```ts
+   * const { text } = await agent.generate('Hello!');
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
@@ -16409,7 +16468,7 @@ export class Agent<
    *
    * @internal
    */
-  protected async subscribeToDurableRunStream(
+  async __subscribeToRunStream(
     runId: string,
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
