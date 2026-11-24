@@ -1,6 +1,6 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
-import { MODEL_PACK_MODELS_MAX } from '@mastra/factory/model-packs';
+import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX } from '@mastra/factory/model-packs';
 import type { ModelPack, ModelPackSet } from '@mastra/factory/model-packs';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
@@ -17,8 +17,6 @@ import type { AvailableModelOption } from '../../../../../../hooks/useAvailableM
 import { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '../../../../chat/services/thinkingLevels';
 import { packNameTaken } from '../../../services/modelPackSet';
 import { ModelCombobox } from '../../ModelCombobox';
-
-const MODEL_PACK_NAME_MAX = 40;
 
 interface EditorRow {
   key: string;
