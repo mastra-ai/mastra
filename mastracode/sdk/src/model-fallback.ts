@@ -10,7 +10,9 @@ const modelFallbackReasonSchema = z.enum(['pool-exhausted', 'persistent-outage']
 
 export type ModelFallbackReason = z.infer<typeof modelFallbackReasonSchema>;
 
-const REASON_CLAUSE: Record<ModelFallbackReason, (model: string) => string> = {
+type FallbackClause = (model: string, wait: string) => string;
+
+const REASON_CLAUSE: Record<ModelFallbackReason, FallbackClause> = {
   'pool-exhausted': model => `${model} failed`,
   'persistent-outage': model => `${model} keeps failing`,
 };
@@ -68,20 +70,30 @@ const modelFallbackPartSchema = z.object({
 
 export type ModelFallbackPartData = z.infer<typeof modelFallbackPartSchema>;
 
-const FAILURE_CLAUSE: Partial<Record<ProviderFailureKind, (model: string) => string>> = {
-  rate_limited: model => `${model} is rate-limited`,
-  quota: model => `${model} is out of credits or quota`,
+const FAILURE_CLAUSE: Partial<Record<ProviderFailureKind, FallbackClause>> = {
+  rate_limited: (model, wait) => `${model} is rate-limited${wait}`,
+  quota: (model, wait) => `${model} is out of credits or quota${wait}`,
   auth: model => `${model} has missing or invalid credentials`,
-  unavailable: model => `${model} is unavailable`,
+  unavailable: (model, wait) => `${model} is unavailable${wait}`,
   timeout: model => `${model} timed out`,
 };
+
+function providerWait({ at, failure }: ModelFallbackPartData): string {
+  const minutes = Math.ceil((Date.parse(failure?.retryAt ?? '') - Date.parse(at)) / 60_000);
+  if (!(minutes > 0)) return '';
+  if (minutes < 60) return ` for ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return ` for ${hours} h`;
+  const days = Math.round(hours / 24);
+  return ` for ${days} ${days === 1 ? 'day' : 'days'}`;
+}
 
 export function modelFallbackNoticeText(
   data: ModelFallbackPartData,
   modelName: (label: string) => string = label => label,
 ): string {
   const clause = (data.failure && FAILURE_CLAUSE[data.failure.kind]) ?? REASON_CLAUSE[data.reason];
-  return `${clause(modelName(data.from.label))}, switched to ${modelName(data.to.label)}`;
+  return `${clause(modelName(data.from.label), providerWait(data))}, switched to ${modelName(data.to.label)}`;
 }
 
 export function fallbackModelIdsToTry(
