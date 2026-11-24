@@ -192,9 +192,10 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
 // Runs on every store with workflow step guards (libSQL since COR-1596). Without guards,
 // orchestration events stay local and a dead worker's step can't be reclaimed. libSQL runs only
 // the SIGKILL cases: the store-specific part is the same for both signals, and each case takes
-// over a minute.
+// over a minute. Nearly all of that is waiting for Redis to reclaim the dead worker's message, and
+// every case has its own schema, key prefix and libSQL file, so the cases run at the same time.
 describe('durable agent worker takeover with a surviving API (COR-1469)', () => {
-  it.each([
+  it.concurrent.each([
     ['pg', 'SIGTERM', false],
     ['pg', 'SIGKILL', false],
     ['pg', 'SIGTERM', true],
