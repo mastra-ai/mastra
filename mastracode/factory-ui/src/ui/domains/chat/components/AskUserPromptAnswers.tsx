@@ -23,7 +23,12 @@ export function AskUserPromptAnswers({
     <>
       <AskUser.Options>
         {options.map(option => (
-          <AskUser.Option key={option.label} value={option.label} description={option.description}>
+          <AskUser.Option
+            key={option.label}
+            value={option.label}
+            description={option.description}
+            recommended={option.recommended}
+          >
             {option.label}
           </AskUser.Option>
         ))}
