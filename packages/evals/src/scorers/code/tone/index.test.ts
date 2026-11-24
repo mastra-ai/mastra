@@ -167,23 +167,35 @@ describe('ToneConsistencyMetric', () => {
       expect(metrics?.sentimentVariance).toBeLessThan(0.1);
     });
 
-    it('should score the last sentence when the response ends without punctuation', async () => {
+    it('should score every sentence, with or without final punctuation', async () => {
       const scorer = createToneScorer();
-      const text = 'Thank you for reaching out. I am happy to help. I hate it';
       const scoreFor = async (content: string) => {
         const output = [createTestMessage({ content, role: 'assistant', id: 'test-output' })];
         return (await scorer.run(createAgentTestRun({ output }))).score;
       };
+      const kind = 'Thank you for reaching out. I am happy to help.';
+      const kindScore = await scoreFor(kind);
 
-      const withPeriod = await scoreFor(`${text}.`);
-      expect(withPeriod).toBeLessThan(0.5);
-      expect(await scoreFor(text)).toBe(withPeriod);
-      expect(await scoreFor(text.replace('I hate it', '**$&**'))).toBe(withPeriod);
-      expect(await scoreFor(`${text}. [1, 2, 3]`)).toBe(withPeriod);
-      expect(await scoreFor(`${text}.\n\nBest wishes,\nAnna`)).toBe(withPeriod);
-      expect(await scoreFor('I am happy to help. Это очень плохо')).toBe(
-        await scoreFor('I am happy to help. Это очень плохо.'),
-      );
+      for (const ending of [
+        'This is terrible garbage and I hate it',
+        '**I hate it**',
+        '(I hate it)',
+        'Это очень плохо',
+      ]) {
+        const score = await scoreFor(`${kind} ${ending}`);
+        expect(score).toBeLessThan(kindScore);
+        expect(score).toBe(await scoreFor(`${kind} ${ending}.`));
+      }
+      for (const ending of ['Terrible', '**Terrible**', '"Terrible"']) {
+        expect(await scoreFor(`${kind} ${ending}`)).toBeLessThan(0.6);
+      }
+      expect(await scoreFor(`${kind} Terrible.`)).toBe(0);
+      expect(await scoreFor('I love this\nI hate this awful garbage')).toBe(0);
+
+      expect(await scoreFor('Your refund is on the way. It takes three days.\n\nThanks')).toBeGreaterThan(0.9);
+      for (const ending of [' [1, 2, 3]', ' (source)', '</p>']) {
+        expect(await scoreFor(`${kind}${ending}`)).toBe(kindScore);
+      }
       expect(await scoreFor('Great news, you saved $3.50 on your order today')).toBe(1);
     });
   });
