@@ -314,7 +314,8 @@ function isResourceBoundToken(token: string, options: FactoryAuthOptions): boole
     return false;
   }
   if (options.refuseAudienceBoundTokens && aud !== undefined) return true;
-  return aud === options.mcpResource || (Array.isArray(aud) && aud.includes(options.mcpResource));
+  const { mcpResource } = options;
+  return mcpResource !== undefined && (aud === mcpResource || (Array.isArray(aud) && aud.includes(mcpResource)));
 }
 
 /**
