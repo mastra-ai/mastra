@@ -438,7 +438,7 @@ const agent = new Agent({
 `generativeUI` is experimental and may change in a minor release.
 :::
 
-Set `generativeUI: true` on the Slack adapter to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
+Set `generativeUI: true` on Slack to let the agent post structured cards (status summaries, key/value fields, tables, charts, images, and link buttons) instead of long markdown replies. Install the optional peer first:
 
 ```bash npm2yarn
 npm install @json-render/chat
@@ -446,17 +446,33 @@ npm install @json-render/chat
 
 `@json-render/chat` requires zod 4, so projects still on zod 3 can't enable `generativeUI` yet.
 
-`@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output:
+`@mastra/core` loads `@json-render/chat` at runtime, so `mastra build` and `mastra deploy` don't pick it up on their own. Add it to [`bundler.dynamicPackages`](/reference/core/mastra-class) so it's included in the build output.
+
+Runs on Slack then get a `render_card` tool. The tool call itself isn't rendered as a tool card.
+
+### Enable with Mastra Connect
+
+When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
 import { supportAgent } from './agents/support-agent'
 
 export const mastra = new Mastra({
   agents: { supportAgent },
+  channels: await channels({
+    providers: { slack: { providerOptions: { generativeUI: true } } },
+  }),
   bundler: { dynamicPackages: ['@json-render/chat'] },
 })
 ```
+
+The agent doesn't need `channels.adapters`. Connect the Slack channel to the agent in Studio.
+
+### Enable with `createSlackAdapter()`
+
+When you manage your own Slack app with the [self-managed setup](/integrations/channels/slack#self-managed-setup), set `generativeUI` on the agent's Slack adapter instead:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -475,25 +491,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-Runs on that adapter get a `render_card` tool whose description lists the available components. The tool call itself isn't rendered as a tool card.
-
-### Enable with Mastra Connect
-
-When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options instead of on the agent. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider), which accepts the same option. The agent doesn't set `channels.adapters`, so leave out `createSlackAdapter()`:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { channels } from '@mastra/connect'
-import { assistant } from './agents/assistant'
-
-export const mastra = new Mastra({
-  agents: { assistant },
-  channels: await channels({
-    providers: { slack: { providerOptions: { generativeUI: true } } },
-  }),
-  bundler: { dynamicPackages: ['@json-render/chat'] },
-})
-```
+Add `@json-render/chat` to `bundler.dynamicPackages` on `Mastra` as in the Connect example.
 
 ### Card spec
 
@@ -507,7 +505,6 @@ A generic prompt such as `'You are a helpful support assistant.'` usually produc
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
-import { createSlackAdapter } from '@chat-adapter/slack'
 
 export const supportAgent = new Agent({
   id: 'support-agent',
@@ -522,13 +519,10 @@ Use render_card for status updates and reports. Start each card with a Card that
 
 If render_card returns issues, fix the spec and call it again. Keep every component you planned, including images and fields. Don't remove content to make the card pass.`,
   model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      slack: { adapter: createSlackAdapter(), generativeUI: true },
-    },
-  },
 })
 ```
+
+With `createSlackAdapter()`, keep the `channels.adapters` config from [the adapter example](#enable-with-createslackadapter).
 
 ### How cards look in Slack
 
