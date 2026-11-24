@@ -163,6 +163,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithSources }],
+          experimental_generateMessageId: () => 'msg-0',
           messageList: createMessageListWithUserMessage(),
         });
 
@@ -175,6 +176,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
+          experimental_generateMessageId: () => 'msg-0',
           messageList: createMessageListWithUserMessage(),
         });
 
@@ -190,6 +192,7 @@ export function generateTextTestsV5({ loopFn, runId }: { loopFn: typeof loop; ru
         const result = await generateText({
           agentId: 'agent-id',
           models: [{ maxRetries: 0, id: 'test-model', model: modelWithFiles }],
+          experimental_generateMessageId: () => 'msg-0',
           messageList: createMessageListWithUserMessage(),
           _internal: {
             generateId: mockId({ prefix: 'id' }),

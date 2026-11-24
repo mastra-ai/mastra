@@ -4,6 +4,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain fi
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "Hello World",
       "data": "Hello World",
@@ -14,6 +15,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.files > should contain fi
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "QkFVRw==",
       "data": "QkFVRw==",
@@ -29,6 +31,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "123",
@@ -47,6 +50,7 @@ exports[`Loop Tests > AISDK v5 > generateText > result.sources > should contain 
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "456",
@@ -70,6 +74,7 @@ exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "Hello World",
       "data": "Hello World",
@@ -80,6 +85,7 @@ exports[`Loop Tests > AISDK v5 > result.files > should contain files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "QkFVRw==",
       "data": "QkFVRw==",
@@ -104,6 +110,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -116,6 +123,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -125,6 +133,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -135,6 +144,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -145,6 +155,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -155,6 +166,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -164,6 +176,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -443,6 +456,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -455,6 +469,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -464,6 +479,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -474,6 +490,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -484,6 +501,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -494,6 +512,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -503,6 +522,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -818,6 +838,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -830,6 +851,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -844,6 +866,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -859,6 +882,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -1144,6 +1168,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -1156,6 +1181,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -1165,6 +1191,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -1175,6 +1202,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -1184,6 +1212,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -1785,6 +1814,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -1797,6 +1827,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "Hello World",
       "data": "Hello World",
@@ -1807,6 +1838,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -1816,6 +1848,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -1826,6 +1859,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -1835,6 +1869,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "QkFVRw==",
       "data": "QkFVRw==",
@@ -1845,6 +1880,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -2232,6 +2268,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -2244,6 +2281,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -2253,6 +2291,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -2263,6 +2302,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -2273,6 +2313,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": {
@@ -2287,6 +2328,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -2296,6 +2338,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "2",
       "providerMetadata": {
@@ -2309,6 +2352,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "2",
       "providerMetadata": undefined,
@@ -2318,6 +2362,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -2327,6 +2372,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -2337,6 +2383,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -2347,6 +2394,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": {
@@ -2360,6 +2408,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": {
@@ -2373,6 +2422,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": undefined,
@@ -2383,6 +2433,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": undefined,
@@ -2393,6 +2444,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": {
@@ -2406,6 +2458,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": {
@@ -2419,6 +2472,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -2429,6 +2483,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -2439,6 +2494,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -2449,6 +2505,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": {
@@ -2462,6 +2519,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -2471,6 +2529,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -2481,6 +2540,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -2491,6 +2551,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -2500,6 +2561,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -3139,6 +3201,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -3151,6 +3214,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "123",
@@ -3169,6 +3233,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3178,6 +3243,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3188,6 +3254,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -3197,6 +3264,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "456",
@@ -3215,6 +3283,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -3494,6 +3563,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -3506,6 +3576,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3515,6 +3586,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3525,6 +3597,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3535,6 +3608,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -3545,6 +3619,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -3554,6 +3629,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -3833,6 +3909,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -3845,6 +3922,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "dynamic": undefined,
       "providerExecuted": undefined,
@@ -3857,6 +3935,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "{"",
       "providerMetadata": undefined,
@@ -3868,6 +3947,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "value",
       "providerMetadata": undefined,
@@ -3879,6 +3959,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "":"",
       "providerMetadata": undefined,
@@ -3890,6 +3971,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "Spark",
       "providerMetadata": undefined,
@@ -3901,6 +3983,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "le",
       "providerMetadata": undefined,
@@ -3912,6 +3995,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": " Day",
       "providerMetadata": undefined,
@@ -3923,6 +4007,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": ""}",
       "providerMetadata": undefined,
@@ -3934,6 +4019,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -3943,6 +4029,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "Sparkle Day",
@@ -3958,6 +4045,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -4331,6 +4419,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -4343,6 +4432,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -4361,6 +4451,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -4772,6 +4863,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -4784,6 +4876,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -4798,6 +4891,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -4813,6 +4907,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -5098,6 +5193,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -5110,6 +5206,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5119,6 +5216,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5129,6 +5227,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -5138,6 +5237,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -5739,6 +5839,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
       "modelId": "mock-model-id",
@@ -5751,6 +5852,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5760,6 +5862,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5770,6 +5873,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5780,6 +5884,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -5790,6 +5895,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -5799,6 +5905,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
       "messages": {
@@ -6220,6 +6327,7 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "123",
@@ -6238,6 +6346,7 @@ exports[`Loop Tests > AISDK v5 > result.sources > should contain sources 1`] = `
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "456",
@@ -6294,6 +6403,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
     "files": [
       {
         "from": "AGENT",
+        "messageId": "msg-0",
         "payload": {
           "base64": "Hello World",
           "data": "Hello World",
@@ -6304,6 +6414,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
       },
       {
         "from": "AGENT",
+        "messageId": "msg-0",
         "payload": {
           "base64": "QkFVRw==",
           "data": "QkFVRw==",
@@ -6485,6 +6596,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -6498,6 +6610,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -6512,6 +6625,7 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -6926,6 +7040,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.files > should contain files
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "Hello World",
       "data": "Hello World",
@@ -6936,6 +7051,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.files > should contain files
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "QkFVRw==",
       "data": "QkFVRw==",
@@ -6960,6 +7076,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -6972,6 +7089,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -6981,6 +7099,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -6991,6 +7110,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7001,6 +7121,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7011,6 +7132,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -7020,6 +7142,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -7323,6 +7446,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -7335,6 +7459,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7344,6 +7469,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7354,6 +7480,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7364,6 +7491,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -7374,6 +7502,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -7383,6 +7512,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -7722,6 +7852,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -7734,6 +7865,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -7748,6 +7880,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -7763,6 +7896,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -8066,6 +8200,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -8078,6 +8213,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -8087,6 +8223,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -8097,6 +8234,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -8106,6 +8244,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -8743,6 +8882,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -8755,6 +8895,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "Hello World",
       "data": "Hello World",
@@ -8765,6 +8906,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -8774,6 +8916,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -8784,6 +8927,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -8793,6 +8937,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "base64": "QkFVRw==",
       "data": "QkFVRw==",
@@ -8803,6 +8948,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -9214,6 +9360,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -9226,6 +9373,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -9235,6 +9383,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -9245,6 +9394,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -9255,6 +9405,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": {
@@ -9269,6 +9420,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "1",
       "providerMetadata": undefined,
@@ -9278,6 +9430,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "2",
       "providerMetadata": {
@@ -9291,6 +9444,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "2",
       "providerMetadata": undefined,
@@ -9300,6 +9454,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -9309,6 +9464,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -9319,6 +9475,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": undefined,
@@ -9329,6 +9486,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "3",
       "providerMetadata": {
@@ -9342,6 +9500,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": {
@@ -9355,6 +9514,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": undefined,
@@ -9365,6 +9525,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": undefined,
@@ -9375,6 +9536,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "4",
       "providerMetadata": {
@@ -9388,6 +9550,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": {
@@ -9401,6 +9564,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -9411,6 +9575,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -9421,6 +9586,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": undefined,
@@ -9431,6 +9597,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "5",
       "providerMetadata": {
@@ -9444,6 +9611,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -9453,6 +9621,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -9463,6 +9632,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -9473,6 +9643,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -9482,6 +9653,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -10145,6 +10317,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "modelId": "mock-model-id",
@@ -10157,6 +10330,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "123",
@@ -10175,6 +10349,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10184,6 +10359,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10194,6 +10370,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -10203,6 +10380,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "456",
@@ -10221,6 +10399,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "messageId": "msg-0",
       "messages": {
@@ -10524,6 +10703,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -10536,6 +10716,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10545,6 +10726,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10555,6 +10737,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10565,6 +10748,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -10575,6 +10759,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -10584,6 +10769,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -10887,6 +11073,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -10899,6 +11086,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "dynamic": undefined,
       "providerExecuted": undefined,
@@ -10911,6 +11099,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "{"",
       "providerMetadata": undefined,
@@ -10922,6 +11111,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "value",
       "providerMetadata": undefined,
@@ -10933,6 +11123,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "":"",
       "providerMetadata": undefined,
@@ -10944,6 +11135,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "Spark",
       "providerMetadata": undefined,
@@ -10955,6 +11147,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": "le",
       "providerMetadata": undefined,
@@ -10966,6 +11159,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": " Day",
       "providerMetadata": undefined,
@@ -10977,6 +11171,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "argsTextDelta": ""}",
       "providerMetadata": undefined,
@@ -10988,6 +11183,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "providerMetadata": undefined,
       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
@@ -10997,6 +11193,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "Sparkle Day",
@@ -11012,6 +11209,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -11409,6 +11607,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -11421,6 +11620,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -11439,6 +11639,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -11874,6 +12075,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -11886,6 +12088,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -11900,6 +12103,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "args": {
         "value": "value",
@@ -11915,6 +12119,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -12218,6 +12423,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "modelId": "mock-model-id",
@@ -12230,6 +12436,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12239,6 +12446,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12249,6 +12457,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -12258,6 +12467,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
   },
   {
     "from": "AGENT",
+    "messageId": "id-0",
     "payload": {
       "messageId": "id-0",
       "messages": {
@@ -12895,6 +13105,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
       "modelId": "mock-model-id",
@@ -12907,6 +13118,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12916,6 +13128,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12926,6 +13139,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12936,6 +13150,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "providerMetadata": undefined,
@@ -12946,6 +13161,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "id": "text-1",
       "type": "text-end",
@@ -12955,6 +13171,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
   },
   {
     "from": "AGENT",
+    "messageId": "id-2000",
     "payload": {
       "messageId": "id-2000",
       "messages": {
@@ -13400,6 +13617,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.sources > should contain sou
 [
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "123",
@@ -13418,6 +13636,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.sources > should contain sou
   },
   {
     "from": "AGENT",
+    "messageId": "msg-0",
     "payload": {
       "filename": undefined,
       "id": "456",
@@ -13474,6 +13693,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
     "files": [
       {
         "from": "AGENT",
+        "messageId": "msg-0",
         "payload": {
           "base64": "Hello World",
           "data": "Hello World",
@@ -13484,6 +13704,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
       },
       {
         "from": "AGENT",
+        "messageId": "msg-0",
         "payload": {
           "base64": "QkFVRw==",
           "data": "QkFVRw==",

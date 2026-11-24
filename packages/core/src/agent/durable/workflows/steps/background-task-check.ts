@@ -75,7 +75,7 @@ export function createDurableBackgroundTaskCheckStep() {
         resolveWaitMs: rc => (rc === 0 && waitTimeoutMs ? undefined : (waitTimeoutMs ?? 1000)),
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, runId, chunk as any);
+          return emitChunkEvent(pubsub, runId, chunk as any, typedInput.messageId);
         },
       });
 

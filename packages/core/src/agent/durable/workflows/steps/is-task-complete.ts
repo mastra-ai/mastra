@@ -131,7 +131,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         generateId: () => mastra?.generateId?.(),
         emitChunk: chunk => {
           if (!pubsub) return;
-          return emitChunkEvent(pubsub, state.runId, chunk as any);
+          return emitChunkEvent(pubsub, state.runId, chunk as any, state.messageId);
         },
         logger: mastra?.getLogger?.(),
       });

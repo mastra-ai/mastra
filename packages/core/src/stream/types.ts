@@ -97,6 +97,11 @@ interface BaseChunkType {
   from: ChunkFrom;
   metadata?: Record<string, any>;
   /**
+   * Id of the persisted assistant message this chunk's content belongs to.
+   * A single run can produce several messages; absent on run-lifecycle chunks (`start`, `finish`, `abort`).
+   */
+  messageId?: string;
+  /**
    * Position of the run-log entry this chunk came from, on durable and evented agent streams and
    * on `observe()` for any agent, when the transport numbers its entries. To resume after a dropped connection, observe the run
    * from the last received chunk's `index + 1`. Entries that send no chunk leave gaps. Structured-output `object` chunks are

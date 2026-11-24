@@ -640,6 +640,7 @@ export function resultObjectTests({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
+        experimental_generateMessageId: () => 'msg-0',
         models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
@@ -669,6 +670,7 @@ export function resultObjectTests({
         [
           {
             "from": "AGENT",
+            "messageId": "msg-0",
             "payload": {
               "args": {
                 "value": "value",
@@ -692,6 +694,7 @@ export function resultObjectTests({
         methodType: 'stream',
         runId,
         messageList: createMessageListWithUserMessage(),
+        experimental_generateMessageId: () => 'msg-0',
         models: createTestModelsForVersion({
           stream: convertArrayToReadableStream([
             {
@@ -722,6 +725,7 @@ export function resultObjectTests({
         [
           {
             "from": "AGENT",
+            "messageId": "msg-0",
             "payload": {
               "args": {
                 "value": "value",

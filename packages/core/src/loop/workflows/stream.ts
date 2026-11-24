@@ -10,6 +10,7 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { createChunkMessageIdStamper, withChunkMessageId } from '../../stream/base/message-id';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
@@ -58,6 +59,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   const loopSource = {
     start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       let totalTimeoutSignal: AbortSignal | undefined;
+      // On resume, `messageId` is freshly generated; the resumed step's content (e.g. `tool-result`,
+      // emitted before any `step-start`) belongs to the message that was active when it suspended.
+      const stampMessageId = createChunkMessageIdStamper(getSuspendedMessageId(resumeContext?.snapshot) ?? messageId);
       // Stamp and trace chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
@@ -72,13 +76,14 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             return;
           }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
-          streamController.enqueue(chunk);
+          const stamped = stampMessageId(chunk);
+          streamController.enqueue(stamped);
           try {
-            rest.modelSpanTracker?.recordChunk?.(chunk);
+            rest.modelSpanTracker?.recordChunk?.(stamped);
           } catch {
             // Optional tracing must not prevent accepted output from reaching the caller.
           }
-          streamPublisher?.publish(chunk, messageList);
+          streamPublisher?.publish(stamped, messageList);
         },
         close: () => {
           try {
@@ -153,7 +158,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
                 });
               }
             }
-            safeEnqueue(controller, data as ChunkType<OUTPUT>);
+            safeEnqueue(
+              controller,
+              ((writerOptions?.messageId ?? options?.messageId)
+                ? { ...data, messageId: writerOptions?.messageId ?? options?.messageId }
+                : data) as ChunkType<OUTPUT>,
+            );
           },
         };
 
@@ -270,6 +280,9 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
                 error: persistError,
               });
             }
+            // Announce the id the part was saved under; it may differ from the stamper's current id
+            // after a processor rotation. Transient parts are not saved and keep the stamper's id.
+            processedChunk = withChunkMessageId(processedChunk, responseMessageId, { savedInResponse: true });
           }
 
           safeEnqueue(controller, processedChunk);
@@ -649,4 +662,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (failure) streamController.error(failure.error);
     },
   });
+}
+
+function getSuspendedMessageId(snapshot: unknown): string | undefined {
+  const context = (snapshot as { context?: Record<string, unknown> } | undefined)?.context;
+  for (const step of Object.values(context ?? {})) {
+    const s = step as { status?: unknown; payload?: { messageId?: unknown } } | undefined;
+    if (s?.status === 'suspended' && typeof s.payload?.messageId === 'string') return s.payload.messageId;
+  }
+  return undefined;
 }

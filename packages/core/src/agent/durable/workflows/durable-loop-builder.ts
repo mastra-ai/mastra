@@ -362,9 +362,9 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
    * that must not consume input without a transport (signal drain) guard on
    * `pubsub` before draining.
    */
-  protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown): void | Promise<void> {
+  protected override emitChunk(runtime: DurableLoopRuntime, chunk: unknown, messageId?: string): void | Promise<void> {
     if (!runtime.pubsub) return;
-    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any);
+    return emitChunkEvent(runtime.pubsub, runtime.runId, chunk as any, messageId);
   }
 
   // ── Step factories ─────────────────────────────────────────────────────
@@ -417,7 +417,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: sealMessageId => list().rotateResponseMessageId(sealMessageId),
             addSignal: signal => list().addSignal(signal),
-            emitChunk: chunk => this.emitChunk(rt, chunk),
+            emitChunk: chunk => this.emitChunk(rt, chunk, execOutput.messageId),
             sealMessageId: execOutput.messageId,
             // Durable's shipped contract: drain is best-effort — redelivery
             // re-runs this site and signals stay queued on failure.
@@ -769,7 +769,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         }
 
         try {
-          await this.emitChunk(rt, deferredChunk);
+          await this.emitChunk(rt, deferredChunk, state.lastStepResult?.messageId ?? state.messageId);
           if (nextCursor) state.responseMessagesCursor = nextCursor;
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
@@ -837,7 +837,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             drainPendingSignals: rt.drainPendingSignals,
             rotateResponseMessageId: () => list().rotateResponseMessageId(),
             addSignal: signal => list().addSignal(signal),
-            emitChunk: chunk => this.emitChunk(rt, chunk),
+            emitChunk: chunk => this.emitChunk(rt, chunk, state.messageId),
             // Durable's shipped contract: drain is best-effort — redelivery
             // re-runs this site and signals stay queued on failure.
             errorPolicy: 'best-effort',
@@ -1178,25 +1178,32 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             }
 
             const tripwire = finishResult.tripwire;
+            // An input processor may have rotated the response message during the last step.
+            const finishMessageId = state.lastStepResult?.messageId ?? state.messageId;
             if (pubsub && !tripwire) {
               for (const chunk of finishResult.structuredOutputChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any, finishMessageId);
               }
             }
 
             if (pubsub) {
               for (const chunk of finishResult.outputResultChunks ?? []) {
-                await emitChunkEvent(pubsub, state.runId, chunk, true);
+                await emitChunkEvent(pubsub, state.runId, chunk, finishMessageId, true);
               }
             }
 
             if (tripwire && pubsub) {
-              await emitChunkEvent(pubsub, state.runId, {
-                type: 'tripwire',
-                runId: state.runId,
-                from: ChunkFrom.AGENT,
-                payload: tripwire,
-              });
+              await emitChunkEvent(
+                pubsub,
+                state.runId,
+                {
+                  type: 'tripwire',
+                  runId: state.runId,
+                  from: ChunkFrom.AGENT,
+                  payload: tripwire,
+                },
+                finishMessageId,
+              );
             }
 
             // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a

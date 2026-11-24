@@ -128,6 +128,8 @@ const durableToolCallInputSchema = z.object({
   hasSuspendSchema: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
+  // Persisted assistant message the tool call belongs to; stamped on emitted chunks.
+  messageId: z.string().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the same step, used the same way
@@ -342,6 +344,7 @@ async function processChunkThroughOutputProcessors(
   observabilityContext?: ObservabilityContext,
   collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
   onEmit?: (chunk: ChunkType) => void,
+  messageId?: string,
 ): Promise<ChunkType | null> {
   const runner =
     registryEntry?.outputProcessors?.length && registryEntry.processorStates
@@ -374,7 +377,7 @@ async function processChunkThroughOutputProcessors(
               collectDataPart?.({ type: data.type, data: data.data, messageId: writerOptions?.messageId });
             }
             try {
-              await emitChunkEvent(pubsub, runId, data as ChunkType);
+              await emitChunkEvent(pubsub, runId, data as ChunkType, messageId);
             } catch (error) {
               throw new DurableChunkPublishError(error);
             }
@@ -387,7 +390,7 @@ async function processChunkThroughOutputProcessors(
         // them again. Without a runner (no processors, or none in this process)
         // the chunk goes out unmarked and the consumer processes it.
         try {
-          await emitChunkEvent(pubsub, runId, c, !!runner);
+          await emitChunkEvent(pubsub, runId, c, messageId, !!runner);
         } catch (error) {
           throw new DurableChunkPublishError(error);
         }
@@ -453,7 +456,7 @@ export function createDurableToolCallStep() {
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
       const typedInput = inputData as DurableToolCallInput;
-      const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;
+      const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools, messageId } = typedInput;
       const suspendData = ownToolCallSuspendData(params.suspendData, toolCallId);
 
       // Extract resumeData from tool call arguments (autoResumeSuspendedTools path)
@@ -769,12 +772,17 @@ export function createDurableToolCallStep() {
           message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-error',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, error },
-          });
+            {
+              type: 'tool-error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, error },
+            },
+            messageId,
+          );
         }
         return {
           ...typedInput,
@@ -790,12 +798,17 @@ export function createDurableToolCallStep() {
           ),
         );
         if (pubsub) {
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-error',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: { toolCallId, toolName, args, error },
-          });
+            {
+              type: 'tool-error',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: { toolCallId, toolName, args, error },
+            },
+            messageId,
+          );
         }
         return { ...typedInput, error };
       }
@@ -1162,26 +1175,31 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, runId, {
-            type: 'tool-call-resumed',
+          await emitChunkEvent(
+            pubsub,
             runId,
-            from: ChunkFrom.AGENT,
-            payload: {
-              toolCallId: matchedEntry.toolCallId ?? toolCallId,
-              toolName: matchedEntry.toolName ?? toolName,
-              kind: type,
-              args: displayed.payload.args,
-              ...(typeof matchedEntry.delegatedToolCallId === 'string'
-                ? { delegatedToolCallId: matchedEntry.delegatedToolCallId }
-                : {}),
-              ...(typeof matchedEntry.delegatedToolName === 'string'
-                ? { delegatedToolName: matchedEntry.delegatedToolName }
-                : {}),
-              ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
-              resumeSchema: displayed.payload.resumeSchema,
+            {
+              type: 'tool-call-resumed',
+              runId,
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: matchedEntry.toolCallId ?? toolCallId,
+                toolName: matchedEntry.toolName ?? toolName,
+                kind: type,
+                args: displayed.payload.args,
+                ...(typeof matchedEntry.delegatedToolCallId === 'string'
+                  ? { delegatedToolCallId: matchedEntry.delegatedToolCallId }
+                  : {}),
+                ...(typeof matchedEntry.delegatedToolName === 'string'
+                  ? { delegatedToolName: matchedEntry.delegatedToolName }
+                  : {}),
+                ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
+                resumeSchema: displayed.payload.resumeSchema,
+              },
+              ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
             },
-            ...(displayed.metadata ? { metadata: displayed.metadata } : {}),
-          });
+            messageId,
+          );
         }
       };
 
@@ -1252,6 +1270,8 @@ export function createDurableToolCallStep() {
                 messageList,
                 processorObservabilityContext,
                 collectProcessorDataPart,
+                undefined,
+                messageId,
               );
             } catch (emitError) {
               if (emitError instanceof DurableOutputProcessorError) {
@@ -1303,7 +1323,7 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk, messageId));
         }
 
         // Emit suspended event for the stream adapter
@@ -1415,6 +1435,8 @@ export function createDurableToolCallStep() {
                 messageList,
                 processorObservabilityContext,
                 collectProcessorDataPart,
+                undefined,
+                messageId,
               );
             } catch (emitError) {
               if (emitError instanceof DurableOutputProcessorError) {
@@ -1598,7 +1620,7 @@ export function createDurableToolCallStep() {
                 messageId: dataPart.messageId,
               });
             }
-            await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+            await emitChunkEvent(pubsub, runId, chunk as ChunkType, messageId);
           }
         : undefined;
 
@@ -1726,7 +1748,7 @@ export function createDurableToolCallStep() {
                 logger: logger as any,
               },
             );
-            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
+            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk, messageId));
           }
 
           if (pubsub) {
@@ -1800,7 +1822,7 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk, messageId));
           await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
         }
 
@@ -1882,16 +1904,21 @@ export function createDurableToolCallStep() {
         emitTaskStarted: async task => {
           // Emit background-task-started chunk via PubSub
           if (pubsub) {
-            await emitChunkEvent(pubsub, runId, {
-              type: 'background-task-started' as any,
+            await emitChunkEvent(
+              pubsub,
               runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                taskId: task.id,
-                toolName,
-                toolCallId,
+              {
+                type: 'background-task-started' as any,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  taskId: task.id,
+                  toolName,
+                  toolCallId,
+                },
               },
-            });
+              messageId,
+            );
           }
         },
         taskContext: info => ({
@@ -2555,7 +2582,7 @@ export function createDurableToolCallStep() {
                           messageId: writerOptions?.messageId,
                         });
                       }
-                      await emitChunkEvent(pubsub, runId, data as ChunkType);
+                      await emitChunkEvent(pubsub, runId, data as ChunkType, messageId);
                     },
                   }
                 : undefined,
@@ -2585,12 +2612,17 @@ export function createDurableToolCallStep() {
               };
               if (pubsub) {
                 try {
-                  await emitChunkEvent(pubsub, runId, {
-                    type: 'tripwire',
+                  await emitChunkEvent(
+                    pubsub,
                     runId,
-                    from: ChunkFrom.AGENT,
-                    payload: tripwire,
-                  } as ChunkType);
+                    {
+                      type: 'tripwire',
+                      runId,
+                      from: ChunkFrom.AGENT,
+                      payload: tripwire,
+                    } as ChunkType,
+                    messageId,
+                  );
                 } catch (emitError) {
                   logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
                 }
@@ -2694,6 +2726,7 @@ export function createDurableToolCallStep() {
               chunk => {
                 if (chunk.type === 'tool-result' && chunk.payload.toolCallId === toolCallId) resultEmitted = true;
               },
+              messageId,
             );
           } catch (emitError) {
             ownership?.throwIfLost();
@@ -2808,6 +2841,8 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
               collectProcessorDataPart,
+              undefined,
+              messageId,
             );
           } catch (emitError) {
             ownership?.throwIfLost();
