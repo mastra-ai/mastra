@@ -29,8 +29,8 @@ function extractElements(doc: any): string[] {
     const runs =
       normalized
         .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
-        // Latin words, or letters of another script with their marks, or digits of another script
-        .match(/[a-z0-9]+|(?:(?![\p{scx=Latin}\p{scx=Common}])\p{L}\p{M}*)+|\p{Nd}+/gu) ?? [];
+        // Latin words, or letters and numerals of another script with their marks, or digits of another script
+        .match(/[a-z0-9]+|(?:(?![\p{scx=Latin}\p{scx=Common}])[\p{L}\p{Nl}\p{No}]\p{M}*)+|\p{Nd}+/gu) ?? [];
 
     // Split on word boundaries, also in scripts without spaces such as Japanese, Chinese, and Thai
     return runs.flatMap(run => Array.from(wordSegmenter.segment(run), part => part.segment));

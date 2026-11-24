@@ -186,6 +186,18 @@ describe('CompletenessMetric', () => {
       expect(onTopic.preprocessStepResult?.inputElements).toContain(word);
     });
 
+    it.each([
+      ['〇', ''],
+      ['一〇〇円', '一円'],
+      ['፲፰ ሰዓት', '፲፪ ሰዓት'],
+    ])('should not match the number in "%s" with "%s"', async (question, answer) => {
+      const inputMessages = [createTestMessage({ content: question, role: 'user', id: 'test-input' })];
+      const output = [createTestMessage({ content: answer, role: 'assistant', id: 'test-output' })];
+
+      const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
+      expect(result.score).toBeLessThan(1);
+    });
+
     it('should not count emoji and signs in Latin text as words', async () => {
       const inputMessages = [createTestMessage({ content: 'ℹ️ Step 1️⃣: 180 ºC', role: 'user', id: 'test-input' })];
       const output = [createTestMessage({ content: 'Step 1: 180 °C', role: 'assistant', id: 'test-output' })];
