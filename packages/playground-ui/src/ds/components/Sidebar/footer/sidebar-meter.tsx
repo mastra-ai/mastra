@@ -12,59 +12,12 @@ import './sidebar-meter.css';
 
 export type SidebarMeterTone = 'neutral' | 'warning' | 'danger';
 
-const BLOOM_HEIGHT = 100;
-const BLOOM_HOLD_Y = 60;
-const BLOOM_HOLD_X = 22.5;
-
-const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1];
-
-/** The neutral card is its plain fill; a bloom marks a card that needs attention. */
+/** A tinted card needs attention; the neutral one is its plain fill. */
 const TONES = {
-  neutral: { bloom: undefined, text: 'text-muted-foreground' },
-  warning: { bloom: '--warning-indicator', text: 'text-warning-foreground' },
-  danger: { bloom: '--destructive-indicator', text: 'text-destructive-foreground' },
+  neutral: { surface: 'bg-nested', text: 'text-muted-foreground' },
+  warning: { surface: 'bg-badge-amber-subtle', text: 'text-badge-amber-foreground' },
+  danger: { surface: 'bg-badge-red-subtle', text: 'text-badge-red-foreground' },
 };
-
-const BLOOM_PEAK = 0.16;
-
-function cubicFalloff(position: number) {
-  const inverse = 1 - position;
-  return inverse * inverse * inverse;
-}
-
-function easedBloom(colorVar: string) {
-  const stops = FALLOFF_RAMP.map(position => {
-    const alpha = (BLOOM_PEAK * cubicFalloff(position) * 100).toFixed(2);
-    return `color-mix(in oklch, var(${colorVar}) ${alpha}%, transparent) ${(position * 100).toFixed(0)}%`;
-  });
-  return `linear-gradient(to right, ${stops.join(', ')})`;
-}
-
-function easedMask(direction: string, hold: number) {
-  const stops = FALLOFF_RAMP.map(position => {
-    const offset = (hold + (100 - hold) * position).toFixed(2);
-    return `rgb(0 0 0 / ${cubicFalloff(position).toFixed(3)}) ${offset}%`;
-  });
-  return `linear-gradient(${direction}, rgb(0 0 0 / 1) 0%, ${stops.join(', ')})`;
-}
-
-const BLOOM_MASK = `${easedMask('to bottom', BLOOM_HOLD_Y)}, ${easedMask('to right', BLOOM_HOLD_X)}`;
-
-function Bloom({ colorVar }: { colorVar: string }) {
-  return (
-    <span
-      aria-hidden
-      data-slot="sidebar-meter-bloom"
-      className="pointer-events-none absolute inset-x-0 top-0 -z-10"
-      style={{
-        height: BLOOM_HEIGHT,
-        backgroundImage: easedBloom(colorVar),
-        maskImage: BLOOM_MASK,
-        maskComposite: 'intersect',
-      }}
-    />
-  );
-}
 
 // Each line is cropped to its letters (cap height to baseline), so the card's padding is the space you see above
 // the first line and below the last.
@@ -142,17 +95,17 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       aria-busy={loading || undefined}
       className={cn(
-        'relative isolate flex flex-col overflow-hidden rounded-lg bg-nested px-2.25 py-2.5',
+        'relative isolate flex flex-col overflow-hidden rounded-lg px-2.25 py-2.5',
+        current.surface,
         href && surfaceStateLayerStyle,
         className,
       )}
       {...props}
     >
-      {current.bloom ? <Bloom colorVar={current.bloom} /> : null}
       {href && !loading ? (
         <Link
           href={href}
-          // The card clips its contents for the bloom, so the focus outline is drawn inside, over its border.
+          // The card clips its contents, so the focus outline is drawn inside, over its border.
           className="absolute inset-0 rounded-lg focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus"
           aria-label={linkLabel}
         />
