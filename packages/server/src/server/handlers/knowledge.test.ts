@@ -340,6 +340,15 @@ describe('Knowledge read routes', () => {
     ]);
   });
 
+  it('400s a cursor the store cannot decode', async () => {
+    const { mastra, acme } = await setup();
+    const args = { mastra, knowledgeKey: 'main', cursor: 'not-a-cursor' };
+    // The 400 keeps the caller's cursor out of the message.
+    const badRequest = { status: 400, message: 'Invalid Knowledge cursor: this store cannot decode it' };
+    await expect(call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: acme.id })).rejects.toMatchObject(badRequest);
+    await expect(call(GET_KNOWLEDGE_ACTIVITY_ROUTE, args)).rejects.toMatchObject(badRequest);
+  });
+
   it('filters instances and gates reads by FGA when configured', async () => {
     const { mastra } = await setup();
     const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>
