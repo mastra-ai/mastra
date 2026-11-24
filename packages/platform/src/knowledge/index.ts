@@ -104,7 +104,10 @@ function isMissingOperation(error: unknown): boolean {
   );
 }
 
-class RemoteKnowledgeStorage extends KnowledgeStorage {
+// Derived, not imported: older @mastra/core peers lack KnowledgePageGraphStore.
+type KnowledgeGraphStore = Parameters<typeof readKnowledgePageGraph>[0];
+
+class RemoteKnowledgeStorage extends KnowledgeStorage implements KnowledgeGraphStore {
   constructor(
     private readonly endpoint: string,
     private readonly token: string,

@@ -309,7 +309,7 @@ export interface KnowledgePageGraph {
   edges: KnowledgePageGraphEdge[];
   /** Page ids that have pins. */
   pinnedIds: string[];
-  /** True when a limit stopped the walk or the endpoint list. */
+  /** True when a limit left out pages, notes, a note's mentions, or pins. */
   truncated: boolean;
 }
 
@@ -407,16 +407,16 @@ async function graphNotes(
       limit,
       maxMentionsPerNote: MAX_GRAPH_MENTIONS_PER_NOTE,
     });
-    const notes = batch.notes.map(project);
-    return { notes, truncated: truncated || batch.truncated };
+    const projected = batch.notes.map(project);
+    return { notes: projected, truncated: truncated || batch.truncated };
   }
   const counts = await countInBatches(pages, ids => store.countNotes({ pageIds: ids, read }));
   for (const page of pages) {
     if (counts && !counts[page.id]) continue;
     if (notes.length >= limit) return { notes, truncated: true };
-    const batch = await boundedList(limit - notes.length, async (cursor, limit) => {
-      const { notes, nextCursor } = await store.listNotes({ pageId: page.id, read, cursor, limit });
-      return { items: notes.map(project), nextCursor };
+    const batch = await boundedList(limit - notes.length, async (cursor, pageLimit) => {
+      const listed = await store.listNotes({ pageId: page.id, read, cursor, limit: pageLimit });
+      return { items: listed.notes.map(project), nextCursor: listed.nextCursor };
     });
     for (const note of batch.items) notes.push(note);
     truncated ||= batch.truncated;

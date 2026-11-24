@@ -1,5 +1,6 @@
 import { createKnowledgePagesCoreLoader, KNOWLEDGE_PAGES_SCHEMA_VERSION } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
+import type { readKnowledgePageGraph } from '@mastra/core/knowledge';
 import { KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
@@ -81,8 +82,11 @@ type PageStoreMethod = {
   [K in keyof KnowledgePageStore]: KnowledgePageStore[K] extends (...args: never[]) => unknown ? K : never;
 }[keyof KnowledgePageStore];
 
+// Derived, not imported: older @mastra/core peers lack KnowledgePageGraphStore.
+type KnowledgeGraphStore = Parameters<typeof readKnowledgePageGraph>[0];
+
 /** @experimental Knowledge APIs are experimental and may change without notice. */
-export class KnowledgePG extends KnowledgeStorage {
+export class KnowledgePG extends KnowledgeStorage implements KnowledgeGraphStore {
   static getExportDDL(schemaName?: string): string[] {
     return pgKnowledgePagesDDL(schemaName).map(statement => `${statement};`);
   }
