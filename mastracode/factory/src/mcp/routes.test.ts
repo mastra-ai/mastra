@@ -166,6 +166,7 @@ async function setup(
     timeoutMs?: number;
     issuerPath?: string;
     metadataMaxAgeMs?: number;
+    organizationId?: string;
   } = {},
 ) {
   const seed = await createFactoryStorageForTests();
@@ -225,6 +226,7 @@ async function setup(
     }),
     publicOrigin: PUBLIC_ORIGIN,
     authorizationServers: [authServer.issuer],
+    ...(options.organizationId ? { organizationId: options.organizationId } : {}),
     projects: seed.projects,
     // No repository is linked, so the connector session has no row to file.
     sourceControls: [sourceControl],
@@ -517,6 +519,17 @@ describe('Factory MCP server', () => {
     // Once the metadata is read again, the Factory finds the new key at the new URL.
     await new Promise(resolve => setTimeout(resolve, 150));
     expect((await claudeRequest(url, 'server/discover', {}, token)).status).toBe(200);
+  });
+
+  it('a deployment pinned to one organization refuses tokens for another', async () => {
+    const { url, projects } = await setup({ organizationId: 'org-1' });
+    // Someone in the pinned org created a project under their other org.
+    await projects.create({ orgId: 'org-2', userId: 'alice', input: { name: 'Globex' } });
+
+    const outsider = await claudeRequest(url, 'server/discover', {}, 'token-mallory');
+    expect(outsider.status).toBe(403);
+    expect(outsider.body).toEqual({ error: 'organization_forbidden' });
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
   });
 
   it('requests arriving during a slow metadata lookup share it', async () => {

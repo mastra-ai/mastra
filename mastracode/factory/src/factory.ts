@@ -2345,6 +2345,9 @@ export class MastraFactory {
                 }),
                 publicOrigin,
                 authorizationServers: mcpAuthorizationServers,
+                ...(auth instanceof MastraAuthStudio && auth.pinnedOrganizationId
+                  ? { organizationId: auth.pinnedOrganizationId }
+                  : {}),
                 projects: factoryProjectsStorage,
                 sourceControls: sourceControlHandles,
                 tools: factoryToolDeps,

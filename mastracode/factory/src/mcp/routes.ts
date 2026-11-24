@@ -85,6 +85,11 @@ export interface FactoryMcpRoutesDeps {
   verifyAccessToken: McpTokenVerifier;
   publicOrigin: string;
   authorizationServers: string[];
+  /**
+   * The organization the deployment is pinned to, when it is. Other routes
+   * refuse anyone outside it; this endpoint refuses tokens for another org.
+   */
+  organizationId?: string;
   projects: Pick<FactoryProjectsStorage, 'list'>;
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
@@ -231,6 +236,9 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const tenant = token ? await deps.verifyAccessToken(token) : null;
   if (!tenant) return unauthorized(deps, Boolean(token));
   if (!tenant.orgId) return c.json({ error: 'organization_required' }, 403);
+  if (deps.organizationId && tenant.orgId !== deps.organizationId) {
+    return c.json({ error: 'organization_forbidden' }, 403);
+  }
 
   // The endpoint URL names no project, so it serves the org's only one.
   const projects = await deps.projects.list({ orgId: tenant.orgId });
