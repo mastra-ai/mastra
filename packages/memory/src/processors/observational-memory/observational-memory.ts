@@ -2240,14 +2240,19 @@ export class ObservationalMemory {
       }
     }
 
-    await this.persistTokenEstimatesOntoStored(sealedWithNewCounts);
-
     if (filteredMessages.length > 0) {
       await this.messageHistory.persistMessages({
         messages: filteredMessages,
         threadId,
         resourceId,
       });
+    }
+
+    // A missed count write only costs a recount on the next request, so it must never fail the save.
+    try {
+      await this.persistTokenEstimatesOntoStored(sealedWithNewCounts);
+    } catch (error) {
+      omError('[OM] Failed to save token counts for sealed messages', error);
     }
   }
 

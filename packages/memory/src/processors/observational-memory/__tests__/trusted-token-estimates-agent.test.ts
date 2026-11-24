@@ -244,4 +244,92 @@ describe('trusted token counts across requests', () => {
     await createAgent(store).agent.generate('Second follow-up', { memory: { thread: THREAD, resource: RESOURCE } });
     for (const n of [0, 1, 2, 3]) expect(counted).not.toContain(sealedText(n));
   });
+
+  it('counts for sealed history are patched onto the stored copy, keeping buffering markers only storage has', async () => {
+    mock.on({ endpoint: 'chat', userMessage: 'Marker follow-up' }, { content: 'Ok.' });
+    const store = new InMemoryStore();
+    const text = `Sealed with a marker. ${'Buffered words from an earlier session. '.repeat(30)}`;
+    const marker = { type: 'data-om-buffering-start', data: { cycleId: 'cycle-1', operationType: 'observation' } };
+    const memoryStore = (await store.getStore('memory'))!;
+    await memoryStore.saveThread({
+      thread: { id: THREAD, resourceId: RESOURCE, title: '', createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memoryStore.saveMessages({
+      messages: [
+        {
+          id: 'sealed-marker',
+          threadId: THREAD,
+          resourceId: RESOURCE,
+          role: 'assistant',
+          createdAt: new Date(Date.UTC(2026, 10, 1)),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text }, marker as any],
+            metadata: { mastra: { sealed: true } },
+          },
+        },
+      ],
+    });
+    // The loaded copy was read before buffering wrote its marker straight to storage, so it lacks the marker.
+    const listMessages = memoryStore.listMessages.bind(memoryStore);
+    vi.spyOn(memoryStore, 'listMessages').mockImplementation(async args => {
+      const result = await listMessages(args);
+      return {
+        ...result,
+        messages: result.messages.map(message => ({
+          ...message,
+          content: {
+            ...message.content,
+            parts: message.content.parts.filter(part => !part.type.startsWith('data-om-buffering-')),
+          },
+        })),
+      };
+    });
+
+    await createAgent(store).agent.generate('Marker follow-up', { memory: { thread: THREAD, resource: RESOURCE } });
+
+    const {
+      messages: [stored],
+    } = await memoryStore.listMessagesById({ messageIds: ['sealed-marker'] });
+    const parts = stored!.content.parts as StoredPart[];
+    expect(parts.map(part => part.type)).toEqual(['text', 'data-om-buffering-start']);
+    expect(trustedEntries(parts[0]!)).toHaveLength(1);
+  });
+
+  it('a failed token-count write does not lose the turn messages', async () => {
+    mock.on({ endpoint: 'chat', userMessage: 'Failing follow-up' }, { content: 'Saved anyway.' });
+    const store = new InMemoryStore();
+    const memoryStore = (await store.getStore('memory'))!;
+    await memoryStore.saveThread({
+      thread: { id: THREAD, resourceId: RESOURCE, title: '', createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memoryStore.saveMessages({
+      messages: [
+        {
+          id: 'sealed-uncounted',
+          threadId: THREAD,
+          resourceId: RESOURCE,
+          role: 'user',
+          createdAt: new Date(Date.UTC(2026, 10, 1)),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: `Sealed history. ${'Buffered words. '.repeat(30)}` }],
+            metadata: { mastra: { sealed: true } },
+          },
+        },
+      ],
+    });
+    const updateMessages = vi.spyOn(memoryStore, 'updateMessages').mockRejectedValue(new Error('adapter refused'));
+
+    const first = createAgent(store);
+    await first.agent.generate('Failing follow-up', { memory: { thread: THREAD, resource: RESOURCE } });
+
+    expect(updateMessages).toHaveBeenCalled();
+    const { messages } = await first.memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+    const texts = messages.flatMap(message =>
+      (message.content.parts as StoredPart[]).flatMap(part => (part.type === 'text' ? [part.text] : [])),
+    );
+    expect(texts).toContain('Failing follow-up');
+    expect(texts).toContain('Saved anyway.');
+  });
 });
