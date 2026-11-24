@@ -81,7 +81,9 @@ Access checks and `scope` filter results before ranking. `limit` applies after i
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. These searches also return `more`:
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A page result can also carry a `snippet`: up to 240 characters of the page body around the words that matched. A snippet is cut with the same matching as the search (quote marks removed, case-insensitive), so it's included only when the body contains at least one of the words. It's left out when only the name or description matched. Snippets are built only for pages the run can read.
+
+These searches also return `more`:
 
 - A search that finds nothing suggests different key words or `knowledge_list`:
 
