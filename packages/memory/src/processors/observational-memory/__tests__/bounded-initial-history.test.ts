@@ -173,6 +173,8 @@ describe('bounded initial observation history', () => {
         .spyOn(store, 'listObservationHistory')
         .mockImplementation(input => list({ ...input, before: undefined }));
       const loaded = await om.loadUnobservedMessages({ threadId, resourceId });
+      expect(loaded.length).toBeGreaterThan(0);
+      expect(reads.mock.calls.some(([input]) => input.order === 'asc' || input.order === undefined)).toBe(true);
       expect(reads.mock.calls.some(([input]) => input.order === 'desc' && input.limit === 40)).toBe(false);
       expect(loaded.map(row => row.id)).toEqual(rows.slice(0, loaded.length).map(row => row.id));
     },
@@ -530,7 +532,7 @@ describe('bounded initial observation history', () => {
   });
 
   it('does not commit past a resource thread missing from the observer response', async () => {
-    const { store, om, rows, open } = await setup('resource', false, true, 9000);
+    const { store, om, rows, open, model } = await setup('resource', false, true, 9000);
     await store.saveThread({
       thread: { id: 'sibling', resourceId, createdAt: timestamp, updatedAt: timestamp, title: 'Sibling' },
     });
@@ -539,6 +541,10 @@ describe('bounded initial observation history', () => {
     });
     const first = await om.loadUnobservedMessages({ threadId, resourceId });
     await om.observe({ threadId, resourceId }).catch(() => undefined);
+    expect(model.doStreamCalls.length).toBeGreaterThan(0);
+    const prompt = JSON.stringify(model.doStreamCalls);
+    expect(prompt).toContain('Fact 0.');
+    expect(prompt).toContain('Fact 1.');
     expect((await store.getObservationalMemory(null, resourceId))?.metadata?.observationHistory).toBeUndefined();
     const restarted = (await open().omEngine)!;
     expect((await restarted.loadUnobservedMessages({ threadId, resourceId })).map(row => row.id)).toEqual(
