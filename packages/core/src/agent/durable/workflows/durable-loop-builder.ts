@@ -240,7 +240,7 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
   // Not `getAgentById`, which reports a missing agent as an error; this runs on every step.
   const agent = Object.values(rt.mastra?.listAgents() ?? {}).find(registered => registered.id === rt.agentId);
   // An agent not registered here leaves the engine's bus to go by.
-  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
+  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub ?? agent?.__getStreamBus?.()?.pubsub;
   return agentBus?.__replaysTopic?.(topic) ?? true;
 }
 
@@ -1170,8 +1170,15 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                 steps,
               },
             });
-            const textRewritten = !!lastStep && finishResult.outputTextChanged;
-            if (lastStep && finishResult.outputTextChanged) {
+            const rewrittenStepTexts = finishResult.rewrittenStepTexts;
+            const textRewritten = !!lastStep && (finishResult.outputTextChanged || !!rewrittenStepTexts);
+            if (rewrittenStepTexts) {
+              for (const [index, text] of rewrittenStepTexts.entries()) {
+                storedSteps[index] = { ...storedSteps[index]!, text };
+                steps[index] = { ...steps[index]!, text };
+              }
+              finalText = finishResult.outputText;
+            } else if (lastStep && finishResult.outputTextChanged) {
               lastStep.text = finishResult.outputText;
               steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
@@ -1240,7 +1247,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
-                messages: finishMessages,
+                messages: finishResult.finishMessages ?? finishMessages,
                 ...(textRewritten && { textRewritten }),
                 ...(stopCause && { stopCause }),
               });

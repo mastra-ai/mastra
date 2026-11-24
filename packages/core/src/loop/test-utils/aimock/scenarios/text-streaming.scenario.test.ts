@@ -84,7 +84,7 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     getMock().on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: reply }, { chunkSize: 5 });
     const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
     const result: any = await agent.stream('Say hello');
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
 
     try {
       const deltas = await collect<unknown>(output.textStream);
@@ -120,7 +120,7 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
       tools: { lookup },
     });
     const result: any = await agent.stream('Look up a', { stopWhen: stepCountIs(3) });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
 
     try {
       const deltas = await collect<unknown>(output.textStream);
@@ -177,7 +177,7 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     getMock().on({ endpoint: 'chat', userMessage: 'Say hello' }, { content: reply }, { chunkSize: 5 });
     const { agent } = await createSharedAgent(getMock(), { engine, instructions: 'You are a helpful assistant.' });
     const result: any = await agent.stream('Say hello');
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
 
     try {
       const deltas = await collect<unknown>(output.textStream);
@@ -213,7 +213,7 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
       tools: { lookup },
     });
     const result: any = await agent.stream('Look up a', { stopWhen: stepCountIs(3) });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
 
     try {
       const deltas = await collect<unknown>(output.textStream);

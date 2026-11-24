@@ -9,6 +9,7 @@ import { omDebug } from '../debug';
 import { getObservableMessages } from '../message-utils';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
+import { idsMarkedForResave, withMessagesMarkedForResave } from '../resave-counted-messages';
 import type { ObservationModelContext } from '../types';
 
 import { loadMemoryContextMessages } from './load-memory-context';
@@ -233,9 +234,15 @@ export class ObservationTurn {
     // Save any unsaved messages from the last step
     const unsavedInput = messageList.get.input.db();
     const unsavedOutput = messageList.get.response.db();
-    const unsavedMessages = [...unsavedInput, ...unsavedOutput];
+    // Stored messages whose token counts changed go back with them.
+    const unsavedMessages = withMessagesMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]);
     if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+      await this.om.persistMessages(
+        unsavedMessages,
+        this.threadId,
+        this.resourceId,
+        idsMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]),
+      );
     }
 
     // When the agent goes idle, start buffering any unobserved messages in the background.

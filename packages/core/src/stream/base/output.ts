@@ -441,7 +441,8 @@ function partMatches(a: StepMessagePart | undefined, b: StepMessagePart | undefi
   return true;
 }
 
-function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
+/** @internal */
+export function findIterationOffsetInParts(parts: StepMessagePart[], stepText: string | undefined): number | undefined {
   if (!stepText) return undefined;
 
   let suffixText = '';
@@ -477,7 +478,8 @@ function findIterationPartOffset(
   return undefined;
 }
 
-function resolveMessageText(message: MastraDBMessage): string {
+/** @internal */
+export function resolveMessageText(message: MastraDBMessage): string {
   const converted = convertMessages([message]).to('AIV4.Core');
   const convertedMessage = converted[converted.length - 1];
   return convertedMessage ? coreContentToString(convertedMessage.content) : '';
@@ -494,7 +496,8 @@ type StepPartBoundaries = {
   offsets: number[];
 };
 
-function findStepPartBoundaries<OUTPUT>(
+/** @internal */
+export function findStepPartBoundaries<OUTPUT>(
   message: MastraDBMessage | undefined,
   steps: LLMStepResult<OUTPUT>[],
 ): StepPartBoundaries | undefined {
@@ -527,13 +530,15 @@ function findStepPartBoundaries<OUTPUT>(
   return { offsets };
 }
 
-function clearStepPartIndexes(messages: MastraDBMessage[]): void {
+/** @internal */
+export function clearStepPartIndexes(messages: MastraDBMessage[]): void {
   for (const message of messages) {
     for (const part of message.content.parts) delete (part as typeof part & StepIndexedPart)[stepPartIndex];
   }
 }
 
-function reconcileBufferedStepTexts<OUTPUT>(
+/** @internal */
+export function reconcileBufferedStepTexts<OUTPUT>(
   steps: LLMStepResult<OUTPUT>[],
   processedText: string,
   processedMessage?: MastraDBMessage,
@@ -1749,9 +1754,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                 };
               } else if (self.#bufferedSteps.length > 0) {
-                // Durable finish chunks carry no model metadata; the last step's response
-                // already holds the run's response messages and model id (#26780).
+                // Durable finish chunks carry no model metadata. Keep the last step's metadata,
+                // but prefer the terminal message list, which includes result-processor rewrites.
                 response = { ...self.#bufferedSteps[self.#bufferedSteps.length - 1]!.response };
+                if (chunk.payload.messages?.nonUser) response.messages = chunk.payload.messages.nonUser;
               }
 
               if (self.#finishUsageIsTotal) {
@@ -1989,17 +1995,21 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // return a rejected reply (#26048).
                   let rewrittenText: string | undefined;
                   if (chunk.payload.textRewritten === true && self.#status !== 'canceled') {
-                    // Durable producers run processOutputResult after the last step-finish was
-                    // streamed. When it changed the reply, they write the result onto the run's
-                    // last step; otherwise the buffered text stands (a failed step's record is
-                    // empty while the stream already delivered its partial text). Like the
-                    // processed path above, the rewritten reply is the run's text, also after
-                    // a resume, where the buffered aggregate still holds pre-approval text.
-                    const finalizedText = chunk.payload.output?.steps?.at(-1)?.text;
-                    const lastStep = self.#bufferedSteps.at(-1);
-                    if (lastStep && typeof finalizedText === 'string') {
-                      lastStep.text = finalizedText;
-                      rewrittenText = finalizedText;
+                    // Resumed and late observers can buffer only the suffix of the run's finished steps.
+                    const finalizedSteps = chunk.payload.output?.steps;
+                    if (
+                      finalizedSteps &&
+                      self.#bufferedSteps.length &&
+                      finalizedSteps.length >= self.#bufferedSteps.length
+                    ) {
+                      const offset = finalizedSteps.length - self.#bufferedSteps.length;
+                      for (const [index, step] of self.#bufferedSteps.entries()) {
+                        const text = finalizedSteps[offset + index]?.text;
+                        if (typeof text === 'string') step.text = text;
+                      }
+                      const output = chunk.payload.output;
+                      rewrittenText =
+                        'text' in output && typeof output.text === 'string' ? output.text : finalizedSteps.at(-1)?.text;
                     }
                   }
                   this.resolvePromises({
