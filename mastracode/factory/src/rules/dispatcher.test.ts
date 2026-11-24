@@ -3450,6 +3450,27 @@ describe('FactoryDecisionDispatcher', () => {
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
     });
 
+    it('resumes a run whose worker was still heartbeating at the first reclaim but was lost by the next', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-after-refusal', Date.now());
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      const ledger = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<
+        Record<string, unknown>
+      >;
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: ledger.map(entry => ({ ...entry, heartbeatAt: Date.now() - 60_000 })),
+      });
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}(:retry:\\d+)?:resume:\\d+$`)),
+        contents: expect.stringContaining('Your previous run was interrupted'),
+      });
+    });
+
     it('does not resume, and keeps the lost run, when its end cannot be recorded', async () => {
       const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
         'lost-build-audit-down',
