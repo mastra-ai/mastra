@@ -188,6 +188,38 @@ export function createKnowledgeHostedImporterHostTests(
     });
   });
 
+  describe('service importer host: reading a run back', () => {
+    it('reads no receipt while a run is going, then the receipt its finish stored', async () => {
+      const { host } = setup();
+      expect(await host.readRun('no-such-run')).toBeNull();
+      const run = await start(host);
+      expect(await host.readRun(run.runId)).toEqual({ status: 'running', receipt: null });
+      await flush(host, run, 1, 'one');
+      const receipt = await host.finishRun({ ...finishOf(run, 1), backlog: true });
+      expect(receipt.chain).toBe(true);
+      expect(await host.readRun(run.runId)).toEqual({ status: 'succeeded', receipt });
+    });
+
+    it('reads the receipt the host recorded for a run it ended, canceled ones included', async () => {
+      const { host } = setup();
+      const lapsed = await start(host);
+      await lapse();
+      await host.expireRuns();
+      expect(await host.readRun(lapsed.runId)).toMatchObject({
+        status: 'failed',
+        receipt: { outcome: 'failed', chain: false, error: expect.objectContaining({ code: 'lease_expired' }) },
+      });
+
+      const canceled = await start(host);
+      await host.requestCancel(canceled.runId);
+      await host.finishRun({ ...finishOf(canceled, 0), backlog: true });
+      expect(await host.readRun(canceled.runId)).toMatchObject({
+        status: 'canceled',
+        receipt: { outcome: 'canceled', backlog: false, chain: false },
+      });
+    });
+  });
+
   describe('service importer host: admission at start (S4)', () => {
     it('admits a claim, materializes the scope and creates the run in one transaction', async () => {
       const { host, scopeExists, guard } = setup();

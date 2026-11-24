@@ -104,6 +104,13 @@ export interface KnowledgeImporterServiceHost extends KnowledgeImporterHost {
    * `lease_expired` or `deadline_exceeded`. Safe to call from a schedule and from several workers.
    */
   expireRuns(): Promise<{ expired: string[] }>;
+  /**
+   * A run's status and, once it ended, the receipt its finish stored (the app's, or the host's for a
+   * run it ended), with the chaining decision schedulers act on. Null for an unknown run.
+   */
+  readRun(
+    runId: string,
+  ): Promise<{ status: KnowledgeImporterRunStatus; receipt: KnowledgeImporterRunReceipt | null } | null>;
 }
 
 const DEFAULT_FLUSH_BUDGET_MS = 45_000;
@@ -778,6 +785,13 @@ export function createLocalKnowledgeImporterHost(
       } catch (error) {
         throw hostError(error);
       }
+    },
+
+    async readRun(runId: string) {
+      const { importers } = await storageAndImporters();
+      const run = await importers.getRun(runId);
+      if (!run) return null;
+      return { status: run.status, receipt: run.status === 'running' || !run.finish ? null : runReceipt(run) };
     },
 
     async finishRun(request: KnowledgeImporterFinishRequest): Promise<KnowledgeImporterRunReceipt> {
