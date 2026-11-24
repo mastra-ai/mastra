@@ -194,6 +194,9 @@ type DelayedPromises<OUTPUT = undefined> = {
  *   (`ToolCallPayload`) and `toolResults[i].payload.result` (`ToolResultPayload`).
  * - `steps[i].toolCalls` / `steps[i].toolResults`: the same chunks, per step.
  * - `usage` covers the last step; `totalUsage` covers the whole run.
+ * - Goal runs: each continuing goal evaluation clears `text`, `steps`, `toolCalls` and
+ *   `toolResults`, so they cover only the turns after the last such evaluation. `totalUsage`
+ *   stays cumulative.
  *
  * @example
  * ```ts
@@ -224,13 +227,15 @@ export type FullOutput<OUTPUT = undefined> = {
   /** Combined reasoning text */
   reasoningText: string | undefined;
   /**
-   * Every tool call made during the run, across all steps. Each entry is a chunk; the call is
-   * under `payload` (`payload.toolCallId`, `payload.toolName`, `payload.args`).
+   * Every tool call made during the run, across all steps (for goal runs, only after the last
+   * continuing goal evaluation). Each entry is a chunk; the call is under `payload`
+   * (`payload.toolCallId`, `payload.toolName`, `payload.args`).
    */
   toolCalls: PromiseResults<OUTPUT>['toolCalls'];
   /**
-   * Every tool result produced during the run, across all steps. Each entry is a chunk; the
-   * tool's return value is `payload.result`.
+   * Every tool result produced during the run, across all steps (for goal runs, only after the
+   * last continuing goal evaluation). Each entry is a chunk; the tool's return value is
+   * `payload.result`.
    */
   toolResults: PromiseResults<OUTPUT>['toolResults'];
   /** Sources referenced by model */
