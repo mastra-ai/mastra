@@ -263,7 +263,20 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   };
   const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
 
-  // The anchor: pinned by id and by its configured path. Created by the first applying flush.
+  // Another binding's pages: its anchor or one of its nodes. Read once per flush.
+  let otherAnchors: Set<string> | undefined;
+  const otherBindings = async () =>
+    (otherAnchors ??= new Set(
+      (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
+    ));
+  const othersPage = async (id: string) => {
+    if ((await otherBindings()).has(id)) return true;
+    const node = await importers.getNodeByPage(id);
+    return !!node && node.bindingId !== binding.id;
+  };
+
+  // The anchor: pinned by id and by its configured path. Created by the first applying flush. No
+  // page on its path may be another binding's: that would put this binding's pages in its subtree.
   const anchor = await (async (): Promise<KnowledgePage | KnowledgeImportRefusalReason> => {
     if (binding.anchorPageId) {
       const page = await storage.getPage({ id: binding.anchorPageId, read: 'all' });
@@ -272,7 +285,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       await storage.lockPages(path.ids);
       const fresh = await storage.getPage({ id: page.id, read: 'all' });
       const freshPath = live(fresh) ? await keyPath(fresh) : null;
-      return fresh && freshPath && sameKeys(freshPath.keys, target.path) ? fresh : 'conflict';
+      if (!fresh || !freshPath || !sameKeys(freshPath.keys, target.path)) return 'conflict';
+      for (const id of freshPath.ids.slice(0, -1)) {
+        if (await othersPage(id)) return 'conflict';
+      }
+      return fresh;
     }
     if (ops.every(op => op.op === 'remove')) return 'conflict';
     return storage.transaction(async tx => {
@@ -295,15 +312,12 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         const locked = await chain();
         if (locked.length !== before.length || locked.some((page, i) => page.id !== before[i]!.id)) continue;
         // A page someone wrote at the target becomes the binding's folder, its body and children
-        // kept. Another binding's anchor or page is never taken. The chain is locked, so the page
-        // can't move, be renamed or be removed until commit.
-        let parent: KnowledgePage = locked.at(-1) ?? scope;
-        if (locked.length === target.path.length) {
-          const anchors = (await importers.listBindings()).filter(b => b.id !== binding.id && b.anchorPageId);
-          if (anchors.some(b => b.anchorPageId === parent.id) || (await importers.getNodeByPage(parent.id))) {
-            return 'occupied' as const;
-          }
+        // kept. Another binding's anchor or page is never taken, at the target or above it. The
+        // chain is locked, so its pages can't move, be renamed or be removed until commit.
+        for (const page of locked) {
+          if (await othersPage(page.id)) return 'occupied' as const;
         }
+        let parent: KnowledgePage = locked.at(-1) ?? scope;
         // Containers along the way are ordinary pages; only the last key is the binding's own.
         for (let depth = locked.length + 1; depth <= target.path.length; depth++) {
           const key = target.path[depth - 1]!;
@@ -330,18 +344,6 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     return result;
   }
   const anchorPath = target.path;
-
-  // Another binding's pages: its anchor or one of its nodes. Read once per flush.
-  let otherAnchors: Set<string> | undefined;
-  const otherBindings = async () =>
-    (otherAnchors ??= new Set(
-      (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
-    ));
-  const othersPage = async (id: string) => {
-    if ((await otherBindings()).has(id)) return true;
-    const node = await importers.getNodeByPage(id);
-    return !!node && node.bindingId !== binding.id;
-  };
 
   /**
    * A page this binding owns, checked after locking: live, in the target's scope, mapped back to the

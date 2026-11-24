@@ -649,6 +649,47 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(updated?.body).toBe('new');
     });
 
+    it("refuses a first anchor whose path runs through another binding's anchor or page, but not a human one", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#hub/linear/notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+        { id: 'b3', target: 'docs:acme#l1/notion' },
+        { id: 'b4', target: 'docs:acme#team/notion' },
+      ]);
+      await run([upsert({ sourceId: 'l1' })], 'b2');
+      // b2's anchor moves under a human page onto b1's path; b2's item page moves to the top onto b3's.
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'hub', name: 'Hub' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear', parent: 'hub' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'hub/linear/l1' });
+      expect(await run([upsert({ sourceId: 'p1' })], 'b1')).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await page('hub/linear/notion')).toBeNull();
+      expect(await run([upsert({ sourceId: 'p1' })], 'b3')).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(await page('l1/notion')).toBeNull();
+      // Control: a human container on the path is fine.
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'team', name: 'Team' });
+      expect(await run([upsert({ sourceId: 'p1' })], 'b4')).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('team/notion/p1')).toBeTruthy();
+    });
+
+    it("refuses every op once another binding's page has taken the place of an ancestor of the anchor", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#hub/notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
+      await run([upsert({ sourceId: 'p1' })]);
+      await run([upsert({ sourceId: 'hub' })], 'b2');
+      // Same keys as before, but `hub` is now b2's item page.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'hub/notion' });
+      await knowledge.removePage({ scope: 'docs:acme', path: 'hub' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/hub' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion', parent: 'hub' });
+      expect(await run([upsert({ sourceId: 'p1', body: 'new' }), upsert({ sourceId: 'p2' })])).toMatchObject({
+        counts: { updated: 0, created: 0, refused: 2 },
+      });
+      expect((await page('hub/notion/p1'))?.body).toBe('body of p1');
+      expect(await page('hub/notion/p2')).toBeNull();
+    });
+
     it('refuses an imported page a person moved into another scope', async () => {
       const { knowledge, run } = setup();
       await run([upsert({ sourceId: 'p1' })]);
