@@ -127,17 +127,26 @@ async function startWorkerA(dir: string) {
   let output = '';
   child.stdout.on('data', chunk => (output += String(chunk)));
   child.stderr.on('data', chunk => (output += String(chunk)));
-  const exited = new Promise<void>(resolve => child.once('exit', () => resolve()));
+  let spawnError: Error | undefined;
+  // A process the OS refused to start emits `error` and may never emit `exit`.
+  const exited = new Promise<void>(resolve => {
+    child.once('exit', () => resolve());
+    child.once('error', error => {
+      spawnError = error;
+      resolve();
+    });
+  });
   /** SIGKILL: no shutdown hook runs, so the run is left exactly as a crashed worker leaves it. */
   const kill = async () => {
     workers.delete(kill);
-    if (child.exitCode !== null || child.signalCode !== null) return;
+    if (spawnError || child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
     process.kill(-child.pid!, 'SIGKILL');
     await exited;
   };
   workers.add(kill);
   const deadline = Date.now() + 90_000;
   while (!existsSync(join(dir, 'worker-a.ready'))) {
+    if (spawnError) throw new Error(`Worker A could not be started: ${spawnError.message}`);
     if (child.exitCode !== null || Date.now() > deadline) {
       throw new Error(`Worker A never opened its run:\n${output}`);
     }
@@ -155,7 +164,7 @@ describe('two Factory workers sharing storage', () => {
   });
 
   it(
-    'resumes a phase run on the second worker, on the same sandbox, when the first is killed mid-run',
+    'resumes a phase run on the second worker, keeping the sandbox handle, when the first is killed mid-run',
     {
       timeout: 180_000,
     },
@@ -209,7 +218,9 @@ describe('two Factory workers sharing storage', () => {
         ]),
       );
       await expect(seed.openRuns.listByThread('thread-1')).resolves.toEqual([]);
-      // The session reopens on B with the VM A started: its handle outlived A.
+      // B resumed A's session, and the handle to the VM A started outlived A, so that session
+      // reattaches to it rather than starting another. (The file-backed session here does not boot
+      // a sandbox; attaching it is the session loader's part, covered by its own tests.)
       await expect(sourceControl.sessions.getBySessionId('session-1')).resolves.toMatchObject({
         sandboxId: 'vm-started-by-worker-a',
       });

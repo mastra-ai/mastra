@@ -33,6 +33,7 @@ import { resolveFactoryCredentialTenant } from '../session/credential-policy.js'
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listThreadOpenRuns,
+  isOpenRunLiveElsewhere,
   observeSessionRunEnd,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -376,6 +377,31 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
     evaluation: { outcome: 'accepted', decisions: [] },
     autonomy: 'arm',
   });
+}
+
+async function bindReviewRun(storage: WorkItemsStorage, workItemId: string) {
+  const prepared = await storage.prepareRunStart({
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: PROJECT_ID,
+    workItem: {
+      id: workItemId,
+      input: {
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+        title: 'Fix issue',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    },
+    role: 'review',
+    session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+    resourceId: PROJECT_ID,
+    kickoffKey: `kickoff-review-${workItemId}`,
+    kickoffMessage: null,
+  });
+  await storage.markPendingStart(prepared.binding.id, 'sent');
+  return prepared.binding;
 }
 
 async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
@@ -3324,16 +3350,39 @@ describe('FactoryDecisionDispatcher', () => {
     async function lostBuild(
       key: string,
       heartbeatAt: number,
-      options?: { ledgerSuffix?: string; legacySetting?: boolean },
+      options?: {
+        ledgerSuffix?: string;
+        legacySetting?: boolean;
+        /** A review pass instead of a Building run, with this metadata on its card. */
+        review?: (requestedAt: Date) => Record<string, unknown>;
+      },
     ) {
       const seed = await createFactoryStorageForTests();
       const storage = seed.workItems;
       const { item, transitionService } = await queueDecision(
         storage,
-        { type: 'invokeSkill', role: 'work', skillName: 'understand-issue', idempotencyKey: key },
+        options?.review
+          ? {
+              type: 'invokeSkill',
+              role: 'review',
+              skillName: 'factory-review',
+              arguments: 'PR 7',
+              idempotencyKey: key,
+              resume: true,
+            }
+          : { type: 'invokeSkill', role: 'work', skillName: 'understand-issue', idempotencyKey: key },
         { armed: true },
       );
-      const binding = await bindWorkRun(storage, item.id);
+      const binding = options?.review ? await bindReviewRun(storage, item.id) : await bindWorkRun(storage, item.id);
+      if (options?.review) {
+        const [queued] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        await storage.update({
+          orgId: 'org-1',
+          id: item.id,
+          userId: 'user-1',
+          patch: { metadata: options.review(queued!.createdAt) },
+        });
+      }
       const lostAt = new Date('2030-01-01T00:00:00Z');
       const [lost] = await storage.claimDeferredDecisions({
         ownerId: 'lost-worker',
@@ -3369,17 +3418,132 @@ describe('FactoryDecisionDispatcher', () => {
         await seedOpenRuns(seed, ledger);
       }
       observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
-      const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
-        boards: autoStartingBoards(),
-        transitionService,
-        storage,
-        audit: seed.audit,
-        openRuns: seed.openRuns,
-        ownerId: 'worker-2',
-      });
-      return { seed, storage, session, dispatcher, lost: lost!, lostAt };
+      const dispatcherAs = (ownerId: string) =>
+        new FactoryDecisionDispatcher({
+          controller: controller as never,
+          boards: autoStartingBoards(),
+          transitionService,
+          storage,
+          audit: seed.audit,
+          openRuns: seed.openRuns,
+          ownerId,
+          primeCredentials: vi.fn(async () => {}),
+        });
+      const dispatcher = dispatcherAs('worker-2');
+      return { seed, storage, session, dispatcher, dispatcherAs, binding, lost: lost!, lostAt };
     }
+
+    const endedRecords = async (seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) =>
+      (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+
+    it('lets another worker resume when the continuation was not delivered, without waiting out its heartbeat', async () => {
+      const { session, storage, dispatcherAs, lost, lostAt } = await lostBuild('lost-handoff', Date.now() - 60_000);
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcherAs('worker-2').runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcherAs('worker-3').runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      expect(session.sendSignal.mock.calls[1]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}:retry:\\d+:resume:\\d+$`)),
+      });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('settles, instead of sending the prompt again, when a continuation landed and its run ended', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-continuation-landed',
+        Date.now() - 60_000,
+      );
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      // Another worker resumed the next delivery generation; its run completed, then the worker died
+      // before it could settle the decision.
+      const [reserved] = await seed.openRuns.listByThread(session.thread.getId());
+      const continuation = `${lost.id}:retry:1:resume:3`;
+      await seed.openRuns.takeOver([reserved!], { ...reserved!, kickoffId: continuation, ownerId: 'worker-3' });
+      await seed.openRuns.end(continuation, { reason: 'complete', endedAt: Date.now() });
+      const listed = session.thread.listActiveMessages.getMockImplementation()!;
+      session.thread.listActiveMessages.mockImplementation(async () => [...(await listed()), { id: continuation }]);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('does not send the continuation when the run is stopped while this worker takes it over', async () => {
+      const { seed, session, storage, dispatcher, binding, lost, lostAt } = await lostBuild(
+        'lost-stopped-during-takeover',
+        Date.now() - 60_000,
+      );
+      const takeOver = seed.openRuns.takeOver.bind(seed.openRuns);
+      vi.spyOn(seed.openRuns, 'takeOver').mockImplementationOnce(async (...args) => {
+        const tookOver = await takeOver(...args);
+        await storage.requestRunBindingStop({ orgId: 'org-1', sessionId: binding.sessionId, at: new Date() });
+        return tookOver;
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).not.toBe('succeeded');
+      const resume = await seed.openRuns.get(`${lost.id}:resume:2`);
+      expect(isOpenRunLiveElsewhere(resume!.run, 'worker-3')).toBe(false);
+    });
+
+    it('postpones, without spending an attempt or recording anything, a takeover the lost run won back', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-came-back',
+        Date.now() - 60_000,
+      );
+      const takeOver = seed.openRuns.takeOver.bind(seed.openRuns);
+      vi.spyOn(seed.openRuns, 'takeOver').mockImplementationOnce(async (...args) => {
+        await seed.openRuns.heartbeat(lost.id, 'lost-worker', Date.now());
+        return takeOver(...args);
+      });
+      const [before] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      const [after] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(after).toMatchObject({ attempts: before!.attempts, lastError: before!.lastError });
+      expect(after?.status).not.toBe('failed');
+      await expect(endedRecords(seed)).resolves.toEqual([]);
+    });
+
+    it('does not resume a review whose verdict on the current head is already recorded', async () => {
+      const head = '4dab505b024aeec72011b015149f1060ee696f24';
+      const { seed, session, storage, dispatcher, lostAt } = await lostBuild(
+        'lost-review-covered',
+        Date.now() - 60_000,
+        {
+          review: requestedAt => ({
+            pullRequestHeadSha: head,
+            reviewVerdict: 'request changes',
+            reviewedHeadSha: head,
+            reviewedAt: new Date(requestedAt.getTime() + 60_000).toISOString(),
+          }),
+        },
+      );
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      await expect(endedRecords(seed)).resolves.toEqual([]);
+    });
 
     it('resumes the run on the worker that reclaims its kickoff', async () => {
       // Liveness is judged on the wall clock: a heartbeat a minute old is past the 30s window.
@@ -10451,30 +10615,6 @@ describe('review status comment lifecycle', () => {
       await publish(event);
     });
     return { reportReviewStatus, events, writes, publish, comments: () => comments };
-  }
-
-  async function bindReviewRun(storage: WorkItemsStorage, workItemId: string) {
-    const prepared = await storage.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      workItem: {
-        id: workItemId,
-        input: {
-          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
-          title: 'Fix issue',
-          stages: ['execute'],
-          sessions: {},
-          metadata: {},
-        },
-      },
-      role: 'review',
-      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
-      resourceId: PROJECT_ID,
-      kickoffKey: `kickoff-review-${workItemId}`,
-      kickoffMessage: null,
-    });
-    await storage.markPendingStart(prepared.binding.id, 'sent');
   }
 
   const SESSION_REF = { sessionId: 'session-1', threadId: 'thread-1' };

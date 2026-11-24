@@ -410,6 +410,30 @@ describe('Factory run lifecycle audit', () => {
       });
     });
 
+    it("bills nothing of this session's turn to a lost run whose takeover committed in a worker that then died", async () => {
+      const { openRuns, session, events, emit, step } = await setup();
+      const resumed = { ...OPEN_RUN, kickoffId: 'kickoff-1:resume:2', ownerId: 'worker-2', heartbeatAt: Date.now() };
+      await openRuns.open(lost);
+      // The takeover committed (the lost run ended as aborted on its row); its worker died before the audit record.
+      await expect(openRuns.takeOver([lost], resumed)).resolves.toBe(true);
+
+      step(100, 50);
+      emit('complete');
+      await waitForSessionRunAudit(session);
+
+      const ended = Object.fromEntries(
+        (await events())
+          .filter(event => event.action === 'factory.run.ended')
+          .map(event => [event.metadata.kickoffId, event.metadata]),
+      );
+      expect(ended['kickoff-1']).toMatchObject({ reason: 'aborted', usage: { status: 'unreported' } });
+      expect(ended['kickoff-1:resume:2']).toMatchObject({
+        reason: 'complete',
+        usage: { status: 'recorded', totals: { totalTokens: 150 } },
+      });
+      expect(ended['kickoff-1:resume:2']?.usage).not.toHaveProperty('sharedWithKickoffIds');
+    });
+
     it('keeps a lost run whose aborted end could not be audited on the ledger, and records it at the next run end', async () => {
       const { session, openRuns, audit, ledger, events, emit } = await setup();
       await openRuns.open(lost);

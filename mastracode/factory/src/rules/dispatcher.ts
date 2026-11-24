@@ -1742,9 +1742,12 @@ export class FactoryDecisionDispatcher {
                 message.id.startsWith(`${record.id}:retry:`) ||
                 message.id.startsWith(`${record.id}:resume:`),
             );
-          const interrupted = (await deliveryLanded())
-            ? await this.#interruptedRuns(session, binding, record.id, runStillActive)
-            : [];
+          const interrupted =
+            (await deliveryLanded()) &&
+            // A review whose verdict for this head exists is done, even if its run died before its end.
+            !(await this.#headReviewedSince(record, decision))
+              ? await this.#interruptedRuns(session, binding, record.id, runStillActive)
+              : [];
           if (this.#openRuns && interrupted.length > 0 && !(await kickoffStale())) {
             if (await this.#runStopRequested(record.orgId, binding.id)) throw new FactoryRunStopped();
             const resumeId = `${kickoffId}:resume:${record.attempts}`;
@@ -1755,12 +1758,17 @@ export class FactoryDecisionDispatcher {
               resumeKickoffId: resumeId,
               ownerId: this.#ownerId,
             });
-            if (!tookOver) {
-              throw new Error(
-                `Factory could not take over the interrupted run of binding ${binding.id}: another worker took it over first, or its run came back.`,
-              );
-            }
+            // Refused, nothing changed: the run came back, ended, or another worker took it over.
+            // The next claim reads the ledger again and waits on, replays or resumes it.
+            if (!tookOver) throw new FactoryDecisionPostponed();
             deliveryId = resumeId;
+          } else {
+            // A continuation that landed stands for the kickoff it resumed; nothing interrupted it,
+            // so its run ended and it is what a replay settles from.
+            const resumed = (await session.thread.listActiveMessages()).filter(message =>
+              message.id.startsWith(`${kickoffId}:resume:`),
+            );
+            if (resumed.length > 0) deliveryId = resumed.at(-1)!.id;
           }
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
@@ -1872,7 +1880,17 @@ export class FactoryDecisionDispatcher {
             stopRequested,
           });
 
+          // A continuation that will not be sent leaves its reservation stale, so whichever worker
+          // retries the decision takes the run over again instead of waiting out its heartbeat.
+          const releaseResume = async () => {
+            if (resuming) await this.#openRuns?.heartbeat(deliveryId, this.#ownerId, 0);
+          };
           const sendKickoff = async () => {
+            // A stop asked for while this worker took the lost run over is not undone by the resume.
+            if (resuming && (await stopRequested())) {
+              await releaseResume();
+              throw new FactoryRunStopped();
+            }
             await this.#storage.clearRunBindingStopRequest({ orgId: record.orgId, bindingId: binding.id });
             const result = session.sendSignal(
               {
@@ -1891,6 +1909,7 @@ export class FactoryDecisionDispatcher {
               // A named non-delivery action proves no run began and is safe to
               // retry. An absent action did not confirm either outcome, so a new
               // delivery generation could duplicate work.
+              if (settled.action) await releaseResume();
               throw new FactoryDispatchError(
                 settled.action ? 'notification_delivery_failed' : 'skill_delivery_ambiguous',
                 `Factory skill invocation signal did not reach the agent (${String(settled.action)}).`,
