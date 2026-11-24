@@ -16409,7 +16409,7 @@ export class Agent<
    *
    * @internal
    */
-  protected async subscribeToDurableRunStream(
+  async __subscribeToRunStream(
     runId: string,
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
