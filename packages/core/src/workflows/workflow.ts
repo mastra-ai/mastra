@@ -4791,15 +4791,19 @@ export class Run<
             waitingPaths: {},
             timestamp: Date.now(),
           };
+          const ownership = 'release' in held ? held : UNCLAIMED_WORKFLOW_RUN;
           try {
-            await this.runStorage.writeSnapshot(
-              this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
-                ? this.executionEngine.options.pruneSnapshot({
-                    snapshot: initialRunSnapshot,
-                    workflowStatus: 'waiting',
-                  })
-                : initialRunSnapshot,
-              this.resourceId,
+            // Under the claim just taken, so a save delayed past a takeover is refused.
+            await ownership.run(this.runId, () =>
+              this.runStorage.writeSnapshot(
+                this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
+                  ? this.executionEngine.options.pruneSnapshot({
+                      snapshot: initialRunSnapshot,
+                      workflowStatus: 'waiting',
+                    })
+                  : initialRunSnapshot,
+                this.resourceId,
+              ),
             );
           } catch (error) {
             workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });

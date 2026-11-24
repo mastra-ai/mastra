@@ -640,6 +640,32 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(callbacks.onError).not.toHaveBeenCalled();
     });
 
+    // startAsync() claims the run and then saves its first `waiting` snapshot. When that save reaches
+    // the store after another process took the run over and finished it, it's refused.
+    it('refuses a delayed startAsync() dispatch save after the run was taken over', async () => {
+      const ran: string[] = [];
+      const stalled = gate();
+      const { store, workflow, id, writes, holdNext } = await setup(stalledThenNext(ran, stalled));
+
+      const run = await workflow.createRun();
+      const dispatchSave = holdNext();
+      const started = run.startAsync({ inputData: {} }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await dispatchSave.arrived;
+      await takeOverAndFinish(store, id, run.runId);
+      const afterTakeover = writes.length;
+      dispatchSave.release();
+      const error = await started;
+      stalled.open();
+
+      expect(error).toMatchObject({ id: RUN_FENCE_CONFLICT_ERROR_ID });
+      expect(ran).toEqual([]);
+      expect(writes.slice(afterTakeover)).toEqual([expect.objectContaining({ fenced: true, refused: true })]);
+      expect((await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId }))?.status).toBe('success');
+    });
+
     // A nested run resumed on its own flips its suspended parent to running and holds the parent's
     // lease. When it loses that lease, the parent belongs to another process: the child must not set
     // it back to suspended.
