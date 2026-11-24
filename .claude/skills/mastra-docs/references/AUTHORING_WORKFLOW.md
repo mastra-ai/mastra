@@ -114,6 +114,6 @@ Before handing off:
 - Links in those pages use the target site's routes (for example `/reference#…`), not this site's.
 - A site with several docs sections (for example `src/agent-builder/docs` at `/` and `src/agent-builder/reference` at `/reference`) has one manifest entry per section, each with the `routeBasePath` from the site's Docusaurus config. All sections of a repo are pushed in one commit, and links may point across them.
 - Each synced directory owns its `sidebars.js`. Add every new page there.
-- Validate them with the unscoped `pnpm check` or `pnpm check --rule 'mastra/external-*'`. File-scoped `pnpm check <file>` only accepts `src/content/en` pages, and inline `lint` comments don't apply to synced pages.
+- Validate them with the unscoped `pnpm check`, which checks their links, sidebars, and prose (Vale), or `pnpm check --rule 'mastra/external-*'`. Frontmatter, remark, and MDX formatting rules don't apply to them. File-scoped `pnpm check <file>` only accepts `src/content/en` pages, and inline `lint` comments don't apply to synced pages.
 - Deleting or renaming a synced page breaks inbound links to it, because synced directories have no redirects.
 - To add a site, add a manifest entry whose `source` is under `docs/src/`, install the Dane GitHub App on its repo, and remove any build-time docs fetching there.

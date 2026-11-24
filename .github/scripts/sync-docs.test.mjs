@@ -371,10 +371,19 @@ describe('syncRepo', () => {
     assert.deepEqual(again, { status: 'unchanged' });
   });
 
-  test('refuses targets from different repos', async () => {
+  test('refuses targets from different repos or branches', async () => {
     await assert.rejects(
       syncRepo({
         targets: [target(), target({ name: 'b', repo: 'mastra-ai/b' })],
+        remoteUrl: 'unused',
+        sha: SHA,
+        log: quiet,
+      }),
+      /share one repo and branch/,
+    );
+    await assert.rejects(
+      syncRepo({
+        targets: [target(), target({ name: 'b', dest: 'src/b', branch: 'dev' })],
         remoteUrl: 'unused',
         sha: SHA,
         log: quiet,

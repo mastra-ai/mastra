@@ -119,7 +119,7 @@ export function validateManifest(manifest, { rootDir = ROOT_DIR } = {}) {
         errors.push(`${pair}: same "routeBasePath" in ${a.repo}`);
       } else if (routeA !== '/' && routeB !== '/' && overlaps(routeA, routeB)) {
         // Nested section bases (e.g. /reference and /reference/api) can produce the same route from both sections.
-        errors.push(`${pair}: nested "routeBasePath" in ${a.repo}`);
+        errors.push(`${pair}: nested "routeBasePath" ${routeA} and ${routeB} in ${a.repo}`);
       }
     }
   }
