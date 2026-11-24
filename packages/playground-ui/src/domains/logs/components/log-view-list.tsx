@@ -12,9 +12,9 @@ const ROW_HEIGHT = 24;
 const OVERSCAN = 8;
 const SKELETON_WIDTHS = ['w-3/4', 'w-1/2', 'w-2/3', 'w-5/6', 'w-3/5', 'w-4/5'] as const;
 
-export type LogsStreamOrder = 'newest-first' | 'oldest-first';
+export type LogViewOrder = 'newest-first' | 'oldest-first';
 
-export interface LogsStreamViewProps {
+export interface LogViewListProps {
   logs: LogRecord[];
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
@@ -22,20 +22,21 @@ export interface LogsStreamViewProps {
   logIdMap: Map<LogRecord, string>;
   featuredLogId?: string;
   onLogClick?: (log: LogRecord) => void;
-  order?: LogsStreamOrder;
+  order?: LogViewOrder;
+  wrap?: boolean;
   onFetchNextPage?: () => void;
 }
 
-export function LogsStreamView({ isLoading, ...props }: LogsStreamViewProps) {
-  if (isLoading) return <LogsStreamSkeleton />;
+export function LogViewList({ isLoading, ...props }: LogViewListProps) {
+  if (isLoading) return <LogViewSkeleton />;
   return (
     <div className="@container flex min-h-0 min-w-0 flex-1 flex-col px-1 pb-1">
-      <LogsStreamList {...props} />
+      <LogViewRows {...props} />
     </div>
   );
 }
 
-function LogsStreamSkeleton() {
+function LogViewSkeleton() {
   return (
     <div className="flex flex-col gap-1 px-3 py-1" aria-busy="true">
       {SKELETON_WIDTHS.map(width => (
@@ -45,7 +46,7 @@ function LogsStreamSkeleton() {
   );
 }
 
-function LogsStreamList({
+function LogViewRows({
   logs,
   isFetchingNextPage,
   hasNextPage,
@@ -53,8 +54,9 @@ function LogsStreamList({
   featuredLogId,
   onLogClick,
   order = 'newest-first',
+  wrap = true,
   onFetchNextPage,
-}: Omit<LogsStreamViewProps, 'isLoading'>) {
+}: Omit<LogViewListProps, 'isLoading'>) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isOldestFirst = order === 'oldest-first';
   const lastLogIndex = logs.length - 1;
@@ -133,7 +135,7 @@ function LogsStreamList({
         columns={COLUMNS}
         scrollRef={scrollRef}
         className="min-w-0 flex-1"
-        fit="container"
+        fit={wrap ? 'container' : 'content'}
         variant="well"
         mask={false}
         density="compact"
@@ -165,6 +167,7 @@ function LogsStreamList({
                 level={log.level}
                 message={log.message}
                 fields={log.data ?? undefined}
+                wrap={wrap}
               />
             </LogsListRow>
           );

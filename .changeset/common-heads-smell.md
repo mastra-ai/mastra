@@ -2,20 +2,28 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a stream view to the shared log viewer, for plain log lines such as sandbox and deploy output.
-
-`LogsListView` takes `density="stream"` with an `order` of `newest-first` (the default, as in an audit log) or `oldest-first` (as in a terminal, opening on the newest line). Each line shows its time, level and message under a column header, with a level-colored bar and a red tint on errors. Long lines wrap, JSON messages show as `key: value` fields, stack traces show their first three lines with a count of the rest, and `onFetchNextPage` loads older logs when the older end scrolls into view. Leave out `onLogClick` for read-only lines that open nothing. A log only needs `timestamp`, `level` and `message`; `data` shows as `key: value` fields after the message.
+Added `LogView`, a shared log viewer for plain log lines such as sandbox and deploy output. It is built from parts, so a page keeps only what it needs and fetches its own data.
 
 ```tsx
-<LogsListView
-  density="stream"
-  order="oldest-first"
-  logs={lines}
-  logIdMap={logIdMap}
-  onLogClick={handleLogClick}
-  hasNextPage={hasNextPage}
-  onFetchNextPage={fetchNextPage}
-/>
+<LogView>
+  <LogView.Header>
+    <LogView.Title />
+    <LogView.LevelToggles levels={levels} value={shown} onValueChange={setShown} />
+    <LogView.Filters logs={logs} value={filters} onValueChange={setFilters} fieldChips={false} />
+    <LogView.Refresh onRefresh={refetch} refreshing={isFetching} />
+  </LogView.Header>
+  <LogView.List
+    logs={lines}
+    logIdMap={logIdMap}
+    order="oldest-first"
+    wrap={false}
+    hasNextPage={hasNextPage}
+    onFetchNextPage={fetchNextPage}
+    onLogClick={openLog}
+  />
+</LogView>
 ```
 
-`LogsLevelToggles` shows and hides levels: click to toggle one, Cmd-click or Ctrl-click to show only that level, and turning off the last level shows them all again. `LogDataPanel` now groups a log into Details, Message and Fields sections and pretty-prints JSON messages, and `DataList` takes `density="compact"` for 24px rows and `variant="well"`, an outlined sunken area with rows edge to edge for a dense stream inside a card.
+`LogView.List` shows time, level and message with a level bar and a red tint on errors. JSON messages show as fields and stack traces collapse to three lines. `order` is `oldest-first` (terminal) or `newest-first` (audit log), older logs load when that end scrolls into view, `wrap={false}` keeps each line on one row and scrolls sideways, and leaving out `onLogClick` makes lines read-only. `LogView.Filters` offers search and chips for any log field; turn either off with `search={false}` or `fieldChips={false}`, or leave the part out. `filterLogsByFields` and `logViewSearchText` apply the chips.
+
+`LogsListView` rows are read-only without `onLogClick`, `LogDataPanel` now groups a log into Details, Message and Fields sections and pretty-prints JSON messages, and `DataList` takes `density="compact"` for 24px rows and `variant="well"` for an outlined sunken list inside a card.

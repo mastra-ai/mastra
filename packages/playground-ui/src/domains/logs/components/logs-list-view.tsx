@@ -2,8 +2,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
 import { LogsListRow } from './logs-list-row';
-import { LogsStreamView } from './logs-stream-view';
-import type { LogsStreamOrder } from './logs-stream-view';
 import { useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
@@ -30,30 +28,6 @@ export interface LogsListViewProps {
   /** Current timestamp sort direction. When `onSortChange` is provided the Date/Time headers become sortable. */
   timestampSort?: DataListSort;
   onSortChange?: (direction: DataListSort, key: 'timestamp') => void;
-  density?: LogsListViewDensity;
-  order?: LogsStreamOrder;
-  onFetchNextPage?: () => void;
-}
-
-export type LogsListViewDensity = 'table' | 'stream';
-
-export function LogsListView({ density = 'table', order, onFetchNextPage, ...props }: LogsListViewProps) {
-  if (density === 'stream') {
-    return (
-      <LogsStreamView
-        logs={props.logs}
-        isLoading={props.isLoading}
-        isFetchingNextPage={props.isFetchingNextPage}
-        hasNextPage={props.hasNextPage}
-        logIdMap={props.logIdMap}
-        featuredLogId={props.featuredLogId ?? undefined}
-        onLogClick={props.onLogClick}
-        order={order}
-        onFetchNextPage={onFetchNextPage}
-      />
-    );
-  }
-  return <LogsTableView {...props} />;
 }
 
 /**
@@ -61,7 +35,7 @@ export function LogsListView({ density = 'table', order, onFetchNextPage, ...pro
  * TanStack Virtual, sandwiched between top/bottom Spacers that preserve total
  * scroll height. Owns no state and fetches no data.
  */
-function LogsTableView({
+export function LogsListView({
   logs,
   isLoading,
   isFetchingNextPage,
@@ -72,7 +46,7 @@ function LogsTableView({
   onLogClick,
   timestampSort,
   onSortChange,
-}: Omit<LogsListViewProps, 'density' | 'order' | 'onFetchNextPage'>) {
+}: LogsListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const virtualizer = useVirtualizer({

@@ -123,6 +123,7 @@ export interface LogsDataListLineCellProps {
   level: LogLevel;
   message: string;
   fields?: Record<string, unknown>;
+  wrap?: boolean;
 }
 
 const COLLAPSED_LINE_COUNT = 3;
@@ -176,7 +177,7 @@ function LogMessage({ message }: { message: string }) {
   );
 }
 
-export function LogsDataListLineCell({ timestamp, level, message, fields }: LogsDataListLineCellProps) {
+export function LogsDataListLineCell({ timestamp, level, message, fields, wrap = true }: LogsDataListLineCellProps) {
   const fieldEntries = fields ? Object.entries(fields) : [];
 
   return (
@@ -188,7 +189,12 @@ export function LogsDataListLineCell({ timestamp, level, message, fields }: Logs
         </time>
       </DataListCell>
       <DataListCell className={cn('content-start font-mono uppercase', logLevelTextClass[level])}>{level}</DataListCell>
-      <DataListCell className="block font-mono wrap-anywhere whitespace-pre-wrap text-foreground @max-md:col-span-full">
+      <DataListCell
+        className={cn(
+          'block font-mono text-foreground @max-md:col-span-full',
+          wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'overflow-visible whitespace-pre',
+        )}
+      >
         <LogMessage message={message} />
         {fieldEntries.length > 0 && (
           <span className="ml-3">
