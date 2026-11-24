@@ -11,7 +11,7 @@ import type {
   KnowledgeImporterContext,
   KnowledgeImporterHost,
   KnowledgeImportItem,
-  KnowledgeImporterOp,
+  KnowledgeImporterPageOp,
 } from '@mastra/core/knowledge';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -36,7 +36,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
   });
 
   function setup(bindings: { id: string; target: string }[] = [{ id: 'b1', target: 'docs:acme#notion' }]) {
-    let ops: KnowledgeImporterOp[] = [];
+    let ops: KnowledgeImporterPageOp[] = [];
     class Notes extends KnowledgeImporter({ id: 'notes', label: 'Notes' }) {
       async import(ctx: KnowledgeImporterContext<Record<string, never>, never>) {
         for (const op of ops) {
@@ -51,7 +51,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       storage: fixture.storage,
       importers: bindings.map(b => new Notes(b)),
     });
-    const run = async (next: KnowledgeImporterOp[], bindingId = 'b1') => {
+    const run = async (next: KnowledgeImporterPageOp[], bindingId = 'b1') => {
       ops = next;
       return knowledge.importers!.run(bindingId);
     };
@@ -63,7 +63,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
     return { knowledge, run, page };
   }
 
-  const upsert = (item: Partial<KnowledgeImportItem> & { sourceId: string }): KnowledgeImporterOp => ({
+  const upsert = (item: Partial<KnowledgeImportItem> & { sourceId: string }): KnowledgeImporterPageOp => ({
     op: 'upsert',
     item: { title: item.sourceId.toUpperCase(), body: `body of ${item.sourceId}`, ...item },
   });
@@ -73,7 +73,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
     runId: string,
     generation: number,
     seq: number,
-    ops: KnowledgeImporterOp[],
+    ops: KnowledgeImporterPageOp[],
   ) {
     const digest = await knowledgeImporterFlushDigest({ ops });
     return host.flush({ runId, generation, seq, digest, ops });
@@ -215,7 +215,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       // Settling b under p happens after the cursor has passed a000–a104; the same run goes back for
       // them once, and still finishes with the orphan whose parent never arrives left waiting.
       expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded', chain: false });
-      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+      for (const { item } of linkers as Extract<KnowledgeImporterPageOp, { op: 'upsert' }>[]) {
         expect((await page(`notion/${item.sourceId}`))?.body).toBe(
           `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
         );
@@ -240,7 +240,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await run([...linkers, upsert({ sourceId: 'b', parent: 'p' }), ...waiting]);
 
       expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded' });
-      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+      for (const { item } of linkers as Extract<KnowledgeImporterPageOp, { op: 'upsert' }>[]) {
         expect((await page(`notion/${item.sourceId}`))?.body).toBe(
           `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
         );
@@ -259,7 +259,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await run([...linkers, upsert({ sourceId: 'b', parent: 'p', links: [{ sourceId: 'b' }] })]);
 
       expect(await run([upsert({ sourceId: 'p' })])).toMatchObject({ outcome: 'succeeded' });
-      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+      for (const { item } of linkers as Extract<KnowledgeImporterPageOp, { op: 'upsert' }>[]) {
         expect((await page(`notion/${item.sourceId}`))?.body).toBe(
           `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p/b]]`,
         );
@@ -372,7 +372,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
         outcome: 'succeeded',
         counts: { moved: 1, updated: 105 },
       });
-      for (const { item } of linkers as Extract<KnowledgeImporterOp, { op: 'upsert' }>[]) {
+      for (const { item } of linkers as Extract<KnowledgeImporterPageOp, { op: 'upsert' }>[]) {
         expect((await page(`notion/${item.sourceId}`))?.body).toBe(
           `body of ${item.sourceId}\n\nLinks:\n- [[docs:acme#notion/p2/b]]`,
         );

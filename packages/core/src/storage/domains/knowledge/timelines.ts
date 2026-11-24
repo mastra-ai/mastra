@@ -146,6 +146,8 @@ export abstract class KnowledgeTimelinesStorage {
   /**
    * Deletes up to `limit` entries of a timeline whose page was deleted before `deletedBefore`, and
    * the timeline mark with the last batch (`done`). Refuses a live page, or one deleted since.
+   * `purgedIds` come in no particular order. Until the purge, deleting the page only hides its
+   * entries: the mark and every entry stay stored.
    */
   abstract purgeEntries(input: {
     timelineId: string;

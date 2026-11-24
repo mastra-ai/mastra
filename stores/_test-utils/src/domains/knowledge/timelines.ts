@@ -255,6 +255,12 @@ export function createKnowledgeTimelineTests(createStore: () => Promise<Knowledg
 
       const before = new Date(Date.now() - 60_000);
       await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'host' });
+      // Deleting hides the entries; the mark stays until the purge drops it.
+      expect(await timelines.listTimelineIds({ pageIds: [page.id] })).toEqual([page.id]);
+      expect(await timelines.listEntries({ timelineId: page.id, read: 'all', limit: 10 })).toEqual({
+        entries: [],
+        nextCursor: null,
+      });
       await expect(
         timelines.purgeEntries({ timelineId: page.id, deletedBefore: before, limit: 2 }),
       ).rejects.toBeInstanceOf(KnowledgeTimelinePurgeRefusedError);
