@@ -205,7 +205,8 @@ export function PropertyFilterCreator({
           {!selectedField && (
             <div
               role="menu"
-              className={cn(menuScrollPopupClass, 'max-h-[80dvh]')}
+              // 80dvh of rows plus the scroll area's padding.
+              className={cn(menuScrollPopupClass, 'max-h-[calc(80dvh+--spacing(2))]')}
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
