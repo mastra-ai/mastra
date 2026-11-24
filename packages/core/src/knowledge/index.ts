@@ -634,6 +634,7 @@ export type {
   KnowledgePageGraphStore,
   KnowledgePageLinks,
   KnowledgePageView,
+  KnowledgeReadOptions,
   KnowledgeTreeChildren,
   KnowledgeTreePage,
 } from './explorer-pages';

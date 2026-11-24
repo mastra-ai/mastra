@@ -204,6 +204,14 @@ function withDisplayLabel<T extends { isScope: boolean; address?: string }>(
   return displayLabel ? { ...page, displayLabel } : page;
 }
 
+const KNOWLEDGE_READ_DEADLINE_MS = 25_000;
+
+/** A read past its deadline is refused like one over its read budget: a retry would run as long. */
+function pastDeadlineAsTooExpensive(error: unknown, message: string): unknown {
+  if (!(error instanceof DOMException) || error.name !== 'TimeoutError') return error;
+  return new HTTPException(422, { message });
+}
+
 export const LIST_KNOWLEDGE_ROUTE = createRoute({
   method: 'GET',
   path: '/knowledge',
@@ -234,22 +242,29 @@ export const GET_KNOWLEDGE_TREE_ROUTE = createRoute({
   responseSchema: knowledgeTreeResponseSchema,
   summary: 'List one level of the Knowledge page tree',
   description:
-    'Without parentId, returns the root scopes. With parentId, returns its child scopes (first page only) then its child pages in order, paged with cursor.',
+    'Without parentId, returns the root scopes. With parentId, returns its child scopes (first page only) then its child pages in order, paged with cursor. 422 when the read runs past 25 seconds.',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, knowledgeKey, parentId, cursor, limit }) => {
     try {
       const { instance, store, read, readers } = await resolveStore(mastra, requestContext, knowledgeKey);
-      const level = await readers.listKnowledgeTreeChildren(store, {
-        parentId: parentId ?? null,
-        read,
-        // An empty `?cursor=` means no cursor, so root scopes are still listed.
-        cursor: cursor || undefined,
-        limit,
-      });
+      const level = await readers.listKnowledgeTreeChildren(
+        store,
+        {
+          parentId: parentId ?? null,
+          read,
+          // An empty `?cursor=` means no cursor, so root scopes are still listed.
+          cursor: cursor || undefined,
+          limit,
+        },
+        { signal: AbortSignal.timeout(KNOWLEDGE_READ_DEADLINE_MS) },
+      );
       return { ...level, pages: level.pages.map(page => withDisplayLabel(instance, page)) };
     } catch (error) {
-      return handleError(error, 'Error reading Knowledge tree');
+      return handleError(
+        pastDeadlineAsTooExpensive(error, 'Knowledge tree read ran out of time.'),
+        'Error reading Knowledge tree',
+      );
     }
   },
 });
@@ -353,17 +368,17 @@ export const GET_KNOWLEDGE_GRAPH_ROUTE = createRoute({
   responseSchema: knowledgeGraphResponseSchema,
   summary: 'Get a bounded Knowledge page graph',
   description:
-    'Returns pages under rootId (or every root scope) breadth-first with parent and mention edges, bounded; truncated is true when a limit stopped it. grants lists the declared access grants onto the scopes shown, from principal scopes the caller can read. 404 when rootId does not exist.',
+    'Returns pages under rootId (or every root scope) breadth-first with parent and mention edges, bounded; truncated is true when a limit stopped it. grants lists the declared access grants onto the scopes shown, from principal scopes the caller can read. 404 when rootId does not exist. 422 when the read runs past 25 seconds.',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, knowledgeKey, rootId, maxPages }) => {
     try {
       const { instance, store, read, readers } = await resolveStore(mastra, requestContext, knowledgeKey);
-      const graph = await readers.readKnowledgePageGraph(store, {
-        read,
-        rootId: rootId ?? null,
-        ...(maxPages ? { limits: { maxPages } } : {}),
-      });
+      const graph = await readers.readKnowledgePageGraph(
+        store,
+        { read, rootId: rootId ?? null, ...(maxPages ? { limits: { maxPages } } : {}) },
+        { signal: AbortSignal.timeout(KNOWLEDGE_READ_DEADLINE_MS) },
+      );
       if (!graph) throw new HTTPException(404, { message: 'Knowledge page not found' });
       const grants = await graphGrants(instance, store, graph.pages, read);
       return {
@@ -372,7 +387,13 @@ export const GET_KNOWLEDGE_GRAPH_ROUTE = createRoute({
         ...(grants ? { grants } : {}),
       };
     } catch (error) {
-      return handleError(error, 'Error reading Knowledge graph');
+      return handleError(
+        pastDeadlineAsTooExpensive(
+          error,
+          'Knowledge graph read ran out of time. Select a narrower root or reduce the graph limits.',
+        ),
+        'Error reading Knowledge graph',
+      );
     }
   },
 });

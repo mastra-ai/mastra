@@ -471,6 +471,50 @@ describe('readKnowledgePageGraph', () => {
   });
 });
 
+describe('a read whose signal aborts', () => {
+  /** `store`, counting the calls it receives once `signal` has aborted. */
+  function watched<S extends object>(store: S, signal: AbortSignal) {
+    const late = { calls: 0 };
+    const proxy = new Proxy(store, {
+      get(target, key) {
+        const member: unknown = Reflect.get(target, key, target);
+        if (typeof member !== 'function') return member;
+        return (...args: unknown[]) => {
+          if (signal.aborted) late.calls += 1;
+          return Reflect.apply(member, target, args);
+        };
+      },
+    });
+    return { store: proxy, late };
+  }
+
+  it.each([
+    {
+      reader: 'graph',
+      read: (store: InMemoryKnowledgePageStore, signal: AbortSignal) =>
+        readKnowledgePageGraph(store, { read: 'all' }, { signal }),
+    },
+    {
+      reader: 'tree',
+      read: (store: InMemoryKnowledgePageStore, signal: AbortSignal) =>
+        listKnowledgeTreeChildren(store, { parentId: null, read: 'all' }, { signal }),
+    },
+  ])('stops the $reader read at its next store call and rejects with the reason', async ({ read }) => {
+    const { store } = await seed();
+    const deadline = new AbortController();
+    const timedOut = new DOMException('The operation timed out.', 'TimeoutError');
+    const listChildScopes = store.listChildScopes.bind(store);
+    vi.spyOn(store, 'listChildScopes').mockImplementation(input => {
+      deadline.abort(timedOut);
+      return listChildScopes(input);
+    });
+    const { store: counted, late } = watched(store, deadline.signal);
+
+    await expect(read(counted, deadline.signal)).rejects.toBe(timedOut);
+    expect(late.calls).toBe(0);
+  });
+});
+
 describe('search and activity', () => {
   it('filters search hits and activity by the read scope', async () => {
     const { store, roadmap, refunds } = await seed();

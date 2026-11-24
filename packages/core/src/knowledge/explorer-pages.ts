@@ -36,6 +36,25 @@ function scopeVisible(page: KnowledgePage, read: KnowledgeReadScope): boolean {
   return page.isScope && knowledgeScopeReadable(page, read);
 }
 
+export interface KnowledgeReadOptions {
+  /** Once it aborts, the read makes no further store call and rejects with its reason, e.g. `AbortSignal.timeout(ms)`. */
+  signal?: AbortSignal;
+}
+
+function untilAborted<S extends object>(store: S, signal: AbortSignal | undefined): S {
+  if (!signal) return store;
+  return new Proxy(store, {
+    get(target, key) {
+      const member: unknown = Reflect.get(target, key, target);
+      if (typeof member !== 'function') return member;
+      return (...args: unknown[]) => {
+        signal.throwIfAborted();
+        return Reflect.apply(member, target, args);
+      };
+    },
+  });
+}
+
 /** Read at most the row budget. A broken continuation cannot keep a graph or tree request alive. */
 async function boundedList<T>(
   budget: number,
@@ -125,9 +144,11 @@ export interface KnowledgeTreeChildren {
  * first (they're structure), then the parent's ordinary child pages, paged with `cursor`/`limit`.
  */
 export async function listKnowledgeTreeChildren(
-  store: KnowledgePageStore,
+  source: KnowledgePageStore,
   input: { parentId: string | null; read: KnowledgeReadScope; cursor?: string; limit?: number },
+  { signal }: KnowledgeReadOptions = {},
 ): Promise<KnowledgeTreeChildren> {
+  const store = untilAborted(source, signal);
   const { parentId, read, cursor, limit } = input;
   if (parentId !== null && !(await store.getPage({ id: parentId, read }))) {
     return { pages: [], truncated: false };
@@ -426,9 +447,11 @@ async function graphNotes(
  * edges between them, and mention edges from their readable notes.
  */
 export async function readKnowledgePageGraph(
-  store: KnowledgePageGraphStore,
+  source: KnowledgePageGraphStore,
   input: KnowledgePageGraphInput,
+  { signal }: KnowledgeReadOptions = {},
 ): Promise<KnowledgePageGraph | null> {
+  const store = untilAborted(source, signal);
   const limits = {
     maxPages: input.limits?.maxPages ?? DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS.maxPages,
     maxNotes: input.limits?.maxNotes ?? DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS.maxNotes,

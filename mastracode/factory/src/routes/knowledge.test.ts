@@ -121,6 +121,22 @@ describe('Factory Knowledge routes on the page store', () => {
     expect(await response.json()).toMatchObject({ error: 'query_too_expensive' });
   });
 
+  it('refuses a tree or graph read that runs past its deadline as too expensive', async () => {
+    const h = await createHarness();
+    const deadline = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation(() => AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError')));
+    try {
+      for (const path of ['/tree', '/graph']) {
+        const response = await h.get(path);
+        expect(response.status, path).toBe(422);
+        expect(response.body, path).toMatchObject({ error: 'query_too_expensive' });
+      }
+    } finally {
+      deadline.mockRestore();
+    }
+  });
+
   it("labels scope pages with their declaration's displayLabel, filling in the address's params", async () => {
     const h = await createHarness({
       declarations: {

@@ -153,6 +153,23 @@ describe('Knowledge read routes', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
+  it('refuses a tree or graph read that runs past its deadline with 422', async () => {
+    const { mastra } = await setup();
+    const deadline = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation(() => AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError')));
+    try {
+      for (const route of [GET_KNOWLEDGE_TREE_ROUTE, GET_KNOWLEDGE_GRAPH_ROUTE]) {
+        await expect(call(route, { mastra, knowledgeKey: 'main' })).rejects.toMatchObject({
+          status: 422,
+          message: expect.stringContaining('ran out of time'),
+        });
+      }
+    } finally {
+      deadline.mockRestore();
+    }
+  });
+
   describe('grants between scopes', () => {
     const declarations = {
       'org:$orgId': {},

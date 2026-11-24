@@ -40,6 +40,7 @@ const ID_LIMIT = 256;
 const SEARCH_QUERY_LIMIT = 128;
 const MAX_PAGE_LIMIT = 100;
 const MAX_GRAPH_PAGES = 500;
+const READ_DEADLINE_MS = 25_000;
 /** Comment frames only: proxies drop an idle stream. */
 const EVENTS_KEEPALIVE_MS = 25_000;
 /**
@@ -77,8 +78,10 @@ function boundedLimit(value: string | undefined, max: number): number | undefine
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= max ? parsed : null;
 }
 
+/** Over a hosted read budget, or past this route's deadline: a retry would cost as much. */
 function isOverReadBudget(error: unknown): boolean {
-  return error instanceof Error && 'status' in error && error.status === 422;
+  const pastDeadline = error instanceof DOMException && error.name === 'TimeoutError';
+  return pastDeadline || (error instanceof Error && 'status' in error && error.status === 422);
 }
 
 /**
@@ -174,6 +177,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
   routes(): ApiRoute[] {
     const badRequest = (c: Context, message: string) => c.json({ error: 'bad_request', message }, 400);
+    const tooExpensive = (c: Context) =>
+      c.json({ error: 'query_too_expensive', message: 'This project’s Knowledge is too large to read at once.' }, 422);
     return [
       registerApiRoute('/web/factory/projects/:id/knowledge/tree', {
         method: 'GET',
@@ -186,12 +191,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const cursor = boundedId(c.req.query('cursor'));
           const limit = boundedLimit(c.req.query('limit'), MAX_PAGE_LIMIT);
           if (limit === null) return badRequest(c, `limit must be an integer from 1 to ${MAX_PAGE_LIMIT}.`);
-          const level = await listKnowledgeTreeChildren(view.store, {
-            parentId: parentId ?? null,
-            read: view.read,
-            cursor,
-            limit,
-          });
+          let level;
+          try {
+            level = await listKnowledgeTreeChildren(
+              view.store,
+              { parentId: parentId ?? null, read: view.read, cursor, limit },
+              { signal: AbortSignal.timeout(READ_DEADLINE_MS) },
+            );
+          } catch (error) {
+            if (isOverReadBudget(error)) return tooExpensive(c);
+            throw error;
+          }
           return c.json({ ...level, pages: level.pages.map(page => withDisplayLabel(view.knowledge, page)) });
         },
       }),
@@ -233,18 +243,17 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if (maxPages === null) return badRequest(c, `maxPages must be an integer from 1 to ${MAX_GRAPH_PAGES}.`);
           let graph;
           try {
-            graph = await readKnowledgePageGraph(view.store, {
-              read: view.read,
-              rootId: boundedId(c.req.query('rootId')) ?? null,
-              ...(maxPages ? { limits: { maxPages } } : {}),
-            });
+            graph = await readKnowledgePageGraph(
+              view.store,
+              {
+                read: view.read,
+                rootId: boundedId(c.req.query('rootId')) ?? null,
+                ...(maxPages ? { limits: { maxPages } } : {}),
+              },
+              { signal: AbortSignal.timeout(READ_DEADLINE_MS) },
+            );
           } catch (error) {
-            if (isOverReadBudget(error)) {
-              return c.json(
-                { error: 'query_too_expensive', message: 'This project’s Knowledge is too large to read at once.' },
-                422,
-              );
-            }
+            if (isOverReadBudget(error)) return tooExpensive(c);
             throw error;
           }
           if (!graph) return c.json({ error: 'page_not_found' }, 404);
