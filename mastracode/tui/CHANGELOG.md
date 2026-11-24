@@ -1,5 +1,19 @@
 # mastracode
 
+## 0.50.3-alpha.7
+
+### Patch Changes
+
+- **Model picker** — `/model` now lists a Fast entry (for example `openai/gpt-6.2-sol:fast`) next to each OpenAI model that has a Fast tier when you sign in to OpenAI with your ChatGPT account. When the session is on Fast, `/model` keeps the Fast entry selected, so pressing Enter no longer switches back to standard speed. ([#30882](https://github.com/mastra-ai/mastra/pull/30882))
+
+- Updated dependencies [[`6bc0c6c`](https://github.com/mastra-ai/mastra/commit/6bc0c6cdc68342e32bb48076f9e9ba17e6669256), [`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/code-sdk@1.21.0-alpha.8
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/memory@1.41.3-alpha.3
+  - @mastra/libsql@1.32.0-alpha.1
+  - @mastra/pg@1.37.1-alpha.2
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 0.50.3-alpha.6
 
 ### Patch Changes

@@ -18,6 +18,10 @@ jobs:
     name: Docs E2E tests
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # Mounts the StarSling Disks pnpm store (setup-pnpm-node).
+      id-token: write
 
     steps:
       - name: Checkout repository

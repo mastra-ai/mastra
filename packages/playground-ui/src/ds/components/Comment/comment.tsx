@@ -174,7 +174,7 @@ CommentItemAuthor.displayName = 'CommentItemAuthor';
 const commentItemTimestampTone: Record<CommentVariant, string> = {
   default: 'text-caption text-muted-foreground',
   embed: 'text-caption text-muted-foreground',
-  thread: 'text-meta text-placeholder shrink-0',
+  thread: 'text-meta text-subtle-foreground shrink-0',
 };
 
 export type CommentItemTimestampProps = ComponentPropsWithoutRef<'time'>;

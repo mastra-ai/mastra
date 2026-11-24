@@ -25,15 +25,9 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "moonshotai/Kimi-K2.7-Code": [
       {
         "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -42,7 +36,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
         "type": "toggle"
       },
@@ -60,7 +60,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "toggle"
       },
@@ -81,7 +81,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K2.7-Code": [
+    "Qwen/Qwen3.8-Flash": [
       {
         "type": "toggle"
       }
