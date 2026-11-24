@@ -240,6 +240,8 @@ describe('installed board catalog', () => {
           context: 'release-preparer',
           role: 'release-preparer',
           autoStart: false,
+          // A board that lists no outcomes offers one per next phase.
+          outcomes: [{ key: 'shipped', label: 'Shipped', to: 'shipped' }],
           transitions: [{ outcome: null, to: 'shipped' }],
         },
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },

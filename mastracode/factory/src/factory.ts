@@ -162,10 +162,11 @@ import {
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
 import { createPhaseGoalEnder } from './rules/phase-goal.js';
+import { observeSessionPhaseOutcome } from './rules/phase-outcome-move.js';
 import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
-import { createFactoryTransitionTools } from './rules/tools.js';
+import { createFactoryOutcomeTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
@@ -2177,13 +2178,13 @@ export class MastraFactory {
               }),
             );
           }
+          // Outcomes become moves only through the board engine, so no engine means no outcome tool.
           if (workItemsStorage && boardEngine) {
             mergeTools(
               'factory',
-              await createFactoryTransitionTools({
+              await createFactoryOutcomeTools({
                 requestContext,
                 storage: workItemsStorage,
-                boardEngine,
                 boards: boards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
@@ -2636,6 +2637,20 @@ export class MastraFactory {
         sourceControl: { sessions: sourceControlSessions },
       });
       observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
+      // A run the dispatcher no longer watches (a plan approved after its run parked) still ends
+      // its phase: the outcome its session reported moves the card when that run ends.
+      observeSessionPhaseOutcome(session, {
+        deps: () => (boardEngine ? { storage: workItemsStorage, boards, boardEngine } : undefined),
+        binding: async () => {
+          const row = await sourceControlSessions.getBySessionId(session.identity.getId());
+          if (!row?.factoryProjectId) return null;
+          return workItemsStorage.findActiveRunBindingForSession({
+            orgId: row.orgId,
+            factoryProjectId: row.factoryProjectId,
+            sessionId: row.sessionId,
+          });
+        },
+      });
       // Every run end of a work or side session, and every tool call it holds for
       // approval, reaches whoever follows it, however the run started;
       // re-attached when a session is created again.

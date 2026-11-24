@@ -11,6 +11,7 @@ import {
   removePhase,
   starterBoard,
   withKind,
+  withNextPhases,
 } from '../boardDraft';
 
 const phases: StoredPhaseInfo[] = ['intake', 'triage', 'planning', 'done'].map(key => ({
@@ -55,11 +56,55 @@ describe('removing a phase', () => {
     ]);
   });
 
+  it('drops the outcomes that went to it, so the board still saves', () => {
+    const building: StoredPhaseInfo = {
+      key: 'doing',
+      name: 'Doing',
+      kind: 'working',
+      nextPhases: ['review', 'done'],
+      outcomes: [
+        { key: 'review', label: 'Ready for review', to: 'review' },
+        { key: 'done', label: 'Nothing to change', to: 'done' },
+      ],
+    };
+    const [, doing] = removePhase(
+      [board[0], building, { key: 'review', name: 'Review', kind: 'working' }, board[2]],
+      'review',
+    );
+    expect(doing).toEqual({ ...building, nextPhases: ['done'], outcomes: [building.outcomes![1]] });
+    const saved = storedBoardInputSchema.safeParse({
+      key: 'flow',
+      name: 'Flow',
+      phases: [board[0], doing, board[2]],
+    });
+    expect(saved.success).toBe(true);
+  });
+
   it("keeps a phase Factory's code handles, and a first phase whose successor can't take its place", () => {
     expect(canRemovePhase(board, 'doing', { doing: { requiredNextPhases: [] } })).toBe(false);
     expect(canRemovePhase(board, 'backlog', null)).toBe(false);
     expect(canRemovePhase(board, 'doing', null)).toBe(true);
     expect(canRemovePhase(board.slice(0, 1), 'backlog', null)).toBe(false);
+  });
+});
+
+describe('withNextPhases', () => {
+  it('drops the outcomes going to a phase the moves no longer list, and the list once it is empty', () => {
+    const doing: StoredPhaseInfo = {
+      key: 'doing',
+      name: 'Doing',
+      kind: 'working',
+      nextPhases: ['review', 'done'],
+      outcomes: [{ key: 'review', label: 'Ready for review', to: 'review' }],
+    };
+    expect(withNextPhases(doing, ['review'])).toEqual({ ...doing, nextPhases: ['review'] });
+    expect(withNextPhases(doing, ['done'])).toEqual({ ...doing, nextPhases: ['done'], outcomes: null });
+    // A phase without outcomes of its own reports one per next phase, so only its moves change.
+    expect(withNextPhases({ ...doing, outcomes: undefined }, ['done'])).toEqual({
+      ...doing,
+      outcomes: undefined,
+      nextPhases: ['done'],
+    });
   });
 });
 

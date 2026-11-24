@@ -32,6 +32,7 @@ import {
   PHASE_TOOLS,
   goalRunsValid,
   nextPhasesOf,
+  withNextPhases,
   withAutoStart,
 } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
@@ -185,7 +186,7 @@ export function PhaseConfig({
       required={new Set(requiredNextPhases)}
       boardId={boardId}
       disabled={disabled}
-      onChange={nextPhases => onChange({ ...phase, nextPhases })}
+      onChange={nextPhases => onChange(withNextPhases(phase, nextPhases))}
     />
   );
   const remove = onRemove && (

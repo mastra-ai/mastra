@@ -84,7 +84,7 @@ const releaseSkills = [
   createSkill({
     name: 'prepare-release',
     description: 'Prepare a release',
-    instructions: 'Prepare the release and transition to shipping.',
+    instructions: 'Prepare the release and report the shipping outcome.',
   }),
   createSkill({ name: 'publish-release', description: 'Publish a release', instructions: 'Publish the release.' }),
 ];
@@ -106,23 +106,20 @@ describe('custom board public runtime', () => {
         const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
         const phaseText = JSON.stringify(JSON.parse(body).input);
         phaseRequests.push(phaseText);
-        const currentRevision = [
-          ...phaseText.matchAll(/Use factory_transition_work_item with expectedRevision (\d+)/g),
-        ].at(-1)?.[1];
+        // The preparer reports the outcome its phase signal lists; Factory moves the card once its run ends.
+        const listsShipping = phaseText.includes('Outcomes: shipping: Shipping');
         const publishing = handoffRequested && !publishRequested && phaseText.includes('Role: release-publisher');
         if (publishing || (!handoffRequested && phaseText.includes('Role: release-preparer'))) {
-          if (!publishing && currentRevision === undefined) throw new Error('Missing Factory phase expectedRevision.');
+          if (!publishing && !listsShipping) throw new Error('Missing Factory phase outcomes.');
           if (publishing) publishRequested = true;
           else handoffRequested = true;
           const item = {
             id: publishing ? 'fc_publish' : 'fc_release',
             type: 'function_call',
             call_id: publishing ? 'call_publish' : 'call_release_handoff',
-            name: publishing ? 'execute_command' : 'factory_transition_work_item',
+            name: publishing ? 'execute_command' : 'factory_report_outcome',
             arguments: JSON.stringify(
-              publishing
-                ? { command: 'echo published' }
-                : { stage: 'shipping', expectedRevision: Number(currentRevision), rationale: 'Release prepared.' },
+              publishing ? { command: 'echo published' } : { outcome: 'shipping', reason: 'Release prepared.' },
             ),
           };
           const events = [
