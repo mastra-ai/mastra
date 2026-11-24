@@ -495,52 +495,9 @@ export const mastra = new Mastra({
 })
 ```
 
-### Card components
-
-| Component | Props | Children |
-| - | - | - |
-| `Card` | `title?`, `subtitle?`, `imageUrl?` | Yes |
-| `Section` | None | Yes |
-| `Text` | `content`, `style?` (`plain`, `bold`, or `muted`) | No |
-| `Fields` | None | Yes |
-| `Field` | `label`, `value` | No |
-| `Table` | `headers`, `rows`, `align?`, `caption?` | No |
-| `Chart` | `title`, `chart`: `{ type: 'pie', segments }` or `{ type: 'bar' \| 'line' \| 'area', categories, series }` | No |
-| `Divider` | None | No |
-| `Image` | `url`, `alt` | No |
-| `Actions` | None | Yes |
-| `LinkButton` | `label`, `url` | No |
-
-`Text` content is Slack mrkdwn: write links as `<url|label>`, and don't use `#` headings or markdown tables. Image URLs, including `Card` `imageUrl`, must be public HTTPS images that Slack can fetch. `LinkButton` URLs must be absolute and unique within the card.
-
 ### Card spec
 
-The agent passes `render_card` a flat spec of `{ root, elements }`. Every element, at any depth, is a key in `elements`. `children` lists the IDs of child elements, never the elements themselves. The root element must be a `Card`:
-
-```json
-{
-  "root": "card",
-  "elements": {
-    "card": {
-      "type": "Card",
-      "props": { "title": "Deploy status", "subtitle": "production" },
-      "children": ["summary", "fields", "divider", "actions"]
-    },
-    "summary": { "type": "Text", "props": { "content": "Deploy finished in *4m 12s*." } },
-    "fields": { "type": "Fields", "children": ["env", "version"] },
-    "env": { "type": "Field", "props": { "label": "Environment", "value": "production" } },
-    "version": { "type": "Field", "props": { "label": "Version", "value": "1.8.1" } },
-    "divider": { "type": "Divider" },
-    "actions": { "type": "Actions", "children": ["logs"] },
-    "logs": {
-      "type": "LinkButton",
-      "props": { "label": "View logs", "url": "https://example.com/deploys/42" }
-    }
-  }
-}
-```
-
-Models often nest element objects inside a parent instead of listing them in `elements`. A `children` ID with no matching key in `elements` fails with an issue such as `missing element "section"`.
+The agent passes `render_card` a [json-render](https://json-render.dev/docs) spec. See the json-render docs for the spec format and components. Image URLs, including a `Card` `imageUrl`, must be public HTTPS images that Slack can fetch.
 
 The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the [Slack limits](#slack-card-limits), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. When Slack rejects the post, it returns `{ ok: false, error }`.
 
