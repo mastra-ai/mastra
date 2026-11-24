@@ -9,6 +9,7 @@ import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { MODEL_FALLBACK_STATE_KEY, fallbackModelIdsToTry, pendingModelFallbackForThread } from '../model-fallback.js';
+import type { PendingModelFallback } from '../model-fallback.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   getCustomProviderId,
@@ -522,6 +523,20 @@ export function hostModelRoute(requestContext: RequestContextReader | undefined)
   return requestContext?.get(HOST_MODEL_ROUTE_CONTEXT_KEY) as ModelRouteEntry[] | undefined;
 }
 
+export function requestModelRoute(
+  requestContext: RequestContextReader | undefined,
+  controller: { getState?: () => Record<string, unknown> | undefined; threadId?: unknown } | undefined,
+): { entries: ModelRouteEntry[] | undefined; pending: PendingModelFallback | null } {
+  const hostRoute = hostModelRoute(requestContext);
+  if (hostRoute) return { entries: hostRoute, pending: null };
+  const state = controller?.getState?.();
+  const entries = (state?.modelRoute as ModelRoute | undefined)?.entries;
+  return {
+    entries: Array.isArray(entries) ? entries.slice(0, MODEL_ROUTE_MAX_ENTRIES) : undefined,
+    pending: pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId),
+  };
+}
+
 function canAuthenticateModel(modelId: string, requestContext: RequestContext): boolean {
   try {
     resolveModelForRequest(modelId, { requestContext });
@@ -544,13 +559,7 @@ export function getDynamicModel(
   { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const state = controller?.getState?.() as
-    | { modelRoute?: ModelRoute; [MODEL_FALLBACK_STATE_KEY]?: unknown }
-    | undefined;
-  const hostRoute = hostModelRoute(requestContext);
-  const pendingFallback = hostRoute
-    ? null
-    : pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
+  const { entries: route, pending: pendingFallback } = requestModelRoute(requestContext, controller);
   const modelId = pendingFallback?.toModelId ?? controller?.session?.modelId;
   if (!modelId) {
     if (!controller) {
@@ -570,7 +579,6 @@ export function getDynamicModel(
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
   const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
-  const route = hostRoute ?? state?.modelRoute?.entries?.slice(0, MODEL_ROUTE_MAX_ENTRIES);
   const startIndex = pendingFallback ? route?.findIndex(entry => entry.id === pendingFallback.toEntryId) : 0;
   const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
   if (!activeRoute || activeRoute.length < 2 || findRouteModelIndex(activeRoute, modelId) !== 0) return primary;
