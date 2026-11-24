@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectListingQuery, useLinearTeamListingQuery } from '../../../../hooks/useLinearData';
@@ -14,16 +13,16 @@ import {
 import type { LinearStatus } from '../../factory/services/linear';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
-import { LinearConnectButton } from './LinearConnectionControls';
+import { AddLinearWorkspaceButton, LinearConnectButton } from './LinearConnectionControls';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
 import { PausedLinearWorkspace } from './PausedLinearWorkspace';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function LinearIntakeSection({
   config,
@@ -122,6 +121,8 @@ export function LinearIntakeSection({
     if (!listed) return <LinearConnectButton />;
     if (reauthRequired) return <LinearConnectButton action="Reconnect" />;
     if (!connected && paused.length === 0) return <LinearConnectButton />;
+    if (status?.mode === 'platform' && status.workspaces?.some(workspace => workspace.connected))
+      return <AddLinearWorkspaceButton />;
     return null;
   }
   return (
@@ -132,24 +133,20 @@ export function LinearIntakeSection({
       listed={listed}
       connection={linearConnection()}
       description={description}
-      syncControl={
-        <IntakeSyncControl
-          accessibleLabel="Sync Linear issues"
-          description="Active issues from selected projects and teams feed your board. Whole teams include projectless issues."
-          checked={config.linear.enabled}
-          disabled={!connected}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
-      }
       action={
         statusUnavailable && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )
       }
     >
-      {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
+      {connected && !reauthRequired && inferredSources.disconnected.length > 0 && (
         <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}
       {[...workspaceErrors.values()].map(error => (
@@ -161,7 +158,7 @@ export function LinearIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             onClick={() => {
               void projectsQuery.refetch();
               void teamsQuery.refetch();
@@ -181,7 +178,7 @@ export function LinearIntakeSection({
           onRemove={() => removeSources(sourceIds)}
         />
       ))}
-      {connected && config.linear.enabled && !reauthRequired && (
+      {connected && !reauthRequired && (
         <RoutedSourcePicker
           integrationId="linear"
           routingLabel="Linear"
@@ -199,9 +196,7 @@ export function LinearIntakeSection({
             void projectsQuery.refetch();
             void teamsQuery.refetch();
           }}
-          onToggleItem={id =>
-            selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, id) }))
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
       {routedProjects.length > 0 && (

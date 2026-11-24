@@ -788,16 +788,6 @@ describe('LinearIntegration workers', () => {
     expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
   });
 
-  it('uses the issue reconcile switch before the legacy switch', () => {
-    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
-    const linear = integration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
-  });
-
   it('uses the issue reconcile interval before the legacy interval and falls back when invalid', () => {
     vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_INTERVAL_MS', '120000');
     vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS', '60000');
@@ -815,26 +805,13 @@ describe('LinearIntegration workers', () => {
     );
   });
 
-  it('falls back from an invalid issue reconcile switch and warns', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('keeps sweeping on a server that still sets the old off switches', () => {
     vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'yes');
-    const linear = integration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(linear.workers(context)).toEqual([]);
-    expect(warn).toHaveBeenCalledWith(
-      '[Linear reconciliation] MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED must be true or false; received "yes".',
-    );
-  });
-
-  it('does not register when issue reconciliation is disabled', () => {
     vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
     const linear = integration() as unknown as {
       workers(ctx: unknown): Array<{ name: string }>;
     };
 
-    expect(linear.workers(context)).toEqual([]);
+    expect(linear.workers(context).map(worker => worker.name)).toEqual(['linear-issue-reconcile']);
   });
 });

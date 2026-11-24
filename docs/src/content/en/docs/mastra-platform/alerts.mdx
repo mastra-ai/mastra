@@ -1,241 +1,281 @@
 ---
 title: "Alerts | Mastra platform"
-description: "Configure Mastra platform alerts for failed deploys, service outages, and usage thresholds, then send notifications to Slack, Discord, Microsoft Teams, email, a webhook, PagerDuty, or incident.io."
+description: "Get notified in Slack, email, PagerDuty, and other destinations when a Mastra platform deploy or service fails, usage crosses a threshold, or traces cross a limit."
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
 
 # Alerts
 
-Alerts notify your team when a deploy fails, a running service stops or stops responding, or organization usage crosses a plan threshold. You configure alerts at the organization level, then choose which projects and environments each alert covers.
+Alerts notify your team when something in your Mastra projects needs attention. When an alert's condition is met, Mastra sends a notification to the destinations you chose, such as a Slack channel, an email group, or PagerDuty.
 
-Organization admins can create and manage alerts. Other organization roles have read-only access to the alert settings.
+By the end of this page, you'll have a tested destination and an enabled alert that sends to it.
 
-Open the [Mastra platform dashboard](https://projects.mastra.ai), go to your organization settings, then select **Alerts**. The page has three tabs:
+Mastra platform has two kinds of alerts. Both are managed on the same **Alerts** page and send to the same destinations.
 
-- **Alerts** lists each alert with its scope, destinations, status, and enable or pause switch.
-- **Destinations** lists the Slack channels, Discord channels, Microsoft Teams channels, email groups, webhook endpoints, PagerDuty services, and incident.io alert sources that can receive notifications.
-- **Activity** shows incidents and the notification attempts associated with them.
+| Kind | Watches | Examples |
+| - | - | - |
+| Observability alert | Traces, spans, and scores that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). Opens when a value crosses a threshold you set. | An agent fails more than 5% of its runs, a model's p95 latency goes above 8 seconds, today's spend passes a budget |
+| Platform alert | Events from projects you deploy on Mastra platform, and organization usage. Opens when the event happens. | A production deploy fails, a service stops responding, usage nears a plan limit |
+
+## Before you begin
+
+- Use an organization admin account. Members and viewers can see alerts and destinations, but only admins can create, change, or delete them.
+- For observability alerts, send traces to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). A backtest needs recent data to show anything useful.
+
+Open the [Mastra platform dashboard](https://projects.mastra.ai), then select **Observability** > **Alerts**. The page has three tabs:
+
+- **Alerts**: Every alert with its state, type, and destinations.
+- **Activity**: Which alerts opened and closed, and where each notification went.
+- **Destinations**: Where alerts send notifications.
 
 ## Add a destination
 
-A destination defines where Mastra sends notifications. Add at least one destination before creating an alert.
+A destination is a place where Mastra sends notifications. One destination can serve many alerts of either kind.
 
-| Destination | Configuration |
-| - | - |
-| **Slack** | Connect a Slack workspace and select one or more channels. Mastra creates a separate destination for each selected channel. |
-| **Discord** | Enter a Discord channel webhook URL. See [Send alerts to Discord](#send-alerts-to-discord). |
-| **Microsoft Teams** | Enter the URL of a Teams workflow that posts to a channel. See [Send alerts to Microsoft Teams](#send-alerts-to-microsoft-teams). |
-| **Email** | Select organization roles, individual members, or up to 10 email addresses. Role-based recipient groups update when organization membership changes. |
-| **Webhook** | Enter an HTTPS endpoint. Mastra signs each request and shows the signing secret once after the destination is created. |
-| **PagerDuty** | Enter the integration key of a PagerDuty Events API v2 integration. See [Send alerts to PagerDuty](#send-alerts-to-pagerduty). |
-| **Incident.io** | Enter the alert source config ID and token of an incident.io HTTP alert source. See [Send alerts to incident.io](#send-alerts-to-incidentio). |
+1. On the **Alerts** page, open the **Destinations** tab and select **New destination**.
+1. Choose a **Type** and fill in the fields described below. For Slack, the channel supplies the name. For other types, enter a **Name** such as `On-call team`. Names must be unique within each type.
+1. Select **Create destination**. For a webhook, copy the signing secret before you close the dialog. Mastra can't show it again.
+1. Open the new destination and select **Send test**. Check that the message arrives.
 
-<Steps>
-  <StepItem>
-    On the **Destinations** tab, select **Add destination**.
-  </StepItem>
+You can also add a destination while you create an alert. Open **Send to** and select **New destination**. When you save it, the form adds it to the alert.
 
-  <StepItem>
-    Select **Slack**, **Discord**, **Microsoft Teams**, **Email**, **Webhook**, **PagerDuty**, or **Incident.io**, then enter a name for the destination.
-  </StepItem>
+<div className="accordion-group">
+  <details>
+    <summary>Slack</summary>
 
-  <StepItem>
-    Configure the selected destination:
+    Connect or choose a **Workspace**, then select **Channels**. Mastra creates one destination for each selected channel and names it after the channel, such as `#alerts`, so Slack has no **Name** field.
 
-    - For Slack, connect or select a workspace and choose the channels that should receive alerts. The Mastra Alerts app joins public channels automatically. Invite `@Mastra Alerts` before selecting a private channel.
-    - For Discord, enter the channel's webhook URL.
-    - For Microsoft Teams, enter the workflow's webhook URL.
-    - For email, choose **All organization members**, one or more roles, individual members, or external email addresses.
-    - For a webhook, enter an endpoint that starts with `https://`.
-    - For PagerDuty, enter the **Integration key**.
-    - For incident.io, enter the **Alert source config ID** and **Token**.
-  </StepItem>
+    The Mastra Alerts app joins public channels automatically. For a private channel, invite `@Mastra Alerts` to the channel first. You can also paste a channel ID, which Slack shows under the channel name in **About**.
+  </details>
 
-  <StepItem>
-    Select **Create destination**. For a webhook destination, copy the signing secret before closing the page. The secret can't be shown again.
-  </StepItem>
-</Steps>
+  <details>
+    <summary>Email</summary>
 
-The destination form changes based on the selected type. Slack destinations require a workspace and at least one channel. Discord and Microsoft Teams destinations require a webhook URL. Email destinations require at least one recipient, which can be an organization role, a member, or an external address. Webhook destinations require an HTTPS endpoint. PagerDuty and incident.io destinations require the credentials from their integration. Every destination also requires a name that identifies it in alert configuration and activity history.
+    In **Send to**, search for a person or group, or type a full email address and select it. You can add up to 10 individual people or addresses. To reach a group, select a role or **All organization members**. Group membership updates as people join, leave, or change roles.
+  </details>
 
-Use the destination's actions menu to send a test notification. You can also edit, pause, or delete a destination. Pausing a destination stops notifications without removing it from existing alerts.
+  <details>
+    <summary>Discord</summary>
 
-For webhook destinations, **Rotate secret** replaces the current signing secret immediately. Update the receiving endpoint with the new secret before sending another alert.
+    In Discord, open the channel that should receive alerts, then select **Edit Channel** > **Integrations** > **Webhooks** > **New Webhook**, and copy the webhook URL. See [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) in the Discord documentation.
 
-Discord and Microsoft Teams webhook URLs contain their own credentials, so Mastra stores them encrypted and shows only the last four characters after the destination is created. To rotate the URL, edit the destination and paste a new one. Leaving the URL field blank keeps the stored URL.
+    Paste the URL into **Webhook URL**. It must have the form `https://discord.com/api/webhooks/<id>/<token>`.
+
+    When an alert closes, Discord gets a separate green **Closed** message, because Discord can't update earlier messages.
+  </details>
+
+  <details>
+    <summary>Microsoft Teams</summary>
+
+    In Teams, open the channel that should receive alerts, select **More options** > **Workflows**, and choose the template **Send webhook alerts to a channel**. Create the workflow, then copy its URL. See [Create incoming webhooks with Workflows](https://support.microsoft.com/en-us/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498) in the Microsoft documentation.
+
+    Paste the URL into **Webhook URL**. Mastra still accepts legacy `webhook.office.com` connector URLs.
+  </details>
+
+  <details>
+    <summary>PagerDuty</summary>
+
+    In PagerDuty, open the service that should receive alerts. On its **Integrations** tab, add an **Events API V2** integration and copy its **Integration Key**. See [Services and integrations](https://support.pagerduty.com/main/docs/services-and-integrations) in the PagerDuty documentation.
+
+    Paste the key into **Integration key**. Each Mastra incident opens one PagerDuty incident, which resolves when the Mastra incident resolves. **Send test** opens an `info` incident that you resolve in PagerDuty.
+  </details>
+
+  <details>
+    <summary>incident.io</summary>
+
+    In incident.io, create an HTTP alert source with the **Default** source type. Copy the alert source config ID, the last segment of its alert events URL, and the bearer token. See [Create an alert event](https://docs.incident.io/api-reference/alert-events-v2/create) in the incident.io documentation.
+
+    Paste the ID, or the full URL, into **Alert source ID**, and the token into **Token**.
+  </details>
+
+  <details>
+    <summary>Webhook</summary>
+
+    Enter an **Endpoint URL** that starts with `https://`. Mastra sends a signed JSON `POST` request for each notification.
+
+    Before you act on a request, verify its signature. See [Alert webhooks](#receive-webhook-notifications) for the payload, headers, signature verification, and retries.
+  </details>
+</div>
 
 ## Create an alert
 
-An alert combines triggers, scope, destinations, and repeat-alert pacing.
+Select **New alert** on the **Alerts** tab, then choose the kind of alert.
 
-<Steps>
-  <StepItem>
-    On the **Alerts** tab, select **Create Alert**.
-  </StepItem>
+<Tabs>
+  <TabItem value="observability" label="Observability alert">
+    <Steps>
+      <StepItem>
+        Select **Observability alert** and choose a template to open the full form with its settings filled in. For example, **Agent run failures** checks each agent's error rate over five minutes, with a 5% threshold and a minimum of 20 runs per agent. If the settings fit, review the **Backtest**, choose a destination in **Send to**, and select **Create alert**. To configure your own alert, choose **Start blank**.
+      </StepItem>
 
-  <StepItem>
-    Enter an alert name and leave **Enabled** on if the alert should start monitoring immediately.
-  </StepItem>
+      <StepItem>
+        Under **Details**, give the alert a **Name**. Use **Description** to tell responders what to do when it opens, such as where to find the runbook.
+      </StepItem>
 
-  <StepItem>
-    Select one or more triggers:
+      <StepItem>
+        Under **What to watch**, choose **All projects** or one project. You can't change the project choice later.
+      </StepItem>
 
-    - **Deploy failed**: A build or deploy doesn't reach a running state.
-    - **Service crashed**: A running service exhausts its restart policy and stops.
-    - **Service out of memory**: A service is stopped after running out of memory.
-    - **Service unreachable**: A deployed service fails 3 health checks in a row.
-    - **Usage threshold crossed**: Organization usage crosses a plan threshold or reaches its limit. This trigger is organization-wide, so it requires the **All projects** scope.
-  </StepItem>
+      <StepItem>
+        A blank alert starts with **Watch** set to **Traces** for whole runs. Choose **Spans** for individual operations. For either source, select a **Metric** and, when offered, a statistic. To watch evaluation results, choose **Scores**, select a scorer, and choose how to combine its scores. For traces and spans, select **Add a filter** to narrow the data. For example, if your application records its deployment region in **Environment**, filter on that value. Switch to **Spans** to filter by **Primitive type**. Each record must match all the filters.
+      </StepItem>
 
-  <StepItem>
-    Set the alert scope to **All projects** or **Specific projects**. When you select specific projects, you can narrow the scope to individual environments. Leaving the environment selection empty includes every environment in that project.
-  </StepItem>
+      <StepItem>
+        Under **When it fires**, use **Alert for** to check all matching traffic together or split it into groups. Choose a comparison and review the prefilled threshold. For **Over**, choose a rolling window such as **the last 15m**, or **since midnight UTC** for the current day.
+      </StepItem>
 
-  <StepItem>
-    Select one or more destinations. You can add or edit a destination without leaving the alert setup.
-  </StepItem>
+      <StepItem>
+        Review the **Backtest** chart. Once the condition is complete, the preview runs with the current threshold. The **6h**, **1d**, and **2d** ranges replay every check and show when the alert would have opened and closed. The **7d** and **30d** ranges, when offered, plot the value against the threshold without replaying checks. Some alerts offer shorter ranges. Adjust the threshold or window until the alert would open only when you'd want someone to act. The backtest uses past data and doesn't send notifications.
+      </StepItem>
 
-  <StepItem>
-    Under **Repeat alerts**, choose how often Mastra can resend an alert for the same incident: every event, every 5 minutes, every 15 minutes, or every hour. The first notification, recovery notifications, and severity increases send immediately.
-  </StepItem>
+      <StepItem>
+        Under **Notify**, choose where to send notifications in **Send to**, then select **Create alert**.
+      </StepItem>
+    </Steps>
 
-  <StepItem>
-    Select **Create Alert**.
-  </StepItem>
-</Steps>
+    Open the alert to see when it was last checked and when the next check runs. See [Observability alert checks](#observability-alert-checks) to tune recovery, grouping, and late data.
+  </TabItem>
 
-The alert form groups these settings into **Name**, **Trigger**, **Scope**, and **Destinations**. The selected destinations and repeat interval apply to every trigger and project included in that alert.
+  <TabItem value="platform" label="Platform alert">
+    <Steps>
+      <StepItem>
+        Select **Platform alert**. Choose a template such as **Production deploy failed** to open the form with its events and scope filled in, or select **Start blank** to choose your own.
+      </StepItem>
 
-## Manage alerts
+      <StepItem>
+        Enter a **Name**.
+      </StepItem>
 
-The **Alerts** tab shows each alert's scope, destinations, and current state. Use the switch to pause or enable an alert.
+      <StepItem>
+        Under **What to watch**, choose one or more events in **Event**. See [Platform alert events](#platform-alert-events).
+      </StepItem>
 
-Open an alert's actions menu to:
+      <StepItem>
+        Under **Project**, leave **All projects** selected or choose specific projects. Use **Environments** to narrow the alert to production, staging, or preview across all projects, or choose environments separately for each selected project. Organization usage alerts always cover the whole organization.
+      </StepItem>
 
-- **Edit** its triggers, scope, destinations, pacing, or name.
-- **Test** every destination assigned to the alert.
-- **Delete** the alert. Existing incidents and delivery history remain available.
+      <StepItem>
+        Under **Notify**, choose one or more destinations in **Send to**. In **Repeat**, choose how often Mastra can resend while the same incident stays open: **Every event**, **At most every 5 minutes**, **At most every 15 minutes**, or **At most every hour**.
+      </StepItem>
+
+      <StepItem>
+        Select **Create alert**.
+      </StepItem>
+    </Steps>
+
+    The alert is listed on the **Alerts** tab with the type **Platform**.
+  </TabItem>
+</Tabs>
+
+## How notifications work
+
+When an alert's condition is met, the alert opens and Mastra sends a notification to each of its destinations. The alert stays open while the condition lasts. Once the condition clears, the alert closes and Mastra sends a **Closed** notification.
+
+- **Observability alerts** notify each destination when an incident opens and when it closes. Mastra doesn't send reminders while the same incident stays open.
+- **Platform alerts** resend according to **Repeat**. The first notification, recovery notifications, and increases in severity always send immediately. Incidents for **Usage threshold crossed** stay open, because they don't resolve on their own.
+
+Slack messages update in place, for example when another group of the same observability alert opens. Discord and Microsoft Teams post a separate **Closed** message.
+
+Notifications for an open observability alert let you close it by hand. Slack messages have a **Close alert** button, and emails and webhooks include a link that opens the alert's **Close alert** dialog. See [Close an open alert](#close-an-open-alert).
+
+## Observability alert checks
+
+Mastra schedules a check every five minutes. **Over** sets how much data each check reads. With **the last 15m**, Mastra checks every five minutes and measures the previous 15 minutes each time. With **since midnight UTC**, the window starts at 00:00 UTC.
+
+Open **Advanced** in the alert form for these settings:
+
+- Set a recovery threshold if an alert keeps opening and closing near the same value. The form shows one recovery field based on the firing condition. For example, if an alert opens above a 5% error rate, set **Recovers below** to 2%. The alert stays open at 2% and closes when a check measures less than 2%.
+- **Skip agents with fewer than**, or the same setting for another group such as models: For spans and traces with a separate alert for each group, a minimum number of runs per check, so an agent with one failure out of two runs doesn't open the alert.
+- Leave **Wait for late data** at **None** if your data arrives on time. If your exporter sends spans in batches, choose the shortest delay that covers the usual time between the end of a span and when you can see it in Mastra. For example, if spans arrive up to 90 seconds late, choose **2m**. A 10:15 check with a 15-minute window then reads 09:58 to 10:13. The next check still runs at 10:20. A longer delay gives data more time to arrive but also delays detection.
+
+Some alerts can measure each group on its own. Under **Alert for**, choose **One alert for all traffic** for one check over everything, or a separate alert for each group, such as **A separate alert for each agent**, so one failing agent isn't hidden by healthy ones. If you filter to a single agent, the form drops the option to split by agent. It also hides splits when the selected project has only one known value for that field.
+
+If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch. Mastra checks up to 50 groups, prioritizing those closest to the threshold. All groups of one alert share one incident.
+
+## Platform alert events
+
+Each platform alert watches one or more events:
+
+| Event | Sends when |
+| - | - |
+| Deploy failed | A build or deploy fails to reach a running state. |
+| Service crashed | A running service exhausts its restart policy and stops. |
+| Service out of memory | A service is stopped after running out of memory. |
+| Service unreachable | A deployed service fails three consecutive health checks. |
+| Elevated error rate | At least 10% of requests return `5xx` errors on two consecutive checks. Each check counts requests over the past five minutes and requires at least 50 requests. |
+| Resource usage threshold crossed | An environment uses more CPU, memory, or egress over a window than the thresholds you set. |
+| Usage threshold crossed | Organization usage nears or reaches a plan limit. |
+| Alert rule | An observability alert in the covered projects opens or closes. Use it to route every observability alert to one place, such as an on-call PagerDuty service. |
+
+**Resource usage threshold crossed** adds a **Usage window**, from **Last 15 minutes** to **Last 24 hours**, and thresholds for **CPU above**, **Memory above**, and **Egress above**. Enter an amount, or switch the unit to **% of monthly allowance**. Leave a metric empty to skip it. Mastra adds up each environment's usage every five minutes, about 10 minutes behind real time.
+
+**Usage threshold crossed** covers the whole organization, so it can't be combined with other events or limited to projects. Choose a **Meter**, such as **Usage credits**, or **Any meter**. Under **Sends when**, choose **Near or at the limit** or **At the limit**.
+
+## Close an open alert
+
+Close an observability alert by hand when you know about the problem and don't want it to stay open, for example while a fix rolls out. Only organization admins can close an alert.
+
+1. Open the alert from the **Alerts** tab. The page shows **Close alert** when at least one group of the alert is open.
+1. Select **Close alert**, then confirm.
+
+The **Closed** notification shows who closed the alert. In Slack, Mastra updates the original message. The alert stays closed until a check finds the value back on the safe side of the threshold, or past the recovery level if you set one. After that, it can open again.
+
+You can also close the alert from its notifications. In Slack, select **Close alert** on the message. Slack matches your account to a Mastra user by email, so this works only for admins in your Mastra organization. If Slack says the app needs additional permissions, ask a workspace admin to reinstall **Mastra Alerts**. You can close the alert from its page in Mastra in the meantime. In an email or a webhook, follow the close link to the alert's page.
+
+## Manage alerts and destinations
+
+Use the **State** column on the **Alerts** tab to see which alerts need attention.
+
+| State | Meaning |
+| - | - |
+| On | The alert is enabled. A platform alert listens for matching events. An observability alert has no group firing. This includes alerts awaiting their first check. |
+| Off | The alert is turned off. |
+| Firing | An observability alert has at least one group with an open alert. |
+
+Open an observability alert for the result of its last check. **Alert open** means the condition was met. **Closed** means the alert recovered or someone closed it by hand. If you see **No data**, check the filters and whether your app sent data in the selected window. **Error** means the query failed. Neither result sends a notification.
+
+Open an alert from the **Alerts** tab to see its state, settings, and notification history. On the alert's page:
+
+- Use the switch next to the alert's name to turn it off or on.
+- Select **Edit** to change the alert, then select **Save changes**.
+- Select **Edit** > **Delete alert** to delete it. Its past incidents stay on the **Activity** tab.
+
+An organization can have up to 50 observability alerts enabled at once. If you need more, [contact Mastra](https://mastra.ai/contact).
+
+Inside a project, the **Alerts** page shows that project's alerts plus the organization's alerts that apply to all projects. Edit an alert that applies to all projects from the organization's **Alerts** page.
+
+Open a destination from the **Destinations** tab to see its deliveries and the alerts it serves. On the destination's page:
+
+- Turn off the switch next to its name to pause it. Alerts skip a paused destination until you turn it back on.
+- Select **Send test**, or select **Edit** to change its name or settings.
+- To rotate a webhook's signing secret, select **More actions** > **Rotate secret**, then confirm. Mastra starts signing requests with the new secret immediately. Copy it from the dialog before selecting **Done**, update your endpoint, then select **Send test** to verify the change.
+- Select **More actions** > **Remove** to delete the destination.
+
+On the organization's **Destinations** tab, **Slack workspaces** lists each connected workspace and how many destinations use it. To disconnect a workspace, select **Disconnect**. Remove the destinations that use it first.
+
+When the last two deliveries to a destination fail, its page shows a **Failing** badge and the error. Select **Fix it** to edit the destination.
 
 ## Review alert activity
 
-The **Activity** tab groups each incident with its delivery attempts. An incident stays **Open** while the condition is active and changes to **Resolved** after the service or deploy recovers, except for usage threshold incidents, which don't resolve automatically.
+The **Activity** tab shows each time an alert opened or closed, from the last 24 hours to the last 30 days. Use **Filter activity** to narrow the list by alert, event, destination, or delivery status.
 
-Expand an incident to inspect the notification sent to each destination. Each incident row shows when the event occurred, the event type, its project or environment scope, and its current status. Nested delivery rows show the trigger, destination, and delivery status for each notification attempt. Delivery attempts can be **Scheduled**, **Sent**, **Suppressed**, **Retrying**, **Exhausted**, or **Config error**. Use the activity filter to show all activity, incidents only, or delivery attempts only.
-
-## Send alerts to Discord
-
-A Discord destination posts an embed to a channel through a Discord webhook. A triggered incident posts a red embed, and a recovery posts a separate green **Resolved** embed. Discord webhooks can't update earlier messages, so the resolved notice is a new message rather than an edit.
-
-<Steps>
-  <StepItem>
-    In Discord, open the channel that should receive alerts, then select **Edit Channel**, **Integrations**, **Webhooks**, and **New Webhook**. Copy the webhook URL. See [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) in the Discord documentation.
-  </StepItem>
-
-  <StepItem>
-    In Mastra, add a destination, select **Discord**, and paste the URL into **Webhook URL**. The URL must have the form `https://discord.com/api/webhooks/<id>/<token>`.
-  </StepItem>
-
-  <StepItem>
-    Send a test notification from the destination's actions menu.
-  </StepItem>
-</Steps>
-
-The embed shows the event and project in its title, which links to the deployment logs, followed by the error excerpt and the environment, branch, and error code when the event includes them. If Discord rejects the webhook URL, the delivery shows **Config error**.
-
-## Send alerts to Microsoft Teams
-
-A Microsoft Teams destination posts an Adaptive Card to a channel through a Teams workflow. A triggered incident posts a red card, and a recovery posts a separate green **Resolved** card.
-
-<Steps>
-  <StepItem>
-    In Teams, open the channel that should receive alerts, select **More options** and then **Workflows**, and choose the template **Send webhook alerts to a channel**. Select the team and channel, create the workflow, then copy the workflow URL. See [Create incoming webhooks with Workflows](https://support.microsoft.com/en-us/office/create-incoming-webhooks-with-workflows-for-microsoft-teams-8ae491c7-0394-4861-ba59-055e33f75498) in the Microsoft documentation.
-  </StepItem>
-
-  <StepItem>
-    In Mastra, add a destination, select **Microsoft Teams**, and paste the URL into **Webhook URL**.
-  </StepItem>
-
-  <StepItem>
-    Send a test notification from the destination's actions menu.
-  </StepItem>
-</Steps>
-
-Microsoft retired classic Office 365 connectors, so use a Teams workflow rather than the older **Incoming Webhook** connector. Mastra still accepts legacy `webhook.office.com` URLs for tenants that haven't migrated.
-
-The card shows the event and project in its title, followed by the environment, branch, and error code when the event includes them, the error excerpt, and a button that opens the deployment logs. If Teams rejects the workflow URL, the delivery shows **Config error**.
-
-## Send alerts to PagerDuty
-
-A PagerDuty destination sends events to the PagerDuty Events API v2. Each Mastra incident opens one PagerDuty incident, and PagerDuty resolves it when the Mastra incident resolves.
-
-<Steps>
-  <StepItem>
-    In PagerDuty, open the service that should receive alerts. On its **Integrations** tab, add an **Events API V2** integration and copy its **Integration Key**. See [Services and integrations](https://support.pagerduty.com/main/docs/services-and-integrations) in the PagerDuty documentation.
-  </StepItem>
-
-  <StepItem>
-    In Mastra, add a destination, select **PagerDuty**, and paste the key into **Integration key**.
-  </StepItem>
-
-  <StepItem>
-    Send a test notification from the destination's actions menu. The test opens an incident with `info` severity in PagerDuty. Resolve it in PagerDuty.
-  </StepItem>
-</Steps>
-
-Mastra maps its notifications to PagerDuty events as follows:
-
-| PagerDuty field | Value |
+| Delivery status | Meaning |
 | - | - |
-| `event_action` | `trigger` for a new or repeated notification, `resolve` for a recovery |
-| `dedup_key` | The Mastra incident ID. Repeated notifications for the same incident update one PagerDuty incident |
-| `payload.summary` | A one-line description, for example `Deploy failed on support-agent (production): Build failed` |
-| `payload.severity` | The Mastra severity: `critical`, `error`, `warning`, or `info` |
-| `payload.source` | `mastra:<project>/<environment>` |
-| `payload.custom_details` | The event data described in [Webhook payload](#webhook-payload) |
-
-Changes made in PagerDuty, such as acknowledging or resolving an incident, don't update the Mastra incident. If PagerDuty rejects the integration key, the delivery shows **Config error**.
-
-## Send alerts to incident.io
-
-An incident.io destination sends alert events to an incident.io HTTP alert source. Each Mastra incident creates one alert in incident.io, and the alert resolves when the Mastra incident resolves.
-
-<Steps>
-  <StepItem>
-    In incident.io, create an HTTP alert source with the **Default** source type. Mastra sends events in the incident.io alert event format, so a custom transform isn't needed. See [Create an alert event](https://docs.incident.io/api-reference/alert-events-v2/create) in the incident.io documentation.
-  </StepItem>
-
-  <StepItem>
-    Copy the alert source config ID and the bearer token from the source's authorization header. The ID is the last segment of the alert events URL, `https://api.incident.io/v2/alert_events/http/<alert-source-config-id>`.
-  </StepItem>
-
-  <StepItem>
-    In Mastra, add a destination and select **Incident.io**. Paste the ID, or the full alert events URL, into **Alert source config ID**, and the token into **Token**.
-  </StepItem>
-
-  <StepItem>
-    Send a test notification from the destination's actions menu. The test creates a firing alert in incident.io.
-  </StepItem>
-</Steps>
-
-Mastra sends these fields to incident.io:
-
-| incident.io field | Value |
-| - | - |
-| `status` | `firing` for a new or repeated notification, `resolved` for a recovery |
-| `deduplication_key` | The Mastra incident ID |
-| `title` | A one-line description of the event |
-| `description` | The error message, when the event has one |
-| `metadata` | The event data plus `source`, `event_type`, `severity`, `project_id`, and `environment` |
-
-Use the `metadata` fields in alert attributes and routing rules. Changes made in incident.io don't update the Mastra incident, and if incident.io rejects the token or alert source ID, the delivery shows **Config error**.
+| Scheduled | Queued to send. |
+| Sent | The destination accepted the notification. |
+| Suppressed | Not sent, because a matching notification went out recently. |
+| Retrying | The last attempt failed, and Mastra is trying again. |
+| Exhausted | Every retry failed. The notification wasn't delivered. |
+| Config error | The destination rejected the notification because its settings are wrong. Edit the destination to fix it. |
+| Replayed | A failed delivery that was sent again. |
 
 ## Receive webhook notifications
 
-A webhook destination receives an HTTP `POST` request with a JSON body for each notification. Use a webhook to connect a tool that Mastra doesn't integrate with directly.
+A webhook [alert destination](#add-a-destination) receives an HTTP `POST` request with a JSON body each time an alert sends a notification. Mastra shows the signing secret once after you create the destination and once after each rotation.
 
 ### Webhook payload
 
@@ -269,7 +309,7 @@ The following example shows a failed deploy:
 | - | - |
 | `id` | Notification ID. Stays the same when Mastra retries the same notification |
 | `version` | Payload version. The current version is `2026-09-01` |
-| `type` | Event type. See the table below |
+| `type` | Event type. See [Event types](#alert-event-types) |
 | `createdAt` | ISO 8601 time when the event occurred |
 | `fingerprint` | Identifies the incident the notification belongs to. Notifications for the same failing deploy target or service share a fingerprint |
 | `severity` | `critical`, `error`, `warning`, or `info`. These values match PagerDuty severities |
@@ -277,7 +317,9 @@ The following example shows a failed deploy:
 | `summary` | One-line description of the event |
 | `source` | Always `mastra` |
 | `data` | Event-specific details. Fields vary by event type |
-| `links` | Related links, each with `href` and `text`. Can be empty |
+| `links` | Related links, each with `href` and `text`. Can be empty. For an open observability alert, includes a link to close it in Mastra platform |
+
+### Alert event types
 
 The `type` field has one of these values:
 
@@ -287,7 +329,10 @@ The `type` field has one of these values:
 | `service.crashed` | **Service crashed** | Same as `deploy.failed` |
 | `service.oom` | **Service out of memory** | Same as `deploy.failed` |
 | `service.unreachable` | **Service unreachable** | `projectName`, `probeUrl`, `error`, `consecutiveFailures` |
+| `service.error_rate` | **Elevated error rate** | `requests`, `errors5xx`, `ratePct`, `windowMinutes`, `environmentSlug`, `error` |
+| `service.resource_usage` | **Resource usage threshold crossed** | `projectName`, `policyName`, `metric`, `unit`, `usage`, `limit`, `thresholdKind`, `thresholdValue`, `windowMinutes`, `error` |
 | `billing.usage_threshold` | **Usage threshold crossed** | `featureId`, `featureLabel`, `thresholdDisplay`, `error` |
+| `observability.rule` | An [observability alert](#create-an-alert) opens or closes | `ruleId`, `ruleName`, `ruleUrl`, `value`, `threshold`, `summary`, `groups`, `firingCount`, and `closedBy` when someone closed the alert by hand |
 
 Crash, out-of-memory, and unreachable events for the same service share a fingerprint, so one outage produces one incident. Usage threshold incidents don't send a `resolved` notification.
 
@@ -377,17 +422,42 @@ To verify a request:
   </TabItem>
 </Tabs>
 
-Return a `401` status for a request that fails verification. After you rotate a destination's secret, requests are signed with the new secret immediately.
+Return a `401` status for a request that fails verification.
 
-### Retries and duplicate notifications
+### Retries and duplicates
 
 Mastra treats any `2xx` response as delivered and doesn't retry it. Persist or durably enqueue the notification before responding, and return a `5xx` response if that step fails so Mastra retries the delivery. Respond within 10 seconds and process the notification after responding if the work takes longer. Mastra doesn't follow redirects.
 
 When a request fails, Mastra retries based on the response:
 
-- **`4xx` response:** Mastra stops and marks the delivery **Config error**. Fix the endpoint, then use **Test** on the destination to confirm it works.
+- **`4xx` response:** Mastra stops and marks the delivery **Config error**. Fix the endpoint, then open the destination and select **Send test** to confirm it works.
 - **`5xx` response, timeout, or network error:** Mastra retries twice within a few seconds. If those requests also fail, the delivery shows **Retrying** and Mastra tries again after about 30 seconds, doubling the wait each time up to 15 minutes. After 6 failed attempts, the delivery shows **Exhausted**.
 
 Discord, Microsoft Teams, PagerDuty, and incident.io destinations follow the same schedule. For those destinations, Mastra also retries `408` and `429` responses.
 
 Retries can deliver the same notification more than once. Store the `x-mastra-idempotency-key` value of each processed request and skip requests with a key you've already seen. Use `fingerprint` to group notifications that belong to the same incident.
+
+### PagerDuty and incident.io fields
+
+PagerDuty and incident.io destinations receive the same event, mapped to each service's format. Changes made in those services, such as acknowledging an incident, don't update the Mastra incident.
+
+| PagerDuty field | Value |
+| - | - |
+| `event_action` | `trigger` for a new or repeated notification, `resolve` for a recovery |
+| `dedup_key` | The Mastra incident ID |
+| `payload.summary` | The `summary` field |
+| `payload.severity` | The `severity` field |
+| `payload.source` | `mastra:<project>/<environment>` |
+| `payload.custom_details` | The `data` field |
+
+| incident.io field | Value |
+| - | - |
+| `status` | `firing` for a new or repeated notification, `resolved` for a recovery |
+| `deduplication_key` | The Mastra incident ID |
+| `title` | The `summary` field |
+| `description` | The error message, when the event has one |
+| `metadata` | The `data` field plus `source`, `event_type`, `severity`, `project_id`, and `environment` |
+
+## Related
+
+- [Observability on Mastra platform](/docs/mastra-platform/observability/overview)

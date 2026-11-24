@@ -271,9 +271,7 @@ export class MessageHistory implements Processor {
     // input copy onto the stored message so memory remains the authoritative base.
     const chronologicalMessages = filteredMessages.reverse();
 
-    for (const msg of chronologicalMessages) {
-      messageList.add(msg, 'memory');
-    }
+    messageList.add(chronologicalMessages, 'memory');
 
     span?.update({ attributes: { messageCount: chronologicalMessages.length } });
 
@@ -340,8 +338,6 @@ export class MessageHistory implements Processor {
         if (newIds.length > 0) await this.storage.deleteMessages(newIds);
         if (previous.length > 0) await this.storage.saveMessages({ messages: previous });
       });
-    // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
 
     return messageList;
   }

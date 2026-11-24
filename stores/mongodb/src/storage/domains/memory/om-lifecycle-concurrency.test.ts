@@ -205,6 +205,44 @@ describe('MongoDB observational memory supersededBy, rollover recovery, and appe
     }
   }, 120_000);
 
+  it('a rollover fenced while the backfill groups live documents still leaves exactly one live record', async () => {
+    const threadId = `race-window-${randomUUID()}`;
+    await raw.insertMany([legacyDoc(threadId, `${threadId}-0`, 0, 0), legacyDoc(threadId, `${threadId}-1`, 1, 1000)]);
+    const snapshot = (await a.getObservationalMemory(threadId, 'resource'))!;
+
+    // Pin the race window: the rollover fences the head just before the backfill groups live
+    // documents, and inserts the successor only after the grouping has been read.
+    const original = Collection.prototype.aggregate;
+    const spy = vi.spyOn(Collection.prototype, 'aggregate').mockImplementation(function (
+      this: Collection,
+      ...args: any[]
+    ) {
+      const pipeline = JSON.stringify(args[0] ?? []);
+      if (!pipeline.includes('"$group"') || !pipeline.includes('supersededBy'))
+        return original.apply(this, args as any);
+      spy.mockRestore();
+      const cursor = original.apply(this, args as any);
+      const toArray = cursor.toArray.bind(cursor);
+      cursor.toArray = async () => {
+        await fence(snapshot);
+        const groups = await toArray();
+        await a.getObservationalMemory(threadId, 'resource');
+        return groups;
+      };
+      return cursor;
+    });
+
+    const backfiller = new MongoDBStore({ id: 'om-race-window', uri: URI, dbName });
+    stores.push(backfiller);
+    await backfiller.init();
+    spy.mockRestore();
+
+    const head = (await a.getObservationalMemory(threadId, 'resource'))!;
+    expect(head.generationCount).toBe(2);
+    const live = await raw.find({ lookupKey: `thread:${threadId}`, supersededBy: null }).toArray();
+    expect(live.map(d => d.id)).toEqual([head.id]);
+  });
+
   it('a crash after the fence is rolled forward by the next read from another store', async () => {
     const { key, record } = await seeded('crash');
     const newId = await fence(record);

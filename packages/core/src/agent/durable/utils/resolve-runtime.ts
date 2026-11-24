@@ -18,8 +18,8 @@ import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../.
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
+import { liveRequestEntries, restoreRequestContext } from '../../request-context-snapshot';
 import { SaveQueueManager } from '../../save-queue';
-import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
@@ -104,33 +104,7 @@ export interface ResolveRuntimeOptions {
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
-/**
- * Restore a RequestContext from the JSON-safe `requestContextEntries`
- * snapshot serialized onto the workflow input (see preparation.ts).
- *
- * `entries` is absent on a step input even when the run itself has a context:
- * the snapshot is propagated at the run level, not copied onto every step.
- * `runLevel` is that run-level context, which the execution engine has already
- * rebuilt in the step's scope — falling back to it is what keeps request-scoped
- * resolution (tenant/user, workspace, dynamic model/memory) working for tools
- * rebuilt on a cross-process worker, including a delegated subagent's.
- */
-export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
-  if (entries) {
-    // The persisted entries belong to whoever started the run. Their bearer token
-    // (legacy snapshots) and signed-in user are dropped, and the live ones are
-    // carried over from the run-level context, so a resumed run acts only as
-    // the resuming caller. Tools that forward auth (e.g. same-auth MCP servers)
-    // keep the live token on paths where the snapshot takes precedence.
-    const restored: RequestContext = new RequestContext<unknown>([
-      ...Object.entries(withoutLiveRequestKeys(entries)),
-      ...liveRequestEntries(runLevel),
-    ]);
-    restoreRunAgentScopes(restored);
-    return restored;
-  }
-  return runLevel ?? new RequestContext();
-}
+export { restoreRequestContext };
 
 /**
  * The run's `requestContextEntries` as handed to scorers (`customContext`), with
@@ -146,14 +120,6 @@ export function restoreCustomContext(
     ...Object.entries(withoutLiveRequestKeys(entries)),
     ...liveRequestEntries(runLevel).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
   ]);
-}
-
-/** The token and user entries that `withoutLiveRequestKeys` drops, read from the live context. */
-function liveRequestEntries(runLevel?: RequestContext): [string, unknown][] {
-  if (!runLevel) return [];
-  const live = Object.fromEntries(runLevel.entries());
-  const kept = withoutLiveRequestKeys(live);
-  return Object.entries(live).filter(([key]) => !(key in kept));
 }
 
 /**

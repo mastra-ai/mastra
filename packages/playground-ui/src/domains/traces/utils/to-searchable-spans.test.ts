@@ -26,41 +26,6 @@ function enrich(record: LightSpanRecord) {
 }
 
 describe('toSearchableSpans', () => {
-  describe('what it attaches', () => {
-    it('gives every span a searchText', () => {
-      const result = toSearchableSpans([span({ spanId: 'a' }), span({ spanId: 'b' })]);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]?.searchText).toEqual(expect.any(String));
-      expect(result[1]?.searchText).toEqual(expect.any(String));
-    });
-
-    it('carries the span name into searchText', () => {
-      const result = enrich(span({ name: 'weather tool' }));
-
-      expect(result.searchText).toContain('weather tool');
-    });
-
-    it('carries the open-ended metadata payload, which no fixed field list reaches', () => {
-      const result = enrich(span({ metadata: { city: 'Lyon', nested: { unit: 'celsius' } } }));
-
-      expect(result.searchText).toContain('lyon');
-      expect(result.searchText).toContain('celsius');
-    });
-
-    it('carries the open-ended error payload', () => {
-      const result = enrich(span({ error: { message: 'rate limit exceeded' } }));
-
-      expect(result.searchText).toContain('rate limit exceeded');
-    });
-
-    it('carries the field names, so a payload shape is searchable', () => {
-      const result = enrich(span({ metadata: { retries: 3 } }));
-
-      expect(result.searchText).toContain('retries');
-    });
-  });
-
   describe('the case it stores', () => {
     it('lowercases searchText so matching never has to', () => {
       const result = enrich(span({ name: 'WeatherAgent', entityName: 'CHEF-Agent' }));

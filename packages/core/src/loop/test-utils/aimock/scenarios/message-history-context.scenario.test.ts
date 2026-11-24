@@ -4,7 +4,6 @@ import { z } from 'zod/v4';
 import { Memory } from '../../../../../../memory/src';
 import { Agent } from '../../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
-import { storeRunsInV2 } from '../../../../agent/durable/__tests__/storage-version';
 import { DurableStepIds } from '../../../../agent/durable/constants';
 import type { IFGAProvider } from '../../../../auth';
 import { InMemoryServerCache } from '../../../../cache/inmemory';
@@ -41,10 +40,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
               return requestContext.get('MastraMemory') ? [new MessageHistory({ storage })] : [];
             },
           });
-          const wrapped = storeRunsInV2(
-            engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent }),
-            false,
-          );
+          const wrapped = engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
           const mastra = new Mastra({
             agents: { history: wrapped },
             storage: workerStore,
@@ -184,6 +180,16 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
           }
           expect((await first.output.getFullOutput()).finishReason).toBe('suspended');
           first.cleanup();
+          // The evented engine commits the outer suspension after the stream closes.
+          const workflowsStore = (await store.getStore('workflows'))!;
+          await vi.waitFor(async () => {
+            const run = await workflowsStore.getWorkflowRunById({
+              runId: first.runId,
+              workflowName: DurableStepIds.AGENTIC_LOOP,
+            });
+            const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+            expect(snapshot?.status).toBe('suspended');
+          });
           const resumed = await createWorker().approveToolCall({
             runId: first.runId,
             toolCallId: 'call_lookup',

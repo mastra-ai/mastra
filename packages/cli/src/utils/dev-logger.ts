@@ -13,6 +13,7 @@ interface HTTPSOptions {
 
 export class DevLogger {
   private options: DevLoggerOptions;
+  private startupTimer?: ReturnType<typeof setInterval>;
 
   constructor(options: DevLoggerOptions = {}) {
     this.options = {
@@ -54,8 +55,22 @@ export class DevLogger {
   }
 
   starting(): void {
-    const prefix = this.formatPrefix('◇', pc.blue);
-    console.info(`${prefix} ${pc.blue('Starting Mastra dev server...')}`);
+    this.stopStarting();
+    if (!process.stdout.isTTY) {
+      console.info(`${this.formatPrefix('◇', pc.blue)} ${pc.blue('Starting Mastra dev server...')}`);
+      return;
+    }
+
+    this.update(pc.blue('Starting Mastra dev server...'));
+    this.startupTimer = setInterval(() => this.update(pc.blue('Starting Mastra dev server...')), 80);
+    this.startupTimer.unref();
+  }
+
+  stopStarting(): void {
+    if (!this.startupTimer) return;
+    clearInterval(this.startupTimer);
+    this.startupTimer = undefined;
+    this.clearLine();
   }
 
   ready(
@@ -65,23 +80,36 @@ export class DevLogger {
     apiPrefix: string,
     startTime?: number,
     https?: HTTPSOptions,
+    factory?: boolean,
   ): void {
     let protocol = 'http';
     if (https && https.key && https.cert) {
       protocol = 'https';
     }
 
+    this.stopStarting();
+    this.success('Mastra dev server started');
     console.info('');
     const timing = startTime ? `${Date.now() - startTime} ms` : 'XXX ms';
     console.info(pc.inverse(pc.green(' mastra ')) + ` ${pc.green(version)} ${pc.gray('ready in')} ${timing}`);
     console.info('');
-    console.info(`${pc.dim('│')} ${pc.bold('Studio:')} ${pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)}`);
-    console.info(`${pc.dim('│')} ${pc.bold('API:')}    ${protocol}://${host}:${port}${apiPrefix}`);
-    console.info(`${pc.dim('│')} ${pc.bold('Deploy:')} ${pc.cyan('mastra deploy')}`);
+    // Factory serves its own UI at the root in place of Studio.
+    const rows: Array<[string, string]> = [
+      factory
+        ? ['Factory UI:', pc.cyan(`${protocol}://${host}:${port}`)]
+        : ['Studio:', pc.cyan(`${protocol}://${host}:${port}${studioBasePath}`)],
+      ['API:', `${protocol}://${host}:${port}${apiPrefix}`],
+      ['Deploy:', pc.cyan('mastra deploy')],
+    ];
+    const labelWidth = Math.max(...rows.map(([label]) => label.length));
+    for (const [label, value] of rows) {
+      console.info(`${pc.dim('│')} ${pc.bold(label)}${' '.repeat(labelWidth - label.length + 1)}${value}`);
+    }
     console.info('');
   }
 
   bundling(): void {
+    this.stopStarting();
     const prefix = this.formatPrefix('◐', pc.magenta);
     console.info(`${prefix} ${pc.magenta('Bundling...')}`);
   }
@@ -120,6 +148,7 @@ export class DevLogger {
   }
 
   shutdown(): void {
+    this.stopStarting();
     console.info('');
     const prefix = this.formatPrefix('✓', pc.green);
     console.info(`${prefix} ${pc.green('Dev server stopped')}`);

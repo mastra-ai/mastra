@@ -221,6 +221,23 @@ describe('HookManager run_id propagation', () => {
     expect(stdin.tool_input).toEqual({ command: 'npm test' });
   });
 
+  it('fires PermissionResult under the run id of its PermissionRequest after the run ends', async () => {
+    // A suspended run ends (clearing the run id) while its prompt stays open;
+    // the result must still be reported under the request's run.
+    const mgr = createManager({
+      PermissionResult: [{ type: 'command', command: 'echo test' }],
+    });
+    mgr.setRunId('run-suspended');
+    await mgr.runPermissionRequest('ask_question', 'call-q', 'ask_user');
+    mgr.clearRunId();
+
+    await mgr.runPermissionResult('ask_question', 'call-q', 'ask_user', 'answered');
+    mgr.setRunId('run-later');
+    await mgr.runPermissionResult('ask_question', 'call-q', 'ask_user', 'answered');
+
+    expect(mocks.runHooksForEvent.mock.calls.map(call => call[1].run_id)).toEqual(['run-suspended', 'run-later']);
+  });
+
   it('skips Interrupt when no run_id is active', async () => {
     const mgr = createManager({
       Interrupt: [{ type: 'command', command: 'echo test' }],

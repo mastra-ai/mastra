@@ -175,6 +175,10 @@ export class CachingPubSub extends PubSub {
     return true;
   }
 
+  get redeliversUnacked(): boolean {
+    return this.inner.redeliversUnacked;
+  }
+
   /**
    * Topics `shouldCache` leaves out only reach the inner transport. With
    * `extendExistingLogsOnly`, a process that doesn't hold a run's log

@@ -1,4 +1,3 @@
-import { Plus, RotateCcw } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ModelPickerOption } from './model-picker-option';
@@ -21,6 +20,8 @@ import {
   CommandSeparator,
 } from '@/ds/components/Command';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
 import { compareModelReleaseDates } from '@/utils/model';
@@ -138,11 +139,7 @@ export function ModelPickerPanel({
       <Command
         loop
         shouldFilter={false}
-        // Search and the list sit on an inset card; the header and settings sit on the frame around it.
-        className={cn(
-          'bg-background',
-          sheet && 'mx-2 w-auto rounded-2xl **:[[cmdk-input]]:h-11 **:[[cmdk-item]]:min-h-11',
-        )}
+        className={cn('bg-card', sheet && 'mx-2 w-auto rounded-2xl **:[[cmdk-input]]:h-11 **:[[cmdk-item]]:min-h-11')}
       >
         {/* Search floats over the list, which scrolls up beneath it. */}
         <div
@@ -159,8 +156,8 @@ export function ModelPickerPanel({
             ref={searchBar.ref}
             data-scrolled={scrolled || undefined}
             className={cn(
-              'sticky top-0 z-10 bg-background',
-              'after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-background after:to-transparent after:opacity-0 after:transition-opacity after:duration-fast',
+              'sticky top-0 z-10 bg-card',
+              'after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-card after:to-transparent after:opacity-0 after:transition-opacity after:duration-fast',
               'data-scrolled:after:opacity-100',
             )}
           >
@@ -181,7 +178,7 @@ export function ModelPickerPanel({
                     render={addProvider.render}
                     onClick={onAddProvider}
                   >
-                    <Plus aria-hidden />
+                    <IconPlusMedium aria-hidden />
                   </Button>
                 ) : undefined
               }
@@ -238,7 +235,7 @@ export function ModelPickerPanel({
                 <CommandSeparator />
                 <CommandGroup>
                   <CommandItem value="action:reset" keywords={['reset', 'default', 'model']} onSelect={reset.onClick}>
-                    <RotateCcw aria-hidden />
+                    <IconArrowRotateCounterClockwise aria-hidden />
                     <span>{reset.label}</span>
                   </CommandItem>
                 </CommandGroup>

@@ -35,7 +35,7 @@ function makeSession(index: number, overrides: Partial<FactoryUserSession> = {})
   };
 }
 
-function stubSessions(sessions: FactoryUserSession[]) {
+function stubSessions(sessions: FactoryUserSession[], runningSessionIds: readonly string[] = []) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
@@ -45,6 +45,15 @@ function stubSessions(sessions: FactoryUserSession[]) {
       HttpResponse.json({ threads: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/:controllerId/active-runs`, () =>
+      HttpResponse.json({
+        runs: runningSessionIds.map(sessionId => ({
+          runId: `run-${sessionId}`,
+          resourceId: sessionId,
+          threadId: sessionId,
+        })),
+      }),
+    ),
   );
 }
 
@@ -65,9 +74,9 @@ describe('Workspace sidebar visibility', () => {
     localStorage.removeItem('mastracode.pinnedSessions');
   });
 
-  it('keeps a session that has not materialized yet visible past the five-row cut', async () => {
+  it('keeps a session whose run waits on its setup visible past the five-row cut', async () => {
     const sessions = [1, 2, 3, 4, 5].map(index => makeSession(index));
-    stubSessions([...sessions, makeSession(6, { materializedAt: null })]);
+    stubSessions([...sessions, makeSession(6, { materializedAt: null })], ['work-session-6']);
 
     const { client } = renderSection();
     await waitForMutationsIdle(client);
@@ -78,7 +87,10 @@ describe('Workspace sidebar visibility', () => {
 
   it('never drops a pinned session to make room for a busy one', async () => {
     const busy = [1, 2, 3, 4, 6].map(index => makeSession(index, { materializedAt: null }));
-    stubSessions([...busy, makeSession(5)]);
+    stubSessions(
+      [...busy, makeSession(5)],
+      busy.map(session => session.sessionId),
+    );
     localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['work-session-5']));
 
     const { client } = renderSection();

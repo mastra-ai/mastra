@@ -27,10 +27,12 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { NotRoutedLookup } from '../rules/event-rules.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -45,6 +47,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { CardSource } from './kept-cards.js';
 
 /** A push to a repository linked to a project, as a version-control integration reports it. */
 export interface RepositoryPushEvent {
@@ -166,6 +169,17 @@ export interface IntegrationContext {
      * per-project source serves each project its stored boards.
      */
     boards: BoardRegistry | ProjectBoardSource;
+    /**
+     * Every project's provider-backed cards, kept in memory between background
+     * sweeps so a sweep with nothing to change reads nothing from storage.
+     * Absent where no sweep runs (route contexts, tests).
+     */
+    keptCards?: CardSource;
+    /**
+     * Which items intake turned away (Not routed), so a label or assignee change to one runs intake
+     * again. Absent where the boards domain isn't available.
+     */
+    notRouted?: NotRoutedLookup;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;
@@ -211,8 +225,17 @@ export interface FactoryIntegration {
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
+  /**
+   * Further intake settings this integration owns under their own ids (e.g. GitHub's `dependabot`),
+   * so the intake config API and UI accept and list sources for them.
+   */
+  readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
+  /** Reads one item by URL from a source linked to a project, for the intake tester. */
+  readonly intakeLookup?: IntakeItemLookup;
+  /** Whether at least one account is connected, for the dev-server startup summary. */
+  hasActiveConnections?(): Promise<boolean>;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),

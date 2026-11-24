@@ -163,7 +163,7 @@ export interface HookStdinAgentEnd extends HookStdinBase {
   stop_reason: 'complete' | 'aborted' | 'error' | 'suspended';
 }
 
-export type PermissionKind = 'tool_approval' | 'sandbox_access' | 'plan_approval';
+export type PermissionKind = 'tool_approval' | 'sandbox_access' | 'plan_approval' | 'ask_question';
 
 export interface HookStdinPermissionRequest extends HookStdinBase {
   hook_event_name: 'PermissionRequest';
@@ -174,7 +174,7 @@ export interface HookStdinPermissionRequest extends HookStdinBase {
   tool_input?: unknown;
 }
 
-export type PermissionDecision = 'approved' | 'declined' | 'dismissed' | 'auto_approved' | 'auto_declined';
+export type PermissionDecision = 'approved' | 'declined' | 'dismissed' | 'answered' | 'auto_approved' | 'auto_declined';
 
 export interface HookStdinPermissionResult extends HookStdinBase {
   hook_event_name: 'PermissionResult';

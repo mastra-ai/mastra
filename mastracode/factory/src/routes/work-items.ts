@@ -11,7 +11,15 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID, isPullRequestCard } from '../boards/index.js';
+import {
+  boardFlow,
+  boardPhaseOutcomes,
+  DEFAULT_BOARD_ID,
+  isPullRequestCard,
+  isOpenPullRequestSource,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -25,10 +33,13 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
+import type { RunRepositoryResolution } from '../session/work-item-repository.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -47,17 +58,30 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
-import { workItemBranchSource } from '../work-item-branch.js';
+import { workItemFilterOptions } from '../work-items/board-filter-options.js';
+import { boardPhases } from '../work-items/board-phases.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
-import { relatedCardIndex } from '../work-items/related-cards.js';
-import type { PullRequestFacts } from '../work-items/related-cards.js';
+import { relatedCardsIn } from '../work-items/list-related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
-import { boardSnapshot, hashedBody, listCheck, matchesEtag, movedBody, scopedSnapshot } from './board-snapshot.js';
-import type { BoardSnapshot } from './board-snapshot.js';
+import {
+  boardSnapshot,
+  hashedBody,
+  listCheck,
+  matchesEtag,
+  movedBody,
+  namedBody,
+  scopedSnapshot,
+  etagDigest,
+  sendJson,
+  sendRevalidated,
+} from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { ProjectSessionsReader } from './project-sessions.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
+import { readRunQueue } from './run-queue.js';
+import { buildSessionRowRoutes } from './session-rows.js';
 import { workItemActivity } from './work-item-activity.js';
 import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
 import {
@@ -78,14 +102,25 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a filed card; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
-  /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
-  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  sessionRepository?: (input: {
+    orgId: string;
+    factoryProjectId: string;
+    item: Card;
+  }) => Promise<RunRepositoryResolution>;
+  /** Materialized sessions, read to report which sessions wait on someone and which session a run's thread is on. */
+  liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn' | 'sessionOnThread'>;
+  /** This process's dispatcher run slots; absent or `undefined` while it runs no dispatcher. */
+  runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
+  projectSessions?: ProjectSessionsReader;
+  activeRuns?: () => readonly { threadId: string; resourceId?: string }[];
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -98,37 +133,30 @@ function toWireWorkItem(item: Card): Card {
   };
 }
 
-/** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
-  const picked = new Set<string>();
-  for (const item of items) {
-    for (const { sessionId } of Object.values(item.sessions)) {
-      if (predicate(sessionId)) picked.add(sessionId);
-    }
-  }
-  return [...picked];
+// One hash per card object: `listShared` keeps a card's object until the card changes.
+const wireVersions = new WeakMap<Card, string>();
+
+/**
+ * Names the body a card is sent with. It is a hash of that body, not a stamp: two bodies of one
+ * card can carry the same `changedAt`, and a card can read differently without a write.
+ */
+function wireVersion(card: Card): string {
+  let version = wireVersions.get(card);
+  if (version === undefined) wireVersions.set(card, (version = etagDigest(JSON.stringify(toWireWorkItem(card)))));
+  return version;
 }
 
-const CARD_PULL_REQUESTS: PullRequestFacts<Card> = {
-  isPullRequest: card => isPullRequestCard({ source: workItemBranchSource(card.externalSource) }),
-  headBranch: card => {
-    const branch = card.workItem.metadata?.headBranch;
-    return typeof branch === 'string' ? branch : undefined;
-  },
-};
+/** The card for a reader that keeps it between reads, and tells by `version` whether it holds this body. */
+function toVersionedWireWorkItem(card: Card): Card & { version: string } {
+  return { ...toWireWorkItem(card), version: wireVersion(card) };
+}
 
-// One index per board version: `listShared` returns the same array until a card changes.
-const relatedCards = new WeakMap<readonly Card[], (card: Card) => Card[]>();
 // One list per board version, so every tab's sidebar shares its serialization.
 const cardsInSessions = new WeakMap<readonly Card[], Card[]>();
 
 /** The cards `holds` picks, and the cards related to them, in board order. */
 function withRelatedCards(board: readonly Card[], holds: (card: Card) => boolean): Card[] {
-  let relatedTo = relatedCards.get(board);
-  if (!relatedTo) {
-    relatedTo = relatedCardIndex(board, CARD_PULL_REQUESTS);
-    relatedCards.set(board, relatedTo);
-  }
+  const relatedTo = relatedCardsIn(board);
   const picked = new Set<Card>();
   for (const card of board) {
     if (!holds(card)) continue;
@@ -284,6 +312,9 @@ function catalogDetails(details: StoredBoardDetails | undefined) {
   };
 }
 
+/** The pull request a person picked closed before the pick was written. */
+class PullRequestClosedError extends Error {}
+
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   #source: ProjectBoardSource | undefined;
 
@@ -402,7 +433,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator, liveSessions } = this.deps;
+    const {
+      audit,
+      workItems,
+      queueHealth,
+      transitionService,
+      startCoordinator,
+      liveSessions,
+      projectSessions,
+      activeRuns,
+    } = this.deps;
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
         method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
@@ -458,7 +498,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
         },
       }),
-      // ── List the org's work items for a project, and which are being worked ─
+      // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
@@ -496,33 +536,18 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 : source
                   ? cardsFiledFrom(board, source)
                   : ids && cardsWithIds(board, ids));
-          const items = part ?? board;
-          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
-          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
-          const send = async (body: Pick<BoardSnapshot, 'json' | 'gzipped'>, headers: Record<string, string>) => {
-            headers['Content-Type'] = 'application/json; charset=UTF-8';
-            headers.Vary = 'Accept-Encoding';
-            if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
-            headers['Content-Encoding'] = 'gzip';
-            return c.body(new Uint8Array(await body.gzipped()), 200, headers);
-          };
           // A tab that kept the board gets what moved since its cursor: a body the size of the change.
           if (list.changed) {
             const workItems = list.changed.map(toWireWorkItem);
             const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
-            return send(movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
-              'Cache-Control': 'no-store',
-            });
+            return sendJson(context, movedBody(moved), { 'Cache-Control': 'no-store' });
           }
           const snapshot = part
-            ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
-            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
+            ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
+              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, unstarted?.total)
+            : boardSnapshot(board, toWireWorkItem, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
-          const headers = { ETag: snapshot.etag, 'Cache-Control': 'private, no-cache' };
-          if (matchesEtag(c.req.header('if-none-match'), snapshot.etag)) {
-            return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
-          }
-          return send(snapshot, headers);
+          return sendRevalidated(context, snapshot);
         },
       }),
 
@@ -607,6 +632,76 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      // ── What each phase of a board view lists, a page of it at a time ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardPhases.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardPhases.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const path = FACTORY_ROUTE_CONTRACTS.boardPhases.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            boardKey: context.req.param('boardKey'),
+          });
+          if (!path.success) return c.json({ error: 'board_not_found' }, 404);
+          const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
+            sort: context.req.query('sort'),
+            q: context.req.query('q'),
+            source: context.req.queries('source'),
+            linearProject: context.req.queries('linearProject'),
+            label: context.req.queries('label'),
+            teammate: context.req.queries('teammate'),
+            author: context.req.queries('author'),
+            assignee: context.req.queries('assignee'),
+            reviewer: context.req.queries('reviewer'),
+            worked: context.req.queries('worked'),
+            limit: context.req.query('limit'),
+            window: context.req.queries('window'),
+            item: context.req.query('item'),
+            cards: context.req.query('cards'),
+          });
+          // A view that fails to parse must not answer as another view.
+          if (!query.success) return c.json({ error: 'invalid_phases_query' }, 400);
+          const { cards: withBodies, ...view } = query.data;
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [list, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
+          const board = boards.get(path.data.boardKey);
+          if (!board) return c.json({ error: 'board_not_found' }, 404);
+          const phases = Object.keys(board.phases);
+          const { body, named } = boardPhases(
+            list,
+            { id: path.data.boardKey, phases },
+            view,
+            resolved.userId,
+            wireVersion,
+          );
+          // The board asks again on each feed frame; most frames change nothing it shows.
+          return sendRevalidated(
+            context,
+            namedBody(body, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
+          );
+        },
+      }),
+
+      // ── The labels and people the board's filter menus offer ────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const list = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return sendRevalidated(context, hashedBody(workItemFilterOptions(list)));
+        },
+      }),
+
       // ── Per-project queue-health age-threshold config (seconds) ─────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.method,
@@ -665,12 +760,45 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      // ── Automated runs waiting for a run slot ───────────────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.runQueue.path, {
+        method: FACTORY_ROUTE_CONTRACTS.runQueue.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          return c.json(
+            await readRunQueue({
+              workItems,
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+              slots: this.deps.runSlots?.(),
+              now: new Date(),
+            }),
+          );
+        },
+      }),
+
       ...buildAttentionRoutes({
         workItems,
         boards: this.#boards,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
+
+      ...(projectSessions && activeRuns
+        ? buildSessionRowRoutes({
+            workItems,
+            boards: this.#boards,
+            liveSessions,
+            resolveProject: context => this.#resolveProject(loose(context)),
+            sessionCards: async scope => allSessionCards(await workItems.listShared(scope)),
+            projectSessions,
+            activeRuns,
+            authEnabled: () => this.deps.auth.enabled(),
+          })
+        : []),
 
       this.#proposalRoute({ verb: 'approve' }),
       this.#proposalRoute({ verb: 'dismiss' }),
@@ -720,6 +848,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               boards: await this.#boards.load(resolved),
               transitionService,
               intakeRoutes: this.deps.intakeRoutes,
+              intakeEvaluator: this.deps.intakeEvaluator,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
@@ -732,7 +861,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 if (created.code === 'factory_transitions_unavailable') return c.json({ error: created.code }, 503);
                 return c.json(
                   { error: created.code, message: created.message },
-                  created.code === 'invalid_board' ? 422 : 409,
+                  created.code === 'invalid_board' || created.code === 'intake_board_required' ? 422 : 409,
                 );
               case 'rejected':
                 return c.json({ status: 'rejected', code: created.code, reason: created.reason }, 422);
@@ -795,6 +924,109 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          await workItems.ensureReady();
+          const item = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!item || item.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const { sessionRepository } = this.deps;
+          if (!sessionRepository) return c.json({ error: 'factory_session_repository_unavailable' }, 503);
+          const resolution = await sessionRepository({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            item,
+          });
+          return c.json(
+            resolution.status === 'resolved'
+              ? {
+                  status: resolution.status,
+                  projectRepositoryId: resolution.projectRepositoryId,
+                  slug: resolution.slug,
+                }
+              : { status: resolution.status, hint: resolution.hint },
+          );
+        },
+      }),
+
+      // ── Pick the pull request a card's sessions work on ──────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const contract = FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest;
+          const parsedPath = contract.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          const body = contract.bodySchema.safeParse(await readJson(context));
+          if (!body.success) return c.json({ error: 'invalid_working_pull_request' }, 400);
+          await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!existing || existing.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const source = pullRequestSources(existing).find(
+            candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+          );
+          if (!source || isPullRequestCard({ source: workItemSource(existing.externalSource) })) {
+            return c.json(
+              { error: 'pull_request_not_linked', message: 'That pull request is not linked to this card.' },
+              422,
+            );
+          }
+          const closed = () => c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
+          if (!isOpenPullRequestSource(source)) return closed();
+          // The recorded head belongs to the pull request being replaced; the next push records this one's.
+          const patch = {
+            metadata: {
+              openPullRequestNumber: body.data.pullRequest,
+              pullRequestHeadSha: null,
+              pullRequestHeadAt: null,
+              pullRequestHeadDeliveryId: null,
+            },
+          };
+          try {
+            const updated = await workItems.update({
+              orgId: resolved.orgId,
+              id: existing.id,
+              userId: resolved.userId,
+              patch,
+              expectedRevision: body.data.expectedRevision,
+              // It may have closed since the read above without moving the card's revision.
+              check: current => {
+                const now = pullRequestSources(current).find(
+                  candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+                );
+                if (!now || !isOpenPullRequestSource(now)) throw new PullRequestClosedError();
+              },
+            });
+            if (!updated) return c.json({ error: 'Work item not found' }, 404);
+            await this.#auditWorkItemPatch({ context, item: updated.item, patch });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
+          } catch (error) {
+            if (error instanceof PullRequestClosedError) return closed();
+            if (error instanceof WorkItemUpdateConflictError) return c.json({ error: 'stale' }, 409);
+            throw error;
+          }
+        },
+      }),
+
       // ── Bind a Factory run before dispatching its kickoff ────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStart.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemStart.method,
@@ -823,7 +1055,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
             }
             if (error instanceof WorkItemRepositoryError) {
-              return c.json({ error: error.code, message: error.message, candidates: error.candidates }, 409);
+              return c.json({ error: error.code, message: error.message }, 409);
             }
             throw error;
           }

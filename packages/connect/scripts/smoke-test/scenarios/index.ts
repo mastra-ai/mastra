@@ -2,8 +2,10 @@ import type { Scenario } from '../scenario.js';
 import { anthropicScenario } from './anthropic.js';
 import { clerkScenario } from './clerk.js';
 import { discordScenario } from './discord.js';
+import { elevenlabsScenario } from './elevenlabs.js';
 import { firefliesScenario } from './fireflies.js';
 import { githubScenario } from './github.js';
+import { gitlabScenario } from './gitlab.js';
 import { googleAnalyticsScenario } from './google-analytics.js';
 import { googleCalendarScenario } from './google-calendar.js';
 import { googleDocsScenario } from './google-docs.js';
@@ -24,6 +26,7 @@ import { openaiScenario } from './openai.js';
 import { outlookScenario } from './outlook.js';
 import { posthogScenario } from './posthog.js';
 import { resendScenario } from './resend.js';
+import { sendgridScenario } from './sendgrid.js';
 import { sharepointOnlineScenario } from './sharepoint-online.js';
 import { slackScenario } from './slack.js';
 import { snowflakeScenario } from './snowflake.js';
@@ -41,8 +44,10 @@ export const scenarios: Scenario[] = [
   anthropicScenario,
   clerkScenario,
   discordScenario,
+  elevenlabsScenario,
   firefliesScenario,
   githubScenario,
+  gitlabScenario,
   googleAnalyticsScenario,
   googleCalendarScenario,
   googleDocsScenario,
@@ -63,6 +68,7 @@ export const scenarios: Scenario[] = [
   outlookScenario,
   posthogScenario,
   resendScenario,
+  sendgridScenario,
   sharepointOnlineScenario,
   slackScenario,
   snowflakeScenario,

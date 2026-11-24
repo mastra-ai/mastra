@@ -11,6 +11,14 @@ const REPOSITORIES_PER_TOKEN = 10;
  */
 const GROUP_RETRY_AFTER_MS = 60_000;
 
+/** Split repository ids into the groups one token each can name, keeping order and dropping repeats. */
+export function groupRepositoryIds(repositoryIds: readonly string[]): string[][] {
+  const ids = [...new Set(repositoryIds)];
+  const groups: string[][] = [];
+  for (let i = 0; i < ids.length; i += REPOSITORIES_PER_TOKEN) groups.push(ids.slice(i, i + REPOSITORIES_PER_TOKEN));
+  return groups;
+}
+
 /**
  * Access to each of an environment's repositories, minted a group at a time.
  * Asking for one repository asks for its group of up to ten, so a provider
@@ -27,9 +35,7 @@ export function groupedRepositoryAccess(
   repositoryIds: readonly string[],
   now: () => number = Date.now,
 ): (repositoryId: string) => Promise<RepositoryAccess> {
-  const ids = [...new Set(repositoryIds)];
-  const groups: string[][] = [];
-  for (let i = 0; i < ids.length; i += REPOSITORIES_PER_TOKEN) groups.push(ids.slice(i, i + REPOSITORIES_PER_TOKEN));
+  const groups = groupRepositoryIds(repositoryIds);
   const skipUntil = new Map<string[], number>();
   const pending = new Map<string[], Promise<RepositoriesAccess | undefined>>();
   const groupAccess = (group: string[], getRepositoriesAccess: GetRepositoriesAccess) => {

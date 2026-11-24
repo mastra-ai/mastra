@@ -1,7 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PinIcon, PinOffIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { useState } from 'react';
 import { userEvent, waitFor, within } from 'storybook/test';
@@ -11,6 +10,8 @@ import { METRICS_DASHBOARD } from '../metrics-dashboard';
 import type { DashboardAlert, DashboardAlertAction, DashboardAlertSource, DashboardAlertTarget } from '../widget-kind';
 import { DashboardRenderer } from './dashboard-renderer';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 
 type Definition = ComponentProps<typeof DashboardRenderer>['definition'];
 type Widget = Definition['rows'][number]['widgets'][number];
@@ -192,7 +193,7 @@ function AlertingHost({ hostResponse, editing }: Args) {
                     }
                     className={isPinned ? undefined : onCardHover}
                   >
-                    {isPinned ? <PinOffIcon /> : <PinIcon />}
+                    {isPinned ? <IconUnpin /> : <IconPin />}
                   </MetricsCard.Action>
                 );
               }}

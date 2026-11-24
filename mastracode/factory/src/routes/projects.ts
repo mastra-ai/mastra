@@ -3,7 +3,6 @@ import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorageOps } from '@mastra/core/storage';
-import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
@@ -11,22 +10,20 @@ import type { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
-import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
+import { scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
+import { EnvironmentHandlers } from '../environment/handlers.js';
+import type { EnvironmentScope } from '../environment/handlers.js';
+import { ProjectEnvironment } from '../environment/project-environment.js';
 import { maskSandboxEnvValues } from '../sandbox/sandbox-env.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
-import type {
-  FactoryProject,
-  FactoryProjectsStorage,
-  UpdateFactoryProjectInput,
-} from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
   SourceControlStorage,
   SourceControlStorageHandle,
-  UpdateProjectRepositoryInput,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
@@ -38,8 +35,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_NAME_LENGTH = 200;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
-const MAX_SANDBOX_PROVIDER_LENGTH = 100;
-const MAX_SANDBOX_WORKDIR_LENGTH = 1_000;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
 const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
@@ -76,13 +71,13 @@ function parseRepositoryLinkInput(value: unknown): {
   repositoryId?: string;
   repository?: { externalId: string; slug: string };
   branch: string | null;
-  sandboxProvider: string;
-  sandboxWorkdir: string;
   setupCommand: string | null;
   teardownCommand: string | null;
+  selectIntake: boolean;
 } | null {
   if (!value || typeof value !== 'object') return null;
   const input = value as Record<string, unknown>;
+  if (input.selectIntake !== undefined && typeof input.selectIntake !== 'boolean') return null;
   const repositoryId =
     typeof input.repositoryId === 'string' && UUID_RE.test(input.repositoryId) ? input.repositoryId : undefined;
   const repositoryInput = input.repository;
@@ -96,8 +91,6 @@ function parseRepositoryLinkInput(value: unknown): {
   }
   if (!repositoryId && !repository) return null;
   const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
   const setupCommand = parseOptionalString(input.setupCommand, {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
@@ -106,56 +99,15 @@ function parseRepositoryLinkInput(value: unknown): {
     maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
     nullable: true,
   });
-  if (
-    branch === false ||
-    typeof sandboxProvider !== 'string' ||
-    typeof sandboxWorkdir !== 'string' ||
-    setupCommand === false ||
-    teardownCommand === false
-  )
-    return null;
+  if (branch === false || setupCommand === false || teardownCommand === false) return null;
   return {
     ...(repositoryId ? { repositoryId } : {}),
     ...(repository ? { repository } : {}),
     branch: branch ?? null,
-    sandboxProvider,
-    sandboxWorkdir,
     setupCommand: setupCommand ?? null,
     teardownCommand: teardownCommand ?? null,
+    selectIntake: input.selectIntake !== false,
   };
-}
-
-function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInput | null {
-  if (!value || typeof value !== 'object') return null;
-  const input = value as Record<string, unknown>;
-  const patch: UpdateProjectRepositoryInput = {};
-  const branch = parseOptionalString(input.branch, { maxLength: MAX_BRANCH_LENGTH, nullable: true });
-  const sandboxProvider = parseOptionalString(input.sandboxProvider, { maxLength: MAX_SANDBOX_PROVIDER_LENGTH });
-  const sandboxWorkdir = parseOptionalString(input.sandboxWorkdir, { maxLength: MAX_SANDBOX_WORKDIR_LENGTH });
-  const setupCommand = parseOptionalString(input.setupCommand, {
-    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
-    nullable: true,
-  });
-  const teardownCommand = parseOptionalString(input.teardownCommand, {
-    maxLength: MAX_REPOSITORY_COMMAND_LENGTH,
-    nullable: true,
-  });
-  if (
-    branch === false ||
-    sandboxProvider === false ||
-    sandboxProvider === null ||
-    sandboxWorkdir === false ||
-    sandboxWorkdir === null ||
-    setupCommand === false ||
-    teardownCommand === false
-  )
-    return null;
-  if (branch !== undefined) patch.branch = branch;
-  if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
-  if (sandboxWorkdir !== undefined) patch.sandboxWorkdir = sandboxWorkdir;
-  if (setupCommand !== undefined) patch.setupCommand = setupCommand;
-  if (teardownCommand !== undefined) patch.teardownCommand = teardownCommand;
-  return Object.keys(patch).length > 0 ? patch : null;
 }
 
 interface ModelApplySession {
@@ -167,6 +119,7 @@ interface ModelApplySession {
 
 interface ModelApplyController {
   getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
+  setThreadModel: (args: { resourceId: string; threadId: string; modelId: string }) => Promise<unknown>;
 }
 
 export interface ProjectRoutesDeps extends RouteDependencies {
@@ -201,7 +154,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Environment builds, present only when the sandbox has a `builds` capability. */
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
-  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings' | 'addSources'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
   boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
 }
@@ -219,69 +172,26 @@ function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, bu
   };
 }
 
-/** What the environment reports when the factory has no sandbox configured. */
-const NO_SANDBOX: FactorySandboxDescription = {
-  provider: 'none',
-  settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
-  capabilities: { template: false, builds: { available: false, history: false } },
-};
-
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
-  #sandboxDescription: FactorySandboxDescription | undefined;
-  #settingsSchema: StandardSchemaWithJSON | undefined;
+  readonly #environment: ProjectEnvironment;
+  readonly #handlers: EnvironmentHandlers;
 
   constructor(deps: ProjectRoutesDeps) {
     super(deps);
     this.#versionControlIntegrationIds = new Set(deps.versionControlIntegrationIds ?? []);
-  }
-
-  #describeSandbox(): FactorySandboxDescription {
-    if (!this.deps.sandbox) return NO_SANDBOX;
-    this.#sandboxDescription ??= describeFactorySandbox(this.deps.sandbox);
-    return this.#sandboxDescription;
-  }
-
-  /**
-   * Merge a settings patch onto the stored document (null removes a key) and
-   * validate the result through the sandbox's schema. Returns the issues when
-   * the merged document is rejected.
-   *
-   * A stored key the current schema does not declare, or whose stored value it
-   * now rejects (a tightened range or choice list), is left over from another
-   * provider or an older schema. When the merged document fails validation, the
-   * merge retries without those keys so one stale value cannot lock every later
-   * update; keys the patch itself sets are never pruned.
-   */
-  async #mergeSettings(
-    stored: Record<string, unknown>,
-    patch: Record<string, unknown | null>,
-  ): Promise<
-    { merged: Record<string, unknown> | null } | { issues: ReadonlyArray<{ message: string; path?: unknown }> }
-  > {
-    const merged: Record<string, unknown> = { ...stored };
-    for (const [key, value] of Object.entries(patch)) {
-      if (value === null) delete merged[key];
-      else merged[key] = value;
-    }
-    this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
-    const result = await this.#settingsSchema['~standard'].validate(merged);
-    if (!result.issues) return { merged: Object.keys(merged).length > 0 ? merged : null };
-
-    const declared = this.#describeSandbox().settingsSchema.properties ?? {};
-    const rejected = new Set(
-      result.issues.map(issue => {
-        const segment = issue.path?.[0];
-        return typeof segment === 'object' && segment !== null ? segment.key : segment;
-      }),
-    );
-    const pruned = Object.fromEntries(
-      Object.entries(merged).filter(([key]) => key in patch || (Object.hasOwn(declared, key) && !rejected.has(key))),
-    );
-    if (Object.keys(pruned).length === Object.keys(merged).length) return { issues: result.issues };
-    const retried = await this.#settingsSchema['~standard'].validate(pruned);
-    if (retried.issues) return { issues: result.issues };
-    return { merged: Object.keys(pruned).length > 0 ? pruned : null };
+    this.#environment = new ProjectEnvironment({
+      projects: deps.projects,
+      sourceControl: deps.sourceControl,
+      integrationIds: [...this.#versionControlIntegrationIds],
+      ...(deps.sandbox ? { sandbox: deps.sandbox } : {}),
+    });
+    this.#handlers = new EnvironmentHandlers({
+      environment: this.#environment,
+      ...(deps.environmentBuilds ? { environmentBuilds: deps.environmentBuilds } : {}),
+      ...(deps.sessionRetirement ? { sessionRetirement: deps.sessionRetirement } : {}),
+      ...(deps.workItems ? { workItems: deps.workItems } : {}),
+    });
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
@@ -304,9 +214,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return ops => intake.clearProjectBindings({ orgId, factoryProjectId }, ops);
   }
 
-  async #handles(): Promise<SourceControlStorageHandle[]> {
-    const storage = await this.#sourceControl();
-    return [...this.#versionControlIntegrationIds].map(integrationId => storage.forIntegration(integrationId));
+  #handles(): Promise<SourceControlStorageHandle[]> {
+    return this.#environment.handles();
   }
 
   async #project(orgId: string, id: string) {
@@ -321,14 +230,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return null;
   }
 
-  async #findProjectRepository({ orgId, projectId, id }: { orgId: string; projectId: string; id: string }) {
-    for (const handle of await this.#handles()) {
-      const projectRepository = await handle.projectRepositories.get({ orgId, id });
-      if (!projectRepository) continue;
-      const connection = await handle.connections.get({ orgId, id: projectRepository.connectionId });
-      if (connection?.factoryProjectId === projectId) return { handle, connection, projectRepository };
-    }
-    return null;
+  #findProjectRepository(args: { orgId: string; projectId: string; id: string }) {
+    return this.#environment.findProjectRepository(args);
   }
 
   async #connectionsWithRepositories(orgId: string, factoryProjectIds: string[]) {
@@ -353,7 +256,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           slug: link.repository?.slug ?? null,
           defaultBranch: link.repository?.defaultBranch ?? null,
           branch: link.branch,
-          sandboxWorkdir: link.sandboxWorkdir,
         });
       }
       byProject.set(connection.factoryProjectId, repositories);
@@ -361,83 +263,12 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return byProject;
   }
 
-  async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
-    const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
-    return { ...projectRepository, repository };
+  #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
+    return this.#handlers.repositoryPayload(handle, orgId, projectRepository);
   }
 
-  /** Every link of the project across every handle, with the handle that owns it, in position order. */
-  async #environmentLinks(orgId: string, projectId: string) {
-    const links: Array<{ handle: SourceControlStorageHandle; projectRepository: ProjectRepository }> = [];
-    for (const handle of await this.#handles()) {
-      for (const projectRepository of await handle.projectRepositories.listByProject({
-        orgId,
-        factoryProjectId: projectId,
-      })) {
-        links.push({ handle, projectRepository });
-      }
-    }
-    return links.sort(
-      (a, b) =>
-        a.projectRepository.position - b.projectRepository.position ||
-        a.projectRepository.createdAt.getTime() - b.projectRepository.createdAt.getTime(),
-    );
-  }
-
-  async #environmentPayload(orgId: string, project: FactoryProject) {
-    const repositories = [];
-    for (const { handle, projectRepository } of await this.#environmentLinks(orgId, project.id)) {
-      const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
-      repositories.push({
-        projectRepositoryId: projectRepository.id,
-        connectionId: projectRepository.connectionId,
-        repositoryId: projectRepository.repositoryId,
-        slug: repository?.slug ?? null,
-        defaultBranch: repository?.defaultBranch ?? null,
-        position: projectRepository.position,
-        inEnvironment: projectRepository.inEnvironment,
-        setupCommand: projectRepository.setupCommand,
-        teardownCommand: projectRepository.teardownCommand,
-        lastBuildStatus: projectRepository.lastBuildStatus,
-        lastBuildError: projectRepository.lastBuildError,
-        lastBuiltAt: projectRepository.lastBuiltAt,
-      });
-    }
-    return {
-      environment: {
-        sandbox: this.#describeSandbox(),
-        settings: project.sandboxSettings ?? {},
-        sandboxWorkingDirectory: project.sandboxWorkingDirectory,
-        workspaceSetupCommand: project.workspaceSetupCommand,
-        activeTemplateId: project.activeTemplateId,
-        activeTemplateHeads: project.activeTemplateHeads,
-        repositories,
-        ...(await this.#buildPayload(project)),
-      },
-    };
-  }
-
-  /**
-   * The build keys of the environment payload, present only when the
-   * sandbox can build. Reads the project row and the schedule row; never
-   * the provider (live status is the builds routes' job).
-   */
-  async #buildPayload(project: FactoryProject) {
-    const builds = this.deps.environmentBuilds;
-    if (!builds) return {};
-    const schedules = builds.scheduleAvailable ? builds.schedules() : undefined;
-    const schedule = schedules
-      ? await readSchedule(schedules, project.id)
-      : { enabled: false, cron: null, timezone: null };
-    return {
-      buildTriggers: {
-        schedule: { ...schedule, scheduleAvailable: builds.scheduleAvailable },
-        push: { enabled: project.buildOnPushEnabled, debounceMinutes: project.buildPushDebounceMinutes },
-      },
-      build: project.lastBuildId
-        ? { buildId: project.lastBuildId, attemptedAt: project.lastBuildAttemptedAt?.toISOString() ?? null }
-        : null,
-    };
+  #environmentPayload(orgId: string, project: FactoryProject) {
+    return this.#handlers.environmentPayload(orgId, project);
   }
 
   /** The builds capability behind the routes, or the 404 to answer with. */
@@ -534,21 +365,26 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     }
   }
 
-  async #retireProjectRepositorySessions(
-    handle: SourceControlStorageHandle,
-    orgId: string,
-    projectRepositoryId: string,
-  ): Promise<boolean> {
-    const sessions = await handle.sessions.listByProjectRepository({ projectRepositoryId });
-    if (sessions.length === 0) return true;
-    if (!this.deps.sessionRetirement) return false;
-    await this.deps.sessionRetirement.retireProjectRepositorySessions({
-      sourceControl: handle,
-      ...(this.deps.workItems ? { workItems: this.deps.workItems } : {}),
-      orgId,
-      projectRepositoryId,
-    });
-    return true;
+  #retireProjectRepositorySessions(handle: SourceControlStorageHandle, orgId: string, projectRepositoryId: string) {
+    return this.#handlers.retireProjectRepositorySessions(handle, orgId, projectRepositoryId);
+  }
+
+  async #environmentScope(context: Context): Promise<EnvironmentScope | { response: Response }> {
+    const tenant = await this.#resolveTenant(context);
+    if ('response' in tenant) return tenant;
+    const projectId = context.req.param('id');
+    if (!projectId || !UUID_RE.test(projectId)) return { response: context.json({ error: 'Project not found' }, 404) };
+    return { ...tenant, projectId };
+  }
+
+  async #repositoryScope(context: Context): Promise<(EnvironmentScope & { id: string }) | { response: Response }> {
+    const tenant = await this.#resolveTenant(context);
+    if ('response' in tenant) return tenant;
+    const projectId = context.req.param('id');
+    const id = context.req.param('projectRepositoryId');
+    if (!projectId || !UUID_RE.test(projectId) || !id || !UUID_RE.test(id))
+      return { response: context.json({ error: 'Project repository not found' }, 404) };
+    return { ...tenant, projectId, id };
   }
 
   async #resolveTenant(context: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
@@ -739,7 +575,13 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 }
                 const session = await controller.getSession(binding.sessionId);
                 if (!session) {
-                  skipped++;
+                  // An unloaded session reads the thread's model when it loads again, so store it on the thread.
+                  await controller.setThreadModel({
+                    resourceId: binding.resourceId,
+                    threadId: binding.threadId,
+                    modelId,
+                  });
+                  applied++;
                   continue;
                 }
                 const thread = await session.thread.getById({ threadId: binding.threadId });
@@ -905,14 +747,24 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               : null;
           if (!repository || repository.installationId !== found.connection.installationId)
             return context.json({ error: 'Source-control repository not found' }, 404);
-          const { repositoryId: _repositoryId, repository: _repository, ...linkInput } = input;
+          const { repositoryId: _repositoryId, repository: _repository, selectIntake, ...linkInput } = input;
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
             connectionId,
-            createdByUserId: tenant.userId,
             repositoryId: repository.id,
             ...linkInput,
           });
+          if (selectIntake && found.connection.integrationId === 'github' && this.deps.intake) {
+            try {
+              await this.deps.intake.addSources({
+                orgId: tenant.orgId,
+                integrationId: 'github',
+                sourceIds: [repository.slug],
+              });
+            } catch (error) {
+              console.warn('[factory] Failed to add a linked repository to issue intake:', error);
+            }
+          }
           try {
             this.deps.onProjectRepositoryLinked?.({ orgId: tenant.orgId, projectRepository });
           } catch (error) {
@@ -930,13 +782,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const projectId = context.req.param('id');
-          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
-          const project = await this.#project(tenant.orgId, projectId);
-          if (!project) return context.json({ error: 'Project not found' }, 404);
-          return context.json(await this.#environmentPayload(tenant.orgId, project));
+          const scope = await this.#environmentScope(context);
+          return 'response' in scope ? scope.response : this.#handlers.get(context, scope);
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.path, {
@@ -944,129 +791,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const projectId = context.req.param('id');
-          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
-          const project = await this.#project(tenant.orgId, projectId);
-          if (!project) return context.json({ error: 'Project not found' }, 404);
-          const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
-          if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
-          const {
-            repositories: repositoryPatches,
-            settings: settingsPatch,
-            buildTriggers,
-            ...projectInput
-          } = parsed.data;
-          const input: UpdateFactoryProjectInput = projectInput;
-          const runner = this.deps.environmentBuilds;
-          if (buildTriggers !== undefined) {
-            if (!runner) return context.json({ error: 'no_builds' }, 400);
-            if (buildTriggers.push?.enabled !== undefined) input.buildOnPushEnabled = buildTriggers.push.enabled;
-            if (buildTriggers.push?.debounceMinutes !== undefined) {
-              input.buildPushDebounceMinutes = buildTriggers.push.debounceMinutes;
-            }
-            if (buildTriggers.schedule) {
-              if (!runner.scheduleAvailable) {
-                if (buildTriggers.schedule.enabled) return context.json({ error: 'schedules_unavailable' }, 400);
-              } else {
-                const { cron, timezone } = buildTriggers.schedule;
-                const stored = await readSchedule(runner.schedules()!, project.id);
-                const nextCron = cron ?? stored.cron;
-                // Disabling a schedule that never existed needs no cron: it is a no-op.
-                if (!nextCron && buildTriggers.schedule.enabled)
-                  return context.json(
-                    {
-                      error: 'invalid_environment',
-                      issues: [{ message: 'cron is required', path: ['buildTriggers', 'schedule', 'cron'] }],
-                    },
-                    400,
-                  );
-                const nextTimezone = timezone ?? stored.timezone ?? undefined;
-                const message = nextCron ? invalidCronMessage(nextCron, nextTimezone) : undefined;
-                if (message) {
-                  return context.json(
-                    {
-                      error: 'invalid_environment',
-                      issues: [{ message, path: ['buildTriggers', 'schedule', 'cron'] }],
-                    },
-                    400,
-                  );
-                }
-              }
-            }
-          }
-          if (settingsPatch !== undefined && !this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
-
-          let updated = project;
-          if (Object.keys(input).length > 0 || settingsPatch !== undefined || repositoryPatches !== undefined) {
-            let issues: ReadonlyArray<{ message: string; path?: unknown }> | undefined;
-            let repositoryOutcome: 'updated' | 'not_found' | 'incomplete_reorder' | undefined;
-            const sourceControl = await this.#sourceControl();
-            // One transaction holds the project row, so the settings merge and the link
-            // writes either all land or none do, and concurrent patches apply in turn.
-            const result = await (
-              await this.#projects()
-            ).update({
-              orgId: tenant.orgId,
-              id: projectId,
-              input: async (current, ops) => {
-                let sandboxSettings: Record<string, unknown> | null | undefined;
-                if (settingsPatch !== undefined) {
-                  const settings = await this.#mergeSettings(current.sandboxSettings ?? {}, settingsPatch);
-                  if ('issues' in settings) {
-                    issues = settings.issues;
-                    return null;
-                  }
-                  sandboxSettings = settings.merged;
-                }
-                if (repositoryPatches !== undefined) {
-                  repositoryOutcome = await sourceControl.updateEnvironmentRepositories(ops, {
-                    factoryProjectId: current.id,
-                    integrationIds: [...this.#versionControlIntegrationIds],
-                    patches: repositoryPatches,
-                  });
-                  if (repositoryOutcome !== 'updated') return null;
-                }
-                return { ...input, ...(sandboxSettings !== undefined ? { sandboxSettings } : {}) };
-              },
-            });
-            if (repositoryOutcome === 'not_found') return context.json({ error: 'Project repository not found' }, 404);
-            if (repositoryOutcome === 'incomplete_reorder') return context.json({ error: 'invalid_environment' }, 400);
-            if (issues) {
-              return context.json(
-                {
-                  error: 'invalid_environment',
-                  issues: issues.map(issue => ({
-                    message: issue.message,
-                    path: Array.isArray(issue.path)
-                      ? issue.path.map(segment =>
-                          typeof segment === 'object' && segment !== null && 'key' in segment ? segment.key : segment,
-                        )
-                      : [],
-                  })),
-                },
-                400,
-              );
-            }
-            if (!result) return context.json({ error: 'Project not found' }, 404);
-            updated = result;
-            runner?.onEnvironmentSaved(updated.id);
-          }
-          if (buildTriggers?.schedule && runner?.scheduleAvailable) {
-            const stored = await readSchedule(runner.schedules()!, project.id);
-            const cron = buildTriggers.schedule.cron ?? stored.cron;
-            // Without a cron the request disables a schedule that never existed: nothing to write.
-            if (cron)
-              await ensureSchedule(runner.schedules()!, project.id, {
-                enabled: buildTriggers.schedule.enabled,
-                cron,
-                ...((buildTriggers.schedule.timezone ?? stored.timezone)
-                  ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
-                  : {}),
-              });
-          }
-          return context.json(await this.#environmentPayload(tenant.orgId, updated));
+          const scope = await this.#environmentScope(context);
+          return 'response' in scope ? scope.response : this.#handlers.update(context, scope);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
@@ -1074,25 +800,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const projectId = context.req.param('id');
-          const projectRepositoryId = context.req.param('projectRepositoryId');
-          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId))
-            return context.json({ error: 'Project repository not found' }, 404);
-          const found = await this.#findProjectRepository({ orgId: tenant.orgId, projectId, id: projectRepositoryId });
-          if (!found) return context.json({ error: 'Project repository not found' }, 404);
-          const input = parseRepositoryUpdateInput(await readJson(context));
-          if (!input) return context.json({ error: 'invalid_project_repository' }, 400);
-          const projectRepository = await found.handle.projectRepositories.update({
-            orgId: tenant.orgId,
-            id: projectRepositoryId,
-            input,
-          });
-          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
-          return context.json({
-            projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
-          });
+          const scope = await this.#repositoryScope(context);
+          return 'response' in scope ? scope.response : this.#handlers.updateRepository(context, scope, scope.id);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
@@ -1100,20 +809,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
         requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          const projectId = context.req.param('id');
-          const projectRepositoryId = context.req.param('projectRepositoryId');
-          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId))
-            return context.json({ error: 'Project repository not found' }, 404);
-          const found = await this.#findProjectRepository({ orgId: tenant.orgId, projectId, id: projectRepositoryId });
-          if (!found) return context.json({ error: 'Project repository not found' }, 404);
-          if (!(await this.#retireProjectRepositorySessions(found.handle, tenant.orgId, projectRepositoryId))) {
-            return context.json({ error: 'session_retirement_unavailable' }, 409);
-          }
-          await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
-          this.deps.environmentBuilds?.onEnvironmentSaved(projectId);
-          return context.body(null, 204);
+          const scope = await this.#repositoryScope(context);
+          return 'response' in scope ? scope.response : this.#handlers.deleteRepository(context, scope, scope.id);
         },
       }),
       ...this.#buildRoutes(),

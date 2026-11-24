@@ -1,5 +1,6 @@
 import type { WorkItemStarters } from '../../../api/types';
 import type { BoardInfo } from './boardFlow';
+import { phaseLabel } from './boardStages';
 import { triageDecisions } from './cardPrimaryAction';
 
 export type StarterKind = 'unblock' | 'feedback' | 'review' | 'decide' | 'triage' | 'bug' | 'sweep' | 'stale';
@@ -73,7 +74,7 @@ export function starterPrompts({
   if (!board) return [];
   const texts = prompts(board);
   const { failed, changesRequested, review, undecided, untriaged, unplannedBugs, sweep, stale } = starters;
-  const restTitle = board.phases.find(phase => phase.id === board.initialPhase)?.title ?? board.initialPhase;
+  const restTitle = phaseLabel(board, board.initialPhase);
   const facts: Array<[StarterKind, StarterFact | false | undefined]> = [
     ['unblock', failed > 0 && { label: 'Failed runs', value: failed, action: upTo(failed, 'Debug and retry') }],
     [

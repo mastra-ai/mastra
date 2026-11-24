@@ -381,12 +381,4 @@ describe('KnowledgePageExplorer body links', () => {
       expect(toggle.getAttribute('aria-pressed')).toBe('true');
     });
   });
-
-  describe('the Graph and Page toggle', () => {
-    it('marks the current view as the selected tab', () => {
-      renderWithProviders(<Host initial="overview" initialView="graph" />);
-      expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('true');
-      expect(screen.getByRole('tab', { name: 'Page' }).getAttribute('aria-selected')).toBe('false');
-    });
-  });
 });

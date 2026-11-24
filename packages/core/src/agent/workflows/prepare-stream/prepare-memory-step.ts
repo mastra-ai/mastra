@@ -13,9 +13,9 @@ import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { getInitialSignalEchoes } from '../../helpers';
 import { assertThreadOwnedByResource } from '../../memory-thread-ownership';
 import { MessageList } from '../../message-list';
-import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import {
@@ -44,14 +44,6 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
     // Handle string, CoreSystemMessage, or SystemModelMessage
     messageList.addSystem(content, tag);
   }
-}
-
-function getInitialSignalEchoes(messageList: MessageList) {
-  const inputMessageIds = messageList.makeMessageSourceChecker().input;
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
-    .map(mastraDBMessageToSignal);
 }
 
 interface PrepareMemoryStepOptions<OUTPUT = undefined> {

@@ -6,12 +6,15 @@ import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTime
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconCalendarClock4 } from '@mastra/playground-ui/icons/central/IconCalendarClock4';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useSchedule, useScheduleTriggers, useToggleSchedule } from '@mastra/react/hooks/schedules';
-import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
@@ -39,7 +42,7 @@ export default function SchedulePage() {
   const crumbs = [
     navCrumb('/workflows'),
     schedulesCrumb,
-    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
+    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: IconCalendarClock4 },
   ];
   const { paths } = useLinkComponent();
   const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
@@ -55,7 +58,7 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -64,7 +67,7 @@ export default function SchedulePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <PermissionDenied variant="fill" resource="schedules" />
       </PageLayout>
@@ -73,7 +76,7 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load schedule" descriptionSlot={error.message} />
       </PageLayout>
@@ -85,11 +88,12 @@ export default function SchedulePage() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>
           <ActionRow.End>
-            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
+            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<IconArrowLeft />}>
               Back to schedules
             </Button>
             {workflowId ? (
@@ -111,12 +115,12 @@ export default function SchedulePage() {
               >
                 {schedule.status === 'active' ? (
                   <>
-                    <PauseIcon />
+                    <IconPause />
                     Pause
                   </>
                 ) : (
                   <>
-                    <PlayIcon />
+                    <IconPlay />
                     Resume
                   </>
                 )}

@@ -32,8 +32,8 @@ vi.mock('@workos-inc/node', () => {
     }
   }
 
-  // Mock the GeneratePortalLinkIntent enum used by admin-portal.ts
-  const GeneratePortalLinkIntent = {
+  // Mock the GenerateLinkIntent enum used by admin-portal.ts
+  const GenerateLinkIntent = {
     SSO: 'sso',
     DSync: 'dsync',
     AuditLogs: 'audit_logs',
@@ -42,7 +42,7 @@ vi.mock('@workos-inc/node', () => {
 
   return {
     WorkOS: MockWorkOS,
-    GeneratePortalLinkIntent,
+    GenerateLinkIntent,
   };
 });
 

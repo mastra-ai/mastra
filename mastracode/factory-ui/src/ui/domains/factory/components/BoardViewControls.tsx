@@ -3,7 +3,6 @@ import { SavedViewEditor, SavedViewTabs } from '@mastra/playground-ui/components
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Kanban, List } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
@@ -15,6 +14,8 @@ import type { BoardView } from '../hooks/useBoardView';
 import { BOARD_FILTER_OPERATORS, boardFilterFields } from './boardFilterFields';
 import { BoardPropertiesMenu } from './BoardPropertiesMenu';
 import { BoardViewControlsLayout } from './BoardViewControlsLayout';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconListBullets } from '@mastra/playground-ui/icons/central/IconListBullets';
 
 const LAYOUT_LABELS: Record<BoardLayout, string> = { board: 'Board', list: 'List' };
 
@@ -73,10 +74,10 @@ export function BoardViewControls({
           <div className="flex shrink-0 items-center gap-2">
             <SegmentedControl aria-label="Layout" size="sm" iconOnly value={view.layout} onValueChange={view.setLayout}>
               <SegmentedControlItem value="list" aria-label={LAYOUT_LABELS.list} title={LAYOUT_LABELS.list}>
-                <List aria-hidden />
+                <IconListBullets aria-hidden />
               </SegmentedControlItem>
               <SegmentedControlItem value="board" aria-label={LAYOUT_LABELS.board} title={LAYOUT_LABELS.board}>
-                <Kanban aria-hidden />
+                <IconKanbanView aria-hidden />
               </SegmentedControlItem>
             </SegmentedControl>
             <BoardPropertiesMenu view={view} fields={fields} currentUserId={currentUserId} />

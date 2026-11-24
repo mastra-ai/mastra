@@ -29,6 +29,7 @@ import {
   claimRunOwnership,
   evalFenced,
   getRunOwnership,
+  getRunOwnerships,
   releaseRunOwnership,
   renewRunOwnership,
   runClaimKey,
@@ -45,6 +46,33 @@ type WorkflowRunRecord = {
   updatedAt: string | Date;
   resourceId?: string;
 };
+
+/**
+ * A run with its snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status`
+ * and `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot, or one that failed to parse and stayed a string, reduces to `{}`.
+ */
+function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
+  const source = run.snapshot !== null && typeof run.snapshot === 'object' ? run.snapshot : {};
+  const { status, timestamp, parentWorkflow } = source as Partial<WorkflowRunState>;
+  const snapshot: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    snapshot.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    snapshot.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
+  }
+
+  return { ...run, snapshot: snapshot as unknown as WorkflowRunState };
+}
 
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
@@ -138,6 +166,23 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       return await getRunOwnership(this.client, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one pipeline request per hundred runs. */
+  override async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    try {
+      return await getRunOwnerships(this.client, runIds);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: runIds.length },
+        },
+        error,
+      );
     }
   }
 
@@ -621,6 +666,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first. With `summary`, each snapshot keeps only its status, timestamp and
+   * parent run; the full snapshots are still read from Upstash.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -629,6 +678,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     page,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       if (page !== undefined && page < 0) {
@@ -697,7 +747,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         runs = runs.slice(offset, offset + normalizedPerPage);
       }
 
-      return { runs, total };
+      // Every snapshot is fetched whole, so summary mode only trims the result, after the status filter.
+      return { runs: summary ? runs.map(summarizeWorkflowRun) : runs, total };
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

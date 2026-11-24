@@ -1,6 +1,7 @@
 import React from 'react';
+import type { ReactNode } from 'react';
 import Markdown from 'react-markdown';
-import { ToolCard } from '../tool-card';
+import type { ToolCardProps } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
@@ -44,6 +45,11 @@ export interface AgentBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'>
   errorText?: string;
   onLoadPrevious?: () => void;
   isLoadingPrevious?: boolean;
+  /**
+   * Draws each tool call the sub-agent made. Required so this badge never imports the live
+   * `ToolCard` itself: a recorded card can draw it without pulling in the live chat.
+   */
+  renderToolCard: (props: ToolCardProps) => ReactNode;
 }
 
 export const AgentBadge = ({
@@ -62,6 +68,7 @@ export const AgentBadge = ({
   errorText,
   onLoadPrevious,
   isLoadingPrevious = false,
+  renderToolCard,
 }: AgentBadgeProps) => {
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -167,18 +174,18 @@ export const AgentBadge = ({
 
             return (
               <React.Fragment key={index}>
-                <ToolCard
-                  toolName={message.toolName}
-                  input={message.args}
-                  output={result}
-                  state="output-available"
-                  toolCallId={message.toolCallId}
-                  metadata={{
+                {renderToolCard({
+                  toolName: message.toolName,
+                  input: message.args,
+                  output: result,
+                  state: 'output-available',
+                  toolCallId: message.toolCallId,
+                  metadata: {
                     mode: 'stream',
                     requireApprovalMetadata: isNetwork ? metadata?.requireApprovalMetadata : undefined,
                     suspendedTools: parentSuspendedTools,
-                  }}
-                />
+                  },
+                })}
               </React.Fragment>
             );
           })}

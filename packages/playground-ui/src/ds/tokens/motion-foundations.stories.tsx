@@ -27,7 +27,13 @@ const durationNotes: Record<DurationToken, string> = {
   slow: 'Something the reader watches arrive or leave',
 };
 
-const easings = [{ token: '--ease-out-custom', note: 'Leaves fast, settles slow — the only curve' }];
+const easings = [
+  { token: '--ease-out-custom', note: 'Leaves fast, settles slow — for what enters or leaves' },
+  {
+    token: '--ease-in-out-custom',
+    note: 'Strong ease-in-out — for what is already on screen and moves or changes shape',
+  },
+];
 
 const FadeBox = ({ duration, easing }: { duration: string; easing: string }) => (
   <div
@@ -44,7 +50,7 @@ export const MotionFoundations: Story = {
       title="Motion foundations"
       description="Hover each specimen: the only property the shell animates is colour. Nothing in a control moves, resizes or slides, so a fade is the whole motion language and a duration is the only choice left."
       note="Policy: colour fades only, --duration-fast for control state. Anything longer belongs to a surface arriving, not to a control reacting."
-      noteAside="Utilities: duration-fast / duration-normal / duration-slow, ease-out-custom."
+      noteAside="Utilities: duration-fast / duration-normal / duration-slow, ease-out-custom, ease-in-out-custom."
     >
       <FoundationSection
         label="Durations"

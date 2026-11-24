@@ -77,15 +77,6 @@ describe('TraceColumnsMenu', () => {
       expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('duration');
     });
 
-    it('lets the user toggle the Output column', async () => {
-      render(<TraceColumnsMenu {...defaultProps} />);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
-      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Output' }));
-
-      expect(defaultProps.onToggleColumn).toHaveBeenCalledWith('output');
-    });
-
     it('resets on request', async () => {
       render(<TraceColumnsMenu {...defaultProps} />);
 

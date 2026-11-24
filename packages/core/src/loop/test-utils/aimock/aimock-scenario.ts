@@ -427,9 +427,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   let agent: any;
   let mastra: any;
   if (sharedAgent) {
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter, so discriminate against a real
-    // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
+    // Only wrappers (createDurableAgent, Inngest) match `isDurableAgentLike`; a native
+    // Agent with an execution engine does not, so it still gets wrapped below.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
     if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
@@ -525,6 +524,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(prepareStep ? { prepareStep } : {}),
     ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
+    ...(opts.tracingOptions ? { tracingOptions: opts.tracingOptions } : {}),
     ...(delegation ? { delegation } : {}),
     ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
@@ -703,6 +703,11 @@ export async function runApprovalScenario({
   tracingOptions,
   afterStream,
   agentOutputProcessors,
+  memory,
+  threadId,
+  resourceId,
+  resumeOptions,
+  defaultOptions,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
@@ -713,8 +718,12 @@ export async function runApprovalScenario({
     engine,
     observability,
     agentOutputProcessors,
+    memory,
+    defaultOptions,
   });
   const isDurable = isDurableEngineVariant(engine);
+  const memoryOption =
+    memory && threadId ? { memory: { thread: threadId, ...(resourceId ? { resource: resourceId } : {}) } } : {};
 
   const chunks: ChunkType[] = [];
   const approvals: string[] = [];
@@ -726,6 +735,7 @@ export async function runApprovalScenario({
 
   let run = (await agent.stream(prompt, {
     tracingOptions,
+    ...memoryOption,
     ...(requireToolApproval !== false ? { requireToolApproval } : {}),
     ...(stopWhen ? { stopWhen } : {}),
     // Durable needs maxSteps as a fallback when stopWhen is the only bound.
@@ -756,8 +766,8 @@ export async function runApprovalScenario({
     approvals.push(`${approve ? 'approve' : 'decline'}:${toolCallId}`);
 
     run = (await (approve
-      ? agent.approveToolCall({ runId, toolCallId })
-      : agent.declineToolCall({ runId, toolCallId }))) as unknown as RunHandle;
+      ? agent.approveToolCall({ runId, toolCallId, ...resumeOptions })
+      : agent.declineToolCall({ runId, toolCallId, ...resumeOptions }))) as unknown as RunHandle;
   }
 
   await afterStream?.();

@@ -4,6 +4,7 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
@@ -36,34 +37,29 @@ export function safeReturnTo(raw?: string): string {
 
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
-    <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive-foreground">
-        Mastra Platform sign-in isn&apos;t available on custom domains
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-2">
+    <Notice
+      variant="destructive"
+      role="alert"
+      title={<h2>Mastra Platform sign-in isn&apos;t available on custom domains</h2>}
+      action={
+        <>
+          <Notice.Button render={<a href="https://mastra.ai/docs/auth/overview" target="_blank" rel="noreferrer" />}>
+            Auth overview
+          </Notice.Button>
+          <Notice.Button
+            render={<a href="https://mastra.ai/integrations/auth/workos" target="_blank" rel="noreferrer" />}
+          >
+            WorkOS integration
+          </Notice.Button>
+        </>
+      }
+    >
+      <Notice.Message>
         This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
         (*.mastra.cloud). To use a custom domain, configure your own auth provider, such as WorkOS (WORKOS_API_KEY +
         WORKOS_CLIENT_ID) or Better Auth, and redeploy.
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-        <a
-          href="https://mastra.ai/docs/auth/overview"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          Auth overview
-        </a>
-        <a
-          href="https://mastra.ai/integrations/auth/workos"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          WorkOS integration
-        </a>
-      </Txt>
-    </div>
+      </Notice.Message>
+    </Notice>
   );
 }
 
@@ -208,21 +204,17 @@ export function SignInPage() {
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
-              <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive-foreground">
-                  {accessDenied ? 'Access denied' : 'Sign-in failed'}
-                </Txt>
-                {authErrorDescription ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    {authErrorDescription}
-                  </Txt>
-                ) : null}
+              <Notice
+                variant="destructive"
+                role="alert"
+                title={accessDenied ? 'Access denied' : 'Sign-in failed'}
+                className="mb-6"
+              >
+                {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
                 {accessDenied ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    Ask an organization admin to add your account, then sign in again.
-                  </Txt>
+                  <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
                 ) : null}
-              </div>
+              </Notice>
             ) : null}
             {auth.isError ? (
               <div role="alert" className="space-y-3">

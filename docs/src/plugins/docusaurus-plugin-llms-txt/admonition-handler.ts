@@ -16,14 +16,7 @@ import type { BlockContent, DefinitionContent } from 'mdast'
 import type { State } from 'hast-util-to-mdast'
 
 function hasClass(node: Element, className: string): boolean {
-  const classes = node.properties?.className
-  if (Array.isArray(classes)) {
-    return classes.includes(className)
-  }
-  if (typeof classes === 'string') {
-    return classes.split(/\s+/).includes(className)
-  }
-  return false
+  return node.properties?.className?.includes(className) ?? false
 }
 
 /**

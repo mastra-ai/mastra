@@ -1,11 +1,20 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ComponentProps } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { Panel } from 'react-resizable-panels';
 
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
+import type { TraceNavigation } from '../trace-navigation';
+import { TraceNavigationScope } from '../trace-navigation-scope';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
-import { MessageScrollerProvider } from '@/ds/components/MessageScroller';
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@/ds/components/MessageScroller';
 import { PanelGroup } from '@/lib/resize/panel-group';
+import { PanelSeparator } from '@/lib/resize/separator';
 import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
@@ -13,20 +22,38 @@ export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   traceIds: string[];
   /** Fires when the reader scrolls up to the oldest loaded row; load the previous page here. */
   onLoadOlder?: () => void;
+  /**
+   * Controlled selection (`null`: no span open), so the host knows which span to load the record of.
+   * The root keeps its own when omitted.
+   */
+  selectedSpan?: ThreadTraceSelectedSpan | null;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
+  /**
+   * The resizable column beside the turns, shown while a span is open; typically a
+   * `ThreadTrace.SpanDetail` fed with the open span's record.
+   */
+  spanDetail?: ReactNode;
+  /** Where the thread opens things (each turn's trace, tools, agents…): the host's callbacks; text without them. */
+  navigation?: TraceNavigation;
+  /** The turns, oldest first: one `ThreadTrace.Row` per trace of `traceIds`. */
+  children?: ReactNode;
 }
 
 /**
- * Owns the interaction state of a thread rendered as its traces: the selected span, the
- * highlighted spans, which rows are expanded, and which rows are on screen. Layout parts read it
- * through `useThreadTrace()` / `useThreadTraceRow()`; the root itself is the resizable panel group that
- * gains a span column while a span is selected.
+ * Owns the interaction state of a thread rendered as its traces: the selected span (unless the host
+ * controls it), the highlighted spans, which rows are expanded, and which rows are on screen. It never
+ * fetches: each part gets the records it draws from the host. Layout parts read it
+ * through `useThreadTrace()` / `useThreadTraceRow()`. It lays the turns out in a scrolling list and, while a
+ * span is open, its `spanDetail` slot in a resizable column beside them.
  */
 export function ThreadTraceRoot({
   traceIds,
   onLoadOlder,
+  selectedSpan,
   onSelectedSpanChange,
+  spanDetail,
+  navigation,
   className,
   children,
   ...props
@@ -34,7 +61,8 @@ export function ThreadTraceRoot({
   const listRef = useRef<HTMLDivElement>(null);
   const { visibleTraceIds, currentTraceId } = useVisibleTraceRows(listRef, traceIds);
 
-  const [selected, setSelected] = useState<ThreadTraceSelectedSpan | null>(null);
+  const [ownSelected, setOwnSelected] = useState<ThreadTraceSelectedSpan | null>(null);
+  const selected = selectedSpan !== undefined ? selectedSpan : ownSelected;
   const [highlight, setHighlight] = useState<ThreadTraceHighlight | null>(null);
   // Selecting a span expands its row and it stays expanded until the reader collapses it with "Collapse".
   const [expandedTraceIds, setExpandedTraceIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -52,7 +80,7 @@ export function ThreadTraceRoot({
   const selectSpan = useCallback(
     (traceId: string, spanId: string | undefined) => {
       const next = spanId ? { traceId, spanId } : null;
-      setSelected(next);
+      setOwnSelected(next);
       onSelectedSpanChange?.(next);
       if (spanId) setTraceExpanded(traceId, true);
       // Closing the panel also ends the highlight, like clearing the URL param on the traces page.
@@ -116,16 +144,41 @@ export function ThreadTraceRoot({
 
   return (
     <ThreadTraceContext.Provider value={contextValue}>
-      {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
+      <TraceNavigationScope navigation={navigation}>
+        {/* Opens on the latest turn and keeps the reading position when older turns are prepended.
           No auto-follow: turns are settled before mount, so the only growth at the end comes from
           the reader expanding a row, which must not move the view. */}
-      <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
-        <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
-          <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
-            {children}
-          </PanelGroup>
-        </div>
-      </MessageScrollerProvider>
+        <MessageScrollerProvider defaultScrollPosition="end" preserveScrollOnPrepend onReachStart={onLoadOlder}>
+          <div data-slot="thread-trace" className={cn('flex h-full min-h-0', className)} {...props}>
+            <PanelGroup orientation="horizontal" className="min-h-0 flex-1">
+              <Panel id="thread-trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+                {/* Visible-row tracking observes `[data-trace-id]` inside this viewport. */}
+                <MessageScroller data-slot="thread-trace-list" className="min-h-0 flex-1">
+                  <MessageScrollerViewport ref={listRef} className="overflow-x-hidden">
+                    <MessageScrollerContent data-slot="thread-trace-list-inner" className="relative min-h-full gap-0">
+                      {children}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                </MessageScroller>
+              </Panel>
+              {selected && spanDetail && (
+                <>
+                  <PanelSeparator variant="pill" />
+                  <Panel id="thread-trace-span" minSize={384} defaultSize="35%" maxSize="50%">
+                    <div
+                      data-slot="thread-trace-span-panel"
+                      // Same chrome as the span column of the trace panel: flush to the edge, divided by a left border.
+                      className="flex h-full min-h-0 min-w-0 animate-in flex-col overflow-hidden border-l border-border duration-300 fade-in-0"
+                    >
+                      {spanDetail}
+                    </div>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          </div>
+        </MessageScrollerProvider>
+      </TraceNavigationScope>
     </ThreadTraceContext.Provider>
   );
 }

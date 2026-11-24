@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -124,6 +125,7 @@ const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
 const controllerGetSessionMock = vi.fn();
+const controllerResolveToolApprovalMock = vi.fn((_toolName: string, _scope?: unknown) => 'ask');
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -262,6 +264,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         getWorkspace: () => undefined,
         getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
+        resolveToolApproval: (toolName: string, scope?: unknown) => controllerResolveToolApprovalMock(toolName, scope),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -498,7 +501,9 @@ vi.mock('../utils/project.js', () => ({
   getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
-const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({
+  storage: new InMemoryStore({ id: 'code-sdk-test' }),
+}));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('../utils/storage-factory.js', () => ({
@@ -653,7 +658,7 @@ describe('createMastraCode', () => {
     mastraCodeGatewayMock.getApiKey.mockClear();
     mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-test' }), backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
@@ -692,6 +697,8 @@ describe('createMastraCode', () => {
     });
     controllerStateMock = { cavemanObservations: false };
     controllerThreadMetadataMock = undefined;
+    controllerResolveToolApprovalMock.mockReset();
+    controllerResolveToolApprovalMock.mockImplementation(() => 'ask');
     controllerModeMock = 'build';
     controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
@@ -1191,14 +1198,15 @@ describe('createMastraCode', () => {
     expect(await plainScopes({ scopes: [], requestContext: factory })).toEqual(['org:o', 'project:p']);
   });
 
-  it('gives an unresolved Factory session only identity tags, never the host tags', async () => {
+  it("gives an unresolved Factory session only its run's own identity, never a host tag", async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const { RequestContext } = await import('@mastra/core/request-context');
     const { resolveKnowledgeSessionScopes } = await import('../knowledge-scope.js');
     const { createMastraCode } = await import('../index.js');
     const cases = [
-      // A host org that conflicts with the session's org.
+      // A host identity tag, which a Factory session refuses with or without a host org.
       { host: ['org:other', 'resource:r'], state: { factoryOrgId: 'o', factoryProjectId: 'p' } },
+      { host: ['thread:t'], state: { factoryOrgId: 'o', factoryProjectId: 'p' } },
       // A Factory session with no org, where the host org must not stand in for it.
       { host: ['org:acme'], state: { factoryProjectId: 'p', factoryOrgUnresolved: true } },
     ];
@@ -1208,9 +1216,9 @@ describe('createMastraCode', () => {
         scopes: host,
       });
       const context = new RequestContext([['controller', { state }]]);
-      expect(await codeAgentConfig().scopes({ scopes: [], requestContext: context })).toEqual(
-        host.filter(tag => tag.startsWith('resource:')),
-      );
+      expect(await codeAgentConfig().scopes({ scopes: ['resource:run'], requestContext: context })).toEqual([
+        'resource:run',
+      ]);
       // The inspector uses the same resolver with the same host tags, and refuses an unresolved session.
       expect(createKnowledgeInspectorMock).toHaveBeenLastCalledWith(expect.objectContaining({ hostScopes: host }));
       expect(resolveKnowledgeSessionScopes(state as any, host).resolved).toBe(false);
@@ -1350,7 +1358,7 @@ describe('createMastraCode', () => {
   // even though the instance is a real store. Detection must be structural.
   describe('injected storage from a foreign @mastra/core copy', () => {
     class ForeignCompositeStore {
-      stores = {};
+      stores = new InMemoryStore({ id: 'foreign-code-sdk-test' }).stores;
       async init() {}
       __registerMastra() {}
     }
@@ -1467,7 +1475,7 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-plugin-test' }), backend: 'pg' });
     const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
@@ -2106,7 +2114,7 @@ describe('createMastraCode', () => {
       maxRetries?: number;
       delayMs?: (args: { error?: unknown; retryCount: number }) => number;
       onRetry?: (args: {
-        error: Error;
+        error: unknown;
         retryCount: number;
         requestContext?: { get: (key: string) => unknown };
         delayMs: number;
@@ -2164,6 +2172,22 @@ describe('createMastraCode', () => {
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
+
+    emitEvent.mockClear();
+    await serverErrorPolicy.onRetry!({
+      error: { type: 'error', error: { type: 'overloaded_error', message: 'Provider overloaded' }, statusCode: 503 },
+      retryCount: 0,
+      requestContext: { get: () => ({ emitEvent }) },
+      delayMs: 500,
+    });
+    expect(emitEvent).toHaveBeenCalledWith({
+      type: 'error',
+      error: expect.objectContaining({ message: expect.stringContaining('Provider overloaded'), statusCode: 503 }),
+      retryable: true,
+      retryDelay: 500,
+      retryAttempt: 1,
+      maxRetries: 10,
+    });
   });
 
   describe('default error lane', () => {
@@ -2438,6 +2462,42 @@ describe('createMastraCode', () => {
     expect(built.controller).toBeDefined();
   });
 
+  it('reports plugin signal provider errors through the plugin manager', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    class BrokenProvider extends SignalProvider<string> {
+      readonly id = 'acme-broken-signals';
+      async start() {
+        throw new Error('provider warm-up broke');
+      }
+    }
+    const reportPluginError = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [
+        { pluginId: 'acme.plugin', versionStamp: 'v1', value: new BrokenProvider() },
+      ]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+      reportPluginError,
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    await vi.waitFor(() =>
+      expect(reportPluginError).toHaveBeenCalledWith({
+        pluginId: 'acme.plugin',
+        message: 'Plugin "acme.plugin" signal provider "acme-broken-signals" failed to start: provider warm-up broke',
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
     const { SignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');
@@ -2553,10 +2613,12 @@ describe('createMastraCode', () => {
       modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       yolo: false,
       sandboxAllowedPaths: ['/active-only'],
+      permissionRules: { categories: { edit: 'allow' }, tools: {} },
     };
     controllerThreadMetadataMock = {
       currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
       modelRoute: {
         entries: [
           { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
@@ -2612,9 +2674,18 @@ describe('createMastraCode', () => {
       },
       yolo: false,
       sandboxAllowedPaths: [],
+      // The woken thread's own rules, not the open thread's.
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
     });
     expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
-    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    // Only calls the woken thread's policy does not allow pause for approval.
+    const requireToolApproval = decision.streamOptions.requireToolApproval;
+    expect(requireToolApproval).toBeTypeOf('function');
+    controllerResolveToolApprovalMock.mockImplementation(toolName => (toolName === 'view' ? 'allow' : 'ask'));
+    expect(requireToolApproval({ toolName: 'view' })).toBe(false);
+    expect(requireToolApproval({ toolName: 'write_file' })).toBe(true);
+    expect(controllerResolveToolApprovalMock).toHaveBeenCalledWith('view', decision.streamOptions.requestContext);
+    expect(decision.streamOptions.toolCallConcurrency).toEqual({ strategy: 'called' });
     controllerSetStateMock.mockClear();
 
     const pendingFallback = {

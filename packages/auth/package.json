@@ -1,10 +1,11 @@
 {
   "name": "@mastra/auth",
-  "version": "1.1.5",
+  "version": "1.2.1-alpha.0",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -551,7 +551,7 @@ export class AgentControllerChannels extends AgentChannels {
     if (!this.controller || !ctx?.sessionId) return true;
     const session = await this.controller.getSession(ctx.sessionId, requestContext);
     if (!session) return true;
-    return session.resolveToolApproval(toolName) === 'ask';
+    return session.resolveToolApproval(toolName, requestContext) === 'ask';
   }
 
   /**

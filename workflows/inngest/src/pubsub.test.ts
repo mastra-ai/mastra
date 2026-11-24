@@ -38,7 +38,8 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
       type: 'finish',
       runId: 'r1',
       data: {
-        stepResult: { reason: 'stop' },
+        stepResult: { reason: 'tool-calls' },
+        stopCause: 'max_steps',
         output: { text: 'done', usage: { totalTokens: 3 }, steps: [{ toolResults: [{ result: huge }] }] },
       },
     });
@@ -46,18 +47,23 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
       {
         type: 'finish',
         runId: 'r1',
-        data: { stepResult: { reason: 'stop' }, output: { text: 'done', usage: { totalTokens: 3 }, steps: [] } },
+        data: {
+          stepResult: { reason: 'tool-calls' },
+          stopCause: 'max_steps',
+          output: { text: 'done', usage: { totalTokens: 3 }, steps: [] },
+        },
       },
     ]);
   });
 
-  it('keeps the final text when stepResult alone is oversized', async () => {
+  it('keeps the final text and stopCause when stepResult alone is oversized', async () => {
     const { pubsub, published } = setup();
     await pubsub.publish('agent.stream.r1', {
       type: 'finish',
       runId: 'r1',
       data: {
-        stepResult: { reason: 'stop', blob: huge },
+        stepResult: { reason: 'tool-calls', blob: huge },
+        stopCause: 'stop_condition',
         output: { text: 'done', usage: { totalTokens: 3 }, steps: [] },
       },
     });
@@ -65,7 +71,11 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
       {
         type: 'finish',
         runId: 'r1',
-        data: { stepResult: { reason: 'stop' }, output: { steps: [], text: 'done', usage: { totalTokens: 3 } } },
+        data: {
+          stepResult: { reason: 'tool-calls' },
+          stopCause: 'stop_condition',
+          output: { steps: [], text: 'done', usage: { totalTokens: 3 } },
+        },
       },
     ]);
   });
@@ -112,7 +122,9 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     await pubsub.subscribe('agent.stream.r1', event => received.push(event));
 
     onMessage({ data: '{"type":"chunk","runId":"r1","data":{"type":"tool-result","payload":{"result":"xxxx' });
-    onMessage({ data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"stop"},"output":{"steps":[{"te' });
+    onMessage({
+      data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"tool-calls"},"stopCause":"max_steps","output":{"steps":[{"te',
+    });
 
     expect(received).toHaveLength(2);
     expect(received[0]).toMatchObject({
@@ -122,8 +134,32 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     expect(received[1]).toMatchObject({
       type: 'finish',
       runId: 'r1',
-      data: { output: { steps: [] }, stepResult: { reason: 'stop' } },
+      data: { output: { steps: [] }, stepResult: { reason: 'tool-calls' }, stopCause: 'max_steps' },
     });
+  });
+
+  it('ignores nested stopCause inside tool output when salvaging a truncated finish event', async () => {
+    let onMessage: (m: unknown) => void = () => {};
+    subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
+      onMessage = opts.onMessage;
+      return { close: vi.fn() };
+    });
+    const { pubsub } = setup();
+    const received: any[] = [];
+    await pubsub.subscribe('agent.stream.r1', event => received.push(event));
+
+    // Nested stopCause appears before the real top-level data.stopCause, then truncation hits later.
+    onMessage({
+      data: '{"type":"finish","runId":"r1","data":{"output":{"steps":[{"toolResults":[{"result":{"stopCause":"max_steps"}}]}]},"stepResult":{"reason":"tool-calls"},"stopCause":"stop_condition","extra":"xxxx',
+    });
+    // Truncated inside output before any direct data.stopCause: must omit stopCause rather than steal nested one.
+    onMessage({
+      data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"tool-calls"},"output":{"steps":[{"toolResults":[{"result":{"stopCause":"max_steps"}}],"text":"xxxx',
+    });
+
+    expect(received).toHaveLength(2);
+    expect(received[0].data.stopCause).toBe('stop_condition');
+    expect(received[1].data).not.toHaveProperty('stopCause');
   });
 
   it('keeps an oversized error readable so the stream can close with onError', async () => {

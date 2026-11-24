@@ -1174,6 +1174,40 @@ describe('AgentChannels', () => {
       );
     });
 
+    it('marks a message that mentions the bot so the model knows to answer it', async () => {
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => new InMemoryMemory({ db: new InMemoryDB() }) }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
+      await agentChannels.initialize(mockMastra);
+
+      const send = async (id: string, isMention: boolean) => {
+        const chatThread = {
+          id: `channel-1:${id}`,
+          channelId: 'channel-1',
+          isDM: false,
+          adapter: agentChannels.adapters.discord,
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id,
+          text: 'found a bug, brb with details',
+          isMention,
+          author: { userId: 'user-1', userName: 'paul' },
+          attachments: [],
+        } as any;
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        return mockAgent.sendMessage.mock.calls.at(-1)![0].attributes;
+      };
+
+      expect(await send('mentioned', true)).toMatchObject({ mentioned: 'true' });
+      expect(await send('not-mentioned', false)).not.toHaveProperty('mentioned');
+    });
+
     describe('bot display name (#25603)', () => {
       async function sendAndGetChannel(channels: AgentChannels, mockMastra: any, messageId: string) {
         const chatThread = {

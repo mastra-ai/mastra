@@ -141,11 +141,11 @@ const scorer = createPromptAlignmentScorerLLM({
 
 This only affects agent runs, where the scorer receives the remembered messages. Runs scored from a plain prompt string are unchanged.
 
-### Multi-Dimensional Analysis
+### Multi-dimensional analysis
 
 Prompt Alignment evaluates responses across four key dimensions with weighted scoring that adapts based on the evaluation mode:
 
-#### User Mode ('user')
+#### User mode ('user')
 
 Evaluates alignment with user prompts only:
 
@@ -154,7 +154,7 @@ Evaluates alignment with user prompts only:
 1. **Completeness** (20% weight): Whether the response is detailed for user needs
 1. **Response Appropriateness** (10% weight): If format and tone match user expectations
 
-#### System Mode ('system')
+#### System mode ('system')
 
 Evaluates compliance with system guidelines only:
 
@@ -163,7 +163,7 @@ Evaluates compliance with system guidelines only:
 1. **Completeness** (15% weight): Whether the response adheres to all system rules
 1. **Response Appropriateness** (15% weight): If format and tone match system specifications
 
-#### Both Mode ('both' - default)
+#### Both mode ('both' - default)
 
 Evaluates user and system alignment together in a single analysis:
 
@@ -171,7 +171,7 @@ Evaluates user and system alignment together in a single analysis:
 - The resulting dimension scores are combined using the user mode weights
 - The scorer computes no separate system score, so the result isn't a blend of user mode and system mode scores
 
-### Scoring Formula
+### Scoring formula
 
 **User Mode:**
 
@@ -205,16 +205,16 @@ In both mode, each dimension score comes from the combined analysis of the user 
 - **System Mode**: Balances behavioral compliance (35%) and constraints (35%) equally
 - **Both Mode**: Uses the user mode weights over a combined analysis, so user needs stay primary while system guidelines are still assessed
 
-### Score Interpretation
+### Score interpretation
 
-- **0.9-1.0** = Excellent alignment across all dimensions
-- **0.8-0.9** = Very good alignment with minor gaps
+- **0.9-1.0** = Strong alignment across all dimensions
+- **0.8-0.9** = Good alignment with minor gaps
 - **0.7-0.8** = Good alignment but missing some requirements or completeness
 - **0.6-0.7** = Moderate alignment with noticeable gaps
 - **0.4-0.6** = Poor alignment with substantial issues
-- **0.0-0.4** = Very poor alignment, response doesn't address the prompt effectively
+- **0.0-0.4** = Poor alignment, response doesn't address the prompt
 
-### When to Use Each Mode
+### When to use each mode
 
 **User Mode (`'user'`)** - Use when:
 
@@ -237,7 +237,7 @@ In both mode, each dimension score comes from the combined analysis of the user 
 
 ## Common use cases
 
-### Code Generation Evaluation
+### Code generation evaluation
 
 Ideal for evaluating:
 
@@ -253,7 +253,7 @@ const codePrompt = 'Create a REST API endpoint with authentication and rate limi
 // completeness (full implementation), format (code structure)
 ```
 
-### Instruction Following Assessment
+### Instruction following assessment
 
 Perfect for:
 
@@ -269,7 +269,7 @@ const taskPrompt =
 // Scorer tracks each requirement individually and provides detailed breakdown
 ```
 
-### Content Format Validation
+### Content format validation
 
 Useful for:
 
@@ -285,7 +285,7 @@ const formatPrompt =
 // Scorer evaluates content accuracy AND format compliance
 ```
 
-### Agent Response Quality
+### Agent response quality
 
 Measure how well your AI agents follow user instructions:
 
@@ -318,7 +318,7 @@ const systemScorer = createPromptAlignmentScorerLLM({
 const result = await scorer.run(agentRun)
 ```
 
-### Prompt Engineering Optimization
+### Prompt engineering optimization
 
 Test different prompts to improve alignment:
 
@@ -336,7 +336,7 @@ for (const prompt of prompts) {
 }
 ```
 
-### Multi-Agent System Evaluation
+### Multi-agent system evaluation
 
 Compare different agents or models:
 
@@ -357,7 +357,7 @@ for (const agent of agents) {
 
 ## Examples
 
-### Basic Configuration
+### Basic configuration
 
 ```typescript
 import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt'
@@ -387,7 +387,7 @@ const result = await scorer.run({
 // Result: { score: 0.95, reason: "Excellent alignment - function addresses intent, includes error handling..." }
 ```
 
-### Custom Configuration Examples
+### Custom configuration examples
 
 ```typescript
 // Configure scale and evaluation mode
@@ -415,7 +415,7 @@ const result = await scorer.run(testRun)
 // Result: { score: 8.5, reason: "Score: 8.5 out of 10 - Good alignment with both user intent and system guidelines..." }
 ```
 
-### Format-Specific Evaluation
+### Format-specific evaluation
 
 ```typescript
 // Evaluate bullet point formatting
@@ -434,7 +434,7 @@ const result = await scorer.run({
 // Result: Lower appropriateness score due to format mismatch (paragraph vs bullet points)
 ```
 
-### Excellent alignment example
+### Strong alignment example
 
 In this example, the response fully addresses the user's prompt with all requirements met.
 
@@ -471,7 +471,7 @@ const result = await scorer.run({
 console.log(result)
 ```
 
-### Excellent alignment output
+### Strong alignment output
 
 In this example, the response receives a high score because it provides the requested Python factorial function with error handling for negative numbers.
 
@@ -567,9 +567,9 @@ The output receives a low score because it only partially fulfills the requireme
 }
 ```
 
-### Evaluation Mode Examples
+### Evaluation mode examples
 
-#### User Mode - Focus on User Prompt Only
+#### User mode - focus on user prompt only
 
 Evaluates how well the response addresses the user's request, ignoring system instructions:
 
@@ -601,7 +601,7 @@ const result = await scorer.run({
 // Scores high for addressing user request, even without Python code
 ```
 
-#### System Mode - Focus on System Guidelines Only
+#### System mode - focus on system guidelines only
 
 Evaluates compliance with system behavioral guidelines and constraints:
 
@@ -633,7 +633,7 @@ const result = await scorer.run({
 // Evaluates politeness, conciseness, and example provision
 ```
 
-#### Both Mode - Combined Evaluation (Default)
+#### Both mode - combined evaluation (default)
 
 Evaluates user intent fulfillment and system compliance together in a single analysis:
 

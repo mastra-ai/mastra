@@ -24,6 +24,9 @@ export type CodeDiffProps = {
   ref?: Ref<HTMLDivElement>;
 } & (({ header?: CodeDiffFileHeader } & CodeDiffSource) | ({ header: CodeDiffFileHeader } & NoCodeDiffSource));
 
+/** The highlighter theme paints its own canvas under the code; the diff takes the card's fill like the rest of it. */
+const CARD_CANVAS = ':host { --diffs-dark-bg: var(--card); --diffs-light-bg: var(--card); }';
+
 const PATCH_METADATA_PREFIXES = [
   'Binary files ',
   'GIT binary patch',
@@ -90,10 +93,15 @@ export function CodeDiff({ className, layout, overflow = 'wrap', header, ref, ..
     diffIndicators: 'classic',
     disableFileHeader: true,
     overflow,
+    unsafeCSS: CARD_CANVAS,
   };
 
   return (
-    <div ref={ref} className={cn('code-diff min-w-0 overflow-clip rounded-md border border-border bg-card', className)}>
+    <div
+      ref={ref}
+      data-header={header ? '' : undefined}
+      className={cn('code-diff min-w-0 overflow-clip rounded-md border border-border bg-card', className)}
+    >
       {header ? (
         <CodeDiffHeader
           {...header}

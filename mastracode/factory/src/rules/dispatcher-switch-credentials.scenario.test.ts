@@ -23,8 +23,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/registry.js';
-import { autoStartingBoards } from '../boards/test-utils.js';
+import { autoStartingBoards, createTriageWorkRegistry } from '../boards/test-utils.js';
 import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
@@ -111,11 +110,11 @@ async function setup() {
 
   const dispatcher = new FactoryDecisionDispatcher({
     controller,
-    boards: autoStartingBoards(),
+    boards: autoStartingBoards(createTriageWorkRegistry()),
     transitionService: new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     }),
     storage,
     intakeRoutes: factory.boards,
@@ -134,8 +133,7 @@ describe('dispatcher thread switch credentials', () => {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: 'github:delivery-1', triggerType: 'github.issueCommentCreated' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'github:delivery-1' },
       expectedRevision: card!.revision,
       actor: { type: 'github', login: 'contributor', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
@@ -180,8 +178,7 @@ describe('dispatcher thread switch credentials', () => {
     await storage.commitRuleEvaluation({
       ...scope,
       workItemId: item.id,
-      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueClosed' },
-      configVersion: 'rules-v1',
+      ingress: { identity: 'github:delivery-2' },
       expectedRevision: card!.revision,
       actor: { type: 'system', id: 'rules' },
       outcome: { status: 'accepted' },

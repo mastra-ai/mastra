@@ -14,7 +14,7 @@ Mastra provides two tool call accuracy scorers for evaluating whether an LLM sel
 
 ## Choosing between scorers
 
-### Use the Code-Based Scorer When:
+### Use the Code-based scorer when:
 
 - You need **deterministic, reproducible** results
 - You want to test **exact tool matching**
@@ -22,7 +22,7 @@ Mastra provides two tool call accuracy scorers for evaluating whether an LLM sel
 - Speed and cost are priorities (no LLM calls)
 - You're running automated tests
 
-### Use the LLM-Based Scorer When:
+### Use the LLM-based scorer when:
 
 - You need **semantic understanding** of appropriateness
 - Tool selection depends on **context and intent**
@@ -65,18 +65,18 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
 
 This function returns an instance of the MastraScorer class. See the [MastraScorer reference](./mastra-scorer) for details on the `.run()` method and its input/output.
 
-### Evaluation Modes
+### Evaluation modes
 
 The code-based scorer operates in two distinct modes:
 
-#### Single Tool Mode
+#### Single tool mode
 
 When `expectedToolOrder` isn't provided or is empty, the score reflects single tool selection:
 
 - **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
 - **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
 
-#### Order Checking Mode
+#### Order checking mode
 
 When a non-empty `expectedToolOrder` is provided, the score reflects the tool calling sequence:
 
@@ -89,7 +89,7 @@ When a non-empty `expectedToolOrder` is provided, the score reflects the tool ca
 - **Deterministic**: Same input always produces same output
 - **Fast**: No external API calls
 
-### Code-Based Scorer Options
+### Code-based scorer options
 
 ```typescript
 // Standard mode - passes if expected tool is called
@@ -112,7 +112,7 @@ const strictOrderScorer = createCodeScorer({
 })
 ```
 
-### Code-Based Scorer Results
+### Code-based scorer results
 
 ```typescript oxfmt:false
 {
@@ -335,7 +335,7 @@ The LLM-based scorer provides:
 - **Missing Tool Detection**: Identifies tools that should have been called
 - **Reasoning Generation**: Provides explanations for scoring decisions
 
-### Evaluation Process
+### Evaluation process
 
 1. **Extract Tool Calls**: Identifies tools mentioned in agent output
 1. **Analyze Appropriateness**: Evaluates each tool against user request
@@ -349,7 +349,7 @@ The LLM-based scorer provides:
 - **Context-aware**: Considers user intent and appropriateness
 - **Explanatory**: Provides reasoning for scores
 
-### LLM-Based Scorer Options
+### LLM-based scorer options
 
 ```typescript oxfmt:false
 // Basic configuration
@@ -368,7 +368,7 @@ const customModelScorer = createLLMScorer({
 });
 ```
 
-### LLM-Based Scorer Results
+### LLM-based scorer results
 
 ```typescript oxfmt:false
 {

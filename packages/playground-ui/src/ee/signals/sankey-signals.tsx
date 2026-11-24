@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { PendingSignalProgress } from './components/signals-empty-state';
@@ -40,6 +39,9 @@ import type { SignalsViewMode } from './view-mode-tab';
 import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
 import { TabList, Tabs } from '@/ds/components/Tabs';
 import { Txt } from '@/ds/components/Txt';
+import { IconAgents } from '@/ds/icons/central/IconAgents';
+import { IconArrowLeftRight } from '@/ds/icons/central/IconArrowLeftRight';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
 
 export interface SankeySignalsProps {
   entityId: string;
@@ -376,9 +378,9 @@ export function SankeySignals({
               className="w-fit"
             >
               <TabList variant="pill-ghost">
-                <ViewModeTab value="flow" icon={<Waypoints />} label="Flow" />
-                <ViewModeTab value="compare" icon={<ArrowLeftRight />} label="Compare" />
-                <ViewModeTab value="lifelines" icon={<ChartNoAxesGantt />} label="Lifelines" />
+                <ViewModeTab value="flow" icon={<IconAgents />} label="Flow" />
+                <ViewModeTab value="compare" icon={<IconArrowLeftRight />} label="Compare" />
+                <ViewModeTab value="lifelines" icon={<IconGanttChart />} label="Lifelines" />
               </TabList>
             </Tabs>
             <TraceIntelligenceExplainer signalCatalog={effectiveSignalCatalog} />
@@ -448,14 +450,14 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+              <section className="rounded-lg bg-nested p-6 text-muted-foreground">
                 <Txt as="span" variant="body" className="block">
                   This theme is not present in the selected snapshot. Use the clear filter action above to return to the
                   full flow.
                 </Txt>
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+              <section className="rounded-lg bg-nested p-6 text-muted-foreground">
                 <Txt as="span" variant="body" className="block">
                   No cross-signal flow for this snapshot. Its trace signals have not overlapped on shared traces yet.
                   Pick another snapshot from the timeline below.

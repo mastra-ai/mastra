@@ -4,6 +4,8 @@ import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
+import { stampNewProjectIntake } from '../boards/base.js';
+import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
 
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
@@ -27,6 +29,18 @@ export function effectiveModelScope(scope: FactoryModelScope, context: 'run' | '
  */
 export function factoryProjectSettingsUserId(factoryProjectId: string): string {
   return `factory-project:${factoryProjectId}`;
+}
+
+/**
+ * The Factory as the owner of work nobody started: the `user_id` of a phase session a
+ * webhook, an automatic phase or a rule opened, and the user its runs authenticate as.
+ * It is the settings sentinel, so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export const factoryPrincipalId = factoryProjectSettingsUserId;
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
 }
 
 export interface FactoryProject {
@@ -125,15 +139,9 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'hybrid' },
     default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
-    // Deprecated: no longer read or written. Kept so existing databases need no
-    // migration. Old rows may still hold `true`, so never read it to bring Slack
-    // work items back. Drop it in a later migration.
-    slack_work_items_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A phase starts on its own with `autoStart`; the
     // `auto-run-switch-v1` board migration reads it once to carry it into the project's boards.
     auto_run_enabled: { type: 'boolean', default: false },
-    // Retired project switch: no longer read or written. Plans are approved per board (`exitTool.autoApprove`).
-    auto_approve_plans: { type: 'boolean', default: false },
     sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
     workspace_setup_command: { type: 'text', nullable: true },
@@ -150,8 +158,6 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
-    // Retired project switch: no longer read or written. The review skill decides whether to publish its test check.
-    review_test_checks_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A board self-reviews when it has a self-review
     // phase; the `self-review-switch-v1` board migration reads it once to carry it into its boards.
     self_review_enabled: { type: 'boolean', default: false },
@@ -173,7 +179,6 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   model_scope: string;
   default_thinking_level: string | null;
   auto_run_enabled: boolean;
-  auto_approve_plans: boolean;
   sandbox_working_directory: string | null;
   sandbox_settings: Record<string, unknown> | null;
   workspace_setup_command: string | null;
@@ -228,12 +233,21 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
 }
 
 export class FactoryProjectsStorage extends FactoryStorageDomain {
+  readonly #deletedListeners = new Set<(project: FactoryProject) => void>();
+
   constructor() {
     super('projects');
   }
 
+  /** Fires after a project's deletion committed. Returns a function that removes the listener. */
+  onDeleted(listener: (project: FactoryProject) => void): () => void {
+    this.#deletedListeners.add(listener);
+    return () => this.#deletedListeners.delete(listener);
+  }
+
   async init(): Promise<void> {
-    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA]);
+    // The project's intake setting is written with it, so its table is this domain's too.
+    await this.ensureCollections([FACTORY_PROJECTS_SCHEMA, FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA]);
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -254,15 +268,20 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     input: CreateFactoryProjectInput;
   }): Promise<FactoryProject> {
     const now = new Date();
-    const row = await this.#db.insertOne<FactoryProjectDbRow>('factory_projects', {
-      org_id: orgId,
-      created_by: userId,
-      name: input.name,
-      description: input.description ?? null,
-      default_model_id: input.defaultModelId ?? null,
-      model_scope: input.modelScope ?? 'hybrid',
-      created_at: now,
-      updated_at: now,
+    // A new project places its items by intake order; one created before that keeps the route list.
+    const row = await this.storage.withTransaction(async ops => {
+      const inserted = await ops.insertOne<FactoryProjectDbRow>('factory_projects', {
+        org_id: orgId,
+        created_by: userId,
+        name: input.name,
+        description: input.description ?? null,
+        default_model_id: input.defaultModelId ?? null,
+        model_scope: input.modelScope ?? 'hybrid',
+        created_at: now,
+        updated_at: now,
+      });
+      await stampNewProjectIntake(ops, { orgId, factoryProjectId: inserted.id });
+      return inserted;
     });
     return toFactoryProject(row);
   }
@@ -548,7 +567,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     { orgId, id }: { orgId: string; id: string },
     release?: (ops: FactoryStorageOps) => Promise<void>,
   ): Promise<FactoryProject | null> {
-    return this.storage.withTransaction(
+    const deleted = await this.storage.withTransaction(
       async ops => {
         const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
         if (!row) return null;
@@ -558,5 +577,15 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       },
       { isolationLevel: 'serializable' },
     );
+    if (deleted) {
+      for (const listener of this.#deletedListeners) {
+        try {
+          listener(deleted);
+        } catch (error) {
+          console.error('[factory] project deletion listener failed', error instanceof Error ? error.message : error);
+        }
+      }
+    }
+    return deleted;
   }
 }

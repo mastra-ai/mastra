@@ -1,6 +1,5 @@
+import { BOARD_PERSON_FIELDS } from '@mastra/factory/work-items/card-people';
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
-
-import { BOARD_PERSON_FIELDS } from './boardPeople';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
 export const BOARD_FILTER_FIELDS = ['source', 'linearProject', ...BOARD_PERSON_FIELDS, 'label'] as const;
