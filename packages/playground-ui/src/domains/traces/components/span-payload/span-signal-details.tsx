@@ -8,7 +8,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
-const badgeLabel = 'shrink-0 text-placeholder';
+const badgeLabel = 'shrink-0 text-muted-foreground';
 
 /** One field of the signal as a badge: a faint label, then its value, truncated with the full text on hover. */
 function SignalDetail({ label, value }: { label: string; value: string }) {

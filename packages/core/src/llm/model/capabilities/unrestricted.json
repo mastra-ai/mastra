@@ -12,10 +12,10 @@
     "qwen3.8-27b-uncensored"
   ],
   "reasoning": {
-    "qwen3.8-27b-uncensored": [
+    "deepseek-v4.1-flash-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "mimo-v2.6-flash-uncensored": [
@@ -30,10 +30,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash-uncensored": [
+    "qwen3.8-27b-uncensored": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

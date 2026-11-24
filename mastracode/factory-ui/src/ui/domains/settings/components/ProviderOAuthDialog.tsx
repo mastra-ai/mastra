@@ -70,8 +70,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
           <Txt as="p" variant="caption" tone="muted">
             {session.instructions}
           </Txt>
-          <Button onClick={() => openAuthorizationUrl(session.url)}>
-            <IconSquareArrowTopRight />
+          <Button icon={<IconSquareArrowTopRight />} onClick={() => openAuthorizationUrl(session.url)}>
             Open authorization page
           </Button>
           <Input
@@ -164,8 +163,11 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
-          <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
-            <IconSquareArrowTopRight />
+          <Button
+            icon={<IconSquareArrowTopRight />}
+            className="w-full"
+            onClick={() => openAuthorizationUrl(session.url)}
+          >
             Open authorization page
           </Button>
         </DialogBody>

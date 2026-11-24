@@ -51,9 +51,9 @@ function cellTone({
   disabled: boolean;
 }) {
   if (stop === shownStop) return warning ? 'text-warning-foreground' : 'text-foreground';
-  if (disabled) return 'text-muted-foreground/45';
+  if (disabled) return 'text-subtle-foreground';
   if (hovered) return 'text-foreground';
-  return stop < shownStop ? 'text-foreground/55' : 'text-muted-foreground/45';
+  return stop < shownStop ? 'text-foreground/55' : 'text-subtle-foreground';
 }
 
 /**

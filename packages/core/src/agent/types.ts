@@ -1053,6 +1053,31 @@ type AgentEditableFieldConfig<
     ? { tools?: never }
     : { tools?: DynamicArgument<TTools, TRequestContext> });
 
+/**
+ * Options for `new Agent(config)`.
+ *
+ * - Required: `id`, `name`, `model`, and `instructions` (unless Studio owns instructions via
+ *   `editor`).
+ * - Common optional fields: `tools`, `memory`, `agents` (sub-agents), `workflows`,
+ *   `defaultOptions` (default per-call options such as `maxSteps`), `inputProcessors`,
+ *   `outputProcessors`, `maxRetries`.
+ * - `model`, `instructions`, `tools`, and most other fields also accept a function of
+ *   `{ requestContext }` resolved per call. `model` also accepts an array of fallbacks.
+ *
+ * @example
+ * ```ts
+ * const agent = new Agent({
+ *   id: 'weather-agent',
+ *   name: 'Weather Agent',
+ *   instructions: 'You answer weather questions.',
+ *   model: 'openai/gpt-5.6-sol',
+ *   tools: { weatherTool },
+ *   defaultOptions: { maxSteps: 5 },
+ * });
+ * ```
+ *
+ * @see [Agent constructor reference](https://mastra.ai/reference/agents/agent)
+ */
 export type AgentConfig<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,

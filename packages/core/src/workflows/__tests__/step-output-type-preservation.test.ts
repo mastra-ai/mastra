@@ -12,7 +12,7 @@
  *     `InMemoryStore` (no codec).
  *   - evented engine: snapshot path goes through the WEP and an
  *     `EventEmitterPubSub` (in-process — also no codec; the codec only
- *     activates at the `UnixSocketPubSub` boundary, see s2 for that).
+ *     activates at the `UnixSocketPubSub` boundary).
  *
  * The contract is identical on both: types must be preserved end-to-end.
  * That's what makes the agentic loop safe to migrate onto the evented
@@ -22,7 +22,7 @@
  *
  * Note: this suite does NOT exercise the codec — the codec is unit-tested
  * exhaustively in `events/codec/codec.test.ts` and exercised cross-process
- * in `events/__tests__/evented-codec-multiprocess.test.ts` (s2). This suite
+ * in `events/__tests__/cross-process-codec-roundtrip.test.ts`. This suite
  * covers the complementary path: in-process snapshot preservation.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

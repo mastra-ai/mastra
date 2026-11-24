@@ -27,7 +27,7 @@ export function MainCard({
         animatesEdgeToEdge &&
           'transition-[border-radius,border-width,box-shadow] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
         animatesEdgeToEdge && 'in-data-[sidebar-gesture=active]:transition-none!',
-        !edgeToEdge && 'lg:rounded-studio-frame lg:border lg:shadow-[var(--elevation-lip),var(--elevation-raised)]',
+        !edgeToEdge && 'lg:rounded-studio-frame lg:border lg:shadow-(--elevation-raised)',
         frameFillStyle,
         className,
       )}

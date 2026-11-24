@@ -15,7 +15,6 @@ import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 
 import type { RefObject } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
@@ -179,52 +178,33 @@ export function ScorerEditSidebar({
       <div className="shrink-0 p-4">
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
-            <Button onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
-              {isSavingDraft ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Icon>
-                    <IconFloppyDisk1 />
-                  </Icon>
-                  Save
-                </>
-              )}
+            <Button
+              icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
+              onClick={onSaveDraft}
+              disabled={isSavingDraft || isSubmitting}
+              className="flex-1"
+            >
+              {isSavingDraft ? 'Saving...' : 'Save'}
             </Button>
-            <Button variant="primary" onClick={onPublish} disabled={isSubmitting || isSavingDraft} className="flex-1">
-              {isSubmitting ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Publishing...
-                </>
-              ) : (
-                <>
-                  <Icon>
-                    <IconCheckmark2Medium />
-                  </Icon>
-                  Publish
-                </>
-              )}
+            <Button
+              icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
+              variant="primary"
+              onClick={onPublish}
+              disabled={isSubmitting || isSavingDraft}
+              className="flex-1"
+            >
+              {isSubmitting ? 'Publishing...' : 'Publish'}
             </Button>
           </div>
         ) : (
-          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <IconCheckmark2Medium />
-                </Icon>
-                Create scorer
-              </>
-            )}
+          <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
+            variant="primary"
+            onClick={onPublish}
+            disabled={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? 'Creating...' : 'Create scorer'}
           </Button>
         )}
       </div>

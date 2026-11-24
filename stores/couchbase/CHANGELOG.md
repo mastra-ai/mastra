@@ -1,5 +1,14 @@
 # @mastra/couchbase
 
+## 1.1.6-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#30531](https://github.com/mastra-ai/mastra/pull/30531))
+  - Updated dependency [`couchbase@^4.7.2` ↗︎](https://www.npmjs.com/package/couchbase/v/4.7.2) (from `^4.7.1`, in `dependencies`)
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+
 ## 1.1.6-alpha.0
 
 ### Patch Changes

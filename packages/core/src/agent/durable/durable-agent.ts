@@ -785,24 +785,6 @@ export class DurableAgent<
   // ===========================================================================
 
   /**
-   * Subscribe to a run's raw AgentStreamEvents, filtering out events from
-   * executions that lost ownership and takeover markers. Callers must map
-   * these events to the public frame contract produced by stream-adapter.ts's
-   * createDurableAgentStream before sending them to clients; raw event
-   * envelopes are not public stream frames. Resolves once subscribed, with
-   * a function that unsubscribes.
-   *
-   * @internal
-   */
-  __subscribeToRunStream(
-    runId: string,
-    options: { offset?: number; onComplete?: () => void },
-    onEvent: (event: AgentStreamEvent) => void,
-  ): Promise<() => Promise<void>> {
-    return this.subscribeToDurableRunStream(runId, options, onEvent);
-  }
-
-  /**
    * Get the workflow instance for direct execution.
    * Lazily creates the workflow and registers Mastra on it (needed for
    * getAgentById in execution steps).

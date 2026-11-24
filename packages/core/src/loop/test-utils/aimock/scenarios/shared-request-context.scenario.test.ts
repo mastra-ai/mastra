@@ -1,8 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
+import { sharedBroker } from '../../../../mastra/test-utils/shared-broker';
 import { RequestContext } from '../../../../request-context';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -10,8 +7,7 @@ describeForAllEngines('AIMock loop scenario: shared request context', engine => 
   const getMock = useLoopScenarioAimock();
 
   it('answers the next request when its context still contains a completed run', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mastra-shared-context-'));
-    const pubsub = engine === 'evented' ? new UnixSocketPubSub(join(directory, 'pubsub.sock')) : undefined;
+    const pubsub = engine === 'evented' ? sharedBroker({ leases: true }).connect() : undefined;
     const shared = await createSharedAgent(getMock(), { engine, pubsub });
     const requestContext = new RequestContext();
     try {
@@ -36,7 +32,6 @@ describeForAllEngines('AIMock loop scenario: shared request context', engine => 
     } finally {
       await shared.mastra.shutdown();
       await pubsub?.close();
-      await rm(directory, { recursive: true, force: true });
     }
   }, 10_000);
 });

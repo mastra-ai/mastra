@@ -77,8 +77,7 @@ export const mastra = new Mastra({
     type: 'string',
     description:
       'The route path (e.g., `/workflow` or `/workflow/:workflowId`). Include `:workflowId` for dynamic workflow routing.',
-    isOptional: true,
-    defaultValue: "'/api/workflows/:workflowId/stream'",
+    isOptional: false,
   },
   {
     name: 'workflow',
