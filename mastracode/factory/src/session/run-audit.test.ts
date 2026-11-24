@@ -11,6 +11,7 @@ import {
   listSessionOpenRuns,
   observeSessionRunEnd,
   recordSessionRunStart,
+  takeOverInterruptedSessionRuns,
   waitForSessionRunAudit,
 } from './run-audit.js';
 import type { FactoryOpenRun, RunEndCaptureSession } from './run-audit.js';
@@ -322,6 +323,126 @@ describe('Factory run lifecycle audit', () => {
     emit('complete');
     await start(OPEN_RUN, 'complete');
     expect((await events()).map(event => event.action).sort()).toEqual(['factory.run.ended', 'factory.run.started']);
+  });
+
+  describe('taking over a lost run', () => {
+    const lost = { ...OPEN_RUN, ownerId: 'lost-worker', heartbeatAt: 1 };
+    const endedRecords = async (events: () => Promise<Array<{ action: string; metadata: Record<string, unknown> }>>) =>
+      (await events())
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata.kickoffId, event.metadata.reason]);
+
+    /** Takes `lost` over while another replica writes the ledger between the stale read and the takeover. */
+    async function takeOverWhile(during: (openRuns: Awaited<ReturnType<typeof setup>>['openRuns']) => Promise<void>) {
+      const context = await setup();
+      const { session, openRuns, audit } = context;
+      await openRuns.open(lost);
+      const takeOver = openRuns.takeOver.bind(openRuns);
+      vi.spyOn(openRuns, 'takeOver').mockImplementationOnce(async (...args) => {
+        await during(openRuns);
+        return takeOver(...args);
+      });
+      const tookOver = await takeOverInterruptedSessionRuns(session, {
+        audit,
+        openRuns,
+        lost: [lost],
+        resumeKickoffId: 'kickoff-1:resume:2',
+        ownerId: 'worker-2',
+      });
+      return { ...context, tookOver };
+    }
+
+    it('keeps a run another replica opened meanwhile, and records the lost run as aborted', async () => {
+      const opened = {
+        ...OPEN_RUN,
+        kickoffId: 'kickoff-2',
+        bindingId: 'binding-2',
+        ownerId: 'worker-3',
+        heartbeatAt: 2,
+      };
+
+      const { tookOver, ledger, events } = await takeOverWhile(async openRuns => {
+        await openRuns.open(opened);
+      });
+
+      expect(tookOver).toBe(true);
+      const runs = await ledger();
+      expect(runs).toHaveLength(2);
+      expect(runs).toEqual(
+        expect.arrayContaining([
+          opened,
+          expect.objectContaining({ kickoffId: 'kickoff-1:resume:2', ownerId: 'worker-2' }),
+        ]),
+      );
+      await expect(endedRecords(events)).resolves.toEqual([['kickoff-1', 'aborted']]);
+    });
+
+    it('steps aside, recording nothing, when another worker took the lost run over first', async () => {
+      const theirs = { ...OPEN_RUN, kickoffId: 'kickoff-1:resume:3', ownerId: 'worker-3', heartbeatAt: 2 };
+
+      const { tookOver, openRuns, events } = await takeOverWhile(async openRuns => {
+        await openRuns.takeOver([lost], theirs);
+      });
+
+      expect(tookOver).toBe(false);
+      await expect(openRuns.get('kickoff-1:resume:2')).resolves.toBeUndefined();
+      await expect(openRuns.get(theirs.kickoffId)).resolves.toEqual({ run: theirs });
+      await expect(endedRecords(events)).resolves.toEqual([]);
+    });
+
+    it('steps aside when the lost run heartbeats again, leaving its real end and usage to its owner', async () => {
+      const { tookOver, ledger, events, session, emit, step } = await takeOverWhile(openRuns =>
+        heartbeatSessionOpenRun(openRuns, { kickoffId: 'kickoff-1', ownerId: 'lost-worker', at: 5 }),
+      );
+
+      expect(tookOver).toBe(false);
+      await expect(ledger()).resolves.toEqual([{ ...lost, heartbeatAt: 5 }]);
+      await expect(endedRecords(events)).resolves.toEqual([]);
+
+      step(100, 50);
+      emit('complete');
+      await waitForSessionRunAudit(session);
+      const [ended] = (await events()).filter(event => event.action === 'factory.run.ended');
+      expect(ended?.metadata).toMatchObject({
+        kickoffId: 'kickoff-1',
+        reason: 'complete',
+        usage: { status: 'recorded', totals: { totalTokens: 150 } },
+      });
+    });
+
+    it('keeps a lost run whose aborted end could not be audited on the ledger, and records it at the next run end', async () => {
+      const { session, openRuns, audit, ledger, events, emit } = await setup();
+      await openRuns.open(lost);
+      vi.spyOn(audit, 'record').mockResolvedValueOnce(null as never);
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await expect(
+        takeOverInterruptedSessionRuns(session, {
+          audit,
+          openRuns,
+          lost: [lost],
+          resumeKickoffId: 'kickoff-1:resume:2',
+          ownerId: 'worker-2',
+        }),
+      ).resolves.toBe(true);
+      warning.mockRestore();
+      await expect(openRuns.get('kickoff-1')).resolves.toMatchObject({ end: { reason: 'aborted' } });
+      expect((await ledger()).map(run => run.kickoffId).sort()).toEqual(['kickoff-1', 'kickoff-1:resume:2']);
+
+      emit('complete');
+      await waitForSessionRunAudit(session);
+      await expect(endedRecords(events)).resolves.toEqual(
+        expect.arrayContaining([
+          ['kickoff-1', 'aborted'],
+          ['kickoff-1:resume:2', 'complete'],
+        ]),
+      );
+      const [lostEnd] = (await events()).filter(
+        event => event.action === 'factory.run.ended' && event.metadata.kickoffId === 'kickoff-1',
+      );
+      expect(lostEnd?.metadata.usage).toEqual({ status: 'unreported' });
+      await expect(ledger()).resolves.toEqual([]);
+    });
   });
 
   it("records how a run ended on the run's own row, before its audit record and before it leaves the ledger", async () => {

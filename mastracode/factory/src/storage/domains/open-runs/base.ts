@@ -150,6 +150,13 @@ function toRun(row: OpenRunDbRow): FactoryOpenRun {
   };
 }
 
+/** The row still carries the owner and heartbeat it was read with; anything else is a newer write. */
+function asRead(run: FactoryOpenRun) {
+  return { kickoff_id: run.kickoffId, owner_id: run.ownerId ?? null, heartbeat_at: run.heartbeatAt ?? null };
+}
+
+class OpenRunTakeoverConflict extends Error {}
+
 export class OpenRunsStorage extends FactoryStorageDomain {
   constructor() {
     super('open-runs');
@@ -242,6 +249,34 @@ export class OpenRunsStorage extends FactoryStorageDomain {
     for (const row of closed) {
       if (row.closed_at === null || at - row.closed_at < FACTORY_RUN_END_RETENTION_MS) continue;
       await this.#db.deleteMany('factory_open_runs', { kickoff_id: row.kickoff_id, closed_at: row.closed_at });
+    }
+  }
+
+  /**
+   * Ends the `lost` runs, as they were read, as aborted and opens `resume`, in one transaction.
+   * Resolves `false`, changing nothing, when any lost run ended, left the ledger, or carries another
+   * owner or heartbeat than was read: another worker took it over, or its run came back. A waiter
+   * on a lost run reads its aborted end from its row; each lost run stays on the ledger until its
+   * end is on the audit log, like any other ended run.
+   */
+  async takeOver(lost: readonly FactoryOpenRun[], resume: FactoryOpenRun): Promise<boolean> {
+    const at = Date.now();
+    try {
+      await this.storage.withTransaction(async ops => {
+        for (const run of lost) {
+          const ended = await ops.updateMany(
+            'factory_open_runs',
+            { ...asRead(run), ended_at: null, closed_at: null },
+            { end_reason: 'aborted', ended_at: at },
+          );
+          if (ended !== 1) throw new OpenRunTakeoverConflict();
+        }
+        await ops.insertOne('factory_open_runs', toRow(resume, new Date(at)));
+      });
+      return true;
+    } catch (error) {
+      if (error instanceof OpenRunTakeoverConflict || error instanceof UniqueViolationError) return false;
+      throw error;
     }
   }
 
