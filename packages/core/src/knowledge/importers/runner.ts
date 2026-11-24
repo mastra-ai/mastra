@@ -38,6 +38,12 @@ export interface RunKnowledgeImportOptions {
   maxPasses?: number;
   /** Ops per flush. Default 200. */
   bufferSize?: number;
+  /**
+   * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
+   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. Default 30
+   * seconds.
+   */
+  flushAfterMs?: number;
   /** Default 30 seconds. */
   heartbeatMs?: number;
   /** Resends of one flush or finish after a 5xx or network error. Default 8. */
@@ -123,6 +129,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     graceMs = 3 * 60_000,
     maxPasses = 200,
     bufferSize = 200,
+    flushAfterMs = 30_000,
     heartbeatMs = 30_000,
     maxRetries = 8,
     hostCallTimeoutMs = 60_000,
@@ -146,6 +153,12 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let state: KnowledgeImporterState = { ...started.state };
   let buffer: KnowledgeImporterOp[] = [];
   let stop: RunStop | undefined;
+  /** Armed while the buffer holds ops; sends them once the oldest has waited `flushAfterMs`. */
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => {
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+  };
   let hostFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
   let deadlineHit!: () => void;
@@ -157,6 +170,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   const halt = (reason: RunStop['reason']) => {
     if (reason === 'stopped') deadlineHit();
     stop ??= new RunStop(reason);
+    disarm();
     controller.abort(stop);
     wake();
   };
@@ -188,6 +202,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let flushing: Promise<void> = Promise.resolve();
   /** `settle` sends an empty flush, which only runs the host's next settle slice. */
   function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
+    disarm();
     const ops = buffer;
     buffer = [];
     const next = flushing.then(async () => {
@@ -223,6 +238,9 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     if (stop) throw stop;
     buffer.push(op);
     if (buffer.length >= bufferSize) await flush();
+    // Queued behind any flush in flight, like every flush. A failure halts the run, which the
+    // importer sees on its next call.
+    else if (!flushTimer) flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
   };
 
   const finish = async (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) => {
@@ -347,6 +365,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   } finally {
     clearInterval(heartbeat);
+    disarm();
   }
   // Wait for a flush in flight, but not past the hard deadline (which halts the run and so wakes
   // `stopped`): if it is still unanswered then, its seq stays unsettled and the finish names
