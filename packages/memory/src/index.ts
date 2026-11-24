@@ -103,10 +103,6 @@ import {
   remapDurableObservedMessageIds,
   withDurableObservationCursor,
 } from './processors/observational-memory/message-utils';
-import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
-import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
-import { createAskMemoryTool } from './processors/observational-memory/subconscious/remind-questions';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -930,14 +926,6 @@ export class Memory extends MastraMemory {
                 );
               }
 
-              vectorResults.push(
-                ...(await this.vector.query({
-                  indexName,
-                  queryVector: embedding,
-                  topK: vectorConfig.topK,
-                  filter: combinedFilter,
-                })),
-              );
               if (semanticBranchSegments) {
                 vectorResults.push(
                   ...(await queryReachableVectorResults({
@@ -972,12 +960,21 @@ export class Memory extends MastraMemory {
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
       const threshold = semanticConfig?.threshold;
+      // A branch recall may reach ancestor threads on the branch's path, so the scope guard admits
+      // any of those; everything else must belong to the recalled thread.
+      const reachableThreadIds = semanticBranchSegments
+        ? new Set(semanticBranchSegments.map(segment => segment.thread.id))
+        : undefined;
       // Check each hit's scope as well as the store's filter, so a store that drops or misapplies
       // filters cannot bring other threads' or resources' messages into recall.
       const filteredVectorResults = vectorResults.filter(
         r =>
           (threshold === undefined || r.score >= threshold) &&
-          (resourceScope ? r.metadata?.resource_id === resourceId : r.metadata?.thread_id === threadId),
+          (resourceScope
+            ? r.metadata?.resource_id === resourceId
+            : reachableThreadIds
+              ? reachableThreadIds.has(r.metadata?.thread_id)
+              : r.metadata?.thread_id === threadId),
       );
 
       // Get raw messages from storage
@@ -1072,7 +1069,10 @@ export class Memory extends MastraMemory {
       // context neighbour, that the vector hit's metadata placed in scope but storage does not.
       if (include.length) {
         rawMessages = rawMessages.filter(
-          message => message.threadId === threadId || (resourceScope && message.resourceId === resourceId),
+          message =>
+            message.threadId === threadId ||
+            (!!message.threadId && reachableThreadIds?.has(message.threadId)) ||
+            (resourceScope && message.resourceId === resourceId),
         );
       }
 
@@ -1865,12 +1865,6 @@ export class Memory extends MastraMemory {
         ) {
           throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with branches cannot be deleted.');
         }
-
-        const remindThreadId = getRemindThreadId(threadId);
-        const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
-        if (thread?.resourceId && isOwnedRemindThread(remindThread, threadId, thread.resourceId)) {
-          await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
-        }
         await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
       },
     );
@@ -2522,8 +2516,7 @@ ${workingMemory}`;
   }
 
   private async saveMessagesInternal(
-    { messages, memoryConfig, observabilityContext, embeddedMessages }: GeneratedMessagePersistenceInput,
-    { messages, memoryConfig, observabilityContext, thread }: GeneratedMessagePersistenceInput,
+    { messages, memoryConfig, observabilityContext, embeddedMessages, thread }: GeneratedMessagePersistenceInput,
     generatedMessageIds: readonly string[],
   ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
@@ -3812,14 +3805,21 @@ Notes:
     memoryConfig?: MemoryConfigInternal;
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
-    if (messages.some(message => message.createdAt !== undefined)) {
-      throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'Message timestamps cannot be updated.');
-    }
 
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
     const existingResult = await memoryStore.listMessagesById({ messageIds: messages.map(message => message.id) });
     const existingById = new Map(existingResult.messages.map(message => [message.id, message]));
+
+    // A caller may resend a whole message, but the stored timestamp is immutable: branch history
+    // and observation cursors order by it, so only an unchanged value is accepted.
+    for (const message of messages) {
+      if (message.createdAt === undefined) continue;
+      const stored = existingById.get(message.id)?.createdAt;
+      if (!stored || new Date(message.createdAt).getTime() !== new Date(stored).getTime()) {
+        throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'Message timestamps cannot be updated.');
+      }
+    }
     const resultingMessages = messages.flatMap(update => {
       const existing = existingById.get(update.id);
       if (!existing) return [];
@@ -3888,7 +3888,9 @@ Notes:
           ...update.content,
           ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
           ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
-          ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
+          ...(update.content.toolInvocations !== undefined
+            ? { toolInvocations: projected.content.toolInvocations }
+            : {}),
         };
         existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
         const patched = textFields.filter(field => update.content?.[field] !== undefined);
@@ -3904,6 +3906,9 @@ Notes:
         return [{ ...update, content }];
       });
       if (messages.length === 0) return [];
+
+      // Storage first: a rejected update must leave the vectors untouched.
+      const updatedMessages = await memoryStore.updateMessages({ messages });
 
       // Update vector database if semantic recall is enabled and any messages have text updates
       if (this.vector && config.semanticRecall) {

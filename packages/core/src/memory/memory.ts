@@ -50,7 +50,6 @@ import {
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
-import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
 import type {
@@ -1255,6 +1254,7 @@ https://mastra.ai/en/docs/memory/overview`,
                     maxTokens: lastMessages.maxTokens,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
+            listMessages: this.getMessageHistoryReader(),
             ...(this.supportsThreadBranching
               ? {
                   persistMessages: (input, generatedMessageIds) =>

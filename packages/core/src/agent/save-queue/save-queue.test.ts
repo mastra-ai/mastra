@@ -315,6 +315,8 @@ describe('SaveQueueManager', () => {
       ).resolves.toBeUndefined();
       expect(logger.error).toHaveBeenCalledWith('Error in enqueueSave', expect.anything());
     });
+  });
+
   it('marks generated response messages when flushing through memory', async () => {
     const generatedCalls: string[][] = [];
     mockMemory.__mastraPersistGeneratedMessages = vi.fn(async ({ messages }, generatedMessageIds) => {

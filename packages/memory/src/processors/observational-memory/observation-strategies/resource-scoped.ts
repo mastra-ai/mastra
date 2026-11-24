@@ -25,6 +25,7 @@ import {
   sortThreadsByOldestMessage,
 } from '../message-utils';
 import { buildMessageRange } from '../observational-memory';
+import type { ObservationGroup } from '../observation-groups';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
 import { getMaxThreshold } from '../thresholds';
@@ -138,9 +139,20 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       const messages = result.messages.filter(msg => msg.role !== 'system');
       if (messages.length > 0) this.messagesByThread.set(currentThreadId, messages);
     } else {
+      // Equal-timestamp messages are only separated from the cursor by their IDs; with no IDs
+      // recorded, read strictly after the cursor so a message at it is not offered again.
+      const coversEqualTimestamps =
+        (Array.isArray(record.observedMessageIds) ? record.observedMessageIds.length : 0) > 0 ||
+        getDurableObservedMessageIds(record).length > 0;
       for (const thread of allThreads) {
         const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
-        const startDate = threadLastObservedAt ? new Date(threadLastObservedAt) : undefined;
+        const startDate = threadLastObservedAt
+          ? new Date(
+              coversEqualTimestamps
+                ? new Date(threadLastObservedAt)
+                : new Date(new Date(threadLastObservedAt).getTime() + 1),
+            )
+          : undefined;
         const result = await this.storage.listMessages({
           threadId: thread.id,
           resourceId: this.resourceId,

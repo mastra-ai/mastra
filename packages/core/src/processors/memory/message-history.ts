@@ -147,7 +147,7 @@ export class MessageHistory implements Processor {
     const loadedIds = new Set(loaded.map(msg => msg.id));
     const found: MastraDBMessage[] = [];
     for (let page = 0; page < CONTINUATION_SCAN_MAX_PAGES && missing.size > 0; page++) {
-      const { messages, hasMore } = await this.storage.listMessages({
+      const { messages, hasMore } = await (this.listMessagesHook ?? (input => this.storage.listMessages(input)))({
         threadId,
         resourceId,
         page,
@@ -245,11 +245,12 @@ export class MessageHistory implements Processor {
           atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens,
           tokenCounter: this.tokenCounter,
           includeOverflow: true,
+          listMessages: this.listMessagesHook,
         });
         return [...result.overflow, ...result.messages].reverse();
       }
 
-      const result = await this.storage.listMessages({
+      const result = await (this.listMessagesHook ?? (input => this.storage.listMessages(input)))({
         threadId,
         resourceId,
         page: 0,

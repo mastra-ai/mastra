@@ -1881,6 +1881,11 @@ export class ObservationalMemory {
         continue;
       }
 
+      // Rely on message IDs to separate equal-timestamp messages only when the record still
+      // carries some: an activated generation deliberately records none, and comparing
+      // inclusively there would re-offer the message at the cursor as unobserved.
+      const coversEqualTimestamps = observedMessageIds.size > 0;
+
       // Check if this message has a completed observation
       const endMarkerIndex = findLastCompletedObservationBoundary(msg);
       const inProgress = this.hasInProgressObservation(msg);
@@ -1904,7 +1909,7 @@ export class ObservationalMemory {
           result.push(msg);
         } else {
           const msgDate = new Date(msg.createdAt);
-          if (msgDate >= lastObservedAt) {
+          if (coversEqualTimestamps ? msgDate >= lastObservedAt : msgDate > lastObservedAt) {
             result.push(msg);
           } else {
           }

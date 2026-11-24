@@ -165,6 +165,7 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       new Set(),
+      ['final-response'],
     );
     expect(mockOM.getUnobservedMessages).toHaveBeenCalledWith(finalMessageList.get.all.db(), mockOM._mockRecord);
     expect(mockOM.buffer).toHaveBeenCalledWith(

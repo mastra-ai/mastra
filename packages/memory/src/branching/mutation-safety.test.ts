@@ -295,14 +295,18 @@ describe('branch mutation integrity', () => {
 
     const persisted = (await vectorStore.listMessagesById({ messageIds: ['vector-message'] })).messages[0]!;
     updateMessages.mockResolvedValueOnce([persisted]);
+    deleteVectors.mockClear();
+    upsert.mockClear();
     await vectorMemory.updateMessages({
-      messages: [{ id: 'vector-message', content: { content: undefined } }],
+      messages: [{ id: 'vector-message', content: { content: '' } }],
     });
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        metadata: [expect.objectContaining({ message_id: 'vector-message', content: 'before' })],
-      }),
+    // Clearing the text leaves nothing to index: the old vector rows go and no new ones replace
+    // them. (The branch's vector step re-read the stored row, so an adapter that ignored the
+    // clear used to re-index the stale text here.)
+    expect(deleteVectors).toHaveBeenCalledWith(
+      expect.objectContaining({ filter: { message_id: { $in: ['vector-message'] } } }),
     );
+    expect(upsert).not.toHaveBeenCalled();
   });
 
   it('enforces both equal-timestamp ID tie directions on parent and child writes', async () => {

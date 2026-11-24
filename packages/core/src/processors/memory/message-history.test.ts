@@ -1112,6 +1112,8 @@ describe('MessageHistory', () => {
         { type: 'text', text: 'Noted.' },
       ]);
       expect(saved!.content.toolInvocations).toBeUndefined();
+    });
+
     it('forwards only persisted generated IDs through the internal persistence hook', async () => {
       const persistMessages = vi.fn().mockResolvedValue({ messages: [] });
       const mockStorage = {

@@ -73,7 +73,6 @@ import type {
 } from './types';
 import { createEmptyTokenUsage } from './types';
 
-
 type RawThreadBranchMetadata = { state: 'pending' | 'ready'; parentThreadId: string };
 
 function getRawThreadBranchMetadata(thread: StorageThreadType): RawThreadBranchMetadata | null {

@@ -115,18 +115,38 @@ describe('Observational Memory metadata persistence', () => {
   it('round-trips cursor metadata through a reflection generation', async () => {
     let row: Record<string, unknown> | undefined;
     const execute = vi.fn(async (sql: string, params: unknown[] = []) => {
+      // A reflection generation is inserted from a copy of the stored row (`INSERT … SELECT`).
       if (/^INSERT INTO `mastra_observational_memory`/.test(sql)) {
-        const columns = sql
-          .match(/\(([^)]+)\) VALUES/)![1]!
-          .split(',')
-          .map(column => column.trim().replaceAll('`', ''));
-        row = Object.fromEntries(columns.map((column, index) => [column, params[index]]));
+        row = {
+          ...row,
+          id: params[0],
+          activeObservations: params[1],
+          generationCount: Number(row?.generationCount ?? 0) + 1,
+          observationTokenCount: params[3],
+          originType: 'reflection',
+          supersededBy: null,
+          createdAt: params[4],
+          updatedAt: params[5],
+        };
         return [{ affectedRows: 1 }, []];
       }
+      if (/^UPDATE `mastra_observational_memory`/.test(sql)) return [{ affectedRows: 1 }, []];
       if (/^SELECT \* FROM `mastra_observational_memory`/.test(sql)) return [row ? [row] : [], []];
+
       return [[], []];
     });
-    const pool = { execute, query: execute } as unknown as Pool;
+    const pool = {
+      execute,
+      query: execute,
+      getConnection: async () => ({
+        execute,
+        query: execute,
+        beginTransaction: async () => {},
+        commit: async () => {},
+        rollback: async () => {},
+        release: () => {},
+      }),
+    } as unknown as Pool;
     const operations = new StoreOperationsMySQL({ pool, database: 'mastra' });
     const memory = new MemoryMySQL({ pool, operations, skipDefaultIndexes: true });
     const cursor = {
@@ -155,6 +175,30 @@ describe('Observational Memory metadata persistence', () => {
       lastBufferedAtTime: null,
       config: {},
       metadata: { __mastra_observation_cursor: cursor },
+    };
+
+    row = {
+      id: currentRecord.id,
+      lookupKey: 'thread:thread-1|resource:resource-1',
+      scope: 'thread',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      createdAt: currentRecord.createdAt,
+      updatedAt: currentRecord.updatedAt,
+      lastObservedAt: currentRecord.lastObservedAt,
+      originType: 'initial',
+      generationCount: 0,
+      activeObservations: currentRecord.activeObservations,
+      totalTokensObserved: currentRecord.totalTokensObserved,
+      observationTokenCount: currentRecord.observationTokenCount,
+      pendingMessageTokens: 0,
+      isReflecting: 0,
+      isObserving: 0,
+      isBufferingObservation: 0,
+      isBufferingReflection: 0,
+      config: JSON.stringify(currentRecord.config),
+      metadata: JSON.stringify(currentRecord.metadata),
+      supersededBy: null,
     };
 
     await memory.createReflectionGeneration({ currentRecord, reflection: 'Reflected observation', tokenCount: 5 });
