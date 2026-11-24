@@ -381,7 +381,10 @@ function buttonLoading(context) {
   const textOf = node => sourceCode.getText(unwrap(node)).replace(/\s+/g, '').replaceAll('?.', '.');
 
   function opposite(value) {
-    if (value.type !== 'BinaryExpression' || !/^[!=]==?$/.test(value.operator)) return `!${textOf(value)}`;
+    if (value.type !== 'BinaryExpression' || !/^[!=]==?$/.test(value.operator)) {
+      const isCompound = ['BinaryExpression', 'LogicalExpression', 'ConditionalExpression'].includes(value.type);
+      return isCompound ? `!(${textOf(value)})` : `!${textOf(value)}`;
+    }
     const operator = value.operator.replace(/^[!=]/, sign => (sign === '!' ? '=' : '!'));
     return `${textOf(value.left)}${operator}${textOf(value.right)}`;
   }

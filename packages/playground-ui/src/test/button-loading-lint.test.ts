@@ -44,6 +44,10 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       code: jsx("<Button loading={saving}>{!saving && saved ? 'Saved' : 'Save'}</Button>"),
     },
     {
+      name: 'allows a test that only shares its text with a partly negated loading',
+      code: jsx("<Button loading={!draft && saving}>{draft && saving ? 'Save draft' : 'Save'}</Button>"),
+    },
+    {
       name: 'allows a finished label that waits for a negated loading to end',
       code: jsx("<Button loading={!ready}>{ready && saved ? 'Saved' : 'Save'}</Button>"),
     },
@@ -180,6 +184,11 @@ tester.run('button-loading', plugin.rules['button-loading'], {
     {
       name: 'flags the opposite of a negated loading',
       code: jsx("<Button loading={!ready}>{ready ? 'Save' : 'Waiting…'}</Button>"),
+      errors: [label()],
+    },
+    {
+      name: 'flags the opposite of a negated compound loading',
+      code: jsx("<Button loading={!(ready || skipped)}>{ready || skipped ? 'Save' : 'Waiting…'}</Button>"),
       errors: [label()],
     },
     {
