@@ -445,6 +445,8 @@ describe('Factory MCP server', () => {
       'token for this and another resource': await authServer.sign(claims, {
         audience: [RESOURCE, 'https://platform.mastra.ai/v1/mcp'],
       }),
+      'empty subject': await authServer.sign({ ...claims, sub: '' }),
+      'non-string subject': await authServer.sign({ ...claims, sub: 42 as unknown as string }),
     };
     // A key the authorization server never published, under its issuer.
     const stranger = await startAuthorizationServer();

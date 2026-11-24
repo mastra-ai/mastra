@@ -86,8 +86,10 @@ export function createMcpTokenVerifier(options: {
       // `jose` accepts an audience list that merely includes ours.
       const audience = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
       if (audience.some(aud => aud !== options.resource)) return null;
+      // `requiredClaims` checks that `sub` is present, not that it's a string.
+      if (typeof payload.sub !== 'string' || !payload.sub) return null;
       const orgId = typeof payload.org_id === 'string' && payload.org_id ? payload.org_id : undefined;
-      return { userId: payload.sub!, ...(orgId ? { orgId } : {}) };
+      return { userId: payload.sub, ...(orgId ? { orgId } : {}) };
     } catch (error) {
       if (
         error instanceof errors.JOSEError &&
