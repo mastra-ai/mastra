@@ -43416,8 +43416,8 @@
     "packages/core/src/agent/durable/__tests__/wrapper-forwarding.test.ts": {
       "tier": "in",
       "since": "2026-11-24",
-      "last_failure": null,
-      "reason": "new"
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail"
     },
     "packages/core/src/channels/__tests__/chat-tools.test.ts": {
       "tier": "in",
