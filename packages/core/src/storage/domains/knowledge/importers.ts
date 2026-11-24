@@ -44,6 +44,11 @@ export interface KnowledgeImporterNodeRecord {
   /** The page was kept as a stub after the source removed it, because pages are nested under it. */
   stub: boolean;
   /**
+   * The page was already at the item's path when the binding first wrote the item, and the binding
+   * took it over. Removed from the source, it is kept as a stub, never deleted.
+   */
+  adopted: boolean;
+  /**
    * The sink still owes this node follow-up work: it sits away from its source parent (which hadn't
    * arrived), or it has links that didn't resolve. Settle passes visit only these.
    */

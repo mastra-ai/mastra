@@ -26,14 +26,16 @@ import type {
 
 /**
  * Applies one flush's ops to pages and the node map, on a transaction view. Pages are found by id
- * through the node map, never adopted by path: the binding owns its anchor (the page it created at
- * its target) and the pages its nodes point at, and nothing else.
+ * through the node map: the binding owns its anchor (the page it created at its target) and the
+ * pages its nodes point at, and nothing else. A page no binding owns at a new item's path is taken
+ * over by that item's node, and kept as a stub rather than deleted when the item is removed.
  *
  * @internal
  */
 
 /** The body a page keeps when its item is gone at the source but pages are still nested under it. */
 export const REMOVED_PARENT_BODY = 'Removed from the source. Kept because pages are still nested under it.';
+export const REMOVED_ADOPTED_BODY = 'Removed from the source. Kept because the page was here before the import.';
 
 /** Embedding work for after commit. */
 export type KnowledgeImportEmbedJob = { kind: 'index'; pageId: string } | { kind: 'remove'; pageId: string };
@@ -519,8 +521,31 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     let renamed = false;
     let relinked: Relinked[] = [];
     let rewrote = false;
+    let adopted = existing?.adopted ?? false;
 
-    if (!existing) {
+    // A page someone else wrote at the item's path is taken over: it keeps its id and children, and
+    // the item's fields replace its own. Another binding's page is never taken. The destination is
+    // locked, so nothing can be created at the path or moved there until commit.
+    const held = existing
+      ? null
+      : await storage.getPageByPath({ scopeId: scope.id, path: [...destination.keys, key], read: 'all' });
+    if (held) {
+      await storage.lockPages([held.id]);
+      const fresh = await storage.getPage({ id: held.id, read: 'all' });
+      if (!live(fresh) || fresh.parentId !== destination.page.id || fresh.key !== key) {
+        throw new KnowledgeImportRefusalError('occupied');
+      }
+      otherAnchors ??= new Set(
+        (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
+      );
+      if (otherAnchors.has(fresh.id) || (await importers.getNodeByPage(fresh.id))) {
+        throw new KnowledgeImportRefusalError('occupied');
+      }
+      renamed = fields.name !== fresh.name;
+      page = await storage.updatePage({ id: fresh.id, expectedVersion: fresh.version, ...fields, provenance });
+      change = 'updated';
+      adopted = true;
+    } else if (!existing) {
       page = await storage.createPage({
         parentId: destination.page.id,
         key,
@@ -579,6 +604,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       links: rendered ? rendered.links : (existing?.links ?? []),
       linkSection: rendered ? rendered.section : (existing?.linkSection ?? null),
       stub: false,
+      adopted,
       unsettled: misplaced || (rendered ? rendered.unresolved : (existing?.unresolvedLinks ?? [])).length > 0,
     });
 
@@ -620,12 +646,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           await assertSubtreeOwned(current.page.id);
           const children =
             (await storage.countChildPages({ parentIds: [current.page.id], read: 'all' }))[current.page.id] ?? 0;
-          if (children > 0) {
+          // A page the binding took over is never deleted, even as a leaf.
+          if (children > 0 || node.adopted) {
             if (node.stub) return;
             const page = await storage.updatePage({
               id: current.page.id,
               expectedVersion: current.page.version,
-              body: REMOVED_PARENT_BODY,
+              body: children > 0 ? REMOVED_PARENT_BODY : REMOVED_ADOPTED_BODY,
               provenance,
             });
             await importers.saveNode({ ...node, stub: true });

@@ -53,6 +53,7 @@ export const KNOWLEDGE_IMPORTER_DDL = [
     links TEXT NOT NULL DEFAULT '[]',
     linkSection TEXT,
     stub INTEGER NOT NULL DEFAULT 0,
+    adopted INTEGER NOT NULL DEFAULT 0,
     unsettled INTEGER NOT NULL DEFAULT 0,
     updatedAt INTEGER NOT NULL,
     PRIMARY KEY (bindingId, sourceId)
@@ -162,6 +163,7 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   links: JSON.parse(String(row.links)),
   linkSection: row.linkSection === null ? null : String(row.linkSection),
   stub: Number(row.stub) === 1,
+  adopted: Number(row.adopted) === 1,
   unsettled: Number(row.unsettled) === 1,
   updatedAt: new Date(Number(row.updatedAt)),
 });
@@ -446,12 +448,12 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     try {
       await this.#transaction(async tx => {
         await tx.execute({
-          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, links, linkSection, stub, unsettled, updatedAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          sql: `INSERT INTO "${T.nodes}" (bindingId, sourceId, pageId, kind, parentSourceId, aliases, unresolvedLinks, links, linkSection, stub, adopted, unsettled, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (bindingId, sourceId) DO UPDATE SET
                   pageId = excluded.pageId, kind = excluded.kind, parentSourceId = excluded.parentSourceId,
                   aliases = excluded.aliases, unresolvedLinks = excluded.unresolvedLinks, links = excluded.links,
-                  linkSection = excluded.linkSection, stub = excluded.stub,
+                  linkSection = excluded.linkSection, stub = excluded.stub, adopted = excluded.adopted,
                   unsettled = excluded.unsettled, updatedAt = excluded.updatedAt`,
           args: [
             node.bindingId,
@@ -464,6 +466,7 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
             JSON.stringify(node.links),
             node.linkSection,
             node.stub ? 1 : 0,
+            node.adopted ? 1 : 0,
             node.unsettled ? 1 : 0,
             Date.now(),
           ],

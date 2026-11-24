@@ -57,6 +57,7 @@ const node = (
   links: extra.links ?? [],
   linkSection: extra.linkSection ?? null,
   stub: false,
+  adopted: false,
   unsettled: extra.unsettled ?? false,
 });
 
@@ -487,8 +488,9 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
 
       it('replaces a node in place and refuses a page another node owns', async () => {
         await importers.saveNode(node('a', 'page-a'));
-        await importers.saveNode({ ...node('a', 'page-a'), stub: true, aliases: ['x'] });
-        expect(await importers.getNode('b1', 'a')).toMatchObject({ stub: true, aliases: ['x'] });
+        expect(await importers.getNode('b1', 'a')).toMatchObject({ stub: false, adopted: false });
+        await importers.saveNode({ ...node('a', 'page-a'), stub: true, adopted: true, aliases: ['x'] });
+        expect(await importers.getNode('b1', 'a')).toMatchObject({ stub: true, adopted: true, aliases: ['x'] });
         await expect(importers.saveNode(node('z', 'page-a'))).rejects.toThrow();
         expect(await importers.getNode('b1', 'z')).toBeNull();
       });

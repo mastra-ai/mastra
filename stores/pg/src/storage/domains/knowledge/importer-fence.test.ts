@@ -123,6 +123,7 @@ describe('PG importer sink fences (r347 O3)', () => {
           links: [],
           linkSection: null,
           stub: false,
+          adopted: false,
           unsettled: false,
         });
       });

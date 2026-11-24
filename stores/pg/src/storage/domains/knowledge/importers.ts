@@ -71,6 +71,7 @@ export function pgKnowledgeImportersDDL(schemaName?: string): string[] {
       links jsonb NOT NULL DEFAULT '[]',
       link_section text,
       stub boolean NOT NULL DEFAULT false,
+      adopted boolean NOT NULL DEFAULT false,
       unsettled boolean NOT NULL DEFAULT false,
       updated_at timestamptz NOT NULL DEFAULT now(),
       PRIMARY KEY (binding_id, source_id)
@@ -171,6 +172,7 @@ const toNode = (row: Row): KnowledgeImporterNodeRecord => ({
   links: row.links ?? [],
   linkSection: row.link_section ?? null,
   stub: row.stub,
+  adopted: row.adopted,
   unsettled: row.unsettled,
   updatedAt: row.updated_at,
 });
@@ -426,12 +428,12 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     try {
       await this.#client.tx(async tx => {
         await tx.none(
-          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, links, link_section, stub, unsettled)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)
+          `INSERT INTO ${this.#t.nodes} (binding_id, source_id, page_id, kind, parent_source_id, aliases, unresolved_links, links, link_section, stub, adopted, unsettled)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11, $12)
            ON CONFLICT (binding_id, source_id) DO UPDATE SET
              page_id = EXCLUDED.page_id, kind = EXCLUDED.kind, parent_source_id = EXCLUDED.parent_source_id,
              aliases = EXCLUDED.aliases, unresolved_links = EXCLUDED.unresolved_links, links = EXCLUDED.links,
-             link_section = EXCLUDED.link_section, stub = EXCLUDED.stub,
+             link_section = EXCLUDED.link_section, stub = EXCLUDED.stub, adopted = EXCLUDED.adopted,
              unsettled = EXCLUDED.unsettled, updated_at = clock_timestamp()`,
           [
             node.bindingId,
@@ -444,6 +446,7 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
             JSON.stringify(node.links),
             node.linkSection,
             node.stub,
+            node.adopted,
             node.unsettled,
           ],
         );
