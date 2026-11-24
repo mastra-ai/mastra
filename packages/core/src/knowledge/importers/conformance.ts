@@ -150,6 +150,26 @@ export function importerHostConformance(
       },
     ],
     [
+      'refuses an entry whose times are not ISO 8601 date-times, whether or not it takes timelines',
+      async t => {
+        const run = await t.start();
+        const bad = (field: 'occurredAt' | 'editedAt', value: string): KnowledgeImporterOp[] => [
+          {
+            op: 'entry',
+            timeline: 'a',
+            entry: { externalId: '1', occurredAt: '2026-11-23T22:13:20Z', body: '', [field]: value },
+          },
+        ];
+        for (const ops of [bad('occurredAt', 'yesterday'), bad('occurredAt', '2026-11-23'), bad('editedAt', 'soon')]) {
+          await refused(
+            () => t.host.flush({ runId: run.runId, generation: run.generation, seq: 1, digest: '0'.repeat(64), ops }),
+            400,
+          );
+        }
+        await t.flush(run, 1, [upsert('a')]);
+      },
+    ],
+    [
       'keeps a running run alive on heartbeat',
       async t => {
         const run = await t.start();

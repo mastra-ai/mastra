@@ -262,7 +262,7 @@ function wellFormed(value: string): string {
   return value;
 }
 
-type FieldKind = 'string' | 'nonEmpty' | 'nullableString' | 'links' | 'aliases' | 'author';
+type FieldKind = 'string' | 'nonEmpty' | 'isoTime' | 'nullableString' | 'links' | 'aliases' | 'author';
 
 const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   sourceId: { kind: 'nonEmpty', required: true },
@@ -272,10 +272,12 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   fallbackParent: { kind: 'nonEmpty' },
 };
 
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
 const ENTRY_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   externalId: { kind: 'nonEmpty', required: true },
-  occurredAt: { kind: 'nonEmpty', required: true },
-  editedAt: { kind: 'nonEmpty' },
+  occurredAt: { kind: 'isoTime', required: true },
+  editedAt: { kind: 'isoTime' },
   author: { kind: 'author' },
   body: { kind: 'string', required: true },
   threadExternalId: { kind: 'nonEmpty' },
@@ -327,6 +329,15 @@ function checkFields<T>(
       case 'nonEmpty':
         out[key] = checkString(field, at, true);
         break;
+      case 'isoTime': {
+        // Entries are ordered by these, so a string that parses wrong would look like data in the wrong place.
+        const time = checkString(field, at, true);
+        if (!ISO_TIME.test(time) || Number.isNaN(Date.parse(time))) {
+          throw new TypeError(`${at} must be an ISO 8601 date-time, got "${time}".`);
+        }
+        out[key] = time;
+        break;
+      }
       case 'nullableString':
         out[key] = field === null ? null : checkString(field, at, true);
         break;
