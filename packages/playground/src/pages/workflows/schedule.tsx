@@ -103,6 +103,7 @@ export default function SchedulePage() {
             ) : null}
             {schedule && schedule.status !== 'completed' ? (
               <Button
+                icon={schedule.status === 'active' ? <IconPause /> : <IconPlay />}
                 onClick={() => {
                   const action = schedule.status === 'active' ? 'pause' : 'resume';
                   toggle.mutate(action, {
@@ -113,17 +114,7 @@ export default function SchedulePage() {
                 disabled={toggle.isPending}
                 data-testid="schedule-toggle-button"
               >
-                {schedule.status === 'active' ? (
-                  <>
-                    <IconPause />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <IconPlay />
-                    Resume
-                  </>
-                )}
+                {schedule.status === 'active' ? 'Pause' : 'Resume'}
               </Button>
             ) : null}
           </ActionRow.End>

@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
@@ -174,16 +173,13 @@ export function VcsFactoryStep({
               Manage access
             </Button>
             <Button
+              icon={<IconArrowRotateClockwise className={refreshRepos.isPending ? 'animate-spin' : undefined} />}
               variant="ghost"
               size="sm"
               aria-label="Refresh GitHub repositories"
               disabled={refreshRepos.isPending}
               onClick={refreshGithub}
             >
-              <IconArrowRotateClockwise
-                className={cn('size-icon-sm', refreshRepos.isPending && 'animate-spin')}
-                aria-hidden="true"
-              />
               Refresh
             </Button>
           </>

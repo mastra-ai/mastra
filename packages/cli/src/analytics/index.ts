@@ -6,6 +6,71 @@ import { getPackageManager } from '../commands/utils.js';
 
 const ANALYTICS_CONFIG_PATH = path.join(os.homedir(), '.mastra', 'analytics.json');
 
+/**
+ * The only command options that are ever sent. Add an option here only if its value can't contain
+ * a secret: no keys, tokens, env values, or free-form arguments.
+ */
+const COMMAND_ARG_KEYS = [
+  'components',
+  'debug',
+  'default',
+  'default_template',
+  'dir',
+  'env',
+  'envFile',
+  'example',
+  'force',
+  'git',
+  'hasConfig',
+  'hasEnvFile',
+  'hasInput',
+  'hasOrg',
+  'hasProject',
+  'has_org',
+  'headless',
+  'json',
+  'llm',
+  'mcp',
+  'mode',
+  'no_platform',
+  'observability',
+  'positionalCount',
+  'positionalPresent',
+  'preflight',
+  'region',
+  'root',
+  'scorerName',
+  'skills',
+  'skipBuild',
+  'skipPreflight',
+  'strict',
+  'studio',
+  'targetApi',
+  'tools',
+  'version_tag',
+  'workers',
+  'yes',
+] as const;
+
+type CommandArgKey = (typeof COMMAND_ARG_KEYS)[number];
+
+/** Rejects objects with any other key, such as a command's raw options. */
+type CommandArgs<Args> = Args & { [Key in Exclude<keyof Args, CommandArgKey>]: never };
+
+function pickCommandArgs(args: object): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(args).filter(([key]) => (COMMAND_ARG_KEYS as readonly string[]).includes(key)),
+  );
+}
+
+/**
+ * Errors can quote a URL the user passed, so drop its query string, or all of it when it may hold
+ * credentials. Where those end is ambiguous: passwords can contain `/` or `?`, and queries `@`.
+ */
+function stripUrlSecrets(message: string): string {
+  return message.replace(/:\/\/\S+/g, url => (url.includes('@') ? '://[redacted]' : url.replace(/[?#].*/, '')));
+}
+
 interface CommandData {
   command: string;
   args?: Record<string, unknown>;
@@ -202,9 +267,9 @@ export class PosthogAnalytics {
     }
   }
 
-  trackCommand(options: {
+  trackCommand<Args extends object>(options: {
     command: string;
-    args?: Record<string, unknown>;
+    args?: CommandArgs<Args>;
     durationMs?: number;
     status?: 'success' | 'error';
     error?: string;
@@ -221,7 +286,7 @@ export class PosthogAnalytics {
       };
 
       if (options.args) {
-        commandData.args = options.args;
+        commandData.args = pickCommandArgs(options.args);
       }
 
       if (options.durationMs) {
@@ -229,7 +294,7 @@ export class PosthogAnalytics {
       }
 
       if (options.error) {
-        commandData.error = options.error;
+        commandData.error = stripUrlSecrets(options.error);
       }
 
       this.client.capture({
@@ -247,14 +312,14 @@ export class PosthogAnalytics {
   }
 
   // Helper method to wrap command execution with timing
-  async trackCommandExecution<T>({
+  async trackCommandExecution<T, Args extends object>({
     command,
     args,
     execution,
     origin,
   }: {
     command: string;
-    args: Record<string, unknown>;
+    args: CommandArgs<Args>;
     execution: () => Promise<T>;
     origin?: CLI_ORIGIN;
   }): Promise<T> {

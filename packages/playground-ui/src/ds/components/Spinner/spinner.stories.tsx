@@ -66,12 +66,7 @@ export const Small: Story = {
 };
 
 export const InButton: Story = {
-  render: () => (
-    <Button>
-      <Spinner />
-      Loading...
-    </Button>
-  ),
+  render: () => <Button icon={<Spinner />}>Loading...</Button>,
 };
 
 export const Sizes: Story = {

@@ -16,11 +16,21 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Node, Project, SyntaxKind } from 'ts-morph';
+import { Node, Project, SyntaxKind, VariableDeclarationKind } from 'ts-morph';
 import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
@@ -28,10 +38,11 @@ import {
   assertProviderEnvVarAvailable,
   calculateFileChecksums,
   currentTemplateSha,
+  listHandwrittenFiles,
   providerConnectionEnvVar,
   providerDir,
   providerRegistrationName,
-  providersDir,
+  readManifestIn,
   templatePath,
   validateProviderId,
 } from './provider-utils.js';
@@ -137,6 +148,28 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+/**
+ * Some templates declare `output` inline (e.g. `output: z.null()` for a
+ * delete). Hoist it into a top-level schema declaration so it gets the same
+ * naming and export treatment as declared schemas.
+ */
+function hoistInlineOutputSchema(source: SourceFile, argument: ObjectLiteralExpression): void {
+  const property = argument.getProperty('output');
+  if (!property || !Node.isPropertyAssignment(property)) return;
+  const initializer = property.getInitializer();
+  if (!initializer || !Node.isCallExpression(initializer)) return;
+  let name = 'OutputSchema';
+  while (source.getVariableDeclaration(name)) name = `Inline${name}`;
+  const actionStatement = argument.getFirstAncestorOrThrow(
+    ancestor => Node.isStatement(ancestor) && ancestor.getParent() === source,
+  );
+  source.insertVariableStatement(actionStatement.getChildIndex(), {
+    declarationKind: VariableDeclarationKind.Const,
+    declarations: [{ name, initializer: initializer.getText() }],
+  });
+  property.setInitializer(name);
 }
 
 function normalizeSupportedRuntimeImports(source: SourceFile): void {
@@ -496,6 +529,7 @@ function extractAction(
     return { kind: 'skip', reason: 'createAction argument is not an object literal' };
   }
 
+  hoistInlineOutputSchema(source, argument);
   const inputName = readIdentifierPropertyInitializer(argument, 'input');
   const outputName = readIdentifierPropertyInitializer(argument, 'output');
   const execProperty = argument.getProperty('exec');
@@ -522,8 +556,10 @@ function extractAction(
     ? execBodyNode.getText()
     : `{ return ${execBodyNode.getText()}; }`;
   const usedContextMethods = new Set<string>();
-  for (const match of originalExecBody.matchAll(/\bnango\.([A-Za-z_$][\w$]*)/g)) {
-    usedContextMethods.add(match[1]!);
+  // Walk property accesses rather than matching text, so a comment such as a
+  // `docs.nango.dev` link isn't mistaken for a call to a `dev` helper.
+  for (const access of execBodyNode.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    if (access.getExpression().getText() === 'nango') usedContextMethods.add(access.getName());
   }
   const unsupportedMethods = [...usedContextMethods].filter(method => !PROXY_CONTEXT_METHODS.has(method));
   if (unsupportedMethods.length > 0) {
@@ -592,6 +628,7 @@ function extractAction(
     [
       actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
       "Parameters<Parameters<typeof createAction>[0]['exec']>[0]",
+      "Parameters<ReturnType<typeof createAction>['exec']>[0]",
     ].filter((text): text is string => text !== undefined),
   );
   const inlineContextNodes = source
@@ -1181,13 +1218,320 @@ function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
 }
 
 /**
- * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
- * first attempt already applied could run again: deleting a branch recreated
- * by someone else meanwhile, committing a file change twice, or undoing a
- * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * The proxy replays PUT and DELETE after a transient 5xx, so a write the first
+ * attempt already applied could run again: deleting a GitLab branch recreated by
+ * someone else meanwhile, committing a file change twice, or reapplying a Zendesk
+ * ticket update over a concurrent one. Writes get exactly one attempt; reads keep
  * the template's retries.
  */
-function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+/** Rewrites expected in the exec body; a different count means the template changed. */
+function rewriteExecBody(action: ExtractedAction, rewrites: readonly StatementRewrite[]): ExtractedAction {
+  let execBody = action.execBody;
+  for (const { pattern, replacement, count, what } of rewrites) {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`);
+    if ((execBody.match(global)?.length ?? 0) !== count) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+      );
+    }
+    execBody = execBody.replace(global, replacement);
+  }
+  return { ...action, execBody };
+}
+
+/** Zendesk sends `null` for the cursor on the edge pages; the templates reject null. */
+const ZENDESK_NULL_CURSORS: StatementRewrite = {
+  pattern: /(after_cursor|before_cursor): z\.string\(\)\.optional\(\)/,
+  replacement: '$1: z.string().nullish()',
+  count: 0,
+  what: 'nullable cursors',
+};
+
+/** Asks for cursor pages even when the caller gives no page size; Zendesk only sends cursors then. */
+const ZENDESK_ALWAYS_CURSOR_PAGES: StatementRewrite = {
+  pattern: /if \(input\.per_page !== undefined\) \{\s*params\['page\[size\]'\] = input\.per_page;\s*\}/,
+  replacement: "params['page[size]'] = input.per_page ?? 100;",
+  count: 1,
+  what: 'cursor pages',
+};
+
+/** A next cursor only while Zendesk says more results remain. */
+function zendeskNextCursor(source: string, pattern: RegExp): StatementRewrite {
+  return {
+    pattern,
+    replacement: `...(${source}.meta?.has_more && ${source}.meta.after_cursor && { next_cursor: ${source}.meta.after_cursor })`,
+    count: 1,
+    what: 'next cursor',
+  };
+}
+
+interface ProviderActionFixes {
+  statements?: readonly StatementRewrite[];
+  exec?: readonly StatementRewrite[];
+}
+
+/**
+ * Corrections to the Zendesk templates, each found reviewing the toolset:
+ * - Cursor pagination answers `null` cursors at either end, which the
+ *   templates reject, and a cursor is only a continuation while `has_more`.
+ * - Multi-select custom fields hold arrays of option tags, and `null` clears a
+ *   field; the update template rejected both, and rejected the ticket Zendesk
+ *   returned after the update had already been applied.
+ * - Help Center content tag ids are strings, so article reads failed.
+ * - Setting a user's organization replaces all their memberships.
+ * - Comments and macros fall back to offset pages unless `page[size]` is
+ *   sent, and the templates only read cursors, so the default listing never
+ *   offered a next page; macros never read the cursor Zendesk answered with.
+ * - A section or category article listing ignored the requested locale.
+ * - get_ticket fetched the requested sideloads and dropped them, and rejected
+ *   a ticket with no group.
+ * - An unscoped search mixed users and organizations into the ticket counts
+ *   and pages; the search is now limited to tickets, and a ticket it cannot
+ *   read is an error rather than silently missing from a counted page.
+ * Drop an entry once the upstream template is fixed.
+ */
+const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
+  'get-article': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 2,
+        what: 'string content tag ids',
+      },
+    ],
+  },
+  'get-ticket-comments': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor !== undefined && \{\s*next_cursor: responseData\.meta\.after_cursor\s*\}\)/,
+      ),
+    ],
+  },
+  'get-ticket': {
+    statements: [
+      {
+        pattern: /group_id: z\.number\(\)\.optional\(\)/,
+        replacement: 'group_id: z.number().nullish()',
+        count: 2,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /^(export const \w+OutputSchema = z\.object\(\{[\s\S]*?)(\s*\}\);)$/,
+        replacement:
+          "$1,\n    sideloads: z.record(z.string(), z.unknown()).optional().describe('Records Zendesk sideloaded for `include`, keyed by sideload name, such as users or groups.')$2",
+        count: 1,
+        what: 'sideloads output',
+      },
+    ],
+    exec: [
+      {
+        pattern: /\.\.\.\(rawTicket\.group_id !== undefined && /,
+        replacement: '...(rawTicket.group_id != null && ',
+        count: 1,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /(const rawTicket = ProviderTicketSchema\.parse\(response\.data\.ticket\);)/,
+        replacement: '$1\nconst { ticket: _ticket, ...sideloads } = response.data;',
+        count: 1,
+        what: 'sideloads',
+      },
+      {
+        pattern: /(\.\.\.\(rawTicket\.tags !== undefined && \{ tags: rawTicket\.tags \}\))/,
+        replacement: '$1,\n...(input.include && Object.keys(sideloads).length > 0 && { sideloads })',
+        count: 1,
+        what: 'sideloads',
+      },
+    ],
+  },
+  'list-articles': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 1,
+        what: 'string content tag ids',
+      },
+    ],
+    exec: [
+      {
+        pattern:
+          /`\/api\/v2\/help_center\/(sections|categories)\/\$\{encodeURIComponent\(input\.(section_id|category_id)\)\}\/articles`/,
+        replacement:
+          "`/api/v2/help_center/${input.locale !== undefined ? `${encodeURIComponent(input.locale)}/` : ''}$1/${encodeURIComponent(input.$2)}/articles`",
+        count: 2,
+        what: 'locale for section and category listings',
+      },
+    ],
+  },
+  'list-macros': {
+    statements: [
+      {
+        // Zendesk only cursor-pages alphabetical and date sorts, and every
+        // macro listing is cursor-paged so the caller can continue it.
+        pattern:
+          /\.enum\(\['alphabetical', 'created_at', 'updated_at', 'usage_1h', 'usage_24h', 'usage_7d', 'usage_30d'\]\)/,
+        replacement: ".enum(['alphabetical', 'created_at', 'updated_at'])",
+        count: 1,
+        what: 'cursor-compatible sorts',
+      },
+      {
+        pattern: /(const ProviderResponseSchema = z\.object\(\{\s*macros: z\.array\(ProviderMacroSchema\),)/,
+        replacement:
+          '$1\n    meta: z.object({ has_more: z.boolean().optional(), after_cursor: z.string().nullish() }).optional(),',
+        count: 1,
+        what: 'cursor metadata',
+      },
+      {
+        pattern: /^function extractCursorFromUrl\([\s\S]*\}$/,
+        replacement: '',
+        count: 1,
+        what: 'unused offset cursor parsing',
+      },
+    ],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      {
+        // Cursor pages take one `sort` value (`-` for descending) instead of
+        // sort_by/sort_order. Zendesk's defaults: alphabetical, ascending for
+        // alphabetical and descending for the date sorts.
+        pattern:
+          /if \(input\.sort_by !== undefined\) \{\s*params\['sort_by'\] = input\.sort_by;\s*\}\s*if \(input\.sort_order !== undefined\) \{\s*params\['sort_order'\] = input\.sort_order;\s*\}/,
+        replacement: `if (input.sort_by !== undefined || input.sort_order !== undefined) {
+        const sortBy = input.sort_by ?? 'alphabetical';
+        const sortOrder = input.sort_order ?? (sortBy === 'alphabetical' ? 'asc' : 'desc');
+        params['sort'] = \`\${sortOrder === 'desc' ? '-' : ''}\${sortBy}\`;
+      }`,
+        count: 1,
+        what: 'cursor sort parameter',
+      },
+      {
+        pattern: /const next_cursor = extractCursorFromUrl\(providerData\.next_page\);/,
+        replacement:
+          'const next_cursor = providerData.meta?.has_more && providerData.meta.after_cursor ? providerData.meta.after_cursor : undefined;',
+        count: 1,
+        what: 'next cursor',
+      },
+    ],
+  },
+  'search-tickets': {
+    statements: [
+      {
+        pattern:
+          /query: z\s*\.string\(\)\s*\.describe\(\s*'Zendesk search query\. Should include "type:ticket" and any additional filters like status, tags, dates\. Example: "type:ticket status:open"'\s*\)/,
+        replacement:
+          "query: z.string().min(1).refine(query => !/(^|\\s)-?type:(?!ticket(\\s|$))/i.test(query.replace(/\"[^\"]*(\"|$)/g, ' ')), 'Only tickets can be searched; remove the other type: filter.').describe('Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: \"status:open tags:vip\"')",
+        count: 1,
+        what: 'ticket-only query',
+      },
+    ],
+    exec: [
+      {
+        pattern: /query: input\.query,/,
+        replacement:
+          'query: /(^|\\s)type:ticket(\\s|$)/i.test(input.query.replace(/"[^"]*("|$)/g, \' \')) ? input.query : `type:ticket ${input.query}`,',
+        count: 1,
+        what: 'ticket-only query',
+      },
+      {
+        pattern:
+          /const parsed = TicketSchema\.safeParse\(result\);\s*if \(parsed\.success\) \{\s*tickets\.push\(parsed\.data\);\s*\}/,
+        replacement: 'tickets.push(TicketSchema.parse(result));',
+        count: 1,
+        what: 'unreadable tickets',
+      },
+    ],
+  },
+  'list-groups': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor != null && \{ next_cursor: responseData\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-tickets': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      zendeskNextCursor(
+        'data',
+        /\.\.\.\(data\.meta\?\.after_cursor != null && \{ next_cursor: data\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-users': {
+    statements: [
+      { ...ZENDESK_NULL_CURSORS, count: 2 },
+      {
+        pattern: /(next|prev): z\.string\(\)\.optional\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 2,
+        what: 'nullable page links',
+      },
+    ],
+  },
+  'list-views': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'parsed',
+        /\.\.\.\(parsed\.meta\?\.after_cursor !== undefined && \{ next_cursor: parsed\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'update-ticket': {
+    statements: [
+      {
+        pattern:
+          /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\)\]\)\.describe\('The value to set for the custom field\.'\)/,
+        replacement:
+          "value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).describe('The value to set for the custom field: an array of option tags for a multi-select field, or null to clear it.')",
+        count: 1,
+        what: 'custom field input values',
+      },
+      {
+        pattern: /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\), z\.null\(\)\]\)\.optional\(\)/,
+        replacement: 'value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).optional()',
+        count: 1,
+        what: 'custom field values',
+      },
+    ],
+    exec: [
+      {
+        pattern: /value: string \| number \| boolean \}/,
+        replacement: 'value: string | number | boolean | string[] | null }',
+        count: 1,
+        what: 'custom field payload type',
+      },
+    ],
+  },
+  'update-user': {
+    statements: [
+      {
+        pattern: /organizationId: z\.number\(\)\.optional\(\)\.describe\("The ID of the user's organization\."\)/,
+        replacement:
+          'organizationId: z.number().optional().describe("The ID of the organization to make the user\'s only organization. Removes the user from every other organization they belong to.")',
+        count: 1,
+        what: 'organization description',
+      },
+    ],
+  },
+};
+
+function adaptZendeskAction(action: ExtractedAction): ExtractedAction {
+  const fixes = ZENDESK_FIXES[action.candidate.actionSlug];
+  let adapted = attemptWritesOnce(action);
+  if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
+  if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
+  return { ...adapted, moduleStatements: adapted.moduleStatements.filter(statement => statement.trim() !== '') };
+}
+
+function attemptWritesOnce(action: ExtractedAction): ExtractedAction {
   if (/platformProxy\.get\(/.test(action.execBody)) return action;
   return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
 }
@@ -1258,7 +1602,7 @@ function paginateGitLabList(action: ExtractedAction): ExtractedAction {
 
 function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   const slug = action.candidate.actionSlug;
-  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  let adapted = attemptWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
   const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
   if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
   const updateIdentifiers = GITLAB_UPDATE_IDENTIFIERS[slug];
@@ -1319,9 +1663,564 @@ function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   return description ? { ...adapted, description } : adapted;
 }
 
+const ATLASSIAN_API_ORIGIN = 'https://api.atlassian.com';
+const CONFLUENCE_SITE_BASE =
+  /^(?:`https:\/\/api\.atlassian\.com\/ex\/confluence\/\$\{(\w+)\}`|'https:\/\/api\.atlassian\.com\/ex\/confluence\/' \+ (\w+))$/;
+
+/**
+ * Lets the named fields of one schema statement be null. Confluence sends
+ * `null` for these when they are unset, and the templates only accept them
+ * absent, so a successful response (sometimes after a write) failed to parse.
+ */
+function nullableFields(action: ExtractedAction, schema: string, fields: readonly string[]): ExtractedAction {
+  const declares = new RegExp(`^(?:export )?const ${schema} = `);
+  const matching = action.moduleStatements.filter(statement => declares.test(statement));
+  if (matching.length !== 1) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${schema}); the upstream template shape changed.`,
+    );
+  }
+  return {
+    ...action,
+    moduleStatements: action.moduleStatements.map(statement =>
+      statement === matching[0]
+        ? fields.reduce(
+            (text, field) =>
+              replaceOnce(
+                text,
+                new RegExp(`\\b${field}: (z\\.\\w+\\(\\))(?:\\.optional\\(\\))?,`),
+                `${field}: $1.nullish(),`,
+                action,
+                `nullable ${schema}.${field}`,
+              ),
+            statement,
+          )
+        : statement,
+    ),
+  };
+}
+
+/** Maps a field only when it is set, now that it can be null. */
+function skipNullFields(action: ExtractedAction, record: string, fields: readonly string[]): ExtractedAction {
+  return {
+    ...action,
+    execBody: fields.reduce(
+      (body, field) =>
+        replaceOnce(
+          body,
+          new RegExp(`\\b${record}\\.${field} !== undefined`),
+          `${record}.${field} != null`,
+          action,
+          `null ${field}`,
+        ),
+      action.execBody,
+    ),
+  };
+}
+
+/** Adds a deterministic input constraint the template only checked in exec. */
+function refineInput(action: ExtractedAction, refinement: string): ExtractedAction {
+  return rewriteModuleStatements(action, [
+    {
+      pattern: new RegExp(`^(export const ${action.inputSchemaName} = z\\.object\\(\\{[\\s\\S]*\\}\\))(;?\\s*)$`),
+      replacement: `$1${refinement.replace(/\$/g, '$$$$')}$2`,
+      count: 1,
+      what: 'input constraint',
+    },
+  ]);
+}
+
+function rewriteExec(action: ExtractedAction, pattern: RegExp, replacement: string, what: string): ExtractedAction {
+  return { ...action, execBody: replaceOnce(action.execBody, pattern, replacement, action, what) };
+}
+
+/** The `{ results, meta, _links }` envelope Confluence v2 uses for included collections. */
+const CONFLUENCE_INCLUDED =
+  'z.object({ results: z.array(z.unknown()).optional(), meta: z.record(z.string(), z.unknown()).optional(), _links: z.record(z.string(), z.unknown()).optional() }).passthrough()';
+
+/** Lets an included content property keep its JSON value. */
+function keepPropertyValues(action: ExtractedAction, schema: string): ExtractedAction {
+  return rewriteModuleStatements(action, [
+    {
+      pattern: new RegExp(
+        `(const ${schema} = z\\.object\\(\\{\\s*id: z\\.string\\(\\)(?:\\.optional\\(\\))?,\\s*key: z\\.string\\(\\)(?:\\.optional\\(\\))?,)`,
+      ),
+      replacement: '$1\n  value: z.unknown().optional(),',
+      count: 1,
+      what: 'content property values',
+    },
+  ]);
+}
+
+/** A Confluence id as a decimal string, which an int64 id needs to stay exact. */
+const confluenceDecimalId = (what: string, example: string) =>
+  `z.string().regex(/^\\d+$/, 'must be a numeric ${what} id').describe('${what[0]!.toUpperCase()}${what.slice(1)} ID. Example: "${example}"')`;
+
+/** The formats the bulk page and blog-post endpoints return bodies in. */
+const CONFLUENCE_BULK_BODY_FORMAT = "z.enum(['storage', 'atlas_doc_format'])";
+
+/**
+ * Confluence template fixes, by action slug, for request and response shapes
+ * that don't match the Confluence API. Drop an entry once the upstream template
+ * is fixed; each rewrite fails generation if the template changes under it.
+ */
+const CONFLUENCE_FIXES: Readonly<Record<string, (action: ExtractedAction) => ExtractedAction>> = {
+  'create-page': action =>
+    nullableFields(action, 'ProviderPageSchema', ['parentId', 'parentType', 'position', 'ownerId']),
+  'create-inline-comment': action =>
+    refineInput(
+      rewriteExec(
+        nullableFields(action, 'ProviderInlineCommentSchema', ['resolutionLastModifierId', 'resolutionLastModifiedAt']),
+        // The input schema enforces both, so exec need not check them again.
+        /if \(!input\.pageId && !input\.blogPostId && !input\.parentCommentId\) \{[\s\S]*?\}\);\s*\}\s*if \(!input\.parentCommentId && !input\.inlineCommentProperties\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'inline comment target checks',
+      ),
+      `.refine(input => Boolean(input.pageId || input.blogPostId || input.parentCommentId), 'At least one of pageId, blogPostId, or parentCommentId is required.').refine(input => Boolean(input.parentCommentId || input.inlineCommentProperties), { message: 'inlineCommentProperties is required for top-level inline comments.', path: ['inlineCommentProperties'] })`,
+    ),
+  'create-footer-comment': action =>
+    refineInput(
+      rewriteExec(
+        action,
+        // The input schema allows exactly one target, so exec only picks it.
+        /let targetKey: string \| undefined;[\s\S]*?type: 'missing_target',[\s\S]*?\}\);\s*\}/,
+        `const [targetKey, targetValue] = (
+        [
+          ['pageId', input.pageId],
+          ['blogPostId', input.blogPostId],
+          ['attachmentId', input.attachmentId],
+          ['parentCommentId', input.parentCommentId],
+          ['customContentId', input.customContentId],
+        ] as const
+      ).find(([, value]) => value !== undefined)!;`,
+        'footer comment target checks',
+      ),
+      `.refine(input => [input.pageId, input.blogPostId, input.attachmentId, input.parentCommentId, input.customContentId].filter(id => id !== undefined).length === 1, 'Exactly one of pageId, blogPostId, attachmentId, parentCommentId, or customContentId is required.')`,
+    ),
+  'update-inline-comment': action =>
+    refineInput(
+      rewriteExec(
+        action,
+        // The input schema requires one of them, so exec need not check again.
+        /if \(input\.body === undefined && input\.resolved === undefined\) \{[\s\S]*?\}\);\s*\}/,
+        '',
+        'update field check',
+      ),
+      `.refine(input => input.body !== undefined || input.resolved !== undefined, 'At least one of body or resolved must be provided to update the inline comment.')`,
+    ),
+  'list-space-pages': action =>
+    rewriteModuleStatements(nullableFields(action, 'PageSchema', ['ownerId', 'position']), [
+      {
+        // The space pages endpoint takes PageSortOrder values.
+        pattern: /\.enum\(\[\s*'id',\s*'-id',\s*'createdAt',[^\]]*'-title',?\s*\]\)/,
+        replacement:
+          ".enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title'])",
+        count: 1,
+        what: 'space page sorts',
+      },
+    ]),
+  'get-inline-comment': action =>
+    nullableFields(action, 'InlineCommentSchema', [
+      'resolutionLastModifierId',
+      'resolutionLastModifiedAt',
+      'resolutionStatus',
+    ]),
+  'get-attachment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-footer-comment': action => keepPropertyValues(action, 'PropertySchema'),
+  'get-page': action =>
+    rewriteModuleStatements(keepPropertyValues(action, 'PropertyResultSchema'), [
+      {
+        // A content property value is caller JSON, so its nulls are data; only
+        // the page's own nullable fields should become undefined.
+        pattern:
+          /function stripNulls\(value: unknown\): unknown \{\s*if \(value === null\) \{\s*return undefined;\s*\}\s*if \(Array\.isArray\(value\)\) \{\s*return value\.map\(stripNulls\);\s*\}\s*if \(typeof value === 'object' && value !== null\) \{\s*const result: Record<string, unknown> = \{\};\s*for \(const \[key, val\] of Object\.entries\(value\)\) \{\s*result\[key\] = stripNulls\(val\);\s*\}\s*return result;\s*\}\s*return value;\s*\}/,
+        replacement: `function stripNulls(value: unknown, path = ''): unknown {
+  if (path === 'properties.results.value') {
+    return value;
+  }
+  if (value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => stripNulls(item, path));
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = stripNulls(val, path ? \`\${path}.\${key}\` : key);
+    }
+    return result;
+  }
+  return value;
+}`,
+        count: 1,
+        what: 'content property value nulls',
+      },
+    ]),
+  'delete-page-property': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /pageId: z\.number\(\)\.describe\('Page ID\. Example: 123'\)/,
+        replacement: `pageId: ${confluenceDecimalId('page', '123')}`,
+        count: 1,
+        what: 'page id as a decimal string',
+      },
+      {
+        pattern: /propertyId: z\.number\(\)\.describe\('Property ID\. Example: 456'\)/,
+        replacement: `propertyId: ${confluenceDecimalId('property', '456')}`,
+        count: 1,
+        what: 'property id as a decimal string',
+      },
+    ]),
+  'list-pages-for-label': action => {
+    const fields = ['parentId', 'parentType', 'position', 'ownerId', 'lastOwnerId', 'subtype'];
+    return skipNullFields(nullableFields(action, 'PageSchema', fields), 'page', fields);
+  },
+  'list-pages': action => {
+    let fixed = rewriteModuleStatements(action, [
+      {
+        pattern: /subType: z\.enum\(\['page', 'blogpost'\]\)/,
+        replacement: "subType: z.enum(['page', 'live'])",
+        count: 1,
+        what: 'page subtypes',
+      },
+      {
+        pattern: /sort: z\.string\(\)\.optional\(\)\.describe\('Sort order\. Example: "title asc"'\)/,
+        replacement:
+          "sort: z.enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date', 'title', '-title']).optional().describe('Sort order; a leading - sorts descending. Example: \"-modified-date\"')",
+        count: 1,
+        what: 'page sorts',
+      },
+      {
+        pattern: /bodyFormat: z\s*\.enum\(\[[^\]]*\]\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+      {
+        pattern: /(const ProviderVersionSchema = z\.object\(\{)/,
+        replacement: '$1\n    authorId: z.string().optional(),',
+        count: 1,
+        what: 'version author id',
+      },
+    ]);
+    fixed = skipNullFields(nullableFields(fixed, 'ProviderPageSchema', ['position']), 'page', ['position']);
+    return rewriteExec(
+      fixed,
+      /(\.\.\.\(page\.version\.by !== undefined && \{)/,
+      '...(page.version.authorId !== undefined && { author: { accountId: page.version.authorId } }),\n$1',
+      'version author id',
+    );
+  },
+  'list-blog-posts': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /sort: z\.string\(\)\.optional\(\)\.describe\('Sort order, e\.g\. created-date desc\.'\)/,
+        replacement:
+          "sort: z.enum(['id', '-id', 'created-date', '-created-date', 'modified-date', '-modified-date']).optional().describe('Sort order; a leading - sorts descending. Example: \"-created-date\"')",
+        count: 1,
+        what: 'blog post sorts',
+      },
+      {
+        pattern:
+          /bodyFormat: z\.string\(\)\.optional\(\)\.describe\('Body format representation\. Defaults to storage\.'\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}.optional().describe('Body format representation. Defaults to storage.')`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+    ]),
+  'list-space-blog-posts': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern:
+          /bodyFormat: z\.string\(\)\.optional\(\)\.describe\('Body format to include such as storage, atlas_doc_format, or view\.'\)/,
+        replacement: `bodyFormat: ${CONFLUENCE_BULK_BODY_FORMAT}.optional().describe('Body format to include: storage or atlas_doc_format.')`,
+        count: 1,
+        what: 'bulk body formats',
+      },
+    ]),
+  'list-page-footer-comments': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern:
+          /pageId: z\.number\(\)\.describe\('The ID of the page whose footer comments should be listed\. Example: 123456'\)/,
+        replacement:
+          "pageId: z.string().regex(/^\\d+$/, 'must be a numeric page id').describe('The ID of the page whose footer comments should be listed. Example: \"123456\"')",
+        count: 1,
+        what: 'page id as a decimal string',
+      },
+    ]),
+  'list-page-attachments': action =>
+    rewriteExec(
+      rewriteModuleStatements(action, [
+        {
+          pattern: /(\s*)(links: z\s*\.object\(\{)/,
+          replacement:
+            '$1_links: z.object({ download: z.string().optional(), webui: z.string().optional(), thumbnail: z.string().optional() }).passthrough().optional(),$1downloadLink: z.string().optional(),$1webuiLink: z.string().optional(),$1$2',
+          count: 1,
+          what: 'attachment links',
+        },
+      ]),
+      /\.\.\.\(parsed\.links !== undefined && \{ links: parsed\.links \}\)/,
+      `...(() => {
+                const download = parsed.links?.download ?? parsed.downloadLink ?? parsed._links?.download;
+                const webui = parsed.links?.webui ?? parsed.webuiLink ?? parsed._links?.webui;
+                const thumbnail = parsed.links?.thumbnail ?? parsed._links?.thumbnail;
+                return download !== undefined || webui !== undefined || thumbnail !== undefined
+                    ? { links: { ...(download !== undefined && { download }), ...(webui !== undefined && { webui }), ...(thumbnail !== undefined && { thumbnail }) } }
+                    : {};
+            })()`,
+      'attachment links',
+    ),
+  'get-blog-post': action => {
+    const fixed = rewriteModuleStatements(action, [
+      {
+        pattern: /labels: z\.array\(z\.unknown\(\)\)\.optional\(\),/,
+        replacement: `labels: ${CONFLUENCE_INCLUDED}.optional(),`,
+        count: 2,
+        what: 'included labels',
+      },
+      {
+        pattern: /properties: z\.record\(z\.string\(\), z\.unknown\(\)\)\.optional\(\),/,
+        replacement: `properties: ${CONFLUENCE_INCLUDED}.optional(),`,
+        count: 2,
+        what: 'included properties',
+      },
+      {
+        pattern: /likes: z\.object\(\{ count: z\.number\(\)\.optional\(\) \}\)\.optional\(\)/,
+        replacement: `likes: ${CONFLUENCE_INCLUDED}.optional(), operations: ${CONFLUENCE_INCLUDED}.optional(), versions: ${CONFLUENCE_INCLUDED}.optional()`,
+        count: 2,
+        what: 'included likes, operations, and versions',
+      },
+    ]);
+    return rewriteExec(
+      rewriteExec(
+        fixed,
+        /params\['include'\] = include;/,
+        "for (const part of include.split(',')) {\n                params[`include-${part}`] = 'true';\n            }",
+        'v2 include parameters',
+      ),
+      /(\.\.\.\(blogPost\.likes !== undefined && \{ likes: blogPost\.likes \}\))/,
+      '$1,\n            ...(blogPost.operations !== undefined && { operations: blogPost.operations }),\n            ...(blogPost.versions !== undefined && { versions: blogPost.versions })',
+      'included operations and versions',
+    );
+  },
+  'search-content': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /(const SpaceSchema = z\s*\.object\(\{\s*)id: z\.string\(\),/,
+        replacement: '$1id: z.union([z.number().int(), z.string()]).optional(),',
+        count: 1,
+        what: 'v1 space id',
+      },
+    ]),
+  'delete-page': action =>
+    rewriteModuleStatements(action, [
+      {
+        pattern: /\.describe\('Permanently delete the page without moving it to trash\.'\)/,
+        replacement:
+          ".describe('Permanently delete a page that is already in the trash. Delete it without purge first to move it to the trash.')",
+        count: 1,
+        what: 'purge description',
+      },
+    ]),
+  'update-page': action =>
+    rewriteExec(
+      action,
+      /const nextVersionNumber = currentPage\.version\.number \+ 1;/,
+      // Confluence numbers a draft update as version 1.
+      "const nextVersionNumber = input.status === 'draft' ? 1 : currentPage.version.number + 1;",
+      'draft version number',
+    ),
+  'update-blog-post': action =>
+    rewriteExec(
+      action,
+      /number: currentVersion \+ 1/,
+      // Confluence numbers a draft update as version 1.
+      "number: (input.status ?? currentPost.status ?? 'current') === 'draft' ? 1 : currentVersion + 1",
+      'draft version number',
+    ),
+};
+
+/**
+ * Confluence templates point `baseUrlOverride` at
+ * `https://api.atlassian.com/ex/confluence/{cloudId}`. The platform proxy
+ * forwards only an override's origin (and only origins it allowlists), so the
+ * `/ex/confluence/{cloudId}` path would be dropped. Nango's Confluence
+ * provider already proxies to api.atlassian.com, so drop the override and send
+ * the site path as part of the endpoint instead.
+ */
+function routeConfluenceThroughProviderBase(action: ExtractedAction): ExtractedAction {
+  const slug = action.candidate.actionSlug;
+  const wrapped = dropConfluenceBaseUrlOverrides(`async function exec() {\n${action.execBody}\n}`, slug);
+  let execBody = wrapped.slice(wrapped.indexOf('{') + 1, wrapped.lastIndexOf('}')).replace(/^\n/, '');
+  if (slug === 'search-content') {
+    // Every other Confluence template reads the site the user connected from
+    // the connection config first; this one skips straight to metadata and
+    // accessible-resources, which fails for tokens that cover several sites.
+    execBody = replaceOnce(
+      execBody,
+      /let cloudId = metaResult\.success \? metaResult\.data\.cloudId : undefined;/,
+      `const connection = await platformProxy.getConnection();
+      const configCloudId = connection.connection_config?.['cloudId'];
+      let cloudId =
+        typeof configCloudId === 'string' && configCloudId
+          ? configCloudId
+          : metaResult.success
+            ? metaResult.data.cloudId
+            : undefined;`,
+      action,
+      'connection cloudId',
+    );
+  }
+  if (slug === 'delete-page-property') {
+    // This template skips the metadata lookup every other Confluence template
+    // does, so with no cloudId in the connection config it ignores the site
+    // the metadata names and asks Atlassian instead.
+    execBody = replaceOnce(
+      execBody,
+      /(let cloudId = z\.string\(\)\.optional\(\)\.parse\(connection\.connection_config\?\.\['cloudId'\]\);)/,
+      `$1
+        if (!cloudId) {
+            const metadata = MetadataSchema.safeParse(await platformProxy.getMetadata());
+            cloudId = metadata.success ? metadata.data.cloudId : undefined;
+        }`,
+      action,
+      'metadata cloudId',
+    );
+  }
+  if (slug === 'update-footer-comment') {
+    // Every other Confluence template lets the site in the connection config
+    // win over the one cached in metadata; this one checks metadata first, so
+    // when they disagree it writes to a different site than the reads use.
+    execBody = replaceOnce(
+      execBody,
+      /(const metadata = await (?:nango|platformProxy)\.getMetadata\(\);\s*const rawMetadataCloudId[\s\S]*?cloudId = rawMetadataCloudId;\s*\})(\s*)if \(!cloudId\) \{\s*(const connection = await (?:nango|platformProxy)\.getConnection\(\);[\s\S]*?cloudId = rawCloudId;\s*\}\s*\})\s*\}/,
+      `$3$2if (!cloudId) {
+            $1
+        }`,
+      action,
+      'connection cloudId first',
+    );
+  }
+  // Most Confluence templates refuse to pick a site when the token can see
+  // several and none has been chosen; these three take the first one and cache
+  // it, which silently moves every later call onto that site.
+  const pickedSite = {
+    'delete-page-property': [/const firstResource = resources\[0\];/, 'resources'],
+    'create-page': [/const firstResourceSchema = z\.object\(\{/, 'resources.data'],
+    'update-footer-comment': [/if \(!accessibleResources\[0\]\) \{/, 'accessibleResources'],
+  } as const satisfies Record<string, readonly [RegExp, string]>;
+  if (slug in pickedSite) {
+    const [anchor, list] = pickedSite[slug as keyof typeof pickedSite];
+    execBody = replaceOnce(
+      execBody,
+      new RegExp(`(${anchor.source})`),
+      `if (${list}.length > 1) {
+                throw new platformProxy.ActionError({
+                    type: 'ambiguous_cloud_id',
+                    message: 'Multiple Confluence sites found. Please set an explicit cloudId in the connection metadata.',
+                });
+            }
+            $1`,
+      action,
+      'single accessible site',
+    );
+  }
+  // Most templates put ids into the path as-is, so an id carrying `?`, `#`,
+  // `/` or `\` could add query options (such as purge=true) or reach another
+  // resource. Encoding keeps every input value inside its own path segment.
+  execBody = execBody.replace(/endpoint: `[^`]*`/g, endpoint =>
+    endpoint.replace(/\$\{(input\.\w+)\}/g, '${encodeURIComponent($1)}'),
+  );
+  const routed = {
+    ...action,
+    execBody,
+    moduleStatements: action.moduleStatements.map(statement =>
+      statement.includes('baseUrlOverride') ? dropConfluenceBaseUrlOverrides(statement, slug) : statement,
+    ),
+  };
+  return CONFLUENCE_FIXES[slug]?.(routed) ?? routed;
+}
+
+export function dropConfluenceBaseUrlOverrides(code: string, slug: string): string {
+  const source = new Project({ useInMemoryFileSystem: true }).createSourceFile('code.ts', code);
+  const initializerOf = (name: string): string | undefined =>
+    source
+      .getDescendantsOfKind(SyntaxKind.VariableDeclaration)
+      .find(declaration => declaration.getName() === name)
+      ?.getInitializer()
+      ?.getText();
+
+  const overrides = source.getDescendantsOfKind(SyntaxKind.ObjectLiteralExpression).flatMap(literal => {
+    const property = literal.getProperty('baseUrlOverride');
+    return property ? [{ literal, property }] : [];
+  });
+  for (const { literal, property } of overrides.reverse()) {
+    let value: string | undefined;
+    if (Node.isShorthandPropertyAssignment(property)) value = initializerOf(property.getName());
+    else if (Node.isPropertyAssignment(property)) {
+      const initializer = property.getInitializerOrThrow();
+      value = Node.isIdentifier(initializer) ? initializerOf(initializer.getText()) : initializer.getText();
+    }
+    if (value === `'${ATLASSIAN_API_ORIGIN}'`) {
+      property.remove();
+      continue;
+    }
+    const site = value?.match(CONFLUENCE_SITE_BASE);
+    const endpoint = literal.getProperty('endpoint');
+    const endpointValue = Node.isPropertyAssignment(endpoint) ? endpoint.getInitializer() : undefined;
+    if (
+      !site ||
+      !endpointValue ||
+      !(
+        Node.isStringLiteral(endpointValue) ||
+        Node.isTemplateExpression(endpointValue) ||
+        Node.isNoSubstitutionTemplateLiteral(endpointValue)
+      )
+    ) {
+      throw new Error(
+        `confluence/${slug}: unexpected baseUrlOverride ${value ?? property.getText()}; update routeConfluenceThroughProviderBase`,
+      );
+    }
+    const cloudId = site[1] ?? site[2];
+    const path = endpointValue.getText().slice(1, -1).replace(/^\//, '');
+    endpointValue.replaceWithText(`\`/ex/confluence/\${${cloudId}}/${path}\``);
+    property.remove();
+  }
+
+  // Drop the override variables the rewrite left unused; some templates also
+  // use theirs as the base for parsing `_links.next`, so keep those.
+  for (const declaration of source.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer()?.getText();
+    if (!initializer || !CONFLUENCE_SITE_BASE.test(initializer)) continue;
+    const name = declaration.getName();
+    const uses = source
+      .getDescendantsOfKind(SyntaxKind.Identifier)
+      .filter(identifier => identifier.getText() === name && identifier.getParent() !== declaration);
+    if (uses.length > 0) continue;
+    // `const limit = 25, base = ...;` keeps `limit`; only the unused declarator goes.
+    const statement = declaration.getVariableStatementOrThrow();
+    if (statement.getDeclarations().length === 1) statement.remove();
+    else declaration.remove();
+  }
+
+  const rewritten = source.getFullText();
+  if (rewritten.includes('baseUrlOverride')) {
+    throw new Error(`confluence/${slug}: baseUrlOverride left after rewrite`);
+  }
+  return rewritten;
+}
+
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
   if (action.candidate.providerId === 'gitlab') {
     return adaptGitLabAction(action);
+  }
+  if (action.candidate.providerId === 'zendesk') {
+    return adaptZendeskAction(action);
+  }
+  if (action.candidate.providerId === 'confluence') {
+    return routeConfluenceThroughProviderBase(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);
@@ -1638,15 +2537,195 @@ ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
 `;
 }
 
-function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: TemplatePin): string {
-  const imports = actions
-    .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
+/**
+ * Hand-written files (tools for endpoints no template covers, and their
+ * helpers) survive regeneration; every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
+/**
+ * Finds the hand-written files in an installed provider and the tools among
+ * them, so regeneration keeps both. Every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
+export function planHandwrittenTools(
+  outputDir: string,
+  localId: string,
+  generated: readonly ToolRegistration[],
+): { handwrittenFiles: string[]; handwrittenTools: ToolRegistration[] } {
+  const manifest = readManifestIn(outputDir);
+  if (!manifest && Object.keys(calculateFileChecksums(outputDir)).length > 0) {
+    // Without a manifest every file looks generated, so regenerating would
+    // delete the hand-written ones.
+    throw new Error(
+      `${localId} has no readable .manifest.json, so its hand-written files cannot be told apart from generated ones. Restore the manifest, or remove the provider before regenerating it.`,
+    );
+  }
+  const handwrittenFiles = listHandwrittenFiles(outputDir, manifest);
+  const keys = new Map(generated.map(tool => [tool.key, tool.slug]));
+  const factories = new Map(generated.map(tool => [tool.factoryName, tool.slug]));
+  const project = new Project({ skipAddingFilesFromTsConfig: true });
+  const handwrittenTools = handwrittenFiles.flatMap(file => {
+    const slug = /^tools\/([^/_][^/]*)\.ts$/.exec(file)?.[1];
+    if (!slug) return [];
+    const tool = { slug, key: `${localId.replace(/-/g, '_')}_${toSnake(slug)}`, factoryName: `${toCamel(slug)}Tool` };
+    const clash = keys.get(tool.key) ?? factories.get(tool.factoryName);
+    if (clash !== undefined) {
+      throw new Error(
+        `Hand-written ${localId}/${file} collides with tool '${clash}' (key ${tool.key}, factory ${tool.factoryName}); rename or remove it.`,
+      );
+    }
+    const source = project.addSourceFileAtPath(resolve(outputDir, file));
+    project.resolveSourceFileDependencies();
+    const exported = source.getExportedDeclarations().get(tool.factoryName) ?? [];
+    if (
+      !exported.some(declaration => Node.isFunctionDeclaration(declaration) || Node.isVariableDeclaration(declaration))
+    ) {
+      throw new Error(`Hand-written ${localId}/${file} must export ${tool.factoryName}.`);
+    }
+    keys.set(tool.key, slug);
+    factories.set(tool.factoryName, slug);
+    return [tool];
+  });
+  return { handwrittenFiles, handwrittenTools };
+}
+
+export interface GeneratedTool extends ToolRegistration {
+  /** The emitted module for the tool, before formatting. */
+  source: string;
+}
+
+/**
+ * Replaces a provider directory with freshly generated files, keeping the
+ * hand-written files and tools found in it. The new directory is built aside
+ * and swapped in, so a failure leaves the installed provider in place.
+ */
+export async function writeProvider({
+  outputDir,
+  providerId,
+  localId,
+  templateSha,
+  pin,
+  tools,
+  skippedActions,
+}: {
+  outputDir: string;
+  providerId: string;
+  localId: string;
+  templateSha: string;
+  pin: TemplatePin;
+  tools: readonly GeneratedTool[];
+  skippedActions: ProviderManifest['skippedActions'];
+}): Promise<{ toolCount: number }> {
+  const { handwrittenFiles, handwrittenTools } = planHandwrittenTools(outputDir, localId, tools);
+  const temporaryDir = resolve(dirname(outputDir), `.${localId}.generate-${process.pid}`);
+  rmSync(temporaryDir, { recursive: true, force: true });
+  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
+
+  try {
+    for (const tool of tools) {
+      writeFileSync(resolve(temporaryDir, 'tools', `${tool.slug}.ts`), tool.source);
+    }
+    const registrations = [
+      ...tools.map(({ slug, key, factoryName }) => ({ slug, key, factoryName })),
+      ...handwrittenTools,
+    ];
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, registrations, pin));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
+    await formatGeneratedFiles(temporaryDir);
+    const generatedFiles = calculateFileChecksums(temporaryDir);
+    for (const file of handwrittenFiles) {
+      mkdirSync(dirname(resolve(temporaryDir, file)), { recursive: true });
+      copyFileSync(resolve(outputDir, file), resolve(temporaryDir, file));
+    }
+
+    const manifest: ProviderManifest = {
+      providerId,
+      localId,
+      templateSha,
+      templateRepo: pin.repo,
+      generatedAt: new Date().toISOString(),
+      toolCount: registrations.length,
+      skippedActions,
+      files: generatedFiles,
+      ...(handwrittenFiles.length > 0 ? { handwrittenFiles } : {}),
+    };
+    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+    // A file added while this ran would be deleted with the old directory.
+    // Without a readable manifest every file there is someone else's.
+    const latest = readManifestIn(outputDir);
+    const current = latest ? listHandwrittenFiles(outputDir, latest) : Object.keys(calculateFileChecksums(outputDir));
+    const added = current.filter(file => !handwrittenFiles.includes(file));
+    if (added.length > 0) {
+      throw new Error(
+        `${localId} gained hand-written files while it was being regenerated (${added.join(', ')}); run it again.`,
+      );
+    }
+
+    publishProvider(temporaryDir, outputDir, localId);
+  } catch (error) {
+    rmSync(temporaryDir, { recursive: true, force: true });
+    throw error;
+  }
+  return { toolCount: handwrittenTools.length + tools.length };
+}
+
+/**
+ * Swaps the built directory in for the installed one. The installed provider
+ * is moved aside rather than deleted, so a failed swap can put it back: it
+ * holds hand-written files that may not be committed anywhere else.
+ */
+function publishProvider(temporaryDir: string, outputDir: string, localId: string): void {
+  if (!existsSync(outputDir)) {
+    renameSync(temporaryDir, outputDir);
+    return;
+  }
+  const backupRoot = mkdtempSync(resolve(dirname(outputDir), `.${localId}.backup-`));
+  const backupDir = resolve(backupRoot, localId);
+  try {
+    renameSync(outputDir, backupDir);
+  } catch (error) {
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  try {
+    renameSync(temporaryDir, outputDir);
+  } catch (error) {
+    try {
+      rmSync(outputDir, { recursive: true, force: true });
+      renameSync(backupDir, outputDir);
+    } catch (restoreError) {
+      throw new Error(
+        `Publishing ${localId} failed and the previous provider could not be restored; it is kept at ${backupDir}.`,
+        { cause: new AggregateError([error, restoreError]) },
+      );
+    }
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  rmSync(backupRoot, { recursive: true, force: true });
+}
+
+export interface ToolRegistration {
+  slug: string;
+  key: string;
+  factoryName: string;
+}
+
+function emitToolsFile(integrationId: string, registrations: ToolRegistration[], pin: TemplatePin): string {
+  // Ordered by module path, as the import-order lint rule expects.
+  const modulePath = (registration: ToolRegistration) => `./tools/${registration.slug}.js`;
+  const sorted = [...registrations].sort((left, right) =>
+    modulePath(left) < modulePath(right) ? -1 : modulePath(left) > modulePath(right) ? 1 : 0,
+  );
+  const imports = sorted
+    .map(registration => `import { ${registration.factoryName} } from '${modulePath(registration)}';`)
     .join('\n');
   // Keys are quoted because a leading-digit local ID (e.g. '1password')
   // produces tool keys that are not valid bare identifiers; prettier strips
   // the quotes again wherever they are unnecessary.
-  const toolEntries = actions
-    .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
+  const toolEntries = sorted
+    .map(registration => `    '${registration.key}': ${registration.factoryName}(platformProxy),`)
     .join('\n');
 
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
@@ -1761,42 +2840,25 @@ export async function generateProvider({
     throw new Error(`No usable actions found for '${providerId}'. ${reasons}`);
   }
 
-  const outputDir = providerDir(localId);
-  const temporaryDir = resolve(providersDir, `.${localId}.generate-${process.pid}`);
-  rmSync(temporaryDir, { recursive: true, force: true });
-  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
-
-  try {
-    for (const action of extracted) {
-      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
-    }
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted, pin));
-    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
-    await formatGeneratedFiles(temporaryDir);
-
-    const manifest: ProviderManifest = {
-      providerId,
-      localId,
-      templateSha,
-      templateRepo: pin.repo,
-      generatedAt: new Date().toISOString(),
-      toolCount: extracted.length,
-      skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
-      files: calculateFileChecksums(temporaryDir),
-    };
-    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-
-    rmSync(outputDir, { recursive: true, force: true });
-    renameSync(temporaryDir, outputDir);
-  } catch (error) {
-    rmSync(temporaryDir, { recursive: true, force: true });
-    throw error;
-  }
+  const { toolCount } = await writeProvider({
+    outputDir: providerDir(localId),
+    providerId,
+    localId,
+    templateSha,
+    pin,
+    tools: extracted.map(action => ({
+      slug: action.candidate.actionSlug,
+      key: action.candidate.toolKey,
+      factoryName: action.toolFactoryName,
+      source: emitActionFile(action, pin),
+    })),
+    skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
+  });
 
   return {
     providerId,
     localId,
-    toolCount: extracted.length,
+    toolCount,
     skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
   };
 }

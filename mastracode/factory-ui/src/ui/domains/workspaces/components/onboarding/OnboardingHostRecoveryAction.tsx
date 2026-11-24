@@ -28,8 +28,13 @@ export function OnboardingHostRecoveryAction({
     );
   }
   return (
-    <Button variant="ghost" aria-label={`Retry ${HOST_NAMES[host]}`} disabled={retrying} onClick={onRetry}>
-      {retrying && <Spinner size="sm" aria-hidden="true" />}
+    <Button
+      icon={retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
+      variant="ghost"
+      aria-label={`Retry ${HOST_NAMES[host]}`}
+      disabled={retrying}
+      onClick={onRetry}
+    >
       Retry
     </Button>
   );

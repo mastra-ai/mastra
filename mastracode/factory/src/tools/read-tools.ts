@@ -25,9 +25,9 @@ import type {
   Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { cardFacts } from '../work-items/card-facts.js';
 import { workItemNumber } from '../work-items/card-number.js';
 import { cardCarries, isCardFor, isSourceReference } from '../work-items/card-reference.js';
+import { closingLinksIn } from '../work-items/closing-pull-requests.js';
 import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
@@ -280,9 +280,10 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         }
         // The board's search, with what it computed of each card.
         const terms = searchTerms(input.query ?? '');
+        const closing = closingLinksIn(items);
         const matches = items
           .filter(item => {
-            if (!matchesSearch(cardFacts(item).search, terms)) return false;
+            if (!matchesSearch(closing.search(item), terms)) return false;
             if (input.stage && !item.stages.includes(input.stage)) return false;
             if (input.board && boardForWorkItem(item) !== input.board) return false;
             if (input.role && !item.sessions[input.role]) return false;

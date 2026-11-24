@@ -1415,6 +1415,52 @@ describe('provisioning protocol', () => {
         expect(z?.rev).toBe(3);
       });
 
+      // Atlas Local rejects two concurrent updateSearchIndex calls on one id ("indexes had duplicate
+      // ids"), so identical refreshes racing each other must not both send one.
+      it('P-REFRESH-NOOP: a refresh whose mapping is already listed sends no updateSearchIndex', async () => {
+        const coll = await byoColl('prnoop');
+        await createByo(a, coll, { searchIndexName: 'V' });
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
+        const t = await listedId(db, coll, 'T');
+        expect(idOf(await entry(coll), 'T')).toBe(t);
+        await waitFor(async () => (await db.collection(coll).listSearchIndexes('T').toArray())[0]?.latestDefinition);
+        const events = captureCommands(a);
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T' });
+        expect(events.filter(e => e.commandName === 'updateSearchIndex')).toEqual([]);
+        // latestDefinition is the last requested mapping, not an applied one. Only a READY index has
+        // applied it and only a PENDING or BUILDING one is applying it; every other status (a FAILED
+        // build, a STALE index that stopped replicating, an unknown or missing status) still needs the
+        // update, the only request that rebuilds it.
+        const listed = (await db.collection(coll).listSearchIndexes('T').toArray()) as Document[];
+        const sendsUpdate: Array<[string | undefined, boolean]> = [
+          ['READY', false],
+          ['PENDING', false],
+          ['BUILDING', false],
+          ['FAILED', true],
+          ['STALE', true],
+          ['SOME_FUTURE_STATUS', true],
+          [undefined, true],
+        ];
+        for (const [status, expected] of sendsUpdate) {
+          const before = events.filter(e => e.commandName === 'updateSearchIndex').length;
+          await withHooks(
+            [a],
+            {
+              listSearchIndexesStub: (name: string) =>
+                name === 'T' ? listed.map(r => ({ ...r, name: 'T', status })) : undefined,
+            },
+            () => a.createSearchIndex({ indexName: coll, searchIndexName: 'T' }),
+          );
+          const sent = events.filter(e => e.commandName === 'updateSearchIndex').slice(before);
+          expect({ status, ids: sent.map(e => String(e.command.id)) }).toEqual({ status, ids: expected ? [t] : [] });
+        }
+        // A different mapping on the same recorded index still updates it in place.
+        await a.createSearchIndex({ indexName: coll, searchIndexName: 'T', fields: ['title'] });
+        const updates = events.filter(e => e.commandName === 'updateSearchIndex');
+        expect(updates.map(e => String(e.command.id))).toEqual([t, t, t, t, t]);
+        await a.deleteIndex({ indexName: coll });
+      });
+
       it('R7a: without transactions, a recipient that stops using the name makes the delete refuse instead of orphaning it', async () => {
         const coll = await byoColl('r7a');
         await createRawSearchIndex(db, coll, 'A', textDefinition, 'search');
