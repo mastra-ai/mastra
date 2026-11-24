@@ -4,6 +4,7 @@ import type { ProviderRegistration } from '../registry.js';
 
 import { anthropicProvider } from './anthropic/index.js';
 import { clerkProvider } from './clerk/index.js';
+import { confluenceProvider } from './confluence/index.js';
 import { discordProvider } from './discord/index.js';
 import { elevenlabsProvider } from './elevenlabs/index.js';
 import { firefliesProvider } from './fireflies/index.js';
@@ -29,6 +30,7 @@ import { openaiProvider } from './openai/index.js';
 import { outlookProvider } from './outlook/index.js';
 import { posthogProvider } from './posthog/index.js';
 import { resendProvider } from './resend/index.js';
+import { sendgridProvider } from './sendgrid/index.js';
 import { sharepointOnlineProvider } from './sharepoint-online/index.js';
 import { slackProvider } from './slack/index.js';
 import { snowflakeProvider } from './snowflake/index.js';
@@ -36,10 +38,12 @@ import { stripeProvider } from './stripe/index.js';
 import { supabaseProvider } from './supabase/index.js';
 import { twitterV2Provider } from './twitter-v2/index.js';
 import { workosProvider } from './workos/index.js';
+import { zendeskProvider } from './zendesk/index.js';
 
 export const PROVIDERS: readonly ProviderRegistration[] = [
   anthropicProvider,
   clerkProvider,
+  confluenceProvider,
   discordProvider,
   elevenlabsProvider,
   firefliesProvider,
@@ -65,6 +69,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   outlookProvider,
   posthogProvider,
   resendProvider,
+  sendgridProvider,
   sharepointOnlineProvider,
   slackProvider,
   snowflakeProvider,
@@ -72,4 +77,5 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   supabaseProvider,
   twitterV2Provider,
   workosProvider,
+  zendeskProvider,
 ];

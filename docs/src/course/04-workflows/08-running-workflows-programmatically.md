@@ -64,10 +64,11 @@ npx tsx src/run-workflow.ts
 
 ## Return Value
 
-The `start()` method returns:
+The `start()` method returns a result object. Check its `status` field before reading the other fields:
 
-- **`success`**: Boolean indicating if workflow completed successfully
-- **`result`**: The final output from the workflow
-- **`executionTime`**: How long the workflow took to run
+- **`status`**: How the run ended, such as `'success'`, `'failed'`, or `'suspended'`
+- **`result`**: The final output from the workflow, available when `status` is `'success'`
+- **`error`**: The error that stopped the workflow, available when `status` is `'failed'`
+- **`steps`**: The result of each step that ran, keyed by step ID
 
 Your workflow can now be run from anywhere in your application! Next, you'll learn about error handling.

@@ -12,6 +12,7 @@ describe('shipped provider registry', () => {
     expect(integrationIds).toEqual([
       'anthropic',
       'clerk',
+      'confluence',
       'discord',
       'elevenlabs',
       'fireflies',
@@ -37,6 +38,7 @@ describe('shipped provider registry', () => {
       'outlook',
       'posthog',
       'resend',
+      'sendgrid',
       'sharepoint-online',
       'slack',
       'snowflake',
@@ -44,6 +46,7 @@ describe('shipped provider registry', () => {
       'supabase',
       'twitter-v2',
       'workos',
+      'zendesk',
     ]);
   });
 

@@ -9,22 +9,19 @@
  * must not inherit that error: before the evented engine was re-enabled they ran
  * the loop in-process regardless of storage, so throwing here would turn a working
  * agent into a hard failure on upgrade. They degrade with a warning instead, the
- * same way a hostless EventedAgent does (see DurableExecutionEngine.resolveWorkflowEngine).
+ * same way a hostless EventedAgent does (see DefaultAgentExecutionEngine.resolveWorkflowEngine).
  *
  * A workflow that opts into the engine directly via `schedule` still gets the
  * error — see workflows/evented/storage-capability-gate.test.ts.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { PubSub } from '../../../events';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
+import { sharedBroker } from '../../../mastra/test-utils/shared-broker';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { MockStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
@@ -32,7 +29,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { DurableAgent } from '../durable-agent';
 import { EventedAgent } from '../evented-agent';
-import { DurableExecutionEngine } from '../execution-engine';
+import { DefaultAgentExecutionEngine } from '../execution-engine';
 import type { ExecutionFence } from '../execution-fence';
 import type { DurableAgenticWorkflowInput } from '../types';
 
@@ -79,7 +76,7 @@ describe('Durable workflow run cleanup', () => {
       const mastra = new Mastra({ storage: new MockStore(), agents: { agent }, logger: false });
       try {
         const workflow = agent.getWorkflow();
-        const engine = new DurableExecutionEngine(agent.id, mastra);
+        const engine = new DefaultAgentExecutionEngine(agent.id, mastra);
         const runId = 'cleanup-run';
         const original = await engine.createRun(workflow, { runId });
         let current = original;
@@ -188,8 +185,7 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
   it.each(['sync', 'async'] as const)(
     'keeps streaming with a warning when shared storage reports no fencing (%s)',
     async probe => {
-      const directory = await mkdtemp(join(tmpdir(), 'fence-'));
-      const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+      const pubsub = sharedBroker({ leases: true }).connect();
       const storage = new MockStore();
       const workflows: WorkflowsStorage = storage.stores.workflows;
       const capability = vi.spyOn(workflows, 'supportsRunFencing');
@@ -215,14 +211,12 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
       } finally {
         await mastra?.shutdown();
         await pubsub.close();
-        await rm(directory, { recursive: true, force: true });
       }
     },
   );
 
   it('keeps streaming with a private agent transport on a shared evented host', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mixed-'));
-    const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+    const pubsub = sharedBroker({ leases: true }).connect();
     const agent = createEventedAgent({
       agent: new Agent({
         id: 'private-bus',
@@ -245,7 +239,6 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     } finally {
       await mastra?.shutdown();
       await pubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   });
 

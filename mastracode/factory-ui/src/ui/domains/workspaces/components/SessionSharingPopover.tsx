@@ -30,8 +30,7 @@ export function SessionSharingPopover({
       <PopoverTrigger
         render={
           inHeader ? (
-            <Button variant="ghost" size="sm" aria-label="Private session" disabled={disabled}>
-              <IconLock />
+            <Button icon={<IconLock />} variant="ghost" size="sm" aria-label="Private session" disabled={disabled}>
               Private
             </Button>
           ) : (
@@ -54,8 +53,12 @@ export function SessionSharingPopover({
           }
           actionSlot={
             onShare ? (
-              <Button onClick={onShare} disabled={disabled || sharing} aria-busy={sharing}>
-                {sharing ? <Spinner size="sm" aria-hidden /> : <IconUserDuo />}
+              <Button
+                icon={sharing ? <Spinner size="sm" aria-hidden /> : <IconUserDuo />}
+                onClick={onShare}
+                disabled={disabled || sharing}
+                aria-busy={sharing}
+              >
                 Share with organization
               </Button>
             ) : undefined

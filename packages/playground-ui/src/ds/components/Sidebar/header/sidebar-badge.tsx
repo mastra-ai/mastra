@@ -9,11 +9,5 @@ export type SidebarBadgeProps = ComponentPropsWithoutRef<'span'>;
  * muted text and no inset rim, so it reads as part of the brand rather than as a control.
  */
 export function SidebarBadge({ className, ...props }: SidebarBadgeProps) {
-  return (
-    <Badge
-      size="sm"
-      className={cn('text-muted-foreground [--inset-highlight:transparent] [--inset-rim:transparent]', className)}
-      {...props}
-    />
-  );
+  return <Badge size="sm" className={cn('text-muted-foreground [--inset-rim:transparent]', className)} {...props} />;
 }

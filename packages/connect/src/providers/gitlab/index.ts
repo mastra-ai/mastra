@@ -5,6 +5,7 @@ import { createGitlabTools } from './tools.js';
 export const gitlabProvider: ProviderRegistration = {
   integrationId: 'gitlab',
   envVar: 'MASTRA_GITLAB_CONNECTION_ID',
+  aliasIntegrationIds: ['gitlab-self-hosted'],
   createTools: createGitlabTools,
 };
 

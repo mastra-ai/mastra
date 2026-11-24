@@ -107,6 +107,14 @@ async exportTracingEvent(event: TracingEvent): Promise<void>
 
 Exports a tracing event to Datadog LLM Observability.
 
+### `onFeedbackEvent`
+
+```typescript oxfmt:false
+async onFeedbackEvent(event: FeedbackEvent): Promise<void>
+```
+
+Exports a feedback event to Datadog LLM Observability. See [Feedback export](#feedback-export).
+
 ### flush
 
 ```typescript oxfmt:false
@@ -175,6 +183,48 @@ Mastra span types are mapped to Datadog LLM Observability span kinds:
 | All other types | `task` |
 
 All unmapped span types (including `MODEL_CHUNK`, `WORKFLOW_STEP`, `GENERIC`, and future span types) automatically default to `task`.
+
+## Feedback export
+
+Feedback recorded with [`addFeedback()`](/docs/observability/feedback) is exported to Datadog as end-user feedback. Feedback with a `spanId` targets that span, and feedback with only a `traceId` targets the trace. No extra configuration is needed.
+
+```typescript
+if (!mastra.observability.addFeedback) {
+  throw new Error('Feedback is not supported by the active observability implementation')
+}
+
+await mastra.observability.addFeedback({
+  traceId,
+  feedback: {
+    feedbackType: 'thumbs',
+    value: 'down',
+    comment: 'Wrong answer',
+    feedbackUserId: 'user-123',
+    metadata: { datadog: { assessment: 'fail' } },
+  },
+})
+```
+
+The Datadog LLM Observability trace ID is the Mastra trace ID, and each Datadog span ID is the Mastra span ID. Feedback reaches its trace or span even when it arrives hours after the run or from another process. You can also search Datadog for the `traceId` that a run returns.
+
+| Mastra feedback field | Datadog feedback field |
+| - | - |
+| `traceId` | `trace_id`, the target when there is no `spanId` |
+| `spanId` | `span_id`, the target span |
+| `feedbackType` | `label`, with each `.` changed to `_` |
+| `value` | `score_value` for numbers, `text_value` for `comment` and `correction` feedback, `categorical_value` for other strings |
+| `comment` | `reasoning` |
+| `feedbackUserId` (or `metadata.userId`) | `submitter.id`, or `anonymous` when neither is set or `feedbackUserId` is `null` |
+| `feedbackSource` | `feedback_source` tag |
+| `metadata.datadog.assessment` | `assessment`, when the value is `pass` or `fail` |
+
+The `assessment` is optional. Your app decides which feedback passes or fails, and Mastra doesn't derive it from the value. Set it on the feedback, not on the run, because feedback can inherit the metadata of the run it rates. To find failed feedback with the `thumbs` label in Datadog, search for `@feedback.thumbs.assessment:fail`.
+
+Feedback without a `traceId` is dropped. Feedback without a `spanId` can't reach a run that joined another LLM Observability trace, such as a run inside your own `llmobs.trace()` call or one continued from an upstream service. Those runs keep the Datadog trace ID that `dd-trace` gives them.
+
+## Score export
+
+Scores recorded with `mastra.observability.addScore()` are exported to Datadog as evaluations on the span they rate. A score reaches its span even when it arrives after the run or from another process. A late score can't reach a run that joined another LLM Observability trace.
 
 ## Environment variables
 

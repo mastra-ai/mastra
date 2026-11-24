@@ -58,7 +58,7 @@ export default function SchedulePage() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -67,7 +67,7 @@ export default function SchedulePage() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <PermissionDenied variant="fill" resource="schedules" />
       </PageLayout>
@@ -76,7 +76,7 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{scheduleId}</h1>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load schedule" descriptionSlot={error.message} />
       </PageLayout>
@@ -88,6 +88,7 @@ export default function SchedulePage() {
 
   return (
     <PageLayout
+      variant="page"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
         <ActionRow>
@@ -102,6 +103,7 @@ export default function SchedulePage() {
             ) : null}
             {schedule && schedule.status !== 'completed' ? (
               <Button
+                icon={schedule.status === 'active' ? <IconPause /> : <IconPlay />}
                 onClick={() => {
                   const action = schedule.status === 'active' ? 'pause' : 'resume';
                   toggle.mutate(action, {
@@ -112,17 +114,7 @@ export default function SchedulePage() {
                 disabled={toggle.isPending}
                 data-testid="schedule-toggle-button"
               >
-                {schedule.status === 'active' ? (
-                  <>
-                    <IconPause />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <IconPlay />
-                    Resume
-                  </>
-                )}
+                {schedule.status === 'active' ? 'Pause' : 'Resume'}
               </Button>
             ) : null}
           </ActionRow.End>

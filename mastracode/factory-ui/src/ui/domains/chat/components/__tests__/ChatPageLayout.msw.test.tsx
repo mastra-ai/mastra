@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('puts the drawer trigger, the title and the page actions on one mobile header row', () => {
+  it('leaves the drawer trigger to the app header on mobile, keeping the title and page actions', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
@@ -47,9 +47,9 @@ describe('ChatPageLayout', () => {
     );
 
     const header = screen.getByRole('banner');
-    expect(within(header).getByRole('button', { name: 'Open navigation menu' })).toBeInTheDocument();
     expect(within(header).getByText('Page title')).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Panel' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open navigation menu' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 

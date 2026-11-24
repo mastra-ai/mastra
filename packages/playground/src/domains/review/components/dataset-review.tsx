@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExperimentResultsList } from '@mastra/playground-ui/domains/experiments/components/experiment-results-list';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
@@ -36,8 +37,7 @@ import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
-import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
-import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
+import { StudioExperimentResultDetail } from '@/domains/experiments/components/studio-experiment-result-detail';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
@@ -492,12 +492,10 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
+              icon={<IconGauge />}
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="xs">
-                <IconGauge />
-              </Icon>
               Create scorer
             </Button>
           )}
@@ -545,7 +543,7 @@ export function DatasetReview({
 
   if (isLoadingReview) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
         <h1 className="sr-only">Review Queue</h1>
         <Spinner fill />
       </PageLayout>
@@ -553,7 +551,7 @@ export function DatasetReview({
   }
 
   const detailPanel = (
-    <ExperimentResultDetail
+    <StudioExperimentResultDetail
       withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
@@ -571,7 +569,7 @@ export function DatasetReview({
   );
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+    <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
       <h1 className="sr-only">Review Queue</h1>
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>

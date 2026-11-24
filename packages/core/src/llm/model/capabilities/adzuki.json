@@ -23,18 +23,16 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
+    "doubao-seed-2.1-pro": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "mimo-v2.5": [
+    "doubao-seed-2.0-lite": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -46,15 +44,32 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-lite": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.8-max": [
@@ -71,27 +86,13 @@
         "max": 262144
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.5-pro": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
-      }
-    ],
-    "kimi-k3.1-pro": [
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-2.1-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5.3-flash": [
@@ -100,10 +101,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "mimo-v2.5": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ]
   }

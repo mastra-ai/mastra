@@ -5,8 +5,27 @@ import type { RunStorage } from '../../run-storage';
 import { setLongTimeout } from '../../utils';
 import { withoutAuthToken } from '../helpers';
 import type { StepExecutor } from '../step-executor';
+import { hasRunEnded, UNENDED_RUN_STATUSES } from './run-status';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
+
+/**
+ * Records the sleep as the run's active step. Returns false when the run ended after the sleep
+ * was dispatched: the write is refused, so the ended run is not reopened, and the sleep stops.
+ */
+async function markSleepRunning(
+  runStorage: RunStorage,
+  executionPath: number[],
+  activeStepsPath: Record<string, number[]>,
+): Promise<boolean> {
+  const updated = await runStorage.updateHeader({
+    status: 'running',
+    activePaths: executionPath,
+    activeStepsPath,
+    expectedStatus: UNENDED_RUN_STATUSES,
+  });
+  return !!updated || !hasRunEnded(await runStorage.loadHeader());
+}
 
 export async function processWorkflowWaitForEvent(
   workflowData: ProcessorArgs,
@@ -120,11 +139,9 @@ export async function processWorkflowSleep(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await runStorage.updateHeader({
-    status: 'running',
-    activePaths: executionPath,
-    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-  });
+  if (!(await markSleepRunning(runStorage, executionPath, { ...activeStepsPath, [step.id]: executionPath }))) {
+    return;
+  }
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -238,11 +255,9 @@ export async function processWorkflowSleepUntil(
     },
     requestContext: withoutAuthToken(requestContext ?? {}),
   });
-  await runStorage.updateHeader({
-    status: 'running',
-    activePaths: executionPath,
-    activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
-  });
+  if (!(await markSleepRunning(runStorage, executionPath, { ...activeStepsPath, [step.id]: executionPath }))) {
+    return;
+  }
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);

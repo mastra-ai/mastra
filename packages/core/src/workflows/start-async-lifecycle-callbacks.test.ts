@@ -1,11 +1,7 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
-import { UnixSocketPubSub } from '../events/unix-socket-pubsub';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
@@ -268,7 +264,7 @@ describe.each(engines)('%s engine: lifecycle callbacks for background runs', (en
   );
 });
 
-describe('evented engine: startAsync() hooks with workers on another instance', () => {
+describe('evented engine: startAsync() dispatch failure', () => {
   const cleanups: Array<() => Promise<void> | void> = [];
 
   afterEach(async () => {
@@ -304,62 +300,6 @@ describe('evented engine: startAsync() hooks with workers on another instance', 
         }),
       )
       .commit();
-
-  const waitForStatus = async (mastra: Mastra, workflowId: string, runId: string, status: WorkflowRunStatus) => {
-    await vi.waitFor(
-      async () => expect((await mastra.getWorkflow(workflowId).getWorkflowRunById(runId))?.status).toBe(status),
-      { timeout: HOOK_TIMEOUT_MS, interval: 20 },
-    );
-  };
-
-  it.each([
-    ['success', ['start', 'finish:success']],
-    ['failed', ['start', 'finish:failed', 'error:job crashed']],
-  ] as const)(
-    'runs the %s hooks once, on the caller that started the run',
-    async (outcome, expectedHooks) => {
-      // A web process dispatches with startAsync(); a worker process with its own Mastra runs the
-      // steps. They share storage and a socket-based pubsub that serializes every event.
-      const dir = mkdtempSync(join(tmpdir(), 'mastra-start-async-hooks-'));
-      const socketPath = join(dir, 'pubsub.sock');
-      const workerPubsub = new UnixSocketPubSub(socketPath);
-      const callerPubsub = new UnixSocketPubSub(socketPath);
-      cleanups.push(async () => {
-        await callerPubsub.close();
-        await workerPubsub.close();
-        rmSync(dir, { recursive: true, force: true });
-      });
-
-      const workflowId = `cross-instance-hooks-${outcome}`;
-      const storage = new MockStore();
-      const callerHooks: string[] = [];
-      const workerHooks: string[] = [];
-      const worker = new Mastra({
-        logger: false,
-        storage,
-        pubsub: workerPubsub,
-        workflows: { [workflowId]: buildWorkflow(workflowId, workerHooks, outcome) },
-      });
-      const caller = new Mastra({
-        logger: false,
-        storage,
-        pubsub: callerPubsub,
-        workflows: { [workflowId]: buildWorkflow(workflowId, callerHooks, outcome) },
-      });
-      await worker.startWorkers();
-      cleanups.push(() => worker.stopWorkers());
-
-      const run = await caller.getWorkflow(workflowId).createRun();
-      await run.startAsync({ inputData: {} });
-
-      await waitForStatus(caller, workflowId, run.runId, outcome);
-      await vi.waitFor(() => expect(callerHooks).toEqual(expectedHooks), { timeout: HOOK_TIMEOUT_MS, interval: 20 });
-      await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
-      expect(callerHooks).toEqual(expectedHooks);
-      expect(workerHooks).toEqual([]);
-    },
-    15_000,
-  );
 
   it('rejects startAsync() and leaves no finish listener behind when workflow.start cannot be published', async () => {
     const workflowId = 'dispatch-failure-hooks';

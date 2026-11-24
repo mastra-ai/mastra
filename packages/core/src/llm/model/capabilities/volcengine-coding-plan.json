@@ -49,15 +49,16 @@
     "kimi-k3.1-pro"
   ],
   "reasoning": {
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k2.8-preview": [
+    "doubao-seed-2.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "doubao-seed-2.0-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -75,21 +76,25 @@
         "values": ["none", "low", "high"]
       }
     ],
-    "minimax-m3": [
+    "kimi-k3": [
       {
         "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.1-turbo": [
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "doubao-seed-2.0-lite": [
+    "kimi-k2.8-preview": [
       {
         "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-economy": [
@@ -101,13 +106,14 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4-flash": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "kimi-k3.1-pro": [
@@ -116,16 +122,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "doubao-seed-2.1-pro": [
+    "deepseek-v4-pro": [
       {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "doubao-seed-2.1-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "type": "toggle"
       }
     ],
     "glm-5.3-flash": [
@@ -134,15 +133,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "doubao-seed-2.1-lite": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high"]
       }
     ],
-    "deepseek-v4-flash": [
+    "doubao-seed-2.1-turbo": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "doubao-seed-evolving": [

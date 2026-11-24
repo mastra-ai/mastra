@@ -1,7 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsDescription, SettingsTitle } from '@mastra/playground-ui/new/settings';
 import { useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 
@@ -206,9 +206,7 @@ function BoardLanes({
       ).map(section => (
         <section key={section.title} aria-label={section.title} className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Txt as="h2" variant="subheading" tone="ink">
-              {section.title}
-            </Txt>
+            <SettingsTitle>{section.title}</SettingsTitle>
             {section.events.some(isOpenedLane) ? (
               order.data && (
                 <IntakeChain
@@ -219,9 +217,7 @@ function BoardLanes({
                 />
               )
             ) : (
-              <Txt as="p" variant="caption" tone="muted">
-                Only cards already on this board; other boards never see them.
-              </Txt>
+              <SettingsDescription>Only cards already on this board; other boards never see them.</SettingsDescription>
             )}
           </div>
           {section.events.map(event => {

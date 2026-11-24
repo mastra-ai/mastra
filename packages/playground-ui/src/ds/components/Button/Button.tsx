@@ -70,6 +70,7 @@ export const buttonVariants = cva(
           'border-0',
           raisedControlSurfaceStyle,
           controlIconState,
+          '[--control-icon-rest:var(--icon)]',
           'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
@@ -136,9 +137,9 @@ export const buttonVariants = cva(
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
-        'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
-        'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
-        'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
+        'icon-sm': cn(controlHeight.sm, 'w-control-sm shrink-0 rounded-full'),
+        'icon-md': cn(controlHeight.md, 'w-control-md shrink-0 rounded-full'),
+        'icon-lg': cn(controlHeight.lg, 'w-control-lg shrink-0 rounded-full'),
       },
     },
     compoundVariants: [

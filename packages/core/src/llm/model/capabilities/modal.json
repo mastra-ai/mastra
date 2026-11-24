@@ -1,14 +1,17 @@
 {
   "attachment": [
+    "Qwen/Qwen3.8-Max-VL-Thinking",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/GLM-5.3-Flash-NVFP4",
     "thinkingmachines/Inkling-NVFP4",
     "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
     "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-Max-VL-Thinking",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "nvidia/GLM-5.3-Flash-NVFP4",
@@ -18,20 +21,16 @@
   ],
   "structuredOutput": [
     "Qwen/Qwen3.8-2.4T-A95B",
+    "Qwen/Qwen3.8-Max-VL-Thinking",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "moonshotai/Kimi-K3",
+    "moonshotai/Kimi-K3.1-Pro",
     "nvidia/GLM-5.3-Flash-NVFP4",
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -44,10 +43,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "Qwen/Qwen3.8-Max-VL-Thinking": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "meta-models/Muse-Spark-Open-816B-A42B": [
@@ -57,6 +62,18 @@
       }
     ],
     "nvidia/GLM-5.3-Flash-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

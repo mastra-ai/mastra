@@ -7,7 +7,7 @@ import {
   observationalMemoryQueryKey,
 } from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useRef } from 'react';
+import { useCallback, useInsertionEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
   buildMaxStepsStreamErrorMessage,
@@ -172,19 +172,7 @@ export const useChatSendHandler = ({
       modelContextRef.current.delete(sourceId);
     }
   }, []);
-  const sendDepsRef = useRef<SendDeps>({
-    requestContext,
-    agentVersionId,
-    threadId,
-    modelSettingsArgs,
-    model,
-    chatWithNetwork,
-    chatWithGenerate,
-    maxSteps,
-    isOMEnabled,
-    tracingOptions,
-  });
-  sendDepsRef.current = {
+  const deps: SendDeps = {
     requestContext,
     agentVersionId,
     threadId,
@@ -196,6 +184,7 @@ export const useChatSendHandler = ({
     isOMEnabled,
     tracingOptions,
   };
+  const sendDepsRef = useRef(deps);
 
   // Force an immediate refetch of the memory timeline panel (playground-ui
   // ['memory', ...] keys), scoped to the given thread, so the panel shows live
@@ -271,140 +260,136 @@ export const useChatSendHandler = ({
     ],
   );
 
-  const send = useCallback(
-    async ({ message, attachments = [], requestContext: turnContext }: ChatSendArgs): Promise<boolean> => {
-      const deps = sendDepsRef.current;
-      if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
+  const sendTurn = async ({
+    message,
+    attachments = [],
+    requestContext: turnContext,
+  }: ChatSendArgs): Promise<boolean> => {
+    if (threadSignalsUnsupportedRef.current && (isRunningStream || abortControllerRef.current)) return false;
 
-      setStreamErrors([]);
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      const requestContextInstance = buildRequestContext(deps, turnContext);
-      const heldContext = new Map(modelContextRef.current);
-      modelContextRef.current.clear();
-      // MCP App context is third-party content: it goes in the user turn as delimited data, never in the system prompt.
-      const appContext = heldContext.size
-        ? [
-            {
-              role: 'user' as const,
-              content: [{ type: 'text' as const, text: toUntrustedAppContext(heldContext.values()) }],
-            },
-          ]
-        : [];
-      const coreUserMessages = [...attachments, ...appContext];
-      // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
-      // Those must not put the message back in the composer.
-      let delivered = false;
+    setStreamErrors([]);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const requestContextInstance = buildRequestContext(deps, turnContext);
+    const heldContext = new Map(modelContextRef.current);
+    modelContextRef.current.clear();
+    // MCP App context is third-party content: it goes in the user turn as delimited data, never in the system prompt.
+    const appContext = heldContext.size
+      ? [
+          {
+            role: 'user' as const,
+            content: [{ type: 'text' as const, text: toUntrustedAppContext(heldContext.values()) }],
+          },
+        ]
+      : [];
+    const coreUserMessages = [...attachments, ...appContext];
+    // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
+    // Those must not put the message back in the composer.
+    let delivered = false;
 
-      try {
-        if (deps.chatWithNetwork) {
-          await sendMessage({
-            message,
-            mode: 'network',
-            coreUserMessages,
-            requestContext: requestContextInstance,
-            threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
-            model: deps.model,
-            signal: controller.signal,
-            tracingOptions: deps.tracingOptions,
-            onNetworkChunk: async (chunk: any) => {
-              delivered = true;
-              if (didUpdateWorkingMemory(chunk)) {
-                void refreshWorkingMemory?.();
-              }
-              if (chunk.type === 'network-execution-event-step-finish') {
-                void refreshThreadList?.();
-              }
-              handleHandledChunk(asHandledStreamChunk(chunk));
-            },
-          });
-        } else if (deps.chatWithGenerate) {
-          await sendMessage({
-            message,
-            mode: 'generate',
-            coreUserMessages,
-            requestContext: requestContextInstance,
-            threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
-            model: deps.model,
-            signal: controller.signal,
-            tracingOptions: deps.tracingOptions,
-          });
-          delivered = true;
-          await refreshThreadList?.();
-          refreshTimelinePanel(deps.threadId);
-          return true;
-        } else {
-          await sendMessage({
-            message,
-            mode: 'stream',
-            coreUserMessages,
-            requestContext: requestContextInstance,
-            threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
-            model: deps.model,
-            tracingOptions: deps.tracingOptions,
-            onChunk: async (chunk: any) => {
-              delivered = true;
-              if (chunk.type === 'finish') {
-                if (isMaxStepsFinishChunk(chunk)) {
-                  setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
-                }
-                await refreshThreadList?.();
-                refreshTimelinePanel(deps.threadId);
-                completeObservationalMemoryBuffering(deps.threadId);
-              }
-              if (didUpdateWorkingMemory(chunk)) {
-                void refreshWorkingMemory?.();
-              }
-              handleHandledChunk(asHandledStreamChunk(chunk));
-            },
-            signal: controller.signal,
-          });
-
-          return true;
-        }
-
+    try {
+      if (deps.chatWithNetwork) {
+        await sendMessage({
+          message,
+          mode: 'network',
+          coreUserMessages,
+          requestContext: requestContextInstance,
+          threadId: deps.threadId,
+          modelSettings: deps.modelSettingsArgs,
+          model: deps.model,
+          signal: controller.signal,
+          tracingOptions: deps.tracingOptions,
+          onNetworkChunk: async (chunk: any) => {
+            delivered = true;
+            if (didUpdateWorkingMemory(chunk)) {
+              void refreshWorkingMemory?.();
+            }
+            if (chunk.type === 'network-execution-event-step-finish') {
+              void refreshThreadList?.();
+            }
+            handleHandledChunk(asHandledStreamChunk(chunk));
+          },
+        });
+      } else if (deps.chatWithGenerate) {
+        await sendMessage({
+          message,
+          mode: 'generate',
+          coreUserMessages,
+          requestContext: requestContextInstance,
+          threadId: deps.threadId,
+          modelSettings: deps.modelSettingsArgs,
+          model: deps.model,
+          signal: controller.signal,
+          tracingOptions: deps.tracingOptions,
+        });
         delivered = true;
-        setTimeout(() => {
-          void refreshThreadList?.();
-        }, 500);
+        await refreshThreadList?.();
         refreshTimelinePanel(deps.threadId);
-        completeObservationalMemoryBuffering(deps.threadId);
         return true;
-      } catch (error: any) {
-        console.error('Error occurred in ChatProvider', error);
-        if (error.name === 'AbortError') {
-          return true;
-        }
-        setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
-        resetObservationalMemoryStreamState();
-        const stored = delivered || mayHaveBeenStored(error);
-        if (!stored) {
-          // The message goes back to the composer, so its context waits for the retry.
-          heldContext.forEach((context, sourceId) => {
-            if (!modelContextRef.current.has(sourceId)) modelContextRef.current.set(sourceId, context);
-          });
-        }
-        return stored;
-      } finally {
-        abortControllerRef.current = null;
+      } else {
+        await sendMessage({
+          message,
+          mode: 'stream',
+          coreUserMessages,
+          requestContext: requestContextInstance,
+          threadId: deps.threadId,
+          modelSettings: deps.modelSettingsArgs,
+          model: deps.model,
+          tracingOptions: deps.tracingOptions,
+          onChunk: async (chunk: any) => {
+            delivered = true;
+            if (chunk.type === 'finish') {
+              if (isMaxStepsFinishChunk({ chunk, maxSteps: deps.maxSteps })) {
+                setStreamErrors(prev => [...prev, buildMaxStepsStreamErrorMessage(chunk, deps.maxSteps)]);
+              }
+              await refreshThreadList?.();
+              refreshTimelinePanel(deps.threadId);
+              completeObservationalMemoryBuffering(deps.threadId);
+            }
+            if (didUpdateWorkingMemory(chunk)) {
+              void refreshWorkingMemory?.();
+            }
+            handleHandledChunk(asHandledStreamChunk(chunk));
+          },
+          signal: controller.signal,
+        });
+
+        return true;
       }
-    },
-    [
-      completeObservationalMemoryBuffering,
-      handleHandledChunk,
-      isRunningStream,
-      refreshThreadList,
-      refreshTimelinePanel,
-      refreshWorkingMemory,
-      resetObservationalMemoryStreamState,
-      sendMessage,
-      setStreamErrors,
-      threadSignalsUnsupportedRef,
-    ],
-  );
+
+      delivered = true;
+      setTimeout(() => {
+        void refreshThreadList?.();
+      }, 500);
+      refreshTimelinePanel(deps.threadId);
+      completeObservationalMemoryBuffering(deps.threadId);
+      return true;
+    } catch (error: any) {
+      console.error('Error occurred in ChatProvider', error);
+      if (error.name === 'AbortError') {
+        return true;
+      }
+      setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
+      resetObservationalMemoryStreamState();
+      const stored = delivered || mayHaveBeenStored(error);
+      if (!stored) {
+        // The message goes back to the composer, so its context waits for the retry.
+        heldContext.forEach((context, sourceId) => {
+          if (!modelContextRef.current.has(sourceId)) modelContextRef.current.set(sourceId, context);
+        });
+      }
+      return stored;
+    } finally {
+      abortControllerRef.current = null;
+    }
+  };
+
+  const latestSendTurn = useRef(sendTurn);
+  useInsertionEffect(() => {
+    sendDepsRef.current = deps;
+    latestSendTurn.current = sendTurn;
+  });
+  const send = useCallback((args: ChatSendArgs) => latestSendTurn.current(args), []);
 
   const cancel = useCallback(async () => {
     abortControllerRef.current?.abort();

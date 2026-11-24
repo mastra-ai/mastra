@@ -9,7 +9,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
     alwaysBundle: ['@internal/workspace'],
     neverBundle: ['@mastra/core', 'dockerode'],

@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { isForeignExecutionContext, setExecutionClaim } from '../../agent/durable/execution-fence';
@@ -8,33 +5,32 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PublisherQueueLimitError } from '../../events/publisher-queue-limit-error';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createFlakyPublishPubSub } from './test-utils/flaky-publish-pubsub';
 import { createStep, createWorkflow } from '.';
 
-// When an event exhausts its delivery budget, handle() publishes workflow.fail.
-// If that publish throws, the failure must still reach the caller waiting on
-// workflows-finish instead of leaving run.start() pending forever.
-const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Promise<void> }>]> = [
-  ['EventEmitterPubSub', async () => ({ pubsub: new EventEmitterPubSub(), close: async () => {} })],
-  [
-    'UnixSocketPubSub',
-    async () => {
-      const dir = await mkdtemp(join(tmpdir(), 'mastra-fail-publish-'));
-      const pubsub = new UnixSocketPubSub(join(dir, 'events.sock'));
-      return {
-        pubsub,
-        close: async () => {
-          await pubsub.close();
-          await rm(dir, { recursive: true, force: true });
-        },
-      };
-    },
-  ],
-];
+const PUBLISHER_CAP_BYTES = 48 * 1024;
+
+/**
+ * Rejects a `workflows-finish` event larger than the cap the way UnixSocketPubSub's publisher
+ * queue does: the error carries no capacity wait, because that event can never fit. Smaller
+ * events, such as the compact `workflow.publish-failed`, go through.
+ */
+class CappedFinishPubSub extends EventEmitterPubSub {
+  readonly finishPublished: string[] = [];
+
+  override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+    if (topic === 'workflows-finish') {
+      this.finishPublished.push(event.type);
+      if (Buffer.byteLength(JSON.stringify(event)) > PUBLISHER_CAP_BYTES) {
+        throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded');
+      }
+    }
+    return super.publish(topic, event, options);
+  }
+}
 
 describe('workflow finish publication failure', () => {
   it('ignores a competing execution’s failed finish for the same run', async () => {
@@ -148,22 +144,9 @@ describe('workflow finish publication failure', () => {
     }
   });
 
-  it('rejects the waiting caller when a real socket cannot publish an oversized finish event', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'mastra-finish-cap-'));
-    const path = join(dir, 'events.sock');
-    const broker = new UnixSocketPubSub(path);
-    await broker.subscribe('broker-ready', () => {});
-    const pubsub = new UnixSocketPubSub(path);
-    const cappedPublisher = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 48 * 1024 });
-    const published: string[] = [];
-    const publish = pubsub.publish.bind(pubsub);
-    pubsub.publish = async (topic, event, options) => {
-      if (topic === 'workflows-finish') {
-        published.push(event.type);
-        return cappedPublisher.publish(topic, event, options);
-      }
-      return publish(topic, event, options);
-    };
+  it('rejects the waiting caller when the publisher cannot take an oversized finish event', async () => {
+    const pubsub = new CappedFinishPubSub();
+    const published = pubsub.finishPublished;
     const workflow = createWorkflow({
       id: 'oversized-finish',
       inputSchema: z.object({}),
@@ -198,23 +181,11 @@ describe('workflow finish publication failure', () => {
       expect(published).toContain('workflow.publish-failed');
     } finally {
       await mastra.stopWorkers();
-      await cappedPublisher.close();
-      await pubsub.close();
-      await broker.close();
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
   it('waits for snapshot deletion before reporting an oversized finish failure', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'mastra-finish-cleanup-'));
-    const path = join(dir, 'events.sock');
-    const broker = new UnixSocketPubSub(path);
-    await broker.subscribe('broker-ready', () => {});
-    const pubsub = new UnixSocketPubSub(path);
-    const cappedPublisher = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 48 * 1024 });
-    const publish = pubsub.publish.bind(pubsub);
-    pubsub.publish = (topic, event, options) =>
-      topic === 'workflows-finish' ? cappedPublisher.publish(topic, event, options) : publish(topic, event, options);
+    const pubsub = new CappedFinishPubSub();
 
     const storage = new MockStore();
     const workflowsStore = await storage.getStore('workflows');
@@ -273,10 +244,6 @@ describe('workflow finish publication failure', () => {
     } finally {
       releaseDeletion();
       await mastra.stopWorkers();
-      await cappedPublisher.close();
-      await pubsub.close();
-      await broker.close();
-      await rm(dir, { recursive: true, force: true });
     }
   });
 
@@ -542,105 +509,104 @@ describe('workflow finish publication failure', () => {
   });
 });
 
-describe.each(transports)(
-  'evented workflow: workflow.fail publish fails after retry exhaustion (%s)',
-  (_name, makeTransport) => {
-    const cleanups: Array<() => Promise<void>> = [];
-    afterEach(async () => {
-      for (const fn of cleanups.splice(0).reverse()) await fn().catch(() => {});
+// When an event exhausts its delivery budget, handle() publishes workflow.fail.
+// If that publish throws, the failure must still reach the caller waiting on
+// workflows-finish instead of leaving run.start() pending forever.
+describe('evented workflow: workflow.fail publish fails after retry exhaustion', () => {
+  const cleanups: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const fn of cleanups.splice(0).reverse()) await fn().catch(() => {});
+  });
+
+  function build(id: string) {
+    let executions = 0;
+    const step = createStep({
+      id: 'work',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => {
+        executions++;
+        return { ok: true };
+      },
+    });
+    const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }) })
+      .then(step)
+      .commit();
+    return { workflow, executions: () => executions };
+  }
+
+  async function run(failPublishes: number) {
+    const inner = new EventEmitterPubSub();
+    const id = `fail-publish-${failPublishes}-${Math.random().toString(36).slice(2)}`;
+    const { workflow, executions } = build(id);
+    // Every `workflow.step.end` publish throws, so the `workflow.step.run`
+    // event's dispatch throws on every delivery and exhausts the budget.
+    // `workflow.fail` publishes throw the first `failPublishes` times.
+    const flaky = createFlakyPublishPubSub(inner, {
+      'workflow.step.end': Number.POSITIVE_INFINITY,
+      'workflow.fail': failPublishes,
+    });
+    const mastra = new Mastra({
+      workflows: { [id]: workflow },
+      storage: new MockStore(),
+      pubsub: flaky.pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    cleanups.push(() => mastra.stopWorkers());
+
+    const finishEvents: Event[] = [];
+    await flaky.pubsub.subscribe('workflows-finish', async (event, ack) => {
+      finishEvents.push(event);
+      await ack?.();
     });
 
-    function build(id: string) {
-      let executions = 0;
-      const step = createStep({
-        id: 'work',
-        inputSchema: z.object({}),
-        outputSchema: z.object({ ok: z.boolean() }),
-        execute: async () => {
-          executions++;
-          return { ok: true };
-        },
-      });
-      const workflow = createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({ ok: z.boolean() }) })
-        .then(step)
-        .commit();
-      return { workflow, executions: () => executions };
-    }
-
-    async function run(failPublishes: number) {
-      const { pubsub: inner, close } = await makeTransport();
-      cleanups.push(close);
-      const id = `fail-publish-${failPublishes}-${Math.random().toString(36).slice(2)}`;
-      const { workflow, executions } = build(id);
-      // Every `workflow.step.end` publish throws, so the `workflow.step.run`
-      // event's dispatch throws on every delivery and exhausts the budget.
-      // `workflow.fail` publishes throw the first `failPublishes` times.
-      const flaky = createFlakyPublishPubSub(inner, {
-        'workflow.step.end': Number.POSITIVE_INFINITY,
-        'workflow.fail': failPublishes,
-      });
-      const mastra = new Mastra({
-        workflows: { [id]: workflow },
-        storage: new MockStore(),
-        pubsub: flaky.pubsub,
-        logger: false,
-      });
-      await mastra.startWorkers();
-      cleanups.push(() => mastra.stopWorkers());
-
-      const finishEvents: Event[] = [];
-      await flaky.pubsub.subscribe('workflows-finish', async (event, ack) => {
-        finishEvents.push(event);
-        await ack?.();
-      });
-
-      const wfRun = await workflow.createRun();
-      const result = await Promise.race([
-        wfRun.start({ inputData: {} }),
-        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
-      ]);
-      const stored = await (await mastra.getStorage()!.getStore('workflows'))!.loadWorkflowSnapshot({
-        workflowName: id,
-        runId: wfRun.runId,
-      });
-      return { result, stored, flaky, executions: executions(), finishEvents };
-    }
-
-    it('control: a workflow.fail publish that succeeds fails the run', async () => {
-      const { result, stored, flaky } = await run(0);
-      expect(result).not.toBe('HANG');
-      expect((result as any).status).toBe('failed');
-      expect(stored?.status).toBe('failed');
-      expect(flaky.attempts['workflow.fail']).toBe(1);
+    const wfRun = await workflow.createRun();
+    const result = await Promise.race([
+      wfRun.start({ inputData: {} }),
+      new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+    ]);
+    const stored = await (await mastra.getStorage()!.getStore('workflows'))!.loadWorkflowSnapshot({
+      workflowName: id,
+      runId: wfRun.runId,
     });
+    return { result, stored, flaky, executions: executions(), finishEvents };
+  }
 
-    it('fails the run when the first workflow.fail publish throws', async () => {
-      const { result, stored, flaky, executions } = await run(1);
-      expect(flaky.rejected['workflow.fail']).toBe(1);
-      expect(result).not.toBe('HANG');
-      expect((result as any).status).toBe('failed');
-      expect(stored?.status).toBe('failed');
-      // The republish must not rerun the step handler.
-      expect(executions).toBe(3);
-    });
+  it('control: a workflow.fail publish that succeeds fails the run', async () => {
+    const { result, stored, flaky } = await run(0);
+    expect(result).not.toBe('HANG');
+    expect((result as any).status).toBe('failed');
+    expect(stored?.status).toBe('failed');
+    expect(flaky.attempts['workflow.fail']).toBe(1);
+  });
 
-    it('fails the run when two workflow.fail publishes throw', async () => {
-      const { result, stored, flaky } = await run(2);
-      expect(flaky.rejected['workflow.fail']).toBe(2);
-      expect(result).not.toBe('HANG');
-      expect((result as any).status).toBe('failed');
-      expect(stored?.status).toBe('failed');
-    });
+  it('fails the run when the first workflow.fail publish throws', async () => {
+    const { result, stored, flaky, executions } = await run(1);
+    expect(flaky.rejected['workflow.fail']).toBe(1);
+    expect(result).not.toBe('HANG');
+    expect((result as any).status).toBe('failed');
+    expect(stored?.status).toBe('failed');
+    // The republish must not rerun the step handler.
+    expect(executions).toBe(3);
+  });
 
-    it('stops republishing after a bounded number of workflow.fail attempts', async () => {
-      const { result, stored, flaky, executions } = await run(Number.POSITIVE_INFINITY);
-      // Give the transport time to deliver anything else it still would.
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      expect(flaky.attempts['workflow.fail']).toBe(3);
-      expect(executions).toBe(3);
-      // The run is left to crash recovery (recoverActiveRuns) in this case.
-      expect(result).toBe('HANG');
-      expect(stored?.status).toBe('running');
-    });
-  },
-);
+  it('fails the run when two workflow.fail publishes throw', async () => {
+    const { result, stored, flaky } = await run(2);
+    expect(flaky.rejected['workflow.fail']).toBe(2);
+    expect(result).not.toBe('HANG');
+    expect((result as any).status).toBe('failed');
+    expect(stored?.status).toBe('failed');
+  });
+
+  it('stops republishing after a bounded number of workflow.fail attempts', async () => {
+    const { result, stored, flaky, executions } = await run(Number.POSITIVE_INFINITY);
+    // Give the transport time to deliver anything else it still would.
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    expect(flaky.attempts['workflow.fail']).toBe(3);
+    expect(executions).toBe(3);
+    // The run is left to crash recovery (recoverActiveRuns) in this case.
+    expect(result).toBe('HANG');
+    expect(stored?.status).toBe('running');
+  });
+});

@@ -1,4 +1,4 @@
-import { copyRuleExclusions, copyRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, copyRules, pageRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -10,8 +10,10 @@ export default defineConfig({
     // From playground-ui's preset, only icon-button-size, placeholder-text, and the copy rules below for now: the
     // typography rules have existing hits here.
     'playground-ui/icon-button-size': 'error',
+    'playground-ui/button-icon-prop': 'error',
     'playground-ui/placeholder-text': 'error',
     'playground-ui/icon-size-from-parent': 'error',
+    'playground-ui/page-layout-props': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
@@ -25,6 +27,14 @@ export default defineConfig({
       rules: copyRules,
     },
     copyRuleExclusions,
+    {
+      files: ['src/ui/pages/**/*.tsx'],
+      rules: pageRules,
+    },
+    {
+      files: ['src/ui/pages/SignInPage.tsx'],
+      rules: { 'playground-ui/no-page-width': 'off' },
+    },
     {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },
