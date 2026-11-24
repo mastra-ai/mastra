@@ -217,14 +217,15 @@ export function LogsListView({
       </Txt>
     );
     return (
-      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3">
         {isOldestFirst && loadingOlder}
         <LogsDataList
           columns={STREAM_COLUMNS}
           scrollRef={scrollRef}
           className="min-w-0 flex-1"
           fit="container"
-          variant="flush"
+          variant="well"
+          mask={false}
           density="compact"
         >
           <LogsDataList.Top className="border-b border-border @max-md:hidden">

@@ -38,7 +38,7 @@ export type DataListFit = 'content' | 'container';
  *   and elevation as a card, a popover or a settings container.
  * - `light`: no panel behind the rows; rows sit directly on the page.
  */
-export type DataListVariant = 'default' | 'light' | 'flush';
+export type DataListVariant = 'default' | 'light' | 'well';
 
 export type DataListDensity = 'default' | 'compact';
 
@@ -182,13 +182,16 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
   // No panel, so rows rest on the page and only show on hover.
   light: '[--row:var(--background)]',
-  flush: 'bg-row [&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
+  well: cn(
+    "relative bg-row after:pointer-events-none after:absolute after:inset-0 after:z-30 after:rounded-[inherit] after:shadow-rim after:content-['']",
+    '[&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
+  ),
 };
 
 const dataListInsetClasses: Record<DataListVariant, string> = {
   default: 'rounded-xl p-1',
   light: 'rounded-xl p-1',
-  flush: '',
+  well: 'rounded-lg',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
@@ -196,7 +199,7 @@ const dataListInsetClasses: Record<DataListVariant, string> = {
 const dataListVariantBackground: Record<DataListVariant, string> = {
   default: 'var(--card)',
   light: 'var(--background)',
-  flush: 'var(--card)',
+  well: 'var(--row)',
 };
 
 const dataListDensityClasses: Record<DataListDensity, string | undefined> = {
@@ -334,7 +337,7 @@ function DataListBase({
         scrollable && fades.top && dataListTopFadeStyles,
         dataListFitClasses[fit],
         dataListDensityClasses[density],
-        variant === 'flush' && 'gap-y-0',
+        variant === 'well' && 'gap-y-0',
       )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
@@ -386,8 +389,7 @@ function DataListBase({
         className={cn(
           // `relative` lifts the content above the well. `rounded-lg` (the root's 12px less its 4px
           // inset) clips the square header corners that otherwise cut into the panel's rim.
-          'relative min-h-0 flex-1 basis-auto overscroll-x-none',
-          variant !== 'flush' && 'rounded-lg',
+          'relative min-h-0 flex-1 basis-auto overscroll-x-none rounded-lg',
           // A pinned column draws its own edge (the divider), so nothing fades on the left.
           'has-[.data-list-sticky-start]:[--scroll-area-fade-left:0px]!',
         )}

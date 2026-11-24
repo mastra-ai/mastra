@@ -18,4 +18,4 @@ Added a stream view to the shared log viewer, for plain log lines such as sandbo
 />
 ```
 
-`LogsLevelToggles` shows and hides levels: click to toggle one, Cmd-click or Ctrl-click to show only that level, and turning off the last level shows them all again. `LogDataPanel` now groups a log into Details, Message and Fields sections and pretty-prints JSON messages, and `DataList` takes `density="compact"` for 24px rows and `variant="flush"` for rows that run edge to edge inside a surface the caller owns.
+`LogsLevelToggles` shows and hides levels: click to toggle one, Cmd-click or Ctrl-click to show only that level, and turning off the last level shows them all again. `LogDataPanel` now groups a log into Details, Message and Fields sections and pretty-prints JSON messages, and `DataList` takes `density="compact"` for 24px rows and `variant="well"`, an outlined sunken area with rows edge to edge for a dense stream inside a card.
