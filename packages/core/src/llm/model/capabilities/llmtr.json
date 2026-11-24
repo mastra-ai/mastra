@@ -85,15 +85,13 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen/qwen3.6-flash": [
+    "meta/muse-spark-1.2-contributor": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen/qwen-plus": [
+    "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
       },
@@ -109,15 +107,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.6-plus": [
+    "qwen/qwen3-vl-plus": [
       {
         "type": "toggle"
       },
@@ -133,7 +123,15 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-vl-plus": [
+    "qwen/qwen3-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3.6-flash": [
       {
         "type": "toggle"
       },
@@ -149,12 +147,25 @@
         "type": "budget_tokens"
       }
     ],
+    "qwen/qwen-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen/qwen-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "poolside/laguna-xs-2.1": [
+      {
+        "type": "toggle"
       }
     ],
     "upstage/solar-pro4": [
@@ -179,17 +190,6 @@
       {
         "type": "effort",
         "values": ["high", "xhigh"]
-      }
-    ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "poolside/laguna-xs-2.1": [
-      {
-        "type": "toggle"
       }
     ]
   }
