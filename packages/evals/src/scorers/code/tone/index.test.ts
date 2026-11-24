@@ -176,27 +176,33 @@ describe('ToneConsistencyMetric', () => {
       const kind = 'Thank you for reaching out. I am happy to help.';
       const kindScore = await scoreFor(kind);
 
-      for (const ending of [
-        'This is terrible garbage and I hate it',
-        '**I hate it**',
-        '(I hate it)',
-        'Это очень плохо',
-      ]) {
+      for (const ending of ['This is terrible garbage and I hate it', '**I hate it**', '(I hate it)', 'Ужасно']) {
         const score = await scoreFor(`${kind} ${ending}`);
         expect(score).toBeLessThan(kindScore);
         expect(score).toBe(await scoreFor(`${kind} ${ending}.`));
       }
-      for (const ending of ['Terrible', '**Terrible**', '"Terrible"']) {
-        expect(await scoreFor(`${kind} ${ending}`)).toBeLessThan(0.6);
+      for (const ending of ['Terrible', '**Terrible**', '"Terrible"', '(Terrible)']) {
+        expect(await scoreFor(`${kind} ${ending}`)).toBeLessThan(0.75);
       }
-      expect(await scoreFor(`${kind} Terrible.`)).toBe(0);
-      expect(await scoreFor('I love this\nI hate this awful garbage')).toBe(0);
+      for (const rude of [
+        'I love this\nI hate this awful garbage',
+        'I love this!I hate this awful garbage.',
+        'I love this?I hate this awful garbage.',
+        '_Thank you for reaching out._ I hate this terrible garbage.',
+        `${kind} Terrible.`,
+        `${kind} (Terrible).`,
+      ]) {
+        expect(await scoreFor(rude)).toBe(0);
+      }
 
-      expect(await scoreFor('Your refund is on the way. It takes three days.\n\nThanks')).toBeGreaterThan(0.9);
-      for (const ending of [' [1, 2, 3]', ' (source)', '</p>']) {
+      for (const ending of ['Thanks', 'Good luck 🍀', 'Best wishes,\nAnna']) {
+        expect(await scoreFor(`Your refund is on the way. It takes three days.\n\n${ending}`)).toBeGreaterThan(0.85);
+      }
+      for (const ending of [' [1, 2, 3]', ' (see source)', '</p>', ' 😊']) {
         expect(await scoreFor(`${kind}${ending}`)).toBe(kindScore);
       }
       expect(await scoreFor('Great news, you saved $3.50 on your order today')).toBe(1);
+      expect(await scoreFor('👍')).toBe(1);
     });
   });
 });

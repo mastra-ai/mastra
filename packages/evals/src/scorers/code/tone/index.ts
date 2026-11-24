@@ -36,14 +36,20 @@ export function createToneScorer(config: ToneScorerConfig = {}) {
       }
 
       // Evaluate sentiment stability across response
-      const sentences = agentMessage
-        .match(/[^.!?\n]+(?:[.!?](?=\w)[^.!?\n]*)*[.!?]*/g)
-        ?.filter(sentence => /(?<!\S)["'“‘*_]*\p{L}/u.test(sentence));
-      const sentiments = (sentences?.length ? sentences : [agentMessage]).map(sentence => {
+      const sentences = agentMessage.match(/[^.!?\n]+(?:\.(?=[a-z\d])[^.!?\n]*)*[.!?]*/g) || [];
+      const sentiments = sentences.flatMap(sentence => {
         const { score, tokens } = sentiment.analyze(sentence);
-        // An unpunctuated label or sign-off counts as five words, or a single "Thanks" outweighs the whole reply.
-        return score / (tokens.length < 3 && !/[.!?]$/.test(sentence) ? 5 : tokens.length);
+        const words = tokens.filter(token => /\p{L}/u.test(token)).length;
+        const isCitationOrTag = !score && /^\s*[([<].*[)\]>]\s*$/.test(sentence);
+        if (!words || isCitationOrTag) {
+          return [];
+        }
+        // A short ending without punctuation ("Thanks") counts as ten words, or it outweighs the whole reply.
+        return score / (words > 2 || /[.!?]$/.test(sentence) ? tokens.length : Math.max(tokens.length, 10));
       });
+      if (sentiments.length === 0) {
+        sentiments.push(responseSentiment.comparative);
+      }
       const avgSentiment = sentiments.reduce((a, b) => a + b, 0) / sentiments.length;
       const variance = sentiments.reduce((sum, s) => sum + Math.pow(s - avgSentiment, 2), 0) / sentiments.length;
       const stability = Math.max(0, 1 - variance);
