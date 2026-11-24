@@ -7,3 +7,4 @@ export type {
   StoredAgentSignal,
   StoredAgentSignalPayload,
 } from './base';
+export { InMemoryAgentSignalsStorage } from './inmemory';
