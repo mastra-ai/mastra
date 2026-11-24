@@ -37,7 +37,7 @@ describe('toggleLogLevel', () => {
 function Harness() {
   const [value, setValue] = useState<LogLevel[]>(LEVELS);
   return (
-    <TooltipProvider>
+    <TooltipProvider delay={0}>
       <LogsLevelToggles levels={LEVELS} value={value} onValueChange={setValue} />
     </TooltipProvider>
   );
@@ -48,6 +48,14 @@ const pressed = () =>
     .getAllByRole('button')
     .filter(button => button.getAttribute('aria-pressed') === 'true')
     .map(button => button.textContent);
+
+const hover = (element: HTMLElement) => {
+  fireEvent.pointerEnter(element);
+  fireEvent.mouseEnter(element);
+  fireEvent.pointerMove(element);
+  fireEvent.mouseMove(element);
+  element.focus();
+};
 
 describe('LogsLevelToggles', () => {
   it('starts with every level shown and hides one on click', () => {
@@ -67,5 +75,17 @@ describe('LogsLevelToggles', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Error' }), { ctrlKey: true });
     expect(pressed()).toEqual(['Debug', 'Info', 'Warn', 'Error']);
+  });
+
+  it('tells each toggle how to show only its level, and how to bring the others back', async () => {
+    render(<Harness />);
+
+    const error = screen.getByRole('button', { name: 'Error' });
+    hover(error);
+    expect((await screen.findByRole('tooltip')).textContent).toContain('Show only Error');
+
+    fireEvent.click(error, { metaKey: true });
+    hover(error);
+    expect((await screen.findByRole('tooltip')).textContent).toContain('Show all levels');
   });
 });
