@@ -108,6 +108,7 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
       else res.end(JSON.stringify({ issuer: discovery.issuer ?? issuer, jwks_uri: `${origin}${jwksPath}` }));
     } else if (req.url === jwksPath) {
       if (outage.jwks === 'hang') hanging.push(() => res.end());
+      else if (outage.jwks === 'malformed') res.end('{}');
       else if (outage.jwks) res.writeHead(503).end('{}');
       else res.end(JSON.stringify({ keys: [key.jwk] }));
     } else {
@@ -531,6 +532,11 @@ describe('Factory MCP server', () => {
     const noKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
     expect(noKeys.status).toBe(500);
     expect(noKeys.headers.get('WWW-Authenticate')).toBeNull();
+
+    authServer.outage.jwks = 'malformed';
+    const badKeys = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(badKeys.status).toBe(500);
+    expect(badKeys.headers.get('WWW-Authenticate')).toBeNull();
 
     // Once it's back, the next request signs in: the failures weren't cached.
     authServer.outage.jwks = false;

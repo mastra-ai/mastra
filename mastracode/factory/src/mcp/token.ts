@@ -91,9 +91,11 @@ export function createMcpTokenVerifier(options: {
       const orgId = typeof payload.org_id === 'string' && payload.org_id ? payload.org_id : undefined;
       return { userId: payload.sub, ...(orgId ? { orgId } : {}) };
     } catch (error) {
+      // A bad token is refused; keys that can't be fetched or read are an outage.
       if (
         error instanceof errors.JOSEError &&
         !(error instanceof errors.JWKSTimeout) &&
+        !(error instanceof errors.JWKSInvalid) &&
         error.code !== 'ERR_JOSE_GENERIC'
       ) {
         return null;
