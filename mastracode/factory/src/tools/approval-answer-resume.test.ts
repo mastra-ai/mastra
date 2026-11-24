@@ -439,19 +439,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     // Technical: the resumed run takes the request context the answer hands it. It must name
     // the phase session's owner, so the run keeps one identity from kickoff to finish and never
     // runs with no user ("the request has no authenticated user" on a Factory server).
-    it("carries on as the phase session's owner, and records who approved", async () => {
-      const { answer, errors, audit } = await parkedPhaseSession();
-      const requestsBefore = mock.getRequests().length;
-      resolved = [];
+    it.each(backend === 'postgres' ? ['configured engine', 'native evented'] : ['configured engine'])(
+      "carries on as the phase session's owner, and records who approved (%s)",
+      async engine => {
+        if (engine === 'native evented') vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+        const { answer, errors, audit } = await parkedPhaseSession();
+        const requestsBefore = mock.getRequests().length;
+        resolved = [];
 
-      await answer('approve');
+        await answer('approve');
 
-      await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
-      expect(errors).toEqual([]);
-      expect(resolved.length).toBeGreaterThan(0);
-      expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
-      expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
-    });
+        await vi.waitFor(() => expect(mock.getRequests().length).toBeGreaterThan(requestsBefore), { timeout: 30_000 });
+        expect(errors).toEqual([]);
+        expect(resolved.length).toBeGreaterThan(0);
+        expect([...new Set(resolved.map(tenant => tenant?.userId))]).toEqual([OWNER]);
+        expect(audit.map(event => event.actorId)).toEqual([REQUESTER]);
+      },
+    );
 
     it('lets the person who asked approve the plan on the web, and the run carries on as its owner', async () => {
       const { answerOnWeb, errors, audit } = await parkedPhaseSession();
