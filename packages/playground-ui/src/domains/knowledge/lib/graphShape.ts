@@ -497,8 +497,6 @@ export interface LazyGraphInput {
 
 export interface LazyGraph {
   pages: KnowledgePagePayload[];
-  /** Per drawn page whose children have loaded: how many of them are drawn and how many are not. */
-  hiddenChildren: Map<string, { hidden: number; drawn: number }>;
   /** Pages the graph wants the next level of: the focus and its parent, or the roots with no focus. */
   wanted: string[];
   /** The page the layout centres on: the focus, or with nothing focused the first root scope. */
@@ -528,7 +526,6 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
 
   const focus = input.focusId ? byId.get(input.focusId) : undefined;
   const drawn = new Map<string, KnowledgePagePayload>();
-  const hiddenChildren = new Map<string, { hidden: number; drawn: number }>();
   const depth = new Map<string, number>();
   const queue: string[] = [];
   const add = (page: KnowledgePagePayload, at: number) => {
@@ -631,7 +628,6 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     if (input.loadedParents.has(id)) {
       const total = Math.max(page.childCount ?? kids.length, kids.length);
       const hidden = Math.max(0, total - drawnKids - grouped.size);
-      hiddenChildren.set(id, { hidden, drawn: drawnKids });
       if (hidden > 0 && id === center?.id) {
         const rest = syntheticPage(`${REST_PREFIX}${id}`, page, {
           name: `+${page.childCountCapped ? `${total}+` : hidden} more`,
@@ -654,5 +650,5 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
       page => (page.childCount ?? 0) > 0 && !isScopeGroup(page) && !isChildPlaceholder(page) && !isRestCircle(page),
     );
   wanted.push(...circles.slice(0, WANTED_CIRCLE_CAP).map(page => page.id));
-  return { pages: [...drawn.values()], hiddenChildren, wanted, hub: center?.id ?? null };
+  return { pages: [...drawn.values()], wanted, hub: center?.id ?? null };
 }

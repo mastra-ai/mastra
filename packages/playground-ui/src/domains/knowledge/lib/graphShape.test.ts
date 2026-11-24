@@ -492,7 +492,7 @@ describe('lazyGraph', () => {
       loadedParents: new Set(['', 'site', 'blog']),
       focusId: 'blog',
     });
-    expect(graph.hiddenChildren.get('blog')).toEqual({ hidden: 60 - GRAPH_CHILD_CAP, drawn: GRAPH_CHILD_CAP });
+    expect(graph.pages.filter(p => p.parentId === 'blog' && !isRestCircle(p))).toHaveLength(GRAPH_CHILD_CAP);
     const rest = graph.pages.find(isRestCircle);
     expect(rest?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
     expect(rest?.parentId).toBe('blog');

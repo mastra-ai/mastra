@@ -14,7 +14,6 @@ import {
 import { scopeTitle } from '../lib/pageAddress';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { KnowledgePagesByRef } from '../lib/pagesByRefContext';
-import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 import { useStableWhile } from '../lib/useStableWhile';
 
@@ -1003,7 +1002,6 @@ export function KnowledgePageExplorer({
           })
         : {
             pages: graph.pages,
-            hiddenChildren: new Map<string, { hidden: number; drawn: number }>(),
             wanted: [],
             hub: null,
           },
@@ -1269,9 +1267,6 @@ export function KnowledgePageExplorer({
     () => withinScope(drawn.pages, focusScope ? focusScopeId : null),
     [drawn.pages, focusScope, focusScopeId],
   );
-  // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
-  const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
-  const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
   const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
     { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
     { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
