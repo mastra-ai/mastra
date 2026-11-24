@@ -85,6 +85,7 @@ Executes background tool calls dispatched by agents.
 - **PubSub topic**: `background-tasks`
 - **Consumer group**: `background-task-workers`
 - **Supports multiple replicas**: Instances share the consumer group
+- **Agent runs on processes without it**: An agent run whose loop executes on a process that doesn't run this worker (`workers: false`, or `MASTRA_WORKERS` without `backgroundTasks`) can't hand its tool calls to a dedicated worker, because each call is bound to the run. A durable agent runs the tool inline instead. A regular agent returns the dispatch error as the tool result.
 
 ## Supported storage backends
 
