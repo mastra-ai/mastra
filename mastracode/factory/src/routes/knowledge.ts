@@ -237,7 +237,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           } catch (error) {
             if (error instanceof Error && 'status' in error && error.status === 422) {
               return c.json(
-                { error: 'query_too_expensive', message: 'Select a narrower root or reduce the graph limits.' },
+                { error: 'query_too_expensive', message: 'This project’s Knowledge is too large to read at once.' },
                 422,
               );
             }

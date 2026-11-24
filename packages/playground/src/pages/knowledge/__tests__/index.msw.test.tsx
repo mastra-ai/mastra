@@ -144,7 +144,7 @@ describe('Knowledge page', () => {
         }),
       );
       renderPage();
-      await screen.findByText('Failed to load Knowledge');
+      await screen.findByRole('alert');
       await act(() => vi.advanceTimersByTimeAsync(60_000));
       expect(requests).toBe(1);
     } finally {
@@ -160,6 +160,19 @@ describe('Knowledge page', () => {
       const tree = await screen.findByRole('tree');
       expect(await within(tree).findByText('Acme')).toBeTruthy();
     });
+
+    it('keeps the tree and says why the graph is incomplete when the graph fails', async () => {
+      withInstance();
+      server.use(
+        http.get(`${api}/main/graph`, () => HttpResponse.json({ error: 'Graph read timed out' }, { status: 500 })),
+      );
+      renderPage();
+      const tree = await screen.findByRole('tree');
+      expect(await within(tree).findByText('Acme')).toBeTruthy();
+      const alert = await screen.findByRole('alert', {}, { timeout: 8_000 });
+      expect(alert.textContent).toContain('Graph read timed out');
+      expect(within(screen.getByRole('tree')).getByText('Acme')).toBeTruthy();
+    }, 15_000);
 
     it('reads the graph without asking for a scope', async () => {
       const graphQueries: string[] = [];

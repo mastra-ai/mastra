@@ -42,10 +42,12 @@ function Explorer({
   knowledgeKey,
   live,
   graph,
+  graphError,
 }: {
   knowledgeKey: string;
   live: boolean;
   graph: KnowledgeGraphResponse | undefined;
+  graphError: string | undefined;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedPageId = searchParams.get('page');
@@ -100,6 +102,7 @@ function Explorer({
   return (
     <KnowledgePageExplorer
       graph={graph}
+      graphError={graphError}
       source={source}
       selectedPageId={selectedPageId}
       onSelect={pageId => update('page', pageId)}
@@ -187,13 +190,6 @@ export default function KnowledgePage() {
         ) : null}
         {!knowledgeKey ? (
           <KnowledgeGraphLoader />
-        ) : graph.isError && !graph.data ? (
-          <EmptyState
-            tone="error"
-            variant="fill"
-            titleSlot="Failed to load Knowledge"
-            descriptionSlot={graph.error?.message}
-          />
         ) : graph.data?.pages.length === 0 ? (
           <EmptyState
             variant="fill"
@@ -201,7 +197,13 @@ export default function KnowledgePage() {
             descriptionSlot="Agents add pages and notes to Knowledge as they run. They will appear here."
           />
         ) : (
-          <Explorer key={knowledgeKey} knowledgeKey={knowledgeKey} live={live} graph={graph.data} />
+          <Explorer
+            key={knowledgeKey}
+            knowledgeKey={knowledgeKey}
+            live={live}
+            graph={graph.data}
+            graphError={graph.error?.message}
+          />
         )}
       </div>
     </Shell>

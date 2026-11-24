@@ -121,8 +121,7 @@ export function useKnowledgePageGraph(knowledgeKey: string | undefined, live: bo
     queryKey: ['knowledge', knowledgeKey, 'graph'],
     queryFn: knowledgeKey ? () => client.getKnowledge(knowledgeKey).graph() : skipToken,
     retry: retryUnlessFinal,
-    refetchInterval: ({ state }) =>
-      state.error instanceof MastraClientError && state.error.status === 422 ? false : pollUnless(live),
+    refetchInterval: ({ state }) => (isFinal(state.error) ? false : pollUnless(live)),
   });
 }
 
@@ -181,7 +180,6 @@ export function useKnowledgeTreeLevels(
 
 /** The most pages one link count request may ask about; the route rejects more. */
 const LINK_COUNT_BATCH = 200;
-/** A server with no link index answers 501 every time, and a refused caller the same; neither is retried. */
 
 /** Exact link counts for the pages the graph holds, in batches. 501 (no link index) is an error the graph falls back from. */
 export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: boolean, pageIds: string[]) {

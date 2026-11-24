@@ -152,6 +152,8 @@ const EMPTY_GRAPH: KnowledgeExplorerGraph = { pages: [], edges: [], pinnedIds: [
 export interface KnowledgePageExplorerProps {
   /** While the overview loads, tree and selected-page reads can already populate the explorer. */
   graph: KnowledgeExplorerGraph | undefined;
+  /** Why the overview failed. The tree and pages load without it, so the explorer stays and says so. */
+  graphError?: string;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
   /** `null` clears the selection: a click on empty graph canvas. */
@@ -958,6 +960,7 @@ function useLazyTree(
  */
 export function KnowledgePageExplorer({
   graph: overview,
+  graphError,
   source,
   selectedPageId,
   onSelect,
@@ -1275,7 +1278,9 @@ export function KnowledgePageExplorer({
 
   const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
-  const loadingCanvas = graphShown && !pageOverGraph && !overview && graphPages.length === 0;
+  const loadingCanvas =
+    graphShown && !pageOverGraph && !overview && graphError === undefined && graphPages.length === 0;
+  const rootLevelFailed = lazy.failed.has(KNOWLEDGE_TREE_ROOT) && !lazy.loaded.has(KNOWLEDGE_TREE_ROOT);
   const floatingToolbar = fullBleedGraph && graphShown && !showPage;
   const toolbar = useMeasuredAutoHeight();
   const noticeSurface = floatingToolbar ? cn('w-fit rounded-lg px-2 py-1', overlaySurfaceStyle) : undefined;
@@ -1354,6 +1359,10 @@ export function KnowledgePageExplorer({
           <div className="p-2">
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
+        ) : rootLevelFailed ? (
+          <Txt as="p" variant="caption" tone="muted" className="p-3">
+            Couldn’t load the pages.
+          </Txt>
         ) : (
           <KnowledgePageTree
             key={focusScope ? focusScope.id : 'all'}
@@ -1438,6 +1447,15 @@ export function KnowledgePageExplorer({
           {!lazyMode && graph.truncated && !showPage ? (
             <Txt variant="caption" tone="muted" className={cn(flush && 'px-3 pt-2', noticeSurface)}>
               The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
+            </Txt>
+          ) : null}
+          {!overview && graphError !== undefined && !showPage ? (
+            <Txt
+              role="alert"
+              variant="caption"
+              className={cn('text-destructive-foreground', flush && 'px-3 pt-2', noticeSurface)}
+            >
+              Couldn’t load the full graph. {graphError}
             </Txt>
           ) : null}
           {selectedPageId && !showPage && isNotFound(selected.error) ? (
