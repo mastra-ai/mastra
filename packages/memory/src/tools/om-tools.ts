@@ -471,12 +471,36 @@ export async function searchMessagesForResource({
     };
   }
 
+  // Thread titles and the current record only enrich the results, so a slow read is dropped once the
+  // budget runs out rather than holding the results back. A run abort still stops the recall.
+  const withinBudget = <T>(read: () => Promise<T>, fallback: T) =>
+    new Promise<T>((resolve, reject) => {
+      abortSignal?.throwIfAborted();
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return resolve(fallback);
+      const onAbort = () => settle(() => reject(abortSignal!.reason));
+      const timer = setTimeout(() => settle(() => resolve(fallback)), remainingMs);
+      const settle = (finish: () => void) => {
+        clearTimeout(timer);
+        abortSignal?.removeEventListener('abort', onAbort);
+        finish();
+      };
+      abortSignal?.addEventListener('abort', onAbort, { once: true });
+      Promise.resolve()
+        .then(read)
+        .then(
+          value => settle(() => resolve(value)),
+          error => settle(() => reject(error)),
+        );
+    });
+  const getThread = (id: string) => withinBudget(() => memory.getThreadById!({ threadId: id }), null);
+
   const threadIds = [...new Set(results.map(r => r.threadId))];
   const threadMap = new Map<string, RecallThread>();
   if (memory.getThreadById) {
     await Promise.all(
       threadIds.map(async id => {
-        const thread = await memory.getThreadById!({ threadId: id });
+        const thread = await getThread(id);
         if (thread) threadMap.set(id, thread);
       }),
     );
@@ -507,7 +531,8 @@ export async function searchMessagesForResource({
 
   // One history read per search: the current record supplies the user's timezone and
   // the groups already in context. Hits are not resolved to their own generations.
-  const [currentRecord] = om && currentThreadId ? await om.getHistory(currentThreadId, resourceId, 1) : [];
+  const [currentRecord] =
+    om && currentThreadId ? await withinBudget(() => om.getHistory(currentThreadId, resourceId, 1), []) : [];
   const timeZone = resolveTimeZone(currentRecord?.observedTimezone ?? undefined);
 
   // Reserve an excerpt for every hit before distributing spare space in similarity order.
@@ -583,7 +608,7 @@ export async function searchMessagesForResource({
         if (seen.has(key)) continue;
         seen.add(key);
         if (!threadMap.has(match.threadId) && memory.getThreadById) {
-          const thread = await memory.getThreadById({ threadId: match.threadId });
+          const thread = await getThread(match.threadId);
           if (thread) threadMap.set(match.threadId, thread);
         }
         const entry = prepareEntry(match, ordered.length, backfillBudget);
@@ -702,6 +727,7 @@ export async function searchMessagesForResource({
     );
   }
 
+  abortSignal?.throwIfAborted();
   return {
     results: sections.join('\n\n'),
     count: ordered.length,

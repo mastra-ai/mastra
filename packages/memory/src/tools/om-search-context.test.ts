@@ -693,4 +693,60 @@ describe('recall search when the search itself fails', () => {
 
     expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
   });
+
+  it('keeps thread titles and the current record when they load within the budget', async () => {
+    const { memory } = setup([hit('a', 'evidence')]);
+    memory.getThreadById = vi.fn(async () => ({ id: threadId, title: 'Planning' }) as never);
+    const getHistory = vi.fn(async () => [{ activeObservations: '' }]);
+
+    const result = await searchMessagesForResource({
+      memory,
+      om: { getHistory } as never,
+      resourceId,
+      currentThreadId: threadId,
+      query: 'topic',
+      logger: logger(),
+    });
+
+    expect(result.results).toContain(`- thread: ${threadId} (Planning)`);
+    expect(getHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['getThreadById', 'getHistory'] as const)(
+    'returns the results without waiting past the budget for a slow %s',
+    async slowRead => {
+      const { memory } = setup([hit('a', 'evidence')]);
+      const hang = () => new Promise<never>(() => {});
+      memory.getThreadById = vi.fn(slowRead === 'getThreadById' ? hang : async () => null);
+      const getHistory = vi.fn(slowRead === 'getHistory' ? hang : async () => []);
+      const started = Date.now();
+
+      const result = await searchMessagesForResource({
+        memory,
+        om: { getHistory } as never,
+        resourceId,
+        currentThreadId: threadId,
+        query: 'topic',
+        searchTimeoutMs: 100,
+        logger: logger(),
+      });
+
+      expect(Date.now() - started).toBeLessThan(400);
+      expect(result.count).toBe(1);
+      expect(result.results).toContain('evidence');
+    },
+  );
+
+  it('stops with the run when it is aborted while the results are being enriched', async () => {
+    const { memory } = setup([hit('a', 'evidence')]);
+    const run = new AbortController();
+    memory.getThreadById = vi.fn(() => {
+      run.abort(new Error('run stopped'));
+      return new Promise<never>(() => {});
+    });
+
+    await expect(
+      searchMessagesForResource({ memory, resourceId, query: 'topic', abortSignal: run.signal, logger: logger() }),
+    ).rejects.toThrow('run stopped');
+  });
 });
