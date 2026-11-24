@@ -114,9 +114,9 @@ export class HelpDeskImporter extends KnowledgeImporter({
 
 ## Place items in a tree
 
-Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. After the parent is written, Knowledge moves waiting children under it in bounded batches, in the same run or a later one. A move is refused when another binding owns a page under the child.
+Set `parent` to another item's `sourceId` to nest pages. You can send a child before its parent. Until the parent is imported, the child waits directly under the target. After the parent is written, Knowledge moves waiting children under it in bounded batches, in the same run or a later one.
 
-To put a folder in the tree before you have its content, declare it. A declared item gets a page with a title and no body:
+To put a folder in the tree before you have its content, declare it. A declared item that creates its page gets a title and an empty body. Declaring an item whose page already exists keeps that page's body. An upsert of the item supplies or replaces the body:
 
 ```typescript title="src/mastra/importers/help-desk.ts"
 await ctx.items.declare({ sourceId: `folder-${folder.id}`, title: folder.name })
@@ -128,7 +128,7 @@ Upsert the same `sourceId` later to give it a body. Items can also link to each 
 
 Call `ctx.items.remove(sourceId)` only when the source says an item is gone, for example archived or deleted. An item that's missing from one run's results is left alone, so a partial read never deletes pages. If someone deletes an imported page by hand while the source still has the item, the next time your importer sends that item it's written again. To keep it gone, remove it in the source.
 
-When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place. A page your importer took over is never deleted: it gets back the body it had before the takeover, or becomes a stub if it had none. If another binding's page or target sits under it, Knowledge refuses the removal.
+When a removed item's page still has pages nested under it, Knowledge keeps it as a stub whose body says the item was removed from the source. Its children keep their place. A page your importer took over is never deleted: it gets back the body it had before the takeover, or becomes a stub if it had none.
 
 ## Register and run the importer
 
@@ -161,7 +161,7 @@ export const knowledge = new Knowledge({
 })
 ```
 
-Keep a binding's `id` when you edit its settings: Knowledge tracks which pages each binding owns by that id. Knowledge refuses a binding whose target nests inside another binding's target.
+Keep a binding's `id` when you edit its settings: Knowledge tracks which pages each binding owns by that id. Targets of different bindings may overlap or nest. When an app deletes a binding, call `retireBinding(id)` on the host: Knowledge forgets that binding's tracking, cursor and runs, and its pages stay in place as ordinary pages. Nothing reserves its target, so another binding can write there and take those pages over.
 
 Run a binding with `knowledge.importers.run()`:
 
@@ -193,11 +193,11 @@ Use `ctx.reportBacklog()` in your importer when it stops early on purpose, for e
 
 ## Pages your importer doesn't own
 
-When a page someone wrote by hand already sits at the binding's target, it becomes the importer's folder: its body and the pages under it are kept, and items are added under it. When an item's place is already taken by a page someone wrote by hand, your importer takes that page over. The page keeps its ID and anything nested under it, and the item's title, description and body replace its own. The body from before the import is kept in a note on the page. From then on the importer updates it like a page it created. When the source removes the item, the page is never deleted: it gets that body back. The note holds the body from the first takeover only: if the importer takes the page over again after a removal, edits made in between aren't saved. If someone deletes the note, the page becomes a stub instead, and the note isn't written again.
+When a page already sits at the binding's target, it becomes the importer's folder: its body and the pages under it are kept, and items are added under it. When an item's place is already taken by a page, your importer takes that page over, whoever wrote it. The page keeps its ID and anything nested under it, and the item's title and description replace its own. Its body replaces the page's body when the item sends one. A declare sends none. The page keeps its body until an upsert sends one. A hand-written body from before the import is kept in a note on the page. From then on the importer updates it like a page it created. When the source removes the item, the page is never deleted: it gets that body back. The note holds the body from the first takeover only: if the importer takes the page over again after a removal, edits made in between aren't saved. If someone deletes the note, the page becomes a stub instead, and the note isn't written again.
 
-Your importer never changes another binding's pages. When an item's place is taken by another binding's page, Knowledge refuses that item and writes the rest of the run. When someone moves an imported page out of the target, it stays where they put it and keeps getting the item's updates, as long as it's in the same scope and not inside another binding's pages. Otherwise the item is refused. Moves and removals are also refused when another binding's page or target sits under the page. People can add their own pages under imported pages. Those move along with their parent.
+Importers write where they're configured. When your importer takes over a page another binding imported, that binding stops tracking it, and its next run writes its item again. When someone moves an imported page elsewhere in the same scope, it stays where they put it and keeps getting the item's updates. When someone moves it into another scope, it stays there as an ordinary page and the next run writes the item again at the target. People can add their own pages under imported pages. Those move along with their parent.
 
-Refused items are counted in `counts.refused`, and the run result lists them in `refused`, each with its `sourceId` and a `reason`. The list holds the first 100. Move or rename the page in the way, then send the item again. An importer that reads from a cursor may already have saved a cursor past the refused item, so a normal next run doesn't always send it. Reset that cursor, or have your importer send the item again some other way.
+An item is refused when it can't be written, for example when someone changes the page at the same moment. Refused items are counted in `counts.refused`, and the run result lists them in `refused`, each with its `sourceId` and a `reason`. The list holds the first 100. Send the item again. An importer that reads from a cursor may already have saved a cursor past the refused item, so a normal next run doesn't always send it. Reset that cursor, or have your importer send the item again some other way.
 
 ## Next steps
 

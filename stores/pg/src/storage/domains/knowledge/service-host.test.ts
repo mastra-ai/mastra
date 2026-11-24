@@ -321,65 +321,6 @@ describe('PG service importer host', () => {
     }
   }, 15_000);
 
-  it('starts of nesting targets serialize on the registration lock while both hold the writer guard shared', async () => {
-    const t = await setup(60_000);
-    try {
-      // A first write makes later starts take the writer guard shared.
-      const first = await t.host.startRun('b1');
-      if (first.status !== 'started') throw new Error('not started');
-      expect((await t.storage.importers!.readWriterGuard()).firstWriteAt).not.toBeNull();
-      await t.host.finishRun({
-        runId: first.runId,
-        generation: first.generation,
-        outcome: 'succeeded',
-        backlog: false,
-        lastSeq: 0,
-      });
-
-      const nested: KnowledgeImporterRunBinding = { ...binding, id: 'b2', target: 'docs:acme#notion/inner' };
-      const sibling: KnowledgeImporterRunBinding = { ...binding, id: 'b3', target: 'docs:acme#other' };
-      const peer = createKnowledgeImporterHost(
-        new Knowledge({
-          scopes: { 'docs:$orgId': {} },
-          storage: new PostgresStore({ id: 'service-host-peer', pool: otherPool, schemaName: t.schemaName }),
-        }),
-        { bindings: [nested, sibling], leaseMs: 60_000 },
-      );
-      const admitted = gate();
-      const release = gate();
-      let pid = 0;
-      // b3 holds the guard shared and the registration lock, parked in admit.
-      const holding = peer.startRun('b3', {
-        admit: async tx => {
-          pid = Number((await pgKnowledgeTransactionClient(tx).one('SELECT pg_backend_pid() AS pid')).pid);
-          admitted.open();
-          await release.opened;
-        },
-      });
-      await admitted.opened;
-      // b2 nests in b1's stored target; it must wait for the lock, not pass beside b3.
-      const nestedStart = peer.startRun('b2').then(
-        () => 'started' as const,
-        (error: unknown) => error,
-      );
-      await waitUntilBlockedOn(pid);
-      // b3 holds the writer guard shared: another shared lock on it is granted at once.
-      const probe = await otherPool.connect();
-      try {
-        await probe.query('BEGIN');
-        await probe.query(`SET LOCAL lock_timeout = '500ms'`);
-        await probe.query(`SELECT * FROM ${t.guardTable} FOR SHARE`);
-      } finally {
-        await probe.query('ROLLBACK');
-        probe.release();
-      }
-      release.open();
-      expect((await holding).status).toBe('started');
-      expect(await nestedStart).toMatchObject({ status: 409 });
-    } finally {
-      await t.drop();
-    }
-  }, 15_000);
   it('records no settle timeout, page, node, state or receipt when the lease ends while settling', async () => {
     const t = await setup(1500);
     let rowHolder: PoolClient | undefined;

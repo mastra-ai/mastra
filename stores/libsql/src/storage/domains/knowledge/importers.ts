@@ -266,6 +266,22 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   async listBindings() {
     return (await this.#read.execute(`SELECT * FROM "${T.bindings}" ORDER BY id`)).rows.map(toBinding);
   }
+  async retireBinding(id: string) {
+    const runs = `SELECT id FROM "${T.runs}" WHERE bindingId = ?`;
+    await this.#transaction(async tx => {
+      for (const sql of [
+        `DELETE FROM "${T.changes}" WHERE runId IN (${runs})`,
+        `DELETE FROM "${T.flushes}" WHERE runId IN (${runs})`,
+        `DELETE FROM "${T.runs}" WHERE bindingId = ?`,
+        `DELETE FROM "${T.state}" WHERE bindingId = ?`,
+        `DELETE FROM "${T.nodeLinks}" WHERE bindingId = ?`,
+        `DELETE FROM "${T.nodes}" WHERE bindingId = ?`,
+        `DELETE FROM "${T.bindings}" WHERE id = ?`,
+      ]) {
+        await tx.execute({ sql, args: [id] });
+      }
+    });
+  }
 
   async startRun(input: {
     bindingId: string;
@@ -628,8 +644,6 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
   async lockWriterGuard(_mode: 'share' | 'update') {
     return this.readWriterGuard();
   }
-  /** A write transaction already excludes every other writer, so holding one is the lock. */
-  async lockRegistration() {}
   async markFirstWrite() {
     return this.#transaction(async tx => {
       const result = await tx.execute({

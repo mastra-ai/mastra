@@ -46,9 +46,9 @@ export type KnowledgeImporterState = Record<string, string>;
 
 /** Why the sink refused one op. The rest of the flush still commits. */
 export type KnowledgeImportRefusalReason =
-  /** Another binding's page is at the path or at the binding's target. */
+  /** Another page took the item's path at the same moment, or the page found there changed before it was locked. */
   | 'occupied'
-  /** The mapped page was moved into another scope or inside another binding's pages, or belongs to another binding. */
+  /** The item's page or the pages on the way to it changed while the flush waited, or Knowledge refused the write (a move too large, for example). */
   | 'conflict'
   /** The op names something the binding can't hold (bad parent, malformed item). */
   | 'invalid';

@@ -99,7 +99,7 @@ describe('PG importer sink fences (r347 O3)', () => {
     await Promise.all([pool.end(), otherPool.end(), observerPool.end()]);
   });
 
-  it("refuses a move when another binding's page joined the subtree while the move waited for its lock", async () => {
+  it("carries another binding's page that joined the subtree while the move waited for its lock", async () => {
     const t = await setup([
       { id: 'b1', target: 'docs:acme#notion' },
       { id: 'b2', target: 'docs:acme#linear' },
@@ -132,10 +132,10 @@ describe('PG importer sink fences (r347 O3)', () => {
       held.release();
       await held.done;
 
-      expect(await move).toMatchObject({ counts: { moved: 0, refused: 1 } });
-      // Nothing moved: p1, c1 and the late page all stay where they were.
-      expect(await t.page('notion/p1/c1/late')).toBeTruthy();
-      expect(await t.page('notion/p2/p1')).toBeNull();
+      expect(await move).toMatchObject({ counts: { moved: 1, refused: 0 } });
+      // The subtree is read under lock, so the late page moves with it rather than being left behind.
+      expect(await t.page('notion/p2/p1/c1/late')).toBeTruthy();
+      expect(await t.page('notion/p1')).toBeNull();
     } finally {
       await t.drop();
     }

@@ -78,12 +78,13 @@ describe('createKnowledgeImporterHost', () => {
     expect(reads).toHaveBeenCalledTimes(3);
   });
 
-  it('refuses a start whose target overlaps another binding the function returns', async () => {
+  it('starts a binding whose target nests in another binding the function returns', async () => {
     const { knowledge } = setup();
     const host = createKnowledgeImporterHost(knowledge, {
       bindings: async () => [binding('b1', 'docs:acme#notion'), binding('b2', 'docs:acme#notion/eng')],
     });
-    await expect(host.startRun('b2')).rejects.toMatchObject({ status: 409 });
+    expect(await host.startRun('b1')).toMatchObject({ status: 'started' });
+    expect(await host.startRun('b2')).toMatchObject({ status: 'started' });
   });
 
   it('records the configured author on imported pages', async () => {

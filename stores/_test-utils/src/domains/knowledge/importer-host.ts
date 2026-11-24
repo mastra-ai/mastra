@@ -388,7 +388,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(again).toMatchObject({ counts: { created: 1, refused: 0 } });
     });
 
-    it("refuses every op when another binding's page sits at the target, and never takes it over", async () => {
+    it("takes over another binding's page at its target as its folder, and that binding writes its item again", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear' },
@@ -396,13 +396,19 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await run([upsert({ sourceId: 'notion' })], 'b2');
       // A human moves b2's imported page to where b1's target goes.
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/notion', parent: '' });
+      const moved = await page('notion');
       const receipt = await run([upsert({ sourceId: 'p1' })]);
-      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 0, refused: 1 } });
-      expect(await page('notion/p1')).toBeNull();
-      expect((await page('notion'))?.body).toBe('body of notion');
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 1, refused: 0 } });
+      expect(await page('notion')).toMatchObject({ id: moved!.id, body: 'body of notion' });
+      expect((await page('notion/p1'))?.body).toBe('body of p1');
+      // b2 no longer tracks the page: its next import writes the item again at its own target.
+      const again = await run([upsert({ sourceId: 'notion' })], 'b2');
+      expect(again).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect((await page('linear/notion'))?.id).not.toBe(moved!.id);
+      expect((await page('notion'))?.id).toBe(moved!.id);
     });
 
-    it("refuses every op when another binding's anchor sits at the target, and never takes it over", async () => {
+    it("takes over another binding's anchor at its target, and that binding makes a new one at its own", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear/notion' },
@@ -412,12 +418,14 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/notion', parent: '' });
       const anchor = await page('notion');
       const receipt = await run([upsert({ sourceId: 'p1' })]);
-      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 0, refused: 1 } });
-      expect(await page('notion/p1')).toBeNull();
-      expect(await page('notion')).toMatchObject({ id: anchor!.id, version: anchor!.version });
-      // b2's anchor is pinned by id and now sits outside its target, so b2 refuses too: the page is b2's.
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 1, refused: 0 } });
+      expect((await page('notion'))?.id).toBe(anchor!.id);
+      expect(await page('notion/p1')).toBeTruthy();
+      // b2's anchor was taken: its next import makes a new folder at its target and writes there.
       const b2 = await run([upsert({ sourceId: 'l2' })], 'b2');
-      expect(b2).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(b2).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('linear/notion/l2')).toBeTruthy();
+      expect((await page('linear/notion'))?.id).not.toBe(anchor!.id);
     });
 
     it("takes over a page someone else wrote at an item's path, keeping its id, and lands the rest of the flush", async () => {
@@ -584,20 +592,30 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(resent).toMatchObject({ counts: { created: 1, refused: 0 } });
     });
 
-    it("refuses an item whose path holds another binding's page, and never takes it over", async () => {
+    it("takes over an item path that holds another binding's page, and that binding stops tracking it", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear' },
       ]);
       await run([upsert({ sourceId: 'p1' })]);
       await run([upsert({ sourceId: 'p2' })], 'b2');
-      // A human moves b2's page to where b1's item p2 goes.
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/p2', parent: 'notion' });
+      const moved = (await page('notion/p2'))!;
+      // A human moves b2's page to where b1's item p2 goes; b1 writes there.
       const receipt = await run([upsert({ sourceId: 'p2', body: 'from b1' })]);
-      expect(receipt).toMatchObject({ counts: { created: 0, updated: 0, refused: 1 } });
-      expect((await page('notion/p2'))?.body).toBe('body of p2');
-      const b2 = await run([upsert({ sourceId: 'p2', body: 'from b2' })], 'b2');
-      expect(b2).toMatchObject({ counts: { refused: 1 } });
+      expect(receipt).toMatchObject({ counts: { created: 0, updated: 1, refused: 0 } });
+      expect(await page('notion/p2')).toMatchObject({ id: moved.id, body: 'from b1' });
+      const storage = await knowledge.getStorage();
+      expect(await storage.importers!.getNode('b2', 'p2')).toBeNull();
+      // b2 no longer tracks it, so its next p2 is a new page at its own path.
+      expect(await run([upsert({ sourceId: 'p2', body: 'from b2' })], 'b2')).toMatchObject({
+        counts: { created: 1, refused: 0 },
+      });
+      expect((await page('linear/p2'))?.body).toBe('from b2');
+      expect((await page('notion/p2'))?.body).toBe('from b1');
+      // b1 took it over, so removing p2 keeps the page (as a stub of its original body).
+      expect(await run([{ op: 'remove', sourceId: 'p2' }])).toMatchObject({ counts: { stubbed: 1, removed: 0 } });
+      expect((await page('notion/p2'))?.id).toBe(moved.id);
     });
 
     it('repairs links to a hand-deleted page that is written again under another parent', async () => {
@@ -701,24 +719,25 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('archive/p1'))?.id).toBe(before!.id);
     });
 
-    it("refuses an imported page a person moved into another binding's folder", async () => {
+    it("keeps updating an imported page a person moved into another binding's folder, where they put it", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear' },
       ]);
       await run([upsert({ sourceId: 'p1' })]);
       await run([upsert({ sourceId: 'l1' })], 'b2');
+      const before = await page('notion/p1');
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: 'linear/l1' });
       const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
-      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
-      expect((await page('linear/l1/p1'))?.body).toBe('body of p1');
+      expect(receipt).toMatchObject({ counts: { updated: 1, refused: 0 } });
+      expect(await page('linear/l1/p1')).toMatchObject({ id: before!.id, body: 'new' });
       // Its anchor directly, too.
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/l1/p1', parent: 'linear' });
-      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({ counts: { refused: 1 } });
-      expect((await page('linear/p1'))?.body).toBe('body of p1');
+      expect(await run([upsert({ sourceId: 'p1', body: 'newer' })])).toMatchObject({ counts: { updated: 1 } });
+      expect(await page('linear/p1')).toMatchObject({ id: before!.id, body: 'newer' });
     });
 
-    it("refuses an imported page a person moved under another binding's page inside this target", async () => {
+    it("updates an imported page a person moved under another binding's page inside this target, and puts it back", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear' },
@@ -729,52 +748,37 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/l1', parent: 'notion' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: 'notion/l1' });
       const before = await page('notion/l1/p1');
-      const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
-      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
-      const after = await page('notion/l1/p1');
-      expect(after?.id).toBe(before!.id);
-      expect(after?.body).toBe('body of p1');
-      // Control: under a human folder inside its target, b1 still updates its page (and places it
-      // back under its parent, the anchor).
-      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/folder', name: 'Folder' });
-      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/l1/p1', parent: 'notion/folder' });
+      // Inside its target, b1 places it back under its parent, the anchor.
       expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({
-        counts: { updated: 1, refused: 0 },
+        counts: { updated: 1, moved: 1, refused: 0 },
       });
-      const updated = await page('notion/p1');
-      expect(updated?.id).toBe(before!.id);
-      expect(updated?.body).toBe('new');
+      expect(await page('notion/l1/p1')).toBeNull();
+      expect(await page('notion/p1')).toMatchObject({ id: before!.id, body: 'new' });
     });
 
-    it("refuses a first anchor whose path runs through another binding's anchor or page, but not a human one", async () => {
+    it("anchors through another binding's anchor and on another binding's item page", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#hub/linear/notion' },
         { id: 'b2', target: 'docs:acme#linear' },
-        { id: 'b3', target: 'docs:acme#l1/notion' },
-        { id: 'b4', target: 'docs:acme#team/notion' },
+        { id: 'b3', target: 'docs:acme#l1' },
       ]);
       await run([upsert({ sourceId: 'l1' })], 'b2');
-      // b2's anchor moves under a human page onto b1's path; b2's item page moves to the top onto b3's.
+      // b2's anchor moves under a human page onto b1's path; b2's item page moves to the top onto b3's target.
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'hub', name: 'Hub' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear', parent: 'hub' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'hub/linear/l1' });
-      expect(await run([upsert({ sourceId: 'p1' })], 'b1')).toMatchObject({
-        counts: { created: 0, refused: 1 },
-        refused: [{ sourceId: 'p1', reason: 'occupied' }],
-      });
-      expect(await page('hub/linear/notion')).toBeNull();
-      expect(await run([upsert({ sourceId: 'p1' })], 'b3')).toMatchObject({
-        counts: { created: 0, refused: 1 },
-        refused: [{ sourceId: 'p1', reason: 'occupied' }],
-      });
-      expect(await page('l1/notion')).toBeNull();
-      // Control: a human container on the path is fine.
-      await knowledge.upsertPage({ scope: 'docs:acme', path: 'team', name: 'Team' });
-      expect(await run([upsert({ sourceId: 'p1' })], 'b4')).toMatchObject({ counts: { created: 1, refused: 0 } });
-      expect(await page('team/notion/p1')).toBeTruthy();
+      const l1 = await page('l1');
+      expect(await run([upsert({ sourceId: 'p1' })], 'b1')).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('hub/linear/notion/p1')).toBeTruthy();
+      // b3 anchors on b2's item page, and b2 stops tracking it.
+      expect(await run([upsert({ sourceId: 'p1' })], 'b3')).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('l1/p1')).toBeTruthy();
+      const storage = await knowledge.getStorage();
+      expect(await storage.importers!.getBinding('b3')).toMatchObject({ anchorPageId: l1!.id });
+      expect(await storage.importers!.getNode('b2', 'l1')).toBeNull();
     });
 
-    it("refuses every op once another binding's page has taken the place of an ancestor of the anchor", async () => {
+    it("keeps writing once another binding's page has taken the place of an ancestor of the anchor", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#hub/notion' },
         { id: 'b2', target: 'docs:acme#linear' },
@@ -787,17 +791,13 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.movePage({ scope: 'docs:acme', path: 'linear/hub' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion', parent: 'hub' });
       expect(await run([upsert({ sourceId: 'p1', body: 'new' }), upsert({ sourceId: 'p2' })])).toMatchObject({
-        counts: { updated: 0, created: 0, refused: 2 },
-        refused: [
-          { sourceId: 'p1', reason: 'conflict' },
-          { sourceId: 'p2', reason: 'conflict' },
-        ],
+        counts: { updated: 1, created: 1, refused: 0 },
       });
-      expect((await page('hub/notion/p1'))?.body).toBe('body of p1');
-      expect(await page('hub/notion/p2')).toBeNull();
+      expect((await page('hub/notion/p1'))?.body).toBe('new');
+      expect(await page('hub/notion/p2')).toBeTruthy();
     });
 
-    it('does not re-anchor on one of its own pages a rebind left at the target', async () => {
+    it('anchors on one of its own pages a rebind left at the target, and stops tracking it as an item', async () => {
       const { knowledge, run, page } = setup([{ id: 'b1', target: 'docs:acme#p1' }]);
       await run([upsert({ sourceId: 'p1' })]);
       // The anchor moves away and its item `p1` takes the target path; the app then rebinds.
@@ -805,36 +805,53 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       const anchor = await page('p1');
       await knowledge.movePage({ scope: 'docs:acme', path: 'p1', parent: 'old' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'old/p1/p1' });
+      const item = await page('p1');
       const storage = await knowledge.getStorage();
       await storage.transaction(tx =>
         tx.importers!.setBindingAnchor({ bindingId: 'b1', expected: anchor!.id, pageId: null }),
       );
-      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({
-        counts: { created: 0, refused: 1 },
-        refused: [{ sourceId: 'p2', reason: 'occupied' }],
-      });
-      expect(await page('p1/p2')).toBeNull();
-      expect(await storage.importers!.getBinding('b1')).toMatchObject({ anchorPageId: null });
+      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('p1/p2')).toBeTruthy();
+      expect(await storage.importers!.getBinding('b1')).toMatchObject({ anchorPageId: item!.id });
+      expect(await storage.importers!.getNode('b1', 'p1')).toBeNull();
     });
 
-    it('refuses an imported page a person moved into another scope', async () => {
-      const { knowledge, run } = setup();
+    it('writes an item again at its configured path when a person moved its page into another scope', async () => {
+      const { knowledge, run, page } = setup();
       await run([upsert({ sourceId: 'p1' })]);
+      const before = await page('notion/p1');
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', toScope: 'docs:other' });
       const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
-      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
+      expect(receipt).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect((await page('notion/p1'))?.body).toBe('new');
       const storage = await knowledge.getStorage();
       const [other] = await storage.getScopesByAddress(['docs:other']);
-      expect((await storage.getPageByPath({ scopeId: other!.id, path: ['p1'], read: 'all' }))?.body).toBe('body of p1');
+      // The moved page is an ordinary page now: left as it was, and not removed with the item.
+      expect(await storage.getPageByPath({ scopeId: other!.id, path: ['p1'], read: 'all' })).toMatchObject({
+        id: before!.id,
+        body: 'body of p1',
+      });
+      expect(await run([{ op: 'remove', sourceId: 'p1' }])).toMatchObject({ counts: { removed: 1, refused: 0 } });
+      expect(await storage.getPageByPath({ scopeId: other!.id, path: ['p1'], read: 'all' })).toBeTruthy();
     });
 
-    it('refuses every op after the anchor moved away from its configured path', async () => {
-      const { knowledge, run } = setup();
+    it('keeps writing under its anchor after a person moved the anchor away from its configured path', async () => {
+      const { knowledge, run, page } = setup();
       await run([upsert({ sourceId: 'p1' })]);
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'archive', name: 'Archive' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion', parent: 'archive' });
       const receipt = await run([upsert({ sourceId: 'p2' })]);
-      expect(receipt).toMatchObject({ counts: { created: 0, refused: 1 } });
+      expect(receipt).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('archive/notion/p2')).toBeTruthy();
+    });
+
+    it('anchors again at its configured path after a person deleted the anchor', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion/p1' });
+      await knowledge.removePage({ scope: 'docs:acme', path: 'notion' });
+      expect(await run([upsert({ sourceId: 'p2' })])).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('notion/p2')).toBeTruthy();
     });
 
     it('stubs a removed item with children, deletes a leaf, and removes a parent with its children child-first', async () => {
@@ -933,7 +950,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(next).toMatchObject({ status: 'started', state: { cursor: 'c1' }, lastSeq: 0 });
     });
 
-    it("refuses to move or stub a page whose subtree holds another binding's page, and moves human children", async () => {
+    it("moves and stubs a page whose subtree holds another binding's page, carrying every child", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#linear' },
@@ -945,13 +962,12 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p3/mine', name: 'Mine', body: 'human' });
 
       const move = await run([upsert({ sourceId: 'p1', parent: 'p2' })]);
-      expect(move).toMatchObject({ counts: { moved: 0, refused: 1 } });
-      expect(await page('notion/p1/l1')).toBeTruthy();
-      expect(await page('notion/p2/p1')).toBeNull();
+      expect(move).toMatchObject({ counts: { moved: 1, refused: 0 } });
+      expect(await page('notion/p2/p1/l1')).toBeTruthy();
 
       const remove = await run([{ op: 'remove', sourceId: 'p1' }]);
-      expect(remove).toMatchObject({ counts: { stubbed: 0, removed: 0, refused: 1 } });
-      expect((await page('notion/p1'))?.body).toBe('body of p1');
+      expect(remove).toMatchObject({ counts: { stubbed: 1, removed: 0, refused: 0 } });
+      expect(await page('notion/p2/p1/l1')).toBeTruthy();
 
       const human = await run([upsert({ sourceId: 'p3', parent: 'p2' })]);
       expect(human).toMatchObject({ counts: { moved: 1, refused: 0 } });
@@ -1047,12 +1063,57 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await page('notion/p2')).toBeTruthy();
     });
 
-    it('refuses a binding whose target nests inside another', async () => {
-      const { run } = setup([
+    it('runs bindings whose targets nest, each writing where it is configured', async () => {
+      const { run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },
         { id: 'b2', target: 'docs:acme#notion/inner' },
       ]);
-      await expect(run([upsert({ sourceId: 'p1' })], 'b2')).rejects.toMatchObject({ status: 409 });
+      expect(await run([upsert({ sourceId: 'p1' })])).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await run([upsert({ sourceId: 'p1' })], 'b2')).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect(await page('notion/p1')).toBeTruthy();
+      expect(await page('notion/inner/p1')).toBeTruthy();
+    });
+
+    it('a retired binding leaves its pages as ordinary pages, and a new binding at the same target takes them over', async () => {
+      const first = setup();
+      await first.run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'c1', parent: 'p1' })]);
+      const p1 = await first.page('notion/p1');
+      const host = createKnowledgeImporterHost(first.knowledge, {
+        bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+      });
+      await host.retireBinding('b1');
+      const storage = await first.knowledge.getStorage();
+      expect(await storage.importers!.getBinding('b1')).toBeNull();
+      expect((await storage.importers!.listNodes('b1')).items).toEqual([]);
+      expect(await storage.importers!.listRuns('b1')).toEqual([]);
+      expect(await first.page('notion/p1/c1')).toBeTruthy();
+      // Retiring again, or a binding that was never stored, is a no-op.
+      await host.retireBinding('b1');
+
+      const again = setup([{ id: 'b9', target: 'docs:acme#notion' }]);
+      expect(await again.run([upsert({ sourceId: 'p1', body: 'again' })], 'b9')).toMatchObject({
+        counts: { created: 0, updated: 1, refused: 0 },
+      });
+      expect(await again.page('notion/p1')).toMatchObject({ id: p1!.id, body: 'again' });
+      // It took p1 over, so the source removing it never deletes the page.
+      expect(await again.run([{ op: 'remove', sourceId: 'p1' }], 'b9')).toMatchObject({
+        counts: { removed: 0, stubbed: 1 },
+      });
+      expect((await again.page('notion/p1'))?.id).toBe(p1!.id);
+    });
+
+    it('a run of a binding retired while it runs is refused at its next flush, and writes nothing', async () => {
+      const { knowledge, page } = setup();
+      const host = createKnowledgeImporterHost(knowledge, {
+        bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+      });
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      await host.retireBinding('b1');
+      await expect(
+        flushOnce(host, started.runId, started.generation, 1, [upsert({ sourceId: 'p1' })]),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(await page('notion/p1')).toBeNull();
     });
   });
 

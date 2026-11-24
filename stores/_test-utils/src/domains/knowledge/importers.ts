@@ -119,6 +119,35 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         expect((await importers.getBinding('b1'))?.anchorPageId).toBeNull();
         expect(await importers.setBindingAnchor({ bindingId: 'missing', expected: null, pageId: 'p' })).toBe(false);
       });
+
+      it('retires a binding with its nodes, state and runs, and leaves other bindings alone', async () => {
+        await importers.registerBinding({ id: 'b2', importer: 'notion', target: 'org:acme#other' });
+        for (const bindingId of ['b1', 'b2']) {
+          await importers.saveNode(node('a', `${bindingId}-a`, { bindingId }));
+          await importers.saveNode(node('b', `${bindingId}-b`, { bindingId, links: [{ sourceId: 'a', rel: null }] }));
+          await importers.setState(bindingId, { cursor: '1' });
+          await importers.startRun({ bindingId, runId: `${bindingId}-r`, generation: 1 });
+        }
+        await importers.retireBinding('b1');
+        expect(await importers.getBinding('b1')).toBeNull();
+        expect((await importers.listNodes('b1')).items).toEqual([]);
+        expect(await importers.getNodeByPage('b1-a')).toBeNull();
+        expect((await importers.listLinkingNodes('b1', ['a'])).items).toEqual([]);
+        expect(await importers.getState('b1')).toEqual({});
+        expect(await importers.getRun('b1-r')).toBeNull();
+        // Its page ids are free to map to another node.
+        await importers.saveNode(node('c', 'b1-a', { bindingId: 'b2' }));
+
+        expect((await importers.listNodes('b2')).items.map(n => n.sourceId)).toEqual(['a', 'b', 'c']);
+        expect((await importers.listLinkingNodes('b2', ['a'])).items).toEqual(['b']);
+        expect(await importers.getState('b2')).toEqual({ cursor: '1' });
+        expect(await importers.getRun('b2-r')).toMatchObject({ status: 'running' });
+        // A binding that isn't stored retires as a no-op; the same id can be registered again.
+        await importers.retireBinding('b1');
+        expect((await importers.registerBinding({ id: 'b1', importer: 'linear', target: 'org:acme#x' })).status).toBe(
+          'created',
+        );
+      });
     });
 
     describe('runs', () => {

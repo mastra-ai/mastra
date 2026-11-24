@@ -22,7 +22,7 @@ import type {
   KnowledgeImporterStartRunOptions,
   NormalizedKnowledgeImporterFinish,
 } from './host';
-import { applyKnowledgeImportFlush, knowledgeImportTargetsOverlap, parseKnowledgeImportTarget } from './sink';
+import { applyKnowledgeImportFlush, parseKnowledgeImportTarget } from './sink';
 import type { KnowledgeImportEmbedJob } from './sink';
 import type {
   KnowledgeImportCounts,
@@ -104,6 +104,13 @@ export interface KnowledgeImporterServiceHost extends KnowledgeImporterHost {
    * `lease_expired` or `deadline_exceeded`. Safe to call from a schedule and from several workers.
    */
   expireRuns(): Promise<{ expired: string[] }>;
+  /**
+   * Forgets a binding the app deleted: its tracking, cursor state and runs. Its pages stay where
+   * they are as ordinary pages; nothing reserves its target, so any binding can write there next,
+   * taking over the pages it finds at its items' paths. A run of it still going is refused at its
+   * next flush. No-op for a binding that was never stored.
+   */
+  retireBinding(bindingId: string): Promise<void>;
   /**
    * A run's status and, once it ended, the receipt its finish stored (the app's, or the host's for a
    * run it ended), with the chaining decision schedulers act on. Null for an unknown run. An ended run
@@ -340,7 +347,7 @@ export function createLocalKnowledgeImporterHost(
     const bindings = await listBindings();
     const binding = bindings.find(b => b.id === bindingId);
     if (!binding) throw new KnowledgeImporterHostError(`No importer binding "${bindingId}".`, 404);
-    return { binding, bindings };
+    return binding;
   };
 
   const runEmbeds = async (storage: KnowledgeStorage, jobs: KnowledgeImportEmbedJob[]) => {
@@ -444,7 +451,7 @@ export function createLocalKnowledgeImporterHost(
       bindingId: string,
       start?: KnowledgeImporterServiceStartOptions,
     ): Promise<KnowledgeImporterRunStart> {
-      const { binding, bindings } = await bindingFor(bindingId);
+      const binding = await bindingFor(bindingId);
       const runId = start?.runId ?? randomUUID();
       const claimed = start?.admit !== undefined || start?.generation !== undefined;
       try {
@@ -454,35 +461,15 @@ export function createLocalKnowledgeImporterHost(
         let exclusive = !(await rootImporters.readWriterGuard()).firstWriteAt;
         // Declarations are read now: inside the transaction the scope is materialized through it alone.
         await writer.runtime.resolve();
-        const others = bindings.filter(b => b.id !== binding.id);
-        const overlapping = others.find(b => knowledgeImportTargetsOverlap(b.target, binding.target));
-        if (overlapping) {
-          throw new KnowledgeImporterHostError(
-            `Importer binding "${binding.id}" overlaps binding "${overlapping.id}"; their targets must not nest.`,
-            409,
-          );
-        }
         const attempt = () =>
           storage.transaction(async tx => {
             const importers = tx.importers!;
             const guard = await importers.lockWriterGuard(exclusive ? 'update' : 'share');
-            // Registration and the overlap check against stored bindings serialize on their own lock,
-            // so starts needn't hold the writer guard exclusively for them.
-            await importers.lockRegistration();
             if (
               claimed &&
               (guard.activePath !== 'new' || (start?.generation !== undefined && guard.generation !== start.generation))
             ) {
               throw conflict('stale_generation', 'The claim belongs to another writer generation or write path.');
-            }
-            const stored = (await importers.listBindings()).find(
-              b => b.id !== binding.id && knowledgeImportTargetsOverlap(b.target, binding.target),
-            );
-            if (stored) {
-              throw new KnowledgeImporterHostError(
-                `Importer binding "${binding.id}" overlaps binding "${stored.id}"; their targets must not nest.`,
-                409,
-              );
             }
             await importers.registerBinding({ id: binding.id, importer: binding.importer, target: binding.target });
             await reclaimStaleRuns(importers, binding.id);
@@ -590,7 +577,7 @@ export function createLocalKnowledgeImporterHost(
       // meanwhile, and its replay must not depend on the bindings function.
       const resolvedAuthor: { author: string } | { error: unknown } = peekRun
         ? await bindingFor(peekRun.bindingId)
-            .then(({ binding }) => ({ author: author(binding) }))
+            .then(binding => ({ author: author(binding) }))
             .catch((error: unknown) => ({ error }))
         : { error: conflict('run_not_active', 'The run is not running.') };
       // One absolute deadline for the whole write transaction (O3 §C‴), capped by the run's.
@@ -760,6 +747,19 @@ export function createLocalKnowledgeImporterHost(
           if (run.status !== 'running') return { status: run.status };
           await importers.requestCancel(runId);
           return { status: run.status };
+        });
+      } catch (error) {
+        throw hostError(error);
+      }
+    },
+
+    async retireBinding(bindingId: string) {
+      const { storage } = await storageAndImporters();
+      try {
+        // Under the writer guard, like a flush: one in flight commits before this, or finds its run gone.
+        await storage.transaction(async tx => {
+          await tx.importers!.lockWriterGuard('share');
+          await tx.importers!.retireBinding(bindingId);
         });
       } catch (error) {
         throw hostError(error);

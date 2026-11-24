@@ -97,6 +97,19 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
   async listBindings() {
     return [...this.#s.bindings.values()].sort((a, b) => byteOrder(a.id, b.id)).map(b => ({ ...b }));
   }
+  async retireBinding(id: string) {
+    this.#s.bindings.delete(id);
+    for (const [k, node] of this.#s.nodes) if (node.bindingId === id) this.#s.nodes.delete(k);
+    this.#s.state.delete(id);
+    const runs = new Set<string>();
+    for (const [runId, run] of this.#s.runs) {
+      if (run.bindingId !== id) continue;
+      runs.add(runId);
+      this.#s.runs.delete(runId);
+    }
+    for (const [k, flush] of this.#s.flushes) if (runs.has(flush.runId)) this.#s.flushes.delete(k);
+    for (const [k, { change }] of this.#s.changes) if (runs.has(change.runId)) this.#s.changes.delete(k);
+  }
 
   async startRun(input: {
     bindingId: string;
@@ -304,7 +317,6 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
     return { ...this.#s.guard };
   }
   /** Transactions are serialized here, so holding one is the lock. */
-  async lockRegistration() {}
   async markFirstWrite() {
     if (this.#s.guard.firstWriteAt) return false;
     this.#s.guard.firstWriteAt = new Date();

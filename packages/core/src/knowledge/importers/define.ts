@@ -104,7 +104,7 @@ export interface KnowledgeImporterDefinition<TSettings = unknown, TSlot extends 
 export type KnowledgeImporterBindingInput<TInput = unknown, TSlot extends string = string> = {
   /** Stable binding id: run history and page ownership key on it. Keep it when you edit the binding. */
   id: string;
-  /** Where the pages go, `<scope>#<path>`. Two bindings' targets must not overlap. */
+  /** Where the pages go, `<scope>#<path>`. */
   target: string;
 } & ({} extends TInput ? { settings?: TInput } : { settings: TInput }) &
   ([TSlot] extends [never] ? { credentials?: Record<string, never> } : { credentials: Record<TSlot, string> });

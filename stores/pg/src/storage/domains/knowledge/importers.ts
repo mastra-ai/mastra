@@ -273,6 +273,10 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
   async listBindings() {
     return (await this.#client.any(`SELECT * FROM ${this.#t.bindings} ORDER BY id COLLATE "C"`)).map(toBinding);
   }
+  /** Nodes, their links, state, runs and runs' flushes and changes go with it, by ON DELETE CASCADE. */
+  async retireBinding(id: string) {
+    await this.#client.none(`DELETE FROM ${this.#t.bindings} WHERE id = $1`, [id]);
+  }
 
   async startRun(input: {
     bindingId: string;
@@ -581,12 +585,6 @@ export class PgKnowledgeImporters implements KnowledgeImportersStorage {
     return toGuard(
       await this.#client.one(`SELECT * FROM ${this.#t.guard} FOR ${mode === 'share' ? 'SHARE' : 'UPDATE'}`),
     );
-  }
-  /** A transaction-scoped advisory lock per schema: no row to contend on with the guard. */
-  async lockRegistration() {
-    await this.#client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-      `mastra-knowledge-importers-registration:${this.#schemaName ?? ''}`,
-    ]);
   }
   async markFirstWrite() {
     const row = await this.#client.oneOrNone(
