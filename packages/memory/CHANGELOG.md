@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.41.3-alpha.3
+
+### Patch Changes
+
+- Fixed buffered reflection values appearing in thread metadata before activation. Pending values survive reloads and are never published if their buffer is superseded. Background reflection also resumes for the newest memory generation when another process replaced the previous one while an awaited `onReflectionEnd` hook was still running. Staged values publish only when the storage adapter confirms its swap consumed that exact buffer (`bufferedReflectionVerified`); on an adapter that does not, the reflection still activates but its staged values stay unpublished. A buffered reflection that `afterReflection` empties no longer blocks the next buffering attempt, and one cleared with `clear()` while it waited no longer buffers for the recreated memory. Fixes [#27262](https://github.com/mastra-ai/mastra/issues/27262). ([#28293](https://github.com/mastra-ai/mastra/pull/28293))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+
 ## 1.41.3-alpha.2
 
 ### Patch Changes

@@ -1,5 +1,26 @@
 # @mastra/factory
 
+## 0.31.0-alpha.8
+
+### Patch Changes
+
+- **Model picker** — The Factory model picker now lists a Fast entry (for example `openai/gpt-6.2-sol:fast`) next to each OpenAI model that has a Fast tier when OpenAI is connected with a ChatGPT sign-in. Picking it requests Fast processing for that model. ([#30882](https://github.com/mastra-ai/mastra/pull/30882))
+
+- Factory's Slack tools now come from `createChannelTools()` in `@mastra/core/channels` and `createSlackTools()` in `@mastra/slack`. The limits stay the same, with three changes to the tools: ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+  - The channel tools reject ids without a platform prefix, such as `C0123ABC`, with a hint to use the full id, such as `slack:C0123ABC`. The Slack-only tools still add the `slack:` prefix for you.
+  - `sendDirectMessage` takes `{ userId, message }` instead of `{ userId, text }`, like the other posting tools.
+  - Group DMs the bot is in are now refused like other people's DMs, even with `channels: 'all'`.
+
+- Fixed Factory-owned runs using a deployment-provided Mastra Gateway without requiring an organization model key. ([#31211](https://github.com/mastra-ai/mastra/pull/31211))
+
+- Updated dependencies [[`6bc0c6c`](https://github.com/mastra-ai/mastra/commit/6bc0c6cdc68342e32bb48076f9e9ba17e6669256), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`ac8fa30`](https://github.com/mastra-ai/mastra/commit/ac8fa30038d3223310f99664db7fc2ac8868ab82), [`86b6a1e`](https://github.com/mastra-ai/mastra/commit/86b6a1e2fbd49278d3a8a98ea54f8be58e532f6b), [`3475846`](https://github.com/mastra-ai/mastra/commit/347584609d702849923d691b57099a0a9582266d), [`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`e7e5f7e`](https://github.com/mastra-ai/mastra/commit/e7e5f7ecac4293ad21e67657a69fc913e5ff8b15), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/code-sdk@1.21.0-alpha.8
+  - @mastra/connect@1.5.0-alpha.2
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/slack@1.10.0-alpha.1
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 0.31.0-alpha.7
 
 ### Patch Changes

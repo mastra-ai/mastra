@@ -8,7 +8,7 @@ export interface DataDetailsPanelHeadingProps {
 
 export function DataDetailsPanelHeading({ className, children }: DataDetailsPanelHeadingProps) {
   return (
-    <Txt as="h3" tone="muted" className={cn('flex gap-2 [&>b]:text-caption [&>b]:text-placeholder', className)}>
+    <Txt as="h3" tone="muted" className={cn('flex gap-2 [&>b]:text-caption [&>b]:text-muted-foreground', className)}>
       {children}
     </Txt>
   );
