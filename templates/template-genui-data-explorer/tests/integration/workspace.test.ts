@@ -387,7 +387,7 @@ it.each([2, 3])(
       new SalesSource(path),
       {
         providerId: "openai",
-        modelId: "gpt-4.1-mini",
+        modelId: "gpt-6-luna",
         apiKey: "synthetic-local-provider",
         url: `http://127.0.0.1:${address.port}/v1`,
         api: "chat",
@@ -516,7 +516,7 @@ it("OpenAI optional null arguments produce a verified composed result", async ()
     new SalesSource(path),
     {
       providerId: "openai",
-      modelId: "gpt-4.1-mini",
+      modelId: "gpt-6-luna",
       apiKey: "synthetic-local-provider",
       url: `http://127.0.0.1:${address.port}/v1`,
       api: "chat",

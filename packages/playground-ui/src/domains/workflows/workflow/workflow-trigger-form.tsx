@@ -1,9 +1,10 @@
-import { Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { WorkflowInputData } from './workflow-input-data';
 import { Button } from '@/ds/components/Button';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
 import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowTriggerFormProps {
@@ -48,7 +49,7 @@ export function WorkflowTriggerForm({
         submitButtonVariant="primary"
         submitButtonIcon={
           <Icon>
-            <Play />
+            <IconPlay />
           </Icon>
         }
         onSubmit={onExecute}
@@ -71,11 +72,11 @@ export function WorkflowTriggerForm({
           <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
             {isStreaming ? (
               <Icon>
-                <Loader2 className="animate-spin" />
+                <IconLoadingCircle className="animate-spin" />
               </Icon>
             ) : (
               <Icon>
-                <Play />
+                <IconPlay />
               </Icon>
             )}
             {submitButtonLabel}

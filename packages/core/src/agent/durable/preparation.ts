@@ -8,6 +8,7 @@ import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import { isObservationalMemoryEnabled } from '../../memory/types';
@@ -21,14 +22,7 @@ import type {
   ErrorProcessorOrWorkflow,
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import {
-  RequestContext,
-  MASTRA_AUTH_TOKEN_KEY,
-  MASTRA_INHERITED_MEMORY_KEY,
-  MASTRA_SCOPES_KEY,
-  MASTRA_VERSIONS_KEY,
-  mergeVersionOverrides,
-} from '../../request-context';
+import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
 import { asJsonSchema } from '../../stream/base/schema';
@@ -38,15 +32,18 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
+import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
+import { snapshotRequestContextEntries } from '../request-context-snapshot';
+import { throwAgentRequestContextValidationError } from '../request-context-validation';
 import { SaveQueueManager } from '../save-queue';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
-import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
+import { signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
 import type {
   AgentInstructions,
@@ -61,7 +58,6 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
-import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import { recordRunSavedMessages } from './run-message-refs';
 import { setRunScorerInstances } from './run-registry';
@@ -76,83 +72,10 @@ import {
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
-/**
- * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
- * is-task-complete scorers) can see the same `customContext` the non-durable
- * path passes. Best-effort: entries that fail a JSON round-trip are skipped
- * so a single non-serializable value can't break the workflow input.
- */
-function snapshotRequestContextEntries(
-  requestContext: RequestContext | undefined,
-): Record<string, unknown> | undefined {
-  if (!requestContext) return undefined;
-  const out: Record<string, unknown> = {};
-  let any = false;
-  for (const [key, value] of requestContext.entries()) {
-    // Holds a live MastraMemory instance, which stringifies into a large, method-less
-    // husk of the memory and its storage adapter. Persisting that would bloat the
-    // workflow input and hand the resumed run an object whose methods are gone; the
-    // resumed agent resolves memory from its own config instead.
-    if (key === MASTRA_INHERITED_MEMORY_KEY) continue;
-    // Framework-managed per-run memory context is rebuilt from persisted run
-    // state. A caller may carry a parent run's serializable value here.
-    if (key === 'MastraMemory') continue;
-    // Never persist the framework-managed bearer token in durable workflow
-    // input; a resumed authenticated request supplies its own fresh token.
-    if (key === MASTRA_AUTH_TOKEN_KEY) continue;
-    // The merged version overrides (Mastra defaults < requestContext <
-    // call-site) are framework state written during prep (step 3). Persisting
-    // the merged value would freeze the preparing process's defaults over the
-    // executing worker's. The caller's own versions entry is re-added at the
-    // call site.
-    if (key === MASTRA_VERSIONS_KEY) continue;
-    // Execution ids are claimed per execution. A persisted id would be restored
-    // over a later execution's id (e.g. the recovered one) and fence it out.
-    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
-    // Serialize each entry exactly once with a bounded pass: a shared-reference
-    // graph would otherwise make JSON.stringify expand exponentially and wedge
-    // the event loop on every durable step, and reading the value twice (probe
-    // then clone) could disagree if a getter/toJSON is stateful. Entries that
-    // produce no JSON (non-serializable, or too large to serialize within
-    // budget) are skipped — they wouldn't survive the wire on cross-process
-    // engines anyway.
-    const json = boundedStringify(value);
-    if (json === undefined) continue;
-    out[key as string] = JSON.parse(json);
-    any = true;
-  }
-  return any ? out : undefined;
-}
-
-/**
- * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
- * `attributes.instructions` field so durable runs publish the same shape as
- * non-durable runs. Kept local to avoid promoting the private method.
- */
-function convertInstructionsToString(instructions: AgentInstructions | undefined): string {
-  if (!instructions) return '';
-  if (typeof instructions === 'string') return instructions;
-  if (Array.isArray(instructions)) {
-    return instructions
-      .map(msg => (typeof msg === 'string' ? msg : typeof msg.content === 'string' ? msg.content : ''))
-      .filter(Boolean)
-      .join('\n\n');
-  }
-  return typeof instructions.content === 'string' ? instructions.content : '';
-}
-
-/**
- * Extract signal messages already present in the messageList at run start
- * (from persisted history) so they can be echoed as data-signal stream parts
- * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
- */
-function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
-  const inputMessageIds = messageList.makeMessageSourceChecker().input;
-  return messageList.get.all
-    .db()
-    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
-    .map(mastraDBMessageToSignal);
-}
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -191,6 +114,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -350,23 +274,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   if (typedAgent.requestContextSchema) {
     const contextValues = getRequestContextInputValues(requestContext);
     const validation = await typedAgent.requestContextSchema['~standard'].validate(contextValues);
-
     if (validation.issues) {
-      const errorMessages = validation.issues
-        .map(e => {
-          const pathStr = e.path?.map((p: any) => (typeof p === 'object' ? p.key : p)).join('.');
-          return `- ${pathStr}: ${e.message}`;
-        })
-        .join('\n');
-      throw new MastraError({
-        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Request context validation failed for agent '${publicAgentId}':\n${errorMessages}`,
-        details: {
-          agentId: publicAgentId,
-          agentName: publicAgentName,
-        },
+      throwAgentRequestContextValidationError({
+        issues: validation.issues,
+        agentId: publicAgentId,
+        agentName: publicAgentName,
       });
     }
   }
@@ -382,7 +294,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        (await loadDefaultOptions()) as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(await loadDefaultOptions(), rawExecOptions) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
@@ -419,13 +331,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
-  let mergedVersions = mergeVersionOverrides(mastra?.getVersionOverrides?.(), requestVersions);
-  if ((execOptions as any)?.versions) {
-    mergedVersions = mergeVersionOverrides(mergedVersions, (execOptions as any).versions);
-  }
-  if (mergedVersions) {
-    requestContext.set(MASTRA_VERSIONS_KEY, mergedVersions);
-  }
+  resolveVersionContext(
+    requestContext,
+    requestVersions,
+    mastra?.getVersionOverrides?.(),
+    execOptions,
+    // Durable preparation normalizes sole overrides; plain calls preserve their identity.
+    mergeVersionOverrides,
+  );
 
   // Resolve and validate the complete model selection before durable preparation
   // can persist a thread or run user-defined processors, tools, or hooks.
@@ -643,7 +556,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         input: messages,
         attributes: {
           conversationId: threadId,
-          instructions: convertInstructionsToString(instructions),
+          instructions: instructions ? convertInstructionsToString(instructions) : '',
           ...modelSpanAttributes(model),
           ...(startingSignal ? { signal: startingSignal } : {}),
           // @deprecated — use entityVersionId (top-level span context field) instead.
@@ -760,6 +673,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,

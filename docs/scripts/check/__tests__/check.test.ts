@@ -1,7 +1,7 @@
 import fs from 'fs/promises'
 import os from 'os'
 import path from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { checkFrontmatter } from '../checks/frontmatter'
 import { checkLinks, remarkFindings } from '../checks/mdx'
 import { checkRedirectList } from '../checks/redirects'
@@ -383,6 +383,41 @@ describe('runChecks', () => {
 
   afterEach(async () => {
     await fs.rm(rootDir, { recursive: true, force: true })
+  })
+
+  it('keeps MDX parse errors on generated Gateway API pages', async () => {
+    const file = path.join(rootDir, 'src/content/en/docs/mastra-platform/gateway/api/broken.api.mdx')
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, `${VALID_FRONTMATTER}\n\n# Broken\n\n<Unclosed>\n`)
+    const report = await runChecks({ rootDir, categories: ['prose'], skipVale: true })
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({ ruleId: 'mastra/remark-mdx-parse', file: expect.stringContaining('broken.api.mdx') }),
+    )
+  })
+
+  it('fails when Vale is not installed unless --no-vale is passed', async () => {
+    // The temp root has no scripts/vale/bin/vale; an empty PATH hides any global vale.
+    vi.stubEnv('PATH', '')
+    try {
+      const report = await runChecks({ rootDir, rules: ['mastra/vale-*'] })
+      expect(report.summary).toMatchObject({ ok: false, status: 'failed', errors: 1 })
+      expect(report.findings).toEqual([
+        expect.objectContaining({
+          ruleId: 'mastra/vale-unavailable',
+          severity: 'error',
+          suggestion: expect.stringContaining('pnpm vale:download'),
+        }),
+      ])
+
+      const single = await runChecks({ rootDir, rules: ['mastra/vale-mastra-headings'] })
+      expect(single.summary).toMatchObject({ ok: false, errors: 1 })
+      expect(single.findings.map(f => f.ruleId)).toEqual(['mastra/vale-unavailable'])
+
+      const skipped = await runChecks({ rootDir, categories: ['prose'], skipVale: true })
+      expect(skipped.findings.map(f => f.ruleId)).not.toContain('mastra/vale-unavailable')
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it('reports normalized findings and a summary', async () => {

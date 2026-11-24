@@ -6,6 +6,11 @@ on:
       head_sha:
         required: true
         type: string
+      skip_jobs:
+        description: Tier keys (job:<key>) this PR skips; see scripts/test-tiers/select.mjs.
+        required: false
+        type: string
+        default: '[]'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -31,18 +36,26 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     outputs:
       stores: ${{ steps.set-stores.outputs.stores }}
       light_stores: ${{ steps.set-stores.outputs.light_stores }}
+      container_groups: ${{ steps.set-stores.outputs.container_groups }}
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SKIP_JOBS: ${{ inputs.skip_jobs }}
         run: |
           STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
           INVALID_STORES=$(echo "$STORES" | jq -r '.[] | select(test("^[a-zA-Z0-9_-]+$") | not)')
@@ -72,16 +85,29 @@ jobs:
           # one job (test-light) instead of one runner each: their tests take seconds, less
           # than each runner's checkout, setup and build. A store not listed here keeps its own job.
           # libsql is deliberately not listed: its cross-process tests are load-sensitive.
+          # Test tiers: stores marked `out` that this PR doesn't touch (decided in Prebuild).
+          STORES=$(jq -c -n --argjson all "$STORES" --argjson skip "$SKIP_JOBS" '[$all[] | select(("job:store/" + .) as $k | $skip | index($k) | not)]')
+
           LIGHT='["azure-ai-search","convex","dsql","duckdb","lance","oracledb","s3vectors","spanner","turbopuffer","turso"]'
           LIGHT_STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s))]')
           STORES=$(jq -c -n --argjson all "$STORES" --argjson light "$LIGHT" '[$all[] | select(. as $s | $light | index($s) | not)]')
 
+          # Stores whose tests take well under a minute against their own containers share a runner
+          # per group, one store after another. Their host ports don't clash within a group (dynamodb
+          # and chroma both use 8000, so they sit in different groups). Each group must stay under
+          # the slowest single-store job. A store not listed keeps its own job.
+          STORE_GROUPS='[["opensearch","mssql","chroma","mysql"],["dynamodb","qdrant","redis","upstash","valkey"]]'
+          CONTAINER_GROUPS=$(jq -c -n --argjson all "$STORES" --argjson groups "$STORE_GROUPS" \
+            '[$groups | to_entries[] | {group: (.key + 1), stores: [.value[] | select(. as $s | $all | index($s))]} | select(.stores != [])]')
+          STORES=$(jq -c -n --argjson all "$STORES" --argjson groups "$STORE_GROUPS" '[$all[] | select(. as $s | $groups | flatten | index($s) | not)]')
+
           echo "stores=$STORES" >> $GITHUB_OUTPUT
           echo "light_stores=$LIGHT_STORES" >> $GITHUB_OUTPUT
+          echo "container_groups=$CONTAINER_GROUPS" >> $GITHUB_OUTPUT
 
   test:
     needs: setup
-    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.stores != '[]' }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
@@ -103,6 +129,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -121,6 +153,200 @@ jobs:
           ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
+
+  # The job name lists the selected stores, so scripts/test-tiers/update.mjs can still blame them
+  # when checkout or setup fails before any store step runs.
+  test-grouped:
+    name: "test (containers ${{ matrix.group.group }}: ${{ join(matrix.group.stores, ' ') }})"
+    needs: setup
+    if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.container_groups != '[]' }}
+    runs-on: starsling-ubuntu-26.04
+    # Every step has its own budget and the job allows all of them, so a store that stalls to its
+    # cap can't use up the time of the stores after it (their steps would be cancelled unrun).
+    timeout-minutes: 170
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJson(needs.setup.outputs.container_groups) }}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        timeout-minutes: 1
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
+      - name: Setup pnpm and Node.js
+        timeout-minutes: 10
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build grouped storage packages (${{ join(matrix.group.stores, ' ') }})
+        timeout-minutes: 20
+        id: build
+        env:
+          GROUP_STORES: ${{ toJson(matrix.group.stores) }}
+          NODE_OPTIONS: '--max_old_space_size=8192'
+        run: pnpm turbo build $(jq -r 'map("--filter @mastra/" + .) | join(" ")' <<< "$GROUP_STORES")
+
+      # One step per store, each running even when an earlier store failed.
+      # scripts/test-tiers/update.mjs reads the `Run <store> tests` step results.
+      - name: Run opensearch tests
+        id: opensearch
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'opensearch') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/opensearch
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop opensearch containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.opensearch.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/opensearch
+
+      - name: Run mssql tests
+        id: mssql
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'mssql') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/mssql
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop mssql containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.mssql.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/mssql
+
+      - name: Run chroma tests
+        id: chroma
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'chroma') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/chroma
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop chroma containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.chroma.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/chroma
+
+      - name: Run mysql tests
+        id: mysql
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'mysql') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/mysql
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop mysql containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.mysql.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/mysql
+
+      - name: Run dynamodb tests
+        id: dynamodb
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'dynamodb') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/dynamodb
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop dynamodb containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.dynamodb.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/dynamodb
+
+      - name: Run qdrant tests
+        id: qdrant
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'qdrant') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/qdrant
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop qdrant containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.qdrant.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/qdrant
+
+      - name: Run redis tests
+        id: redis
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'redis') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/redis
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop redis containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.redis.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/redis
+
+      - name: Run upstash tests
+        id: upstash
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'upstash') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/upstash
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop upstash containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.upstash.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/upstash
+
+      - name: Run valkey tests
+        id: valkey
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && contains(matrix.group.stores, 'valkey') }}
+        timeout-minutes: 10
+        run: pnpm test
+        working-directory: stores/valkey
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # A failed run skips the store's posttest, so its containers would hold the ports.
+      - name: Stop valkey containers
+        timeout-minutes: 3
+        if: ${{ !cancelled() && steps.valkey.outcome != 'skipped' }}
+        run: docker compose down -v
+        working-directory: stores/valkey
 
   test-light:
     name: test (light stores)
@@ -142,6 +368,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

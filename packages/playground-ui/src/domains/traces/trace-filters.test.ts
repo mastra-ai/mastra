@@ -87,6 +87,7 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
       lte: 'at most',
       matches: 'matches',
       notMatches: 'does not match',
+      hasAllTokens: 'contains words',
     });
   });
 });
@@ -1047,5 +1048,18 @@ describe('filterBarExpressionToTraceFilters', () => {
         }),
       ).toEqual({ tokens: [], groups: [{ id: 'g1', logic: 'or', nodes: [] }] });
     });
+  });
+});
+
+describe('content search URL state', () => {
+  it('preserves the error word operator through a shared URL', () => {
+    const tokens = getTracePropertyFilterTokens(
+      new URLSearchParams('filterSpanError=timeout&filterSpanError.op=hasAllTokens'),
+    );
+    expect(tokens).toEqual([{ fieldId: 'spans.error', operatorId: 'hasAllTokens', value: 'timeout' }]);
+    const params = new URLSearchParams();
+    applyTracePropertyFilterTokens(params, tokens);
+    expect(params.get('filterSpanError')).toBe('timeout');
+    expect(params.get('filterSpanError.op')).toBe('hasAllTokens');
   });
 });

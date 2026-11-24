@@ -2,9 +2,13 @@ import type {
   FactoryDispatchFailureCode,
   StoredFactoryDispatchFailureCode,
 } from '../storage/domains/work-items/base.js';
+import type { FactoryRuleRejectionCode } from './types.js';
 
 interface FactoryDispatchFailureMetadata {
+  /** A person may retry the failed decision. */
   canRetry: boolean;
+  /** `false` when only a person's retry can succeed: the dispatcher does not try again on its own. */
+  autoRetry?: false;
   label: string;
 }
 
@@ -12,7 +16,7 @@ const FAILURE_METADATA = {
   session_unavailable: { canRetry: true, label: 'Factory session unavailable' },
   source_control_missing: { canRetry: true, label: 'Source-control connection unavailable' },
   source_repository_missing: { canRetry: true, label: 'Source repository unavailable' },
-  source_repository_ambiguous: { canRetry: true, label: 'Choose a repository for this work item' },
+  source_repository_ambiguous: { canRetry: true, label: 'Work item repository unresolved' },
   unsupported_provider_item: { canRetry: false, label: 'Unsupported provider work item' },
   notification_delivery_failed: { canRetry: true, label: 'Factory message delivery failed' },
   run_terminal_event_missing: { canRetry: false, label: 'Agent run terminal event was not observed' },
@@ -32,6 +36,13 @@ const FAILURE_METADATA = {
   run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
   // The run's request carries no user, so every retry fails the same way; a person has to start it.
   run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  // Automatic work runs as the Factory, on the organization's keys only. Trying again cannot add one,
+  // so the dispatcher stops at once; a person retries after adding the key.
+  factory_org_key_missing: {
+    canRetry: true,
+    autoRetry: false,
+    label: 'Add an organization model key to run this automatically',
+  },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
@@ -47,6 +58,19 @@ export class FactoryDispatchError extends Error {
   ) {
     super(message, options);
     this.name = 'FactoryDispatchError';
+  }
+}
+
+/** A transition the board's rules rejected while a decision was being applied. */
+export class FactoryRuleRejectedError extends Error {
+  constructor(
+    readonly code: FactoryRuleRejectionCode,
+    reason: string,
+    /** Every retry would replay this same refusal, so only a person can move the work on. */
+    readonly settled = false,
+  ) {
+    super(`${code}: ${reason}`);
+    this.name = 'FactoryRuleRejectedError';
   }
 }
 

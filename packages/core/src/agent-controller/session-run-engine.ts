@@ -11,6 +11,7 @@ import { AgentThreadLeaseLostError, agentThreadStreamRuntime } from '../agent/th
 import type { AgentThreadSubscription } from '../agent/types';
 import { getErrorFromUnknown, MastraError } from '../error';
 import { isLeaseProvider } from '../events/pubsub';
+import { describeNonSuccessFinishReason } from '../loop/shared/non-success-finish-reason';
 import type { RequestContext } from '../request-context';
 import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
@@ -21,12 +22,7 @@ import {
   SUSPENDED_RUN_AGENT_KEY,
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
-import {
-  describeNonSuccessFinishReason,
-  describeServerSideFallback,
-  getDisplayTransform,
-  toStepTokenUsage,
-} from './stream-content';
+import { describeServerSideFallback, getDisplayTransform, toStepTokenUsage } from './stream-content';
 import { isToolResultError } from './tool-result';
 import { createEmptyTokenUsage } from './types';
 import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
@@ -199,6 +195,9 @@ function formatToolProgressOutput(progress: unknown): string {
 }
 
 const ABORT_STREAM_GRACE_MS = 5_000;
+
+/** `agent_end.abortReason` when an observational-memory failure stopped the run. */
+const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
 const abortBailed = Symbol('abort-bailed');
 
 /**
@@ -514,11 +513,19 @@ export class SessionRunEngine {
     });
   }
 
+  /** Set when the observer or reflector stopped the run, so its end says why. */
+  #memoryFailureAbort = false;
+
+  #takeAbortReason(reason?: string): string | undefined {
+    return this.#memoryFailureAbort ? MEMORY_FAILURE_ABORT_REASON : reason;
+  }
+
   private abortForOmFailure({ operationType, stage, error }: { operationType: string; stage: string; error: string }) {
     this.#session.emit({
       type: 'error',
       error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
+    this.#memoryFailureAbort = true;
     this.#session.abortRun();
   }
 
@@ -590,15 +597,18 @@ export class SessionRunEngine {
       });
     }
 
+    const reason = error
+      ? 'error'
+      : result.suspended
+        ? 'suspended'
+        : aborted || this.#session.run.isAbortRequested()
+          ? 'aborted'
+          : 'complete';
     await this.#session.finishAgentRun(
-      error
-        ? 'error'
-        : result.suspended
-          ? 'suspended'
-          : aborted || this.#session.run.isAbortRequested()
-            ? 'aborted'
-            : 'complete',
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason() } : undefined,
     );
+    this.#memoryFailureAbort = false;
 
     this.#session.run.reset();
 
@@ -907,7 +917,8 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', getPayload(chunk).args);
 
-        const policy = this.#session.resolveToolApproval(toolName, state.threadId);
+        // The policy is that of the run's own thread, which may not be the one the session holds now.
+        const policy = this.#session.resolveToolApproval(toolName, requestContext);
 
         // Resolve the call against the run that raised it, not the session's
         // currently-bound thread/run/resource. The session can switch thread or
@@ -1248,7 +1259,7 @@ export class SessionRunEngine {
             break;
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+          this.#session.emit({ type: 'usage_update', usage: stepUsage, total: this.#session.getTokenUsage() });
         }
         break;
       }
@@ -1830,7 +1841,11 @@ export class SessionRunEngine {
     } else if (reason === 'error' && terminalError) {
       this.retractFailedRunSuspensions({ resourceId, threadId, runId, reason: terminalError });
     }
-    await this.#session.finishAgentRun(reason, reason === 'aborted' ? { abortReason } : undefined);
+    await this.#session.finishAgentRun(
+      reason,
+      reason === 'aborted' ? { abortReason: this.#takeAbortReason(abortReason) } : undefined,
+    );
+    this.#memoryFailureAbort = false;
     this.#session.run.reset();
   }
 
@@ -1881,7 +1896,8 @@ export class SessionRunEngine {
 
   private async handleSubscribedStreamError(error: unknown, resourceId: string, threadId: string): Promise<void> {
     if (error instanceof Error && error.name === 'AbortError') {
-      await this.#session.finishAgentRun('aborted');
+      const abortReason = this.#takeAbortReason();
+      await this.#session.finishAgentRun('aborted', abortReason ? { abortReason } : undefined);
     } else {
       const streamError = getErrorFromUnknown(error);
       this.#session.emit({ type: 'error', error: streamError });
@@ -1895,6 +1911,7 @@ export class SessionRunEngine {
       }
       await this.#session.finishAgentRun('error');
     }
+    this.#memoryFailureAbort = false;
     this.#session.stream.detach();
     this.#session.run.reset();
   }

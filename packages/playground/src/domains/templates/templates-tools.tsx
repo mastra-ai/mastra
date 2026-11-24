@@ -54,7 +54,7 @@ export function TemplatesTools({
         onValueChange={onSearchChange}
       />
       <Select value={selectedTag} onValueChange={onTagChange}>
-        <SelectTrigger aria-label="Filter by tag" size="sm" className="w-auto">
+        <SelectTrigger aria-label="Search by tag" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>
@@ -66,7 +66,7 @@ export function TemplatesTools({
         </SelectContent>
       </Select>
       <Select value={selectedProvider} onValueChange={onProviderChange}>
-        <SelectTrigger aria-label="Filter by provider" size="sm" className="w-auto">
+        <SelectTrigger aria-label="Search by provider" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>

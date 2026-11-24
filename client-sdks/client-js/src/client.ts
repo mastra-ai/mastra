@@ -45,6 +45,8 @@ import type {
 } from './resources/observability';
 import type {
   TraceRecord,
+  GetTracePageArgs,
+  TracePageResponse,
   GetTraceLightResponse,
   GetSpanResponse,
   ListTracesArgs,
@@ -151,6 +153,7 @@ import type {
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
+  GetBuiltinMcpServerResponse,
   McpServerToolListResponse,
   GetScorerResponse,
   GetScorersResponse,
@@ -845,6 +848,14 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Describes the built-in Mastra MCP server: whether it is served, its endpoint path, toolsets, and auth mode.
+   * Requires `mcp:read`. Its tools depend on the caller, so connect an MCP client to `path` to list them.
+   */
+  public getBuiltinMcpServer(): Promise<GetBuiltinMcpServerResponse> {
+    return this.request('/mcp/builtin');
+  }
+
+  /**
    * Retrieves detailed information for a specific MCP server.
    * @param serverId - The ID of the MCP server to retrieve.
    * @param params - Optional parameters, e.g., specific version.
@@ -1272,6 +1283,15 @@ export class MastraClient extends BaseResource {
   /** Retrieves a specific trace by ID. */
   getTrace(traceId: string): Promise<TraceRecord> {
     return this.observability.getTrace(traceId);
+  }
+
+  /**
+   * Retrieves a bounded trace page from Platform. OSS servers do not serve this endpoint.
+   * Check `capabilities.tracePage` before calling.
+   * @experimental This Platform integration may change or be removed.
+   */
+  getTracePage(request: GetTracePageArgs): Promise<TracePageResponse> {
+    return this.observability.getTracePage(request);
   }
 
   /** Retrieves a lightweight trace by ID (timeline fields only, excludes heavy fields). */

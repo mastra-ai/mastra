@@ -1,0 +1,38 @@
+{
+  "attachment": ["ossington-4-1", "ossington-5", "rosedale-1", "tofino-3"],
+  "temperature": ["open-glm-5-3", "open-qwen-3.8-flash-next", "ossington-4-1", "ossington-5", "rosedale-1", "tofino-3"],
+  "structuredOutput": [
+    "open-glm-5-3",
+    "open-qwen-3.8-flash-next",
+    "ossington-4-1",
+    "ossington-5",
+    "rosedale-1",
+    "tofino-3"
+  ],
+  "reasoning": {
+    "ossington-5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "ossington-4-1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "open-qwen-3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "rosedale-1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ]
+  }
+}

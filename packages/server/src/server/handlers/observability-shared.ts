@@ -204,19 +204,6 @@ export function assertObservabilitySpanAggregateSupported(observabilityStore: Ob
   });
 }
 
-/** Reject unsupported search instead of silently returning unfiltered results. */
-export function assertObservabilityTextSearchSupported(
-  observabilityStore: ObservabilityStorage,
-  textSearch: string | undefined,
-  kind: 'span' | 'trace',
-) {
-  if (textSearch !== undefined && !getFeatures(observabilityStore)?.includes(`${kind}-query-text-search`)) {
-    throw new HTTPException(501, {
-      message: 'Text search is not supported by the configured observability store',
-    });
-  }
-}
-
 export function assertObservabilitySpanQuerySupported(observabilityStore: ObservabilityStorage) {
   if (getFeatures(observabilityStore)?.includes(OBSERVABILITY_SPAN_QUERY_STORAGE_FEATURE)) return;
 
@@ -229,7 +216,12 @@ export function assertObservabilitySpanQueryFieldsSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryScalarPredicate | undefined,
 ) {
-  if (!predicate || getFeatures(observabilityStore)?.includes('span-query-context-fields')) return;
+  if (
+    !predicate ||
+    predicate.type === 'tokens' ||
+    getFeatures(observabilityStore)?.includes('span-query-context-fields')
+  )
+    return;
   if (predicate.type === 'boolean') {
     for (const arg of predicate.args) assertObservabilitySpanQueryFieldsSupported(observabilityStore, arg);
   } else if (predicate.type === 'not') {
@@ -384,6 +376,7 @@ function usesRootDuration(predicate: TrustedTraceQueryPredicate | TrustedThreadP
   if (predicate.type === 'relation') {
     return predicate.collection === 'traces' && usesRootDuration(predicate.predicate);
   }
+  if (predicate.type === 'tokens') return false;
   return predicate.field === 'durationMs';
 }
 
@@ -411,6 +404,7 @@ function usesField(
   if (predicate.type === 'boolean') return predicate.args.some(arg => usesField(arg, fields));
   if (predicate.type === 'not') return usesField(predicate.arg, fields);
   if (predicate.type === 'relation') return usesField(predicate.predicate, fields);
+  if (predicate.type === 'tokens') return false;
   return fields.has(predicate.field);
 }
 
@@ -492,6 +486,7 @@ function rootSpanFieldIssues(
   if (predicate.type === 'relation') {
     return predicate.collection === 'traces' ? rootSpanFieldIssues(observabilityStore, predicate.predicate) : [];
   }
+  if (predicate.type === 'tokens') return [];
   return supportsObservabilityTraceQueryRootSpanField(observabilityStore, predicate.field)
     ? []
     : [rootSpanFieldIssue(['where'], predicate.field)];
@@ -554,6 +549,20 @@ export function assertObservabilitySpanDurationSortSupported(store: Observabilit
   if (orderBy.field === 'durationMs' && !getFeatures(store)?.includes('span-query-duration-sort')) {
     throw new HTTPException(501, {
       message: 'Span duration sorting is not supported by the configured observability store',
+    });
+  }
+}
+
+export function assertObservabilitySpanModelProviderSortSupported(
+  store: ObservabilityStorage,
+  orderBy: { field: string },
+) {
+  if (
+    (orderBy.field === 'model' || orderBy.field === 'provider') &&
+    !getFeatures(store)?.includes('span-query-model-provider-sort')
+  ) {
+    throw new HTTPException(501, {
+      message: 'Span model/provider sorting is not supported by the configured observability store',
     });
   }
 }
@@ -647,7 +656,7 @@ export function assertObservabilityThreadQuerySupported(observabilityStore: Obse
  * works for stores built against older or duplicated `@mastra/core` installs
  * and for stores that predate {@link ObservabilityStorage.getFeatures}.
  */
-function implementsObservabilityStorageMethod(observabilityStore: object, method: string): boolean {
+export function implementsObservabilityStorageMethod(observabilityStore: object, method: string): boolean {
   if (Object.prototype.hasOwnProperty.call(observabilityStore, method)) return true;
 
   let resolvedOwner: object | undefined;
@@ -681,7 +690,7 @@ export type ObservabilityStorageCapabilities = {
   deltaPolling: boolean;
   traceQuery: boolean;
   traceQueryAggregatedRoots: boolean;
-  traceQueryTextSearch: boolean;
+  traceQueryTokenSearch: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
   traceQueryContextFields: boolean;
@@ -694,16 +703,19 @@ export type ObservabilityStorageCapabilities = {
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
   traceAggregate: boolean;
+  traceAggregateTokenSearch: boolean;
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
-  spanQueryTextSearch: boolean;
+  spanQueryTokenSearch: boolean;
   spanQueryDurationSort: boolean;
+  spanQueryModelProviderSort: boolean;
   spanQueryContextFields: boolean;
   spanQueryModelFields: boolean;
   spanQueryOutcomeFields: boolean;
   traceQueryOutcomeFields: boolean;
   spanAggregate: boolean;
+  spanAggregateTokenSearch: boolean;
   spanAggregateModelDimensions: boolean;
   aggregateTimeToFirstMeasures: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
@@ -726,7 +738,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   deltaPolling: false,
   traceQuery: false,
   traceQueryAggregatedRoots: false,
-  traceQueryTextSearch: false,
+  traceQueryTokenSearch: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
   traceQueryContextFields: false,
@@ -739,12 +751,15 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
+  traceAggregateTokenSearch: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
-  spanQueryTextSearch: false,
+  spanQueryTokenSearch: false,
   spanAggregate: false,
+  spanAggregateTokenSearch: false,
   spanQueryDurationSort: false,
+  spanQueryModelProviderSort: false,
   spanQueryContextFields: false,
   spanQueryModelFields: false,
   spanAggregateModelDimensions: false,
@@ -819,8 +834,9 @@ export function getObservabilityStorageCapabilities(
       coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE) && declares(OBSERVABILITY_DELTA_POLLING_STORAGE_FEATURE),
     traceQuery,
     traceQueryAggregatedRoots: false,
-    traceQueryTextSearch:
-      traceQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('trace-query-text-search'),
+    // OSS Server never opts into indexed token search.
+    traceAggregateTokenSearch: false,
+    traceQueryTokenSearch: false,
     traceQueryRootDuration:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
@@ -853,12 +869,18 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
-    spanQueryTextSearch:
-      spanQuery && coreStorage.observabilityTextSearchSchema !== undefined && declares('span-query-text-search'),
+    // OSS Server never opts into indexed token search.
+    spanAggregateTokenSearch: false,
+    spanQueryTokenSearch: false,
     spanQueryDurationSort:
       spanQuery &&
       coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') === true &&
       declares('span-query-duration-sort'),
+    spanQueryModelProviderSort:
+      spanQuery &&
+      coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('model') === true &&
+      coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('provider') === true &&
+      declares('span-query-model-provider-sort'),
     spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     spanQueryModelFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_MODEL_FIELDS_STORAGE_FEATURE),
     spanQueryOutcomeFields: spanQuery && declares(OBSERVABILITY_SPAN_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE),
@@ -1335,4 +1357,12 @@ export function createObservabilityListQuerySchema<
       });
     }
   });
+}
+
+/** Older Core versions do not export this error class. */
+export function isTraceQueryUnsupportedError(error: unknown): error is coreStorage.TraceQueryUnsupportedError {
+  return (
+    typeof coreStorage.TraceQueryUnsupportedError === 'function' &&
+    error instanceof coreStorage.TraceQueryUnsupportedError
+  );
 }

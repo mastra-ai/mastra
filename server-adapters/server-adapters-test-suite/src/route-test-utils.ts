@@ -67,6 +67,11 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
     return { body: { cron: '* * * * *' } };
   }
 
+  // Without a thread, working memory is read for a resource, so one must be named.
+  if (route.path === '/memory/working-memory' && route.method === 'GET') {
+    return { query: { resourceId: 'test-resource' } };
+  }
+
   // `data` must match the payloadSchema of the 'ticket.created' event on test-server-1.
   if (route.path === '/mcp/:serverId/events/:eventName/emit') {
     return { body: { data: { id: 'test-ticket' } } };

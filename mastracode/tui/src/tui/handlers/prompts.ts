@@ -56,12 +56,14 @@ export async function handleAskQuestion(
         if (event.type !== 'tool_suspension_cancelled' || event.toolCallId !== toolCallId) return;
         if (cancelled) return;
         cancelled = true;
-        unsubscribeCancel();
         retract();
-        resolve();
+        finish('dismissed');
       }) ?? (() => {});
-    const finish = () => {
+    const finish = (decision: 'answered' | 'dismissed') => {
       unsubscribeCancel();
+      state.hookManager
+        ?.runPermissionResult('ask_question', toolCallId, 'ask_user', decision, { question, options, selectionMode })
+        .catch(() => {});
       resolve();
     };
 
@@ -106,19 +108,19 @@ export async function handleAskQuestion(
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                finish();
+                finish('answered');
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                finish();
+                finish('answered');
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
                 state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                finish();
+                finish('dismissed');
                 processNextInlineQuestion(state);
               },
             });
@@ -135,19 +137,19 @@ export async function handleAskQuestion(
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-                  finish();
+                  finish('answered');
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-                  finish();
+                  finish('answered');
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
                   state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-                  finish();
+                  finish('dismissed');
                   processNextInlineQuestion(state);
                 },
               },
@@ -168,7 +170,7 @@ export async function handleAskQuestion(
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          finish();
+          finish('dismissed');
           processNextInlineQuestion(state);
         }
       };
@@ -194,17 +196,17 @@ export async function handleAskQuestion(
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answer });
-          finish();
+          finish('answered');
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: answers });
-          finish();
+          finish('answered');
         },
         onCancel: () => {
           state.ui.hideOverlay();
           state.session.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
-          finish();
+          finish('dismissed');
         },
       });
       showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });

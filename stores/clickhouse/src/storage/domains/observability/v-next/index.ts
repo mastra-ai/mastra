@@ -194,6 +194,10 @@ const spanQueryFeatures =
         'span-query',
         'span-query-context-fields',
         ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('model') &&
+        coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('provider')
+          ? (['span-query-model-provider-sort'] as const)
+          : []),
         // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
         ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
       ] as const)

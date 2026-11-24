@@ -1,6 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
-import { MessagesSquareIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   isLegacyAnyValue,
@@ -18,6 +17,7 @@ import type { StreamingTimingSupport } from '../traces/trace-filters';
 import { isTraceFilterGroup, scalarPredicate } from '../traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterOperatorId, TraceFilterToken } from '../traces/trace-query-filters';
 import type { FilterBarField, FilterBarOption } from '@/ds/components/FilterBar/types';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 
 /** Thread query fields the filter bar offers. `startedAt`/`endedAt` are left to the time range. */
 export const THREAD_FILTER_FIELD_IDS = [
@@ -70,7 +70,7 @@ const THREAD_ICON_FIELD_ALIASES: Record<string, string> = {
 
 /** Thread fields with an icon of their own: Messages uses the Threads tab's icon. */
 const THREAD_FILTER_BAR_ICONS: Record<string, LucideIcon> = {
-  traceCount: MessagesSquareIcon,
+  traceCount: IconChatBubbles,
 };
 
 const threadFieldBase = (id: string) => ({

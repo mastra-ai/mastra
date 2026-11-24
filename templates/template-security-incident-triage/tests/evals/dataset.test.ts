@@ -31,6 +31,19 @@ describe('security evaluation dataset contract', () => {
     }
   });
 
+  it('rejects tampering with the approved historical response planner snapshot', async () => {
+    const root = await mkdtemp(resolve(tmpdir(), 'security-eval-provenance-'));
+    try {
+      await cp(directory, root, { recursive: true });
+      await appendFile(resolve(root, 'prompt/response-planner.ts.txt'), '\n// Unapproved prompt change.\n');
+      await expect(loadSecurityEvalDataset({ datasetDirectory: root })).rejects.toThrow(
+        'SECURITY_EVAL_DATASET_PROMPT_PROVENANCE_INVALID',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('materializes the A1 population, controls, and 72 policy-normalized families', async () => {
     const dataset = await loadSecurityEvalDataset();
     expect(dataset.manifest).toMatchObject({

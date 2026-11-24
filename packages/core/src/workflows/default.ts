@@ -7,7 +7,9 @@ import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
-import { createObservabilityContext, getResumeTracingContext } from '../observability';
+import { createObservabilityContext, getWorkflowResumeTracingContext } from '../observability';
+import { withSpanErrorAttempt } from '../observability/context-storage';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -65,6 +67,7 @@ import type {
 // to build a runnable step from a declarative entry.
 import {
   abortableSleep,
+  applyStateDelta,
   getRestartStartIndex,
   getSingleStepEntryId,
   omitPriorCompletionFields,
@@ -90,6 +93,7 @@ export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
 const retryCountStorage = new AsyncLocalStorage<number>();
 /** The journal of the storage-v2 execution whose entries run in the current async context. */
 const executionJournal = new AsyncLocalStorage<RunJournal | undefined>();
+const FINISHED_STATUSES = new Set<WorkflowRunStatus>(['success', 'failed', 'canceled', 'tripwire']);
 
 /** A step result without the `nestedRunId` metadata kept to find its nested run. */
 function withoutNestedRunId(stepResult: any): any {
@@ -136,6 +140,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   getRunJournal(runId: string): RunJournal | undefined {
     const journal = executionJournal.getStore();
     return journal?.runId === runId ? journal : undefined;
+  }
+
+  /**
+   * @internal Whether the last write of a storage v2 execution that ends with `status` prunes the run
+   * with `pruneSnapshot`. A v2 run prunes once, when it finished, and only for a workflow that sets
+   * `storageVersion: 2` itself. While the run can still continue, its steps read earlier results
+   * from storage, so pruning would change what they read. Runs on v2 through `autoStorageVersion` or
+   * their parent run don't prune.
+   */
+  prunesLastWrite(journal: RunJournal | undefined, status: WorkflowRunStatus): journal is RunJournal {
+    return (
+      !!journal && this.options.storageVersion === 2 && !!this.options.pruneSnapshot && FINISHED_STATUSES.has(status)
+    );
   }
 
   /** Returns the last status persisted for a given run in this process, if any. */
@@ -431,6 +448,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -496,6 +514,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     operationId: string;
     errorOptions: SpanOutcomeFields & {
       error: Error;
+      origin?: 'new' | 'propagated';
       attributes?: Record<string, unknown>;
     };
   }): Promise<void> {
@@ -544,7 +563,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         await new Promise(resolve => setTimeout(resolve, params.delay));
       }
       try {
-        const result = await retryCountStorage.run(i, () => this.wrapDurableOperation(stepId, runStep));
+        const result = await retryCountStorage.run(i, () =>
+          withSpanErrorAttempt(`${params.stepSpan?.id ?? stepId}:attempt:${i}`, async () => {
+            try {
+              return await this.wrapDurableOperation(stepId, runStep);
+            } catch (error) {
+              const failure = getErrorFromUnknown(error, { supportSerialization: false });
+              const origin = getSpanErrorOrigin(error);
+              if (origin) setSpanErrorOrigin(failure, origin);
+              params.stepSpan?.recordError?.(failure, { occurrenceId: `${params.stepSpan.id}:attempt:${i}` });
+              throw failure;
+            }
+          }),
+        );
         return { ok: true, result };
       } catch (e) {
         const isNonRetryable = e instanceof MastraNonRetryableError;
@@ -566,8 +597,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             },
             errorInstance,
           );
-          this.logger?.trackException(mastraError);
-          this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          // A processor tripwire is an intentional block, not a failure: log it quietly without a stack
+          if (e instanceof TripWire) {
+            this.logger?.debug(`Step ${stepId} stopped by tripwire`, {
+              stepId,
+              processorId: e.processorId,
+              reason: e.message,
+            });
+          } else {
+            this.logger?.trackException(mastraError);
+            this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
+          }
 
           params.stepSpan?.error({
             ...workflowTermination(
@@ -617,7 +657,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       serializeStack: false,
       fallbackMessage: 'Unknown workflow error',
     });
-    return errorInstance.toJSON();
+    const serialized = errorInstance.toJSON();
+    const origin = getSpanErrorOrigin(errorSource);
+    if (origin) setSpanErrorOrigin(serialized, origin);
+    return serialized;
   }
 
   protected async fmtReturnValue<TOutput>(
@@ -834,6 +877,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         ? rebaseNestedState(executionContext.state, mutableContext.stateBase, mutableContext.state)
         : mutableContext.state,
     );
+    if (mutableContext.stateDelta) applyStateDelta(executionContext.state, mutableContext.stateDelta);
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }
@@ -884,14 +928,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @experimental */
     storageVersion?: 1 | 2;
     /** @internal */
-    storedState?: { seq: number; patchBytes: number };
+    storedState?: { seq: number; patchBytes: number; patchCount: number };
     /** @internal */
     inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */
-    tracingIds?: {
-      traceId: string;
-      workflowSpanId: string;
-    };
+    tracingIds?: ExecutionContext['tracingIds'];
   }): Promise<TOutput> {
     const {
       workflowId,
@@ -1103,6 +1144,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             workflowStatus: 'canceled',
             requestContext: currentRequestContext,
             phase: 'canceled',
+            lastWrite: true,
           });
 
           workflowSpan?.end({
@@ -1316,6 +1358,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             }
           }
 
+          // The result keeps the unpruned step results, as on storage v1. The persistence
+          // predicate keeps the stub view it is documented to see, from before the hydration.
+          let predicateStepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+          if (this.prunesLastWrite(journal, lastOutput.result.status)) {
+            predicateStepResults = { ...lastOutput.stepResults };
+            await journal.hydrate(stepResults);
+          }
           let result = (await this.#fmtResult(
             journal,
             params.pubsub,
@@ -1331,10 +1380,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           // never stored, and the resumed span's exported children would inherit it and
           // land as orphans. Undefined when nothing in the chain is exportable, which
           // correctly makes those children trace roots instead. An unsampled run saves
-          // nothing: its no-op span has no real trace for a resume to join.
+          // only that decision, so its resume stays unrecorded instead of sampling again.
           let persistTracingContext: WorkflowStateTracingContext = {};
           if (result.status === 'suspended') {
-            persistTracingContext = this.options.resumeTracingContext ?? getResumeTracingContext(workflowSpan) ?? {};
+            persistTracingContext =
+              this.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan) ?? {};
           }
 
           await this.persistStepUpdate({
@@ -1351,6 +1401,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             requestContext: currentRequestContext,
             tracingContext: persistTracingContext,
             phase: 'terminal',
+            lastWrite: true,
+            predicateStepResults,
           });
 
           if (this.writeRejectedByCancellation(runId, result.status)) {
@@ -1470,6 +1522,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
+      // The result keeps the unpruned step results, as on storage v1. The persistence
+      // predicate keeps the stub view it is documented to see, from before the hydration.
+      let predicateStepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+      if (this.prunesLastWrite(journal, lastOutput.result.status)) {
+        predicateStepResults = { ...lastOutput.stepResults };
+        await journal.hydrate(stepResults);
+      }
       let result = (await this.#fmtResult(
         journal,
         params.pubsub,
@@ -1491,6 +1550,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         error: result.error,
         requestContext: currentRequestContext,
         phase: 'workflow-end',
+        lastWrite: true,
+        predicateStepResults,
       });
 
       if (this.writeRejectedByCancellation(runId, result.status)) {

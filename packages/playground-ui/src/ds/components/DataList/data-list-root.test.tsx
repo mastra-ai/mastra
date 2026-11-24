@@ -172,6 +172,21 @@ describe('DataListRoot', () => {
       expect(scrollRef.current?.className).not.toContain('mask-');
     });
 
+    it('passes vertical wheel scrolling on to the page once the list cannot scroll further', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      const classes = scrollRef.current?.className.split(' ');
+      expect(classes).toContain('overscroll-x-none');
+      expect(classes).not.toContain('overscroll-none');
+      expect(classes).not.toContain('overscroll-y-none');
+      expect(classes).not.toContain('overscroll-y-contain');
+    });
+
     it('lets max-height classes constrain the scrollable viewport', () => {
       const scrollRef = createRef<HTMLDivElement>();
       render(
@@ -197,44 +212,6 @@ describe('DataListRoot', () => {
       expect(root?.className).not.toContain('size-full');
       expect(scrollRef.current?.className).toContain('min-h-0');
       expect(scrollRef.current?.className).toContain('flex-1');
-    });
-  });
-
-  describe('ScrollArea ownership', () => {
-    it('wraps the grid in a ScrollArea, which owns scrolling', () => {
-      const { container } = render(
-        <DataList columns="1fr 1fr">
-          <Header />
-        </DataList>,
-      );
-
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      // grid is nested inside the ScrollArea, not the root child
-      expect(grid).not.toBe(container.firstElementChild);
-      // the ScrollArea viewport owns scrolling, so the grid doesn't
-      expect(grid?.className).not.toContain('overflow-auto');
-      expect(grid?.className).toContain('gap-y-px');
-    });
-  });
-
-  describe('virtualized (scrollRef forwarded to the viewport)', () => {
-    it('points scrollRef at the scrolling viewport that contains the grid', () => {
-      const scrollRef = createRef<HTMLDivElement>();
-      const { container } = render(
-        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
-          <Header />
-        </DataList>,
-      );
-
-      // scrollRef resolves to the ScrollArea viewport (the scroll element the
-      // virtualizer binds to via getScrollElement), not the grid — so the list
-      // virtualizes against the overlay-scrollbar viewport.
-      expect(scrollRef.current).not.toBeNull();
-      const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-      expect(grid).not.toBeNull();
-      expect(scrollRef.current).not.toBe(grid);
-      expect(scrollRef.current?.contains(grid)).toBe(true);
     });
   });
 

@@ -1,7 +1,8 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { PinIcon, PinOffIcon } from 'lucide-react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { OBSERVABILITY_WIDGET_PIN_CONTEXT_KEY, OBSERVABILITY_WIDGET_PINNED_CONTEXT_KEY } from './tool';
@@ -34,6 +35,7 @@ export function usePin(
   datePreset: ObservabilityDatePreset | 'custom',
   customRange: ObservabilityWidgetDateRange | undefined,
   filters: readonly unknown[] | undefined,
+  project: string | undefined,
 ): ReactNode {
   const hostIds = useHostPinnedIds(app);
   const [requested, setRequested] = useState<boolean>();
@@ -59,6 +61,7 @@ export function usePin(
       datePreset,
       ...(customRange ? { customRange } : {}),
       ...(filters?.length ? { filters: [...filters] } : {}),
+      ...(project ? { project } : {}),
     };
     app
       .updateModelContext({
@@ -75,7 +78,7 @@ export function usePin(
       onClick={() => onPin(!isPinned)}
       className={isPinned ? undefined : onCardHover}
     >
-      {isPinned ? <PinOffIcon /> : <PinIcon />}
+      {isPinned ? <IconUnpin /> : <IconPin />}
     </MetricsCard.Action>
   );
 }

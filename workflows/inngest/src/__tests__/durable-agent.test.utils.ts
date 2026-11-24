@@ -205,6 +205,13 @@ export async function startConnectInngestDevServer(): Promise<ChildProcess | nul
   return proc;
 }
 
+/** Start a dev server that calls an app served over HTTP at `sdkUrl`. */
+export async function startServeInngestDevServer(sdkUrl: string): Promise<ChildProcess> {
+  const proc = await startInngestDevServer({ sdkUrl });
+  await waitForInngestReady();
+  return proc;
+}
+
 /**
  * Initialize shared test infrastructure.
  * Call this once in beforeAll for the test suite.

@@ -297,8 +297,11 @@ describe('EditorAgentNamespace.update', () => {
       expect(migrationWarnings).toHaveLength(typeof durable === 'object' ? 1 : 0);
       if (typeof durable === 'object') {
         expect(migrationWarnings[0]![0]).toContain('legacy-durable-agent');
-        for (const key of Object.keys(durable).filter(key => key !== 'cleanupTimeoutMs')) {
-          expect(migrationWarnings[0]![0]).toContain(key);
+        // cleanupTimeoutMs and shouldPersistSnapshot are native durable options, not ignored legacy keys.
+        const nativeKeys = ['cleanupTimeoutMs', 'shouldPersistSnapshot'];
+        for (const key of Object.keys(durable)) {
+          if (nativeKeys.includes(key)) expect(migrationWarnings[0]![0]).not.toContain(key);
+          else expect(migrationWarnings[0]![0]).toContain(key);
         }
       }
     } finally {

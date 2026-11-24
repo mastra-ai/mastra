@@ -1008,6 +1008,7 @@ export const API_ROUTE_METADATA = {
       "state",
       "stepId",
       "stepResults",
+      "storageVersion",
       "validateInputs"
     ],
     "hasQuery": false,
@@ -1344,6 +1345,22 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "threadId"
     ],
+    "queryParams": [
+      "agentId",
+      "memoryConfig",
+      "resourceId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /memory/working-memory": {
+    "method": "GET",
+    "path": "/memory/working-memory",
+    "pathParams": [],
     "queryParams": [
       "agentId",
       "memoryConfig",
@@ -2098,7 +2115,6 @@ export const API_ROUTE_METADATA = {
       "page",
       "pagination",
       "rootSource",
-      "textSearch",
       "timeRange",
       "where"
     ],
@@ -2180,7 +2196,6 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "orderBy",
       "page",
-      "textSearch",
       "timeRange",
       "where"
     ],
@@ -3638,6 +3653,18 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /mcp/builtin": {
+    "method": "GET",
+    "path": "/mcp/builtin",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -6076,6 +6103,8 @@ export const API_ROUTE_METADATA = {
     ],
     "bodyParams": [
       "baselineId",
+      "experimentIdA",
+      "experimentIdB",
       "experimentIds"
     ],
     "hasQuery": true,

@@ -29,6 +29,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
+import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -50,6 +51,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { githubIntakeLookup } from './intake-lookup.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
@@ -107,6 +109,27 @@ export interface RepoSummary {
   defaultBranch: string;
   private: boolean;
   installationId: number;
+  /** When the repository last received a push, for "most recent first" ordering. */
+  pushedAt?: string | null;
+}
+
+/**
+ * Narrows a repository listing: `query` keeps names containing it, `limit`
+ * returns only that many, most recently pushed first. `fresh` skips caches.
+ */
+export interface RepoListOptions {
+  fresh?: boolean;
+  query?: string;
+  limit?: number;
+}
+
+/** Repositories whose full name contains `query`, most recently pushed first, at most `limit`. */
+export function narrowRepos(repos: RepoSummary[], query = '', limit?: number): RepoSummary[] {
+  const needle = query.trim().toLowerCase();
+  return repos
+    .filter(repo => repo.fullName.toLowerCase().includes(needle))
+    .sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''))
+    .slice(0, limit);
 }
 
 export interface GithubTriageCommentUpsertInput {
@@ -211,6 +234,13 @@ export class GithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
+  readonly intakeLookup: IntakeItemLookup = githubIntakeLookup({
+    sourceControl: () => this.sourceControlStorage,
+    fetchIssueState: input => this.fetchIssueState(input),
+    fetchPullRequestState: input => this.fetchPullRequestState(input),
+    getRepositoryCollaboratorPermission: (installationId, repository, login) =>
+      this.getRepositoryCollaboratorPermission(installationId, repository, login),
+  });
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
@@ -375,6 +405,7 @@ export class GithubIntegration implements FactoryIntegration {
     createReviewComment: input => this.#createReviewComment(input),
     updateReviewComment: input => this.#updateReviewComment(input),
     deleteReviewComment: input => this.#deleteReviewComment(input),
+    resolveReviewThread: input => this.#resolveReviewThread(input),
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
@@ -575,15 +606,16 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * List repos accessible to an installation (paginated). Always reads
-   * GitHub directly, so `fresh` has nothing to bypass here.
+   * List repos accessible to an installation (paginated), narrowed by
+   * `query`/`limit`. Always reads GitHub directly, so `fresh` has nothing to
+   * bypass here.
    */
-  async listInstallationRepos(installationId: number, _options?: { fresh?: boolean }): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, options?: RepoListOptions): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
     });
-    return repos.map(repo => ({
+    const summaries: RepoSummary[] = repos.map(repo => ({
       id: repo.id,
       fullName: repo.full_name,
       name: repo.name,
@@ -591,7 +623,9 @@ export class GithubIntegration implements FactoryIntegration {
       defaultBranch: repo.default_branch,
       private: repo.private,
       installationId,
+      pushedAt: repo.pushed_at ?? null,
     }));
+    return options?.query || options?.limit ? narrowRepos(summaries, options.query, options.limit) : summaries;
   }
 
   /**
@@ -1100,6 +1134,32 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  async #resolveReviewThread(input: InputOf<'resolveReviewThread'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const commentId = requirePositiveId(input.commentId, 'review comment');
+    let pullRequestUrl: string;
+    try {
+      const { data } = await octokit.pulls.getReviewComment({ ...parts, comment_id: commentId });
+      pullRequestUrl = data.pull_request_url;
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        throw new Error(
+          `GitHub review comment ${commentId} was not found in ${input.sourceId}. List the pull request's diff comments and pass the id of one of them.`,
+        );
+      }
+      throw err;
+    }
+    const pullNumber = requirePullRequestNumber(pullRequestUrl.slice(pullRequestUrl.lastIndexOf('/') + 1));
+    const threadId = await findReviewThreadId(octokit, parts, pullNumber, commentId);
+    if (!threadId) {
+      throw new Error(
+        `GitHub review comment ${commentId} on pull request #${pullNumber} is not part of a published review thread, so there is no thread to resolve. Comments in a pending review join a thread once that review is submitted; submit the review first, or pass the id of a published diff comment.`,
+      );
+    }
+    const mutation = input.resolved ? RESOLVE_REVIEW_THREAD_MUTATION : UNRESOLVE_REVIEW_THREAD_MUTATION;
+    await octokit.graphql(mutation, { threadId });
+  }
+
   async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.listRequestedReviewers({
@@ -1291,7 +1351,7 @@ export class GithubIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: the `/web/github/*` + `/auth/github/*`
    * Mastra `apiRoutes` (webhook handler, install/OAuth flow, project +
-   * worktree + session operations). The factory folds these into the server's
+   * commit/push/PR operations). The factory folds these into the server's
    * `apiRoutes` when the feature is ready. Handlers operate on this instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
@@ -1302,17 +1362,13 @@ export class GithubIntegration implements FactoryIntegration {
       github: this,
       auth: ctx.auth,
       sandbox: ctx.sandbox,
-      ...(ctx.users ? { users: ctx.users } : {}),
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      memorySettings: ctx.storage.memorySettings,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
-      sessionRetirement: ctx.sessionRetirement,
-      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
   }
 
@@ -1691,6 +1747,125 @@ function requirePositiveId(value: string, resource: string): number {
   const parsed = parsePositiveInteger(value);
   if (parsed === null) throw new Error(`GitHub ${resource} id must be a positive integer.`);
   return parsed;
+}
+
+const REVIEW_THREAD_PAGE_SIZE = 100;
+
+const REVIEW_THREADS_QUERY = `
+  query ($owner: String!, $repo: String!, $number: Int!, $cursor: String, $pageSize: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: $pageSize, after: $cursor) {
+          nodes {
+            id
+            comments(first: $pageSize) {
+              nodes { fullDatabaseId }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const REVIEW_THREAD_COMMENTS_QUERY = `
+  query ($threadId: ID!, $cursor: String, $pageSize: Int!) {
+    node(id: $threadId) {
+      ... on PullRequestReviewThread {
+        comments(first: $pageSize, after: $cursor) {
+          nodes { fullDatabaseId }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const RESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    resolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+const UNRESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    unresolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+interface GraphqlPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface GraphqlReviewThreadComments {
+  // GitHub serializes the BigInt scalar as a string.
+  nodes: Array<{ fullDatabaseId: string | null } | null> | null;
+  pageInfo: GraphqlPageInfo;
+}
+
+interface ReviewThreadsResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: Array<{ id: string; comments: GraphqlReviewThreadComments } | null> | null;
+        pageInfo: GraphqlPageInfo;
+      };
+    } | null;
+  } | null;
+}
+
+interface ReviewThreadCommentsResponse {
+  node: { comments?: GraphqlReviewThreadComments } | null;
+}
+
+function containsComment(comments: GraphqlReviewThreadComments, commentId: number): boolean {
+  const id = String(commentId);
+  return (comments.nodes ?? []).some(comment => comment?.fullDatabaseId === id);
+}
+
+/**
+ * GitHub exposes review threads only through GraphQL, keyed by node id, while
+ * Factory tools carry REST comment ids. Walk every thread (and every comment of
+ * long threads) until one holds the comment; replies match their own thread.
+ */
+async function findReviewThreadId(
+  octokit: Octokit,
+  parts: { owner: string; repo: string },
+  pullNumber: number,
+  commentId: number,
+): Promise<string | null> {
+  let cursor: string | null = null;
+  do {
+    const response: ReviewThreadsResponse = await octokit.graphql<ReviewThreadsResponse>(REVIEW_THREADS_QUERY, {
+      ...parts,
+      number: pullNumber,
+      cursor,
+      pageSize: REVIEW_THREAD_PAGE_SIZE,
+    });
+    const threads = response.repository?.pullRequest?.reviewThreads;
+    if (!threads) return null;
+    const threadNodes = (threads.nodes ?? []).filter(thread => thread !== null);
+    const match = threadNodes.find(thread => containsComment(thread.comments, commentId));
+    if (match) return match.id;
+    // Only threads longer than one page can still hide the comment.
+    for (const thread of threadNodes) {
+      let comments = thread.comments;
+      while (comments.pageInfo.hasNextPage) {
+        const page: ReviewThreadCommentsResponse = await octokit.graphql<ReviewThreadCommentsResponse>(
+          REVIEW_THREAD_COMMENTS_QUERY,
+          { threadId: thread.id, cursor: comments.pageInfo.endCursor, pageSize: REVIEW_THREAD_PAGE_SIZE },
+        );
+        if (!page.node?.comments) break;
+        comments = page.node.comments;
+        if (containsComment(comments, commentId)) return thread.id;
+      }
+    }
+    cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+  } while (cursor);
+  return null;
 }
 
 function getGithubInstallationId(connection: IntegrationConnection): number {

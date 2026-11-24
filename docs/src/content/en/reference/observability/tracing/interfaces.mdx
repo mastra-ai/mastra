@@ -215,6 +215,11 @@ interface Span<TType extends SpanType> {
   readonly type: TType
   readonly name: string
 
+  /** Entity that created the span */
+  entityType?: EntityType
+  entityId?: string
+  entityName?: string
+
   /** Is an internal span? (spans internal to the operation of mastra) */
   isInternal: boolean
 
@@ -675,8 +680,8 @@ Agent Run attributes.
 
 ```typescript
 interface AgentRunAttributes {
-  /** Agent identifier */
-  agentId: string
+  /** Conversation/thread/session identifier for multi-turn interactions */
+  conversationId?: string
 
   /** Agent Instructions */
   instructions?: string
@@ -732,13 +737,7 @@ interface ModelGenerationAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning'
 
   /** Token usage statistics */
-  usage?: {
-    promptTokens?: number
-    completionTokens?: number
-    totalTokens?: number
-    promptCacheHitTokens?: number
-    promptCacheMissTokens?: number
-  }
+  usage?: UsageStats
 
   /** Model parameters */
   parameters?: {
@@ -1026,9 +1025,6 @@ Workflow Run attributes.
 
 ```typescript
 interface WorkflowRunAttributes {
-  /** Workflow identifier */
-  workflowId: string
-
   /** Workflow status */
   status?: WorkflowRunStatus
 }
@@ -1040,11 +1036,49 @@ Workflow Step attributes.
 
 ```typescript
 interface WorkflowStepAttributes {
-  /** Step identifier */
-  stepId: string
-
   /** Step status */
   status?: WorkflowStepStatus
+
+  /** Authored graph entry description */
+  entryDescription?: string
+
+  /** Authored graph entry metadata */
+  entryMetadata?: Record<string, any>
+}
+```
+
+`AgentRunAttributes`, `WorkflowRunAttributes`, and `WorkflowStepAttributes` don't include agent or workflow identifiers. Read them from the span's `entityType`, `entityId`, and `entityName` fields. On a `WORKFLOW_STEP` span, `entityId` is the step ID, and `entityName` is inherited from the enclosing workflow. To get the workflow ID, read `entityId` from the enclosing `WORKFLOW_RUN` span. If `excludeSpanTypes` excludes `WORKFLOW_RUN` spans, the step inherits `entityName` from the nearest ancestor that isn’t excluded instead. That ancestor can be an agent span, or there can be none, so `entityName` doesn’t reliably name the workflow in that case.
+
+### `UsageStats`
+
+Token usage recorded on model spans.
+
+```typescript
+interface UsageStats {
+  /** Total input tokens (sum of all input details) */
+  inputTokens?: number
+
+  /** Total output tokens (sum of all output details) */
+  outputTokens?: number
+
+  /** Detailed breakdown of input token usage */
+  inputDetails?: {
+    text?: number
+    cacheRead?: number
+    cacheWrite?: number
+    cacheWrite5m?: number
+    cacheWrite1h?: number
+    audio?: number
+    image?: number
+  }
+
+  /** Detailed breakdown of output token usage */
+  outputDetails?: {
+    text?: number
+    reasoning?: number
+    audio?: number
+    image?: number
+  }
 }
 ```
 

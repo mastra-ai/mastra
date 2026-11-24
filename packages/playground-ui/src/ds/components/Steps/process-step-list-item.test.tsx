@@ -65,12 +65,12 @@ describe('ProcessStepListItem', () => {
 
   it('lets a running marker keep the spinner at its own size', () => {
     render(<ProcessStepListItem step={step} isActive position={1} />);
-    expect(markerOf('Cloning repository')?.classList.contains('[&>svg]:size-4')).toBe(false);
+    expect(markerOf('Cloning repository')?.classList.contains('[&>svg]:size-icon-md')).toBe(false);
 
     cleanup();
 
     render(<ProcessStepListItem step={{ ...step, status: 'success' }} isActive position={1} />);
-    expect(markerOf('Cloning repository')?.classList.contains('[&>svg]:size-4')).toBe(true);
+    expect(markerOf('Cloning repository')?.classList.contains('[&>svg]:size-icon-md')).toBe(true);
   });
 
   it('drops the description when the step has none', () => {

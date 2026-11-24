@@ -263,6 +263,52 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('one card for an
     const raw = async (storage: Awaited<ReturnType<typeof setup>>['storage'], id: string) =>
       storage.ops.findOne<{ board: string; stages: string[] }>(FACTORY_BOARD_ITEMS_SCHEMA.name, { id });
 
+    /** `ops` on which another writer's `write` lands right after the cards on Review are read. */
+    function writtenToMeanwhile(storage: Awaited<ReturnType<typeof setup>>['storage'], write: () => Promise<unknown>) {
+      let pending: (() => Promise<unknown>) | undefined = write;
+      return new Proxy(storage.ops, {
+        get(ops, key) {
+          const value: unknown = Reflect.get(ops, key, ops);
+          if (key !== 'findMany') return typeof value === 'function' ? value.bind(ops) : value;
+          return async (...args: Parameters<typeof ops.findMany>) => {
+            const rows = await ops.findMany(...args);
+            const landing = pending;
+            pending = undefined;
+            await landing?.();
+            return rows;
+          };
+        },
+      });
+    }
+
+    it('releases a card to Work in the phase a write moved it to while the release was reading', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const card = await file(pullRequest34, { state: 'open' });
+      await storeOnReview(storage, card.id, 'review');
+      const ops = writtenToMeanwhile(storage, () =>
+        workItems.update({ ...scope, id: card.id, patch: { stages: ['intake'] } }),
+      );
+
+      await workItems.releaseReviewCards(ops, scope, { open: 'move' });
+
+      const stored = await storage.ops.findOne<{ board: string; stages: string[]; stage_history: { stage: string }[] }>(
+        FACTORY_BOARD_ITEMS_SCHEMA.name,
+        { id: card.id },
+      );
+      expect(stored).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(stored!.stage_history.map(entry => entry.stage)).toEqual(['pr-review', 'intake']);
+    });
+
+    it('refuses to release a finished card that was reopened while the release was reading', async () => {
+      const { storage, workItems, scope, file } = await setup();
+      const card = await file(pullRequest34, { state: 'merged' });
+      await storeOnReview(storage, card.id, 'done');
+      const ops = writtenToMeanwhile(storage, () => storeOnReview(storage, card.id, 'review'));
+
+      await expect(workItems.releaseReviewCards(ops, scope, { open: 'refuse' })).rejects.toMatchObject({ cards: 1 });
+      expect(await raw(storage, card.id)).toMatchObject({ board: 'review', stages: ['review'] });
+    });
+
     it('keeps a card on Review, in its phase, while the project still has an open card there', async () => {
       const { storage, workItems, scope, file } = await setup();
       const card = await file(pullRequest34, { state: 'open' });

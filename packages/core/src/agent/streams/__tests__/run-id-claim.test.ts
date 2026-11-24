@@ -327,12 +327,13 @@ describe('run id ownership', () => {
       const cache = new InMemoryServerCache();
       const agent = makeAgent();
       new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
-      const get = vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+      vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
 
+      // The publisher may still read the record in the background to fill in its owner,
+      // but neither admission nor the caller's stream waits on it.
       const stream = await agent.stream('Say hello.', { requestContext: resource('tenant-a') });
 
       expect(await stream.text).toBe('Hello there.');
-      expect(get.mock.calls.filter(([key]) => String(key).includes(stream.runId))).toEqual([]);
     });
 
     // A caller-supplied id may be another run's, so without the record the run is

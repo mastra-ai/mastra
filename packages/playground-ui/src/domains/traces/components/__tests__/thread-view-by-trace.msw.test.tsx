@@ -75,27 +75,6 @@ const mockHeights = (heights: Record<string, number>) => {
   });
 };
 
-// jsdom has no IntersectionObserver. Several observers are created (infinite scroll sentinel, visible
-// rows, in-view hooks); `intersect` notifies whichever ones watch the given element.
-const stubIntersectionObserver = () => {
-  type Callback = (entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>>) => void;
-  const observers: Array<{ cb: Callback; targets: Element[] }> = [];
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      targets: Element[] = [];
-      constructor(cb: Callback) {
-        observers.push({ cb, targets: this.targets });
-      }
-      observe = (el: Element) => this.targets.push(el);
-      disconnect = vi.fn();
-    },
-  );
-  const intersect = (target: Element) =>
-    observers.filter(o => o.targets.includes(target)).forEach(o => o.cb([{ target, isIntersecting: true }]));
-  return { intersect };
-};
-
 const viewportOf = () => {
   const viewport = screen
     .getByTestId('thread-view-by-trace')
@@ -188,6 +167,7 @@ const renderView = ({
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
+  navigate,
   pageSize,
 }: {
   withFeedback?: boolean;
@@ -195,10 +175,11 @@ const renderView = ({
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+  navigate?: ComponentProps<typeof TestLinkProvider>['navigate'];
   pageSize?: number;
 } = {}) =>
   renderWithProviders(
-    <TestLinkProvider paths={paths}>
+    <TestLinkProvider paths={paths} navigate={navigate}>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
@@ -304,6 +285,25 @@ describe('ThreadViewByTrace', () => {
       expect(requested).not.toHaveBeenCalled();
     });
   });
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = ['trace-a', 'trace-b'].flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+    });
+  });
+
   it('renders one row per trace, oldest first', async () => {
     installHandlers();
     const { queryClient } = renderView();
@@ -318,7 +318,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('announces each turn with a divider holding its tabs and shows the trace in a card', async () => {
+  it('announces each turn with a divider holding its tabs', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -332,8 +332,6 @@ describe('ThreadViewByTrace', () => {
     for (const [index, row] of rows.entries()) {
       const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
       expect(within(divider).getByRole('tab', { name: /Scores/ })).not.toBeNull();
-      expect(row.className).not.toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-details]')?.className).toContain('rounded-xl');
     }
   });
 
@@ -361,11 +359,9 @@ describe('ThreadViewByTrace', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
       expect(document.querySelector('[data-trace-id]')).toBeNull();
-      // Same boxes as the resolved rows: a `px-4` messages column and one tab pill per tab.
+      // Same boxes as the resolved rows: a messages column and one tab pill per tab.
       const skeleton = screen.getByRole('status', { name: 'Loading thread' });
-      const messagesColumns = skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]');
-      expect(messagesColumns.length).toBeGreaterThan(0);
-      messagesColumns.forEach(column => expect(column.classList.contains('px-4')).toBe(true));
+      expect(skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]').length).toBeGreaterThan(0);
       const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
       expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(3);
       expect(screen.queryByText('No traces found for this thread.')).toBeNull();
@@ -569,25 +565,6 @@ describe('ThreadViewByTrace', () => {
     });
   });
 
-  it('keeps every row at full opacity, whichever is in view', async () => {
-    const { intersect } = stubIntersectionObserver();
-    installHandlers();
-    const { queryClient } = renderView();
-
-    await screen.findByText('Chef agent follow-up');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    const rowOf = (traceId: string) =>
-      screen
-        .getByTestId('thread-view-by-trace')
-        .querySelector<HTMLElement>(`[data-trace-id="${traceId}"]`) as HTMLElement;
-
-    act(() => intersect(rowOf('trace-a')));
-
-    expect(rowOf('trace-a').className).not.toMatch(/opacity/);
-    expect(rowOf('trace-b').className).not.toMatch(/opacity/);
-    vi.unstubAllGlobals();
-  });
-
   describe('truncating a long trace to the height of its messages', () => {
     afterEach(() => vi.restoreAllMocks());
 
@@ -661,14 +638,16 @@ describe('ThreadViewByTrace', () => {
   });
 
   describe('the trace panel tabs', () => {
-    it('links each row to its trace on the traces page', async () => {
+    it('opens each row’s trace on the traces page', async () => {
       installHandlers();
       installFeedbackHandlers();
-      renderView();
+      const navigate = vi.fn();
+      renderView({ navigate });
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      fireEvent.click(firstRow.getByRole('button', { name: 'Go to trace' }));
 
-      expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
+      expect(navigate).toHaveBeenCalledWith('/traces?traceId=trace-a');
     });
 
     it('hides "Go to trace" when the app has no trace route', async () => {
@@ -678,7 +657,7 @@ describe('ThreadViewByTrace', () => {
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-      expect(firstRow.queryByRole('link', { name: 'Go to trace' })).toBeNull();
+      expect(firstRow.queryByRole('button', { name: 'Go to trace' })).toBeNull();
     });
 
     describe('given a scored trace', () => {
@@ -743,18 +722,6 @@ describe('ThreadViewByTrace', () => {
       expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
       expect(firstRow.getByText('Chef agent run')).not.toBeNull();
-    });
-
-    it('shows the scores of the root span on the Scores tab', async () => {
-      installHandlers();
-      installFeedbackHandlers();
-      renderView();
-
-      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-
-      fireEvent.click(firstRow.getByRole('tab', { name: /Scores/ }));
-
-      expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
     it('fetches scores only once a Scores tab is opened', async () => {

@@ -10,8 +10,9 @@ import { createWorkflow } from '../workflows/create';
 import { markFrameworkCondition } from '../workflows/framework-condition';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
-import type { Workflow } from '../workflows/workflow';
 import { createStep } from '../workflows/workflow';
+import { BaseAgenticLoopBuilder } from './base-loop-builder';
+import type { LoopContinuationPredicate, LoopStep, LoopWorkflow } from './base-loop-builder';
 import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
@@ -37,6 +38,7 @@ import { createGoalStep } from './workflows/agentic-execution/goal-step';
 import { createIsTaskCompleteStep } from './workflows/agentic-execution/is-task-complete-step';
 import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execution-step';
 import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-step';
+import { resolveRunToolApprovalPolicy } from './workflows/agentic-execution/tool-approval-verdict';
 import {
   normalizeToolCallConcurrency,
   resolveEmittedToolCallConcurrency,
@@ -47,6 +49,8 @@ import { createToolCallStep } from './workflows/agentic-execution/tool-call-step
 import { pruneAgentLoopSnapshot } from './workflows/prune-snapshot';
 import { llmIterationOutputSchema } from './workflows/schema';
 import type { LLMIterationData } from './workflows/schema';
+
+export type { LoopContinuationPredicate, LoopStep, LoopWorkflow } from './base-loop-builder';
 
 export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
 export const AGENTIC_LOOP_WORKFLOW_ID = 'agentic-loop';
@@ -65,50 +69,25 @@ export interface AgenticLoopBuilderParams<Tools extends ToolSet = ToolSet, OUTPU
 }
 
 /**
- * Predicate evaluated by the outer dowhile after every iteration. Receives the
- * engine's dowhile callback params; typed loosely because the two engines
- * consume different subsets of it (the main loop only reads `inputData`, the
- * durable loop also reads `getInitData`/`mastra`/the pubsub symbol).
- */
-export type LoopContinuationPredicate = (params: any) => Promise<boolean>;
-
-/**
- * Engine-agnostic handle for a loop step. The two engines build steps with
- * different ids and schemas (state flows through workflow context on the main
- * loop vs. serialized iteration state on the durable loop), so the overridable
- * factory surface is typed loosely; each engine's composition works with its
- * own concrete step types internally.
- */
-export type LoopStep = Step<string, any, any, any, any, any, any, any>;
-
-/** Engine-agnostic handle for a composed loop workflow (see {@link LoopStep}). */
-export type LoopWorkflow = Workflow<any, any, any, any, any, any, any, any>;
-
-/**
  * Builds the agentic loop: an outer `dowhile` workflow wrapping a
  * single-iteration workflow of ten steps (LLM execution → tool calls →
  * mapping → background check → signal drain → isTaskComplete → goal).
  *
- * This concrete base class IS the main (in-process) agent loop. Every step is
- * constructed through an overridable method so engine variants (the durable
- * loop) can subclass it and override behavior surgically instead of
- * maintaining a parallel copy of the topology. During the incremental
- * migration the durable subclass still overrides whole methods that
- * delegate to its own step files; the end state is that only runtime hooks
- * (state resolution, chunk transport, workflow engine) remain overridden.
+ * This is the main (in-process) agent loop. The durable loop implements the
+ * same `BaseAgenticLoopBuilder` shape separately (see that class for why it
+ * does not extend this one).
  */
-export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefined> {
+export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefined> extends BaseAgenticLoopBuilder {
   readonly #params?: AgenticLoopBuilderParams<Tools, OUTPUT>;
 
   /**
    * The main loop resolves everything from per-run params captured at
-   * construction time. Engine subclasses that resolve their runtime elsewhere
-   * (e.g. the durable loop's run registry + serialized state) construct
-   * without params — any base method that then touches `this.params` throws,
-   * so an incompletely-overridden subclass fails loudly instead of silently
-   * running main-loop plumbing.
+   * construction time. A subclass constructed without params throws on the
+   * first method that touches `this.params`, so an incompletely-overridden
+   * subclass fails loudly instead of silently running main-loop plumbing.
    */
   constructor(params?: AgenticLoopBuilderParams<Tools, OUTPUT>) {
+    super();
     this.#params = params;
   }
 
@@ -373,7 +352,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           // evaluating a potentially stateful policy a second time.
           const approvalVerdicts = new Map<string, boolean>();
           toolCallForeachOptions.concurrency = await resolveEmittedToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, requestContext),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools: stepActiveTools,
             configuredConcurrency: configuredToolCallConcurrency,
@@ -385,7 +364,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           writeScoped(
             scopeCtx,
@@ -407,9 +395,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             return toolCallForeachOptions.concurrency;
           }
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
-            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
+            // A function policy is gone on resume; its stored stand-in keeps the calls sequential.
+            requireToolApproval: resolveRunToolApprovalPolicy(rest.requireToolApproval, rest.requestContext),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
             activeTools:
               readScoped(scopeCtx, STEP_ACTIVE_TOOLS_KEY, 'stepActiveTools') ??
@@ -724,7 +716,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         agentSpan.traceId === previousContext.traceId &&
         agentSpan.getParentSpanId() === previousContext.spanId;
 
-      const own = getResumeTracingContext(agentSpan);
+      // An unsampled agent run saves no trace and decides again on resume; the empty context
+      // keeps the loop from saving its own span's decision instead.
+      const own = getResumeTracingContext(agentSpan) ?? {};
       resumeTracingContext = continuesSavedLineage
         ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
         : own;

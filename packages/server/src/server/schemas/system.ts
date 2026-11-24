@@ -41,8 +41,10 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .boolean()
     .default(false)
     .describe("Supports explicit `rootSource: 'aggregated'` trace queries"),
-  traceQueryTextSearch: z.boolean().default(false).describe('Literal substring search across any span in a trace'),
-  spanQueryTextSearch: z.boolean().default(false).describe('Literal substring search within individual spans'),
+  traceQueryTokenSearch: z.boolean().default(false).describe('Token matching across any span in a trace'),
+  spanQueryTokenSearch: z.boolean().default(false).describe('Token matching within individual spans'),
+  traceAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in trace aggregates'),
+  spanAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in span aggregates'),
   traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
   traceQueryContextIds: z
     .boolean()
@@ -91,6 +93,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     ),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
   spanQueryDurationSort: z.boolean().default(false).describe('Whether completed spans can be sorted by duration'),
+  spanQueryModelProviderSort: z.boolean().default(false).describe('Whether spans can be sorted by model and provider'),
   spanQueryContextFields: z
     .boolean()
     .default(false)

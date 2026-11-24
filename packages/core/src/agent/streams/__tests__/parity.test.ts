@@ -48,8 +48,9 @@ function describeEvents(events: Published[]): string[] {
       case AgentStreamEventTypes.ERROR:
         return `error:${data?.error?.name}`;
       case AgentStreamEventTypes.STEP_FINISH:
-      case AgentStreamEventTypes.FINISH:
         return `${event.type}:${data?.stepResult?.reason}`;
+      case AgentStreamEventTypes.FINISH:
+        return `${event.type}:${data?.stepResult?.reason}${data?.stopCause ? `:${data.stopCause}` : ''}`;
       default:
         return event.type;
     }
@@ -59,7 +60,7 @@ function describeEvents(events: Published[]): string[] {
 
 type Engine = 'plain' | 'durable' | 'evented';
 
-type Scenario = Pick<RunLoopScenarioOptions, 'prompt' | 'fixtures' | 'requireToolApproval'> & {
+type Scenario = Pick<RunLoopScenarioOptions, 'prompt' | 'fixtures' | 'requireToolApproval' | 'maxSteps'> & {
   tools?: (abort: AbortController) => RunLoopScenarioOptions['tools'];
 };
 
@@ -77,7 +78,7 @@ async function recordRun(getMock: () => any, engine: Engine, scenario: Scenario)
     tools: scenario.tools?.(abort),
     abortSignal: abort.signal,
     errorProcessors: [],
-    stopWhen: stepCountIs(5),
+    ...(scenario.maxSteps !== undefined ? { maxSteps: scenario.maxSteps } : { stopWhen: stepCountIs(5) }),
     ...(scenario.requireToolApproval !== undefined ? { requireToolApproval: scenario.requireToolApproval } : {}),
   });
 
@@ -106,10 +107,14 @@ async function recordBothEngines(getMock: () => any, scenario: Scenario) {
   const durable = await recordRun(getMock, 'durable', scenario);
   const evented = await recordRun(getMock, 'evented', scenario);
   expect(evented).toEqual(durable);
-  // The default loop reports iterations through `onIterationComplete` only;
-  // everything else a plain Agent publishes matches DurableAgent.
+  // The default loop reports iterations through `onIterationComplete` only and
+  // doesn't need the durable replay boundary; all other published events match.
   const plain = await recordRun(getMock, 'plain', scenario);
-  expect(plain).toEqual(durable.filter(label => label !== AgentStreamEventTypes.ITERATION_COMPLETE));
+  expect(plain).toEqual(
+    durable.filter(
+      label => label !== AgentStreamEventTypes.ITERATION_COMPLETE && label !== AgentStreamEventTypes.ITERATION_START,
+    ),
+  );
   return durable;
 }
 
@@ -133,13 +138,14 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:text-start",
         "chunk:text-delta",
         "chunk:text-end",
         "chunk:step-finish",
         "iteration-complete",
-        "finish:stop",
+        "finish:stop:model_finished",
       ]
     `);
   });
@@ -159,6 +165,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",
@@ -167,15 +174,30 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
         "chunk:tool-result",
         "chunk:step-finish",
         "iteration-complete",
+        "iteration-start",
         "step-start",
         "chunk:text-start",
         "chunk:text-delta",
         "chunk:text-end",
         "chunk:step-finish",
         "iteration-complete",
-        "finish:stop",
+        "finish:stop:model_finished",
       ]
     `);
+  });
+
+  it('maxSteps exhaustion preserves stopCause across engines', async () => {
+    const events = await recordBothEngines(getMock, {
+      prompt: 'Look it up.',
+      maxSteps: 1,
+      tools: () => ({ lookup: lookup() }),
+      fixtures: llm =>
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_1', name: 'lookup', arguments: { q: 'x' } }] },
+        ),
+    });
+    expect(events).toContain('finish:tool-calls:max_steps');
   });
 
   it('tool approval suspends the run', async () => {
@@ -192,6 +214,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",
@@ -215,11 +238,12 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:error",
         "chunk:step-finish",
         "iteration-complete",
-        "finish:error",
+        "finish:error:model_finished",
       ]
     `);
   });
@@ -250,6 +274,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",

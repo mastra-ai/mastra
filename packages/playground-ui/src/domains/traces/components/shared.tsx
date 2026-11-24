@@ -1,6 +1,6 @@
-import { BrainIcon } from 'lucide-react';
 import type { UISpanStyle } from '../types';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
@@ -37,7 +37,7 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     typePrefix: 'workflow',
   },
   model: {
-    icon: <BrainIcon />,
+    icon: <IconBrain />,
     color: 'var(--span-model)',
     label: 'Model',
     typePrefix: 'model',

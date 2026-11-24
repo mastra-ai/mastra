@@ -70,6 +70,7 @@ export class InProcessStrategy implements StepExecutionStrategy {
       abortController,
       format: params.format,
       perStep: params.perStep,
+      storageVersion: params.storageVersion,
     });
   }
 

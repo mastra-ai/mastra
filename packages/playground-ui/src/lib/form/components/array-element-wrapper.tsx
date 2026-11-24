@@ -1,5 +1,4 @@
 import type { ArrayElementWrapperProps } from '@autoform/react';
-import { Check, Trash2 } from 'lucide-react';
 import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
@@ -9,6 +8,8 @@ import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -38,7 +39,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="overflow-hidden rounded-lg border border-border bg-background motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+      className="overflow-hidden rounded-lg bg-nested motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
         <CollapsibleTrigger
@@ -71,7 +72,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               addButtonRef?.current?.focus();
             }}
           >
-            <Trash2 />
+            <TrashIcon />
           </Button>
         )}
       </div>
@@ -87,7 +88,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
                 setExpanded(false);
                 triggerRef.current?.focus();
               }}
-              icon={<Check />}
+              icon={<IconCheckmark2Medium />}
             >
               Done
             </Button>

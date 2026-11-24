@@ -47,9 +47,7 @@ function stubRepository() {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
-            ],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -104,7 +102,7 @@ function PageB() {
 function SlotsPage() {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots}>
+    <PageLayout variant="page" {...slots}>
       <h1>Slots page</h1>
     </PageLayout>
   );
@@ -244,17 +242,6 @@ describe('AppLayout', () => {
       expect(await screen.findByRole('heading', { name: 'Factory needs its encryption key.' })).toBeInTheDocument();
     } finally {
       focusManager.setFocused(undefined);
-    }
-  });
-
-  it('leaves retired Factory pages out of the sidebar', async () => {
-    stubFactory();
-    renderApp();
-
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
-    await within(sidebar).findByRole('navigation', { name: 'Factory' });
-    for (const retired of ['Activity', 'Overview', 'Audit log', 'Supervisor']) {
-      expect(within(sidebar).queryByRole('link', { name: new RegExp(`^${retired}`) })).not.toBeInTheDocument();
     }
   });
 

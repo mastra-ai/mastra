@@ -16,25 +16,32 @@ function ProbeCard() {
   return isSuccess ? <span>Loaded</span> : null;
 }
 
-/** Fails with `status` until `failures` requests have been answered, then succeeds. */
-function failThenSucceed(status: number, failures = Infinity) {
-  let calls = 0;
-  serveTraceAggregate(() => {
-    calls++;
-    return calls <= failures ? HttpResponse.json(traceAggregateErrorFixture, { status }) : emptyTraceAggregateFixture;
-  });
+/**
+ * Fails with `status` until `recover()` is called, then succeeds. Failing by state, not by a count of
+ * requests, keeps the test independent of how often the client retries a failure on its own.
+ */
+function failUntilRecovered(status: number) {
+  let failing = true;
+  serveTraceAggregate(() =>
+    failing ? HttpResponse.json(traceAggregateErrorFixture, { status }) : emptyTraceAggregateFixture,
+  );
+  return {
+    recover: () => {
+      failing = false;
+    },
+  };
 }
 
 describe('ChartCardError', () => {
   describe('when a trace aggregate fails', () => {
     it('loads the card when Retry succeeds', async () => {
-      // The client retries a 500 itself before the card sees it; the next request succeeds.
-      failThenSucceed(500, 4);
+      const outage = failUntilRecovered(500);
       renderInMetrics(<ProbeCard />);
 
       expect(
         await screen.findByText("Couldn't load this data. Try again in a moment.", {}, { timeout: 5000 }),
       ).toBeDefined();
+      outage.recover();
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
       expect(await screen.findByText('Loaded')).toBeDefined();
@@ -43,7 +50,7 @@ describe('ChartCardError', () => {
 
   describe('when the session expired', () => {
     it('says so instead of offering a retry', async () => {
-      failThenSucceed(401);
+      failUntilRecovered(401);
       renderInMetrics(<ProbeCard />);
 
       expect(await screen.findByText('Session Expired', {}, { timeout: 5000 })).toBeDefined();
@@ -53,7 +60,7 @@ describe('ChartCardError', () => {
 
   describe('when the user may not read traces', () => {
     it('says permission was denied', async () => {
-      failThenSucceed(403);
+      failUntilRecovered(403);
       renderInMetrics(<ProbeCard />);
 
       expect(await screen.findByText('Permission Denied', {}, { timeout: 5000 })).toBeDefined();

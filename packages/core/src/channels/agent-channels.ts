@@ -33,6 +33,8 @@ import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { createChatLogger } from './chat-logger';
+import { createChannelToolScope } from './chat-tools';
+import type { ChannelToolScope, ChannelToolsSettings } from './chat-tools';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -1338,6 +1340,20 @@ export class AgentChannels {
     return this.makeChannelTools();
   }
 
+  /**
+   * The conversation a channel tool call runs in, for `createChannelTools`.
+   * @internal
+   */
+  async __resolveToolScope(
+    context: { requestContext?: RequestContext; agent?: { threadId?: string } } | undefined,
+    settings: ChannelToolsSettings,
+  ): Promise<ChannelToolScope> {
+    const { adapter, threadId } = await this.getAdapterFromContext(context ?? {});
+    if (!this.chat) throw new Error('Channels are not initialized yet.');
+    const platform = Object.keys(this.adapters).find(key => this.adapters[key] === adapter) ?? adapter.name;
+    return createChannelToolScope({ chat: this.chat, adapter, platform, threadId, settings });
+  }
+
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
@@ -1633,6 +1649,10 @@ export class AgentChannels {
       messageId: message.id,
       actor: message.author,
     });
+    // `eventType` stays 'mention' for subscribed-thread messages too, so mark
+    // the ones that actually tag the bot; the prompt tells the model to always
+    // answer those.
+    if (!chatThread.isDM && batch.some(m => m.isMention)) attributes.mentioned = 'true';
 
     // NOTE: `requestContext` is constructed per message at the handler boundary
     // (see `beginMessage` in initialize) so a custom handler can contribute to

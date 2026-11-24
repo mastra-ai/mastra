@@ -53,14 +53,14 @@ const withDescriptionClasses =
   'has-[[data-slot=sidebar-nav-description]]:h-auto has-[[data-slot=sidebar-nav-description]]:min-h-control-lg has-[[data-slot=sidebar-nav-description]]:items-start has-[[data-slot=sidebar-nav-description]]:py-1.5 has-[[data-slot=sidebar-nav-description]]:[&>svg]:h-lh';
 
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
-// current (`foreground`). Icons inherit that colour — lucide strokes with
-// `currentColor` — so there is nothing to restate per state.
+// current (`foreground`). Its icon is one step quieter than the label.
 // One fill per row, painted on the row's own box: hover and current never stack or differ
 // in size, and there is no pressed state to flash before the row becomes current. This sits
 // on the surface: the outer wrapper on rows with a trailing action, the link itself otherwise.
-const idleSurface = 'rounded-lg text-muted-foreground hover:bg-fill-subtle hover:text-foreground';
+const idleSurface =
+  'rounded-lg text-muted-foreground hover:bg-fill-subtle hover:text-foreground [&>svg]:text-muted-icon hover:[&>svg]:text-icon';
 
-const activeSurface = 'rounded-lg bg-fill text-foreground';
+const activeSurface = 'rounded-lg bg-fill text-foreground [&>svg]:text-icon';
 
 const featuredSurface = 'my-2 rounded-lg border border-transparent bg-brand-green text-black hover:brightness-95';
 
@@ -74,11 +74,12 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
   cn(
     navItemVariants({ size }),
     'w-full justify-start',
-    '[&_svg]:size-4 [&_svg]:shrink-0',
+    '[&_svg]:size-icon-md [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
     !isCollapsed && withDescriptionClasses,
-    isCollapsed && 'gap-0 px-[13.5px] py-0',
+    // The rail's 40px rows keep the expanded rows' 12px padding, so icons don't move between the two states.
+    isCollapsed && 'gap-0 px-3 py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>

@@ -18,7 +18,7 @@ import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
-import { resolveFactorySessionAddress } from './binding-context.js';
+import { resolveFactorySessionAddress, setFactoryToolsRole } from './binding-context.js';
 import { phaseGrantsTool } from './phase-tools.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from './types.js';
@@ -80,6 +80,7 @@ export async function createFactoryTransitionTools(options: {
     }
     return {};
   }
+  setFactoryToolsRole(options.requestContext, availableBinding.role);
   // Tools are built for every turn, so a card that moves on takes its phase's tools with it.
   // A failed lookup grants no phase tools but keeps the move tool.
   const recordsVerdict = await options.storage

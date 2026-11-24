@@ -35,3 +35,22 @@ export function buildDatasetItem(overrides: Partial<AddDatasetItemResponse> = {}
     ...overrides,
   };
 }
+export const cityInputSchema: NonNullable<DatasetRecord['inputSchema']> = {
+  type: 'object',
+  properties: { city: { type: 'string' } },
+  required: ['city'],
+};
+
+export function buildFailingItemsError(count: number) {
+  return {
+    error: `${count} existing item(s) fail validation`,
+    cause: {
+      failingItems: Array.from({ length: count }, (_, index) => ({
+        index,
+        data: {},
+        field: 'input',
+        errors: [{ path: '/city', code: 'required', message: 'city is required' }],
+      })),
+    },
+  };
+}
