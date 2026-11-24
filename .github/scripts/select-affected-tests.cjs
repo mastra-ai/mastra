@@ -173,8 +173,8 @@ function routeTests({
     runFull: fullSuite,
     unitTestFiles,
     // Core-touching PRs select 2,000+ unit files, which runs past the job's cap on one
-    // machine. Lists that large run on six; narrow PRs stay one job.
-    unitShards: unitTestFiles.length >= UNIT_SHARD_THRESHOLD ? [1, 2, 3, 4, 5, 6] : [1],
+    // machine. Lists that large run on five; narrow PRs stay one job.
+    unitShards: unitTestFiles.length >= UNIT_SHARD_THRESHOLD ? [1, 2, 3, 4, 5] : [1],
     e2eTestFiles: e2eTiers.kept,
     workspaceSelection,
     workspaceDockerPackages,

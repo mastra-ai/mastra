@@ -52,12 +52,12 @@ describe('Prebuild test routing', () => {
     expect(result.flags.e2e_changed).toBe(true);
   });
 
-  test('splits 500 or more unit test files across six affected-unit jobs', () => {
+  test('splits 500 or more unit test files across five affected-unit jobs', () => {
     const unitTests = (count: number) => Array.from({ length: count }, (_, i) => `packages/core/src/t${i}.test.ts`);
     const changedFiles = ['packages/core/src/index.ts'];
 
     expect(route({ changedFiles, affectedTests: unitTests(499) }).unitShards).toEqual([1]);
-    expect(route({ changedFiles, affectedTests: unitTests(500) }).unitShards).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(route({ changedFiles, affectedTests: unitTests(500) }).unitShards).toEqual([1, 2, 3, 4, 5]);
     // E2E tests run in their own job, so they don't count toward the split.
     const mixed = [...unitTests(499), 'packages/core/src/a.e2e.test.ts'];
     expect(route({ changedFiles, affectedTests: mixed }).unitShards).toEqual([1]);

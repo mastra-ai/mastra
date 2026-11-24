@@ -168,14 +168,10 @@ jobs:
 
   e2e-monorepo:
     needs: publish-e2e-registry
-    name: E2E monorepo (${{ matrix.shard }}/${{ strategy.job-total }})
+    name: E2E monorepo
     if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/monorepo') }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
     permissions:
       contents: read
       id-token: write
@@ -220,7 +216,7 @@ jobs:
 
       - name: Test
         working-directory: ./e2e-tests/monorepo
-        run: pnpm test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
