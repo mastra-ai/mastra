@@ -57,6 +57,24 @@ describe('PageLayout', () => {
     );
   });
 
+  describe('edge fades', () => {
+    it.each([
+      ['page', { variant: 'page' }],
+      ['settings', { variant: 'settings', title: 'Settings' }],
+      ['form', { variant: 'form', title: 'New board' }],
+    ] as const)('does not fade the edges a %s scrolls past', (_variant, props) => {
+      render(
+        <PageLayout {...props}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      const viewport = screen.getByText('Body').closest<HTMLElement>('[style*="overflow"]');
+      expect(viewport).not.toBeNull();
+      expect(viewport?.className).not.toContain('mask-');
+    });
+  });
+
   describe('when a header is provided', () => {
     it('renders it inside main before the body', () => {
       render(
