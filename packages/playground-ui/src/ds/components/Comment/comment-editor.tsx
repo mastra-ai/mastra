@@ -76,8 +76,15 @@ export function CommentEditor({
           >
             Cancel
           </Button>
-          <Button icon={<IconCheckmark2Medium />} type="button" size="sm" disabled={!canSave} onClick={save}>
-            {isPending ? 'Saving…' : 'Save'}
+          <Button
+            icon={<IconCheckmark2Medium />}
+            type="button"
+            size="sm"
+            disabled={!canSave}
+            onClick={save}
+            loading={isPending}
+          >
+            Save
           </Button>
         </div>
       </div>

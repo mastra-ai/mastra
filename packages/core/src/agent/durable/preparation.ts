@@ -198,6 +198,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request context */
   requestContext?: RequestContext;
+  /** @internal Called when a non-reserved context entry cannot be snapshotted. */
+  onRequestContextEntryOmitted?: () => void;
   /** Logger */
   logger?: IMastraLogger;
   /** Mastra instance (for version overrides, background tasks, etc.) */
@@ -642,7 +644,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // snapshotRequestContextEntries; the versions entry is pinned back to the
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
-  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(
+    requestContext,
+    options.onRequestContextEntryOmitted,
+  );
   // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
   // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
   // snapshot (key absent, supplied scopes are adopted). The live run context deliberately

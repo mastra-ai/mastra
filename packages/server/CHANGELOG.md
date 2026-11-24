@@ -1,5 +1,32 @@
 # @mastra/server
 
+## 1.86.0-alpha.8
+
+### Minor Changes
+
+- Added `durable`, `itemTimeout` and `maxRetries` to the experiment trigger route (`POST /datasets/:datasetId/experiments`), so a server can start an experiment that keeps running after the process that started it stops. ([#31204](https://github.com/mastra-ai/mastra/pull/31204))
+
+  ```bash
+  curl -X POST http://localhost:4111/api/datasets/$DATASET_ID/experiments \
+    -H 'content-type: application/json' \
+    -d '{"targetType":"agent","targetId":"support-agent","durable":true,"itemTimeout":30000,"maxRetries":1}'
+  ```
+
+  A durable start answers `pending` with `startedAt: null`. `maxConcurrency` must now be a positive integer; other values return 400. A config a durable run can't store now returns 400 instead of 500, and with an older `@mastra/core` that has no durable experiments, `durable: true` returns 400 instead of silently running the experiment in process.
+
+  `POST /workflows/events` only accepts the events an experiment run sends (start, step, end, fail and cancel) for a run Mastra started, carrying that run's stored input. It returns 404 when the run doesn't exist and 400 for a resume, suspend or time travel, or when the event names another run, dataset, experiment or request context, so a forged event can't run someone else's experiment.
+
+### Patch Changes
+
+- Reduced memory use on Cloudflare Workers and other V8 runtimes that bundle @mastra/memory or @mastra/server. Their published JavaScript now only uses Latin-1 characters in code. V8 stores a bundle's source at one byte per character instead of two only when the whole bundle is Latin-1, so the saving applies when your own code and other dependencies are Latin-1 as well. In a minimal Worker with an agent, memory and the Mastra server, heap after six requests dropped from 56.8 MiB to 43.8 MiB. ([#31265](https://github.com/mastra-ai/mastra/pull/31265))
+
+- Fixed reconnecting to a run on an agent created with `new Agent({ durable: { executionEngine } })`. After another worker took over the run, the observe endpoint could send output from the execution that lost it and end the stream early. It now drops that output, the same way it already did for `createDurableAgent` agents. Inngest agents keep reading their own stream. ([#31228](https://github.com/mastra-ai/mastra/pull/31228))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/mcp-apps-components@0.3.0-alpha.1
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 1.86.0-alpha.7
 
 ### Patch Changes

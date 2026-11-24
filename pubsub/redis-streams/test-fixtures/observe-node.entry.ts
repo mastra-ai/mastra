@@ -81,11 +81,18 @@ async function main() {
     { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
   );
   const pubsub = process.env.PREWRAPPED_PUBSUB === '1' ? new CachingPubSub(redisPubsub, cache) : redisPubsub;
-  const agent = ENGINE === 'evented' ? createEventedAgent({ agent: base }) : createDurableAgent({ agent: base });
+  const executionEngine = ENGINE === 'native-default' ? 'default' : ENGINE === 'native-evented' ? 'evented' : undefined;
+  const storage = new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! });
+  const agent = executionEngine
+    ? base
+    : ENGINE === 'evented'
+      ? createEventedAgent({ agent: base })
+      : createDurableAgent({ agent: base });
 
   const mastra = new Mastra({
     logger: false,
-    storage: new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! }),
+    storage,
+    ...(executionEngine && { durable: { executionEngine } }),
     pubsub,
     cache,
     agents: { observerAgent: agent },
@@ -163,6 +170,22 @@ async function main() {
     stream,
     approve,
     observe,
+    async waitForSuspension(cmd) {
+      const workflows = await storage.getStore('workflows');
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const snapshot = await workflows?.loadWorkflowSnapshot({
+          workflowName: 'durable-agentic-loop',
+          runId: cmd.runId,
+        });
+        if (snapshot?.status === 'suspended') {
+          emit({ type: 'suspension-persisted', runId: cmd.runId });
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error(`No suspended checkpoint for ${cmd.runId}`);
+    },
     release: () => releaseGate(),
     detach: cmd => observations.get(cmd.id)?.detach(),
   };

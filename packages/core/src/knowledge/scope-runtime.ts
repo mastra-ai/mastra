@@ -32,7 +32,14 @@ type ScopeMatch = NonNullable<ReturnType<CompiledKnowledgeScopes['match']>>;
 type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch['params'] }>>;
 /** The addresses a write-run start looked up, and the scope pages it found or wrote since. */
 type KnownScopes = { looked: Set<string>; byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage> };
-type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
+type MaterializeRun = {
+  held: HeldPrincipals;
+  known?: KnownScopes;
+  /** Writes through this storage (a transaction view) instead of the runtime's own. */
+  storage?: KnowledgeStorage;
+  /** Set when a store call may have written a row. */
+  wrote?: boolean;
+};
 
 /** How long the store's scope declarations are reused before {@link KnowledgeScopeRuntime.resolve} reads them again. */
 export const KNOWLEDGE_STORE_DECLARATIONS_TTL_MS = 30_000;
@@ -384,6 +391,22 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
+   * {@link materializeScope} through `storage`, a transaction view, so the scope's rows commit or
+   * roll back with the caller's transaction. Declarations must already be resolved
+   * ({@link resolve}): nothing here reads the runtime's own storage, so a one-connection pool
+   * can't deadlock against the open transaction. `wrote` is false only when no row can have changed.
+   */
+  async materializeScopeIn(
+    storage: KnowledgeStorage,
+    address: string,
+    provenance: KnowledgeProvenance,
+  ): Promise<{ scope: KnowledgePage; wrote: boolean }> {
+    const run: MaterializeRun = { held: this.#held([]), storage, wrote: false };
+    const scope = await this.#materialize(address, [], provenance, [], run);
+    return { scope, wrote: run.wrote === true };
+  }
+
+  /**
    * {@link materializeScope} for each address in turn (a write-run start's principals), reading
    * scopes from one lookup. `#materialize` skips the store call for a scope that exists, needs no new
    * `belongsTo` link, has its child scopes and declares no template pages; warnings fire as before.
@@ -448,7 +471,7 @@ export class KnowledgeScopeRuntime {
       throw new KnowledgeDeclarationError(`Knowledge scope "${address}" does not match a declared scope type.`);
     if (ancestors.includes(address))
       throw new KnowledgeDeclarationError(`Knowledge scope placement cycle at "${address}".`);
-    const storage = await this.getStorage();
+    const storage = run.storage ?? (await this.getStorage());
     const known = run.known;
     const lookUp = async (scope: string) =>
       known?.looked.has(scope) || known?.byAddress.has(scope)
@@ -504,6 +527,7 @@ export class KnowledgeScopeRuntime {
     ) {
       return existing;
     }
+    const templateCount = declaration.pages?.length ?? 0;
     const result = await storage.materializeScope({
       address,
       declaration: match.declaration,
@@ -520,6 +544,17 @@ export class KnowledgeScopeRuntime {
       provenance,
     });
     this.#assertCurrent(result.scope);
+    // The store reports only a created scope page; template pages, child scopes or a new parent
+    // link may still have landed on an existing one, so count any of those as a write.
+    if (
+      !existing ||
+      result.created ||
+      templateCount > 0 ||
+      match.compiled.children.length > 0 ||
+      result.scope.parentId !== existing.parentId
+    ) {
+      run.wrote = true;
+    }
     if (result.created) {
       // A new scope (and its config pages) can resolve body links written before it existed.
       await updateKnowledgeLinks(this.warn, () =>

@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 
 import { hostUnavailableDescription, isRecoverableHostReason } from '../../services/sourceControlHosts';
@@ -40,10 +39,10 @@ export function OnboardingGithubHostRow({
           />
         ) : (
           <Button
-            icon={redirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : undefined}
             variant="default"
-            disabled={redirecting || unavailableReason !== undefined}
+            disabled={unavailableReason !== undefined}
             onClick={onConnect}
+            loading={redirecting}
           >
             Connect GitHub
           </Button>

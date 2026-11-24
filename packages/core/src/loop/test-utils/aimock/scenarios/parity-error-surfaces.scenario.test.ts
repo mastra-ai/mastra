@@ -32,6 +32,7 @@ import {
   createSharedAgent,
   describeForAllEngines,
   getScenarioEngineHost,
+  isDurableEngineVariant,
   runLoopScenario,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
@@ -179,7 +180,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           });
         }
         const workflows = await result.mastra.getStorage()!.getStore('workflows');
-        const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+        const durable = isDurableEngineVariant(engine);
         const prefix = engine === 'inngest' ? 'inngest:' : '';
         for (const name of durable
           ? ['durable-agentic-loop', 'durable-agentic-execution']
@@ -323,7 +324,6 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
-      const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
       if (engine === 'inngest') {
         // Inngest stops the courier tool on its worker once the abort grace window passes, so that
         // worker finishes the turn through its normal finish path, the same path that saves a tool that
@@ -348,10 +348,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         );
         return;
       }
-      const inputSaved =
-        engine === 'durable' || engine === 'evented'
-          ? !readOnly
-          : !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      // Inngest returned above. The remaining durable engines save through agent memory, while
+      // the plain loop respects the selected history processor and lastMessages setting.
+      const inputSaved = !readOnly && (isDurableEngineVariant(engine) || !(customHistory || historyOff));
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);

@@ -25,6 +25,9 @@ import {
   finishQueuedRunsForTests,
 } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
+import { closingLinksIn } from '../../work-items/closing-pull-requests.js';
+import { relatedCardsIn } from '../../work-items/list-related-cards.js';
+import { matchesSearch, searchTerms } from '../../work-items/search-terms.js';
 import { KeptCards } from '../kept-cards.js';
 import { GithubAppIdentity } from './app-identity.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
@@ -7743,6 +7746,26 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await reviewsStarted(h, issue.id)).toEqual([
         expect.objectContaining({ decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }) }),
       ]);
+    });
+
+    it("files a pull request fixing two issues on the first one's card and links the other card to it", async () => {
+      const h = await harness('write');
+      const first = await h.issueCard(42, 'intake');
+      const second = await h.issueCard(43, 'intake');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42\nFixes #43'));
+
+      const cards = await h.cards();
+      const holder = cards.find(card => card.id === first.id)!;
+      const linked = cards.find(card => card.id === second.id)!;
+      expect(sourceTypes(holder)).toEqual(['issue', 'pull-request']);
+      expect(holder.workItem.sources[1]!.metadata).toMatchObject({ closesWorkItemIds: [second.id] });
+      expect(sourceTypes(linked)).toEqual(['issue']);
+      const closing = closingLinksIn(cards);
+      expect(closing.hasPullRequest(linked)).toBe(true);
+      expect(matchesSearch(closing.search(linked), searchTerms('17'))).toBe(true);
+      expect(relatedCardsIn(cards)(linked).map(card => card.id)).toEqual([first.id]);
+      expect(relatedCardsIn(cards)(holder).map(card => card.id)).toEqual([second.id]);
     });
 
     it("links an outsider's \"Fixes #42\" pull request to issue 42's card, untrusted, and moves or runs nothing", async () => {

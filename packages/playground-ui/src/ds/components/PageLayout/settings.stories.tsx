@@ -67,7 +67,7 @@ const meta = {
       description: {
         component: [
           'The frame for a settings page someone browses to and changes in place. It is `<PageLayout variant="settings">`: breadcrumbs and actions in the top bar, then a centered 640px column with the title above its `SettingsGroup`s.',
-          'The title is inset to line up with the section titles, and sections sit 28px apart. Build the sections from the parts in New/Settings.',
+          'The title is inset to line up with the section titles, and sections sit 24px apart. Build the sections from the parts in New/Settings.',
           'Use `variant="form"` for a create or edit form, and `variant="page"` for every other page.',
         ].join('\n\n'),
       },

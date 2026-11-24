@@ -104,14 +104,14 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
           size="sm"
           variant="ghost"
           onClick={handleDisconnect}
-          disabled={isDisconnecting}
           className="shrink-0"
+          loading={isDisconnecting}
         >
-          {isDisconnecting ? 'Removing...' : 'Remove'}
+          Remove
         </Button>
       ) : platform.isConfigured ? (
-        <Button icon={<IconPlugin1 />} size="sm" variant="default" onClick={handleConnect} disabled={isConnecting}>
-          {isConnecting ? 'Connecting...' : 'Connect'}
+        <Button icon={<IconPlugin1 />} size="sm" variant="default" onClick={handleConnect} loading={isConnecting}>
+          Connect
         </Button>
       ) : null}
     </li>

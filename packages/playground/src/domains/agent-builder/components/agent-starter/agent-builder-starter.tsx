@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Form } from '@mastra/playground-ui/components/Form';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
@@ -112,14 +111,9 @@ export const AgentBuilderStarter = () => {
               tooltip="Start building"
               disabled={isSubmitBlocked}
               data-testid="agent-builder-starter-submit"
+              loading={isCreating}
             >
-              {isCreating ? (
-                <span data-testid="agent-builder-starter-submit-spinner">
-                  <Spinner />
-                </span>
-              ) : (
-                <IconArrowUp />
-              )}
+              <IconArrowUp />
             </Button>
           </div>
         </Form>

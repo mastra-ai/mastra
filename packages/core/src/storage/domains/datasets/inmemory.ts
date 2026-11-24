@@ -533,11 +533,18 @@ export class DatasetsInMemory extends DatasetsStorage {
       field: 'createdAt',
       direction: 'DESC',
     });
-    items.sort(compareByField(orderBy.field, orderBy.direction));
-
     const { page, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    if (perPage === 0) {
+      return {
+        items: [],
+        pagination: { total: items.length, page, perPage: perPageForResponse, hasMore: items.length > 0 },
+      };
+    }
+
+    items.sort(compareByField(orderBy.field, orderBy.direction));
     const end = perPageInput === false ? items.length : start + perPage;
 
     return {

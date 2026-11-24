@@ -420,7 +420,7 @@ describeForAllEngines('Support agent output stream processors', engine => {
       stopReasonContext: { processorId: 'result-policy' },
     });
     for (const inference of ended(SpanType.MODEL_INFERENCE)) expect(inference.outcome).toBe('success');
-    const continued = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+    const continued = isDurableEngineVariant(engine);
     expect(requests).toHaveLength(continued ? 2 : 1);
     expect(ended()[0]?.outcome).toBe(continued ? 'success' : 'blocked');
     for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {

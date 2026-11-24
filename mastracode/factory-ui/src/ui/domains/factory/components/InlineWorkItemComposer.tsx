@@ -1,7 +1,6 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { FormEvent } from 'react';
 import { useRef, useState } from 'react';
@@ -104,9 +103,10 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           variant="ghost"
           size="icon-sm"
           aria-label={`Add work item to ${stageLabel}`}
-          disabled={!trimmedTitle || submitting}
+          disabled={!trimmedTitle}
+          loading={submitting}
         >
-          {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <IconCheckmark2Medium aria-hidden />}
+          <IconCheckmark2Medium aria-hidden />
         </Button>
       </div>
       {error ? (

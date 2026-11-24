@@ -1,0 +1,177 @@
+---
+title: "create-factory | Reference"
+description: "Create a Mastra Factory project with an interactive wizard, with optional Mastra platform setup."
+---
+
+# create-factory
+
+Create a Mastra Factory project with an interactive wizard. By default, `create-factory` installs dependencies and connects the project to the Mastra platform resources.
+
+```bash npm2yarn
+npx create-factory@latest
+```
+
+## Creation modes
+
+### Default template
+
+The command downloads the [Factory template](https://github.com/mastra-ai/template-factory). Provide a project name as an argument, or enter one when prompted:
+
+```bash npm2yarn
+npx create-factory@latest my-mastra-factory
+```
+
+To set up the project in the current directory, run the command without a name in an empty directory. The name prompt defaults to that directory, so press Enter to use it. The package name comes from the directory name:
+
+```bash npm2yarn
+mkdir my-mastra-factory && cd my-mastra-factory
+npx create-factory@latest
+```
+
+Platform setup uses your existing Mastra credentials or opens a browser sign-in flow. It resolves the organization and creates the project in the `us` region. Use `--org` to skip the organization picker, and `--region eu` to create the project in the EU:
+
+```bash npm2yarn
+npx create-factory@latest my-mastra-factory --org my-org --region eu
+```
+
+With the name, `--org`, and `--region` set, the command skips the project prompts, though the flags don't bypass authentication.
+
+### Without platform setup
+
+Use `--no-platform` to skip sign-in and resource provisioning:
+
+```bash npm2yarn
+npx create-factory@latest my-mastra-factory --no-platform
+```
+
+The command downloads the [self-hosted template](https://github.com/mastra-ai/template-factory-self-hosted) and installs dependencies. It copies `.env.example` to `.env` without filling in platform credentials. Configure `.env` before starting the project.
+
+## Automatic setup
+
+The command performs these steps in order:
+
+1. Downloads the template into the target directory (a new directory, or the current one if it's empty) and updates the package name.
+1. Copies `.env.example` to `.env` and attempts to restrict its permissions to the current user.
+1. Installs dependencies using the detected package manager, falling back to npm.
+1. Provisions platform resources unless `--no-platform` is set.
+1. Ensures `.env` is ignored by Git, then initializes a repository and creates an initial commit.
+
+For the default template, start the development server from the project directory. Skip `cd` if you set up the project in the current directory:
+
+```bash npm2yarn
+cd my-mastra-factory
+npm run dev
+```
+
+The Factory UI is available at `http://localhost:4111`.
+
+## Platform provisioning
+
+Platform setup creates a project with Factory enabled and an organization API key. It also ensures a production environment exists and attaches a Neon Postgres database. The project region (`us` unless you pass `--region eu`) determines the database region:
+
+| Project region | Neon region |
+| - | - |
+| `eu` | `aws-eu-central-1` |
+| `us` | `aws-us-west-2` |
+
+Successful provisioning writes these values to `.env`, preserving unrelated entries:
+
+| Variable | Value |
+| - | - |
+| `MASTRA_ORGANIZATION_ID` | Selected organization ID |
+| `MASTRA_PROJECT_ID` | Created platform project ID |
+| `MASTRA_PLATFORM_SECRET_KEY` | Newly created organization API key |
+| `MASTRA_ENVIRONMENT_ID` | Production environment ID |
+| `DATABASE_URL` | Neon database connection string |
+
+If provisioning fails, the command warns and preserves the local project. Values obtained before the failure are still written to `.env`, so you can complete the remaining configuration manually. Skipping browser sign-in also allows local setup to continue without provisioning.
+
+## Arguments and flags
+
+<PropertiesTable
+  content={[
+    {
+      name: '[project-name]',
+      type: 'string',
+      description:
+        'Project directory and package name. When omitted, the command prompts for a name and defaults to the current directory when it is empty. The target directory must not exist or must be empty.',
+      isOptional: true,
+    },
+    {
+      name: '--template <template-name>',
+      type: 'string',
+      description:
+        'Public GitHub template URL. Defaults to https://github.com/mastra-ai/template-factory, or the self-hosted template with --no-platform.',
+      isOptional: true,
+    },
+    {
+      name: '--no-platform',
+      type: 'boolean',
+      description:
+        'Skip Mastra platform sign-in, project creation, API key creation, and Neon provisioning. Platform setup runs by default.',
+      isOptional: true,
+    },
+    {
+      name: '--org <org>',
+      type: 'string',
+      description: 'Organization ID or name. Skips the organization picker. Ignored when --no-platform is set.',
+      isOptional: true,
+    },
+    {
+      name: '--region <region>',
+      type: "'eu' | 'us'",
+      description:
+        'Platform project region. Defaults to us. Other values are rejected before downloading the template, including with --no-platform.',
+      isOptional: true,
+    },
+    {
+      name: '-v, --version',
+      type: 'boolean',
+      description: 'Print the create-factory version.',
+      isOptional: true,
+    },
+    {
+      name: '-h, --help',
+      type: 'boolean',
+      description: 'Display command help.',
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Environment variables
+
+These variables configure the CLI process, rather than the generated Factory Server:
+
+<PropertiesTable
+  content={[
+    {
+      name: 'MASTRA_API_TOKEN',
+      type: 'string',
+      description: 'Authenticate platform API requests instead of using saved credentials or browser sign-in.',
+      isOptional: true,
+    },
+    {
+      name: 'MASTRA_ORG_ID',
+      type: 'string',
+      description: 'Select the organization without prompting. An explicit --org flag takes precedence.',
+      isOptional: true,
+    },
+    {
+      name: 'MASTRA_TELEMETRY_DISABLED',
+      type: 'string',
+      description: 'Set to 1, true, or yes to disable CLI telemetry. Values are case-insensitive.',
+      isOptional: true,
+    },
+  ]}
+/>
+
+## Telemetry
+
+The CLI collects usage information, including the package manager and whether platform provisioning succeeds. Command telemetry records the template choice, `--no-platform`, region, version tag, and whether you supplied an organization. Sensitive argument values are redacted from failure telemetry.
+
+To opt out:
+
+```bash npm2yarn
+MASTRA_TELEMETRY_DISABLED=1 npx create-factory@latest my-mastra-factory --no-platform
+```

@@ -1,9 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkspaceTreeView } from '@mastra/playground-ui/domains/workspace';
@@ -226,7 +226,7 @@ export default function Workspace() {
     return (
       <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Workspaces</h1>
-        <Spinner fill />
+        <BrandLoader fill />
       </PageLayout>
     );
   }
@@ -384,10 +384,10 @@ export default function Workspace() {
                     variant="ghost"
                     size="icon-sm"
                     tooltip="Update skills"
-                    disabled={updateSkills.isPending}
                     onClick={() => void handleUpdateSkills()}
+                    loading={updateSkills.isPending}
                   >
-                    <IconArrowRotateClockwise className={updateSkills.isPending ? 'animate-spin' : undefined} />
+                    <IconArrowRotateClockwise />
                   </Button>
                 ) : undefined
               }

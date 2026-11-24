@@ -63,3 +63,47 @@ describe('LogDataPanel', () => {
     });
   });
 });
+
+describe('LogDataPanel sections', () => {
+  const plainLine: LogRecord = {
+    timestamp: new Date(2026, 10, 24, 9, 29, 30, 956),
+    level: 'warn',
+    message: 'Memory usage above 80% of limit',
+    data: { used_mb: '842', operation_id: 'op_8f21' },
+  };
+
+  it('groups a plain log line into Details and Fields sections around the message', () => {
+    render(<LogDataPanel log={plainLine} onClose={vi.fn()} />);
+
+    const details = within(screen.getByRole('region', { name: 'Details' }));
+    expect(details.getByText('warn')).toBeTruthy();
+
+    const fields = within(screen.getByRole('region', { name: 'Fields' }));
+    expect(fields.getByText('operation_id')).toBeTruthy();
+    expect(fields.getByText('op_8f21')).toBeTruthy();
+    expect(screen.queryByText('Data')).toBeNull();
+  });
+
+  it('keeps nested data as formatted JSON', () => {
+    render(<LogDataPanel log={{ ...plainLine, data: { request: { path: '/api' } } }} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Fields')).toBeTruthy();
+    expect(screen.getByRole('dialog').textContent).toContain('"path": "/api"');
+  });
+
+  it('pretty-prints a JSON message', () => {
+    render(<LogDataPanel log={{ ...plainLine, message: '{"msg":"request done","status":200}' }} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('dialog').textContent).toContain('"msg": "request done"');
+  });
+
+  it('shows nested metadata as JSON instead of [object Object]', () => {
+    render(
+      <LogDataPanel log={{ ...plainLine, metadata: { request: { path: '/api', status: 500 } } }} onClose={vi.fn()} />,
+    );
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.textContent).toContain('"path": "/api"');
+    expect(dialog.textContent).not.toContain('[object Object]');
+  });
+});

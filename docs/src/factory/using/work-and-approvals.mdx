@@ -1,0 +1,62 @@
+---
+title: Work items | Core concepts
+description: Understand Work phases, acceptance, plan approval, automation, and changes from GitHub and Linear events.
+---
+
+# Work items
+
+The **Work** board tracks an issue or task from [intake](/using/intake) to completion. When the task produces a pull request, that pull request gets its own card in the board's **Review** phase. Use the issue's card to assess the outcome and the pull request's card to assess the change.
+
+## Understand the phases
+
+| Phase | What it means | Your next action |
+| - | - | - |
+| Intake | An issue is available for work. | Read the issue and start a run, or accept it to plan. |
+| Planning | The agent investigates, prepares an approach, and checks it. | Review or revise the plan. |
+| Building | The agent changes the repository and runs checks. | Inspect progress, tool failures, and the patch. |
+| Review | The implementation is ready for review or follow-up. | Inspect the PR and the card that tracks it in Review. |
+| Done | The task is complete. | Confirm its acceptance criteria are met. |
+| Canceled | Work was abandoned or canceled. | |
+
+These are the phases of the Work board that Factory installs. Projects created earlier may also have a Triage phase, which investigates a task before planning. Custom boards, and phases added to Work, follow their own settings. See [Boards and rules](/configure/boards-and-rules).
+
+## Make the right decision
+
+| Decision | What it authorizes |
+| - | - |
+| Start a proposed run | Run an investigation, review, or follow-up that was waiting on its card. |
+| Accept a task | Allow a task to leave Intake. **Accept** moves the card to Planning. The menu offers **Accept and plan** and **Close**. |
+| Approve a plan | Continue with the implementation described in that plan. |
+| Merge a PR | Integrate the reviewed branch through the repository's merge process. |
+
+Factory doesn't store a separate acceptance record. When a person moves an item out of Intake, that move is the approval.
+
+The built-in Planning phase writes a plan in the session and submits it with `submit_plan`. The card waits there until you approve the plan. Once `submit_plan` returns an approved plan, the agent moves the card to Building with `factory_transition_work_item`.
+
+**Build** starts implementation directly. Use the guided [first-change tutorial](/#create-your-first-pull-request) when you want to practice plan review before implementation.
+
+## Choose how much Factory runs on its own
+
+How much Factory runs on its own is a setting on each phase. A working phase starts its run without asking when it has **Start on its own**, optionally limited by **Start only when**. Every other phase waits for a person to start the run.
+
+The Work board that Factory installs never starts a run on its own. A run begins when you start it or accept a task. Plans always wait for a person, and a waiting plan is listed in **Needs attention**. Rule effects that wait for a person appear under **Awaiting approval** on the Factory's [**Rules** page](/configure/boards-and-rules#rule-decisions). A custom board can approve a phase's plan automatically with the exit tool's **Approve on its own** setting.
+
+Projects created before these controls moved to phases keep their earlier setting as phase start rules. To change autonomy, edit the phase settings described in [Boards and rules](/configure/boards-and-rules#configure-a-working-phase).
+
+With every phase waiting for a person, Factory never starts agent work or spends model tokens on its own. The **Overview** page and each session's transcript show what happened. With a phase set to start on its own, a run starts only for cards the phase's condition matches.
+
+The default GitHub rules allow an automatic run only for issues created after the Factory by an author with write or admin access to the repository, and only in a phase that starts on its own. Start other issues manually.
+
+## Understand source events
+
+The table describes built-in behavior. Event delivery and reconciliation are asynchronous.
+
+| Source event | Result |
+| - | - |
+| GitHub issue or PR arrives | Issues appear in Intake on the Work board, and pull requests get a card in Review on the same board. Whether a run starts depends on the phase's start setting and the source's metadata. |
+| GitHub issue closes as completed | Its active Work card moves to Done. |
+| GitHub issue closes as not planned or duplicate | Its active Work card moves to Canceled. |
+| Linear issue becomes completed or canceled | Its active Work card moves to Done or Canceled, respectively. |
+| PR merges | Its Review card moves to Done. The originating Work card also moves to Done, unless it has another PR open. Then it stays in Review and its session is told which PR is still open. |
+| PR closes without merging | Its Review card can move to Canceled. The original Work item tracks completion of the task, not the PR. |
+| A reviewed PR receives new work | A later review may be needed. Inspect the card and use **Re-review** when available. |

@@ -550,42 +550,47 @@ describeForAllEngines(
 
     // #26346: feedback continuation must not duplicate earlier text during result processing.
     // Technical: processOutputResult rewrites appear on their own steps, not only the last step.
-    // Known gap: durable, evented and inngest engines report the raw step text ('firstmore') because the
-    // processOutputResult rewrite is not reconciled back onto steps after a feedback continuation.
-    const itFailsOnDurable = engine === 'durable' || engine === 'evented' || engine === 'inngest' ? it.fails : it;
-    itFailsOnDurable('a reply continued after feedback reports each processed part on its own step', async () => {
-      const upper: Processor = {
-        id: 'collapse-continuation-result',
-        processOutputResult: async ({ messages }) =>
-          messages.map(message => {
-            if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
-            const text = message.content.parts
-              ?.map(part => (part.type === 'text' ? part.text.toUpperCase() : ''))
-              .join('');
-            return { ...message, content: { ...message.content, content: text, parts: [{ type: 'text', text }] } };
-          }),
-      };
-      let iteration = 0;
+    // Inngest still reports the original step text.
+    (engine === 'inngest' ? it.fails : it).each(['rewrites', 'replaces'])(
+      'a reply continued after feedback reports each processed part on its own step when the processor %s the last reply',
+      async operation => {
+        const upper: Processor = {
+          id: 'collapse-continuation-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => {
+              if (message.role !== 'assistant' || message.content?.metadata?.completionResult) return message;
+              const text = message.content.parts
+                ?.map(part => (part.type === 'text' ? part.text.toUpperCase() : ''))
+                .join('');
+              return {
+                ...message,
+                id: operation === 'replaces' && text === 'MORE' ? 'replacement-reply' : message.id,
+                content: { ...message.content, content: text, parts: [{ type: 'text', text }] },
+              };
+            }),
+        };
+        let iteration = 0;
 
-      const { output } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'hi',
-        maxSteps: 2,
-        outputProcessors: [upper],
-        onIterationComplete: async () =>
-          ++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined,
-        fixtures: llm => {
-          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'first' });
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'more' });
-        },
-      });
+        const { output } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'hi',
+          maxSteps: 2,
+          outputProcessors: [upper],
+          onIterationComplete: async () =>
+            ++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'first' });
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'more' });
+          },
+        });
 
-      const full = await output.getFullOutput();
-      expect(await output.text).toBe('FIRSTMORE');
-      expect(full.text).toBe('FIRSTMORE');
-      expect(full.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
-    });
+        const full = await output.getFullOutput();
+        expect(await output.text).toBe(operation === 'replaces' ? 'MORE' : 'FIRSTMORE');
+        expect(full.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
+        expect(full.text).toBe('FIRSTMORE');
+      },
+    );
   },
   {},
 );
