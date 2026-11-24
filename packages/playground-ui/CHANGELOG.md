@@ -1,5 +1,11 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.11
+
+### Patch Changes
+
+- Disable zoom buttons at the Knowledge graph’s zoom limits, using the same controls as Workflow. ([#31227](https://github.com/mastra-ai/mastra/pull/31227))
+
 ## 71.0.0-alpha.10
 
 ### Minor Changes
