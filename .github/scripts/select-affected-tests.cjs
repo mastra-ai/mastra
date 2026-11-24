@@ -11,6 +11,7 @@ const { loadTiers, selectJobs, selectUnitTests } = require('../../scripts/test-t
 
 const ROUTING_FILES = ['.github/workflows/prebuild.yml', '.github/scripts/select-affected-tests.cjs'];
 const EXPERIMENT_ENTRY_FILES = ['packages/cli/src/commands/index.ts', 'packages/cli/src/index.ts'];
+const UNIT_SHARD_THRESHOLD = 500;
 const WORKSPACE_DOCKER_PACKAGES = ['s3', 'gcs', 'azure'];
 const TEST_FILE_RE = /\.(?:test|spec)(?:-d)?\.tsx?$/;
 const FIXTURE_RE = /__fixtures__|\/fixtures\//;
@@ -33,7 +34,6 @@ const isPackageE2eTest = file =>
   file.startsWith('packages/evals/src/scorers/llm/') ||
   file.startsWith('packages/rag/src/');
 const isExternalE2eTest = file => file.startsWith('e2e-tests/') || file.startsWith('packages/playground/e2e/');
-const storeOf = file => (file.match(/^stores\/([^/]+)\//) || [])[1];
 
 /**
  * Turns the changed files and the selected tests into the routing Prebuild's jobs read.
@@ -173,8 +173,8 @@ function routeTests({
     runFull: fullSuite,
     unitTestFiles,
     // Core-touching PRs select 2,000+ unit files, which runs past the job's cap on one
-    // machine. Lists that large run on three; narrow PRs stay one job.
-    unitShards: unitTestFiles.length >= UNIT_SHARD_THRESHOLD ? [1, 2, 3] : [1],
+    // machine. Lists that large run on six; narrow PRs stay one job.
+    unitShards: unitTestFiles.length >= UNIT_SHARD_THRESHOLD ? [1, 2, 3, 4, 5, 6] : [1],
     e2eTestFiles: e2eTiers.kept,
     workspaceSelection,
     workspaceDockerPackages,
@@ -259,14 +259,6 @@ function main() {
   }
 
   const affectedTests = [...new Set([...graphTests, ...(dependencySelection?.tests || [])])].sort();
-  let timings = {};
-  if (TEST_TIMINGS && fs.existsSync(TEST_TIMINGS)) {
-    try {
-      timings = JSON.parse(fs.readFileSync(TEST_TIMINGS, 'utf-8'));
-    } catch {
-      console.error(`Could not read ${TEST_TIMINGS}; planning unit shards without timings.`);
-    }
-  }
   const changedEntryFiles = changedFiles.filter(file => EXPERIMENT_ENTRY_FILES.includes(file));
   const routing = routeTests({
     changedFiles,
@@ -313,8 +305,6 @@ function main() {
   fs.writeFileSync(`${outDir}/workspace_packages.json`, `${JSON.stringify(workspaceSelection.packages)}\n`);
   fs.writeFileSync(`${outDir}/base_sha.txt`, `${BASE_SHA}\n`);
   fs.writeFileSync(`${outDir}/head_sha.txt`, `${HEAD_SHA}\n`);
-  // The unit test shards balance their files by the same timings.
-  fs.writeFileSync(`${outDir}/test-timings.json`, JSON.stringify(timings));
 
   const { droppedFiles, skippedJobs, reason } = routing.tiers;
   console.error(`Tier filter: dropped ${droppedFiles.length} files, skipped ${skippedJobs.length} jobs (${reason})`);

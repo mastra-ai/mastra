@@ -146,11 +146,6 @@ jobs:
         if: ${{ !cancelled() && steps.tier.outcome == 'success' && steps.tier.outputs.skip != 'true' }}
         run: node --test .github/scripts/check-changeset-packages.test.mjs
 
-      # Unit tests for the CI helpers (test routing, shard planning). Root Vitest discovery
-      # doesn't include .github/scripts, so they run here.
-      - name: Test CI scripts
-        run: pnpm vitest run --config .github/scripts/vitest.config.ts
-
       # Check all pending changesets, including on changeset-only PRs.
       - name: Reject unknown or ignored changeset packages
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}

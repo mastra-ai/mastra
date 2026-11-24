@@ -106,7 +106,6 @@ jobs:
           echo "container_groups=$CONTAINER_GROUPS" >> $GITHUB_OUTPUT
 
   test:
-    name: test (${{ matrix.store }}${{ matrix.shards > 1 && format(', shard {0}/{1}', matrix.shard, matrix.shards) || '' }})
     needs: setup
     if: ${{ github.repository == 'mastra-ai/mastra' && needs.setup.outputs.stores != '[]' }}
     runs-on: starsling-ubuntu-26.04
@@ -117,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJson(needs.setup.outputs.stores) }}
+        store: ${{fromJson(needs.setup.outputs.stores)}}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -145,12 +144,9 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
       - name: Run ${{ matrix.store }} tests
-        run: |
-          if [ "$SHARDS" -gt 1 ]; then pnpm test --shard="$SHARD/$SHARDS"; else pnpm test; fi
+        run: pnpm test
         working-directory: stores/${{ matrix.store }}
         env:
-          SHARD: ${{ matrix.shard }}
-          SHARDS: ${{ matrix.shards }}
           NODE_OPTIONS: '--max_old_space_size=8192'
           PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
           ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
