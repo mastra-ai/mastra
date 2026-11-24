@@ -10,7 +10,7 @@ import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-const emptyThreadClass =
+export const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
 function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value: string; font?: 'body' | 'mono' }) {
@@ -25,7 +25,7 @@ function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value
 export function EmptyThreadState() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: activeFactory } = useFactoryQuery(factoryId);
-  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
+  const { sessionId, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
 
@@ -37,7 +37,7 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
+      <Txt as="h2" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
         What can I help you build?
       </Txt>
       <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
@@ -83,7 +83,7 @@ export function EmptyThreadState() {
           <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />
           {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
+          {sessionId && sessionId !== resourceId && <FactoryMetadata label="Session ID" value={sessionId} />}
         </dl>
       </details>
     </section>

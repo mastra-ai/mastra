@@ -2,6 +2,7 @@
 export interface ThreadOwner {
   id: string;
   name?: string;
+  avatarUrl?: string;
 }
 
 /**

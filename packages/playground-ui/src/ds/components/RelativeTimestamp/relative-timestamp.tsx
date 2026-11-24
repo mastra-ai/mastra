@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { focusRing } from '@/ds/primitives/transitions';
+import { useClock } from '@/hooks/use-clock';
 import { cn } from '@/lib/utils';
 import { formatDate, toDate } from '@/utils/date-format';
 import type { DateInput } from '@/utils/date-format';
@@ -11,33 +11,6 @@ export interface RelativeTimestampProps {
   value: DateInput;
   label?: string;
   className?: string;
-}
-
-const listeners = new Set<() => void>();
-let ticker: ReturnType<typeof setInterval> | undefined;
-let now = Date.now();
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  if (!ticker) {
-    now = Date.now();
-    ticker = setInterval(() => {
-      now = Date.now();
-      listeners.forEach(notify => notify());
-    }, 1000);
-  }
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0) {
-      clearInterval(ticker);
-      ticker = undefined;
-    }
-  };
-}
-
-function useNow() {
-  const read = () => (ticker ? now : Date.now());
-  return useSyncExternalStore(subscribe, read, read);
 }
 
 const SINCE_UNITS = [
@@ -69,7 +42,7 @@ function formatSince(date: Date, at: number) {
 }
 
 function Relative({ date }: { date: Date }) {
-  const parts = formatRelativeTime(date, { now: useNow() })?.split(/(\d+[smhd])/) ?? [];
+  const parts = useClock(now => formatRelativeTime(date, { now }))?.split(/(\d+[smhd])/) ?? [];
   return parts.map((part, index) =>
     index % 2 ? (
       <span key={index} className="font-mono [font-size-adjust:cap-height_0.729]">
@@ -82,7 +55,7 @@ function Relative({ date }: { date: Date }) {
 }
 
 function Since({ date }: { date: Date }) {
-  return <>{formatSince(date, useNow())}</>;
+  return <>{useClock(now => formatSince(date, now))}</>;
 }
 
 function zoneName(date: Date, timeZone?: string) {

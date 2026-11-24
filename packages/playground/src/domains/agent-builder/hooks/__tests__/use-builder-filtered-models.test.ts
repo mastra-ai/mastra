@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createElement } from 'react';
-import type { PropsWithChildren, ReactNode } from 'react';
+import type { PropsWithChildren } from 'react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ModelInfo } from '../../../llm/hooks/use-filtered-models';
 import { useBuilderFilteredModels, useBuilderFilteredProviders } from '../use-builder-filtered-models';
@@ -24,7 +24,7 @@ const createWrapper = () => {
   return ({ children }: PropsWithChildren) =>
     createElement(MastraReactProvider, {
       baseUrl: BASE_URL,
-      children: createElement(QueryClientProvider, { client: queryClient }, children as ReactNode),
+      children: createElement(QueryClientProvider, { client: queryClient }, children),
     });
 };
 

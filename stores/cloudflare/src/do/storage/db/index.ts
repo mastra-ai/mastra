@@ -293,7 +293,8 @@ export class DODB extends MastraBase {
 
         if (!existingColumnNames.has(columnName) && args.ifNotExists.includes(columnName)) {
           const sqlType = this.getSqlType(column.type);
-          const defaultValue = this.getDefaultValue(column.type);
+          // Nullable columns start out NULL; a type default would give existing rows a value they never had.
+          const defaultValue = column.nullable ? 'DEFAULT NULL' : this.getDefaultValue(column.type);
           const sql = `ALTER TABLE ${fullTableName} ADD COLUMN ${columnName} ${sqlType} ${defaultValue}`;
           await this.executeQuery({ sql });
           this.logger.debug(`Added column ${columnName} to table ${fullTableName}`);
@@ -484,16 +485,13 @@ export class DODB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                // Don't update conflict keys or createdAt on conflict
-                if (col !== 'createdAt' && !conflictKeys.includes(col)) {
-                  acc[col] = `excluded.${col}`;
-                }
-                return acc;
-              },
-              {} as Record<string, string>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, string>>((acc, col) => {
+              // Don't update conflict keys or createdAt on conflict
+              if (col !== 'createdAt' && !conflictKeys.includes(col)) {
+                acc[col] = `excluded.${col}`;
+              }
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(
               fullTableName,

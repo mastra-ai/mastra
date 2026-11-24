@@ -1,4 +1,4 @@
-import { getActiveRouteMemoryModelId } from '@mastra/code-sdk/agents/model';
+import { canUseProvider, getActiveRouteMemoryModelId } from '@mastra/code-sdk/agents/model';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { Session } from '@mastra/core/agent-controller';
 
@@ -12,6 +12,6 @@ export function getEffectiveOMRoleModelId(session: Session<any>, role: 'observer
     session.state.get() as Record<string, unknown> | undefined,
     session.thread.getId(),
   );
-  if (routeMemoryModelId === 'auto') return resolveAutoOMModelId(session.model.get() ?? undefined);
+  if (routeMemoryModelId === 'auto') return resolveAutoOMModelId(session.model.get() ?? undefined, canUseProvider);
   return routeMemoryModelId ?? session.om[role].modelId();
 }

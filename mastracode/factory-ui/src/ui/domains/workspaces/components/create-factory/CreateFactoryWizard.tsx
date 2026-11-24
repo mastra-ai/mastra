@@ -1,3 +1,4 @@
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
@@ -5,11 +6,11 @@ import { useApiConfig } from '../../../../../api/config';
 import { useGithubReposQuery } from '../../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../../hooks/useGithubStatus';
 import { connectLinear } from '../../../factory/services/linear';
-import { useCreateFactoryFlow, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { useCreateFactoryFlow } from '../../hooks/useCreateFactoryFlow';
+import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 import { useCreateFactoryFromDraft } from '../../hooks/useCreateFactoryFromDraft';
 import { factoryHomePath } from '../../services/factoryPaths';
 import { connectGithub, manageGithubConnection } from '../../services/github';
-import { useKeyDown } from '../../../../lib/hooks';
 import { CreateFactoryJiraRows } from './CreateFactoryJiraRows';
 import { CreateFactoryLinearRows } from './CreateFactoryLinearRows';
 import { CreateFactoryModelStep } from './CreateFactoryModelStep';
@@ -31,15 +32,15 @@ const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
   },
   vcs: {
     title: 'Choose your codebase',
-    placeholder: 'Search repositories…',
+    placeholder: 'Search repositories',
   },
   'project-management': {
     title: 'Connect the work behind the code',
-    placeholder: 'Search options…',
+    placeholder: 'Search options',
   },
   'model-provider': {
     title: 'Choose your Factory model',
-    placeholder: 'Search models and providers…',
+    placeholder: 'Search models and providers',
   },
 };
 
@@ -70,10 +71,7 @@ export function CreateFactoryWizard() {
     draft,
     onFactoryCreated: factory => flow.rememberFactory(factory),
     onRepositoryLinked: linkedRepositoryId => flow.rememberLinkedRepository(linkedRepositoryId),
-    onCreated: async factory => {
-      await flow.clear();
-      void navigate(factoryHomePath(factory));
-    },
+    onCreated: () => flow.clear(),
   });
 
   const committing = createFactory.isPending;
@@ -82,7 +80,7 @@ export function CreateFactoryWizard() {
     if (location.key === 'default') void navigate(factoryId ? `/factories/${factoryId}` : '/');
     else void navigate(-1);
   };
-  useKeyDown({ escape: leave }, { enabled: !committing });
+  useKeydown({ Escape: leave }, { enabled: !committing, insideFields: true });
 
   const step = draft?.step;
   if (!step) return null;
@@ -92,7 +90,7 @@ export function CreateFactoryWizard() {
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 pt-6">
+    <div className="flex min-h-0 flex-col gap-2">
       <CreateFactoryPalette
         {...STEP_CHROME[step]}
         step={step}
@@ -151,7 +149,10 @@ export function CreateFactoryWizard() {
             query={value}
             savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
+            onPick={(_providerId, modelId) =>
+              // Per-call callbacks skip once the wizard unmounts, so leaving mid-create keeps the person where they went.
+              createFactory.mutate({ modelId }, { onSuccess: factory => void navigate(factoryHomePath(factory)) })
+            }
           />
         )}
       </CreateFactoryPalette>

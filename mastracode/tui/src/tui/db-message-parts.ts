@@ -3,9 +3,8 @@ import {
   isAccountSwitchReason,
   isModelFallbackReason,
   MODEL_FALLBACK_PART_TYPE,
-  type AccountSwitchPartData,
-  type ModelFallbackPartData,
 } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { AccountSwitchPartData, ModelFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';

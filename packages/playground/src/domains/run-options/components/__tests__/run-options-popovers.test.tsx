@@ -29,7 +29,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   window.localStorage.clear();
-  delete (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS;
+  delete window.MASTRA_REQUEST_CONTEXT_PRESETS;
 });
 
 const renderWithProviders = (ui: React.ReactNode, entityType: 'agent' | 'workflow', entityId: string) => {
@@ -54,22 +54,19 @@ const open = async (name: string) => {
 describe('RequestContextPopover', () => {
   describe('when the user saves a preset from the JSON editor', () => {
     it('persists it for the entity, toasts and closes', async () => {
-      (window as typeof window & { MASTRA_REQUEST_CONTEXT_PRESETS?: string }).MASTRA_REQUEST_CONTEXT_PRESETS =
-        JSON.stringify({ French: { locale: 'fr' } });
+      window.MASTRA_REQUEST_CONTEXT_PRESETS = JSON.stringify({ French: { locale: 'fr' } });
       renderWithProviders(<RequestContextPopover entityType="agent" entityId={AGENT_ID} />, 'agent', AGENT_ID);
 
       await open('Request context');
-      expect(
-        await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 }),
-      ).not.toBeNull();
+      const editor = await screen.findByRole('textbox', { name: 'Request Context (JSON)' }, { timeout: 10_000 });
 
       fireEvent.click(screen.getByRole('combobox', { name: 'Request Context preset' }));
       const presetOption = await screen.findByRole('option', { name: 'French' });
       fireEvent.pointerDown(presetOption, { pointerType: 'mouse' });
       fireEvent.click(presetOption, { detail: 1 });
-      const saveButton = screen.getByRole<HTMLButtonElement>('button', { name: 'Save' });
-      await waitFor(() => expect(saveButton.disabled).toBe(false));
-      fireEvent.click(saveButton);
+      // The preset is formatted asynchronously before it lands in the editor; saving earlier saves the old draft.
+      await waitFor(() => expect(editor.textContent).toContain('"locale": "fr"'), { timeout: 10_000 });
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await waitFor(() => {
         expect(window.localStorage.getItem(`mastra-request-context:agent:${AGENT_ID}`)).toBe('{"locale":"fr"}');

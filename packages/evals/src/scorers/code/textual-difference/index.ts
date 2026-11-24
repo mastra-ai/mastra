@@ -23,31 +23,21 @@ function calculateRatio(input: string, output: string): number {
 
 /**
  * Finds the length of the longest common subsequence between two strings
+ * Only the previous row of the DP table is needed, so memory stays linear
  */
 function longestCommonSubsequence(str1: string, str2: string): number {
-  const m = str1.length;
-  const n = str2.length;
-  const dp: number[][] = [];
+  let previous = new Uint32Array(str2.length + 1);
+  let current = new Uint32Array(str2.length + 1);
 
-  // Initialize DP table
-  for (let i = 0; i <= m; i++) {
-    dp[i] = [];
-    for (let j = 0; j <= n; j++) {
-      dp[i]![j] = 0;
+  for (let i = 1; i <= str1.length; i++) {
+    const char = str1[i - 1];
+    for (let j = 1; j <= str2.length; j++) {
+      current[j] = char === str2[j - 1] ? previous[j - 1]! + 1 : Math.max(previous[j]!, current[j - 1]!);
     }
+    [previous, current] = [current, previous];
   }
 
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (str1[i - 1] === str2[j - 1]) {
-        dp[i]![j]! = dp[i - 1]![j - 1]! + 1;
-      } else {
-        dp[i]![j]! = Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
-      }
-    }
-  }
-
-  return dp[m]![n]!;
+  return previous[str2.length]!;
 }
 
 /**

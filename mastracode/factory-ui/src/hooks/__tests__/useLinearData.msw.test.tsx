@@ -12,40 +12,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
-import type {
-  LinearIssue,
-  LinearIssueDetail,
-  LinearProject,
-  LinearStatus,
-} from '../../ui/domains/factory/services/linear';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../useIntakeConfig';
-import {
-  useLinearIssueDetail,
-  useLinearIssuesQuery,
-  useLinearProjectsQuery,
-  useLinearStatusQuery,
-} from '../useLinearData';
+import type { LinearIssueDetail, LinearProject, LinearStatus } from '../../ui/domains/factory/services/linear';
+import { useIntakeConfigQuery, useSaveIntakeSelectionMutation } from '../useIntakeConfig';
+import { useLinearIssueDetail, useLinearProjectsQuery, useLinearStatusQuery } from '../useLinearData';
 
 const STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
-const ISSUES_URL = `${TEST_BASE_URL}/web/linear/issues`;
 const ISSUE_DETAIL_URL = `${TEST_BASE_URL}/web/linear/issues/:identifier`;
 const PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
-
-const issue: LinearIssue = {
-  id: 'issue-1',
-  identifier: 'ENG-42',
-  title: 'Fix intake sync',
-  url: 'https://linear.app/acme/issue/ENG-42',
-  state: 'Todo',
-  stateType: 'unstarted',
-  priorityLabel: 'High',
-  assignee: 'ada',
-  team: 'ENG',
-  labels: ['bug'],
-  createdAt: '2026-07-01T00:00:00Z',
-  updatedAt: '2026-07-02T00:00:00Z',
-};
 
 const projects: LinearProject[] = [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
@@ -103,62 +77,6 @@ describe('useLinearIssueDetail', () => {
   });
 });
 
-describe('useLinearIssuesQuery', () => {
-  it('given cursor pages, when fetchNextPage is called, then pages accumulate in order', async () => {
-    const pageTwoIssue: LinearIssue = { ...issue, id: 'issue-2', identifier: 'ENG-43', title: 'Page two issue' };
-    const requestedCursors: Array<string | null> = [];
-    server.use(
-      http.get(ISSUES_URL, ({ request }) => {
-        const after = new URL(request.url).searchParams.get('after');
-        requestedCursors.push(after);
-        return after === 'cursor-2'
-          ? HttpResponse.json({ issues: [pageTwoIssue], nextCursor: null })
-          : HttpResponse.json({ issues: [issue], nextCursor: 'cursor-2' });
-      }),
-    );
-
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
-
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    expect(result.current.data).toEqual([issue]);
-    expect(result.current.hasNextPage).toBe(true);
-
-    await result.current.fetchNextPage();
-
-    await waitFor(() => expect(result.current.data).toHaveLength(2));
-    expect(result.current.data).toEqual([issue, pageTwoIssue]);
-    expect(result.current.hasNextPage).toBe(false);
-    expect(requestedCursors).toEqual([null, 'cursor-2']);
-  });
-
-  it('given the hook is disabled, when it mounts, then no request is made', async () => {
-    const hit = vi.fn();
-    server.use(
-      http.get(ISSUES_URL, () => {
-        hit();
-        return HttpResponse.json({ issues: [issue], nextCursor: null });
-      }),
-    );
-
-    const { result, client } = renderHookWithProviders(() => useLinearIssuesQuery(undefined));
-
-    await waitFor(() => expect(client.isFetching()).toBe(0));
-    expect(result.current.fetchStatus).toBe('idle');
-    expect(hit).not.toHaveBeenCalled();
-  });
-
-  it('given the server fails, when the hook resolves, then it surfaces the server message', async () => {
-    server.use(
-      http.get(ISSUES_URL, () => HttpResponse.json({ error: 'linear_fetch_failed', message: 'boom' }, { status: 502 })),
-    );
-
-    const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
-
-    await waitFor(() => expect(result.current.isError).toBe(true));
-    expect((result.current.error as Error).message).toBe('boom');
-  });
-});
-
 describe('useLinearProjectsQuery', () => {
   it('given a connected workspace, when the hook resolves, then it exposes the projects', async () => {
     server.use(http.get(PROJECTS_URL, () => HttpResponse.json({ projects })));
@@ -170,7 +88,7 @@ describe('useLinearProjectsQuery', () => {
   });
 });
 
-describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
+describe('useIntakeConfigQuery / useSaveIntakeSelectionMutation', () => {
   const config: IntakeConfig = {
     github: { enabled: true, sourceIds: null },
     gitlab: { enabled: false, sourceIds: null },
@@ -188,7 +106,7 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
     expect(result.current.data).toEqual(config);
   });
 
-  it('given a save, when it succeeds, then the config cache updates and linear issues invalidate', async () => {
+  it('given a Linear save, when it succeeds, then only Linear is sent and the cache takes the server config', async () => {
     const updated: IntakeConfig = {
       github: { enabled: false, sourceIds: null },
       gitlab: { enabled: false, sourceIds: null },
@@ -207,23 +125,23 @@ describe('useIntakeConfigQuery / useSaveIntakeConfigMutation', () => {
 
     const { result } = renderHookWithProviders(() => ({
       query: useIntakeConfigQuery(),
-      save: useSaveIntakeConfigMutation(),
+      save: useSaveIntakeSelectionMutation('linear'),
     }));
 
     await waitFor(() => expect(result.current.query.data).toBeDefined());
 
-    result.current.save.mutate(updated);
+    result.current.save.mutate(updated.linear);
 
     await waitFor(() => expect(result.current.query.data).toEqual(updated));
-    expect(putBody).toEqual(updated);
+    expect(putBody).toEqual({ linear: updated.linear });
   });
 
   it('given the save fails, when it settles, then the mutation surfaces the server message', async () => {
     server.use(http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })));
 
-    const { result } = renderHookWithProviders(() => useSaveIntakeConfigMutation());
+    const { result } = renderHookWithProviders(() => useSaveIntakeSelectionMutation('linear'));
 
-    result.current.mutate(config);
+    result.current.mutate(config.linear);
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as Error).message).toBe('invalid_config');

@@ -6,7 +6,7 @@ import type { ToolsInput } from '@internal/core/types';
 import { AISDKSpeech } from './aisdk/speech';
 import { AISDKTranscription } from './aisdk/transcription';
 import { MastraVoice } from './voice';
-import type { VoiceEventType, VoiceEventMap } from '.';
+import type { IMastraVoice, VoiceEventType, VoiceEventMap } from '.';
 
 const supportedSpecificationVersions = ['v2', 'v3'];
 
@@ -24,18 +24,18 @@ function isSpeechModel(obj: any): obj is SpeechModel {
 }
 
 export class CompositeVoice extends MastraVoice<unknown, unknown, unknown, ToolsInput, VoiceEventMap> {
-  protected speakProvider?: MastraVoice;
-  protected listenProvider?: MastraVoice;
-  protected realtimeProvider?: MastraVoice;
+  protected speakProvider?: IMastraVoice;
+  protected listenProvider?: IMastraVoice;
+  protected realtimeProvider?: IMastraVoice;
 
   constructor({
     input,
     output,
     realtime,
   }: {
-    input?: MastraVoice | TranscriptionModel;
-    output?: MastraVoice | SpeechModel;
-    realtime?: MastraVoice;
+    input?: IMastraVoice | TranscriptionModel;
+    output?: IMastraVoice | SpeechModel;
+    realtime?: IMastraVoice;
   }) {
     super();
 

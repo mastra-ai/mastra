@@ -15,8 +15,13 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
+import type { UpdateWorkflowStateOptions } from '../../../storage/types';
 import { createTool } from '../../../tools';
+import { createRunStorage } from '../../../workflows/run-storage';
+import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import type { AgentExecutionOptions } from '../../agent.types';
+import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { ExecutionFence, __resetExecutionFencesForTests } from '../execution-fence';
@@ -88,7 +93,11 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     await pubsub.close();
   });
 
-  function setup(execute: (input: { item: string }) => Promise<unknown>) {
+  function setup(
+    execute: (input: { item: string }) => Promise<unknown>,
+    defaultOptions?: AgentConfig['defaultOptions'],
+    storageVersion?: 1 | 2,
+  ) {
     const storage = new InMemoryStore();
     const model = toolCallThenTextModel('archive', 'archived');
     const archive = createTool({
@@ -105,11 +114,25 @@ describe('DurableAgent resume claim loser (#27365)', () => {
         instructions: 'You archive items.',
         model: model.model as LanguageModelV2,
         tools: { archive },
+        defaultOptions,
       }),
       pubsub,
+      storageVersion,
     });
     new Mastra({ agents: { 'loser-agent': durableAgent as any }, logger: false, storage, pubsub });
     return { storage, model, durableAgent };
+  }
+
+  /** Replaces the run's row in the storage version it's stored in, as another process would. */
+  async function rewriteRow(storage: InMemoryStore, runId: string, snapshot: WorkflowRunState) {
+    const workflows = (await storage.getStore('workflows'))!;
+    const row = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+    await createRunStorage({
+      storageVersion: row?.storageVersion ?? 1,
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      runId,
+      getStore: async () => workflows,
+    }).writeSnapshot(snapshot, row?.resourceId);
   }
 
   async function suspend(durableAgent: ReturnType<typeof setup>['durableAgent']) {
@@ -137,6 +160,80 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     });
     return errors;
   }
+
+  it.each(['per-call', 'default', 'dynamic-default', 'persisted'] as const)(
+    'rejects invalid %s timeouts before cold resume recovery can change the run (COR-1426)',
+    async mode => {
+      const execute = vi.fn(async () => ({ ok: true }));
+      const defaults: AgentExecutionOptions = { modelSettings: { timeout: { stepMs: 30_000 } } };
+      const resolveDefaults = vi.fn(() => defaults);
+      const { storage, model, durableAgent } = setup(execute, mode === 'dynamic-default' ? resolveDefaults : defaults);
+      const runId = await suspend(durableAgent);
+      const row = (await workflowRow(storage, runId))!;
+      const suspendedSnapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
+      if (mode === 'persisted') {
+        suspendedSnapshot.context.input.options.modelSettings = { timeout: { stepMs: -1 } };
+      }
+      // Model a process dying after claiming the suspended run, before continuing it.
+      await rewriteRow(storage, runId, { ...suspendedSnapshot, status: 'running' });
+      globalRunRegistry.delete(runId);
+      const before = await workflowRow(storage, runId);
+      const runningSnapshot = typeof before!.snapshot === 'string' ? JSON.parse(before!.snapshot) : before!.snapshot;
+      expect(runningSnapshot.status).toBe('running');
+      expect(globalRunRegistry.has(runId)).toBe(false);
+      const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub });
+      new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
+      const recover = vi.spyOn(coldAgent, 'recoverActiveRuns');
+      if (mode === 'default') defaults.modelSettings = { timeout: { stepMs: -1 } };
+      resolveDefaults.mockClear();
+
+      await expect(
+        coldAgent.resume(
+          runId,
+          { approved: true },
+          mode === 'per-call' || mode === 'dynamic-default' ? { modelSettings: { timeout: { stepMs: -1 } } } : {},
+        ),
+      ).rejects.toThrow(TypeError);
+      expect(recover).not.toHaveBeenCalled();
+      expect(resolveDefaults).not.toHaveBeenCalled();
+      expect(await workflowRow(storage, runId)).toEqual(before);
+      expect(execute).not.toHaveBeenCalled();
+      expect(model.calls()).toBe(1);
+
+      if (mode === 'persisted') {
+        runningSnapshot.context.input.options.modelSettings = { timeout: { stepMs: 30_000 } };
+        await rewriteRow(storage, runId, runningSnapshot);
+      }
+      const resumed = await coldAgent.resume(
+        runId,
+        { approved: true },
+        { modelSettings: { timeout: { stepMs: 30_000 } } },
+      );
+      await drain(resumed.fullStream);
+      expect(recover).toHaveBeenCalledTimes(1);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(model.calls()).toBe(2);
+    },
+  );
+
+  it('rejects a terminal cold run before inspecting its input or taking a recovery claim', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const { storage, durableAgent } = setup(execute);
+    const runId = await suspend(durableAgent);
+    const row = (await workflowRow(storage, runId))!;
+    const snapshot = typeof row.snapshot === 'string' ? JSON.parse(row.snapshot) : row.snapshot;
+    await rewriteRow(storage, runId, { ...snapshot, status: 'success', context: {} });
+    globalRunRegistry.delete(runId);
+    const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub });
+    new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
+    const recover = vi.spyOn(coldAgent, 'recoverActiveRuns');
+
+    await expect(coldAgent.resume(runId, { approved: true })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    });
+    expect(recover).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
 
   it('rejects a warm resume of a run whose snapshot is gone without writing a new row', async () => {
     const execute = vi.fn(async () => ({ ok: true }));
@@ -226,6 +323,81 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     });
     expect(topicErrors).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [1, 2],
+    [2, 1],
+  ] as const)(
+    'finishes a run suspended on storage v%i in its stored version after the agent moves to v%i',
+    async (from, to) => {
+      const rows: Array<{ stored: boolean; other: boolean }> = [];
+      const { storage, durableAgent } = setup(
+        async () => {
+          const workflows = (await storage.getStore('workflows'))!;
+          const loop = { runId, workflowName: DurableStepIds.AGENTIC_LOOP };
+          rows.push({
+            stored: !!(await workflows.getWorkflowRunById({ ...loop, storageVersion: from })),
+            other: !!(await workflows.getWorkflowRunById({ ...loop, storageVersion: to })),
+          });
+          return { ok: true };
+        },
+        undefined,
+        from,
+      );
+      const runId = await suspend(durableAgent);
+      globalRunRegistry.delete(runId);
+      const coldAgent = createDurableAgent({ agent: durableAgent.agent, pubsub, storageVersion: to });
+      new Mastra({ agents: { 'loser-agent': coldAgent }, logger: false, storage, pubsub });
+
+      const resumed = await coldAgent.resume(runId, { approved: true });
+      const chunks = await drain(resumed.fullStream);
+      resumed.cleanup();
+
+      expect(chunks.find(chunk => chunk.type === 'error')).toBeUndefined();
+      expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+        'archived',
+      ]);
+      expect(rows).toEqual([{ stored: true, other: false }]);
+      await vi.waitFor(async () => expect(await workflowRow(storage, runId)).toBeNull());
+    },
+  );
+
+  it('reports a resume that loses the persisted claim as AGENT_RESUME_ALREADY_CLAIMED (#27619)', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const { storage, durableAgent } = setup(execute);
+    const runId = await suspend(durableAgent);
+    const topicErrors = await watchTopicErrors(runId);
+    const workflows = (await storage.getStore('workflows'))!;
+
+    // Another process claims the row after this resume read it as suspended but before its
+    // own claim lands, so the real claim CAS (suspended -> running) loses. A v1 run is claimed
+    // through updateWorkflowState, a v2 run through updateWorkflowRunHeader.
+    let competed = false;
+    const competing =
+      <R>(update: (args: { workflowName: string; runId: string; opts: UpdateWorkflowStateOptions }) => Promise<R>) =>
+      async (args: { workflowName: string; runId: string; opts: UpdateWorkflowStateOptions }) => {
+        if (!competed && args.runId === runId && args.opts.expectedStatus === 'suspended') {
+          competed = true;
+          await update({ workflowName: args.workflowName, runId, opts: { ...args.opts } });
+        }
+        return update(args);
+      };
+    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    const updateWorkflowRunHeader = workflows.updateWorkflowRunHeader.bind(workflows);
+    vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(competing(updateWorkflowState));
+    vi.spyOn(workflows, 'updateWorkflowRunHeader').mockImplementation(competing(updateWorkflowRunHeader));
+
+    const loser = await durableAgent.resume(runId, { approved: true });
+    const chunks = await drain(loser.fullStream);
+    loser.cleanup();
+
+    expect(chunks.find(chunk => chunk.type === 'error')?.payload?.error).toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+    expect(topicErrors).toEqual([]);
+    expect(execute).not.toHaveBeenCalled();
+    expect((await workflowRow(storage, runId))?.snapshot).toMatchObject({ status: 'running' });
   });
 });
 

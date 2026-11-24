@@ -7,7 +7,7 @@ packages:
 
 # Workflow\.branch()
 
-The `.branch()` method creates conditional branches between workflow steps, allowing for different paths to be taken based on the result of a previous step.
+The `.branch()` method creates conditional branches between workflow steps, allowing for different paths to be taken based on the result of a previous step. Every branch whose condition evaluates to `true` runs; conditions are evaluated independently, so overlapping conditions run multiple branches. Use mutually exclusive conditions when only one branch should run.
 
 ## Usage example
 

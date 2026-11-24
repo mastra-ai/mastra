@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-deepgram",
-  "version": "0.13.2-alpha.0",
+  "version": "0.13.5-alpha.0",
   "description": "Mastra Deepgram voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -37,10 +38,11 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "msw": "^2.15.0",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

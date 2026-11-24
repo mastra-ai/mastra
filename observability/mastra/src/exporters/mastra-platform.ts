@@ -8,16 +8,26 @@ import type {
   MetricEvent,
   ScoreEvent,
   FeedbackEvent,
+  FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
 } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { KeyedQueue } from './keyed-queue';
+import { PlatformByteBatcher, resolveByteBatchingConfig } from './platform-byte-batcher';
+import type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
+import { publishResolvedRecord } from './platform-resolved-record';
+import { withSpanPreviews } from './span-previews';
+export type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 
 export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
   maxBatchWaitMs?: number; // Default: 5000ms
-  maxRetries?: number; // Default: 3
+  maxRetries?: number; // Collector batch retries. Default: 3
+  /** Opt into UTF-8 JSON byte flush thresholds and upload concurrency control. */
+  byteBatching?: PlatformByteBatchingConfig;
 
   accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
@@ -261,6 +271,7 @@ type ResolvedPlatformConfig = {
   maxBatchWaitMs: number;
   maxRetries: number;
   accessToken: string;
+  projectId?: string;
   tracesEndpoint: string;
   logsEndpoint: string;
   metricsEndpoint: string;
@@ -276,10 +287,14 @@ export class MastraPlatformExporter extends BaseExporter {
   private buffer: MastraPlatformBuffer;
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
+  private pendingRecords = new Set<Promise<void>>();
+  private readonly feedbackUpdates = new KeyedQueue();
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
   private shuttingDown = false;
+  private byteBatcher?: PlatformByteBatcher<PlatformSignal>;
+  private byteUploadTimeoutMs?: number;
 
   constructor(config: MastraPlatformExporterConfig = {}) {
     super(config);
@@ -345,6 +360,7 @@ export class MastraPlatformExporter extends BaseExporter {
       maxBatchWaitMs: config.maxBatchWaitMs ?? 5000,
       maxRetries: config.maxRetries ?? 3,
       accessToken: accessToken || '',
+      projectId,
       tracesEndpoint,
       logsEndpoint: resolveConfiguredSignalEndpoint('logs', config.logsEndpoint),
       metricsEndpoint: resolveConfiguredSignalEndpoint('metrics', config.metricsEndpoint),
@@ -353,6 +369,18 @@ export class MastraPlatformExporter extends BaseExporter {
     };
 
     this.authFailureCooldown = new AuthFailureCooldown('MastraPlatformExporter', () => this.logger);
+    if (config.byteBatching) {
+      const byteConfig = resolveByteBatchingConfig(config.byteBatching);
+      this.byteUploadTimeoutMs = byteConfig.uploadTimeoutMs;
+      this.byteBatcher = new PlatformByteBatcher(
+        byteConfig,
+        this.platformConfig.maxBatchSize,
+        this.platformConfig.maxBatchWaitMs,
+        SIGNAL_PUBLISH_SEGMENTS,
+        (signal, body, count) => this.flushByteBatch(signal, body, count),
+        error => this.logger.error('Byte batch upload failed', { error }),
+      );
+    }
 
     this.buffer = {
       spans: [],
@@ -409,7 +437,12 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || this.shuttingDown) {
+      return;
+    }
+
+    if (event.score.correlationContext == null) {
+      this.enqueueResolvedRecord('score', event.score);
       return;
     }
 
@@ -422,7 +455,12 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   async onFeedbackEvent(event: FeedbackEvent): Promise<void> {
-    if (this.isDisabled) {
+    if (this.isDisabled || this.shuttingDown) {
+      return;
+    }
+
+    if (event.feedback.correlationContext == null) {
+      this.enqueueResolvedRecord('feedback', event.feedback);
       return;
     }
 
@@ -434,7 +472,90 @@ export class MastraPlatformExporter extends BaseExporter {
     await this.handleBufferedEvent();
   }
 
+  onFeedbackReplacementEvent(event: FeedbackReplacementEvent): void {
+    if (this.isDisabled || this.shuttingDown) return;
+    if (!event.feedback.feedbackId?.trim()) {
+      this.logger.warn('Dropping feedback replacement: feedbackId is required');
+      return;
+    }
+    this.enqueueResolvedRecord('feedback', event.feedback, event.feedback.feedbackId);
+  }
+
+  onFeedbackReviewStatusEvent(event: FeedbackReviewStatusEvent): void {
+    if (this.isDisabled || this.shuttingDown) return;
+    const { feedbackId, reviewStatus } = event.feedback;
+    if (!feedbackId?.trim() || !['needs-review', 'reviewed'].includes(reviewStatus)) {
+      this.logger.warn('Dropping feedback review update: feedbackId and reviewStatus are required');
+      return;
+    }
+    const url = new URL(
+      `/api/observability/feedback/${encodeURIComponent(feedbackId)}/review-status`,
+      this.platformConfig.feedbackEndpoint,
+    );
+    this.enqueueInteractiveWrite('feedback', url, JSON.stringify({ reviewStatus }), 'PATCH', feedbackId);
+  }
+
+  private enqueueResolvedRecord(
+    kind: 'score' | 'feedback',
+    record: MastraPlatformScoreRecord | MastraPlatformFeedbackRecord,
+    replacementId?: string,
+  ): void {
+    if (!record.traceId?.trim()) {
+      this.logger.warn(`Dropping ${kind}: context resolution requires traceId`);
+      return;
+    }
+
+    let body: string;
+    try {
+      // Snapshot once: caller mutations and retries must not change identity or timestamp.
+      body = JSON.stringify({ [kind]: record });
+    } catch (error) {
+      this.logger.warn(`Dropping unserializable ${kind}`, { error });
+      return;
+    }
+    const collectorEndpoint =
+      kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
+    const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
+    if (replacementId !== undefined) url.pathname += `/${encodeURIComponent(replacementId)}`;
+    this.enqueueInteractiveWrite(kind, url, body, replacementId !== undefined ? 'PUT' : 'POST', replacementId);
+  }
+
+  private enqueueInteractiveWrite(
+    kind: 'score' | 'feedback',
+    url: URL,
+    body: string,
+    method: 'POST' | 'PUT' | 'PATCH',
+    feedbackId?: string,
+  ): void {
+    const collectorEndpoint =
+      kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
+    // Full endpoint overrides take precedence over projectId for collector batches too.
+    const projectId =
+      new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1] ?? this.platformConfig.projectId;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.platformConfig.accessToken}`,
+      'Content-Type': 'application/json',
+      ...(projectId ? { 'X-Mastra-Project-Id': projectId } : {}),
+    };
+
+    // Send buffered traces promptly, without making this request wait for collector
+    // uploads or recursively waiting for itself through public flush().
+    void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
+    const send = () => publishResolvedRecord(url, body, headers, method);
+    // PUT and PATCH have different paths but update the same feedback. Keep their
+    // retries ahead of later edits for that ID; unrelated records remain independent.
+    const delivery = feedbackId !== undefined ? this.feedbackUpdates.enqueue(feedbackId, send) : send();
+    const pending = delivery
+      .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
+      .finally(() => this.pendingRecords.delete(pending));
+    this.pendingRecords.add(pending);
+  }
+
   private addToBuffer(event: TracingEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('traces', this.formatSpan(event.exportedSpan));
+      return;
+    }
     this.markBufferStart();
 
     const spanRecord = this.formatSpan(event.exportedSpan);
@@ -443,6 +564,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addLogToBuffer(event: LogEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('logs', this.formatLog(event.log));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.logs.push(this.formatLog(event.log));
@@ -450,6 +575,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addMetricToBuffer(event: MetricEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('metrics', this.formatMetric(event.metric));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.metrics.push(this.formatMetric(event.metric));
@@ -457,6 +586,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addScoreToBuffer(event: ScoreEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('scores', this.formatScore(event.score));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.scores.push(this.formatScore(event.score));
@@ -464,6 +597,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private addFeedbackToBuffer(event: FeedbackEvent): void {
+    if (this.byteBatcher) {
+      this.byteBatcher.add('feedback', this.formatFeedback(event.feedback));
+      return;
+    }
     this.markBufferStart();
 
     this.buffer.feedback.push(this.formatFeedback(event.feedback));
@@ -478,7 +615,7 @@ export class MastraPlatformExporter extends BaseExporter {
 
   private formatSpan(span: AnyExportedSpan): MastraPlatformSpanRecord {
     const spanRecord: MastraPlatformSpanRecord = {
-      ...span,
+      ...withSpanPreviews(span),
       spanId: span.id,
       spanType: span.type,
       startedAt: span.startTime,
@@ -516,6 +653,7 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private async handleBufferedEvent(): Promise<void> {
+    if (this.byteBatcher) return;
     if (this.shouldFlush()) {
       void this.flush().catch(error => {
         this.logger.error('Batch flush failed', {
@@ -654,6 +792,10 @@ export class MastraPlatformExporter extends BaseExporter {
   }
 
   private async batchUpload<T>(signal: PlatformSignal, records: T[]): Promise<void> {
+    await this.uploadBody(signal, this.buildPublishBody(signal, records));
+  }
+
+  private async uploadBody(signal: PlatformSignal, body: string): Promise<void> {
     const endpointMap: Record<PlatformSignal, string> = {
       traces: this.platformConfig.tracesEndpoint,
       logs: this.platformConfig.logsEndpoint,
@@ -665,7 +807,8 @@ export class MastraPlatformExporter extends BaseExporter {
     const options: RequestInit = {
       method: 'POST',
       headers: this.buildPublishHeaders(),
-      body: this.buildPublishBody(signal, records),
+      body,
+      ...(this.byteUploadTimeoutMs ? { signal: AbortSignal.timeout(this.byteUploadTimeoutMs) } : {}),
     };
 
     // Capture a quota-exceeded response in the retry predicate: returning
@@ -703,6 +846,8 @@ export class MastraPlatformExporter extends BaseExporter {
     if (isObservabilityDisabled(response)) {
       this.enterQuotaPause(parseQuotaRetryAfterSeconds(response));
     }
+    // Publish responses carry no payload; release the response stream in both modes.
+    await response.body?.cancel().catch(() => {});
   }
 
   /**
@@ -719,6 +864,7 @@ export class MastraPlatformExporter extends BaseExporter {
     }
 
     this.quotaPaused = true;
+    this.byteBatcher?.clearQueued();
 
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
@@ -809,6 +955,34 @@ export class MastraPlatformExporter extends BaseExporter {
     this.scheduleQuotaProbe();
   }
 
+  /** Current queued and active serialized JSON bytes; undefined in count mode. */
+  getByteBatchingStats(): PlatformByteBatchingStats | undefined {
+    return this.byteBatcher?.getStats();
+  }
+
+  private async flushByteBatch(signal: PlatformSignal, body: string, count: number): Promise<void> {
+    if (this.quotaPaused || this.authFailureCooldown.dropEventsIfCoolingDown(count)) return;
+    try {
+      await this.uploadBody(signal, body);
+      this.authFailureCooldown.reset();
+    } catch (error) {
+      if (isAuthFailureError(error)) {
+        this.authFailureCooldown.recordFailure({
+          status: error.status,
+          failedSignals: [signal],
+          droppedBatchSize: count,
+        });
+        this.byteBatcher?.clearQueued();
+      } else {
+        this.logger.error('Byte batch upload failed after retries, dropping batch', {
+          signal,
+          droppedBatchSize: count,
+          error,
+        });
+      }
+    }
+  }
+
   private async flushSignalBatch<T>(
     signal: PlatformSignal,
     records: T[],
@@ -860,7 +1034,25 @@ export class MastraPlatformExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
+    if (this.isDisabled) return;
+    do {
+      await this.flushBatches();
+      await Promise.allSettled([...this.pendingRecords]);
+    } while (
+      this.pendingRecords.size > 0 ||
+      this.buffer.totalSize > 0 ||
+      this.inFlightFlushes.size > 0 ||
+      (this.byteBatcher?.getStats().pendingBytes ?? 0) > 0
+    );
+  }
+
+  private async flushBatches(): Promise<void> {
     if (this.isDisabled) {
+      return;
+    }
+
+    if (this.byteBatcher) {
+      await this.byteBatcher.flush();
       return;
     }
 
@@ -910,10 +1102,10 @@ export class MastraPlatformExporter extends BaseExporter {
         {
           id: `MASTRA_PLATFORM_EXPORTER_FAILED_TO_FLUSH_REMAINING_EVENTS_DURING_SHUTDOWN`,
           domain: ErrorDomain.MASTRA_OBSERVABILITY,
-          category: ErrorCategory.USER,
-          details: {
-            remainingEvents: this.buffer.totalSize,
-          },
+          category: ErrorCategory.SYSTEM,
+          details: this.byteBatcher
+            ? { pendingBytes: this.byteBatcher.getStats().pendingBytes }
+            : { remainingEvents: this.buffer.totalSize },
         },
         error,
       );

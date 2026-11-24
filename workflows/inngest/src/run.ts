@@ -863,28 +863,31 @@ export class InngestRun<
 
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     let active = true;
-    const streamPromise = subscribe(
-      {
-        channel: `workflow:${this.workflowId}:${this.runId}`,
-        topics: ['watch'],
-        app: this.inngest,
-      },
-      (message: any) => {
+    // Attach the rejection handler at creation: callers only unwatch once the run
+    // finishes, and realtime is best-effort since run completion is also polled.
+    const subscriptionPromise = subscribe({
+      channel: `workflow:${this.workflowId}:${this.runId}`,
+      topics: ['watch'],
+      app: this.inngest,
+      onMessage: (message: any) => {
         if (active) {
           cb(message.data);
         }
       },
-    );
+    }).catch(error => {
+      const message = `Inngest realtime watch subscription failed for workflow "${this.workflowId}" run "${this.runId}"`;
+      const logger = this.#mastra?.getLogger();
+      if (logger) {
+        logger.warn(message, { error });
+      } else {
+        console.warn(message, error);
+      }
+      return undefined;
+    });
 
     return () => {
       active = false;
-      streamPromise
-        .then(async (stream: Awaited<typeof streamPromise>) => {
-          return stream.cancel();
-        })
-        .catch(err => {
-          console.error(err);
-        });
+      subscriptionPromise.then(subscription => subscription?.close()).catch(() => {});
     };
   }
 

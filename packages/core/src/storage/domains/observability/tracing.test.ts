@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { createSignal } from '../../../agent/signals';
 import { SpanType } from '../../../observability/types';
 import {
   BATCH_DELETE_TRACES_MAX_IDS,
@@ -335,6 +336,24 @@ describe('buildPreview', () => {
     expect(buildPreview({ query: 'lookup' }, '{"query": "as stored"}')).toBe('{"query": "as stored"}');
   });
 
+  it('previews an agent signal recorded as a run input by its contents, labelling non-user signals', () => {
+    const skill = createSignal({
+      type: 'reactive',
+      tagName: 'skill',
+      attributes: { name: 'factory-triage' },
+      contents: 'Triage it.\n\nARGUMENTS: #123',
+    });
+    const reminder = createSignal({ type: 'reactive', tagName: 'system-reminder', contents: 'CI is red.' });
+    const user = createSignal({ type: 'user', contents: [{ type: 'text', text: 'Summarize the queue' }] });
+
+    expect(buildPreview(skill)).toBe('Skill factory-triage: Triage it.\n\nARGUMENTS: #123');
+    expect(buildPreview(reminder)).toBe('system-reminder: CI is red.');
+    expect(buildPreview(user)).toBe('Summarize the queue');
+    // Stores read the same preview back from the stored JSON column.
+    expect(buildPreviewFromJson(JSON.stringify(skill))).toBe('Skill factory-triage: Triage it.\n\nARGUMENTS: #123');
+    expect(buildPreview({ contents: 'not a signal' })).toBe('{"contents":"not a signal"}');
+  });
+
   it('trims strings and returns null when there is nothing to preview', () => {
     expect(buildPreview('  plain prompt text \n')).toBe('plain prompt text');
     expect(buildPreview(null)).toBeNull();
@@ -392,11 +411,11 @@ describe('buildPreviewFromJson', () => {
 });
 
 describe('buildStoredPreview', () => {
-  it('trims supplied previews, caps them like generated ones and regenerates blanks', () => {
+  it('trims supplied previews, caps them like generated ones and preserves intentional blanks', () => {
     expect(buildStoredPreview(' upstream ', { text: 'built' })).toBe('upstream');
     expect(buildStoredPreview('u'.repeat(300), 'built')).toBe(`${'u'.repeat(PREVIEW_MAX_LENGTH)}…`);
-    expect(buildStoredPreview('', 'built')).toBe('built');
-    expect(buildStoredPreview(' \n\t ', 'built')).toBe('built');
+    expect(buildStoredPreview('', 'built')).toBe('');
+    expect(buildStoredPreview(' \n\t ', 'built')).toBe('');
   });
 
   it('caps an oversized supplied preview without splitting a surrogate pair', () => {

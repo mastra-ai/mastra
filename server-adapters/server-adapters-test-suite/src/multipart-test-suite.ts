@@ -1,6 +1,7 @@
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { type AdapterTestContext, createDefaultTestContext } from './test-helpers';
+import { createDefaultTestContext } from './test-helpers';
+import type { AdapterTestContext } from './test-helpers';
 
 /**
  * Configuration for multipart FormData test suite

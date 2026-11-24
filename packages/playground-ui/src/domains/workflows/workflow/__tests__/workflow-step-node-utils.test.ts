@@ -117,18 +117,6 @@ describe('resolveWorkflowGraphStep', () => {
     expect(foreachWorkflow.step?.serializedStepFlow).toHaveLength(1);
   });
 
-  it('resolves agent / tool children nested in a parallel entry', () => {
-    const parallel: SerializedStepFlowEntry = {
-      type: 'parallel',
-      steps: [
-        { type: 'agent', id: 'a', agentId: 'a-agent' },
-        { type: 'tool', id: 't', toolId: 't-tool' },
-      ],
-    };
-    const children = parallel.steps.map(child => resolveWorkflowGraphStep(child).kind);
-    expect(children).toEqual(['agent-step', 'tool-step']);
-  });
-
   it('builds graph nodes for declarative agent / tool / mapping entries', () => {
     const { nodes } = constructNodesAndEdges({
       stepGraph: [

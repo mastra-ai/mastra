@@ -29,6 +29,133 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+To use Mastra's product fonts, Mona Sans for text and Commit Mono for code, add `fonts.css`. The font files ship inside the package as woff2, split by script so a page only downloads the characters it renders, and the stylesheet points the font tokens at them. Without it, text uses the system font stacks.
+
+```css
+@import '@mastra/playground-ui/fonts.css';
+```
+
+### Metadata
+
+Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows.
+
+Rows that must keep one line, such as cards, menu options, and truncated titles, pass `singleLine`: fields stay on one line and each shrinks with an ellipsis. Give a short field `className="shrink-0"` to keep it whole while a longer one truncates.
+
+```tsx
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
+<Metadata>
+  <Metadata.Item>
+    <Txt as="span" variant="label">
+      v8
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      Nov 3, 2026, 10:24 AM
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      (current)
+    </Txt>
+  </Metadata.Item>
+</Metadata>;
+```
+
+Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout. Browser tab titles set through `document.title` keep the `Page | Product` convention.
+
+### Data sizes
+
+Import `formatBytes` from the number utility:
+
+```ts
+import { formatBytes } from '@mastra/playground-ui/utils/number';
+
+formatBytes(1536);
+formatBytes(0.5, { unit: 'GB' });
+formatBytes(2048, { unit: 'GB', autoScale: false });
+formatBytes(0.5, { unit: 'GB', autoScale: true });
+formatBytes(2048, { unit: 'GB', autoScale: true });
+```
+
+These calls return `1.5 KB`, `0.5 GB`, `2048 GB`, `512 MB`, and `2 TB`, respectively.
+
+With no options, `formatBytes(bytes)` keeps its existing automatic byte formatting and rounding. With a source `unit`, the formatter keeps the supplied value and unit unchanged unless `autoScale: true`. The supported units are `B`, `KB`, `MB`, `GB`, `TB`, and `PB`, also exported as the `ByteUnit` type.
+
+Conversions use the helper's existing binary convention: each unit is 1024 of the previous unit, despite the legacy `KB` through `PB` labels. These are not decimal SI conversions, where each step is 1000. Convert decimal measurements to this convention before passing them in.
+
+Automatic scaling stops at B and PB. It rounds bytes and values of 10 or more to whole numbers, and smaller values in larger units to one decimal place. When rounding reaches 1024, the opt-in mode promotes to the next unit, except at PB. Zero becomes `0 B` in automatic mode and keeps its source unit otherwise. Negative, non-finite, null, and undefined measurements return `undefined` in every mode.
+
+### Subtle buttons
+
+Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.
+
+```tsx
+<Button variant={selected ? 'subtle' : 'default'} aria-pressed={selected}>
+  My PRs
+</Button>
+```
+
+### Central Icons
+
+Interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `Network`. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
+
+Each icon is its own module under `@mastra/playground-ui/icons/central/`. An icon inside a design system component, such as a button or menu item, takes its size from that component. Anywhere else, wrap it in `Icon` or give it a `size-icon-*` class. Don't set `size`, `width`, `height` or a size class on an icon: the `playground-ui/icon-size-from-parent` lint rule reports it. The **Icons** docs page in Storybook covers the sizes and the optical inset a few edge-to-edge shapes get. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+
+```tsx
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+<Icon size="sm">
+  <IconMagnifyingGlass />
+</Icon>;
+```
+
+The **Icons/All Icons** Storybook story shows every icon available.
+
+#### Adding an icon
+
+The icons are committed to this package, so installing and building need no license key. Adding one requires Mastra's Central Icons license key, from the `CENTRAL MASTRA` item in 1Password.
+
+1. Find the name in Central's [icon list](https://iconists.co/central) or in the Central Figma library, for example `IconArrowRight`.
+2. From `packages/playground-ui`, run the generator with the key and the names to add:
+
+   ```bash
+   CENTRAL_LICENSE_KEY=<key> pnpm icons:central IconArrowRight IconCalendar
+   ```
+
+   It checks the key with Central, installs the pinned package in a temporary directory, writes one TSX module per icon to `src/ds/icons/central/`, and adds the names to `central-icons.json`. Running it with no names regenerates the current set, for example after raising `version` in `central-icons.json`.
+
+3. Commit `src/ds/icons/central/`. Don't edit the generated files by hand.
+
+Only add icons from this one style, and only icons a screen uses. The license covers icons inside Mastra's products. It doesn't cover the complete library, or offering the icons on their own as an icon set or download. See [CENTRAL-ICONS-LICENSE.md](./CENTRAL-ICONS-LICENSE.md). Never commit the license key.
+
+### Tool icons
+
+`presentTool` from `@mastra/playground-ui/components/ai/tool-call` gives a tool call its label,
+detail, static icon, and animated `AgentIndicator` pose. Use it wherever a tool call is shown, so a
+running call and its finished card look the same.
+
+```tsx
+import { AgentIndicator } from '@mastra/playground-ui/components/AgentIndicator';
+import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+
+const { pose, label, detail } = presentTool(call.toolName, call.args);
+
+<AgentIndicator state={pose} />;
+```
+
+Always pass the call's arguments. Tools such as `knowledge_page` take an operation (`op` or
+`action`), and the icon and label follow it, so deleting a page does not look like editing one.
+Workspace prefixes (`mastra_workspace_`), MCP names (`mcp__server__tool`), `namespace.tool` names,
+and known aliases resolve to the tool they wrap. Unknown tools and ambiguous names such as
+`mcp__catalog__search` keep the generic tool icon.
+
+The **AI / Activity / Tool Icon Families** Storybook story shows every family and lets you switch
+actions to watch the morph.
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
@@ -212,26 +339,28 @@ Semantic values follow the existing `html.light` mode; dark mode is the default.
 
 #### Surfaces
 
-| Token          | Utility         | Used for                                                                            |
-| -------------- | --------------- | ----------------------------------------------------------------------------------- |
-| `--background` | `bg-background` | The page canvas                                                                     |
-| `--sidebar`    | `bg-sidebar`    | App chrome, one step behind the canvas                                              |
-| `--card`       | `bg-card`       | Cards, panels, settings sections                                                    |
-| `--popover`    | `bg-popover`    | Menus, dropdowns, tooltips                                                          |
-| `--dialog`     | `bg-dialog`     | Dialogs, drawers, alert dialogs. Off-white in light mode so fields inside stand out |
-| `--muted`      | `bg-muted`      | A quiet region inside a container                                                   |
+| Token          | Utility         | Used for                                      |
+| -------------- | --------------- | --------------------------------------------- |
+| `--background` | `bg-background` | The page canvas                               |
+| `--sidebar`    | `bg-sidebar`    | App chrome, one step behind the canvas        |
+| `--card`       | `bg-card`       | Cards, panels, settings sections              |
+| `--popover`    | `bg-popover`    | Menus, dropdowns, tooltips                    |
+| `--dialog`     | `bg-dialog`     | Dialogs, drawers, alert dialogs               |
+| `--nested`     | `bg-nested`     | A box inside a card or dialog, with no border |
+| `--muted`      | `bg-muted`      | A quiet region inside a container             |
 
 #### Fields
 
-Text fields, textareas, input groups, and the default Select, Combobox, and DateTimePicker triggers read their fill and outline from these tokens. You don't set them at the call site: cards, overlays, and dialogs set them for every field inside, so a field is never darker than the surface it sits on.
+Text fields, textareas, input groups, and the default Select, Combobox, and DateTimePicker triggers read their fill and outline from these tokens. You don't set them at the call site: the page, cards, overlays, dialogs, and boxes painted with `bg-card` set them for every field inside, so the same field is the card color on the page and a light tint inside a card.
 
-| Token                | Utility             | Used for                                                                                 |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| `--field`            | `bg-field`          | Field fill. `--card` on the page, `--field-on-surface` inside a card, overlay, or dialog |
-| `--field-on-surface` | none                | Field fill inside a surface: one step lighter in dark mode, white in light mode          |
-| `--field-disabled`   | `bg-field-disabled` | Disabled field fill                                                                      |
-| `--field-rim`        | none                | Resting outline. Stronger inside white surfaces in light mode                            |
-| `--field-rim-focus`  | none                | Focus outline                                                                            |
+| Token                           | Utility             | Used for                                                                                                                           |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `--field`                       | `bg-field`          | Field fill. `--card` on the page, `--field-on-surface` inside a card, overlay, or dialog, `--field-on-nested` on a `bg-nested` box |
+| `--field-on-surface`            | none                | Field fill inside a surface: a light tint of the card                                                                              |
+| `--field-hover`, `--field-open` | none                | Tint of a field while hovered, and while its menu is open                                                                          |
+| `--field-disabled`              | `bg-field-disabled` | Disabled field fill                                                                                                                |
+| `--field-rim`                   | none                | Resting outline                                                                                                                    |
+| `--field-rim-focus`             | none                | Focus outline                                                                                                                      |
 
 A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive-indicator`, so the red outline shows on every surface and stays red while focused.
 
@@ -285,7 +414,7 @@ Opacity is allowed only through design-system tokens, for layers whose job is to
 - Scrims and overlays: `scrim`.
 - Badge fills: `badge-{hue}-strong` and `badge-{hue}-subtle`, so a badge tints with the card or row it sits on.
 - Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
-- Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
+- Effects that fade, glow, or animate inside a design-system component, such as the Composer ring.
 
 Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions.
 
@@ -293,16 +422,18 @@ Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()`
 
 Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`. Existing roles cover the following uses without adding a new token value:
 
-| Role                | Token / utility                                              | Use                                                                     |
-| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Surface edge        | `--surface-rim` / `border-surface-rim`                       | App frame, panel and card edges; frame headers that meet them           |
-| Content divider     | `--border` / `border-border`                                 | Internal separators and filled control edges                            |
-| Outlined control    | `--border-strong` / `border-border-strong`                   | Transparent controls at rest                                            |
-| Hover / focus       | `--border-hover`, `--border-focus`                           | Interactive control states                                              |
-| Field edge          | `--field-rim`, `--field-rim-on-surface`, `--field-rim-focus` | Field recipes resolve the edge for their parent surface and focus state |
-| Badge / avatar trim | `--inset-highlight`, `--inset-rim`                           | `shadow-inset` combines a top highlight and rim                         |
+| Role                | Token / utility                            | Use                                                            |
+| ------------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| Surface edge        | `--surface-rim` / `border-surface-rim`     | App frame, panel and card edges; frame headers that meet them  |
+| Row divider         | `--separator` / `border-separator`         | Lines between rows of a card, list or settings group           |
+| Content divider     | `--border` / `border-border`               | Internal separators and filled control edges                   |
+| Outlined control    | `--border-strong` / `border-border-strong` | Transparent controls at rest                                   |
+| Hover / focus       | `--border-hover`, `--border-focus`         | Interactive control states                                     |
+| Field edge          | `--field-rim`, `--field-rim-focus`         | `shadow-input` draws the field edge and repaints it on focus   |
+| Overlay edge        | `--overlay-rim`                            | `shadow-overlay` draws the edge of menus, popovers and dialogs |
+| Badge / avatar trim | `--inset-rim`                              | `shadow-inset` draws a 1px rim                                 |
 
-`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box; `shadow-raised` and `shadow-overlay` combine it with a lip and drop shadows. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
+`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box, and `shadow-raised` adds a drop shadow to it. `shadow-overlay` combines `--overlay-rim` with a larger drop shadow. None of them draw a top highlight. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
 
 `Header` is a layout primitive: every instance uses `border-surface-rim`, matching the surrounding frame or panel. Call sites do not choose a tone. `border={false}` hides the edge. Internal content separators use `border-border` directly or a separator component.
 
@@ -327,6 +458,8 @@ To migrate removed tokens:
 | `--ring`, `ring-ring`                                 | `--border-focus`, `ring-border-focus`             |
 | `--shadow-focus-ring`, `--focus-halo`                 | none; focus has no halo                           |
 | `--surface-rim-focus`, `--field-rim-focus-on-surface` | `--border-focus`                                  |
+| `--field-rim-on-surface`                              | `--field-rim`                                     |
+| `--elevation-lip`, `--inset-highlight`                | none; surfaces have no top highlight              |
 | `focusRing.visible` and siblings                      | `focusRing`, or `focusRingInset` in clipped rows  |
 
 Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the base layer draws it on any focusable element that does not style its own. `focusRing` from `primitives/transitions` applies it explicitly, `focusRingInset` draws it inside a full-bleed row whose edge is clipped, and `focusRingOffset` sets it 2px out on checkboxes, radios, switches, and filled `primary` and `destructive` buttons, where a flush line vanishes into the fill. It is an outline, not a `ring-*`, because a ring rewrites `box-shadow` and would erase a raised surface's rim. Fields, buttons, and clickable cards show focus on that rim instead: `surfaceRimFocus` from `primitives/form-element` repaints it to `--border-focus`, the same colour and weight, and the surface keeps its elevation.
@@ -343,9 +476,15 @@ Foundations/Color has one story each for monochrome and chromatic ramps, semanti
 
 Text uses roles, not sizes. A role such as `body-sm` or `caption` sets size, line height, weight, and tracking together. Render text with `Txt`, or use the matching `text-<role>` utility inside a component's own markup.
 
+Roles use two weights. Regular (`--font-weight-normal`, 465) is for anything read: `body`, `body-sm`, `caption`, `lead`, and `menu`. Strong (`--font-weight-medium`, 515) is for anything that labels or heads something: `label`, `column`, `eyebrow`, `meta`, and every heading role. Text without a role inherits regular. `font-normal` and `font-medium` resolve to the same two weights, so inline emphasis such as a highlighted name in a sentence stays on the scale. Before adding `font-medium` to a role, check whether another role already pairs that size with the strong weight: `text-body font-medium` is `subheading`, and `text-body-sm font-medium` is `label`.
+
 Shared components own their typography. Use their existing size and semantic variant APIs, and let compound slots style direct children through inheritance. Use `Txt` for text that the call site owns. Do not add a generic text-role prop or wrap arbitrary children just to migrate a CSS class. A specialized surface can use the existing `className` escape hatch with a DS role when the component's defaults do not fit.
 
+Floating menu rows, values, and search fields use `menu`: 13px text at the regular weight with a 20px line height and −0.01em tracking. DropdownMenu, ContextMenu, Select, and Combobox share this role; their triggers keep the button label role. Labels use the muted foreground tone, with lighter icons. Hover, keyboard highlight, and open submenus increase the contrast of both labels and icons together.
+
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
+
+`display-lg` is the 28px role for plan prices and credit balances. `display` remains 22px. Use `<Txt variant="display-lg">$250</Txt>` without size or weight overrides.
 
 `Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
 
@@ -390,7 +529,7 @@ Card titles use 13px text with a 150% line height. Choose the complete role rath
 </Txt>
 ```
 
-These roles preserve the existing Factory card typography. Control labels remain `label` at 500 weight.
+These roles preserve the existing Factory card typography. Control labels remain `label` at the strong weight.
 
 #### Monospace
 
@@ -416,9 +555,9 @@ Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables 
 
 Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
-`--font-mono` defaults to the system monospace stack. Override it in an unlayered rule in your own CSS to use a product face, and every mono value follows.
+`--font-mono` defaults to the system monospace stack, and `fonts.css` points it at Commit Mono. To use another face, override it in an unlayered rule in your own CSS, and every mono value follows.
 
-At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `0.508` is Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
+At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `fonts.css` sets `0.508` for Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
 
 ```css
 :root {
@@ -441,6 +580,71 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 
 <CodeBlock lang="ts" code={snippet} />
 ```
+
+### Billing usage meters
+
+`Meter` keeps its red overage treatment by default. Set `variant="over-allowance"` for a warning segment and pass the amount charged in dollars through `paidFromCredits`:
+
+```tsx
+import { Meter } from '@mastra/playground-ui/components/Meter';
+
+<Meter
+  variant="over-allowance"
+  value={112}
+  max={100}
+  paidFromCredits={4.37}
+  label="vCPU"
+  aria-label="vCPU"
+  aria-valuetext="112 of 100 vCPU-hours, 12 over"
+/>;
+```
+
+The optional `label` slot accepts text or React content above the bar. Long labels truncate with an ellipsis to keep the label and caption on one line. The paid-from-credits caption sits on the right of that row, or above the bar on its own when no label is supplied. Keep supplying an accessible name through `aria-label` or `aria-labelledby`.
+
+The caption reads “$4.37 paid from credits” only when usage exceeds the allowance and the charged amount is positive. It is linked to the meter’s accessible description, alongside any caller description and `Meter.Source` key. The meter does not calculate charges from usage. `Meter.Source` children still reveal the source breakdown on hover or keyboard focus.
+
+See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
+
+### Lint rules
+
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+
+```ts
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
+  rules: { ...playgroundUiRules },
+  overrides: [copyRuleExclusions],
+});
+```
+
+| Rule                                   | Flags                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
+| `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
+
+Turn rules off per glob in `overrides`, for example for tests and stories.
+
+#### Copy rules
+
+Use separate elements for metadata fields and normal punctuation for sentences. Parentheses such as `(current)` and standalone missing-value placeholders such as `—` are allowed.
+
+The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `element.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
+
+Code, preformatted content, Markdown sources, agent prompts, tool descriptions, browser tab titles assigned to `document.title`, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
+
+In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
+
+Both rules are part of `recommended`. Consumers that need only these rules can use `copyRules`. Put `copyRuleExclusions` after the rule-enabling override to keep authored UI copy separate from test and story content.
+
+The root `pnpm lint` command includes Playground, Playground UI, and Factory UI in regular CI linting. Run `pnpm turbo lint --filter=@internal/playground` to build its required dependency types and check Playground on its own. Documentation prose keeps its existing Vale and Remark checks.
 
 ## Documentation
 

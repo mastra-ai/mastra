@@ -6,11 +6,13 @@
 
 import { MC_TOOLS } from '../../tool-names.js';
 
+const DEFAULT_PLANS_DIR = '.mastracode/plans';
+
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
+  hasWebExtract?: boolean;
   hasSubagents?: boolean;
-  /** Subconscious knowledge tools are registered (experimental subconscious enabled). */
-  hasSubconscious?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
   /** Workspace-relative directory where plan mode can write plans. */
@@ -19,7 +21,8 @@ interface ToolGuidanceOptions {
 
 export function buildToolGuidance(modeId: string, options: ToolGuidanceOptions = {}): string {
   const denied = options.deniedTools ?? new Set<string>();
-  const plansDir = options.plansDir ?? '.mastracode/plans';
+  // Name the dir with `/` so the win32 default (`.mastracode\plans`) still matches DEFAULT_PLANS_DIR.
+  const plansDir = (options.plansDir ?? DEFAULT_PLANS_DIR).replaceAll('\\', '/');
   const sections: string[] = [];
 
   sections.push(`# Tool Usage Rules
@@ -35,7 +38,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (!denied.has(MC_TOOLS.VIEW)) {
     readTools.push(`
 **${MC_TOOLS.VIEW}** — Read file contents
-- Use this to read files before editing them. NEVER propose changes to code you haven't read.
+- Use this to read file contents. Don't propose changes to code you haven't seen; reading with shell commands (cat, sed, rg) also works.
 - Use \`offset\` (1-indexed start line) and \`limit\` (number of lines) for large files.
 - Example: Read lines 50-100: \`{ path: "src/big-file.ts", offset: 50, limit: 51 }\`
 - To list directories, use \`${MC_TOOLS.FIND_FILES}\` instead.`);
@@ -106,7 +109,6 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
     if (!denied.has(MC_TOOLS.STRING_REPLACE_LSP)) {
       writeTools.push(`
 **${MC_TOOLS.STRING_REPLACE_LSP}** — Edit files by replacing exact text
-- You MUST read a file with \`${MC_TOOLS.VIEW}\` before editing it.
 - \`old_string\` must be an exact match of existing text in the file.
 - Provide enough surrounding context in \`old_string\` to make it unique.
 - Use \`replace_all: true\` to replace all occurrences (default: false, requires unique match).
@@ -119,7 +121,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
       writeTools.push(`
 **${MC_TOOLS.WRITE_FILE}** — Create new files or overwrite existing ones
 - Use this to create new files.
-- If overwriting an existing file, you MUST have read it first with \`${MC_TOOLS.VIEW}\`.
+- Overwriting replaces the whole file, so make sure you know its current contents first.
 - Prefer editing existing files over creating new ones.`);
     }
 
@@ -133,58 +135,17 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (options.hasWebSearch) {
     const webTools: string[] = [];
     if (!denied.has('web_search')) webTools.push('**web_search**');
-    if (!denied.has('web_extract')) webTools.push('**web_extract**');
+    if (options.hasWebExtract && !denied.has('web_extract')) webTools.push('**web_extract**');
     if (webTools.length > 0) {
+      const purpose =
+        webTools.length === 2
+          ? 'Search the web / extract page content'
+          : webTools[0] === '**web_search**'
+            ? 'Search the web'
+            : 'Extract page content';
       sections.push(`
-${webTools.join(' / ')} — Search the web / extract page content
+${webTools.join(' / ')} — ${purpose}
 - Use for looking up documentation, error messages, package APIs.`);
-    }
-  }
-
-  // --- Subconscious knowledge tools (all modes, conditionally available) ---
-
-  if (options.hasSubconscious) {
-    const knowledgeTools = ['knowledge_search', 'knowledge_read', 'knowledge_browse'].filter(name => !denied.has(name));
-    const hasAskMemory = !denied.has('ask_memory');
-    if (knowledgeTools.length > 0 || hasAskMemory) {
-      const lines = [
-        `
-# Subconscious Memory
-
-A background memory system (the "subconscious") runs alongside you. After conversations, it extracts durable knowledge — decisions, preferences, people, files, repos, work items — into a knowledge graph scoped to this project, visible across your sessions here. It also delivers reminders (\`<remembered>\`) and pinned knowledge into your context on its own; you do not manage those directly.`,
-      ];
-      if (knowledgeTools.length > 0) {
-        const bullets: string[] = [];
-        if (knowledgeTools.includes('knowledge_search')) {
-          bullets.push(
-            "- Use `knowledge_search` for a quick lexical + semantic lookup when you need a specific fact (a past decision, a person's role, what a file is for). Cheaper than re-deriving it from the codebase or asking the user.",
-          );
-        }
-        if (knowledgeTools.includes('knowledge_read')) {
-          bullets.push('- Use `knowledge_read` to open a node by name or ID and see the records about it.');
-        }
-        if (knowledgeTools.includes('knowledge_browse')) {
-          bullets.push(
-            "- Use `knowledge_browse` to list nodes by kind or name prefix, or to walk a node's mentions and backlinks.",
-          );
-        }
-        if (!denied.has('recall')) {
-          bullets.push(
-            '- Prefer these over `recall` when the question is about durable facts rather than what was said in a specific past conversation.',
-          );
-        }
-        lines.push(`
-${knowledgeTools.map(name => `**${name}**`).join(' / ')} — Query the knowledge graph directly
-${bullets.join('\n')}`);
-      }
-      if (hasAskMemory) {
-        lines.push(`
-**ask_memory** — Ask the reminder sidekick a question about existing memory
-- Use only when the answer is not already in your context and a direct search is not enough: open-ended questions ("what did we decide about X and why?") or questions that need synthesis across several memories. It answers from what is already remembered; it does not store anything.
-- It is ASYNCHRONOUS. The tool returns as soon as the question is accepted; the answer arrives later as one or more \`<remind-answer source="subconscious" agent="remind" replyId="…" moreComing="true|false">\` messages in your context. Keep working — do not poll or wait, and do not re-ask the same question.
-- Treat a message with \`moreComing="true"\` as partial; the reply is complete only when \`moreComing="false"\` arrives. Fold the answer into your work and cite it as remembered context rather than as something you verified yourself.`);
-      }
-      sections.push(lines.join('\n'));
     }
   }
 
@@ -268,6 +229,20 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes one argument: \`path\` (the plan markdown file you wrote under \`${plansDir}/\`). Do NOT pass the plan body — it lives in the file.`);
+  }
+
+  // Outside plan mode nothing else names the plans directory (the submit_plan
+  // tool example is directory-neutral), so state it here. Explore (`fast`) mode
+  // is read-only and has neither submit_plan nor file writes.
+  if (modeId !== 'plan' && modeId !== 'fast' && !denied.has('submit_plan')) {
+    const elsewhere =
+      plansDir === DEFAULT_PLANS_DIR
+        ? ''
+        : `, never under \`${DEFAULT_PLANS_DIR}/\`. Plans anywhere else cannot be shown to the user`;
+    sections.push(`
+**submit_plan** — Submit a plan for user review
+- Write plan files under \`${plansDir}/\` (e.g. \`${plansDir}/add-dark-mode.md\`)${elsewhere}.
+- Pass that file's \`path\` to \`submit_plan\`. Do NOT pass the plan body — it lives in the file.`);
   }
 
   if (modeId === 'plan') {

@@ -20,7 +20,6 @@ export const ToolCallMono = ({ copyText, className, children, ...props }: ToolCa
     </pre>
     <CopyButton
       content={copyText}
-      size="sm"
       variant="ghost"
       className="absolute top-1 right-1 opacity-0 transition-opacity group-hover/block:opacity-100 focus-visible:opacity-100"
     />

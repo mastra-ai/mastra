@@ -1,13 +1,13 @@
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 
-import {
-  Classifier,
-  type MastraEvaluationModelInterface,
-  type BooleanAnswer,
-  type ChoiceAnswer,
-  type ClassifierInterface,
-  type RefusalAnswer,
-  type ScoreAnswer,
+import { Classifier } from './index';
+import type {
+  MastraEvaluationModelInterface,
+  BooleanAnswer,
+  ChoiceAnswer,
+  ClassifierInterface,
+  RefusalAnswer,
+  ScoreAnswer,
 } from './index';
 
 declare const model: ConstructorParameters<typeof Classifier>[0]['model'];
@@ -70,3 +70,6 @@ if (routeAnswer.type === 'choice') {
 } else {
   expectTypeOf(routeAnswer).toEqualTypeOf<RefusalAnswer>();
 }
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('index types', () => {});

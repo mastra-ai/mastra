@@ -1,0 +1,13 @@
+{
+  "maxAttempts": 1,
+  "maxRequests": 5,
+  "maxInputTokensPerRequest": 100000,
+  "maxOutputTokensPerRequest": 8000,
+  "maxTotalTokens": 300000,
+  "maxCostMicros": 5000000,
+  "inputMicrosPerToken": 10,
+  "outputMicrosPerToken": 50,
+  "pricingAssumption": "Conservative USD estimate: $10/M input and $50/M output; not live billing.",
+  "timeoutMs": 120000,
+  "maxResponseBytes": 1048576
+}

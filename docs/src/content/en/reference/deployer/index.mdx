@@ -26,7 +26,10 @@ class CustomDeployer extends Deployer {
     await this.prepare(outputDirectory)
 
     // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory)
+    await this._bundle('server.ts', 'mastra.ts', {
+      projectRoot: process.cwd(),
+      outputDirectory,
+    })
 
     // Custom deployment logic
   }
@@ -54,7 +57,7 @@ class CustomDeployer extends Deployer {
 ]}
 />
 
-### deploy Parameters
+### deploy parameters
 
 <PropertiesTable
   content={[
@@ -99,20 +102,22 @@ The Deployer class inherits the following key methods from the Bundler class:
   },
   {
     name: 'writePackageJson',
-    type: '(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>',
-    description: 'Generates a package.json file in the output directory with the specified dependencies.',
+    type: '(outputDirectory: string, dependencies: Map<string, string | ExternalDependencyInfo>, resolutions?: Record<string, string>) => Promise<void>',
+    description:
+      'Generates a package.json file in the output directory with the specified dependencies. When `resolutions` is non-empty, it is written to the `resolutions` field.',
   },
   {
     name: '_bundle',
-    type: '(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>',
-    description: 'Bundles the application using the specified server and Mastra entry files.',
+    type: '(serverFile: string, mastraEntryFile: string, options: { projectRoot: string; outputDirectory: string; enableEsmShim?: boolean; alias?: Record<string, string> }, toolsPaths?: (string | string[])[], bundleLocation?: string) => Promise<void>',
+    description:
+      'Bundles the application using the specified server and Mastra entry files. `bundleLocation` defaults to the bundler output directory inside `options.outputDirectory`.',
   },
 ]}
 />
 
 ## Core concepts
 
-### Deployment Lifecycle
+### Deployment lifecycle
 
 The Deployer abstract class implements a structured deployment lifecycle:
 
@@ -122,7 +127,7 @@ The Deployer abstract class implements a structured deployment lifecycle:
 1. **Bundling**: The `_bundle` method (inherited from Bundler) packages the application code and its dependencies.
 1. **Deployment**: The abstract `deploy` method is implemented by subclasses to handle the actual deployment process.
 
-### Environment File Management
+### Environment file management
 
 The Deployer class includes built-in support for environment file management through the `getEnvFiles` method. This method:
 
@@ -139,7 +144,7 @@ getEnvFiles(): Promise<string[]> {
 }
 ```
 
-### Bundling and Deployment Relationship
+### Bundling and deployment relationship
 
 The Deployer class extends the Bundler class, establishing a clear relationship between bundling and deployment:
 

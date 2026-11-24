@@ -37,11 +37,7 @@ describeForAllEngines('AIMock loop scenario: stopWhen step bookkeeping after res
         id: 'tick',
         description: 'Advance a counter.',
         inputSchema: z.object({ n: z.number() }),
-        execute: async ({ n }) => {
-          // Long enough for the per-step save to land before the next step.
-          await new Promise(resolve => setTimeout(resolve, 250));
-          return { n };
-        },
+        execute: async ({ n }) => ({ n }),
       });
 
       const seen: string[][] = [];

@@ -19,7 +19,7 @@ test.describe('Missing agent recovery', () => {
 
   test.describe('when the agent is no longer registered', () => {
     test('returns to the agents list instead of allowing a send', async ({ page }) => {
-      await expect(page.getByPlaceholder('Enter your message...')).toHaveCount(0);
+      await expect(page.getByPlaceholder('Enter your message')).toHaveCount(0);
       await page.getByRole('link', { name: 'Choose agent' }).click();
       await expect(page).toHaveURL(/\/agents$/);
       await expect(page.getByRole('heading', { name: 'Agents', exact: true })).toBeVisible();
@@ -30,7 +30,7 @@ test.describe('Missing agent recovery', () => {
     test('reloads the resource and restores the chat', async ({ page }) => {
       await page.unroute(agentDetails);
       await page.getByRole('button', { name: 'Reload', exact: true }).click();
-      await expect(page.getByPlaceholder('Enter your message...')).toBeVisible();
+      await expect(page.getByPlaceholder('Enter your message')).toBeVisible();
       await expect(page.getByRole('heading', { name: 'Agent not found' })).toHaveCount(0);
     });
   });

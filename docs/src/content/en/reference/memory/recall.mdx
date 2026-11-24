@@ -110,7 +110,7 @@ const { messages } = await memory.recall({
             name: 'semanticRecall',
             type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
             description:
-              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured.',
+              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires a vector store, and an embedder unless the vector store embeds text itself, such as MongoDB with [Automated Embedding](/docs/memory/semantic-recall#server-side-embeddings).',
             isOptional: true,
             defaultValue: 'false',
           },

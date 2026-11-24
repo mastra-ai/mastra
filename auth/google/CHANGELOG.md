@@ -1,5 +1,37 @@
 # @mastra/auth-google
 
+## 0.1.8-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 0.1.7
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`jose@^6.2.12` ↗︎](https://www.npmjs.com/package/jose/v/6.2.12) (from `^6.2.11`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`jose@^6.2.12` ↗︎](https://www.npmjs.com/package/jose/v/6.2.12) (from `^6.2.11`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.1.6
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.1.6-alpha.0
 
 ### Patch Changes

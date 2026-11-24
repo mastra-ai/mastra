@@ -21,7 +21,7 @@ When users ask questions:
 6. If no specific function is mentioned, help users discover relevant functions
 
 Focus on practical usage examples and best practices. Help users understand not just what each function does, but how to use it effectively in their projects. When showing function arguments, explain the expected data types and formats clearly.`,
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
   tools: await mcpClient.listTools(),
   memory: new Memory(),
 });

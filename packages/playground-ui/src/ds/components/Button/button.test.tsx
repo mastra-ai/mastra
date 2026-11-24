@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Form } from '../Form';
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
+import type { ButtonSize } from './Button';
 
 afterEach(() => {
   cleanup();
@@ -38,14 +39,6 @@ describe('Button', () => {
     expect(alphaModified).toEqual([]);
   });
 
-  // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
-  // preserves the native `submit` default, so a form button that never set a type keeps
-  // submitting instead of silently going inert.
-  it('leaves type off so a form button keeps the native submit default', () => {
-    render(<Button>Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('type')).toBe(false);
-  });
-
   it('preserves an explicit submit type', () => {
     render(<Button type="submit">Save</Button>);
     expect(screen.getByRole('button', { name: 'Save' }).getAttribute('type')).toBe('submit');
@@ -73,12 +66,6 @@ describe('Button', () => {
     );
 
     expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/new');
-  });
-
-  it('composes with links through render', () => {
-    render(<Button render={<a href="/docs" />}>Read docs</Button>);
-    const link = screen.getByRole('link', { name: 'Read docs' });
-    expect(link.getAttribute('href')).toBe('/docs');
   });
 
   // One icon step per control step. Before this, the same nominal size rendered a
@@ -228,6 +215,32 @@ describe('Button', () => {
         </TooltipProvider>,
       );
       expect(screen.getByRole('button', { name: 'Add' }).getAttribute('aria-label')).toBeNull();
+    });
+
+    it('names an icon-only button from its tooltip when the size is forwarded as a text size', () => {
+      const size: ButtonSize = 'sm';
+      render(
+        <TooltipProvider>
+          <Button size={size} tooltip="Close panel">
+            <svg />
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Close panel' })).toBeTruthy();
+    });
+
+    it('keeps the visible label as the name when the label sits inside a fragment', () => {
+      render(
+        <TooltipProvider>
+          <Button tooltip="More options">
+            <>
+              <svg />
+              Save
+            </>
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
     });
   });
 

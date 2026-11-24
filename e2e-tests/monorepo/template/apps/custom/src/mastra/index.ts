@@ -3,16 +3,21 @@ import { ConsoleLogger } from '@mastra/core/logger';
 import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { innerAgent, browserAgent } from '@/agents';
 import { usageAgent } from '@/agents/usage-agent';
+import { shutdownThreadAgent } from '@/agents/shutdown-thread-agent';
 import { testRoute } from '@/api/route/test';
 import { createRouteRoute } from '@/api/route/create-route';
 import { allRoute } from '@/api/route/all';
 import { streamingRoute } from '@/api/route/streaming';
 import { shutdownDrainRoute } from '@/api/route/shutdown-drain';
 import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow';
+import { shutdownThreadRunRoute } from '@/api/route/shutdown-thread-run';
 import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
+import { excelSubpathRoute } from '@/api/route/excel-subpath';
 import { modelUsageRoute } from '@/api/route/model-usage';
+import { stackRoute } from '@/api/route/stack';
+import { pinoTransportRoute } from '@/api/route/pino-transport';
 import { myAgent } from '@inner/hello-world/agent';
 import { calculatorMcpServer } from '@/mcp';
 import 'nodemailer';
@@ -22,7 +27,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 export const mastra = new Mastra({
-  agents: { innerAgent, myAgent, 'browser-agent': browserAgent, usageAgent },
+  agents: { innerAgent, myAgent, 'browser-agent': browserAgent, usageAgent, shutdownThreadAgent },
   workflows: { shutdownDrainWorkflow },
   mcpServers: { calculator: calculatorMcpServer },
   server: {
@@ -34,13 +39,18 @@ export const mastra = new Mastra({
       streamingRoute,
       shutdownDrainRoute,
       shutdownDrainWorkflowRoute,
+      shutdownThreadRunRoute,
       transitiveWorkspaceRoute,
       protobufSubpathRoute,
+      excelSubpathRoute,
       modelUsageRoute,
+      stackRoute,
+      pinoTransportRoute,
     ],
   },
   bundler: {
     externals: ['bcrypt', '@inner/subpath-only'],
+    pnpmWorkspaceSettings: { blockExoticSubdeps: false },
   },
   // Model token metrics flow through observability; telemetry counts usage from there.
   observability: new Observability({

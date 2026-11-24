@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "oci/meta.llama-3.3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.72,
-    "outputCost": 0.72
-  },
-  {
     "model": "oci/meta.llama-4-maverick-17b-128e-instruct-fp8",
     "imageInput": true,
     "audioInput": false,
@@ -163,6 +151,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -180,6 +170,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

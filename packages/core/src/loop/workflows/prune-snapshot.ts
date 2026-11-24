@@ -215,10 +215,10 @@ function stripTerminalPayloadState<T>(value: T): T {
  * prompt, recorded on the exported AGENT_RUN span. The durable loop carries
  * `agentSpanData` forward on every iteration, so each step result holds another
  * copy of the prompt on its payload/output side, rewritten at every snapshot
- * boundary. Every `rebuildSpan` site reads
- * `reg?.resumeAgentSpanData ?? initData.agentSpanData` (i.e.
- * `snapshot.context.input`, which is never touched here), and the live span was
- * already exported during streaming. Span ids and other attributes stay.
+ * boundary. Every `rebuildSpan` site reads the segment carried on the request
+ * context or `initData.agentSpanData` (i.e. `snapshot.context.input`, which is
+ * never touched here), and the live span was already exported during
+ * streaming. Span ids and other attributes stay.
  */
 function stripAgentSpanInstructions<T>(value: T): T {
   if (!isPlainObject(value)) return value;
@@ -398,7 +398,7 @@ function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
 }
 
 /**
- * Steps that read an earlier step's result directly (`getStepResult`) instead
+ * Steps that read an earlier step's result directly (`getStepResultAsync`) instead
  * of receiving it as input, keyed by reader step id. Workflow-specific, so the
  * workflow that owns the steps declares them.
  */

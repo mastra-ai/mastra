@@ -70,6 +70,7 @@ const tokenChunkOptionsSchema = baseChunkOptionsSchema
 
 const jsonChunkOptionsSchema = baseChunkOptionsSchema
   .extend({
+    maxSize: z.number().min(21).optional(),
     minSize: z.number().positive().optional(),
     ensureAscii: z.boolean().optional(),
     convertLists: z.boolean().optional(),

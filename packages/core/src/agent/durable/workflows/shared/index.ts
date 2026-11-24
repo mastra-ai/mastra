@@ -21,19 +21,31 @@ export {
 } from './schemas';
 export type { BaseIterationState, AccumulatedUsage } from './schemas';
 
-export { calculateAccumulatedUsage, buildStepRecord, createBaseIterationStateUpdate } from './iteration-state';
+export {
+  calculateAccumulatedUsage,
+  buildStepRecord,
+  carriedSpanClocks,
+  createBaseIterationStateUpdate,
+} from './iteration-state';
 export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
-export { buildDeferredStepFinishChunk, buildDurableStepContent } from '@internal/core/durable';
+export { loadAccumulatedSteps, readAccumulatedSteps, storeAccumulatedSteps } from './accumulated-steps';
 
 export {
+  buildDeferredStepFinishChunk,
+  buildDurableStepContent,
+  durableStopConditionSteps,
+  expandDurableSteps,
+} from '@internal/core/durable';
+
+export {
+  dehydrateMessageListState,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
   loadRunStoredMessages,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
-  seedMessageListState,
   storeMessageListState,
 } from './message-list-state';
 

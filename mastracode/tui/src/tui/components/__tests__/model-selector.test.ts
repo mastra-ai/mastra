@@ -88,6 +88,145 @@ describe('makeCustomModelItem', () => {
   });
 });
 
+describe('Codex fast model selection', () => {
+  const codex = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
+  const fast = { ...codex, id: 'openai/gpt-6.2-sol:fast', modelName: 'gpt-6.2-sol:fast' };
+
+  it('lists the Fast entry and keeps it selected when the session is on Fast', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [...models, codex, fast],
+      currentModelId: fast.id,
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    expect(selector.render(100).join('\n')).toContain('gpt-6.2-sol:fast');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: fast.id }));
+  });
+
+  it('focuses the standard row when no Fast entry is offered', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [...models, codex],
+      currentModelId: fast.id,
+      onSelect,
+      onCancel: vi.fn(),
+    });
+
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: codex.id }));
+  });
+
+  it('shows the current model next to its Fast or standard twin on a long list', () => {
+    const others = Array.from({ length: 20 }, (_, index) => ({
+      id: `openai/gpt-4-${String(index).padStart(2, '0')}`,
+      provider: 'openai',
+      modelName: `gpt-4-${String(index).padStart(2, '0')}`,
+      hasApiKey: true,
+    }));
+    const firstRows = (currentModelId: string) =>
+      new ModelSelectorComponent({
+        tui: { requestRender: vi.fn() } as unknown as TUI,
+        models: [...others, codex, fast],
+        currentModelId,
+        onSelect: vi.fn(),
+        onCancel: vi.fn(),
+      })
+        .render(100)
+        .map(line => stripAnsi(line).trim())
+        .filter(line => line.includes('openai/'))
+        .slice(0, 2);
+
+    expect(firstRows(codex.id)).toEqual(['→ openai/gpt-6.2-sol ✓', 'openai/gpt-6.2-sol:fast']);
+    expect(firstRows(fast.id)).toEqual(['→ openai/gpt-6.2-sol:fast ✓', 'openai/gpt-6.2-sol']);
+  });
+});
+
+describe('Fast entries next to their standard model', () => {
+  const openai = (modelName: string) => ({
+    id: `openai/${modelName}`,
+    provider: 'openai',
+    modelName,
+    hasApiKey: true,
+  });
+  const twin = (modelName: string) => openai(`${modelName}:fast`);
+  const claude = { id: 'anthropic/claude-opus-5', provider: 'anthropic', modelName: 'claude-opus-5', hasApiKey: true };
+
+  it('puts each Fast entry directly under its standard model, whatever the current model is', () => {
+    const openaiRows = (currentModelId: string) =>
+      new ModelSelectorComponent({
+        tui: { requestRender: vi.fn() } as unknown as TUI,
+        models: [
+          claude,
+          openai('gpt-5.4'),
+          openai('gpt-5.4-mini'),
+          twin('gpt-5.4'),
+          openai('gpt-5.5'),
+          twin('gpt-5.5'),
+          openai('gpt-6.2-sol'),
+          twin('gpt-6.2-sol'),
+        ],
+        currentModelId,
+        onSelect: vi.fn(),
+        onCancel: vi.fn(),
+      })
+        .render(100)
+        .map(line =>
+          stripAnsi(line)
+            .replace(/^[→\s]+/, '')
+            .replace(/ ✓.*$/, '')
+            .trim(),
+        )
+        .filter(line => line.startsWith('openai/'));
+
+    const expected = [
+      'openai/gpt-5.4',
+      'openai/gpt-5.4:fast',
+      'openai/gpt-5.4-mini',
+      'openai/gpt-5.5',
+      'openai/gpt-5.5:fast',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ];
+    expect(openaiRows(claude.id)).toEqual(expected);
+    expect(openaiRows('openai/gpt-5.5:fast')).toEqual([
+      'openai/gpt-5.5:fast',
+      'openai/gpt-5.5',
+      'openai/gpt-5.4',
+      'openai/gpt-5.4:fast',
+      'openai/gpt-5.4-mini',
+      'openai/gpt-6.2-sol',
+      'openai/gpt-6.2-sol:fast',
+    ]);
+  });
+
+  it('leaves a model name ending in :fast alone on any provider but OpenAI', () => {
+    const acme = (modelName: string) => ({
+      id: `acme/${modelName}`,
+      provider: 'acme',
+      modelName,
+      hasApiKey: true,
+    });
+    const rows = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: [claude, acme('qwen'), acme('qwen:fast'), acme('qwen-max')],
+      currentModelId: claude.id,
+      onSelect: vi.fn(),
+      onCancel: vi.fn(),
+    })
+      .render(100)
+      .map(line => stripAnsi(line).trim())
+      .filter(line => line.includes('acme/'));
+
+    // `:fast` is part of the name here, so the rows keep the order they sort in.
+    expect(rows).toEqual(['acme/qwen', 'acme/qwen-max', 'acme/qwen:fast']);
+  });
+});
+
 describe('MastraCode gateway catalog models', () => {
   const customProviderModels: ModelItem[] = ['gemma-4-31b', 'gemma-4-9b'].map(modelName => ({
     id: `mastracode/acme-local/${modelName}`,

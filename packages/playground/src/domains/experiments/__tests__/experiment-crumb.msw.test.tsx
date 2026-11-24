@@ -123,7 +123,8 @@ describe('ExperimentCrumbItemCount', () => {
       stubLiveExperiment({ ...base, status: 'completed', succeededCount: 8, failedCount: 2 });
       renderCount();
 
-      expect(await screen.findByText('10 items · 2 errored')).toBeTruthy();
+      expect(await screen.findByText('10 items')).toBeTruthy();
+      expect(screen.getByText('2 errored')).toBeTruthy();
     });
   });
 

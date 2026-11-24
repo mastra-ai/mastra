@@ -1839,6 +1839,82 @@ describe('GeminiLiveVoice', () => {
         expect(setupMsg.setup.output_audio_transcription).toEqual({});
       });
 
+      describe('transcription language hints (#27230)', () => {
+        const connectAndGetSetup = async (v: GeminiLiveVoice) => {
+          vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+          (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+          await v.connect();
+          const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+          const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+          return payloads.find((p: any) => p.setup).setup;
+        };
+
+        const baseSetup = {
+          model: 'models/gemini-3.1-flash-live-preview',
+          generation_config: { response_modalities: ['AUDIO'] },
+          realtime_input_config: { activity_handling: 'START_OF_ACTIVITY_INTERRUPTS' },
+          history_config: { initial_history_in_client_content: true },
+        };
+
+        it('sends empty transcription configs when no transcription options are set', async () => {
+          const setup = await connectAndGetSetup(new GeminiLiveVoice({ apiKey: 'k' }));
+          expect(setup).toEqual({
+            ...baseSetup,
+            input_audio_transcription: {},
+            output_audio_transcription: {},
+          });
+        });
+
+        it('maps inputAudioTranscription/outputAudioTranscription.languageCodes to language_codes', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({
+              apiKey: 'k',
+              inputAudioTranscription: { languageCodes: ['es-ES', 'en-US'] },
+              outputAudioTranscription: { languageCodes: ['es-ES'] },
+            }),
+          );
+          expect(setup).toEqual({
+            ...baseSetup,
+            input_audio_transcription: { language_codes: ['es-ES', 'en-US'] },
+            output_audio_transcription: { language_codes: ['es-ES'] },
+          });
+        });
+
+        it('keeps output transcription as {} when only input hints are set', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({ apiKey: 'k', inputAudioTranscription: { languageCodes: ['en-AU'] } }),
+          );
+          expect(setup.input_audio_transcription).toEqual({ language_codes: ['en-AU'] });
+          expect(setup.output_audio_transcription).toEqual({});
+        });
+
+        it('sends {} when the transcription options have no languageCodes', async () => {
+          const setup = await connectAndGetSetup(
+            new GeminiLiveVoice({ apiKey: 'k', inputAudioTranscription: {}, outputAudioTranscription: {} }),
+          );
+          expect(setup.input_audio_transcription).toEqual({});
+          expect(setup.output_audio_transcription).toEqual({});
+        });
+
+        it('updateSessionConfig stores transcription options for the next connect() without sending them', async () => {
+          const v = new GeminiLiveVoice({ apiKey: 'k' });
+          await connectAndGetSetup(v);
+          const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+          const sentBefore = wsSent.mock.calls.length;
+
+          await v.updateSessionConfig({ inputAudioTranscription: { languageCodes: ['fr-FR'] } });
+
+          expect(wsSent.mock.calls.length).toBe(sentBefore);
+          expect((v as any).options.inputAudioTranscription).toEqual({ languageCodes: ['fr-FR'] });
+
+          v.disconnect();
+          const setup = await connectAndGetSetup(v);
+          expect(setup.input_audio_transcription).toEqual({ language_codes: ['fr-FR'] });
+          expect(setup.output_audio_transcription).toEqual({});
+          v.disconnect();
+        });
+      });
+
       it('enables activity-based interrupts in the setup payload', async () => {
         const v = new GeminiLiveVoice({ apiKey: 'k' });
         vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);

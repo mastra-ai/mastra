@@ -10,6 +10,8 @@ import { existsSync } from 'node:fs';
 import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
+import { onEmbedderPackageMissing } from '../agents/fastembed-subprocess.js';
+import { resolveSubagentsSetting } from '../agents/subagents/index.js';
 import { createMastraCode } from '../index.js';
 import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
@@ -239,11 +241,22 @@ export async function runMCCli(
   });
 
   let boot: Awaited<ReturnType<typeof createMastraCode>> | undefined;
+  // Memory contains embedder failures, so this is the only place a missing embedder package shows up.
+  // stderr in every output mode; the exit code is untouched because the run itself still works.
+  const stopEmbedderNotice = onEmbedderPackageMissing(error => {
+    process.stderr.write(`Warning: ${error.message}\n`);
+  });
   // Default to a non-zero exit so an unexpected throw before the run resolves
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
-    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
+    boot = await createMastraCode({
+      settingsPath: args.settings,
+      coAuthor: options?.coAuthor,
+      subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
+      // Headless approves submit_plan without starting a goal.
+      planApprovalStartsGoal: false,
+    });
     const { controller, session, mcpManager } = boot;
 
     const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
@@ -355,6 +368,7 @@ export async function runMCCli(
     await stopProcessMemoryDiagnosticsWithTimeout(processMemoryDiagnostics, warning => {
       process.stderr.write(`Warning: ${warning}\n`);
     });
+    stopEmbedderNotice();
   }
 
   // Let piped output (the final result line in particular) reach the reader

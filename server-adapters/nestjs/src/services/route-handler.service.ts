@@ -1,9 +1,15 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import {
+  checkRouteFGA,
+  checkRouteRBAC,
+  isZodError,
+  resolveServerRoute,
+  SERVER_ROUTES,
+} from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
@@ -37,6 +43,8 @@ export interface RouteHandlerResult {
   streamFormat?: 'sse' | 'stream';
   /** Whether to flush an SSE comment on connect before stream data arrives */
   sseFlushOnConnect?: boolean;
+  /** The request context the route ran with; MCP transports hand it to their tools */
+  requestContext?: RequestContext;
 }
 
 type ValidationErrorContext = 'query' | 'body' | 'path';
@@ -101,7 +109,7 @@ export class RouteHandlerService {
     // Build a map of path+method to route for fast lookup
     this.routeMap = new Map();
     for (const route of SERVER_ROUTES) {
-      this.registerRoute(route);
+      this.registerRoute(resolveServerRoute(route, mastra, SERVER_ROUTES));
     }
   }
 
@@ -247,6 +255,12 @@ export class RouteHandlerService {
       }
     }
 
+    await this.authorizeRoute(route, params.requestContext, {
+      ...validatedPathParams,
+      ...validatedQueryParams,
+      ...(typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {}),
+    });
+
     const context: ServerContext = {
       mastra: this.mastra,
       requestContext: params.requestContext,
@@ -266,12 +280,59 @@ export class RouteHandlerService {
 
     const data = await route.handler(handlerParams);
 
-    return {
+    const result: RouteHandlerResult = {
       data,
       responseType: route.responseType,
       streamFormat: route.streamFormat,
       sseFlushOnConnect: route.sseFlushOnConnect,
     };
+    // Non-enumerable so the caller's token, user and permissions never end up in
+    // a response if this result is ever serialized.
+    Object.defineProperty(result, 'requestContext', { value: params.requestContext, enumerable: false });
+    return result;
+  }
+
+  /**
+   * Enforce the route's RBAC permission and FGA check, matching the other server adapters.
+   * Relies on the auth guard having stored the user, permissions, and auth mode in the request context.
+   */
+  private async authorizeRoute(
+    route: ServerRoute,
+    requestContext: RequestContext,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    await this.enforceRoutePermission(route, requestContext);
+    await this.enforceRouteFGA(route, requestContext, params);
+  }
+
+  /**
+   * Throws 403 when the user lacks the route's effective RBAC permission.
+   * Skipped when Mastra auth is explicitly disabled (`auth.enabled: false`), since no Mastra user is resolved.
+   */
+  async enforceRoutePermission(route: ServerRoute, requestContext: RequestContext): Promise<void> {
+    if (this.options.auth?.enabled === false) return;
+
+    const permissionError = checkRouteRBAC(this.mastra, route, requestContext);
+    if (permissionError) {
+      throw new ForbiddenException(permissionError.message);
+    }
+  }
+
+  /**
+   * Throws when the FGA provider denies the route's resource.
+   * Skipped when Mastra auth is explicitly disabled (`auth.enabled: false`), since no Mastra user is resolved.
+   */
+  async enforceRouteFGA(
+    route: ServerRoute,
+    requestContext: RequestContext,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    if (this.options.auth?.enabled === false) return;
+
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, params);
+    if (fgaError) {
+      throw new HttpException(fgaError.message, fgaError.status);
+    }
   }
 
   private async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {

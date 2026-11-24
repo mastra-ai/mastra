@@ -32,7 +32,6 @@ export class AuthManager {
       await this.initializeVertexAI();
     } else if (this.config.apiKey) {
       // API key auth doesn't need initialization
-      return;
     } else {
       throw new GeminiLiveError(
         GeminiLiveErrorCode.API_KEY_MISSING,

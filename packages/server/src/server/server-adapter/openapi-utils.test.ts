@@ -38,6 +38,24 @@ describe('generateOpenAPIDocument', () => {
 });
 
 describe('convertCustomRoutesToOpenAPIPaths', () => {
+  it('does not pollute Object.prototype when a route path is "__proto__"', () => {
+    const pollutingRoute = {
+      method: 'GET',
+      path: '__proto__',
+      handler: async () => new Response('ok'),
+      openapi: { summary: 'polluting' },
+    } as unknown as ApiRoute;
+
+    try {
+      const paths = convertCustomRoutesToOpenAPIPaths([pollutingRoute]);
+
+      expect(({} as any).get).toBeUndefined();
+      expect(Object.getOwnPropertyDescriptor(paths, '__proto__')?.value.get.summary).toBe('polluting');
+    } finally {
+      delete (Object.prototype as any).get;
+    }
+  });
+
   it('does not classify Hono routes by an incidental responseType property', () => {
     const route = Object.assign(
       registerApiRoute('/legacy', {
@@ -79,6 +97,89 @@ describe('convertCustomRoutesToOpenAPIPaths', () => {
     expect(paths['/widgets/{widgetId}'].post.responses['200'].content['application/json'].schema).toMatchObject({
       type: 'object',
       required: ['id'],
+    });
+  });
+
+  it('documents accepted request inputs and serialized outputs (#30050)', () => {
+    const route = createRoute({
+      method: 'POST',
+      path: '/widgets/:widgetId',
+      responseType: 'json',
+      pathParamSchema: z.object({ widgetId: z.string().transform(value => value.length) }),
+      queryParamSchema: z.object({ limit: z.string().transform(Number).default('10') }),
+      bodySchema: z.object({ name: z.string(), enabled: z.boolean().default(true) }),
+      responseSchema: z.object({ enabled: z.boolean().default(true) }),
+      handler: async () => ({ enabled: true }),
+    });
+
+    const document = generateOpenAPIDocument([route], { title: 'Widgets', version: '1' });
+    const operation = document.paths['/widgets/{widgetId}'].post;
+    expect(operation.parameters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'widgetId', in: 'path', schema: expect.objectContaining({ type: 'string' }) }),
+        expect.objectContaining({
+          name: 'limit',
+          in: 'query',
+          required: false,
+          schema: expect.objectContaining({ type: 'string' }),
+        }),
+      ]),
+    );
+    expect(operation.requestBody.content['application/json'].schema.required).toEqual(['name']);
+    expect(operation.responses['200'].content['application/json'].schema.required).toEqual(['enabled']);
+  });
+
+  describe('component schemas', () => {
+    interface Node {
+      name: string;
+      children: Node[];
+    }
+    const Node: z.ZodType<Node> = z.lazy(() => z.object({ name: z.string(), children: z.array(Node) }));
+    const Invoice = z.object({ number: z.string() }).meta({ id: 'Invoice' });
+    const routes = () => [
+      createRoute({
+        method: 'POST',
+        path: '/nodes',
+        responseType: 'json',
+        bodySchema: z.object({ node: Node }),
+        responseSchema: z.object({ ok: z.boolean() }),
+        handler: async () => ({ ok: true }),
+      }) satisfies ApiRoute,
+      registerApiRoute('/invoices', {
+        method: 'GET',
+        handler: async c => c.json({}),
+        openapi: {
+          responses: {
+            200: {
+              description: 'ok',
+              content: { 'application/json': { schema: z.object({ invoice: Invoice }) as any } },
+            },
+          },
+        },
+      }),
+    ];
+
+    it('hoists nested definitions into the map it is given', () => {
+      const componentSchemas: Record<string, any> = {};
+      const paths = convertCustomRoutesToOpenAPIPaths(routes(), componentSchemas);
+
+      expect(componentSchemas.Invoice).toMatchObject({ properties: { number: { type: 'string' } } });
+      expect(paths['/invoices'].get.responses['200'].content['application/json'].schema.properties.invoice).toEqual({
+        $ref: '#/components/schemas/Invoice',
+      });
+      expect(JSON.stringify(paths)).not.toMatch(/"(\$defs|definitions)":/);
+    });
+
+    it('leaves definitions nested when no component map is given', () => {
+      const paths = convertCustomRoutesToOpenAPIPaths(routes());
+      const serialized = JSON.stringify(paths);
+
+      // Without a map the caller serves no components, so no ref may point into them.
+      expect(serialized).not.toContain('#/components/schemas/');
+      expect(paths['/invoices'].get.responses['200'].content['application/json'].schema.$defs.Invoice).toMatchObject({
+        properties: { number: { type: 'string' } },
+      });
+      expect(serialized).toMatch(/"(\$defs|definitions)":/);
     });
   });
 });
