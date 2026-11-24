@@ -2,6 +2,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 export const MODEL_PACK_MODELS_MAX = 4;
 export const MODEL_PACKS_MAX = 8;
+export const MODEL_PACK_NAME_MAX = 40;
 export const FACTORY_MODEL_PACK_SETTING = 'factoryModelPackId';
 
 export interface ModelPackModel {

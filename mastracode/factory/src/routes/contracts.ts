@@ -12,7 +12,7 @@ import {
 } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { MODEL_ID_PATTERN } from '../model-id.js';
-import { MODEL_PACK_MODELS_MAX, MODEL_PACKS_MAX } from '../model-packs.js';
+import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX } from '../model-packs.js';
 import type { ModelPackSet } from '../model-packs.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -597,7 +597,11 @@ const MODEL_PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 export const modelPackSchema = z
   .object({
     id: z.string().regex(MODEL_PACK_ID_PATTERN, 'A pack ID is 1 to 64 letters, digits, "-" or "_"'),
-    name: z.string().trim().min(1, 'A pack needs a name').max(40, 'A pack name is at most 40 characters'),
+    name: z
+      .string()
+      .trim()
+      .min(1, 'A pack needs a name')
+      .max(MODEL_PACK_NAME_MAX, `A pack name is at most ${MODEL_PACK_NAME_MAX} characters`),
     models: z
       .array(z.object({ modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVELS) }))
       .min(1, 'A pack needs at least one model')
