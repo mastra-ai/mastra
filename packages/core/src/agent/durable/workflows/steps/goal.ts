@@ -64,10 +64,9 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      // Rebuild requestContext from serialized entries for resolvers. The signed-in
-      // user comes from the live run context, never from the run's starting request.
       const liveRequestContext = registryEntry?.requestContext ?? params.requestContext;
-      const requestContext = restoreRequestContext(initData.requestContextEntries, liveRequestContext);
+      const requestContext =
+        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, params.requestContext);
       const customContext = restoreCustomContext(initData.requestContextEntries, liveRequestContext);
 
       // No goal configured on the agent → nothing to judge.

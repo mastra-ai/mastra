@@ -76,7 +76,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         const restored = await restoreCompletionPolicy({
           agent,
           persisted: initData.options.isTaskComplete,
-          requestContext: restoreRequestContext(initData.requestContextEntries, registryEntry?.requestContext),
+          requestContext: registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries),
           runId: state.runId,
           logger: mastra?.getLogger?.(),
         });
