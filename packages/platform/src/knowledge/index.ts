@@ -1,5 +1,10 @@
 import { Knowledge } from '@mastra/core/knowledge';
-import type { KnowledgeConfig, KnowledgeScopeDeclarations } from '@mastra/core/knowledge';
+import type {
+  KnowledgeConfig,
+  KnowledgeScopeDeclarations,
+  KnowledgePageGraph,
+  readKnowledgePageGraph,
+} from '@mastra/core/knowledge';
 import {
   MastraCompositeStore,
   KnowledgeStorage,
@@ -88,6 +93,15 @@ function decode<T>(text: string): T {
     }
     return value;
   }) as T;
+}
+
+function isMissingOperation(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'status' in error &&
+    error.status === 404 &&
+    error.message === 'Knowledge operation not found'
+  );
 }
 
 class RemoteKnowledgeStorage extends KnowledgeStorage {
@@ -185,6 +199,40 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     return decode<{ result?: unknown }>(text).result;
   }
 
+  async readPageGraph(
+    input: Parameters<typeof readKnowledgePageGraph>[1],
+  ): Promise<KnowledgePageGraph | null | undefined> {
+    // Hosts can request larger custom graphs locally. The service enforces its HTTP route budgets.
+    const { limits } = input;
+    if ((limits?.maxPages ?? 0) > 500 || (limits?.maxNotes ?? 0) > 5000 || (limits?.maxOutsidePages ?? 0) > 50)
+      return undefined;
+    let result: unknown;
+    try {
+      result = await this.request('readPageGraph', input);
+    } catch (error) {
+      if (isMissingOperation(error)) return undefined;
+      throw error;
+    }
+    if (result === null) return null;
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      !('pages' in result) ||
+      !Array.isArray(result.pages) ||
+      !('edges' in result) ||
+      !Array.isArray(result.edges) ||
+      !('outsideIds' in result) ||
+      !Array.isArray(result.outsideIds) ||
+      !('pinnedIds' in result) ||
+      !Array.isArray(result.pinnedIds) ||
+      !('truncated' in result) ||
+      typeof result.truncated !== 'boolean'
+    ) {
+      throw new Error('Knowledge service answered readPageGraph without a graph');
+    }
+    return result as KnowledgePageGraph;
+  }
+
   /**
    * The scope declarations the instance supplies, such as the ones its importers write to, with their
    * access rules. A service that doesn't have the operation yet answers 404 "Knowledge operation not
@@ -196,8 +244,7 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     try {
       result = await this.request('getScopeDeclarations');
     } catch (error) {
-      const status = (error as { status?: unknown }).status;
-      if (status === 404 && (error as Error).message === 'Knowledge operation not found') return {};
+      if (isMissingOperation(error)) return {};
       throw error;
     }
     if (!result || typeof result !== 'object' || Array.isArray(result)) {

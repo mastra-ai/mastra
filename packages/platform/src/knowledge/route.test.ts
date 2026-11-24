@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { readKnowledgePageGraph } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
 import {
   InMemoryStore,
@@ -50,6 +51,48 @@ it('uses the project-scoped operation route with bearer auth', async () => {
       body: JSON.stringify({ input: { read: 'all' } }),
     },
   ]);
+});
+
+const hostedGraphStore = () =>
+  new PlatformKnowledge({ apiUrl: 'http://localhost', instanceId: 'kn_1', accessToken: 'token' }).getStorage();
+const graphInput = { read: { addresses: ['org:acme'], prefixes: [], children: [] }, rootId: 'scope-1' };
+
+it.each([{ pages: [], edges: [], outsideIds: [], pinnedIds: [], truncated: false }, null])(
+  'returns the hosted graph result with one scoped request',
+  async result => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ result }));
+    onTestFinished(() => fetch.mockRestore());
+    expect(await readKnowledgePageGraph(await hostedGraphStore(), graphInput)).toEqual(result);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(
+      'http://localhost/v1/knowledge/kn_1/operations/readPageGraph',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ input: graphInput }) }),
+    );
+  },
+);
+
+it('falls back to the scoped page reader when an older instance lacks the graph operation', async () => {
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(Response.json({ detail: 'Knowledge operation not found' }, { status: 404 }))
+    .mockResolvedValueOnce(Response.json({ result: null }));
+  onTestFinished(() => fetch.mockRestore());
+  expect(await readKnowledgePageGraph(await hostedGraphStore(), graphInput)).toBeNull();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenLastCalledWith(
+    'http://localhost/v1/knowledge/kn_1/operations/getPage',
+    expect.objectContaining({ body: JSON.stringify({ input: { id: graphInput.rootId, read: graphInput.read } }) }),
+  );
+});
+
+it.each([
+  [404, 'Instance not found'],
+  [403, 'Forbidden'],
+] as const)('propagates a hosted %i graph error without retrying through primitives', async (status, detail) => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ detail }, { status }));
+  onTestFinished(() => fetch.mockRestore());
+  await expect(readKnowledgePageGraph(await hostedGraphStore(), graphInput)).rejects.toThrow(detail);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it('asks the hosted store for the scope declarations its instance supplies', async () => {

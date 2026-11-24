@@ -43,6 +43,45 @@ describe('PgKnowledgePages (schema 4)', () => {
     await pool.end();
   });
 
+  it('limits graph mentions across pages in traversal order after applying note visibility', async () => {
+    const { scope } = await store.materializeScope({
+      address: 'team:graph',
+      declaration: 'team:$id',
+      name: 'Graph',
+      provenance,
+    });
+    const { scope: hidden } = await store.materializeScope({
+      address: 'team:hidden-graph',
+      declaration: 'team:$id',
+      name: 'Hidden',
+      provenance,
+    });
+    const first = await store.createPage({ parentId: scope.id, name: 'First', provenance });
+    const second = await store.createPage({ parentId: scope.id, name: 'Second', provenance });
+    const add = (pageId: string, mentions: string[]) =>
+      store.addNote({ pageId, text: 'Context', stampScopeIds: [scope.id], mentions, provenance });
+    await add(first.id, [second.id]);
+    await add(second.id, [hidden.id]);
+    await add(second.id, []);
+    await add(second.id, [first.id]);
+    const input = { pageIds: [second.id, first.id], read: readOf('team:graph') };
+    expect(await store.listGraphNoteMentions({ ...input, limit: 2 })).toEqual({
+      notes: [
+        { pageId: second.id, mentions: [] },
+        { pageId: second.id, mentions: [first.id] },
+      ],
+      truncated: true,
+    });
+    expect(await store.listGraphNoteMentions({ ...input, limit: 3 })).toEqual({
+      notes: [
+        { pageId: second.id, mentions: [] },
+        { pageId: second.id, mentions: [first.id] },
+        { pageId: first.id, mentions: [second.id] },
+      ],
+      truncated: false,
+    });
+  });
+
   it('materializes scopes idempotently and reports parent conflicts', async () => {
     const org = await store.materializeScope({
       address: 'org:acme',

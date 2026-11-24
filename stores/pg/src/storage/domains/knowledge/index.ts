@@ -269,6 +269,10 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.listPageLinks(input);
   }
 
+  listGraphNoteMentions(input: Parameters<PgKnowledgePages['listGraphNoteMentions']>[0]) {
+    return this.#pages.listGraphNoteMentions(input);
+  }
+
   override countNotes(
     input: Parameters<KnowledgePageStore['countNotes']>[0],
   ): ReturnType<KnowledgePageStore['countNotes']> {

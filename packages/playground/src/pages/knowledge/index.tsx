@@ -45,7 +45,7 @@ function Explorer({
 }: {
   knowledgeKey: string;
   live: boolean;
-  graph: KnowledgeGraphResponse;
+  graph: KnowledgeGraphResponse | undefined;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedPageId = searchParams.get('page');
@@ -185,16 +185,16 @@ export default function KnowledgePage() {
             ))}
           </select>
         ) : null}
-        {!knowledgeKey || graph.isPending ? (
+        {!knowledgeKey ? (
           <KnowledgeGraphLoader />
-        ) : !graph.data ? (
+        ) : graph.isError && !graph.data ? (
           <EmptyState
             tone="error"
             variant="fill"
             titleSlot="Failed to load Knowledge"
             descriptionSlot={graph.error?.message}
           />
-        ) : graph.data.pages.length === 0 ? (
+        ) : graph.data?.pages.length === 0 ? (
           <EmptyState
             variant="fill"
             titleSlot="No pages yet"

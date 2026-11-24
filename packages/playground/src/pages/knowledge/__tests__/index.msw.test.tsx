@@ -132,6 +132,14 @@ describe('Knowledge page', () => {
   });
 
   describe('when the instance has pages', () => {
+    it('shows the root of the tree while the graph is still loading', async () => {
+      withInstance();
+      server.use(http.get(`${api}/main/graph`, () => new Promise<Response>(() => {})));
+      renderPage();
+      const tree = await screen.findByRole('tree');
+      expect(await within(tree).findByText('Acme')).toBeTruthy();
+    });
+
     it('reads the graph without asking for a scope', async () => {
       const graphQueries: string[] = [];
       withInstance();

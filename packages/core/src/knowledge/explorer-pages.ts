@@ -351,15 +351,51 @@ async function graphLevelChildren(
   return { byParent, truncated };
 }
 
+type GraphInput = { read: KnowledgeReadScope; rootId?: string | null; limits?: Partial<KnowledgePageGraphLimits> };
+type GraphNotes = { notes: Pick<KnowledgeNote, 'pageId' | 'mentions'>[]; truncated: boolean };
+
+/** Optional bulk reads. Local stores and older hosted services can use the paginated primitives. */
+interface GraphStore extends KnowledgePageStore {
+  /** undefined means the service lacks this operation. null means the root was not found. */
+  readPageGraph?(input: GraphInput): Promise<KnowledgePageGraph | null | undefined>;
+  listGraphNoteMentions?(input: { pageIds: string[]; read: KnowledgeReadScope; limit: number }): Promise<GraphNotes>;
+}
+
+async function graphNotes(
+  store: GraphStore,
+  pages: KnowledgePage[],
+  read: KnowledgeReadScope,
+  limit: number,
+): Promise<GraphNotes> {
+  const notes: GraphNotes['notes'] = [];
+  if (!pages.length) return { notes, truncated: false };
+  if (store.listGraphNoteMentions && Number.isSafeInteger(limit) && limit >= 0) {
+    return store.listGraphNoteMentions({ pageIds: pages.map(page => page.id), read, limit });
+  }
+  const counts = await countInBatches(pages, ids => store.countNotes({ pageIds: ids, read }));
+  for (const page of pages) {
+    if (counts && !counts[page.id]) continue;
+    let cursor: string | undefined;
+    do {
+      const remaining = limit - notes.length;
+      if (remaining <= 0) return { notes, truncated: true };
+      const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: Math.min(NOTE_BATCH, remaining) });
+      for (const { pageId, mentions } of batch.notes) notes.push({ pageId, mentions });
+      cursor = batch.nextCursor;
+    } while (cursor);
+  }
+  return { notes, truncated: false };
+}
+
 /**
  * A bounded graph: pages breadth-first under `rootId` (or every root scope `read` reaches), parent
- * edges between them, and mention edges from their readable notes. A hidden note never contributes
- * an edge, so the graph shows only links the caller could read.
+ * edges between them, and mention edges from their readable notes.
  */
-export async function readKnowledgePageGraph(
-  store: KnowledgePageStore,
-  input: { read: KnowledgeReadScope; rootId?: string | null; limits?: Partial<KnowledgePageGraphLimits> },
-): Promise<KnowledgePageGraph | null> {
+export async function readKnowledgePageGraph(store: GraphStore, input: GraphInput): Promise<KnowledgePageGraph | null> {
+  if (store.readPageGraph) {
+    const graph = await store.readPageGraph(input);
+    if (graph !== undefined) return graph;
+  }
   const { read } = input;
   const limits = { ...DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS, ...input.limits };
   const rootId = input.rootId ?? null;
@@ -406,32 +442,18 @@ export async function readKnowledgePageGraph(
   const edges: KnowledgePageGraphEdge[] = [];
   for (const [child, parent] of treeParent) edges.push({ source: parent, target: child, kind: 'parent' });
 
-  const walked = [...pages];
-  const noteCounts = await countInBatches(walked, ids => store.countNotes({ pageIds: ids, read }));
+  const batch = await graphNotes(store, pages, read, limits.maxNotes);
+  truncated ||= batch.truncated;
   const mentionCounts = new Map<string, Map<string, number>>();
   const outsideWanted = new Set<string>();
-  let notesLeft = limits.maxNotes;
-  notes: for (const page of walked) {
-    if (noteCounts && !noteCounts[page.id]) continue;
-    let cursor: string | undefined;
-    do {
-      if (notesLeft <= 0) {
-        truncated = true;
-        break notes;
-      }
-      const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: Math.min(NOTE_BATCH, notesLeft) });
-      notesLeft -= batch.notes.length;
-      for (const note of batch.notes) {
-        for (const target of new Set(note.mentions)) {
-          if (target === page.id) continue;
-          let counts = mentionCounts.get(page.id);
-          if (!counts) mentionCounts.set(page.id, (counts = new Map()));
-          counts.set(target, (counts.get(target) ?? 0) + 1);
-          if (!byId.has(target)) outsideWanted.add(target);
-        }
-      }
-      cursor = batch.nextCursor;
-    } while (cursor);
+  for (const { pageId, mentions } of batch.notes) {
+    for (const target of new Set(mentions)) {
+      if (target === pageId) continue;
+      let counts = mentionCounts.get(pageId);
+      if (!counts) mentionCounts.set(pageId, (counts = new Map()));
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+      if (!byId.has(target)) outsideWanted.add(target);
+    }
   }
 
   const outsideIds: string[] = [];

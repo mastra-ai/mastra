@@ -19,6 +19,7 @@ import type {
   KnowledgePinPayload,
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
+import { KnowledgeGraphLoader } from './KnowledgeGraphLoader';
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
@@ -146,8 +147,11 @@ export interface KnowledgeExplorerSource {
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
 }
 
+const EMPTY_GRAPH: KnowledgeExplorerGraph = { pages: [], edges: [], pinnedIds: [], truncated: false };
+
 export interface KnowledgePageExplorerProps {
-  graph: KnowledgeExplorerGraph;
+  /** While the overview loads, tree and selected-page reads can already populate the explorer. */
+  graph: KnowledgeExplorerGraph | undefined;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
   /** `null` clears the selection: a click on empty graph canvas. */
@@ -862,7 +866,7 @@ function sameLevels(a: LevelResult, b: LevelResult) {
  */
 function useLazyTree(
   source: KnowledgeExplorerSource,
-  graph: KnowledgeExplorerGraph,
+  graph: KnowledgeExplorerGraph | undefined,
   selected: KnowledgeExplorerPageDetail | undefined,
   // Pages focused in the graph: their first level of children loads too, so the graph can draw them.
   graphOpened: readonly string[],
@@ -908,7 +912,8 @@ function useLazyTree(
 
   // With the whole graph loaded, its structure is complete: only pages with children get a chevron.
   const graphParents = useMemo(
-    () => (graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null))),
+    () =>
+      !graph || graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null)),
     [graph],
   );
   // A counted page has children exactly when its count says so. An uncounted one is guessed from the graph,
@@ -952,7 +957,7 @@ function useLazyTree(
  * page instead.
  */
 export function KnowledgePageExplorer({
-  graph,
+  graph: overview,
   source,
   selectedPageId,
   onSelect,
@@ -962,6 +967,7 @@ export function KnowledgePageExplorer({
   flush = false,
   fullBleedGraph = false,
 }: KnowledgePageExplorerProps) {
+  const graph = overview ?? EMPTY_GRAPH;
   const narrow = useIsMobile(1024);
   const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
@@ -975,7 +981,7 @@ export function KnowledgePageExplorer({
   const [revealed, setRevealed] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [allLinks, setAllLinks] = useState(false);
   const [dotCounts, setDotCounts] = useState(true);
-  const lazy = useLazyTree(source, graph, selected.data, graphOpened);
+  const lazy = useLazyTree(source, overview, selected.data, graphOpened);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.
   const drawnGraph = useMemo(
@@ -1269,6 +1275,7 @@ export function KnowledgePageExplorer({
 
   const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
+  const loadingCanvas = graphShown && !pageOverGraph && !overview && graphPages.length === 0;
   const floatingToolbar = fullBleedGraph && graphShown && !showPage;
   const toolbar = useMeasuredAutoHeight();
   const noticeSurface = floatingToolbar ? cn('w-fit rounded-lg px-2 py-1', overlaySurfaceStyle) : undefined;
@@ -1501,7 +1508,8 @@ export function KnowledgePageExplorer({
               )}
               data-testid="knowledge-graph-container"
             >
-              {graphShown && !pageOverGraph ? (
+              {loadingCanvas ? <KnowledgeGraphLoader className="absolute inset-0" /> : null}
+              {graphShown && !pageOverGraph && !loadingCanvas ? (
                 <div className="absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
                   <ButtonsGroup
                     orientation="vertical"
@@ -1545,7 +1553,7 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown && !pageOverGraph ? (
+              {graphShown && !pageOverGraph && !loadingCanvas ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}

@@ -82,6 +82,10 @@ function stubFactory(features: { knowledge: boolean } = { knowledge: true }) {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-records`, () =>
       HttpResponse.json({ workRecords: [] }),
     ),
+    http.get(
+      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/feed-events`,
+      () => new HttpResponse(null, { status: 404 }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({}),
@@ -126,6 +130,17 @@ function renderRoute(path = `/factories/${FACTORY_ID}/knowledge`) {
 describe('KnowledgePage', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('when the tree arrives before the graph', () => {
+    it('lets the member browse pages while the graph request is pending', async () => {
+      stubKnowledge();
+      server.use(http.get(`${KNOWLEDGE}/graph`, () => new Promise<Response>(() => {})));
+      renderRoute();
+      const tree = await screen.findByRole('tree', {}, { timeout: 5_000 });
+      fireEvent.click(await within(tree).findByRole('button', { name: 'Expand Acme Factory' }));
+      expect(await within(tree).findByText('Deploy runbook')).toBeInTheDocument();
+    });
   });
 
   it('keeps the mobile drawer trigger in the header while feature flags load', async () => {

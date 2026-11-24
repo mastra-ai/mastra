@@ -1421,6 +1421,36 @@ export class PgKnowledgePages implements KnowledgePageStore {
     }));
   }
 
+  /** Read just the visible notes' link targets, in the same page and note order as the explorer walk. */
+  async listGraphNoteMentions(input: { pageIds: string[]; read: KnowledgeReadScope; limit: number }) {
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const ids = params.add(input.pageIds);
+    const take = params.add(input.limit + 1);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT picked."pageId",
+         ARRAY(SELECT mn."pageId" FROM ${this.#mentions} mn WHERE mn."noteId" = picked."id" ORDER BY mn."pageId") AS mentions
+       FROM (
+         SELECT n."id", n."pageId", n."createdAt", requested.position
+         FROM unnest(${ids}::text[]) WITH ORDINALITY requested(id, position)
+         JOIN LATERAL (
+           SELECT n."id", n."pageId", n."createdAt" FROM ${this.#visibleNotes(filter)}
+             AND n."deletedAt" IS NULL AND n."pageId" = requested.id
+           ORDER BY n."createdAt", n."id" LIMIT ${take}
+         ) n ON true
+         ORDER BY requested.position, n."createdAt", n."id" LIMIT ${take}
+       ) picked ORDER BY picked.position, picked."createdAt", picked."id"`,
+      params.values,
+    );
+    return {
+      notes: rows
+        .slice(0, input.limit)
+        .map(row => ({ pageId: String(row.pageId), mentions: row.mentions as string[] })),
+      truncated: rows.length > input.limit,
+    };
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
