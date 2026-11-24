@@ -548,7 +548,7 @@ describe('AskUser', () => {
 
         const tags = screen.getAllByText('Recommended');
         expect(tags).toHaveLength(1);
-        expect(tags[0]!.closest('label')?.textContent).toContain('Banana');
+        expect(tags[0]?.closest('label')?.textContent).toContain('Banana');
         expect(screen.getByRole(role, { name: /Banana/ }).getAttribute('aria-checked')).toBe('false');
         expect(screen.getByRole(role, { name: /Apple/ }).getAttribute('aria-checked')).toBe('false');
         expect(onSubmit).not.toHaveBeenCalled();
