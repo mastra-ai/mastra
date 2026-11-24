@@ -14835,6 +14835,13 @@ export class Agent<
         optionsAreResolved: true,
         resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
+        onRequestContextEntryOmitted: this.#executionEnginePolicy.inherited
+          ? () =>
+              this.#warnExecutionPolicy(
+                'requestContextSnapshot',
+                'Mastra-inherited durable execution omitted a value from the request context snapshot. Use JSON-safe values that fit in the snapshot if another process needs them.',
+              )
+          : undefined,
         mastra: this.#mastra,
         methodType,
         durableAgentId: this.id,
