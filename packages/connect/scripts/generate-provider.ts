@@ -16,7 +16,17 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -2009,7 +2019,7 @@ export interface GeneratedTool extends ToolRegistration {
 /**
  * Replaces a provider directory with freshly generated files, keeping the
  * hand-written files and tools found in it. The new directory is built aside
- * and swapped in, so a failure leaves the installed provider untouched.
+ * and swapped in, so a failure leaves the installed provider in place.
  */
 export async function writeProvider({
   outputDir,
@@ -2074,13 +2084,48 @@ export async function writeProvider({
       );
     }
 
-    rmSync(outputDir, { recursive: true, force: true });
-    renameSync(temporaryDir, outputDir);
+    publishProvider(temporaryDir, outputDir, localId);
   } catch (error) {
     rmSync(temporaryDir, { recursive: true, force: true });
     throw error;
   }
   return { toolCount: handwrittenTools.length + tools.length };
+}
+
+/**
+ * Swaps the built directory in for the installed one. The installed provider
+ * is moved aside rather than deleted, so a failed swap can put it back: it
+ * holds hand-written files that may not be committed anywhere else.
+ */
+function publishProvider(temporaryDir: string, outputDir: string, localId: string): void {
+  if (!existsSync(outputDir)) {
+    renameSync(temporaryDir, outputDir);
+    return;
+  }
+  const backupRoot = mkdtempSync(resolve(dirname(outputDir), `.${localId}.backup-`));
+  const backupDir = resolve(backupRoot, localId);
+  try {
+    renameSync(outputDir, backupDir);
+  } catch (error) {
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  try {
+    renameSync(temporaryDir, outputDir);
+  } catch (error) {
+    try {
+      rmSync(outputDir, { recursive: true, force: true });
+      renameSync(backupDir, outputDir);
+    } catch (restoreError) {
+      throw new Error(
+        `Publishing ${localId} failed and the previous provider could not be restored; it is kept at ${backupDir}.`,
+        { cause: new AggregateError([error, restoreError]) },
+      );
+    }
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  rmSync(backupRoot, { recursive: true, force: true });
 }
 
 export interface ToolRegistration {

@@ -1,14 +1,29 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { planHandwrittenTools, writeProvider } from '../../scripts/generate-provider.js';
 import type { GeneratedTool, ToolRegistration } from '../../scripts/generate-provider.js';
 import { listInstalledProviderIds, providerDir, readManifest, readManifestIn } from '../../scripts/provider-utils.js';
 import type { ProviderManifest } from '../../scripts/provider-utils.js';
 import { PROVIDERS } from '../providers/index.js';
+
+// Lets a test make the rename that publishes a regenerated provider fail.
+const renameFault = vi.hoisted(() => ({ from: undefined as RegExp | undefined }));
+vi.mock('node:fs', async importOriginal => {
+  const fs = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...fs,
+    renameSync: (from: string, to: string) => {
+      if (renameFault.from?.test(from)) {
+        throw Object.assign(new Error(`EACCES: permission denied, rename '${from}'`), { code: 'EACCES' });
+      }
+      fs.renameSync(from, to);
+    },
+  };
+});
 
 const toCamel = (slug: string) => slug.replace(/-([a-z0-9])/g, (_, char: string) => char.toUpperCase());
 
@@ -67,7 +82,10 @@ describe('regenerating a provider with hand-written files', () => {
   let root: string;
   let outputDir: string;
 
-  afterEach(() => rmSync(root, { recursive: true, force: true }));
+  afterEach(() => {
+    renameFault.from = undefined;
+    rmSync(root, { recursive: true, force: true });
+  });
 
   const generatedTool = (slug: string): GeneratedTool => ({
     slug,
@@ -190,6 +208,23 @@ describe('regenerating a provider with hand-written files', () => {
       /gained hand-written files while it was being regenerated \(tools\/archive-item\.ts\)/,
     );
     expect(readFileSync(resolve(outputDir, 'tools/archive-item.ts'), 'utf8')).toContain('archiveItemTool');
+  });
+
+  it('keeps the installed provider and its hand-written files when publishing fails', async () => {
+    setUp();
+    await generate();
+    const tool = 'export function archiveItemTool(_proxy: unknown) {\n  return {};\n}\n';
+    write('tools/archive-item.ts', tool);
+    write('notes.md', 'uncommitted\n');
+    const before = readFileSync(resolve(outputDir, 'tools.ts'), 'utf8');
+    renameFault.from = /\.sample\.generate-/;
+
+    await expect(generate([generatedTool('list-items'), generatedTool('get-item')])).rejects.toThrow(/EACCES/);
+
+    expect(readFileSync(resolve(outputDir, 'tools/archive-item.ts'), 'utf8')).toBe(tool);
+    expect(readFileSync(resolve(outputDir, 'notes.md'), 'utf8')).toBe('uncommitted\n');
+    expect(readFileSync(resolve(outputDir, 'tools.ts'), 'utf8')).toBe(before);
+    expect(readdirSync(root)).toEqual(['sample']);
   });
 
   it('generates a provider that does not exist yet', async () => {
