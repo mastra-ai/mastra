@@ -175,7 +175,7 @@ describe('serverSuggestionsAction', () => {
     await expect(serverSuggestionsAction(undefined, {})).rejects.toThrow('exit:1');
 
     expect(mockLogError).toHaveBeenCalledWith(
-      'No deploys found for linked Server project Server App. The suggestions command helps debug failed deployments, and you can run it after a deployment fails with `mastra server deploy suggestions <deploy-id>` or `mastra server deploy suggestions`.',
+      'No deploys found for linked Server project Server App. The diagnosis command helps debug failed deployments, and you can run it after a deployment fails with `mastra server deploy diagnosis <deploy-id>` or `mastra server deploy diagnosis`.',
     );
     expect(mockFetchServerDeployDiagnosis).not.toHaveBeenCalled();
     mockExit.mockRestore();

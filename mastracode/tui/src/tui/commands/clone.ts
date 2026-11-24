@@ -1,5 +1,6 @@
 import { disposeAssistantRenderState } from '../assistant-render-registry.js';
 import { askModalQuestion } from '../modal-question.js';
+import { clearPendingTools } from '../state.js';
 import type { TUIState } from '../state.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -47,8 +48,10 @@ export async function resetUIAfterClone(ctx: CloneResetContext, clonedTitle: str
   const { state } = ctx;
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
+  state.pendingSubagents.clear();
+  state.pendingSignalMessageComponentsById.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSystemReminderComponents = [];
   state.messageComponentsById.clear();

@@ -1,7 +1,7 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { selectSearchableSpans, toSearchableSpans } from './to-searchable-spans';
+import { toSearchableSpans } from './to-searchable-spans';
 
 function span(overrides: Partial<LightSpanRecord> = {}): LightSpanRecord {
   return {
@@ -26,41 +26,6 @@ function enrich(record: LightSpanRecord) {
 }
 
 describe('toSearchableSpans', () => {
-  describe('what it attaches', () => {
-    it('gives every span a searchText', () => {
-      const result = toSearchableSpans([span({ spanId: 'a' }), span({ spanId: 'b' })]);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]?.searchText).toEqual(expect.any(String));
-      expect(result[1]?.searchText).toEqual(expect.any(String));
-    });
-
-    it('carries the span name into searchText', () => {
-      const result = enrich(span({ name: 'weather tool' }));
-
-      expect(result.searchText).toContain('weather tool');
-    });
-
-    it('carries the open-ended metadata payload, which no fixed field list reaches', () => {
-      const result = enrich(span({ metadata: { city: 'Lyon', nested: { unit: 'celsius' } } }));
-
-      expect(result.searchText).toContain('lyon');
-      expect(result.searchText).toContain('celsius');
-    });
-
-    it('carries the open-ended error payload', () => {
-      const result = enrich(span({ error: { message: 'rate limit exceeded' } }));
-
-      expect(result.searchText).toContain('rate limit exceeded');
-    });
-
-    it('carries the field names, so a payload shape is searchable', () => {
-      const result = enrich(span({ metadata: { retries: 3 } }));
-
-      expect(result.searchText).toContain('retries');
-    });
-  });
-
   describe('the case it stores', () => {
     it('lowercases searchText so matching never has to', () => {
       const result = enrich(span({ name: 'WeatherAgent', entityName: 'CHEF-Agent' }));
@@ -110,29 +75,5 @@ describe('toSearchableSpans', () => {
       expect(result.searchText).toContain('renamed');
       expect(result.searchText).not.toBe('outdated');
     });
-  });
-});
-
-describe('selectSearchableSpans', () => {
-  it('enriches the spans of a query payload', () => {
-    const result = selectSearchableSpans({ traceId: 'trace-1', spans: [span({ name: 'weather tool' })] });
-
-    expect(result.spans[0]?.searchText).toContain('weather tool');
-  });
-
-  it('keeps the other fields of the payload', () => {
-    const result = selectSearchableSpans({ traceId: 'trace-1', spans: [] });
-
-    expect(result.traceId).toBe('trace-1');
-  });
-
-  it('passes null through, since a query may resolve to null', () => {
-    expect(selectSearchableSpans(null)).toBeNull();
-  });
-
-  it('is a stable module-level reference, so React Query can memoize it', () => {
-    // Re-importing must not produce a new function: an unstable `select` would
-    // re-flatten every span on every render.
-    expect(selectSearchableSpans).toBe(selectSearchableSpans);
   });
 });

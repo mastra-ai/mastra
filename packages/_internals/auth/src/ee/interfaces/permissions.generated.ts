@@ -23,6 +23,7 @@ export const RESOURCES = [
   'embedders',
   'experiments',
   'infrastructure',
+  'knowledge',
   'logs',
   'mcp',
   'memory',
@@ -111,6 +112,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:*': 'experiments:*',
   /** Full access to infrastructure */
   'infrastructure:*': 'infrastructure:*',
+  /** Full access to knowledge */
+  'knowledge:*': 'knowledge:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -181,6 +184,8 @@ export const PERMISSION_PATTERNS = {
   'agents:write': 'agents:write',
   /** View auth */
   'auth:read': 'auth:read',
+  /** Execute background tasks */
+  'background-tasks:execute': 'background-tasks:execute',
   /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
@@ -203,6 +208,8 @@ export const PERMISSION_PATTERNS = {
   'experiments:read': 'experiments:read',
   /** View infrastructure */
   'infrastructure:read': 'infrastructure:read',
+  /** View knowledge */
+  'knowledge:read': 'knowledge:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -219,6 +226,8 @@ export const PERMISSION_PATTERNS = {
   'memory:read': 'memory:read',
   /** Create and modify memory and threads */
   'memory:write': 'memory:write',
+  /** Delete traces and spans */
+  'observability:delete': 'observability:delete',
   /** View traces and spans */
   'observability:read': 'observability:read',
   /** Create and modify traces and spans */
@@ -368,6 +377,7 @@ export const PERMISSIONS = [
   'agents:read',
   'agents:write',
   'auth:read',
+  'background-tasks:execute',
   'background-tasks:read',
   'channels:read',
   'channels:write',
@@ -379,6 +389,7 @@ export const PERMISSIONS = [
   'experiments:delete',
   'experiments:read',
   'infrastructure:read',
+  'knowledge:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -387,6 +398,7 @@ export const PERMISSIONS = [
   'memory:execute',
   'memory:read',
   'memory:write',
+  'observability:delete',
   'observability:read',
   'observability:write',
   'processor-providers:read',
@@ -481,6 +493,8 @@ export const MastraFGAPermissions = {
   AGENTS_WRITE: 'agents:write',
   /** View auth */
   AUTH_READ: 'auth:read',
+  /** Execute background tasks */
+  BACKGROUND_TASKS_EXECUTE: 'background-tasks:execute',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
   /** View channels */
@@ -503,6 +517,8 @@ export const MastraFGAPermissions = {
   EXPERIMENTS_READ: 'experiments:read',
   /** View infrastructure */
   INFRASTRUCTURE_READ: 'infrastructure:read',
+  /** View knowledge */
+  KNOWLEDGE_READ: 'knowledge:read',
   /** View logs */
   LOGS_READ: 'logs:read',
   /** Execute MCP servers */
@@ -519,6 +535,8 @@ export const MastraFGAPermissions = {
   MEMORY_READ: 'memory:read',
   /** Create and modify memory and threads */
   MEMORY_WRITE: 'memory:write',
+  /** Delete traces and spans */
+  OBSERVABILITY_DELETE: 'observability:delete',
   /** View traces and spans */
   OBSERVABILITY_READ: 'observability:read',
   /** Create and modify traces and spans */

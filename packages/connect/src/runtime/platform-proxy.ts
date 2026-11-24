@@ -1,0 +1,456 @@
+/**
+ * Runtime request context handed to generated tool exec bodies. It implements
+ * the subset of the upstream template SDK that shipped templates actually
+ * call, but every request goes through the Mastra platform's `/v2/proxy`
+ * endpoint — no third-party SDK is involved at runtime.
+ *
+ * The context intentionally implements only what the templates we ship
+ * actually use. If we vendor a template that needs a helper not modelled
+ * here, the generator fails at generation time (unknown property access)
+ * rather than exploding at runtime.
+ */
+import type { RequestContext } from '@mastra/core/request-context';
+
+import { getConnectionContext, getCredential, proxyRequestWithResponse, resolveClient } from '../client.js';
+import type { ConnectClientOptions, ConnectionContext, ConnectionCredential, ProxyRequestOptions } from '../client.js';
+import { MastraConnectError } from '../errors.js';
+
+/**
+ * The shape of an individual request as templates author them — a strict
+ * subset of the upstream proxy configuration containing only the fields the
+ * templates actually use.
+ */
+export interface PlatformProxyRequest {
+  endpoint: string;
+  /** Used by the upstream generic `proxy()` helper; verb-specific helpers ignore it. */
+  method?: ProxyRequestOptions['method'];
+  params?: NonNullable<ProxyRequestOptions['query']>;
+  headers?: Record<string, string>;
+  data?: unknown;
+  /**
+   * Retry hint from templates. We treat this as a soft ceiling — the platform
+   * proxy already applies its own retry policy; templates that ask for `n`
+   * retries get up to `n` transient retries here on network/5xx failures.
+   * Honored for idempotent HTTP methods (GET/HEAD/PUT/DELETE), and for a POST
+   * or PATCH that carries an `Idempotency-Key` header, since the provider then
+   * deduplicates a replay. Any other POST or PATCH gets exactly one attempt.
+   */
+  retries?: number;
+  /** Provider base URL selected by the tool from connection config or metadata. */
+  baseUrlOverride?: string;
+  /**
+   * How to decode the provider response body. Defaults to JSON. Set to
+   * `'arraybuffer'` when the endpoint returns binary content (e.g. file
+   * exports); the body is returned as an ArrayBuffer that a template can
+   * wrap with `Buffer.from(...)`.
+   */
+  responseType?: 'arraybuffer';
+  /** Pagination hints, consumed only by `platformProxy.paginate`. */
+  paginate?: PaginateConfig;
+}
+
+interface CommonPaginateConfig {
+  /** Dot-separated path in the response body to the items array (e.g. `value`). */
+  response_path?: string;
+  /** Query parameter carrying the page size. */
+  limit_name_in_request?: string;
+  /** Page size sent with the first request. */
+  limit?: number;
+}
+
+export interface LinkPaginateConfig extends CommonPaginateConfig {
+  type: 'link';
+  /** Path in the response body to the next-page URL (e.g. `@odata.nextLink`). */
+  link_path_in_response_body: string;
+}
+
+export interface CursorPaginateConfig extends CommonPaginateConfig {
+  type: 'cursor';
+  /** Path in the response body to the next cursor value. */
+  cursor_path_in_response_body: string;
+  /** Query parameter the cursor is sent back in. */
+  cursor_name_in_request: string;
+}
+
+export interface OffsetPaginateConfig extends CommonPaginateConfig {
+  type: 'offset';
+  /** Query parameter carrying the offset. */
+  offset_name_in_request: string;
+  /** First offset. Defaults to 0. */
+  offset_start_value?: number;
+}
+
+export type PaginateConfig = LinkPaginateConfig | CursorPaginateConfig | OffsetPaginateConfig;
+
+/** Upper bound on pages one `paginate` call walks; reaching it throws so a misbehaving provider can't loop forever. */
+const MAX_PAGES = 100;
+
+/** Templates treat provider response bodies as untyped JSON until they validate them. */
+type ProviderResponseData = ReturnType<typeof JSON.parse>;
+
+/**
+ * Connection facts as templates consume them. The upstream SDK types
+ * connection config and metadata values as `any` and vendored templates are
+ * written against that contract (they narrow with schema parses or truthiness
+ * checks), so the template-facing surface mirrors it. The package's own API
+ * (`ConnectionContext` in client.ts) stays strictly typed.
+ */
+export interface TemplateConnectionContext {
+  connection_config: Record<string, ProviderResponseData>;
+  metadata: Record<string, ProviderResponseData> | null;
+}
+
+/**
+ * Connection context extended with the raw credential in the upstream SDK's
+ * wire shape. Only handed to exec bodies whose template reads
+ * `connection.credentials`; the generator rewrites their `getConnection()`
+ * calls to `getConnectionWithCredentials()` so the common path never fetches
+ * a secret it doesn't use. Never log this value.
+ */
+export interface TemplateConnectionContextWithCredentials extends TemplateConnectionContext {
+  credentials: Record<string, ProviderResponseData>;
+}
+
+/** Maps the platform credential to the field names templates are written against. */
+function toTemplateCredentials(credential: ConnectionCredential): Record<string, ProviderResponseData> {
+  if (credential.type === 'oauth2') {
+    return { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt };
+  }
+  if (credential.type === 'two_step') {
+    return { type: 'TWO_STEP', token: credential.token, expires_at: credential.expiresAt };
+  }
+  return { type: 'API_KEY', apiKey: credential.apiKey };
+}
+
+/**
+ * Structural view of a zod schema as `zodValidateInput` consumes it. Typed
+ * structurally instead of against `ZodType` so the runtime works with any
+ * zod major the host app resolves (the package's zod peer spans 3 and 4).
+ */
+export interface ZodLikeSchema<T> {
+  safeParse(
+    input: unknown,
+  ): { success: true; data: T } | { success: false; error: { issues?: unknown; message?: string } };
+}
+
+/** Mirrors the upstream response shape closely enough for the templates we vendor. */
+export interface PlatformProxyResponse<T = ProviderResponseData> {
+  data: T;
+  status: number;
+  headers: Record<string, string>;
+}
+
+/**
+ * Thrown from generated exec bodies to signal a domain error. Templates
+ * construct these with `throw new platformProxy.ActionError({ type, message, ... })`.
+ */
+export class ToolActionError extends Error {
+  readonly payload: Record<string, unknown>;
+  constructor(payload: { type?: string; message?: string; details?: unknown; [key: string]: unknown }) {
+    super(payload.message ?? payload.type ?? 'Tool action error');
+    this.name = 'ToolActionError';
+    this.payload = payload;
+  }
+}
+
+/**
+ * The `platformProxy` binding passed as the first argument of every generated
+ * exec body. Only fields we've seen used are exposed.
+ */
+export interface PlatformProxy {
+  /** Mirrors the upstream generic request helper, defaulting to GET when no method is provided. */
+  proxy<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  get<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  post<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  put<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  patch<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  delete<T = ProviderResponseData>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>>;
+  /**
+   * GETs every page of a paginated endpoint described by `config.paginate`,
+   * yielding each non-empty page's items. Mirrors the upstream SDK helper templates
+   * call as `for await (const page of nango.paginate(config))`.
+   */
+  paginate<T = ProviderResponseData>(config: PlatformProxyRequest): AsyncGenerator<T[], void, unknown>;
+  getConnection(): Promise<TemplateConnectionContext>;
+  /**
+   * `getConnection()` plus the raw connection credential fetched from the
+   * platform. Generated only for templates that read `connection.credentials`.
+   */
+  getConnectionWithCredentials(): Promise<TemplateConnectionContextWithCredentials>;
+  /**
+   * Mirrors the upstream SDK contract templates are written against: always
+   * resolves to an object (empty when the connection has no metadata).
+   */
+  getMetadata<T = Record<string, ProviderResponseData>>(): Promise<T>;
+  /**
+   * Templates cache derived connection facts here (for example the Jira
+   * templates resolve and store the Atlassian `cloudId`/`baseUrl`). The
+   * platform connection record is not writable from a tool, so updates land
+   * in an in-memory overlay shared by every request-bound copy of the
+   * toolset's proxy: `getMetadata` reads through it, and a fresh process
+   * simply re-derives the values on its first call.
+   */
+  updateMetadata(update: Record<string, unknown>): Promise<void>;
+  /**
+   * Mirrors the upstream SDK's input-validation helper. Generated tools
+   * already validate inputs through their tool input schema, so this mostly
+   * re-parses, but templates rely on it for defaults/coercion and for the
+   * `{ data }` result shape.
+   */
+  zodValidateInput<T>(args: { zodSchema: ZodLikeSchema<T>; input: unknown }): Promise<{ data: T }>;
+  ActionError: typeof ToolActionError;
+  log: (...args: unknown[]) => void;
+  /**
+   * The request context of the call currently being served, when bound via
+   * `withRequestContext`. Carried so connection resolution can use per-request
+   * end-user identity once user-scoped connections are supported.
+   */
+  readonly requestContext?: RequestContext;
+  /** Returns a copy of this proxy bound to one request's context. */
+  withRequestContext(requestContext: RequestContext): PlatformProxy;
+}
+
+/** Methods with an idempotency contract per RFC 9110; only these may be retried. */
+const IDEMPOTENT_METHODS = new Set<ProxyRequestOptions['method']>(['GET', 'HEAD', 'PUT', 'DELETE']);
+
+interface CreatePlatformProxyOptions {
+  connectionId?: string;
+  client?: ConnectClientOptions;
+  requestContext?: RequestContext;
+  /**
+   * Internal: the metadata overlay shared across request-bound copies of one
+   * toolset proxy. The connection id is fixed per proxy context, so the
+   * overlay is per-connection; revisit if connection resolution ever becomes
+   * request-scoped.
+   */
+  metadataOverlay?: Record<string, unknown>;
+}
+
+function requireConnectionId(connectionId?: string): string {
+  if (connectionId) return connectionId;
+  throw new MastraConnectError(
+    'missing_connection_id',
+    'Missing connection id: pass connectionId or resolve tools through connect().',
+  );
+}
+
+async function loadConnectionContext({
+  connectionId,
+  client: clientOptions,
+}: CreatePlatformProxyOptions): Promise<ConnectionContext> {
+  return getConnectionContext(resolveClient(clientOptions), requireConnectionId(connectionId));
+}
+
+async function callProxy<T>(
+  method: ProxyRequestOptions['method'],
+  { connectionId, client: clientOptions }: CreatePlatformProxyOptions,
+  config: PlatformProxyRequest,
+): Promise<PlatformProxyResponse<T>> {
+  // Checked lazily per call, so building toolsets without a connection id
+  // never throws. `connect()` always supplies one; direct `create<Provider>Tools`
+  // callers must pass `connectionId`.
+  const resolvedConnectionId = requireConnectionId(connectionId);
+  const client = resolveClient(clientOptions);
+  // Non-idempotent writes get exactly one attempt: a POST/PATCH the provider
+  // accepted just before a transient failure must not be replayed as a
+  // duplicate mutation. A caller-supplied Idempotency-Key makes the replay
+  // safe, so those requests may retry like idempotent methods.
+  const retryable = IDEMPOTENT_METHODS.has(method) || hasIdempotencyKey(config.headers);
+  const attempts = retryable ? Math.max(1, Math.min(config.retries ?? 1, 5)) : 1;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await proxyRequestWithResponse(client, resolvedConnectionId, {
+        method,
+        path: config.endpoint,
+        query: config.params,
+        headers: config.headers,
+        baseUrlOverride: config.baseUrlOverride,
+        body: config.data,
+        responseType: config.responseType,
+      });
+      return { ...response, data: response.data as T };
+    } catch (error) {
+      lastError = error;
+      // Only retry on network-ish failures. MastraConnectError with
+      // proxy_error status >= 500 is worth retrying; auth/404 is not.
+      if (!isTransient(error)) throw error;
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new MastraConnectError('proxy_error', 'Proxy call failed after retries.');
+}
+
+function hasIdempotencyKey(headers: Record<string, string> | undefined): boolean {
+  return Object.keys(headers ?? {}).some(name => name.toLowerCase() === 'idempotency-key');
+}
+
+function isTransient(error: unknown): boolean {
+  if (error instanceof MastraConnectError && error.code === 'proxy_error') {
+    return typeof error.status === 'number' && error.status >= 500;
+  }
+  // Network errors (fetch rejections) surface as generic Errors.
+  return !(error instanceof MastraConnectError);
+}
+
+/**
+ * Reads `a.b.c` off a response body. A key that literally contains dots
+ * (Graph's `@odata.nextLink`) is matched directly before the path is split.
+ */
+function readPath(source: unknown, path: string | undefined): unknown {
+  if (!path) return source;
+  if (source === null || typeof source !== 'object') return undefined;
+  if (path in source) return (source as Record<string, unknown>)[path];
+  let current: unknown = source;
+  for (const segment of path.split('.')) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+/**
+ * Turns a provider next-page link into the next request. The link is followed
+ * as a path on the connection's own provider base URL, so a response can
+ * never steer the proxy at another host. An absolute link must be HTTPS and
+ * share `origin`: the `baseUrlOverride` origin if the first request set one,
+ * otherwise the origin of the first absolute link the provider returned.
+ * A link that fails those checks throws rather than ending the walk early, so
+ * a caller never mistakes a partial listing for a complete one.
+ */
+function nextLinkRequest(base: PlatformProxyRequest, link: string, origin: string | undefined): PlatformProxyRequest {
+  if (link.startsWith('/')) return { ...base, endpoint: link, params: undefined };
+  let url: URL | undefined;
+  try {
+    url = new URL(link);
+  } catch {
+    url = undefined;
+  }
+  if (!url || url.protocol !== 'https:' || (origin !== undefined && url.origin !== origin)) {
+    throw new MastraConnectError(
+      'proxy_error',
+      `Provider returned a next-page link that cannot be followed: ${url ? url.origin : 'not a URL'}.`,
+    );
+  }
+  // The link carries every query parameter the next page needs, so the first
+  // request's params are dropped rather than merged in.
+  return { ...base, endpoint: `${url.pathname}${url.search}`, params: undefined };
+}
+
+async function* paginateRequests<T>(
+  context: CreatePlatformProxyOptions,
+  { paginate: pageConfig, ...base }: PlatformProxyRequest,
+): AsyncGenerator<T[], void, unknown> {
+  if (!pageConfig) {
+    throw new MastraConnectError('invalid_options', 'platformProxy.paginate requires a `paginate` config.');
+  }
+  const params = { ...base.params };
+  if (pageConfig.limit_name_in_request && pageConfig.limit !== undefined) {
+    params[pageConfig.limit_name_in_request] = pageConfig.limit;
+  }
+  let offset = pageConfig.type === 'offset' ? (pageConfig.offset_start_value ?? 0) : 0;
+  if (pageConfig.type === 'offset') params[pageConfig.offset_name_in_request] = offset;
+
+  let request: PlatformProxyRequest = { ...base, params };
+  let linkOrigin = base.baseUrlOverride === undefined ? undefined : new URL(base.baseUrlOverride).origin;
+  const seen = new Set<string>();
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const response: PlatformProxyResponse<unknown> = await callProxy<unknown>('GET', context, request);
+    const raw = readPath(response.data, pageConfig.response_path);
+    const items = Array.isArray(raw) ? (raw as T[]) : [];
+    // Link providers such as Graph can return an empty page that still carries
+    // a next link, so only cursor and offset pagination stop on an empty page.
+    if (items.length > 0) yield items;
+    else if (pageConfig.type !== 'link') return;
+
+    if (pageConfig.type === 'link') {
+      const link = readPath(response.data, pageConfig.link_path_in_response_body);
+      if (typeof link !== 'string' || link === '') return;
+      if (seen.has(link)) {
+        throw new MastraConnectError('proxy_error', 'Provider repeated a next-page link; the listing is incomplete.');
+      }
+      seen.add(link);
+      request = nextLinkRequest(base, link, linkOrigin);
+      if (linkOrigin === undefined && !link.startsWith('/')) linkOrigin = new URL(link).origin;
+    } else if (pageConfig.type === 'cursor') {
+      const cursor = readPath(response.data, pageConfig.cursor_path_in_response_body);
+      if ((typeof cursor !== 'string' && typeof cursor !== 'number') || cursor === '') return;
+      if (seen.has(String(cursor))) {
+        throw new MastraConnectError('proxy_error', 'Provider repeated a page cursor; the listing is incomplete.');
+      }
+      seen.add(String(cursor));
+      request = { ...request, params: { ...request.params, [pageConfig.cursor_name_in_request]: cursor } };
+    } else {
+      // A configured page size lets us stop on a short page. Without one,
+      // continue until the provider returns an empty page or the safety cap.
+      if (pageConfig.limit !== undefined && items.length < pageConfig.limit) return;
+      offset += items.length;
+      request = { ...request, params: { ...request.params, [pageConfig.offset_name_in_request]: offset } };
+    }
+  }
+  throw new MastraConnectError(
+    'proxy_error',
+    `platformProxy.paginate stopped after ${MAX_PAGES} pages; the listing is incomplete.`,
+  );
+}
+
+/**
+ * Builds the platform proxy context shared by every tool of a provider
+ * toolset. Connection id and client config resolve lazily inside each call.
+ */
+export function createPlatformProxy(context: CreatePlatformProxyOptions): PlatformProxy {
+  const bind =
+    (method: ProxyRequestOptions['method']) =>
+    <T>(config: PlatformProxyRequest): Promise<PlatformProxyResponse<T>> =>
+      callProxy<T>(method, context, config);
+  let connectionContext: Promise<ConnectionContext> | undefined;
+  const loadConnection = () => (connectionContext ??= loadConnectionContext(context));
+  const getConnection = async (): Promise<TemplateConnectionContext> => {
+    const { connection_config, metadata } = await loadConnection();
+    return { connection_config: connection_config ?? {}, metadata };
+  };
+  const metadataOverlay = context.metadataOverlay ?? {};
+  const getConnectionWithCredentials = async (): Promise<TemplateConnectionContextWithCredentials> => {
+    const [connection, credential] = await Promise.all([
+      getConnection(),
+      getCredential(resolveClient(context.client), requireConnectionId(context.connectionId)),
+    ]);
+    return { ...connection, credentials: toTemplateCredentials(credential) };
+  };
+  return {
+    proxy: <T>(config: PlatformProxyRequest) => callProxy<T>(config.method ?? 'GET', context, config),
+    get: bind('GET'),
+    post: bind('POST'),
+    put: bind('PUT'),
+    patch: bind('PATCH'),
+    delete: bind('DELETE'),
+    paginate: <T>(config: PlatformProxyRequest) => paginateRequests<T>(context, config),
+    getConnection,
+    getConnectionWithCredentials,
+    getMetadata: async <T = Record<string, ProviderResponseData>>() => {
+      const metadata = (await loadConnection()).metadata;
+      return { ...(metadata ?? {}), ...metadataOverlay } as T;
+    },
+    updateMetadata: async update => {
+      Object.assign(metadataOverlay, update);
+    },
+    zodValidateInput: async <T>({ zodSchema, input }: { zodSchema: ZodLikeSchema<T>; input: unknown }) => {
+      const result = zodSchema.safeParse(input);
+      if (!result.success) {
+        throw new ToolActionError({
+          type: 'invalid_input',
+          message: 'Invalid input provided to tool action.',
+          details: result.error.issues ?? result.error.message,
+        });
+      }
+      return { data: result.data };
+    },
+    ActionError: ToolActionError,
+    // Upstream template logs may contain request or provider data. Keep the
+    // compatibility method but discard arbitrary values at this trust boundary.
+    log: () => {},
+    requestContext: context.requestContext,
+    withRequestContext: requestContext => createPlatformProxy({ ...context, requestContext, metadataOverlay }),
+  };
+}

@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,10 +21,15 @@ async function writeMastraCoreShim(projectRoot: string): Promise<void> {
       name: '@mastra/core',
       type: 'module',
       exports: {
+        './di': './di.js',
         './mastra': './mastra.js',
         './workflows': './workflows.js',
       },
     }),
+  );
+  await writeFile(
+    path.join(coreDir, 'di.js'),
+    `export class RequestContext { constructor(entries = {}) { this.entries = entries; } get(key) { return this.entries[key]; } }`,
   );
   await writeFile(
     path.join(coreDir, 'mastra.js'),
@@ -46,9 +51,14 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
   await writeFile(
     path.join(temporalWorkflowDir, 'index.js'),
     `
+      export { ApplicationFailure, TemporalFailure, isCancellation } from ${JSON.stringify(import.meta.resolve('@temporalio/workflow'))};
       const getMock = () => globalThis.__temporalWorkflowMock;
+      export const condition = (...args) => getMock().condition(...args);
+      export const defineQuery = (...args) => getMock().defineQuery(...args);
+      export const defineSignal = (...args) => getMock().defineSignal(...args);
       export const executeChild = (...args) => getMock().executeChild(...args);
       export const proxyActivities = (...args) => getMock().proxyActivities(...args);
+      export const setHandler = (...args) => getMock().setHandler(...args);
       export const sleep = (...args) => getMock().sleep(...args);
       export const log = { info: (...args) => getMock().log.info(...args) };
     `,
@@ -110,6 +120,7 @@ describe('Temporal prebuild integration', () => {
         client: undefined,
         taskQueue: 'mastra',
         startToCloseTimeout: '5 minutes',
+        retry: { maximumAttempts: 5, initialInterval: '5 seconds' },
       });
 
       const step1 = createStep({
@@ -147,7 +158,12 @@ describe('Temporal prebuild integration', () => {
         .then(step4)
         .commit();
 
-      export const mastra = new Mastra({ workflows: { complexWorkflow } });
+      const double = value => value * 2;
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .map(({ inputData }) => ({ doubled: double(inputData.value) }))
+        .commit();
+
+      export const mastra = new Mastra({ workflows: { complexWorkflow, mappedWorkflow } });
     `;
     const bundleSpy = mockCompiledBundle(compiledEntrySource);
     const customActivity = vi.fn(async () => undefined);
@@ -183,13 +199,18 @@ describe('Temporal prebuild integration', () => {
     ]);
     const activityBindings = JSON.parse(activityBindingsSource) as { exportName: string; stepId: string }[];
 
+    const normalizedWorkflowSource = workflowSource.replace(/\s+/g, ' ');
     expect(workflowSource).toContain('const complexWorkflow =');
     expect(workflowSource).toContain('const innerWorkflow =');
     expect(workflowSource).toContain('.then("step1")');
-    expect(workflowSource).toContain('.thenWorkflow("innerWorkflow")');
-    expect(workflowSource).toContain('.parallel(["step2", "step3"])');
+    expect(workflowSource).toContain('.thenWorkflow("innerWorkflow", "inner-workflow")');
+    expect(normalizedWorkflowSource).toContain(
+      '.parallel([{ type: "step", step: { id: "step2" } }, { type: "step", step: { id: "step3" } }])',
+    );
     expect(workflowSource).toContain('.sleep(1000)');
     expect(workflowSource).toContain('.then("step4")');
+    expect(workflowSource).toContain('.map("mapping_mapped-workflow_0")');
+    expect(workflowSource).not.toContain('inputData.value * 2');
     expect(workflowSource).not.toContain('export const mastra');
     expect(workflowSource).not.toContain('createStep({');
     expect(workflowSource).toContain("startToCloseTimeout: '5 minutes'");
@@ -200,20 +221,22 @@ describe('Temporal prebuild integration', () => {
     expect(activitiesSource).toContain('const step2 = createStep({');
     expect(activitiesSource).toContain('const step3 = createStep({');
     expect(activitiesSource).toContain('const step4 = createStep({');
+    expect(activitiesSource).toMatch(/const mappingMappedWorkflow0[\s\S]*export \{[^}]*mappingMappedWorkflow0/);
+    expect(activitiesSource).toContain('const double =');
     expect(activitiesSource).not.toContain('const innerWorkflow =');
     expect(activitiesSource).not.toContain('const complexWorkflow =');
+    expect(activitiesSource).not.toContain('const mappedWorkflow =');
     expect(activityBindings).toEqual([
       { exportName: 'step1', stepId: 'step1' },
       { exportName: 'innerStep', stepId: 'inner-step' },
       { exportName: 'step2', stepId: 'step2' },
       { exportName: 'step3', stepId: 'step3' },
       { exportName: 'step4', stepId: 'step4' },
+      { exportName: 'mappingMappedWorkflow0', stepId: 'mapping_mapped-workflow_0' },
     ]);
 
-    const activitiesModule = (await import(moduleUrl(activitiesPath))) as Record<string, unknown>;
-    const activitiesByStepId = Object.fromEntries(
-      activityBindings.map(binding => [binding.stepId, activitiesModule[binding.exportName]]),
-    );
+    // The Worker's activities, as Temporal runs them: the plugin wrapper around each generated export.
+    const activitiesByStepId = workerOptions.activities;
     const sleep = vi.fn(async () => {});
     const executeChild = vi.fn(async (workflowType: string, options: { args: [{ inputData: unknown }] }) => {
       const childWorkflow = workflowModule[workflowType];
@@ -226,8 +249,12 @@ describe('Temporal prebuild integration', () => {
     const logInfo = vi.fn();
     let workflowModule: Record<string, unknown>;
     (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+      condition: vi.fn(async () => true),
+      defineQuery: vi.fn((name: string) => name),
+      defineSignal: vi.fn((name: string) => name),
       executeChild,
       proxyActivities,
+      setHandler: vi.fn(),
       sleep,
       log: {
         info: logInfo,
@@ -248,15 +275,228 @@ describe('Temporal prebuild integration', () => {
       result: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       state: undefined,
       steps: {
-        step1: { value: 'test-step1' },
-        innerWorkflow: { value: 'test-step1-inner' },
-        step2: { step2: 'test-step1-inner-step2' },
-        step3: { step3: 'test-step1-inner-step3' },
-        step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        step1: expect.objectContaining({ status: 'success', output: { value: 'test-step1' } }),
+        'inner-workflow': expect.objectContaining({ status: 'success', output: { value: 'test-step1-inner' } }),
+        step2: expect.objectContaining({ status: 'success', output: { step2: 'test-step1-inner-step2' } }),
+        step3: expect.objectContaining({ status: 'success', output: { step3: 'test-step1-inner-step3' } }),
+        step4: expect.objectContaining({
+          status: 'success',
+          output: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        }),
       },
     });
-    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
-    expect(executeChild).toHaveBeenCalledWith('innerWorkflow', { args: [{ inputData: { value: 'test-step1' } }] });
+    const mappedWorkflow = workflowModule.mappedWorkflow;
+    expect(mappedWorkflow).toBeTypeOf('function');
+    await expect(
+      (mappedWorkflow as (args: { inputData: { value: number } }) => Promise<unknown>)({
+        inputData: { value: 21 },
+      }),
+    ).resolves.toEqual({
+      status: 'success',
+      input: { value: 21 },
+      result: { doubled: 42 },
+      state: undefined,
+      steps: {
+        'mapping_mapped-workflow_0': expect.objectContaining({ status: 'success', output: { doubled: 42 } }),
+      },
+    });
+
+    expect(proxyActivities.mock.calls).toEqual(
+      Array.from({ length: 3 }, () => [
+        { startToCloseTimeout: '5 minutes', retry: { maximumAttempts: 5, initialInterval: '5 seconds' } },
+      ]),
+    );
+    expect(executeChild).toHaveBeenCalledWith('innerWorkflow', {
+      args: [{ inputData: { value: 'test-step1' }, validateInputs: true, workflowId: 'complex-workflow' }],
+    });
     expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
+  describe('step input validation (#28308)', () => {
+    type RunWorkflow = (args: { inputData: unknown; requestContext?: Record<string, unknown> }) => Promise<{
+      result: unknown;
+    }>;
+
+    // Runs the generated Workflow code against the activities the plugin gives the Worker.
+    async function buildWorker() {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-validation-'));
+      tempDirs.push(tempDir);
+      await writeMastraCoreShim(tempDir);
+      await writeTemporalWorkflowShim(tempDir);
+      await symlink(
+        path.join(import.meta.dirname, '..', 'node_modules', 'zod'),
+        path.join(tempDir, 'node_modules', 'zod'),
+        'junction',
+      );
+
+      mockCompiledBundle(`
+        import { init } from '@mastra/temporal';
+        import { z } from 'zod';
+
+        const { createWorkflow, createStep } = init({ client: undefined, taskQueue: 'mastra' });
+
+        const read = createStep({
+          id: 'read',
+          inputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ value: inputData.text }),
+        });
+        const increment = createStep({
+          id: 'increment',
+          inputSchema: z.object({ value: z.number(), note: z.string().trim() }),
+          execute: async ({ inputData }) => ({ value: inputData.value + 1, note: inputData.note }),
+        });
+        const tenant = createStep({
+          id: 'tenant',
+          requestContextSchema: z.object({ tenantId: z.string() }),
+          execute: async ({ requestContext }) => ({ tenantId: requestContext.get('tenantId') }),
+        });
+
+        export const incrementWorkflow = createWorkflow({ id: 'increment-workflow' }).then(increment).commit();
+        export const readWorkflow = createWorkflow({ id: 'read-workflow' }).then(read).then(increment).commit();
+        export const uncheckedWorkflow = createWorkflow({ id: 'unchecked-workflow', options: { validateInputs: false } })
+          .then(read)
+          .then(incrementWorkflow)
+          .commit();
+        export const tenantWorkflow = createWorkflow({ id: 'tenant-workflow' }).then(tenant).commit();
+      `);
+
+      const plugin = new MastraPlugin(path.join(tempDir, 'src', 'index.ts'), tempDir);
+      const workerOptions = await plugin.configureWorker({ taskQueue: 'mastra' } as any);
+      const activities = workerOptions.activities as Record<string, (params: unknown) => Promise<unknown>>;
+
+      let workflows: Record<string, RunWorkflow> = {};
+      (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+        condition: async () => true,
+        defineQuery: (name: string) => name,
+        defineSignal: (name: string) => name,
+        proxyActivities: () => activities,
+        executeChild: (workflowType: string, { args }: { args: [never] }) => workflows[workflowType]!(...args),
+        setHandler: () => {},
+        sleep: async () => {},
+        log: { info: () => {} },
+      };
+      workflows = await import(moduleUrl(path.join(tempDir, 'node_modules', '.mastra', 'workflow.mjs')));
+
+      return { workflows, activities };
+    }
+
+    it('fails the run when a step gets input that breaks its schemas', async () => {
+      const { workflows } = await buildWorker();
+
+      // `read` returns a string where `increment` declares a number. Unchecked, the run
+      // succeeded with { value: '51' }.
+      // The run fails with the Activity's failure as its cause.
+      await expect(workflows.readWorkflow!({ inputData: { text: '5' } })).rejects.toMatchObject({
+        cause: { type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED', nonRetryable: true },
+      });
+      await expect(workflows.incrementWorkflow!({ inputData: { value: 5, note: ' hi ' } })).resolves.toMatchObject({
+        result: { value: 6, note: 'hi' },
+      });
+
+      await expect(workflows.tenantWorkflow!({ inputData: {}, requestContext: {} })).rejects.toMatchObject({
+        cause: { type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED', nonRetryable: true },
+      });
+      await expect(
+        workflows.tenantWorkflow!({ inputData: {}, requestContext: { tenantId: 'tenant-1' } }),
+      ).resolves.toMatchObject({ result: { tenantId: 'tenant-1' } });
+    });
+
+    it('skips the checks for validateInputs: false, its child workflows, and activities scheduled before the upgrade', async () => {
+      const { workflows, activities } = await buildWorker();
+
+      await expect(workflows.uncheckedWorkflow!({ inputData: { text: '5' } })).resolves.toMatchObject({
+        result: { value: '51' },
+      });
+      // Activities scheduled before the Worker upgrade carry no flag and run unchecked.
+      await expect(activities.increment!({ inputData: { value: '5' } })).resolves.toMatchObject({ value: '51' });
+    });
+  });
+
+  it('excludes Node dependencies used inside activities from generated workflows', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-node-isolation-'));
+    tempDirs.push(tempDir);
+    const entryFile = path.join(tempDir, 'src', 'index.ts');
+    await mkdir(path.dirname(entryFile), { recursive: true });
+    await writeFile(entryFile, 'export {};');
+
+    mockCompiledBundle(`
+      import { readFileSync } from 'node:fs';
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const readResource = createStep({
+        id: 'read-resource',
+        execute: async () => ({
+          size: readFileSync(new URL(import.meta.url)).byteLength,
+          fs: await import('node:fs'),
+        }),
+      });
+      export const resourceWorkflow = createWorkflow({ id: 'resource-workflow' })
+        .then(readResource)
+        .commit();
+    `);
+
+    const plugin = new MastraPlugin(entryFile, tempDir);
+    await plugin.configureWorker({ taskQueue: 'mastra' } as any);
+
+    const outputDir = path.join(tempDir, 'node_modules', '.mastra');
+    const workflowSource = await readFile(path.join(outputDir, 'workflow.mjs'), 'utf8');
+    const activitiesSource = await readFile(path.join(outputDir, 'activities.mjs'), 'utf8');
+
+    expect(workflowSource).toContain('const resourceWorkflow =');
+    expect(workflowSource).toContain('.then("read-resource")');
+    expect(workflowSource).not.toContain('node:fs');
+    expect(workflowSource).not.toContain('readFileSync');
+    expect(activitiesSource).toContain("from 'node:fs'");
+    expect(activitiesSource).toContain("import('node:fs')");
+    expect(activitiesSource).toContain('readFileSync');
+  });
+
+  it('rejects Node dependencies that remain after workflow tree-shaking', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-node-rejection-'));
+    tempDirs.push(tempDir);
+    const entryFile = path.join(tempDir, 'src', 'index.ts');
+    await mkdir(path.dirname(entryFile), { recursive: true });
+    await writeFile(entryFile, 'export {};');
+
+    mockCompiledBundle(`
+      import { readFileSync } from 'node:fs';
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      readFileSync(new URL(import.meta.url));
+      const readResource = createStep({
+        id: 'read-resource',
+        execute: async () => readFileSync(new URL(import.meta.url)).byteLength,
+      });
+      export const resourceWorkflow = createWorkflow({ id: 'resource-workflow' })
+        .then(readResource)
+        .commit();
+    `);
+
+    const plugin = new MastraPlugin(entryFile, tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow(
+      "Temporal workflow bundle cannot depend on Node.js builtin 'node:fs'",
+    );
+  });
+
+  it('rejects dynamic Node dependencies that remain after workflow tree-shaking', async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-dynamic-node-rejection-'));
+    tempDirs.push(tempDir);
+    const entryFile = path.join(tempDir, 'src', 'index.ts');
+    await mkdir(path.dirname(entryFile), { recursive: true });
+    await writeFile(entryFile, 'export {};');
+
+    mockCompiledBundle(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      await import('node:fs');
+      export const resourceWorkflow = createWorkflow({ id: 'resource-workflow' }).commit();
+    `);
+
+    const plugin = new MastraPlugin(entryFile, tempDir);
+
+    await expect(plugin.configureWorker({ taskQueue: 'mastra' } as any)).rejects.toThrow(
+      "Temporal workflow bundle cannot depend on Node.js builtin 'node:fs'",
+    );
   });
 });

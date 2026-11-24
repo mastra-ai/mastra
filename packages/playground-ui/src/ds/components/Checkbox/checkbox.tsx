@@ -1,8 +1,10 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
-import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
 
-import { transitions } from '@/ds/primitives/transitions';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
+import { selectionControlStyle } from '@/ds/primitives/selection-control';
 import { cn } from '@/lib/utils';
 
 /**
@@ -34,23 +36,15 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         checked={isCheckedIndeterminate ? false : checked}
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
+        render={<span {...keepOwnAccessibleName(props)} />}
         className={cn(
-          'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
-          'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
-          transitions.all,
-          'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
-          'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
-          'focus-visible:border-neutral5/50 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
-          'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
-          'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
-          'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
-          'data-[indeterminate]:hover:border-neutral5 data-[indeterminate]:hover:bg-neutral5',
-          'data-[checked]:active:border-neutral4 data-[checked]:active:bg-neutral4',
-          'data-[indeterminate]:active:border-neutral4 data-[indeterminate]:active:bg-neutral4',
-          // Base UI's Checkbox.Root is a `<span>`, so `:disabled` never matches; target `data-disabled`.
-          'data-[disabled]:cursor-not-allowed data-[disabled]:border-neutral6/[0.38] data-[disabled]:bg-neutral6/[0.38] data-[disabled]:hover:border-neutral6/[0.38] data-[disabled]:hover:bg-neutral6/[0.38] data-[disabled]:active:scale-100',
-          'data-[disabled]:data-[checked]:border-neutral6/[0.38] data-[disabled]:data-[checked]:bg-neutral6/[0.38] data-[disabled]:data-[checked]:text-neutral6',
-          'data-[disabled]:data-[indeterminate]:border-neutral6/[0.38] data-[disabled]:data-[indeterminate]:bg-neutral6/[0.38] data-[disabled]:data-[indeterminate]:text-neutral6',
+          'peer rounded-[0.3125rem]',
+          selectionControlStyle,
+          // Indeterminate is checkbox-only and mirrors the checked chip.
+          'data-[indeterminate]:border-foreground data-[indeterminate]:bg-foreground data-[indeterminate]:text-background',
+          'data-[indeterminate]:hover:border-foreground/90 data-[indeterminate]:hover:bg-foreground/90',
+          'data-[indeterminate]:active:border-foreground/75 data-[indeterminate]:active:bg-foreground/75',
+          'data-[disabled]:data-[indeterminate]:border-muted-foreground data-[disabled]:data-[indeterminate]:bg-muted-foreground data-[disabled]:data-[indeterminate]:text-background',
           className,
         )}
         {...props}
@@ -81,9 +75,9 @@ Checkbox.displayName = 'Checkbox';
 function CheckboxIndicatorIcon() {
   return (
     <>
-      <Check
+      <IconCheckmark2Medium
         className={cn(
-          'stroke-3.25 size-3 scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
+          'stroke-3.25 size-icon-xs scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
           // Lucide's check path is ~22.6 units long. Use a longer dash so the
           // final checked mark is never clipped.
           '[stroke-dasharray:28] [stroke-dashoffset:28]',
@@ -92,9 +86,9 @@ function CheckboxIndicatorIcon() {
           'group-data-[indeterminate]/checkbox-indicator:hidden',
         )}
       />
-      <Minus
+      <IconMinusMedium
         className={cn(
-          'stroke-3.25 hidden size-3 scale-95 transition-transform duration-200 ease-out-custom',
+          'stroke-3.25 hidden size-icon-xs scale-95 transition-transform duration-200 ease-out-custom',
           'group-data-[indeterminate]/checkbox-indicator:block',
           'group-data-[indeterminate]/checkbox-indicator:scale-100',
         )}

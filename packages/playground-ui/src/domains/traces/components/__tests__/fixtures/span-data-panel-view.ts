@@ -1,4 +1,4 @@
-import type { RouteResponse } from '@mastra/client-js';
+import type { MastraClient, RouteResponse } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 
 type SpanRecord = RouteResponse<'GET /observability/traces/:traceId/spans/:spanId'>['span'];
@@ -36,4 +36,10 @@ export const spanFixture: SpanRecord = {
   endedAt: new Date('2026-06-01T10:00:01.000Z'),
   createdAt: new Date('2026-06-01T10:00:00.000Z'),
   updatedAt: null,
+};
+
+/** The trace the Output tab looks tool results up in; this span made no tool calls. */
+export const traceFixture: Awaited<ReturnType<MastraClient['getTrace']>> = {
+  traceId: 'trace-1',
+  spans: [],
 };

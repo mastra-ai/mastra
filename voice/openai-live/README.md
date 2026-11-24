@@ -34,7 +34,7 @@ const agent = new Agent({
     delegation: {
       type: 'responses',
       responses: {
-        model: 'gpt-4o',
+        model: 'gpt-6-luna',
         tool_choice: 'auto',
       },
     },
@@ -66,11 +66,13 @@ await agent.voice.send(getMicrophoneStream());
 
 - `speaker` — a readable stream of output audio.
 - `speaking` — `{ audio }` chunks of output audio.
-- `writing` — `{ text, role }` assistant transcript deltas.
+- `writing` — `{ text, role }` transcript deltas (`user` or `assistant`).
+- `delegation` — `{ delegationId, target }` for delegated work; under `client`
+  delegation reply with `sendDelegationResult(delegationId, text)`.
 - `error` — connection or protocol errors.
 
 ## Notes
 
-The Live API is new and its event schema is still stabilizing. All wire-protocol
-strings live in `src/protocol.ts` so they can be corrected in one place if
-OpenAI's published schema differs.
+Wire names follow OpenAI's GPT-Live WebSocket reference and live in
+`src/protocol.ts`. The client sends `session.start` first and waits for
+`session.started`; after that only the delegation can be updated.

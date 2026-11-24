@@ -1,9 +1,10 @@
 import type { DatasetTenancyFilters, ExperimentTenancyFilters, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSchemaName } from '../../shared/schema-name';
 
 export function getSchemaName(schema?: string) {
-  return schema ? `"${parseSqlIdentifier(schema, 'schema name')}"` : undefined;
+  return schema ? `"${parseSchemaName(schema)}"` : undefined;
 }
 
 export function getTableName({ indexName, schemaName }: { indexName: string; schemaName?: string }) {

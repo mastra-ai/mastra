@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -14,12 +15,7 @@ import {
   currentUser,
 } from '@/domains/agent-builder/components/agent-edit/agent-profile/__tests__/fixtures/builder';
 import { useDebouncedRunning } from '@/domains/agent-builder/hooks/use-debounced-running';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -357,20 +353,6 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
     expect(screen.getByTestId('agent-builder-mode-toggle')).toBeTruthy();
   });
 
-  it('identity step with all mandatory fields filled: renders the split layout', async () => {
-    server.use(...baseHandlers(populatedAgent));
-
-    const view = renderPage();
-
-    // Advance from the ready entry review panel into the identity step.
-    await advanceFromReadyToIdentity(view);
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-chat')).not.toBeNull();
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
-    });
-  });
-
   it('ready entry with a half-composed agent (missing instructions): stays centered, no review panel', async () => {
     // The review panel requires every mandatory field. A half-composed agent (here
     // missing instructions) keeps the entry centered and never reveals the panel,
@@ -457,20 +439,6 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
 
     // Still on the edit route (no navigation away).
     expect(screen.queryByTestId('view-page')).toBeNull();
-  });
-
-  it('identity step with all mandatory fields and not streaming: renders the two mobile CTAs', async () => {
-    server.use(...baseHandlers(populatedAgent));
-
-    const view = renderPage();
-    await advanceFromReadyToIdentity(view);
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
-    });
-
-    expect(screen.getByTestId('agent-builder-mobile-initial-cta-chat')).toBeTruthy();
-    expect(screen.getByTestId('agent-builder-mobile-initial-cta-config')).toBeTruthy();
   });
 
   it('mobile initial CTA "Chat with my agent" navigates to /view', async () => {

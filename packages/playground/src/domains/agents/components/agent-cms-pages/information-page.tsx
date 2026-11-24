@@ -1,5 +1,5 @@
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
@@ -23,44 +23,24 @@ export function InformationPage() {
       <SectionRoot>
         <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="agent-name" className="text-neutral5 text-xs">
-            Name <span className="text-accent2">*</span>
-          </Label>
-          <Input
-            id="agent-name"
-            placeholder="My Agent"
-            variant="outline"
-            {...register('name')}
-            error={!!errors.name}
-            disabled={readOnly}
-          />
-          {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
-        </div>
+        <Field invalid={Boolean(errors.name)} disabled={readOnly}>
+          <FieldLabel required>Name</FieldLabel>
+          <Input placeholder="My Agent" required {...register('name')} />
+          <FieldError>{errors.name?.message}</FieldError>
+        </Field>
 
-        <div className="flex flex-col gap-1.5 pb-8">
-          <Label htmlFor="agent-description" className="text-neutral5 text-xs">
-            Description
-          </Label>
-          <Textarea
-            id="agent-description"
-            placeholder="Describe what this agent does"
-            variant="outline"
-            {...register('description')}
-            error={!!errors.description}
-            disabled={readOnly}
-          />
-          {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
-        </div>
+        <Field invalid={Boolean(errors.description)} disabled={readOnly} className="pb-8">
+          <FieldLabel>Description</FieldLabel>
+          <Textarea placeholder="Describe what this agent does" {...register('description')} />
+          <FieldError>{errors.description?.message}</FieldError>
+        </Field>
 
-        <div className="border-border1 border-t pt-8">
+        <div className="border-t border-border pt-8">
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">
-                  Provider <span className="text-accent2">*</span>
-                </Label>
+              <Field invalid={Boolean(errors.model?.provider?.message)}>
+                <FieldLabel required>Provider</FieldLabel>
                 <Controller
                   name="model.provider"
                   control={control}
@@ -70,15 +50,11 @@ export function InformationPage() {
                     </div>
                   )}
                 />
-                {errors.model?.provider && (
-                  <span className="text-accent2 text-xs">{errors.model.provider.message}</span>
-                )}
-              </div>
+                <FieldError>{errors.model?.provider?.message}</FieldError>
+              </Field>
 
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">
-                  Model <span className="text-accent2">*</span>
-                </Label>
+              <Field invalid={Boolean(errors.model?.name?.message)}>
+                <FieldLabel required>Model</FieldLabel>
                 <Controller
                   name="model.name"
                   control={control}
@@ -92,8 +68,8 @@ export function InformationPage() {
                     </div>
                   )}
                 />
-                {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
-              </div>
+                <FieldError>{errors.model?.name?.message}</FieldError>
+              </Field>
             </div>
           </SubSectionRoot>
         </div>

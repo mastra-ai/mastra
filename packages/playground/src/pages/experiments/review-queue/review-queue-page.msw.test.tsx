@@ -1,6 +1,6 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,37 +12,10 @@ import {
   experiment,
   results,
 } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
-
-// Base UI popups don't open in jsdom; a native select exposes the same contract.
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
-  Combobox: ({
-    options,
-    value,
-    onValueChange,
-    placeholder,
-  }: {
-    options: Array<{ label: string; value: string }>;
-    value?: string | string[];
-    onValueChange?: (value: string) => void;
-    placeholder?: string;
-  }) => (
-    <select
-      aria-label={placeholder}
-      value={Array.isArray(value) ? (value[0] ?? '') : (value ?? '')}
-      onChange={event => onValueChange?.(event.target.value)}
-    >
-      <option value="">{placeholder}</option>
-      {options.map(option => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
 
 const OTHER_EXPERIMENT_ID = 'exp-2';
 const otherExperiment = { ...experiment, id: OTHER_EXPERIMENT_ID, name: 'entity-extraction / model-b' };
@@ -65,6 +38,11 @@ const originalOffsetWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototyp
 
 beforeAll(() => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
+  // jsdom ships no PointerEvent, and Base UI constructs one on press.
+  if (typeof window.PointerEvent === 'undefined') {
+    class PointerEventStub extends MouseEvent {}
+    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
+  }
   Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 800 });
   Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, value: 800 });
 });
@@ -96,6 +74,23 @@ beforeEach(() => {
   );
 });
 
+const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
+const getChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]');
+const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
+const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
+
+/** Builds a `<field> is <value>` filter through the typeahead input. */
+const pickFilter = async (field: string, value: string) => {
+  getFilterInput().focus();
+  typeFilter(field);
+  await screen.findByRole('option', { name: field });
+  pressFilterKey('Enter');
+  typeFilter(value);
+  await screen.findByRole('option', { name: value });
+  pressFilterKey('Enter');
+};
+const pickExperiment = (name: string) => pickFilter('Experiment', name);
+
 const renderPage = (search = '') => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
@@ -126,13 +121,133 @@ const renderPage = (search = '') => {
 };
 
 describe('Review Queue page', () => {
+  describe('when an experiment has more flagged results than one page', () => {
+    const { intersect } = useMockIntersectionObserver();
+    const flagged = Array.from({ length: 150 }, (_, index) => ({
+      ...results[2],
+      id: `res-flagged-${index}`,
+      itemId: `item-flagged-${index}`,
+      input: { q: `flagged question ${index}` },
+    }));
+
+    it('shows the first page, then loads the rest when the user scrolls to the end', async () => {
+      const requestedPages: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = flagged.filter(r => r.status === status);
+          if (status === 'needs-review') requestedPages.push(String(page));
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/flagged question 99\b/);
+      expect(screen.queryByText(/flagged question 120\b/)).toBeNull();
+      expect(requestedPages).toEqual(['0']);
+
+      act(() => intersect(true));
+
+      await screen.findByText(/flagged question 120\b/);
+      expect(screen.getByText(/flagged question 0\b/)).toBeTruthy();
+      expect(requestedPages).toEqual(['0', '1']);
+    });
+  });
+
+  describe('when the deep-linked result is on a later page', () => {
+    const { intersect } = useMockIntersectionObserver();
+
+    it('requests each page once while it looks for the result', async () => {
+      const many = Array.from({ length: 300 }, (_, index) => ({
+        ...results[2],
+        id: `res-many-${index}`,
+        itemId: `item-many-${index}`,
+        input: { q: `many question ${index}` },
+      }));
+      const requested: string[] = [];
+      server.use(
+        http.get(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`,
+          async ({ request }) => {
+            const query = new URL(request.url).searchParams;
+            const status = query.get('status');
+            const page = Number(query.get('page'));
+            const perPage = Number(query.get('perPage'));
+            if (status === 'needs-review') requested.push(String(page));
+            await new Promise(resolve => setTimeout(resolve, 30));
+            const list = many.filter(r => r.status === status);
+            return HttpResponse.json({
+              results: list.slice(page * perPage, (page + 1) * perPage),
+              pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+            });
+          },
+        ),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}&review=res-many-250`);
+
+      await screen.findByText(/many question 0\b/);
+      act(() => intersect(true));
+
+      await screen.findAllByText(/many question 250\b/, undefined, { timeout: 10_000 });
+      await waitFor(() => expect(requested).toEqual(['0', '1', '2']));
+    });
+  });
+
+  describe('when a tag filter matches no loaded result yet', () => {
+    it('keeps loading until a matching result shows', async () => {
+      const taggedFlagged = {
+        ...results[2],
+        id: 'res-tagged',
+        input: { q: 'tagged flagged question' },
+        tags: ['alpha'],
+      };
+      const completed = Array.from({ length: 150 }, (_, index) => ({
+        ...results[0],
+        id: `res-done-${index}`,
+        itemId: `item-done-${index}`,
+        status: 'complete' as const,
+        input: { q: `done question ${index}` },
+        tags: index >= 100 ? ['alpha'] : [],
+      }));
+      const all = [taggedFlagged, ...completed];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const status = query.get('status');
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          const list = all.filter(r => r.status === status);
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}`);
+
+      await screen.findByText(/tagged flagged question/);
+      await pickFilter('Tag', 'alpha');
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByText(/done question 120\b/);
+      expect(screen.queryByText('No completed reviews yet')).toBeNull();
+      expect(screen.queryByText(/done question 0\b/)).toBeNull();
+    });
+  });
+
   describe('when no experiment is selected', () => {
     it('lists items awaiting review across every experiment', async () => {
       renderPage();
 
-      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
-      await screen.findByRole('option', { name: 'All experiments' });
-      expect(select.value).toBe('all');
+      await screen.findByRole('group', { name: 'Review queue filters' });
+      expect(getChips()).toHaveLength(0);
 
       await screen.findByText(/third question/);
       await screen.findByText(/other question/);
@@ -141,11 +256,10 @@ describe('Review Queue page', () => {
   });
 
   describe('when ?experiment points at a loaded experiment', () => {
-    it('preselects it in the combobox and shows only its review queue', async () => {
+    it('shows it as a filter chip and shows only its review queue', async () => {
       renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = (await screen.findByRole('combobox', { name: 'Select experiment' })) as HTMLSelectElement;
-      await waitFor(() => expect(select.value).toBe(EXPERIMENT_ID));
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
 
       await screen.findByText(/third question/);
       expect(screen.queryByText(/other question/)).toBeNull();
@@ -178,13 +292,12 @@ describe('Review Queue page', () => {
     });
   });
 
-  describe('when the user picks "All experiments"', () => {
+  describe('when the user removes the experiment chip', () => {
     it('clears ?experiment and shows every queue', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}`);
 
-      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
-      await screen.findByRole('option', { name: 'All experiments' });
-      fireEvent.change(select, { target: { value: 'all' } });
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Experiment filter' }));
 
       await waitFor(() => expect(router.state.location.search).toBe(''));
       await screen.findByText(/third question/);
@@ -192,18 +305,115 @@ describe('Review Queue page', () => {
     });
   });
 
+  describe('when the user picks the "Completed" status', () => {
+    it('shows reviewed items instead of the queue, as a Status chip', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results: params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[0], status: 'complete' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      expect(screen.queryByText(/first question/)).toBeNull();
+
+      await pickFilter('Status', 'Completed');
+
+      await screen.findByRole('group', { name: 'Status Completed' });
+      await screen.findByText(/first question/);
+      expect(screen.queryByText(/third question/)).toBeNull();
+    });
+  });
+
+  describe('when the user narrows the experiment after picking a status', () => {
+    it('keeps the Status chip alongside the new Experiment chip', async () => {
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await pickFilter('Status', 'Completed');
+      await screen.findByRole('group', { name: 'Status Completed' });
+
+      await pickExperiment(experiment.name);
+
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      expect(screen.getByRole('group', { name: 'Status Completed' })).toBeTruthy();
+      expect(getChips()).toHaveLength(2);
+    });
+  });
+
+  describe('when the user picks a tag', () => {
+    it('narrows the queue to items carrying that tag', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params }) =>
+          HttpResponse.json({
+            results:
+              params.experimentId === EXPERIMENT_ID ? [results[2], { ...results[1], status: 'needs-review' }] : [],
+            pagination: { total: 2, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+      );
+      renderPage();
+
+      await screen.findByText(/third question/);
+      await screen.findByText(/second question/);
+
+      await pickFilter('Tag', 'alpha');
+
+      await screen.findByRole('group', { name: 'Tag alpha' });
+      await waitFor(() => expect(screen.queryByText(/third question/)).toBeNull());
+      expect(screen.getByText(/second question/)).toBeTruthy();
+    });
+  });
+
   describe('when the user picks another experiment', () => {
     it('updates ?experiment and drops ?review', async () => {
       const { router } = renderPage(`?experiment=${EXPERIMENT_ID}&review=res-3`);
 
-      const select = await screen.findByRole('combobox', { name: 'Select experiment' });
-      await screen.findByRole('option', { name: 'entity-extraction / model-b' });
-      fireEvent.change(select, { target: { value: OTHER_EXPERIMENT_ID } });
+      await screen.findByRole('group', { name: `Experiment ${experiment.name}` });
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Experiment filter' }));
+      await waitFor(() => expect(router.state.location.search).toBe(''));
+      await pickExperiment(otherExperiment.name);
 
       await waitFor(() => {
         expect(router.state.location.search).toBe(`?experiment=${OTHER_EXPERIMENT_ID}`);
       });
       await screen.findByText(/other question/);
+    });
+  });
+
+  describe('when ?targetType and ?targetId are set', () => {
+    it('forwards them to the experiments request', async () => {
+      const experimentQueries: URLSearchParams[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, ({ request }) => {
+          experimentQueries.push(new URL(request.url).searchParams);
+          return HttpResponse.json(experimentsResponse);
+        }),
+      );
+
+      renderPage('?targetType=agent&targetId=agent-1');
+
+      await screen.findByText(/third question/);
+      const lastQuery = experimentQueries.at(-1)!;
+      expect(lastQuery.get('targetType')).toBe('agent');
+      expect(lastQuery.get('targetId')).toBe('agent-1');
+    });
+
+    it('keeps the target params when picking an experiment', async () => {
+      const { router } = renderPage('?targetType=agent&targetId=agent-1');
+
+      await screen.findByText(/third question/);
+      await pickExperiment(otherExperiment.name);
+
+      await waitFor(() => {
+        const params = new URLSearchParams(router.state.location.search);
+        expect(params.get('experiment')).toBe(OTHER_EXPERIMENT_ID);
+        expect(params.get('targetType')).toBe('agent');
+        expect(params.get('targetId')).toBe('agent-1');
+      });
     });
   });
 

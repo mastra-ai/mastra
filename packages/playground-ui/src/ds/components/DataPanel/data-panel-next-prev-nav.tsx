@@ -1,28 +1,32 @@
-import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import type { ButtonProps } from '@/ds/components/Button';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 
 export interface DataPanelNextPrevNavProps {
   onPrevious?: () => void;
   onNext?: () => void;
   previousLabel?: string;
   nextLabel?: string;
+  variant?: ButtonProps['variant'];
 }
 
+/** Two independent previous/next buttons, laid out by the parent `HeaderActions` gap. */
 export function DataPanelNextPrevNav({
   onPrevious,
   onNext,
-  previousLabel = 'Previous',
-  nextLabel = 'Next',
+  previousLabel = 'Go to previous',
+  nextLabel = 'Go to next',
+  variant = 'ghost',
 }: DataPanelNextPrevNavProps) {
   return (
-    <ButtonsGroup spacing="close">
-      <Button size="md" tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
-        <ArrowUpIcon />
+    <>
+      <Button size="icon-sm" variant={variant} tooltip={previousLabel} onClick={onPrevious} disabled={!onPrevious}>
+        <IconArrowUp />
       </Button>
-      <Button size="md" tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
-        <ArrowDownIcon />
+      <Button size="icon-sm" variant={variant} tooltip={nextLabel} onClick={onNext} disabled={!onNext}>
+        <IconArrowDown />
       </Button>
-    </ButtonsGroup>
+    </>
   );
 }

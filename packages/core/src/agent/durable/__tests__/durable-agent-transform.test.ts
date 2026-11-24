@@ -10,6 +10,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { ToolPayloadTransformPolicy } from '../../../tools/types';
 import { Agent } from '../../agent';
@@ -64,6 +67,18 @@ async function drain(stream: ReadableStream<any>) {
   const out: any[] = [];
   for await (const c of stream) out.push(c);
   return out;
+}
+
+function findInvocationPart(messages: any[], toolCallId: string) {
+  for (const msg of messages) {
+    const parts = msg?.content?.parts ?? [];
+    for (const part of parts) {
+      if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+        return part;
+      }
+    }
+  }
+  return undefined;
 }
 
 describe('DurableAgent tool payload transform', () => {
@@ -181,5 +196,127 @@ describe('DurableAgent tool payload transform', () => {
 
     expect(workflowInput.options.transform).toBeUndefined();
     expect(registryEntry.toolPayloadTransform).toBeUndefined();
+  });
+
+  it('persists the transform metadata into thread history for client tool results (L18b)', async () => {
+    const tool = createTool({
+      id: 'secretTool',
+      description: 'returns a secret payload',
+      inputSchema: z.object({ secret: z.string() }),
+      execute: async () => ({ ok: true, secret: 'raw-tool-secret' }),
+    });
+
+    const model = createToolCallThenTextModel('secretTool', { secret: 'hunter2' }, 'done');
+    const mockMemory = new MockMemory();
+    const baseAgent = new Agent({
+      id: 'transform-persist-agent',
+      name: 'Transform Persist Agent',
+      instructions: 'use the tool',
+      model: model as any,
+      memory: mockMemory,
+      tools: { secretTool: tool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'transform-persist-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const policy: ToolPayloadTransformPolicy = {
+      targets: ['display', 'transcript'],
+      transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
+    };
+
+    const result = await durableAgent.stream('run it', {
+      transform: policy,
+      memory: { thread: 'thread-transform-persist', resource: 'resource-transform-persist' },
+    });
+    await drain(result.fullStream as unknown as ReadableStream<any>);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-transform-persist',
+      resourceId: 'resource-transform-persist',
+    });
+    const part = findInvocationPart(recalled.messages as any[], 'call-1');
+    expect(part).toBeDefined();
+
+    // The persisted providerMetadata carries the transform state for both the
+    // result phase and the paired input phase, so transcript/display targets
+    // apply on recall.
+    const transform = part.providerMetadata?.mastra?.toolPayloadTransform;
+    expect(transform?.transcript?.['output-available']?.transformed).toBe('[redacted output-available on transcript]');
+    expect(transform?.display?.['output-available']?.transformed).toBe('[redacted output-available on display]');
+    expect(transform?.transcript?.['input-available']?.transformed).toBe('[redacted input-available on transcript]');
+    expect(transform?.display?.['input-available']?.transformed).toBe('[redacted input-available on display]');
+
+    // The transcript transform applies at drain time (MessageList's
+    // transformMessageForTranscript reads the persisted metadata), so the
+    // stored args/result are the redacted values and the raw secrets never
+    // reach storage — the redaction guarantee L18b exists for.
+    expect(part.toolInvocation?.state).toBe('result');
+    expect(part.toolInvocation?.result).toBe('[redacted output-available on transcript]');
+    expect(part.toolInvocation?.args).toBe('[redacted input-available on transcript]');
+    const serialized = JSON.stringify(recalled.messages);
+    expect(serialized).not.toContain('raw-tool-secret');
+    expect(serialized).not.toContain('hunter2');
+
+    result.cleanup();
+  });
+
+  it('persists the transform metadata for failed client tool results (L18b)', async () => {
+    const tool = createTool({
+      id: 'failingTool',
+      description: 'always fails with a sensitive error',
+      inputSchema: z.object({ secret: z.string() }),
+      execute: async () => {
+        throw new Error('boom');
+      },
+    });
+
+    const model = createToolCallThenTextModel('failingTool', { secret: 'hunter2' }, 'done');
+    const mockMemory = new MockMemory();
+    const baseAgent = new Agent({
+      id: 'transform-error-persist-agent',
+      name: 'Transform Error Persist Agent',
+      instructions: 'use the tool',
+      model: model as any,
+      memory: mockMemory,
+      tools: { failingTool: tool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({
+      agents: { 'transform-error-persist-agent': durableAgent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub,
+    });
+
+    const policy: ToolPayloadTransformPolicy = {
+      targets: ['display', 'transcript'],
+      transformToolPayload: ctx => `[redacted ${ctx.phase} on ${ctx.target}]`,
+    };
+
+    const result = await durableAgent.stream('run it', {
+      transform: policy,
+      memory: { thread: 'thread-transform-error-persist', resource: 'resource-transform-error-persist' },
+    });
+    await drain(result.fullStream as unknown as ReadableStream<any>);
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-transform-error-persist',
+      resourceId: 'resource-transform-error-persist',
+    });
+    const part = findInvocationPart(recalled.messages as any[], 'call-1');
+    expect(part).toBeDefined();
+    expect(part.toolInvocation?.state).toBe('output-error');
+
+    const transform = part.providerMetadata?.mastra?.toolPayloadTransform;
+    expect(transform?.transcript?.['error']?.transformed).toBe('[redacted error on transcript]');
+    expect(transform?.display?.['error']?.transformed).toBe('[redacted error on display]');
+    expect(transform?.transcript?.['input-available']?.transformed).toBe('[redacted input-available on transcript]');
+
+    result.cleanup();
   });
 });

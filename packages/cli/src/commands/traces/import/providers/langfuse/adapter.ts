@@ -1,0 +1,767 @@
+import { getEntityTypeForSpan } from '@mastra/core/observability';
+import type { TraceImportProvider, TraceImportReadContext } from '../../provider.js';
+import type {
+  SkippedTrace,
+  TraceImportRecord,
+  TraceImportSourceIdentity,
+  TraceImportSpan,
+  TraceImportTrace,
+} from '../../types.js';
+import type { LangfuseClientDependencies, LangfuseClientOptions } from './client.js';
+import { createLangfuseSpanImportId, createLangfuseTraceImportId, LANGFUSE_ID_ALGORITHM_VERSION } from './ids.js';
+import { LangfuseObservationsReader } from './reader.js';
+import type { LangfuseReadWindow, LangfuseTraceReadOptions } from './reader.js';
+import type { LangfuseObservation, LangfuseSourceTrace } from './types.js';
+
+const LANGFUSE_TYPE_MAP: Record<string, TraceImportSpan['spanType']> = {
+  AGENT: 'agent_run',
+  CHAIN: 'generic',
+  EMBEDDING: 'rag_embedding',
+  EVALUATOR: 'scorer_run',
+  EVENT: 'generic',
+  GENERATION: 'model_generation',
+  GUARDRAIL: 'generic',
+  RETRIEVER: 'generic',
+  SPAN: 'generic',
+  TOOL: 'tool_call',
+};
+
+/**
+ * OpenTelemetry GenAI semantic-convention operations. Langfuse keeps OTEL
+ * attributes in observation metadata, so spans that arrive from other OTEL
+ * instrumentations as plain `SPAN` (including the virtual trace root Langfuse
+ * creates for them) still say what they were.
+ */
+const GEN_AI_OPERATION_SPAN_TYPES: Record<string, TraceImportSpan['spanType']> = {
+  invoke_agent: 'agent_run',
+  execute_tool: 'tool_call',
+  chat: 'model_generation',
+  generate_content: 'model_generation',
+  text_completion: 'model_generation',
+  embeddings: 'rag_embedding',
+};
+
+/** Metadata keys that name the owning primitive, in priority order per entity type. */
+const ENTITY_NAME_KEYS: Record<string, readonly string[]> = {
+  agent: ['attributes.gen_ai.agent.name', 'agentName'],
+  workflow_run: ['workflowName'],
+  tool: ['attributes.gen_ai.tool.name'],
+};
+const ENTITY_ID_KEYS: Record<string, readonly string[]> = {
+  agent: ['attributes.gen_ai.agent.id', 'agentId'],
+  workflow_run: ['workflowId'],
+  tool: ['attributes.gen_ai.tool.name'],
+};
+
+const INPUT_TOKEN_KEYS = ['input', 'inputTokens', 'input_tokens'] as const;
+const OUTPUT_TOKEN_KEYS = ['output', 'outputTokens', 'output_tokens'] as const;
+const CACHE_READ_TOKEN_KEYS = ['inputCachedTokens', 'input_cached_tokens', 'cacheReadInputTokens'] as const;
+const CACHE_WRITE_TOKEN_KEYS = [
+  'cacheCreationInputTokens',
+  'cache_creation_input_tokens',
+  'input_cache_creation',
+] as const;
+const INPUT_AUDIO_TOKEN_KEYS = ['inputAudioTokens', 'input_audio_tokens'] as const;
+const REASONING_TOKEN_KEYS = ['outputReasoningTokens', 'output_reasoning_tokens', 'reasoning_tokens'] as const;
+const OUTPUT_AUDIO_TOKEN_KEYS = ['outputAudioTokens', 'output_audio_tokens'] as const;
+
+const MAX_OUTPUT_TOKEN_PARAMETER_KEYS = ['maxOutputTokens', 'max_output_tokens', 'max_tokens'] as const;
+const TOP_P_PARAMETER_KEYS = ['topP', 'top_p'] as const;
+const TOP_K_PARAMETER_KEYS = ['topK', 'top_k'] as const;
+const PRESENCE_PENALTY_PARAMETER_KEYS = ['presencePenalty', 'presence_penalty'] as const;
+const FREQUENCY_PENALTY_PARAMETER_KEYS = ['frequencyPenalty', 'frequency_penalty'] as const;
+const MAX_RETRY_PARAMETER_KEYS = ['maxRetries', 'max_retries'] as const;
+const STOP_SEQUENCE_PARAMETER_KEYS = ['stopSequences', 'stop_sequences', 'stop'] as const;
+
+const MAPPED_USAGE_DETAIL_KEYS = new Set<string>([
+  ...INPUT_TOKEN_KEYS,
+  ...OUTPUT_TOKEN_KEYS,
+  ...CACHE_READ_TOKEN_KEYS,
+  ...CACHE_WRITE_TOKEN_KEYS,
+  ...INPUT_AUDIO_TOKEN_KEYS,
+  ...REASONING_TOKEN_KEYS,
+  ...OUTPUT_AUDIO_TOKEN_KEYS,
+]);
+
+const MAPPED_MODEL_PARAMETER_KEYS = new Set<string>([
+  ...MAX_OUTPUT_TOKEN_PARAMETER_KEYS,
+  'temperature',
+  ...TOP_P_PARAMETER_KEYS,
+  ...TOP_K_PARAMETER_KEYS,
+  ...PRESENCE_PENALTY_PARAMETER_KEYS,
+  ...FREQUENCY_PENALTY_PARAMETER_KEYS,
+  'seed',
+  ...MAX_RETRY_PARAMETER_KEYS,
+  ...STOP_SEQUENCE_PARAMETER_KEYS,
+]);
+
+const MASTRA_SPAN_TYPES = new Set<TraceImportSpan['spanType']>([
+  'agent_run',
+  'scorer_run',
+  'scorer_step',
+  'generic',
+  'model_generation',
+  'model_step',
+  'model_inference',
+  'model_chunk',
+  'mcp_tool_call',
+  'processor_run',
+  'tool_call',
+  'client_tool_call',
+  'provider_tool_call',
+  'workflow_run',
+  'workflow_step',
+  'workflow_conditional',
+  'workflow_conditional_eval',
+  'workflow_parallel',
+  'workflow_loop',
+  'workflow_sleep',
+  'workflow_wait_event',
+  'memory_operation',
+  'workspace_action',
+  'rag_ingestion',
+  'rag_embedding',
+  'rag_vector_operation',
+  'rag_action',
+  'graph_action',
+  'mapping',
+  'skill_resolution',
+  'skill_action',
+  'agent_signal',
+]);
+
+type TimestampedObservation = LangfuseObservation & {
+  mastraImportDerivedEndTime?: true;
+  mastraImportDerivedEndTimeSourceObservationId?: string;
+};
+
+interface OrderedLangfuseTrace {
+  sourceTraceId: string;
+  projectId: string;
+  observations: TimestampedObservation[];
+}
+
+export interface MapLangfuseTraceOptions {
+  importId: string;
+  cutoffMs: number;
+  snapshotMs: number;
+}
+
+export class LangfuseTraceImportProvider implements TraceImportProvider {
+  private readonly reader: LangfuseObservationsReader;
+
+  constructor(options: LangfuseClientOptions, dependencies: LangfuseClientDependencies = {}) {
+    this.reader = new LangfuseObservationsReader(options, dependencies);
+  }
+
+  async identify(signal?: AbortSignal): Promise<TraceImportSourceIdentity> {
+    const project = await this.reader.identify(signal);
+    return {
+      provider: 'langfuse',
+      baseUrl: this.reader.baseUrl,
+      projectId: project.id,
+      projectName: project.name,
+      idAlgorithmVersion: LANGFUSE_ID_ALGORITHM_VERSION,
+    };
+  }
+
+  async *read(context: TraceImportReadContext): AsyncIterable<TraceImportRecord> {
+    const importWindow = parseImportWindow(context.cutoffAt, context.snapshotAt);
+    if (context.source.projectId.trim().length === 0) throw new Error('Langfuse project ID is required.');
+
+    const window: LangfuseReadWindow = {
+      cutoffAt: context.cutoffAt,
+      snapshotAt: context.snapshotAt,
+      projectId: context.source.projectId,
+      signal: context.signal,
+      onRetry: context.onRetry,
+    };
+
+    for await (const discovery of this.reader.discoverTraces(window)) {
+      if (discovery.kind === 'missing-trace-id') {
+        yield {
+          kind: 'skipped',
+          skipped: {
+            sourceTraceId: null,
+            spanCount: 1,
+            reason: 'missing_trace_id',
+            detail: discovery.observationId,
+            sourceSpanIds: [discovery.observationId],
+          },
+        };
+        continue;
+      }
+
+      const options: LangfuseTraceReadOptions = {
+        traceId: discovery.traceId,
+        projectId: context.source.projectId,
+        signal: context.signal,
+        onRetry: context.onRetry,
+      };
+      const sourceTrace = await this.reader.readTrace(options);
+      yield mapLangfuseSourceTrace(sourceTrace, {
+        importId: context.importId,
+        ...importWindow,
+      });
+    }
+  }
+}
+
+export function mapLangfuseSourceTrace(
+  sourceTrace: LangfuseSourceTrace,
+  options: MapLangfuseTraceOptions,
+): TraceImportRecord {
+  const ordered = validateAndOrderTrace(sourceTrace, options);
+  if ('skipped' in ordered) return { kind: 'skipped', skipped: ordered.skipped };
+
+  const unknownTypes = new Set<string>();
+  const spans = ordered.trace.observations.map((observation, index) => {
+    const mappedType =
+      restoredMastraSpanType(observation) ?? genAiSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
+    if (mappedType === undefined) unknownTypes.add(observation.type);
+    return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
+  });
+  promoteVirtualRootEntity(spans, ordered.trace);
+  inheritOwningEntity(spans);
+  const trace: TraceImportTrace = { sourceTraceId: ordered.trace.sourceTraceId, spans };
+
+  const warnings = [...unknownTypes].sort().map(type => `Unknown Langfuse observation type: ${type}`);
+  return warnings.length > 0 ? { kind: 'trace', trace, warnings } : { kind: 'trace', trace };
+}
+
+function validateAndOrderTrace(
+  sourceTrace: LangfuseSourceTrace,
+  options: MapLangfuseTraceOptions,
+): { trace: OrderedLangfuseTrace } | { skipped: SkippedTrace } {
+  const observations = sourceTrace.observations;
+  if (observations.length === 0) {
+    return { skipped: createSkippedTrace(sourceTrace.traceId, observations, 'empty_trace') };
+  }
+
+  const projectIds = new Set(observations.map(observation => observation.projectId));
+  if (projectIds.size !== 1) {
+    return { skipped: createSkippedTrace(sourceTrace.traceId, observations, 'mixed_project_ids') };
+  }
+
+  const byId = new Map<string, LangfuseObservation>();
+  for (const observation of observations) {
+    if (byId.has(observation.id)) {
+      return {
+        skipped: createSkippedTrace(sourceTrace.traceId, observations, 'duplicate_observation_id', observation.id),
+      };
+    }
+    byId.set(observation.id, observation);
+  }
+
+  const roots = observations.filter(
+    observation =>
+      !observation.parentObservationId ||
+      (observation.isRootObservation === true && !byId.has(observation.parentObservationId)),
+  );
+  if (roots.length === 0) return { skipped: createSkippedTrace(sourceTrace.traceId, observations, 'missing_root') };
+  if (roots.length > 1) return { skipped: createSkippedTrace(sourceTrace.traceId, observations, 'multiple_roots') };
+
+  const normalizedObservations = deriveVirtualRootEndTime(sourceTrace.traceId, observations, roots[0]!);
+  const normalizedById = new Map(normalizedObservations.map(observation => [observation.id, observation]));
+  const startTimesById = new Map<string, number>();
+  const root = normalizedById.get(roots[0]!.id)!;
+
+  for (const observation of normalizedObservations) {
+    if (
+      observation !== root &&
+      observation.parentObservationId &&
+      !normalizedById.has(observation.parentObservationId)
+    ) {
+      return {
+        skipped: createSkippedTrace(
+          sourceTrace.traceId,
+          normalizedObservations,
+          'missing_parent',
+          observation.parentObservationId,
+        ),
+      };
+    }
+
+    const startMs = parseSourceTimestamp(observation.startTime);
+    if (startMs === null) {
+      return {
+        skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
+      };
+    }
+    startTimesById.set(observation.id, startMs);
+
+    if (observation.type === 'EVENT') {
+      if (startMs > options.snapshotMs) {
+        return {
+          skipped: createSkippedTrace(
+            sourceTrace.traceId,
+            normalizedObservations,
+            'completed_after_snapshot',
+            observation.id,
+          ),
+        };
+      }
+      continue;
+    }
+
+    const endMs = parseSourceTimestamp(observation.endTime);
+    if (endMs === null) {
+      return {
+        skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'incomplete_duration', observation.id),
+      };
+    }
+    if (endMs < startMs) {
+      return {
+        skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'invalid_timestamp', observation.id),
+      };
+    }
+    if (endMs > options.snapshotMs) {
+      return {
+        skipped: createSkippedTrace(
+          sourceTrace.traceId,
+          normalizedObservations,
+          'completed_after_snapshot',
+          observation.id,
+        ),
+      };
+    }
+  }
+
+  const rootStartMs = parseSourceTimestamp(root.startTime)!;
+  if (rootStartMs < options.cutoffMs || rootStartMs >= options.snapshotMs) {
+    return { skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'root_outside_window') };
+  }
+
+  const children = new Map<string, TimestampedObservation[]>();
+  for (const observation of normalizedObservations) {
+    if (observation === root || !observation.parentObservationId) continue;
+    const siblings = children.get(observation.parentObservationId) ?? [];
+    siblings.push(observation);
+    children.set(observation.parentObservationId, siblings);
+  }
+
+  for (const siblings of children.values()) {
+    siblings.sort((a, b) => startTimesById.get(a.id)! - startTimesById.get(b.id)! || a.id.localeCompare(b.id));
+  }
+
+  const ordered: TimestampedObservation[] = [];
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  const visit = (observation: TimestampedObservation): boolean => {
+    if (visiting.has(observation.id)) return false;
+    if (visited.has(observation.id)) return true;
+    visiting.add(observation.id);
+    ordered.push(observation);
+    for (const child of children.get(observation.id) ?? []) {
+      if (!visit(child)) return false;
+    }
+    visiting.delete(observation.id);
+    visited.add(observation.id);
+    return true;
+  };
+
+  if (!visit(root) || visited.size !== normalizedObservations.length) {
+    return { skipped: createSkippedTrace(sourceTrace.traceId, normalizedObservations, 'cycle') };
+  }
+
+  return {
+    trace: {
+      sourceTraceId: sourceTrace.traceId,
+      projectId: projectIds.values().next().value!,
+      observations: ordered,
+    },
+  };
+}
+
+function mapObservationToSpan(
+  observation: TimestampedObservation,
+  trace: OrderedLangfuseTrace,
+  importId: string,
+  spanType: TraceImportSpan['spanType'],
+  index: number,
+): TraceImportSpan {
+  const isEvent = observation.type === 'EVENT';
+  return {
+    traceId: createLangfuseTraceImportId(trace.projectId, trace.sourceTraceId),
+    spanId: createLangfuseSpanImportId(trace.projectId, observation.id),
+    parentSpanId:
+      index > 0 && observation.parentObservationId
+        ? createLangfuseSpanImportId(trace.projectId, observation.parentObservationId)
+        : null,
+    name: observation.name?.trim() || `langfuse:${observation.type.toLowerCase()}`,
+    spanType,
+    ...buildEntity(observation, spanType),
+    startedAt: observation.startTime,
+    endedAt: isEvent ? observation.startTime : observation.endTime!,
+    isEvent,
+    attributes: buildAttributes(observation, spanType),
+    metadata: buildMetadata(observation, trace, importId, spanType),
+    tags: index === 0 && observation.tags ? observation.tags : undefined,
+    input: parseIo(observation.input),
+    output: parseIo(observation.output),
+    error:
+      observation.level === 'ERROR'
+        ? {
+            message: observation.statusMessage || 'Langfuse observation reported an error',
+            name: 'LangfuseObservationError',
+            details: { level: observation.level, sourceType: observation.type },
+          }
+        : null,
+  };
+}
+
+function createSkippedTrace(
+  sourceTraceId: string | null,
+  observations: LangfuseObservation[],
+  reason: string,
+  detail?: string,
+): SkippedTrace {
+  const traceName = observations.find(observation => observation.traceName)?.traceName ?? undefined;
+  return {
+    sourceTraceId,
+    spanCount: observations.length,
+    reason,
+    detail,
+    traceName,
+    sourceSpanIds: observations.map(observation => observation.id).sort(),
+  };
+}
+
+function deriveVirtualRootEndTime(
+  sourceTraceId: string,
+  observations: LangfuseObservation[],
+  root: LangfuseObservation,
+): TimestampedObservation[] {
+  if (root.endTime || root.id !== `t-${sourceTraceId}`) return observations;
+
+  const latest = observations
+    .filter(observation => observation.id !== root.id)
+    .map(observation => ({
+      observation,
+      endMs: parseSourceTimestamp(
+        observation.endTime ?? (observation.type === 'EVENT' ? observation.startTime : undefined),
+      ),
+    }))
+    .filter((item): item is { observation: LangfuseObservation; endMs: number } => item.endMs !== null)
+    .sort((left, right) => right.endMs - left.endMs || left.observation.id.localeCompare(right.observation.id))[0];
+
+  if (!latest) return observations;
+
+  return observations.map(observation =>
+    observation.id === root.id
+      ? {
+          ...observation,
+          endTime: new Date(latest.endMs).toISOString(),
+          mastraImportDerivedEndTime: true,
+          mastraImportDerivedEndTimeSourceObservationId: latest.observation.id,
+        }
+      : observation,
+  );
+}
+
+function parseImportWindow(cutoffAt: string, snapshotAt: string): { cutoffMs: number; snapshotMs: number } {
+  const cutoffMs = parseSourceTimestamp(cutoffAt);
+  const snapshotMs = parseSourceTimestamp(snapshotAt);
+  if (cutoffMs === null || snapshotMs === null || cutoffMs >= snapshotMs) {
+    throw new Error('Langfuse import window must contain valid timestamps with cutoffAt before snapshotAt.');
+  }
+  return { cutoffMs, snapshotMs };
+}
+
+function parseSourceTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseIo(value: unknown): unknown {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+/**
+ * Langfuse labels every observation without an explicit environment `default`.
+ * That placeholder is not a user choice, and Platform scopes Studio reads to
+ * the serving environment while keeping unlabelled spans visible, so leave it
+ * empty and copy only environments the user actually set.
+ */
+function sourceEnvironment(observation: LangfuseObservation): string | undefined {
+  const environment = observation.environment?.trim();
+  return environment && environment !== 'default' ? environment : undefined;
+}
+
+function definedRecord(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined));
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function numericValue(record: Record<string, unknown> | null | undefined, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = finiteNumber(record?.[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function wrapSourceMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'object' && !Array.isArray(value)) return value as Record<string, unknown>;
+  return { value };
+}
+
+function restoredMastraSpanType(observation: LangfuseObservation): TraceImportSpan['spanType'] | undefined {
+  const metadata = wrapSourceMetadata(observation.metadata);
+  if (!metadata) return undefined;
+
+  const fromMastraExporter =
+    metadata['scope.name'] === '@mastra/langfuse' ||
+    metadata['resourceAttributes.telemetry.sdk.name'] === '@mastra/langfuse';
+  if (!fromMastraExporter) return undefined;
+
+  const spanType = metadata.spanType;
+  return typeof spanType === 'string' && MASTRA_SPAN_TYPES.has(spanType as TraceImportSpan['spanType'])
+    ? (spanType as TraceImportSpan['spanType'])
+    : undefined;
+}
+
+/**
+ * Langfuse stores OTEL attributes either flat (`attributes.gen_ai.agent.name`,
+ * seen on @mastra/langfuse exports) or nested (`attributes: { 'gen_ai.agent.name' }`,
+ * seen on OTLP ingestion). Accept both.
+ */
+function metadataValue(metadata: Record<string, unknown>, key: string): unknown {
+  if (metadata[key] !== undefined) return metadata[key];
+  if (!key.startsWith('attributes.')) return undefined;
+  const nested = metadata.attributes;
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? (nested as Record<string, unknown>)[key.slice('attributes.'.length)]
+    : undefined;
+}
+
+/** Plain Langfuse spans keep their OTEL GenAI operation; use it to recover the Mastra span type. */
+function genAiSpanType(observation: LangfuseObservation): TraceImportSpan['spanType'] | undefined {
+  if (observation.type !== 'SPAN') return undefined;
+  const metadata = wrapSourceMetadata(observation.metadata);
+  const operation = metadata ? metadataValue(metadata, 'attributes.gen_ai.operation.name') : undefined;
+  return typeof operation === 'string' ? GEN_AI_OPERATION_SPAN_TYPES[operation] : undefined;
+}
+
+/**
+ * Platform lists and filters traces by the owning primitive, not the span type,
+ * so name it the same way core does for native spans.
+ */
+function buildEntity(
+  observation: LangfuseObservation,
+  spanType: TraceImportSpan['spanType'],
+): Pick<TraceImportSpan, 'entityType' | 'entityId' | 'entityName'> {
+  const entityType = getEntityTypeForSpan({ spanType });
+  if (!entityType) return {};
+  const metadata = wrapSourceMetadata(observation.metadata) ?? {};
+  const firstString = (keys: readonly string[] = []) =>
+    keys
+      .map(key => metadataValue(metadata, key))
+      .find((value): value is string => typeof value === 'string' && value.trim() !== '');
+  const entityId = firstString(ENTITY_ID_KEYS[entityType]);
+  const entityName = firstString(ENTITY_NAME_KEYS[entityType]) ?? (observation.name?.trim() || undefined);
+  return {
+    entityType,
+    ...(entityId ? { entityId } : {}),
+    ...(entityName ? { entityName } : {}),
+  };
+}
+
+/**
+ * Langfuse exposes a trace as a virtual root span `t-<traceId>` above the real
+ * root. Platform lists a trace by its root's primitive, so the virtual root
+ * takes the primitive of the one real root beneath it.
+ */
+function promoteVirtualRootEntity(spans: TraceImportSpan[], trace: OrderedLangfuseTrace): void {
+  const root = spans[0];
+  if (!root || root.entityType || trace.observations[0]?.id !== `t-${trace.sourceTraceId}`) return;
+  const children = spans.filter(span => span.parentSpanId === root.spanId);
+  const child = children.length === 1 ? children[0] : undefined;
+  if (!child?.entityType) return;
+  root.entityType = child.entityType;
+  if (child.entityId) root.entityId = child.entityId;
+  if (child.entityName) root.entityName = child.entityName;
+}
+
+/** Native spans carry the primitive that owns them, so spans without one take their parent's. */
+function inheritOwningEntity(spans: TraceImportSpan[]): void {
+  const byId = new Map(spans.map(span => [span.spanId, span]));
+  for (const span of spans) {
+    if (span.entityType || !span.parentSpanId) continue;
+    const parent = byId.get(span.parentSpanId);
+    if (!parent?.entityType) continue;
+    span.entityType = parent.entityType;
+    if (parent.entityId) span.entityId = parent.entityId;
+    if (parent.entityName) span.entityName = parent.entityName;
+  }
+}
+
+function buildAttributes(
+  observation: LangfuseObservation,
+  spanType: TraceImportSpan['spanType'],
+): Record<string, unknown> | undefined {
+  const model = observation.model ?? observation.providedModelName ?? undefined;
+  const usage = mapUsage(observation);
+
+  if (spanType === 'rag_embedding') {
+    const attributes = definedRecord({ model, usage });
+    return Object.keys(attributes).length > 0 ? attributes : undefined;
+  }
+
+  if (spanType !== 'model_generation' && spanType !== 'model_step' && spanType !== 'model_inference') {
+    return undefined;
+  }
+
+  const completionStartMs = observation.completionStartTime ? Date.parse(observation.completionStartTime) : Number.NaN;
+  const attributes = definedRecord({
+    model,
+    usage,
+    parameters: mapModelParameters(observation.modelParameters),
+    costContext:
+      typeof observation.totalCost === 'number' && Number.isFinite(observation.totalCost)
+        ? { estimatedCost: observation.totalCost, costUnit: 'USD' }
+        : undefined,
+    completionStartTime: Number.isFinite(completionStartMs) ? new Date(completionStartMs).toISOString() : undefined,
+  });
+  return Object.keys(attributes).length > 0 ? attributes : undefined;
+}
+
+function mapUsage(observation: LangfuseObservation): Record<string, unknown> | undefined {
+  const inputTokens =
+    finiteNumber(observation.inputUsage) ?? numericValue(observation.usageDetails, ...INPUT_TOKEN_KEYS);
+  const outputTokens =
+    finiteNumber(observation.outputUsage) ?? numericValue(observation.usageDetails, ...OUTPUT_TOKEN_KEYS);
+  const inputDetails = definedRecord({
+    cacheRead: numericValue(observation.usageDetails, ...CACHE_READ_TOKEN_KEYS),
+    cacheWrite: numericValue(observation.usageDetails, ...CACHE_WRITE_TOKEN_KEYS),
+    audio: numericValue(observation.usageDetails, ...INPUT_AUDIO_TOKEN_KEYS),
+  });
+  const outputDetails = definedRecord({
+    reasoning: numericValue(observation.usageDetails, ...REASONING_TOKEN_KEYS),
+    audio: numericValue(observation.usageDetails, ...OUTPUT_AUDIO_TOKEN_KEYS),
+  });
+  const usage = definedRecord({
+    inputTokens,
+    outputTokens,
+    inputDetails: Object.keys(inputDetails).length > 0 ? inputDetails : undefined,
+    outputDetails: Object.keys(outputDetails).length > 0 ? outputDetails : undefined,
+  });
+  return Object.keys(usage).length > 0 ? usage : undefined;
+}
+
+function mapModelParameters(parameters: unknown): Record<string, unknown> | undefined {
+  if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) return undefined;
+  const source = parameters as Record<string, unknown>;
+  const stopSequences = STOP_SEQUENCE_PARAMETER_KEYS.map(key => source[key]).find(value => value != null);
+  const mapped = definedRecord({
+    maxOutputTokens: numericValue(source, ...MAX_OUTPUT_TOKEN_PARAMETER_KEYS),
+    temperature: numericValue(source, 'temperature'),
+    topP: numericValue(source, ...TOP_P_PARAMETER_KEYS),
+    topK: numericValue(source, ...TOP_K_PARAMETER_KEYS),
+    presencePenalty: numericValue(source, ...PRESENCE_PENALTY_PARAMETER_KEYS),
+    frequencyPenalty: numericValue(source, ...FREQUENCY_PENALTY_PARAMETER_KEYS),
+    seed: numericValue(source, 'seed'),
+    maxRetries: numericValue(source, ...MAX_RETRY_PARAMETER_KEYS),
+    stopSequences:
+      Array.isArray(stopSequences) && stopSequences.every(value => typeof value === 'string')
+        ? stopSequences
+        : undefined,
+  });
+  return Object.keys(mapped).length > 0 ? mapped : undefined;
+}
+
+function preserveUnmappedFields(value: unknown, mappedKeys: ReadonlySet<string>): unknown {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const remaining = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).filter(([key]) => !mappedKeys.has(key)),
+  );
+  return Object.keys(remaining).length > 0 ? remaining : undefined;
+}
+
+function buildMetadata(
+  observation: TimestampedObservation,
+  trace: OrderedLangfuseTrace,
+  importId: string,
+  spanType: TraceImportSpan['spanType'],
+): Record<string, unknown> {
+  const hasModelAttributes =
+    spanType === 'rag_embedding' ||
+    spanType === 'model_generation' ||
+    spanType === 'model_step' ||
+    spanType === 'model_inference';
+  const hasGenerationAttributes =
+    spanType === 'model_generation' || spanType === 'model_step' || spanType === 'model_inference';
+
+  // Keep source-only context, but avoid a second copy of values represented by
+  // this span type's canonical Mastra attributes.
+  return definedRecord({
+    source: 'langfuse',
+    importSource: 'langfuse-api-v2',
+    importBatchId: importId,
+    langfuseTraceId: trace.sourceTraceId,
+    langfuseObservationId: observation.id,
+    langfuseProjectId: trace.projectId,
+    environment: sourceEnvironment(observation),
+    userId: observation.userId ?? undefined,
+    sessionId: observation.sessionId ?? undefined,
+    langfuseType: observation.type,
+    langfuseMetadata: wrapSourceMetadata(observation.metadata),
+    langfuse: definedRecord({
+      isRootObservation: observation.isRootObservation ?? undefined,
+      parentObservationId: observation.parentObservationId ?? undefined,
+      level: observation.level ?? undefined,
+      statusMessage: observation.statusMessage ?? undefined,
+      version: observation.version ?? undefined,
+      release: observation.release ?? undefined,
+      traceName: observation.traceName ?? undefined,
+      model: hasModelAttributes ? undefined : (observation.model ?? undefined),
+      providedModelName:
+        observation.providedModelName &&
+        (!hasModelAttributes || (observation.model != null && observation.providedModelName !== observation.model))
+          ? observation.providedModelName
+          : undefined,
+      internalModelId: observation.internalModelId ?? undefined,
+      modelId: observation.modelId ?? undefined,
+      modelParameters: hasGenerationAttributes
+        ? preserveUnmappedFields(observation.modelParameters, MAPPED_MODEL_PARAMETER_KEYS)
+        : (observation.modelParameters ?? undefined),
+      usageDetails: hasModelAttributes
+        ? preserveUnmappedFields(observation.usageDetails, MAPPED_USAGE_DETAIL_KEYS)
+        : (observation.usageDetails ?? undefined),
+      inputUsage: hasModelAttributes ? undefined : (observation.inputUsage ?? undefined),
+      outputUsage: hasModelAttributes ? undefined : (observation.outputUsage ?? undefined),
+      totalUsage: observation.totalUsage ?? undefined,
+      costDetails: observation.costDetails ?? undefined,
+      inputCost: observation.inputCost ?? undefined,
+      outputCost: observation.outputCost ?? undefined,
+      totalCost: hasGenerationAttributes ? undefined : (observation.totalCost ?? undefined),
+      completionStartTime: hasGenerationAttributes ? undefined : (observation.completionStartTime ?? undefined),
+      inputPrice: observation.inputPrice ?? undefined,
+      outputPrice: observation.outputPrice ?? undefined,
+      totalPrice: observation.totalPrice ?? undefined,
+      usagePricingTierId: observation.usagePricingTierId ?? undefined,
+      usagePricingTierName: observation.usagePricingTierName ?? undefined,
+      promptId: observation.promptId ?? undefined,
+      promptName: observation.promptName ?? undefined,
+      promptVersion: observation.promptVersion ?? undefined,
+      latency: observation.latency ?? undefined,
+      timeToFirstToken: observation.timeToFirstToken ?? undefined,
+      derivedEndTime: observation.mastraImportDerivedEndTime ?? undefined,
+      derivedEndTimeSourceObservationId: observation.mastraImportDerivedEndTimeSourceObservationId ?? undefined,
+    }),
+  });
+}

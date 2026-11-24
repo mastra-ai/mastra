@@ -61,6 +61,10 @@ export function formatSkillActivation(skill: Skill): string {
 // Individual Tools
 // =============================================================================
 
+/** Above this many skills, a not-found skill lists suggestions instead of every skill. */
+const MAX_LISTED_SKILLS = 20;
+const MAX_SUGGESTED_SKILLS = 5;
+
 async function getScopedSkills(skills: WorkspaceSkills, requestContext?: object): Promise<WorkspaceSkills> {
   return skills.getScoped
     ? skills.getScoped({ requestContext: requestContext as SkillsContext['requestContext'] })
@@ -87,9 +91,25 @@ async function resolveSkill(
   const skill = await skills.get(identifier);
   if (skill) return { skill };
 
+  const notFound = `Skill "${identifier}" not found.`;
   const allSkills = await skills.list();
-  const skillEntries = allSkills.map(s => `${s.name} (${s.path})`);
-  return { notFound: `Skill "${identifier}" not found. Available skills: ${skillEntries.join(', ')}` };
+  if (allSkills.length <= MAX_LISTED_SKILLS) {
+    const skillEntries = allSkills.map(s => `${s.name} (${s.path})`);
+    return { notFound: `${notFound} Available skills: ${skillEntries.join(', ')}` };
+  }
+
+  // Listing every skill would put the whole catalog into the conversation, so suggest
+  // the closest matches instead and point the model at skill_search.
+  // Search by the last path segment: earlier segments ("skills/") match every skill.
+  const name = identifier.split('/').filter(Boolean).pop() ?? '';
+  const query = name.replace(/[-_.]+/g, ' ').trim();
+  // An empty query would "match" the first few skills, so don't suggest anything
+  const matches = query
+    ? await skills.search(query, { topK: MAX_SUGGESTED_SKILLS, includeReferences: false }).catch(() => [])
+    : [];
+  const suggestions = [...new Set(matches.map(m => `${m.skillName} (${m.skillPath})`))];
+  const closest = suggestions.length > 0 ? ` Closest matches: ${suggestions.join(', ')}.` : '';
+  return { notFound: `${notFound}${closest} Use the \`skill_search\` tool to find other skills.` };
 }
 
 function createSkillTool(skills: WorkspaceSkills) {
@@ -137,7 +157,7 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
   const tool = createTool({
     id: 'skill_search',
     description:
-      'Search across skill content to find relevant information. Useful when you need to find specific details within skills.',
+      'Search skills by name, description, and content. Use it to find which skill to load with the `skill` tool, or to find specific details inside skills.',
     inputSchema: z.object({
       query: z.string().describe('The search query'),
       skillNames: z.array(z.string()).optional().describe('Optional list of skill names to search within'),
@@ -164,8 +184,13 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
         return results
           .map(r => {
             const preview = r.content.substring(0, 200) + (r.content.length > 200 ? '...' : '');
+            // Reference hits name their file so the model can pass it to skill_read
+            const file = r.source !== 'SKILL.md' ? ` ${r.source}` : '';
             const location = r.lineRange ? ` (lines ${r.lineRange.start}-${r.lineRange.end})` : '';
-            return `[${r.skillName}]${location} (score: ${r.score.toFixed(2)})\n${preview}`;
+            // The SKILL.md location tells same-named skills apart and, unlike a bare
+            // directory path, can never be mistaken for a skill name by `skill` or `skill_read`.
+            const skillPath = r.skillPath ? ` (${r.skillPath}/SKILL.md)` : '';
+            return `[${r.skillName}]${skillPath}${file}${location} (score: ${r.score.toFixed(2)})\n${preview}`;
           })
           .join('\n\n');
       } catch (err) {
@@ -214,15 +239,17 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           span.end({ success: false });
           return resolved.notFound;
         }
-        const resolvedPath = resolved.skill.path;
+        // Accessors try the name before the path, so address the resolved skill by its
+        // SKILL.md location; a bare directory path can equal an ambiguous skill name.
+        const resolvedPath = `${resolved.skill.path}/SKILL.md`;
 
-        // Try each reader using the resolved path to target the exact skill candidate
-        let content: string | Buffer | null = null;
-        content = await scopedSkills.getReference(resolvedPath, path);
-        if (content === null) content = await scopedSkills.getScript(resolvedPath, path);
-        if (content === null) content = await scopedSkills.getAsset(resolvedPath, path);
+        // Every accessor resolves the same skill-root-relative path; getAsset is the only one
+        // that returns the raw bytes instead of decoding them as UTF-8, so read through it and
+        // classify the bytes here. Going through getReference first would lossily decode any
+        // binary file before getAsset was reached.
+        const bytes = await scopedSkills.getAsset(resolvedPath, path);
 
-        if (content === null) {
+        if (bytes === null) {
           const refs = (await scopedSkills.listReferences(resolvedPath)).map(f => `references/${f}`);
           const scriptsList = (await scopedSkills.listScripts(resolvedPath)).map(f => `scripts/${f}`);
           const assets = (await scopedSkills.listAssets(resolvedPath)).map(f => `assets/${f}`);
@@ -232,17 +259,17 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           return `File "${path}" not found in skill "${skillName}".${fileList}`;
         }
 
-        // Detect binary content — getReference/getScript may return binary as garbled utf-8 strings
-        const textContent = typeof content === 'string' ? content : content.toString('utf-8');
-        if (textContent.slice(0, 1000).includes('\0')) {
+        // Binary if it contains NUL bytes or is not valid UTF-8 (e.g. PNGs, PDFs — which are
+        // often NUL-free). Report the exact byte size and never put mojibake in model context.
+        const text = bytes.toString('utf-8');
+        const isBinary = bytes.includes(0) || !bytes.equals(Buffer.from(text, 'utf-8'));
+        if (isBinary) {
           const fullPath = `${resolved.skill.path}/${path}`;
-          const size = typeof content === 'string' ? Buffer.byteLength(content) : content.length;
-          span.end({ success: true }, { bytesTransferred: size });
-          return `Binary file: ${fullPath} (${size} bytes)`;
+          span.end({ success: true }, { bytesTransferred: bytes.length });
+          return `Binary file: ${fullPath} (${bytes.length} bytes)`;
         }
-        content = textContent;
 
-        const result = extractLines(content, startLine, endLine);
+        const result = extractLines(text, startLine, endLine);
 
         // An empty range is indistinguishable from a failed read, so the model keeps paginating
         if (result.lines.start === 0 && result.lines.end === 0) {

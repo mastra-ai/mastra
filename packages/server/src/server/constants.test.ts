@@ -1,5 +1,18 @@
+import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
-import { MASTRA_INHERITED_MEMORY_KEY, isReservedRequestContextKey } from './constants';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_INHERITED_MEMORY_KEY,
+  MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+  RESERVED_REQUEST_CONTEXT_KEYS,
+  isReservedRequestContextKey,
+} from './constants';
+import { mergeBodyRequestContext } from './handlers/utils';
 
 describe('isReservedRequestContextKey', () => {
   it('reserves the inherited-memory key so a request body cannot set it', () => {
@@ -9,6 +22,71 @@ describe('isReservedRequestContextKey', () => {
     // body-supplied value would be used as the agent's memory and throw on the
     // first memory call.
     expect(isReservedRequestContextKey(MASTRA_INHERITED_MEMORY_KEY)).toBe(true);
+  });
+
+  it('reserves Factory memory settings so a request body cannot spoof the authoritative row', () => {
+    expect(isReservedRequestContextKey('mastra__factoryMemorySettings')).toBe(true);
+
+    const requestContext = new RequestContext();
+    mergeBodyRequestContext(requestContext, {
+      mastra__factoryMemorySettings: { observerModelId: 'openai/spoofed' },
+      locale: 'en',
+    });
+
+    expect(requestContext.get('mastra__factoryMemorySettings')).toBeUndefined();
+    expect(requestContext.get('locale')).toBe('en');
+  });
+
+  it('reserves the durable segment spans so a request body cannot choose the spans a run ends', () => {
+    const requestContext = new RequestContext();
+    mergeBodyRequestContext(requestContext, {
+      mastra__durableSegments: { 'run-1': { agentSpanData: { id: 'spoofed', traceId: 'spoofed' } } },
+    });
+
+    expect(requestContext.get('mastra__durableSegments')).toBeUndefined();
+  });
+
+  it('reserves every key in the shared reserved-key list', () => {
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(15);
+    expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
+      expect.arrayContaining([
+        MASTRA_SCOPES_KEY,
+        MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+        MASTRA_INHERITED_MEMORY_KEY,
+        'mastra__factoryMemorySettings',
+        'organizationId',
+      ]),
+    );
+    for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
+      expect(isReservedRequestContextKey(key)).toBe(true);
+    }
+  });
+
+  it('keeps the auth keys core drops on workflow resume in sync with these constants', () => {
+    // Core can't import these constants, so it keeps its own copy of the key
+    // names. A rename here without one in core would let a resumed run keep
+    // the starting user.
+    const authKeys = [
+      MASTRA_AUTH_TOKEN_KEY,
+      MASTRA_USER_KEY,
+      MASTRA_NORMALIZED_USER_KEY,
+      MASTRA_USER_ROLES_KEY,
+      MASTRA_USER_PERMISSIONS_KEY,
+      MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+    ];
+    // The middleware also writes these unprefixed aliases (auth/helpers.ts).
+    const legacyAliases = ['user', 'userRoles', 'userPermissions'];
+    const snapshot = Object.fromEntries([...authKeys, ...legacyAliases, 'tenant'].map(key => [key, 'stored']));
+
+    expect(withoutLiveRequestKeys(snapshot)).toEqual({ tenant: 'stored' });
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(expect.arrayContaining(authKeys));
+  });
+
+  it('keeps app-owned values under the unprefixed alias names when auth did not write them', () => {
+    const snapshot = { user: 'app-value', userRoles: ['app'], userPermissions: ['app'], tenant: 'stored' };
+
+    expect(withoutLiveRequestKeys(snapshot)).toEqual(snapshot);
   });
 
   it('leaves ordinary keys to the caller', () => {

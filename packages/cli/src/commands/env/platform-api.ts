@@ -37,6 +37,17 @@ export interface Environment {
   updatedAt: string;
 }
 
+/**
+ * Value the platform returns in place of a write-only secret. Sending it back
+ * on a save keeps the stored secret. It is a sentinel, never a real value, so
+ * it must not be written to env files or shown to users.
+ */
+export const SECRET_VALUE_PLACEHOLDER = '__mastra_secret__';
+
+export function isSecretPlaceholder(value: string | undefined): boolean {
+  return value === SECRET_VALUE_PLACEHOLDER;
+}
+
 export type EnvironmentDeployStatus =
   | 'queued'
   | 'uploading'
@@ -86,7 +97,35 @@ export async function fetchProjects(token: string, orgId: string): Promise<Proje
   return data.projects;
 }
 
-export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+/**
+ * Which store a project's deployed runtime reads env vars from.
+ *
+ * - `environment`: each environment row carries its own vars (the
+ *   environment_deploys pipeline). This is the steady state for every
+ *   project adopted onto environments.
+ * - `project`: a legacy project whose production environment has not been
+ *   adopted yet. The runtime still boots from the project row, and the
+ *   environment rows' vars are not read by anything.
+ */
+export type EnvVarsAuthority = 'environment' | 'project';
+
+export interface EnvironmentList {
+  environments: Environment[];
+  /**
+   * Absent on platforms that predate the field. Callers should treat a
+   * missing value as `environment`, which is what the hosted platform has
+   * been for every adopted project.
+   */
+  envVarsAuthority?: EnvVarsAuthority;
+}
+
+/**
+ * List a project's environments together with the platform's report of
+ * which store the deployed runtime reads env vars from. Use this when the
+ * caller needs to make a decision based on that authority; use
+ * `fetchEnvironments` when only the rows are needed.
+ */
+export async function fetchEnvironmentList(token: string, orgId: string, projectId: string): Promise<EnvironmentList> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments`, {
     headers: {
       Authorization: `Bearer ${token}`,
@@ -99,8 +138,14 @@ export async function fetchEnvironments(token: string, orgId: string, projectId:
     throwApiError('Failed to fetch environments', resp.status, extractApiErrorDetail(err));
   }
 
-  const data = (await resp.json()) as { environments: Environment[] };
-  return data.environments;
+  const data = (await resp.json()) as EnvironmentList;
+  return { environments: data.environments, envVarsAuthority: data.envVarsAuthority };
+}
+
+/** List a project's environments. Thin wrapper over `fetchEnvironmentList`. */
+export async function fetchEnvironments(token: string, orgId: string, projectId: string): Promise<Environment[]> {
+  const { environments } = await fetchEnvironmentList(token, orgId, projectId);
+  return environments;
 }
 
 export async function fetchEnvironmentDeploys(
@@ -171,6 +216,40 @@ export async function restartEnvironment(
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to restart environment', resp.status, extractApiErrorDetail(err));
   }
+}
+
+/**
+ * Save an environment's env vars and/or their kinds.
+ *
+ * `envVars` replaces the whole stored map, so callers must send every var
+ * they want to keep. Write-only secrets can be kept by sending
+ * `SECRET_VALUE_PLACEHOLDER` as their value. `envVarMeta` flags apply to the
+ * named vars only; other vars keep their stored kind.
+ */
+export async function updateEnvironmentVars(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  updates: { envVars?: Record<string, string>; envVarMeta?: Record<string, { secret: boolean }> },
+): Promise<Environment> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to update environment variables', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { environment: Environment };
+  return data.environment;
 }
 
 export async function deleteEnvironment(token: string, orgId: string, projectId: string, envId: string): Promise<void> {

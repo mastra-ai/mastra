@@ -30,6 +30,8 @@ describe('RedisServerCache Integration', () => {
 
   beforeAll(async () => {
     redis = new Redis(REDIS_URL, {
+      // ioredis 6 defaults to RESP3; keep RESP2 for the v5-compatible test client.
+      protocol: 2,
       maxRetriesPerRequest: 3,
       retryStrategy: times => {
         if (times > 3) {
@@ -165,6 +167,17 @@ describe('RedisServerCache Integration', () => {
       }
     });
 
+    it('listPushIndexed keeps both keys for a requested TTL longer than the default', async () => {
+      const day = 24 * 60 * 60;
+      await cache.listPushIndexed('events', 'events:counter', { type: 'a' }, day * 1000);
+
+      for (const key of ['test:events', 'test:events:counter']) {
+        const ttl = await redis.ttl(key);
+        expect(ttl).toBeGreaterThan(day - 120);
+        expect(ttl).toBeLessThanOrEqual(day);
+      }
+    });
+
     it('should apply TTL to keys written via increment', async () => {
       await cache.increment('counter');
 
@@ -185,6 +198,7 @@ describe('CachingPubSub with Redis Integration', () => {
 
   beforeAll(async () => {
     redis = new Redis(REDIS_URL, {
+      protocol: 2,
       maxRetriesPerRequest: 3,
       retryStrategy: times => {
         if (times > 3) {

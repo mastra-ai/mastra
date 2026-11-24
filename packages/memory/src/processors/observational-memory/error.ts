@@ -1,5 +1,96 @@
+import * as coreObservability from '@mastra/core/observability';
+import type { AnySpan, ObserverFailureMetadata } from '@mastra/core/observability';
+import { hasAbortInChain, isTransientLLMError } from './retry';
+
+const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+export function isOmModelExecutionFailure(error: unknown): boolean {
+  // Cancellation wins over every other signal, even when a wrapper's message
+  // looks transient ("request timeout") — an aborted turn must never be
+  // absorbed by `failurePolicy: 'continue'`.
+  if (hasAbortInChain(error)) return false;
+
+  if (isTransientLLMError(error)) return true;
+
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !visited.has(current)) {
+    visited.add(current);
+
+    if (Object.prototype.hasOwnProperty.call(current, AI_API_CALL_ERROR_MARKER)) {
+      return Reflect.get(current, AI_API_CALL_ERROR_MARKER) === true;
+    }
+
+    current = current.cause ?? current.error;
+  }
+
+  return false;
+}
+
+export type OmFailurePolicy = 'abort' | 'continue';
+export type OmFailureKind = 'observer-model' | 'reflector-model';
+
+export class OmModelExecutionError extends Error {
+  #observerSpanId?: string;
+
+  get observerSpanId(): string | undefined {
+    return this.#observerSpanId;
+  }
+  constructor(
+    readonly failureKind: OmFailureKind,
+    cause: unknown,
+    observerSpan?: AnySpan,
+  ) {
+    super(formatOmError(cause), { cause });
+    this.name = 'OmModelExecutionError';
+    // Keep the reference out of serialized errors, and omit excluded spans rather
+    // than accidentally linking back to the interrupted parent execution.
+    try {
+      this.#observerSpanId =
+        observerSpan &&
+        (typeof observerSpan.getExportedSpanId !== 'function' || observerSpan.getExportedSpanId() === observerSpan.id)
+          ? observerSpan.id
+          : undefined;
+    } catch {
+      // Custom tracing implementations must not replace the original failure.
+    }
+  }
+}
+
+export function isOmModelExecutionError(error: unknown): error is OmModelExecutionError {
+  try {
+    return error instanceof OmModelExecutionError;
+  } catch {
+    return false;
+  }
+}
+
+export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
+  let observerFailure: ObserverFailureMetadata['observerFailure'] | undefined;
+  if (typeof coreObservability.executionFailureTermination === 'function') {
+    try {
+      const modelFailure = isOmModelExecutionError(error);
+      observerFailure = {
+        ...(modelFailure && error.observerSpanId ? { observerSpanId: error.observerSpanId } : {}),
+        cause: coreObservability.executionFailureTermination(
+          modelFailure ? error.cause : error,
+          modelFailure ? 'model_error' : 'runtime_error',
+        ),
+      };
+    } catch {
+      // Malformed error getters must not turn tracing into a new failure.
+      observerFailure = { cause: { outcome: 'error', stopReason: 'runtime_error' } };
+    }
+  }
+  return {
+    failurePolicy,
+    ...(observerFailure ? { observerFailure } : {}),
+    ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
+  };
 }
 
 /** Keep provider diagnostics in streamed/persisted markers, not whole API request/response objects. */
@@ -18,6 +109,11 @@ export function formatOmError(error: unknown): string {
     }
     if (visited.has(value)) return;
     visited.add(value);
+    // MastraError ids are framework-generated operation tokens (no user data) and are often the only
+    // attribution when a wrapper omits `text` and inherits the driver message.
+    if (typeof value.id === 'string' && typeof value.domain === 'string' && typeof value.category === 'string') {
+      add(value.id);
+    }
     add(value.message);
     if (typeof value.statusCode === 'number') add(`HTTP ${value.statusCode}`);
 

@@ -9,9 +9,9 @@ import { useAgentControllerThreadMessages } from '../useAgentControllerThreadMes
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
-const resourceId = 'resource-test';
-const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
-const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
+const sessionId = 'session-test';
+const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}`;
+const hookArgs = { agentControllerId: controllerId, sessionId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('agent-controller read hooks', () => {
   it('loads the session-independent model catalog from the config endpoint', async () => {
@@ -32,7 +32,7 @@ describe('agent-controller read hooks', () => {
     expect(onReadModels).toHaveBeenCalledTimes(1);
   });
 
-  it('scopes the thread list request to the active factory path and sidebar page size', async () => {
+  it("lists only the session's threads out of its shared resource, a sidebar page at a time", async () => {
     const onReadThreads = vi.fn();
 
     server.use(
@@ -46,13 +46,13 @@ describe('agent-controller read hooks', () => {
     );
 
     const { result } = renderHookWithProviders(() =>
-      useAgentControllerThreads({ ...hookArgs, scope: '/sandbox/mastra' }),
+      useAgentControllerThreads({ ...hookArgs, threadTags: { factorySessionId: sessionId } }),
     );
 
     await waitFor(() => expect(result.current.data?.[0]?.id).toBe('thread-one'));
     expect(onReadThreads).toHaveBeenCalledWith({
       limit: String(AGENT_CONTROLLER_THREAD_PAGE_SIZE),
-      tags: JSON.stringify({ projectPath: '/sandbox/mastra' }),
+      tags: JSON.stringify({ factorySessionId: sessionId }),
     });
   });
 

@@ -13,7 +13,6 @@ export default defineConfig({
     propertyReadSideEffects: false,
     unknownGlobalSideEffects: false,
   },
-  sourcemap: true,
   onSuccess: async () => {
     await generateTypes(process.cwd());
   },

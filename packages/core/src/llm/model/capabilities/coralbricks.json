@@ -1,5 +1,13 @@
 {
-  "attachment": ["kimi-k3"],
-  "temperature": ["glm-5.3-fp4", "gpt-oss-120b"],
-  "structuredOutput": ["glm-5.3-fp4", "gpt-oss-120b", "kimi-k3"]
+  "attachment": ["deepseek-v4.1-flash-fast"],
+  "temperature": ["deepseek-v4.1-flash-fast"],
+  "structuredOutput": ["deepseek-v4.1-flash-fast"],
+  "reasoning": {
+    "deepseek-v4.1-flash-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ]
+  }
 }

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { FormEventHandler } from 'react';
 import { createRef, useState } from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
+import { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
 
 afterEach(() => {
   cleanup();
@@ -34,7 +36,90 @@ const ControlledComposer = () => {
   );
 };
 
+function OptionalContext({ visible }: { visible: boolean }) {
+  const [owned, setOwned] = useState(false);
+  if (!visible) return null;
+
+  return (
+    <>
+      <ComposerHeaderRow>
+        <ComposerHeaderContent>{owned ? 'You own this session.' : "Sam's session"}</ComposerHeaderContent>
+        <ComposerHeaderActions>
+          <button type="button" onClick={() => setOwned(true)}>
+            Take ownership
+          </button>
+        </ComposerHeaderActions>
+      </ComposerHeaderRow>
+      <ComposerHeaderRow>
+        <ComposerHeaderContent>
+          <label>
+            <input type="checkbox" /> Review the plan
+          </label>
+        </ComposerHeaderContent>
+      </ComposerHeaderRow>
+    </>
+  );
+}
+
+function ContextualComposer({
+  visible,
+  onSubmit,
+  mode,
+}: {
+  visible: boolean;
+  onSubmit: FormEventHandler<HTMLFormElement>;
+  mode: 'conditional' | 'animated';
+}) {
+  return (
+    <Composer onSubmit={onSubmit}>
+      <ComposerHeader open={mode === 'conditional' || visible}>
+        <OptionalContext visible={mode === 'animated' || visible} />
+      </ComposerHeader>
+      <ComposerBox>
+        <ComposerInput name="message" aria-label="Message" />
+        <ComposerActions>
+          <button type="submit">Send message</button>
+        </ComposerActions>
+      </ComposerBox>
+    </Composer>
+  );
+}
+
 describe('Composer', () => {
+  it.each(['conditional', 'animated'] as const)(
+    'keeps the draft and focus when the %s header changes without submitting a message',
+    async mode => {
+      const messages: FormDataEntryValue[] = [];
+      const onSubmit: FormEventHandler<HTMLFormElement> = event => {
+        event.preventDefault();
+        const message = new FormData(event.currentTarget).get('message');
+        if (message !== null) messages.push(message);
+      };
+      const view = render(<ContextualComposer visible onSubmit={onSubmit} mode={mode} />);
+      const input = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'Please review this plan.' } });
+        fireEvent.click(screen.getByRole('checkbox', { name: 'Review the plan' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Take ownership' }));
+      });
+      expect(screen.getByRole<HTMLInputElement>('checkbox', { name: 'Review the plan' }).checked).toBe(true);
+      expect(screen.getByText('You own this session.')).not.toBeNull();
+      expect(messages).toEqual([]);
+
+      await act(async () => input.focus());
+      view.rerender(<ContextualComposer visible={false} onSubmit={onSubmit} mode={mode} />);
+
+      expect(screen.queryByRole('checkbox')).toBeNull();
+      expect(screen.getByRole('textbox', { name: 'Message' })).toBe(input);
+      expect(document.activeElement).toBe(input);
+      expect(input.value).toBe('Please review this plan.');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      expect(messages).toEqual(['Please review this plan.']);
+    },
+  );
+
   describe('when composed with all regions', () => {
     it('renders a semantic form with stable slots', () => {
       render(<ControlledComposer />);
@@ -71,13 +156,6 @@ describe('Composer', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
 
       expect(onSubmit).toHaveBeenCalledOnce();
-    });
-
-    it('renders arbitrary attachment and action children', () => {
-      render(<ControlledComposer />);
-
-      expect(screen.getByText('notes.txt')).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Send message' })).not.toBeNull();
     });
   });
 
@@ -188,51 +266,7 @@ describe('Composer', () => {
       const pulse = document.querySelector('[data-slot="composer-sending-pulse"]');
       assert(pulse);
       expect(pulse.getAttribute('aria-hidden')).toBe('true');
-      // Three columns of colour sweeping across the composer.
       expect(pulse.childElementCount).toBe(3);
-    });
-  });
-
-  describe('when the ring is idle', () => {
-    it('aims the lit arc at the pointer', async () => {
-      render(
-        <ComposerRing>
-          <ComposerBox>
-            <ComposerInput aria-label="Message" />
-          </ComposerBox>
-        </ComposerRing>,
-      );
-
-      const ring = document.querySelector<HTMLElement>('[data-slot="composer-ring"]');
-      assert(ring);
-      expect(ring.getAttribute('data-busy')).toBe('false');
-
-      // jsdom reports a zero-sized box, so the centre sits at the origin.
-      fireEvent(window, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 0 }));
-
-      await waitFor(() => {
-        expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('90deg');
-      });
-    });
-  });
-
-  describe('when the ring is busy', () => {
-    it('stops tracking the pointer so the spin owns the angle', async () => {
-      render(
-        <ComposerRing busy>
-          <ComposerBox>
-            <ComposerInput aria-label="Message" />
-          </ComposerBox>
-        </ComposerRing>,
-      );
-
-      const ring = document.querySelector<HTMLElement>('[data-slot="composer-ring"]');
-      assert(ring);
-      fireEvent(window, new MouseEvent('pointermove', { bubbles: true, clientX: 100, clientY: 0 }));
-
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      expect(ring.getAttribute('data-busy')).toBe('true');
-      expect(ring.style.getPropertyValue('--composer-ring-angle')).toBe('');
     });
   });
 

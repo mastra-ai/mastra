@@ -2,21 +2,29 @@ import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
-import { MASTRACODE_WORKSPACE_TOOLS } from '@mastra/code-sdk/agents/tool-availability';
+import { createMastraCodeWorkspaceTools } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { InlineSkillSource } from '@mastra/core/skills';
+import type { InlineSkill } from '@mastra/core/skills';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type {
+  FactorySandbox,
   SandboxStartHook,
   SkillSource,
   SkillSourceEntry,
   SkillSourceStat,
   WorkspaceSandbox,
 } from '@mastra/core/workspace';
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
-import type { MastraFactorySandboxConfig } from './factory.js';
+import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
+import { REVIEW_CONTEXT } from './boards/define-board.js';
+import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
+import { redactCredentials } from './environment/build.js';
+import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
+import { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
+import type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -27,12 +35,25 @@ import {
   runSetupCommand,
   runTeardownCommand,
   SetupCommandError,
+  syncEnvironmentRepository,
 } from './integrations/github/sandbox.js';
-import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
-import { getFactorySessionAddress } from './rules/binding-context.js';
+import {
+  registerGithubPatKind,
+  registerGithubRefreshTarget,
+  registerGithubTokenInjector,
+  registerGithubTokenInjectorResolver,
+} from './integrations/github/token-refresh.js';
+import { instrumentSandboxStart, markEagerSandboxStart, recordSandboxAcquired } from './metrics/sandbox.js';
 import { requireExec } from './sandbox/materialization.js';
 import type { ExecutableSandbox } from './sandbox/materialization.js';
 import {
+  attachSandboxEnvRefresh,
+  resolveSandboxEnv,
+  resolveSandboxEnvOrEmpty,
+  sandboxBuildContext,
+} from './sandbox/sandbox-env.js';
+import {
+  createEnvironmentSetupHook,
   createSessionSetupHook,
   evictSessionSandbox,
   getSessionSandbox,
@@ -40,14 +61,32 @@ import {
   recordFailedSetupCommand,
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
-import type { SessionSetupGate } from './sandbox/session-sandbox.js';
-import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import { repositoryDirectoryName } from './sandbox/workdir.js';
+import {
+  clearSessionEnvironment,
+  recordSessionEnvironment,
+  setSessionEnvironmentNote,
+} from './session/environment-state-processor.js';
+import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
+import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
+import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import { parseSupervisorResourceId } from './supervisor/session.js';
-import { timedPhase } from './timing.js';
-import { pullRequestNumberFromBranch } from './work-item-branch.js';
+import { instrumentMethods, timed, timedPhase } from './timing.js';
+import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
+// GitHub installation tokens live 60 minutes and minted access is cached for
+// up to 20, so replace an installed token well before it can expire. An
+// installed org PAT does not expire this way and is never age-refreshed.
+const GITHUB_TOKEN_REFRESH_AFTER_MS = 30 * 60_000;
+const isGithubTokenStale = (registration: { tokenIssuedAt: number; patInstalled: boolean }): boolean =>
+  !registration.patInstalled && Date.now() - registration.tokenIssuedAt >= GITHUB_TOKEN_REFRESH_AFTER_MS;
+/** The Factory UI renders plans only from `.artifacts/`, so every session writes them there. */
+export const FACTORY_PLANS_DIR = '.artifacts/plans';
+const FACTORY_WORKSPACE_TOOLS = createMastraCodeWorkspaceTools(false, FACTORY_PLANS_DIR);
 const bundleDirectory = dirname(fileURLToPath(import.meta.url));
 const bundledFactorySkillsPath = join(bundleDirectory, 'factory-skills');
 export const BUNDLED_FACTORY_SKILLS_PATH =
@@ -63,42 +102,148 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
 /**
  * Resolve the consumer repo's local Factory skills root, if any. Checked in
  * addition to the bundled skills so projects can add (or override) Factory
- * skills without patching the installed package. Candidates cover the cwd
- * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`).
+ * skills without patching the installed package. Skills live in
+ * `src/mastra/factory-skills`; `src/mastra/public/factory-skills` is the older
+ * location and still works. Candidates cover the cwd variants the dev server
+ * runs with (`repo root`, `mastra dev` which runs with cwd `src/mastra/public`),
+ * then the platform build output when the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
+    join(cwd, 'src', 'mastra', 'factory-skills'),
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    ...(path.basename(cwd) === 'public' ? [join(cwd, '..', 'factory-skills')] : []),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
+    join(cwd, 'output', 'factory-skills'),
   ];
   return candidates.find(
     candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
   );
 }
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
-  'factory-complete-issue',
+  'factory-build',
+  'factory-gitlab-rereview',
+  'factory-gitlab-review',
   'factory-plan',
   'factory-rereview',
   'factory-review',
+  'factory-self-review',
   'factory-triage',
 ]);
+
+/**
+ * Review skills only sessions with an active review run binding, or unbound
+ * side sessions a user session started, may discover or load.
+ */
+export const REVIEW_ONLY_FACTORY_SKILLS = new Set([
+  'factory-gitlab-rereview',
+  'factory-gitlab-review',
+  'factory-rereview',
+  'factory-review',
+  'factory-self-review',
+]);
+
+/**
+ * Skill caches rescanned outside the workspace resolver. The resolver records
+ * which role each cache was last scanned for; a rescan it did not perform makes
+ * that record untrustworthy, so the next reuse must rescan again.
+ */
+const rescannedOutsideResolver = new WeakMap<object, Promise<void>>();
+
+/**
+ * Rescan a session's skill cache so a role gained after the cache was built
+ * (a review binding minted after the session's workspace resolved) takes effect.
+ * The source still checks the live binding, so this never widens access.
+ */
+export async function rescanFactorySkills(skills: NonNullable<Workspace['skills']>): Promise<void> {
+  // Registered so the resolver waits it out: a refresh started meanwhile would
+  // join this scan (possibly for the old role) instead of starting a fresh one.
+  const pending = skills.refresh();
+  rescannedOutsideResolver.set(
+    skills,
+    pending.catch(() => {}),
+  );
+  await pending;
+}
+
+/**
+ * Serves `createSkill()` skills under mount-relative paths (`<name>/SKILL.md`),
+ * the layout the other Factory skill layers use.
+ */
+class CodeSkillSource implements SkillSource {
+  readonly #inline: InlineSkillSource;
+  readonly #names: string[];
+
+  constructor(skills: readonly InlineSkill[]) {
+    this.#inline = new InlineSkillSource([...skills]);
+    this.#names = skills.map(skill => skill.name);
+  }
+
+  #inlinePath(relativePath: string): string {
+    return `inline/${relativePath.split(path.sep).join('/')}`;
+  }
+
+  async exists(relativePath: string): Promise<boolean> {
+    if (relativePath === '') return this.#names.length > 0;
+    return this.#inline.exists(this.#inlinePath(relativePath));
+  }
+
+  stat(relativePath: string): Promise<SkillSourceStat> {
+    return this.#inline.stat(this.#inlinePath(relativePath));
+  }
+
+  readFile(relativePath: string): Promise<string | Buffer> {
+    return this.#inline.readFile(this.#inlinePath(relativePath));
+  }
+
+  async readdir(relativePath: string): Promise<SkillSourceEntry[]> {
+    if (relativePath === '') return this.#names.map(name => ({ name, type: 'directory' as const }));
+    return this.#inline.readdir(this.#inlinePath(relativePath));
+  }
+}
+
+/**
+ * A project's SKILL.md for one skill: an edit served in place of the original's, or, with `created`, a skill
+ * the project added that is served even when the app has no skill of that name.
+ */
+export interface FactorySkillOverride {
+  content: string;
+  updatedAt: Date;
+  created?: boolean;
+}
+
+const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
 
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
+  readonly #codeSource: CodeSkillSource | undefined;
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
     readonly fallback: SkillSource,
     fallbackSkillRoots: string[],
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
+    /** Evaluated per call because a session's bound role changes across stages. */
+    readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
+    /** Skills passed as `MastraFactory({ skills })`; they win over local and bundled skills of the same name. */
+    codeSkills: readonly InlineSkill[] = [],
+    /** The session project's edited SKILL.md files by skill name; read per call so saves and reverts apply on the next scan. */
+    readonly skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>> = () =>
+      Promise.resolve(NO_SKILL_OVERRIDES),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
+    this.#codeSource = codeSkills.length > 0 ? new CodeSkillSource(codeSkills) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
+  }
+
+  /** A code skill owns its whole directory, so a same-named folder skill never mixes in files. */
+  async #ownedByCode(relativePath: string): Promise<boolean> {
+    const skillName = relativePath.split(path.sep)[0];
+    return !!skillName && !!this.#codeSource && (await this.#codeSource.exists(skillName));
   }
 
   #isFactoryPath(skillPath: string): boolean {
@@ -110,54 +255,182 @@ export class FactorySkillSource implements SkillSource {
     return path.relative(FACTORY_SKILLS_MOUNT, path.normalize(skillPath));
   }
 
-  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
-  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+  /** True when the path is inside a review-only skill that this session may not use. */
+  async #isHiddenReviewPath(relativePath: string): Promise<boolean> {
+    const skillName = relativePath.split(path.sep)[0];
+    if (!skillName || !REVIEW_ONLY_FACTORY_SKILLS.has(skillName)) return false;
+    return !(await this.isReviewSession());
+  }
+
+  /** Pick the layer serving this mount-relative path: code skills, then local entries, then bundled. */
+  async #layerFor(relativePath: string): Promise<SkillSource> {
+    if (await this.#ownedByCode(relativePath)) return this.#codeSource!;
     if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
     return this.#bundledSource;
+  }
+
+  /**
+   * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` only
+   * consult created skills, so an edit whose skill was removed from the app is never discovered.
+   */
+  async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
+    return (await this.skillOverrides()).get(skillName);
+  }
+
+  /**
+   * True when a code, folder, or bundled skill has this name, so a created skill of the name is its edit
+   * instead. Only a SKILL.md makes a skill, as for the catalog: a folder left without one serves nothing.
+   */
+  async #servedByLayer(skillName: string): Promise<boolean> {
+    const skillFile = path.join(skillName, 'SKILL.md');
+    if (this.#codeSource && (await this.#codeSource.exists(skillName))) return true;
+    if (this.#localSource && (await this.#localSource.exists(skillFile))) return true;
+    return this.#bundledSource.exists(skillFile);
+  }
+
+  /** Names of the skills the project created that no layer serves; each is a directory holding only its SKILL.md. */
+  async #createdSkillNames(): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, override] of await this.skillOverrides()) {
+      if (override.created && !(await this.#servedByLayer(name))) names.push(name);
+    }
+    return names;
+  }
+
+  /** The created skill this mount-relative path is in (its directory or its SKILL.md), when no layer serves it. */
+  async #createdSkillAt(relativePath: string): Promise<{ file: boolean; override: FactorySkillOverride } | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || rest.length > 0 || (file !== undefined && file !== 'SKILL.md')) return undefined;
+    const override = (await this.skillOverrides()).get(skillName);
+    if (!override?.created || (await this.#servedByLayer(skillName))) return undefined;
+    return { file: file !== undefined, override };
+  }
+
+  /** A created skill's folder: its SKILL.md, plus whatever an app skill left in a folder of the same name. */
+  async #createdSkillEntries(relativePath: string): Promise<SkillSourceEntry[]> {
+    const entries = new Map<string, SkillSourceEntry>();
+    for (const source of [this.#bundledSource, this.#localSource]) {
+      try {
+        for (const entry of (await source?.readdir(relativePath)) ?? []) entries.set(entry.name, entry);
+      } catch {
+        // Nothing under the name in this layer, or a file rather than a folder.
+      }
+    }
+    entries.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
+    return [...entries.values()];
   }
 
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) return false;
+    if (await this.#ownedByCode(relative)) return this.#codeSource!.exists(relative);
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
-    return this.#bundledSource.exists(relative);
+    if (await this.#bundledSource.exists(relative)) return true;
+    return (await this.#createdSkillAt(relative)) !== undefined;
   }
 
   async stat(skillPath: string): Promise<SkillSourceStat> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) {
+      return {
+        name: 'SKILL.md',
+        type: 'file',
+        size: Buffer.byteLength(override.content),
+        createdAt: override.updatedAt,
+        modifiedAt: override.updatedAt,
+      };
+    }
+    const created = await this.#createdSkillAt(relative);
+    if (created) {
+      return {
+        name: relative,
+        type: 'directory',
+        size: 0,
+        createdAt: created.override.updatedAt,
+        modifiedAt: created.override.updatedAt,
+      };
+    }
     return (await this.#layerFor(relative)).stat(relative);
   }
 
   async readFile(skillPath: string): Promise<string | Buffer> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
+    if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) return override.content;
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
   async readdir(skillPath: string): Promise<SkillSourceEntry[]> {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
+      if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+      if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
+      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
+      if (created) {
+        if (created.file) throw skillSourceEnoent(skillPath);
+        return this.#createdSkillEntries(relative);
+      }
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
       ]);
-      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
-      const [bundledEntries, localEntries] = await Promise.all([
+      if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
+        throw skillSourceEnoent(skillPath);
+      }
+      const [bundledEntries, localEntries, codeEntries, createdNames] = await Promise.all([
         bundledExists ? this.#bundledSource.readdir(relative) : [],
         localExists ? this.#localSource!.readdir(relative) : [],
+        relative === '' && this.#codeSource ? this.#codeSource.readdir('') : [],
+        relative === '' ? this.#createdSkillNames() : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
       for (const entry of bundledEntries) merged.set(entry.name, entry);
-      // Local entries override bundled names.
+      // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
-      return [...merged.values()];
+      for (const entry of codeEntries) merged.set(entry.name, entry);
+      // Created skills only fill names no layer serves a skill under; a stray file of that name doesn't hide one.
+      for (const name of createdNames) {
+        if (merged.get(name)?.type !== 'directory') merged.set(name, { name, type: 'directory' });
+      }
+      const entries = [...merged.values()];
+      if (relative !== '' || (await this.isReviewSession())) return entries;
+      return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
-      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
+      const reserved = await this.#reservedNames();
+      return entries.filter(entry => !reserved.has(entry.name));
     }
     return entries;
+  }
+
+  /**
+   * Names the Factory mount serves: bundled skills plus the app's code and local skills and the
+   * project's created skills. Repository skills with these names are hidden so they cannot collide
+   * with Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
+   */
+  async #reservedNames(): Promise<Set<string>> {
+    const reserved = new Set(FACTORY_SKILL_NAMES);
+    for (const entry of (await this.#codeSource?.readdir('')) ?? []) reserved.add(entry.name);
+    for (const name of await this.#createdSkillNames()) reserved.add(name);
+    if (!this.#localSource) return reserved;
+    try {
+      for (const entry of await this.#localSource.readdir('')) {
+        if (entry.type === 'directory') reserved.add(entry.name);
+      }
+    } catch {
+      // A missing or unreadable local root reserves only the bundled names.
+    }
+    return reserved;
   }
 
   realpath(skillPath: string): Promise<string> {
@@ -213,11 +486,32 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-const factorySkillExtension: WorkspaceSkillExtension = {
-  id: 'web-factory',
-  paths: [FACTORY_SKILLS_MOUNT],
-  createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
-};
+function createFactorySkillExtension(
+  isReviewSession: () => Promise<boolean>,
+  codeSkills: readonly InlineSkill[],
+  skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>>,
+): WorkspaceSkillExtension {
+  return {
+    id: 'web-factory',
+    paths: [FACTORY_SKILLS_MOUNT],
+    createSource: (fallback, fallbackSkillRoots) =>
+      new FactorySkillSource(
+        fallback,
+        fallbackSkillRoots,
+        resolveLocalFactorySkillsPath(),
+        isReviewSession,
+        codeSkills,
+        skillOverrides,
+      ),
+  };
+}
+
+function isActiveReviewBinding(
+  runBinding: { role: string; status: string; orgId: string } | null | undefined,
+  orgId: string | undefined,
+): boolean {
+  return runBinding?.role === REVIEW_CONTEXT && runBinding.status === 'active' && !!orgId && runBinding.orgId === orgId;
+}
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 
@@ -228,21 +522,40 @@ type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
  */
 export type FactorySandboxStart = 'lazy' | 'eager';
 
+export interface WorkspaceSourceControlProvider {
+  /** Stable integration id used to select the provider-owned storage partition. */
+  id: string;
+  /** Provider capability used to resolve fresh repository credentials. */
+  versionControl: Pick<VersionControl, 'getRepositoryAccess' | 'getRepositoriesAccess'>;
+  /** Provider-owned source-control rows, including Factory sessions. */
+  storage: SourceControlStorageHandle;
+  /** Present only for GitHub, whose CLI PAT rotation has additional semantics. */
+  github?: GithubIntegration;
+}
+
 export interface CreateWorkspaceFactoryOptions {
-  /** Factory sandbox runtime config (session sandbox callback). */
-  sandbox?: MastraFactorySandboxConfig;
+  /** The normalized factory sandbox constructing one sandbox per session. */
+  sandbox?: FactorySandbox;
   /** Defaults to `'lazy'`. */
   sandboxStart?: FactorySandboxStart;
-  /** GitHub integration used to resolve Factory sessions and mint repo tokens. */
+  /** Source-control providers whose repositories may back Factory sessions. */
+  sourceControls?: WorkspaceSourceControlProvider[];
+  /** @deprecated GitHub-only compatibility path; prefer sourceControls. */
   github?: GithubIntegration;
   /** Work-items storage used to resolve the session's run-binding role, so
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
-  workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
-  /** Projects storage used to authorize workspace-free supervisor sessions. */
+  workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
+  /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /** The Factory's sandbox environment variables, applied to each session sandbox. */
+  sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
+  skills?: readonly InlineSkill[];
+  /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
+  skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -283,14 +596,81 @@ export class FactoryWorkspaceRegistry {
   }
 }
 
+async function resolveSourceControlSession(
+  providers: WorkspaceSourceControlProvider[],
+  sessionId: string,
+): Promise<{ provider: WorkspaceSourceControlProvider; session: SourceControlSession } | null> {
+  const matches = (
+    await Promise.all(
+      providers.map(async provider => ({
+        provider,
+        session: await provider.storage.sessions.getBySessionId(sessionId),
+      })),
+    )
+  ).filter(
+    (match): match is { provider: WorkspaceSourceControlProvider; session: SourceControlSession } =>
+      match.session !== null,
+  );
+  if (matches.length > 1) {
+    throw new Error(`Factory session ${sessionId} is ambiguous across source-control providers`);
+  }
+  return matches[0] ?? null;
+}
+
+/** One environment repository as the sandbox context and the boot need it, in position order. */
+/** How many environment repositories one boot syncs at once. */
+const ENVIRONMENT_SYNC_CONCURRENCY = 4;
+
+async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await run(items[next++]!);
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+}
+
+export { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
+export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
+
+/**
+ * Resolve the factory environment a session boots from: the project's
+ * settings plus every `inEnvironment` link of the project under this
+ * source-control integration, ordered by position. `undefined` when the
+ * session carries no factory or the project is gone. With no link in the
+ * environment `repos` is empty and the session keeps the single-repository
+ * sandbox of its own link, still booted with the project's settings. A link
+ * whose repository row is missing is skipped with a warning rather than
+ * failing every start of the session.
+ */
+async function resolveSessionEnvironment(
+  projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
+  storage: SourceControlStorageHandle,
+  session: SourceControlSession,
+): Promise<SessionEnvironment | undefined> {
+  if (!projects || !session.factoryProjectId) return undefined;
+  const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
+  if (!project) return undefined;
+  return resolveProjectEnvironment(storage, project);
+}
+
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, sandboxEnvs } = options;
+  const sourceControls: WorkspaceSourceControlProvider[] =
+    options.sourceControls ??
+    (github
+      ? [{ id: github.id, versionControl: github.versionControl, storage: github.sourceControlStorage, github }]
+      : []);
   const eagerSandboxStart = options.sandboxStart === 'eager';
   const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   type GithubTokenRegistration = {
-    inject: (token: string) => void;
+    inject: (token: string, pat?: boolean) => void;
     patKind: GithubPatKind;
     ghToken: string;
+    // Whether `ghToken` is an org PAT rather than a minted installation token.
+    patInstalled: boolean;
+    // When `ghToken` was installed. Minted installation tokens expire after
+    // an hour, so reconcile and reconnect re-mint once it is stale.
+    tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
   };
@@ -300,26 +680,42 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // path checks for it and reports its absence.
   type SessionSandbox = ExecutableSandbox & { setEnv?: WorkspaceSandbox['setEnv'] };
   const githubTokenInjectors = new Map<string, GithubTokenRegistration>();
+  // Per workspace: the minted group tokens beyond `GH_TOKEN` and the note
+  // naming which variable covers which repositories. Kept here, not per
+  // resolution, so an injector registered by an earlier resolution installs
+  // the tokens a later resolution minted.
+  const githubGroupTokens = new Map<string, { env: Record<string, string>; note: string | null }>();
   const githubTokenReconciliations = new Map<string, Promise<void>>();
   // Workspace identity cache: concurrent resolutions of the same session must
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
+  // Review-skill visibility and override revision last used to populate each workspace's skill cache.
+  const skillCacheState = new Map<string, string>();
+  const skillCacheRefreshes = new Map<string, Promise<number>>();
+  // The review check of the latest request to resolve each workspace. The skill
+  // source outlives the request that built it, so it must gate on this rather
+  // than on the context it was constructed with.
+  const skillReviewChecks = new Map<string, () => Promise<boolean>>();
+  // The project skill edits each workspace's skill source serves, and the
+  // override revision they were read at. Loaded on first use, so building a
+  // workspace never suspends between the reuse check and construction.
+  const skillOverrideStates = new Map<
+    string,
+    Promise<{ revision: number; overrides: ReadonlyMap<string, FactorySkillOverride> }>
+  >();
+  // The revision recorded when skill edits could not be read. No stored
+  // revision equals it, so the next reuse that reads one rescans and retries.
+  const UNREAD_SKILL_OVERRIDES = -1;
+  const skillCacheKey = (isReview: boolean, revision: number) => `${isReview ? 'review' : 'work'}@${revision}`;
 
-  return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
-    const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
+  const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
-    const supervisorProjectId = parseSupervisorResourceId(ctx?.resourceId);
-    if (supervisorProjectId) {
-      const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
-      const project = orgId && projects ? await projects.get({ orgId, id: supervisorProjectId }) : null;
-      if (!project) throw new Error(`Factory supervisor ${supervisorProjectId} is not available to the current user`);
-      return undefined;
-    }
-    const session =
-      ctx?.resourceId && github ? await github.sourceControlStorage.sessions.getBySessionId(ctx.resourceId) : null;
+    const resolvedSession = ctx?.sessionId ? await resolveSourceControlSession(sourceControls, ctx.sessionId) : null;
+    const session = resolvedSession?.session ?? null;
+    const sourceControl = resolvedSession?.provider;
 
-    if (!session) {
+    if (!session || !sourceControl) {
       // No factory session, no workspace. Chat still works; workspace tools
       // are simply not registered. Host-cwd behavior is opt-in via a
       // LocalSandbox callback rooted wherever the deployer wants — the
@@ -339,16 +735,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (user.organizationId !== session.orgId || (session.visibility === 'private' && userId !== session.userId)) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
-    if (!sandboxConfig || !github) {
-      throw new Error('GitHub and a sandbox callback are required to create a Factory session workspace');
+    if (!sandboxConfig) {
+      throw new Error('A sandbox is required to create a Factory session workspace');
     }
-    const createSessionSandboxInstance = sandboxConfig;
+    const factorySandbox = sandboxConfig;
+    const githubProvider = sourceControl.github;
+    const gitIdentity = githubProvider?.gitIdentity ?? { name: user.name, email: user.email };
 
-    const storage = github.sourceControlStorage;
-    const projectRepository = await storage.projectRepositories.get({
-      orgId: session.orgId,
-      id: session.projectRepositoryId,
-    });
+    const storage = sourceControl.storage;
+    const projectRepository = session.projectRepositoryId
+      ? await storage.projectRepositories.get({ orgId: session.orgId, id: session.projectRepositoryId })
+      : null;
     if (!projectRepository) throw new Error(`Repository link ${session.projectRepositoryId} was not found`);
     // The remaining reads only depend on the repository link — issue them in
     // parallel instead of paying four sequential storage round-trips.
@@ -358,8 +755,83 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     ]);
     if (!connection || !repository) throw new Error(`Repository link ${session.projectRepositoryId} is incomplete`);
     const installation = await storage.installations.get({ orgId: session.orgId, id: connection.installationId });
-    if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
+    if (!installation) {
+      throw new Error(`${sourceControl.id} installation ${connection.installationId} was not found`);
+    }
     const repoFullName = repository.slug;
+    // The factory environment: every `inEnvironment` link of the session's
+    // factory in position order, with the project's settings. Absent when the
+    // session predates `factoryProjectId`; the settings apply to every boot of
+    // a factory session, list form or single repository.
+    const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
+    const sandboxSettings = resolvedEnvironment?.settings ?? {};
+    // The Factory's variables, read before construction (which is synchronous).
+    const envScope =
+      sandboxEnvs && session.factoryProjectId
+        ? { orgId: session.orgId, projectId: session.factoryProjectId }
+        : undefined;
+    const sandboxEnv = envScope ? await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope) : undefined;
+    // Re-read when setup actually runs, which can be long after this request.
+    // Runtime values ride along only so a failed setup can mask them.
+    const setupEnv = async (): Promise<[Record<string, string>?, Record<string, string>?]> => {
+      if (!envScope) return [];
+      const env = await resolveSandboxEnvOrEmpty(sandboxEnvs!, envScope);
+      return [env.build, env.runtime];
+    };
+    // The session's own link must be part of the environment: it is the
+    // checkout the PR tools and `resolveSessionWorkdir` target (D1). A session
+    // whose link left the environment keeps its single-repository sandbox.
+    const environment = resolvedEnvironment?.repos.some(repo => repo.projectRepositoryId === projectRepository.id)
+      ? resolvedEnvironment
+      : undefined;
+    // `GH_TOKEN` should reach every environment repository, the session's own
+    // first; the refresh tool re-mints for the same set.
+    const tokenRepositoryIds = environment
+      ? [repository.id, ...environment.repos.map(repo => repo.repositoryId).filter(id => id !== repository.id)]
+      : [repository.id];
+    // Every environment repository's access, minted in groups of ten.
+    const repositoryAccess = groupedRepositoryAccess(sourceControl.versionControl, session.orgId, tokenRepositoryIds);
+    // One sandbox token per group of ten: `GH_TOKEN` covers the first group
+    // (the session repository's), `GH_TOKEN_2`, `GH_TOKEN_3`... the rest.
+    const tokenGroups = groupRepositoryIds(tokenRepositoryIds);
+    const groupTokenEnvName = (index: number) => (index === 0 ? 'GH_TOKEN' : `GH_TOKEN_${index + 1}`);
+    const tokenEnvNameFor = (repositoryId: string) =>
+      groupTokenEnvName(
+        Math.max(
+          0,
+          tokenGroups.findIndex(group => group.includes(repositoryId)),
+        ),
+      );
+    const repositorySlug = (repositoryId: string) =>
+      repositoryId === repository.id
+        ? repoFullName
+        : (environment?.repos.find(repo => repo.repositoryId === repositoryId)?.slug ?? repositoryId);
+    // An org PAT reaches every repository through `GH_TOKEN`, so it drops the
+    // group tokens and each checkout's credential helper falls back to it.
+    const withGithubTokens = <T extends Record<string, string | undefined>>(env: T, token: string, pat: boolean) => ({
+      ...Object.fromEntries(Object.entries(env).filter(([name]) => !/^GH_TOKEN_\d+$/.test(name))),
+      GH_TOKEN: token,
+      ...(pat ? {} : (githubGroupTokens.get(workspaceId)?.env ?? {})),
+    });
+    // Install the credentials and the note that matches them: a PAT needs no
+    // note, and recording the environment drops the note, so every install
+    // (including a reconnect that reuses a fresh token) restores it.
+    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean) => {
+      if (!target.setEnv) {
+        if (required) throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+        return;
+      }
+      target.setEnv(env => withGithubTokens(env, token, pat));
+      setSessionEnvironmentNote(session.sessionId, pat ? null : (githubGroupTokens.get(workspaceId)?.note ?? null));
+    };
+    if (githubProvider) {
+      registerGithubRefreshTarget(requestContext, {
+        orgId: session.orgId,
+        repositoryId: repository.id,
+        // Bound below once the minter exists; a refresh re-mints the same set.
+        ...(tokenRepositoryIds.length > 1 ? { mint: () => getRepositoryToken() } : {}),
+      });
+    }
 
     // Construct (or fetch) the session's memoized sandbox instance.
     // Construction is cheap and side-effect-free by the callback contract —
@@ -373,12 +845,39 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // invoked during start, long after this closure fully initializes.
     const runSetupOn = (target: unknown, workdir: string, gate: SessionSetupGate) =>
       runSessionSetup(requireExec(target as WorkspaceSandbox), workdir, gate);
-    const guardedSetup = createSessionSetupHook(
-      runSetupOn,
-      session.id,
-      repoFullName,
-      projectRepository.setupCommand ?? undefined,
-    );
+    const runEnvironmentSetupOn = (target: unknown, gate: SessionEnvironmentGate) =>
+      runSessionEnvironmentSetup(requireExec(target as WorkspaceSandbox), gate);
+    const guardedSetup = environment
+      ? createEnvironmentSetupHook(runEnvironmentSetupOn, session.id, repoFullName, {
+          repos: environment.repos.map(repo => ({
+            slug: repo.slug,
+            ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
+          })),
+          ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
+        })
+      : createSessionSetupHook(runSetupOn, session.id, repoFullName, projectRepository.setupCommand ?? undefined);
+    // Replaces the installed minted token once it is stale, so `gh` and the
+    // `gh auth git-credential` helper never run with an expired GH_TOKEN. An
+    // installed org PAT is never stale. Returns whether a fresh token was injected.
+    const refreshStaleGithubToken = async (): Promise<boolean> => {
+      const registration = githubTokenInjectors.get(workspaceId);
+      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      // Let an in-flight reconcile settle the role before choosing a credential.
+      await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
+      if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
+      const { ghToken, generation } = registration;
+      const token = await getRepositoryToken();
+      // A reconcile during the mint may have switched role or installed a PAT.
+      if (
+        githubTokenInjectors.get(workspaceId) !== registration ||
+        registration.generation !== generation ||
+        registration.ghToken !== ghToken
+      ) {
+        return false;
+      }
+      registration.inject(token);
+      return true;
+    };
     // Composed start hook: marker-guarded repo setup, then per-start
     // credential install. It runs inside the provider's start lifecycle on
     // EVERY start (create or reconnect) — providers own lazy start
@@ -391,7 +890,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
-      await guardedSetup(args);
+      let setupError: SetupCommandError | undefined;
+      try {
+        await guardedSetup(args);
+      } catch (error) {
+        if (!(error instanceof SetupCommandError)) throw error;
+        setupError = error;
+      }
       // Re-check after the (long) setup: a session retired mid-setup must not
       // register credentials for a workspace whose retirement teardown has
       // already run — the entry would leak forever. The VM itself is left to
@@ -400,20 +905,40 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         throw retiredError();
       }
       const target: SessionSandbox = requireExec(args.sandbox);
-      // Observability plus the post-checkout skill rescan run on every start
-      // (create or reconnect). Observability only — nothing reads these columns
-      // for decisions; the workdir was resolved (and memoized on the entry) by
-      // the guarded setup. The skill roots were reported empty by the
+      // Sandbox persistence plus the post-checkout skill rescan run on every
+      // start (create or reconnect). The persisted sandbox id is read back on
+      // resume to reattach; the workdir was resolved (and memoized on the
+      // entry) by the guarded setup. The skill roots were reported empty by the
       // unmaterialized-source guard before the checkout existed, so rescan now.
-      const publishStartSideEffects = () => {
-        void storage.sessions
-          .setSandbox({ id: session.id, sandboxId: target.id, sandboxWorkdir: sessionEntry.workdir ?? '' })
-          .catch(() => {});
+      // The physical-id write is awaited and its failure propagates: a start
+      // that completes before the id is durable lets a concurrent resume read a
+      // stale id and provision a replacement VM.
+      const publishStartSideEffects = async () => {
+        await storage.sessions.setSandbox({
+          id: session.id,
+          // Persist the provider's PHYSICAL, reattachable VM id so resume can
+          // reattach to the same VM. Providers with no separate physical id
+          // (e.g. local) persist nothing: a logical id handed back as a
+          // `sandboxId` hint is unknown to the provider and breaks resume.
+          sandboxId: target.sandboxId ?? null,
+          // D2: a list session's working directory is the workspace root,
+          // the repositories sit beneath it; a single-repository session
+          // keeps its checkout as before.
+          sandboxWorkdir: sessionWorkdir(sessionEntry.workdir) ?? '',
+        });
         void constructedWorkspaces
           .get(workspaceId)
           ?.skills?.refresh()
           .catch(() => {});
       };
+      const finishStart = async () => {
+        await publishStartSideEffects();
+        if (setupError) throw setupError;
+      };
+      if (!githubProvider) {
+        await finishStart();
+        return;
+      }
       const existingRegistration = githubTokenInjectors.get(workspaceId);
       if (existingRegistration) {
         // Reconnect: re-point the current registration's injection target at
@@ -423,135 +948,419 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // reconcileGithubToken owns role/generation and the active context's
         // injector, so replacing them here would reauthorize the stale
         // constructing context and reject the current one.
-        existingRegistration.inject = freshToken => {
-          if (!target.setEnv) {
-            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-          }
-          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+        existingRegistration.inject = (freshToken, pat = false) => {
+          installGithubTokens(target, freshToken, pat, true);
           existingRegistration.ghToken = freshToken;
+          existingRegistration.patInstalled = pat;
+          existingRegistration.tokenIssuedAt = Date.now();
         };
+        // A minted token may have expired while the VM was away; re-mint it
+        // instead of reinstalling it over the fresh one setup just used.
         // Install through inject (not optional-chained setEnv) so a provider
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
-        existingRegistration.inject(existingRegistration.ghToken);
-        publishStartSideEffects();
+        // A failed mint keeps the reconnect usable with the current token.
+        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        if (!refreshed) {
+          // Reinstalling the same credential must not reset its age.
+          const { tokenIssuedAt } = existingRegistration;
+          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
+          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+        }
+        await finishStart();
         return;
       }
-      // First start: resolve the credential and authorize the constructing
-      // request context. The `gh` CLI needs a PAT when the org configured one
+      // First start: resolve the credential and authorize every request that
+      // resolved this pending workspace. The `gh` CLI needs a PAT when the org configured one
       // (installation tokens 403 on integration-restricted endpoints); git
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
-      const patKind = await resolveGithubPatKind('default');
-      const ghCliToken =
-        (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? (await getRepositoryToken());
-      target.setEnv?.(env => ({ ...env, GH_TOKEN: ghCliToken }));
+      const patKind = await resolveGithubPatKind();
+      const ghCliPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+      const ghCliToken = ghCliPat ?? (await getRepositoryToken());
+      installGithubTokens(target, ghCliToken, ghCliPat !== null, false);
       const tokenRegistration: GithubTokenRegistration = {
-        inject: freshToken => {
-          if (!target.setEnv) {
-            throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-          }
-          target.setEnv(env => ({ ...env, GH_TOKEN: freshToken }));
+        inject: (freshToken, pat = false) => {
+          installGithubTokens(target, freshToken, pat, true);
           tokenRegistration.ghToken = freshToken;
+          tokenRegistration.patInstalled = pat;
+          tokenRegistration.tokenIssuedAt = Date.now();
         },
         patKind,
         ghToken: ghCliToken,
+        patInstalled: ghCliPat !== null,
+        tokenIssuedAt: Date.now(),
         generation: 0,
         tokenReplacementPending: false,
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
-      publishStartSideEffects();
+      await finishStart();
     };
     const constructSessionEntry = () =>
-      getSessionSandbox(session.id, repoFullName, () => {
-        const sandbox = createSessionSandboxInstance({
-          sessionId: session.id,
-          repoFullName,
-          // Stored nullable; the context speaks `undefined` for absent.
-          setupCommand: projectRepository.setupCommand ?? undefined,
-          // Deferred call — only dereferenced when a provider needs the repo
-          // outside the VM (template build time).
-          getRepositoryAccess: () =>
-            github.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: repository.id }),
-        });
-        // Attached inside the construction closure, so exactly once per
-        // instance — `constructSessionEntry` runs on every open and would
-        // stack a wrapper per call. Factory's setup runs first: a hook the
-        // callback installed itself expects a prepared workspace.
-        sandbox.setOnStart(previous => async args => {
-          await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
-            await setupHook(args);
+      getSessionSandbox(
+        session.id,
+        repoFullName,
+        () => {
+          // The provider reads its own settings (resources, images) from the
+          // project's stored document, never from the context.
+          const sandbox = instrumentMethods(
+            factorySandbox.create(
+              {
+                sessionId: session.id,
+                ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
+                ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
+                // Physical VM id persisted from a prior start (undefined on first
+                // start). Providers that reattach by physical id use it to resume the
+                // original VM instead of provisioning a replacement.
+                sandboxId: session.sandboxId ?? undefined,
+                repoFullName,
+                ...sandboxBuildContext(sandboxEnv),
+                ...(environment
+                  ? environmentSandboxContext(environment, {
+                      orgId: session.orgId,
+                      getRepositoryAccess: args => repositoryAccess(args.repositoryId),
+                    })
+                  : {
+                      // Stored nullable; the context speaks `undefined` for absent.
+                      setupCommand: projectRepository.setupCommand ?? undefined,
+                      // Deferred call, only dereferenced when a provider needs the repo
+                      // outside the VM (template build time).
+                      getRepositoryAccess: () => repositoryAccess(repository.id),
+                    }),
+              },
+              sandboxSettings,
+            ),
+            `sandbox(${session.id})`,
+            ['start', 'stop', 'executeCommand', 'reconnect'],
+          );
+          instrumentSandboxStart(sandbox, factorySandbox.provider, session.sandboxId != null);
+          // Before Factory's own GH_TOKEN, so a host env key is remembered before Factory writes it.
+          if (envScope && sandboxEnv) {
+            attachSandboxEnvRefresh(sandbox, {
+              initial: sandboxEnv,
+              revision: async () => (await sandboxEnvs!.revisions(envScope.orgId, envScope.projectId))?.revision ?? '',
+              load: () => resolveSandboxEnv(sandboxEnvs!, envScope),
+            });
+          }
+          // A turn can outlive the token installed when the workspace was
+          // resolved, so check its age before every command and background
+          // spawn. Best-effort: a failed re-mint leaves the current token in
+          // place. Concurrent callers share one refresh.
+          let commandRefresh: Promise<unknown> | undefined;
+          const refreshBeforeCommand = () =>
+            (commandRefresh ??= refreshStaleGithubToken()
+              .catch(() => {})
+              .finally(() => {
+                commandRefresh = undefined;
+              }));
+          const executeCommand = sandbox.executeCommand?.bind(sandbox);
+          if (executeCommand) {
+            sandbox.executeCommand = async (...args) => {
+              await refreshBeforeCommand();
+              return executeCommand(...args);
+            };
+          }
+          const processes = sandbox.processes;
+          if (processes) {
+            const spawn = processes.spawn.bind(processes);
+            processes.spawn = async (...args) => {
+              await refreshBeforeCommand();
+              return spawn(...args);
+            };
+          }
+          // Attached inside the construction closure, so exactly once per
+          // instance: `constructSessionEntry` runs on every open and would
+          // stack a wrapper per call. Factory's setup runs first: a hook the
+          // callback installed itself expects a prepared workspace.
+          sandbox.setOnStart(previous => async args => {
+            recordSandboxAcquired(args.sandbox, args.outcome);
+            try {
+              await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+                await setupHook(args);
+              });
+              await previous?.(args);
+            } catch (error) {
+              // Core reports the logical sandbox id, which survives a recreate,
+              // so the provider's VM id is the only handle for its logs.
+              const physicalId = args.sandbox.sandboxId;
+              if (physicalId && error instanceof Error) error.message += ` (provider sandbox ${physicalId})`;
+              throw error;
+            }
           });
-          await previous?.(args);
-        });
-        // Only a freshly constructed instance starts eagerly; the start itself
-        // waits for this resolver to finish because the start hook reads
-        // bindings declared further down.
-        startEagerly = eagerSandboxStart;
-        return sandbox;
-      });
+          // Only a freshly constructed instance starts eagerly; the start itself
+          // waits for this resolver to finish because the start hook reads
+          // bindings declared further down.
+          startEagerly = eagerSandboxStart;
+          return sandbox;
+        },
+        environment?.repos.map(repo => repo.slug) ?? [],
+      );
     let startEagerly = false;
     const fireEagerStart = () => {
       if (!startEagerly) return;
       startEagerly = false;
       Promise.resolve()
-        .then(() => sessionEntry.sandbox.start?.())
+        .then(() => {
+          markEagerSandboxStart(sessionEntry.sandbox);
+          return sessionEntry.sandbox.start?.();
+        })
         .catch(error => {
           console.warn(`[factory] Eager sandbox start for session ${session.id} failed:`, error);
         });
     };
     const sessionEntry = constructSessionEntry();
-    const workdir = sessionEntry.workdir;
+    // The session's working directory as the agent sees it: the checkout
+    // when the environment holds one repository, the workspace root with a
+    // directory per repository when it holds several (D2). The file routes
+    // read the same layout from the memo. `resolveSessionWorkdir` keeps
+    // pointing at the session's own repository so the PR tools and the start
+    // hook run git in the right checkout.
+    const multiRepo = (environment?.repos.length ?? 0) > 1;
+    const sessionWorkdir = (checkout: string | undefined): string | undefined =>
+      checkout === undefined ? undefined : multiRepo ? path.posix.dirname(checkout) : checkout;
+    const workdir = sessionWorkdir(sessionEntry.workdir);
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
-    // The system prompt derives its working directory from `state.projectPath`
-    // and falls back to the server's own process.cwd() when unset — which
-    // points the agent at the host checkout (and lets it run `git checkout`
-    // there instead of in its session workdir). Pin it to the session workdir
-    // once known. A remote workdir resolves at the sandbox's first start, so
-    // the pin self-heals on the next resolution after the VM has run.
-    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
-      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    // Checkout directories under a multi-repository session's workspace root, the
+    // session's own first: each one's AGENTS.md/CLAUDE.md and project skills load.
+    const checkoutDirs =
+      environment && multiRepo
+        ? [
+            repositoryDirectoryName(repoFullName),
+            ...environment.repos
+              .filter(repo => repo.slug.toLowerCase() !== repoFullName.toLowerCase())
+              .map(repo => repositoryDirectoryName(repo.slug)),
+          ]
+        : undefined;
+    // The SDK system prompt uses `state.projectPath` without falling back to
+    // the server cwd. Pin the session workdir once known so the prompt and
+    // workspace tools describe the same checkout. A remote workdir resolves at
+    // the sandbox's first start, so the pin self-heals on the next resolution.
+    if (
+      ctx &&
+      workdir &&
+      (ctx.getState()?.projectPath !== workdir ||
+        ctx.getState()?.instructionRoots?.join('\n') !== checkoutDirs?.join('\n'))
+    ) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName, instructionRoots: checkoutDirs });
     }
 
-    const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
-    const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
-    const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
-    const configDir = DEFAULT_CONFIG_DIR;
-
-    const getRepositoryToken = async (): Promise<string> => {
-      const access = await github.versionControl.getRepositoryAccess({
+    // Keyed by the session, not the request's thread: a workspace built for a
+    // dispatcher kickoff has no live thread yet, but the session's binding
+    // already says which role it is serving. When the request does carry a
+    // thread, the binding must belong to it, so a stale thread reusing this
+    // session never inherits another run's role.
+    const findSessionBinding = async () => {
+      const binding = await workItems!.findActiveRunBindingForSession({
         orgId: session.orgId,
-        repositoryId: repository.id,
+        factoryProjectId: connection.factoryProjectId,
+        sessionId: session.sessionId,
       });
-      const token = access.authorization?.token;
-      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
-      return token;
+      if (!binding || !ctx?.threadId) return binding;
+      return binding.threadId === ctx.threadId && binding.sessionId === ctx.sessionId ? binding : null;
     };
-    const resolveGithubPatKind = async (fallback: GithubPatKind): Promise<GithubPatKind> => {
-      if (!workItems) return 'default';
+    // Fails closed: review skills need a readable active review binding, or a
+    // side session (started by a user session to run a skill on request) that
+    // has never been bound. Any binding (another role, revoked, or several
+    // ambiguous active ones) keeps the side session on the binding check.
+    const isReviewSession = async (): Promise<boolean> => {
+      if (!workItems) return false;
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        return runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId
-          ? 'reviewer'
-          : 'default';
+        if (session.originSessionId) {
+          const everBound = await workItems.hasRunBindingForSession({
+            orgId: session.orgId,
+            factoryProjectId: connection.factoryProjectId,
+            sessionId: session.sessionId,
+          });
+          if (!everBound) return true;
+        }
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId);
       } catch {
-        // Preserve the installed role when binding storage is temporarily unavailable.
-        return fallback;
+        return false;
       }
     };
-    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
-      const generation = registered.generation;
-      registerGithubTokenInjector(requestContext, token => {
+    const effectiveSkillExtension =
+      skillExtension ??
+      createFactorySkillExtension(
+        (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
+        options.skills ?? [],
+        async () => (await (skillOverrideStates.get(workspaceId) ?? loadSkillOverrides())).overrides,
+      );
+    const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
+    const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
+    if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
+    // A caller-supplied skill extension owns its own skills, so edits only apply to Factory's.
+    const overrideScope =
+      skillOverrides && !skillExtension ? { orgId: session.orgId, projectId: connection.factoryProjectId } : undefined;
+    // Edits are optional: like `isReviewSession`, a storage failure degrades to
+    // the original skills instead of failing the workspace or hiding skills.
+    const readOverrides = async <T>(read: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        await skillOverrides!.ensureReady();
+        return await read();
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not read project skill edits; serving the original skills', {
+          factoryProjectId: connection.factoryProjectId,
+          error,
+        });
+        return undefined;
+      }
+    };
+    const currentOverrideRevision = async () =>
+      overrideScope
+        ? ((await readOverrides(() => skillOverrides!.revision(overrideScope))) ?? UNREAD_SKILL_OVERRIDES)
+        : 0;
+    const loadSkillOverrides = () => {
+      const loading = (async () => {
+        if (!overrideScope) return { revision: 0, overrides: NO_SKILL_OVERRIDES };
+        const snapshot = await readOverrides(() => skillOverrides!.snapshot(overrideScope));
+        if (!snapshot) return { revision: UNREAD_SKILL_OVERRIDES, overrides: NO_SKILL_OVERRIDES };
+        return {
+          revision: snapshot.revision,
+          overrides: new Map(
+            snapshot.overrides.map(
+              o =>
+                [
+                  o.skillName,
+                  { content: o.content, updatedAt: o.updatedAt, ...(o.kind === 'created' ? { created: true } : {}) },
+                ] as const,
+            ),
+          ),
+        };
+      })();
+      skillOverrideStates.set(workspaceId, loading);
+      return loading;
+    };
+    const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
+    const configDir = DEFAULT_CONFIG_DIR;
+
+    const getRepositoryAccess = () => repositoryAccess(repository.id);
+    // Mint one token per group of up to ten environment repositories: the
+    // first group's (the session repository's) is returned for `GH_TOKEN`,
+    // the others are kept for the workspace in `githubGroupTokens`. A group the provider cannot mint one
+    // credential for falls back to its first repository's own token, and the
+    // agent is told through the environment signal which repositories each
+    // variable reaches, so it uses the source_control_* tools for the rest.
+    let tokenScopeWarned = false;
+    const mintGroupToken = async (group: string[]): Promise<{ token?: string; covered: string[]; reason?: string }> => {
+      let reason = 'provider mints per-repository tokens only';
+      if (group.length > 1 && sourceControl.versionControl.getRepositoriesAccess) {
+        try {
+          const wide = await sourceControl.versionControl.getRepositoriesAccess({
+            orgId: session.orgId,
+            repositoryIds: group,
+          });
+          if (wide?.authorization?.token) return { token: wide.authorization.token, covered: group };
+          reason = 'provider cannot mint one token for this repository set';
+        } catch (error) {
+          // A sibling repository the provider cannot grant must not stop the
+          // session: its own token still boots it. The provider logs the
+          // failure itself; only the error name travels here.
+          reason = `provider failed to mint one token for this repository set (${error instanceof Error ? error.name : 'error'})`;
+        }
+      }
+      const token = (
+        await sourceControl.versionControl.getRepositoryAccess({ orgId: session.orgId, repositoryId: group[0]! })
+      ).authorization?.token;
+      return { token, covered: token ? [group[0]!] : [], ...(group.length > 1 ? { reason } : {}) };
+    };
+    const getRepositoryToken = async (): Promise<string> => {
+      const minted = await Promise.all(
+        tokenGroups.map(async (group, index) => {
+          try {
+            return await mintGroupToken(group);
+          } catch (error) {
+            // The session repository's group must mint; another group failing leaves it to the tools.
+            if (index === 0) throw error;
+            return { covered: [], reason: `mint failed (${error instanceof Error ? error.name : 'error'})` };
+          }
+        }),
+      );
+      const primary = minted[0]?.token;
+      if (!primary) throw new Error('Repository access did not include a bearer token for the Factory session');
+      const groupEnv = Object.fromEntries(
+        minted.slice(1).flatMap((group, index) => (group.token ? [[groupTokenEnvName(index + 1), group.token]] : [])),
+      );
+      const covered = new Set(minted.flatMap(group => group.covered));
+      const uncovered = tokenRepositoryIds.filter(id => !covered.has(id));
+      if (uncovered.length && !tokenScopeWarned) {
+        tokenScopeWarned = true;
+        console.warn('[Mastra Factory] Sandbox GitHub tokens do not cover every environment repository', {
+          sessionId: session.sessionId,
+          uncovered: uncovered.map(repositorySlug),
+          reason: minted.flatMap(group => (group.reason ? [group.reason] : [])).join('; '),
+        });
+      }
+      githubGroupTokens.set(workspaceId, { env: groupEnv, note: githubTokenNote(minted, uncovered) });
+      return primary;
+    };
+    // Which variable reaches which repositories, when it is not simply
+    // `GH_TOKEN` for all of them.
+    const githubTokenNote = (minted: { token?: string; covered: string[] }[], uncovered: string[]): string | null => {
+      if (minted.length === 1) {
+        return uncovered.length
+          ? `GH_TOKEN covers ${repoFullName} only; use the source_control_* tools for other repositories.`
+          : null;
+      }
+      const lines = minted.flatMap((group, index) => {
+        if (!group.token || !group.covered.length) return [];
+        const name = groupTokenEnvName(index);
+        const slugs = group.covered.map(repositorySlug).join(', ');
+        return [
+          index === 0
+            ? `GH_TOKEN covers ${slugs}.`
+            : `${name} covers ${slugs}; run gh for these as \`GH_TOKEN=$${name} gh ...\`.`,
+        ];
+      });
+      lines.push('git in each checkout already authenticates with the token that covers it.');
+      if (uncovered.length) {
+        lines.push(
+          `No sandbox token covers ${uncovered.map(repositorySlug).join(', ')}; use the source_control_* tools for them.`,
+        );
+      }
+      return lines.join(' ');
+    };
+    const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
+      if (!workItems) return 'default';
+      try {
+        return isActiveReviewBinding(await findSessionBinding(), session.orgId) ? 'reviewer' : 'default';
+      } catch {
+        // An unreadable binding cannot prove review authority, so fall back to the worker role.
+        return 'default';
+      }
+    };
+    const githubTokenInjector =
+      (registered: GithubTokenRegistration, generation: number) => (token: string, pat?: boolean) => {
         if (githubTokenInjectors.get(workspaceId) !== registered || registered.generation !== generation) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
-        registered.inject(token);
-      });
+        registered.inject(token, pat);
+      };
+    const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
+      registerGithubTokenInjector(requestContext, githubTokenInjector(registered, registered.generation));
       registerGithubPatKind(requestContext, registered.patKind);
     };
+    if (githubProvider) {
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) {
+        registerGithubTokenContext(registered);
+      } else {
+        registerGithubTokenInjectorResolver(requestContext, () => {
+          if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
+            throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+          }
+          const active = githubTokenInjectors.get(workspaceId);
+          if (!active) {
+            throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
+          }
+          registerGithubPatKind(requestContext, active.patKind);
+          return githubTokenInjector(active, 0);
+        });
+      }
+    }
     const reconcileGithubToken = async (): Promise<void> => {
+      if (!githubProvider) return;
       const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();
       const reconciliation = previous
         .catch(() => {})
@@ -560,7 +1369,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!registered) return;
 
           const previousPatKind = registered.patKind;
-          const patKind = await resolveGithubPatKind(previousPatKind);
+          const patKind = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (patKind !== previousPatKind) {
@@ -574,13 +1383,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.tokenReplacementPending = true;
           }
 
-          let token = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
-          if (!token && registered.tokenReplacementPending) token = await getRepositoryToken();
+          const pat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
+          let token = pat;
+          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+            token = await getRepositoryToken();
+          }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (token && token !== registered.ghToken) {
             try {
-              registered.inject(token);
+              registered.inject(token, token === pat);
             } catch (error) {
               if (registered.tokenReplacementPending) throw error;
               // Same-role rotations and reviewer upgrades remain best-effort.
@@ -621,7 +1433,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           }
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
+            githubGroupTokens.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
+            skillCacheState.delete(workspaceId);
           }
         }
         throw error;
@@ -632,16 +1446,69 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return workspace;
     };
 
-    let existing: Workspace | undefined;
-    try {
-      existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-    } catch {
-      // Not registered yet.
-      existing = undefined;
-    }
+    // A miss is expected here; `optional` returns undefined instead of logging an error.
+    let existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as Workspace | undefined;
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
+      // The skill cache does not recheck the source on get(), so rescan when the
+      // session's role flips; otherwise a cached review skill outlives the review binding.
+      // Likewise when the project's skill-override revision moves: a save or revert
+      // must reach the next session on this workspace, not wait for a staleness walk.
+      if (!skillExtension) {
+        // An outside rescan makes the recorded role untrustworthy. Wait for it to
+        // settle first, so the refresh below starts a scan for the current role
+        // rather than joining one started for the previous role.
+        const consumeOutsideRescan = async () => {
+          const outside = existing.skills && rescannedOutsideResolver.get(existing.skills);
+          if (!outside) return false;
+          await outside;
+          if (rescannedOutsideResolver.get(existing.skills!) === outside)
+            rescannedOutsideResolver.delete(existing.skills!);
+          skillCacheState.delete(workspaceId);
+          return true;
+        };
+        await consumeOutsideRescan();
+        const readTarget = async () => {
+          const [isReview, revision] = await Promise.all([isReviewSession(), currentOverrideRevision()]);
+          return { isReview, revision };
+        };
+        let target = await readTarget();
+        // Concurrent reuses share one refresh, and the state is recorded only
+        // once the rescan succeeds. Wait out any in-flight rescan (it may have
+        // been started for the opposite role) and re-read the role afterwards.
+        for (;;) {
+          const inFlight = skillCacheRefreshes.get(workspaceId);
+          if (inFlight) {
+            await inFlight;
+            target = await readTarget();
+            continue;
+          }
+          if (await consumeOutsideRescan()) {
+            target = await readTarget();
+            continue;
+          }
+          if (skillCacheState.get(workspaceId) === skillCacheKey(target.isReview, target.revision)) break;
+          const { isReview, revision } = target;
+          const pending = (async () => {
+            const served =
+              (await loadedOverrideRevision()) === revision ? revision : (await loadSkillOverrides()).revision;
+            await existing.skills?.refresh();
+            // Record the revision the source actually serves; a save landing after
+            // `readTarget` makes the next check rescan rather than skip it.
+            skillCacheState.set(workspaceId, skillCacheKey(isReview, served));
+            return served;
+          })().finally(() => skillCacheRefreshes.delete(workspaceId));
+          skillCacheRefreshes.set(workspaceId, pending);
+          const served = await pending;
+          // The snapshot could not be read, so this refresh served the original
+          // skills. Re-reading the target would refresh again for as long as the
+          // failure lasts; the unread sentinel stays recorded so a later
+          // resolution retries.
+          if (served === UNREAD_SKILL_OVERRIDES) break;
+          target = await readTarget();
+        }
+      }
       // A materialization kicked off by another caller may still be running.
       // Deliberately do NOT wait for it: a metadata-only resolution (thread
       // list, messages, activity) must not block on the clone/setup that lazy
@@ -659,28 +1526,42 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // tokens are fetched inside the run so a replacement VM healed mid-session
     // gets fresh credentials, not ones captured at workspace construction.
     const runSessionSetup = async (target: SessionSandbox, workdir: string, gate: SessionSetupGate): Promise<void> => {
-      const token = await getRepositoryToken();
-      // The configured setup command may shell out to `gh`/https fetches, so
-      // GH_TOKEN must exist before setup runs — and it must be the same
-      // gh-capable credential the session gets after start (installation
-      // tokens 403 on integration-restricted endpoints when the org
-      // configured a PAT).
-      const setupPatKind = await resolveGithubPatKind('default');
-      const setupGhToken = (await getGithubPat(() => github.integrationStorage, session.orgId, setupPatKind)) ?? token;
-      target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
+      const access = await getRepositoryAccess();
+      const token = access.authorization?.token;
+      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
+      // GitHub setup commands may shell out to gh/HTTPS. Preserve its
+      // role-aware PAT behavior without applying GitHub credentials to other
+      // source-control providers.
+      if (githubProvider) {
+        const setupPatKind = await resolveGithubPatKind();
+        const setupPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind);
+        // Setup commands in any environment repository may fetch through its
+        // credential helper, so mint every group's token before they run.
+        const setupGhToken = setupPat ?? (tokenGroups.length > 1 ? await getRepositoryToken() : token);
+        installGithubTokens(target, setupGhToken, setupPat !== null, false);
+      }
       await materializeRepo({
         row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
-        repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
+        repoInfo: {
+          repoFullName,
+          defaultBranch: repository.defaultBranch,
+          cloneUrl: access.cloneUrl,
+          authUsername: access.authorization?.username,
+        },
         sandbox: target,
         token,
         storage: storage.sessions,
       });
       await checkoutSessionBranch(target, workdir, {
+        identity: gitIdentity,
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
         token,
-        repoFullName: repoFullName,
+        repoFullName,
+        cloneUrl: access.cloneUrl,
+        authUsername: access.authorization?.username,
         pullRequestNumber: pullRequestNumberFromBranch(session.branch),
+        mergeRequestNumber: sourceControl.id === 'gitlab' ? mergeRequestNumberFromBranch(session.branch) : undefined,
       });
       if (projectRepository.setupCommand && !gate.setupDone) {
         // A setup command that already failed this session is skipped rather
@@ -698,7 +1579,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           return;
         }
         try {
-          await timedPhase('workspace.setup', () => runSetupCommand(target, workdir, projectRepository.setupCommand!));
+          await timedPhase('workspace.setup', async () =>
+            runSetupCommand(target, workdir, projectRepository.setupCommand!, ...(await setupEnv())),
+          );
           await gate.markSetupDone();
         } catch (setupError) {
           if (projectRepository.teardownCommand) {
@@ -730,6 +1613,223 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
     };
+    // The environment boot: the session's own repository keeps today's path
+    // (materialize, session branch, gated setup); every other environment
+    // repository is materialized beneath the workspace root, synced by the
+    // conservative remote rule, and set up behind its own marker. A failure
+    // on a secondary repository is logged and the boot continues, so one
+    // broken link never wedges the whole environment. The workspace setup
+    // command runs last, once, and is fatal like the template build.
+    const runSessionEnvironmentSetup = async (target: SessionSandbox, gate: SessionEnvironmentGate): Promise<void> => {
+      const repos = environment!.repos;
+      const primaryDir = `${gate.root}/${repositoryDirectoryName(repoFullName)}`;
+      const states: SessionEnvironmentRepositoryState[] = [];
+      // Setup failures by slug: a template build cannot observe a setup
+      // command's result, so the boot that finds one records it on the link.
+      const failures = new Map<string, string>();
+      // Repositories whose setup was skipped because it already failed this
+      // session: the boot that ran it recorded the real error on the link.
+      const repeated = new Set<string>();
+      let primaryError: unknown;
+      // Failed setup still publishes usable state, but a retired boot must
+      // never restore cleared state or overwrite its replacement.
+      const record = () => {
+        if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) return;
+        recordSessionEnvironment(
+          session.sessionId,
+          { workingDirectory: gate.root, repositories: states },
+          states.flatMap(state => {
+            const command = repos.find(repo => repo.slug === state.slug)?.teardownCommand;
+            return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
+          }),
+        );
+      };
+      // The repository whose setup is running when the boot throws something
+      // other than a setup failure: its outcome is unknown, never `configured`.
+      let inFlight: string | undefined;
+      try {
+        const secondaries: Array<{
+          repo: SessionEnvironmentRepo;
+          entry: (typeof gate.repos)[number];
+          state: SessionEnvironmentRepositoryState;
+          synced: boolean;
+        }> = [];
+        for (const repo of repos) {
+          const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
+          if (!entry) continue;
+          const state: SessionEnvironmentRepositoryState = {
+            slug: repo.slug,
+            dir: entry.dir,
+            branch: null,
+            defaultBranch: repo.defaultBranch,
+            setupStatus: repo.setupCommand ? 'ok' : 'skipped',
+          };
+          states.push(state);
+          if (repo.projectRepositoryId !== session.projectRepositoryId) {
+            secondaries.push({ repo, entry, state, synced: false });
+            continue;
+          }
+          inFlight = repo.slug;
+          try {
+            await runSessionSetup(target, primaryDir, entry.gate);
+            state.branch = session.branch;
+            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+              state.setupStatus = 'failed';
+              repeated.add(repo.slug);
+            }
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            state.branch = session.branch;
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
+            primaryError = error;
+          }
+          inFlight = undefined;
+        }
+        // The other repositories sync side by side: each is a token mint, a
+        // clone or fetch and a branch sync in its own directory, so a boot
+        // costs the slowest repository rather than the sum. Setup commands
+        // still run one at a time below, so installs never compete.
+        await forEachConcurrently(secondaries, ENVIRONMENT_SYNC_CONCURRENCY, async secondary => {
+          const { repo, entry, state } = secondary;
+          try {
+            const access = await repositoryAccess(repo.repositoryId);
+            const token = access.authorization?.token;
+            if (!token) throw new Error(`Repository access for ${repo.slug} did not include a bearer token`);
+            await materializeRepo({
+              row: { id: session.id, sandboxWorkdir: entry.dir, materializedAt: null },
+              repoInfo: {
+                repoFullName: repo.slug,
+                defaultBranch: repo.defaultBranch,
+                cloneUrl: access.cloneUrl,
+                authUsername: access.authorization?.username,
+              },
+              sandbox: target,
+              token,
+              // `materialized_at` is the session's own repository's.
+              storage: { markMaterialized: async () => {} },
+            });
+            const synced = await timedPhase(`workspace.sync(${repo.slug})`, () =>
+              syncEnvironmentRepository(target, entry.dir, {
+                identity: gitIdentity,
+                branch: session.branch,
+                defaultBranch: repo.defaultBranch,
+                token,
+                repoFullName: repo.slug,
+                cloneUrl: access.cloneUrl,
+                authUsername: access.authorization?.username,
+                tokenEnvName: tokenEnvNameFor(repo.repositoryId),
+              }),
+            );
+            state.branch = synced.branch;
+            secondary.synced = true;
+          } catch (error) {
+            console.warn('[Mastra Factory] Environment repository could not be synced; continuing the boot', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              projectRepositoryId: repo.projectRepositoryId,
+              error: error instanceof Error ? error.message.slice(-2000) : String(error),
+            });
+            // The checkout may be missing or stale and its setup never ran.
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error instanceof Error ? error.message : String(error));
+          }
+        });
+        for (const { repo, entry, state, synced } of secondaries) {
+          if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
+          if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
+            state.setupStatus = 'failed';
+            repeated.add(repo.slug);
+            continue;
+          }
+          inFlight = repo.slug;
+          try {
+            await timedPhase(`workspace.setup(${repo.slug})`, async () =>
+              runSetupCommand(target, entry.dir, repo.setupCommand!, ...(await setupEnv())),
+            );
+            await entry.gate.markSetupDone();
+          } catch (error) {
+            if (!(error instanceof SetupCommandError)) throw error;
+            recordFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`);
+            state.setupStatus = 'failed';
+            failures.set(repo.slug, error.message);
+            console.warn('[Mastra Factory] Environment repository setup command failed; continuing the boot', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+              projectRepositoryId: repo.projectRepositoryId,
+              error: error.message.slice(-2000),
+            });
+          }
+          inFlight = undefined;
+        }
+        inFlight = undefined;
+        const workspaceCommand = environment!.workspaceSetupCommand;
+        if (workspaceCommand && !gate.workspace.setupDone) {
+          // Fatal on its first failure, skipped afterwards: like the per-repo
+          // commands, a workspace command that keeps failing must not wedge
+          // every start of the session.
+          if (hasFailedSetupCommand(session.id, `workspace:${workspaceCommand}`)) {
+            console.warn('[Mastra Factory] Skipping workspace setup command that already failed this session', {
+              orgId: session.orgId,
+              sessionId: session.sessionId,
+            });
+          } else {
+            try {
+              await timedPhase('workspace.setup(workspace)', async () =>
+                runSetupCommand(target, gate.root, workspaceCommand, ...(await setupEnv())),
+              );
+              await gate.workspace.markSetupDone();
+            } catch (error) {
+              if (!(error instanceof SetupCommandError)) throw error;
+              recordFailedSetupCommand(session.id, `workspace:${workspaceCommand}`);
+              throw new SetupCommandError(
+                `${error.message}. The sandbox stays usable: the workspace setup command is skipped for the rest of the session. Retry your command, then fix it in the environment settings or run it manually.`,
+                error.code,
+              );
+            }
+          }
+        }
+      } finally {
+        record();
+        await recordSetupResults(repos, states, failures, inFlight, repeated);
+      }
+      if (primaryError) throw primaryError;
+    };
+    // Best effort: the per-link status is informational and never fails a
+    // boot. A repository whose setup ran is `configured`; one whose setup or
+    // sync failed is `failed` with the redacted message; one with no setup
+    // command, whose setup was interrupted, or whose already-failed command
+    // was skipped is left as it was.
+    const recordSetupResults = async (
+      repos: SessionEnvironmentRepo[],
+      states: SessionEnvironmentRepositoryState[],
+      failures: Map<string, string>,
+      inFlight: string | undefined,
+      repeated: Set<string>,
+    ) => {
+      try {
+        for (const state of states) {
+          if (state.setupStatus === 'skipped') continue;
+          if (state.slug === inFlight && state.setupStatus !== 'failed') continue;
+          if (repeated.has(state.slug)) continue;
+          const repo = repos.find(candidate => candidate.slug === state.slug);
+          if (!repo) continue;
+          const error = failures.get(state.slug);
+          await storage.projectRepositories.setBuildStatus({
+            orgId: session.orgId,
+            id: repo.projectRepositoryId,
+            status: state.setupStatus === 'failed' ? 'failed' : 'configured',
+            error: error === undefined ? null : redactCredentials(error).slice(-2000),
+          });
+        }
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not record environment setup results', {
+          orgId: session.orgId,
+          sessionId: session.sessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
     // The session's real sandbox goes straight onto the Workspace. Providers
     // own lazy start (`ensureRunning()` inside the first command/process op)
     // and dead-VM self-healing, and the composed `onStart` hook runs the repo
@@ -743,9 +1843,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Lazy: a remote workdir is only knowable once a VM runs. The first
       // file operation resolves it (starting the VM — which materializes the
       // repo via the onStart hook — when needed) and memoizes it.
-      workdir: () => resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName),
+      workdir: async () => {
+        const checkout = await resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName);
+        return sessionWorkdir(checkout) ?? checkout;
+      },
     });
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    // Relative to the filesystem root. An environment session's root is the
+    // workspace root, so its project skills live under each checkout, the
+    // session's own first.
+    const skillRoots = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    const projectSkillPaths = checkoutDirs
+      ? checkoutDirs.flatMap(dir => skillRoots.map(skillPath => path.posix.join(dir, skillPath)))
+      : skillRoots;
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
@@ -756,7 +1865,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: MASTRACODE_WORKSPACE_TOOLS,
+      tools: FACTORY_WORKSPACE_TOOLS,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the
@@ -775,6 +1884,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    // A workspace evicted and rebuilt under this id reads the project's edits afresh.
+    skillOverrideStates.delete(workspaceId);
     // Retirement is registered against the workspace itself rather than the
     // sandbox: construction is eager while the VM start is lazy, so a session
     // retired before its first tool call still has a workspace (and possibly a
@@ -785,11 +1896,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       workspaceGeneration,
       async () => {
         githubTokenInjectors.delete(workspaceId);
+        githubGroupTokens.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
+        skillCacheState.delete(workspaceId);
+        skillReviewChecks.delete(workspaceId);
+        skillOverrideStates.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.
         evictSessionSandbox(session.id);
+        clearSessionEnvironment(session.sessionId);
         await mastra?.removeWorkspace?.(workspaceId);
       },
     );
@@ -800,4 +1916,5 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     fireEagerStart();
     return workspace;
   };
+  return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
 }

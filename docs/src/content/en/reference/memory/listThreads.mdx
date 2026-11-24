@@ -26,7 +26,7 @@ Use `perPage: false` to retrieve all matching threads at once.
 
 :::warning
 
-Use pagination, especially for large datasets. Use this option cautiously.
+Use pagination, especially for large datasets. Use this option with care.
 
 :::
 
@@ -92,6 +92,7 @@ const result = await memory.listThreads({
     type: 'number | false',
     description: 'Maximum number of threads to return per page, or false to fetch all',
     isOptional: true,
+    defaultValue: '100',
   },
   {
     name: 'orderBy',

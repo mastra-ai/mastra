@@ -18,6 +18,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraErrorPart,
   MastraToolApproval,
   MastraToolInvocation,
   MastraToolInvocationPart,
@@ -48,7 +49,6 @@ export type { AIV4AdapterContext, AIV5AdapterContext, AdapterContext } from './a
 
 // Provider compatibility exports
 export {
-  ensureGeminiCompatibleMessages,
   ensureAnthropicCompatibleMessages,
   sanitizeOrphanedToolPairs,
   pairOrphanedToolCalls,

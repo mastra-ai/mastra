@@ -25,6 +25,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
+import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, TABLE_METRIC_EVENTS } from './ddl';
 import { applyCommonFilters, applySingleOrArrayFilter, newFilterAccumulator, whereOrEmpty } from './filters';
 import { metricRecordToRow, rowToMetricRecord } from './helpers';
@@ -47,9 +48,10 @@ import {
   shiftRange,
   validatePercentiles,
 } from './olap';
+import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { METRIC_TYPED_COLUMNS } from './signal-schema';
-import { buildInsert, METRIC_SELECT_COLUMNS } from './sql';
+import { insertRows, METRIC_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the metric signal
@@ -61,13 +63,14 @@ function applyMetricFilters(
 ): void {
   applyCommonFilters(acc, filters);
   applySingleOrArrayFilter(acc, 'traceId', filters?.traceIds);
+  applySingleOrArrayFilter(acc, 'experimentId', filters?.experimentIds);
   applySingleOrArrayFilter(acc, 'name', filters?.name);
   applySingleOrArrayFilter(acc, 'provider', filters?.provider);
   applySingleOrArrayFilter(acc, 'model', filters?.model);
   applySingleOrArrayFilter(acc, 'costUnit', filters?.costUnit);
   if (filters?.labels) {
     acc.conditions.push(`"labels" @> $${acc.next++}::jsonb`);
-    acc.params.push(JSON.stringify(filters.labels));
+    acc.params.push(toPgJson(filters.labels));
   }
 }
 
@@ -87,11 +90,11 @@ export async function batchCreateMetrics(
   client: DbClient,
   schema: string,
   args: BatchCreateMetricsArgs,
+  partitioning: PartitioningOptions,
 ): Promise<void> {
   if (args.metrics.length === 0) return;
   const rows = args.metrics.map(metricRecordToRow);
-  const insert = buildInsert(schema, TABLE_METRIC_EVENTS, rows);
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_METRIC_EVENTS, rows, partitioning);
 }
 
 // ---------------------------------------------------------------------------

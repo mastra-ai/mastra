@@ -1,26 +1,32 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  Cloud,
-  CreditCard,
-  LifeBuoy,
-  LogOut,
-  Mail,
-  MessageSquare,
-  Plus,
-  Settings,
-  Trash2,
-  User,
-  UserPlus,
-  Users,
-} from 'lucide-react';
 import { useState } from 'react';
 import { ContextMenu } from './context-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
+import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof ContextMenu> = {
   title: 'Elements/ContextMenu',
   component: ContextMenu,
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component:
+          'Right-click or long-press to open the app menu. Right-click again while it is open to dismiss it and use the browser’s native context menu.',
+      },
+    },
   },
 };
 
@@ -28,7 +34,7 @@ export default meta;
 type Story = StoryObj<typeof ContextMenu>;
 
 const triggerClass =
-  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border1 text-neutral4 select-none text-ui-smd';
+  'flex items-center justify-center w-80 h-60 rounded-md border border-dashed border-border text-muted-foreground select-none text-body-sm';
 
 export const Default: Story = {
   render: () => (
@@ -45,6 +51,21 @@ export const Default: Story = {
   ),
 };
 
+/** A long menu scrolls inside the popup; the scrollbar stays clear of the rounded corners. */
+export const WithManyItems: Story = {
+  render: () => (
+    <ContextMenu>
+      <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
+      <ContextMenu.Content className="w-56">
+        <ContextMenu.Label>Many items</ContextMenu.Label>
+        {Array.from({ length: 30 }, (_, i) => (
+          <ContextMenu.Item key={i}>Item {i + 1}</ContextMenu.Item>
+        ))}
+      </ContextMenu.Content>
+    </ContextMenu>
+  ),
+};
+
 export const WithIconsAndShortcuts: Story = {
   render: () => (
     <ContextMenu>
@@ -53,17 +74,17 @@ export const WithIconsAndShortcuts: Story = {
         <ContextMenu.Group>
           <ContextMenu.Label>My Account</ContextMenu.Label>
           <ContextMenu.Item>
-            <User />
+            <IconUser />
             <span>Profile</span>
             <ContextMenu.Shortcut>Ctrl+P</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Billing</span>
             <ContextMenu.Shortcut>Ctrl+B</ContextMenu.Shortcut>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <Settings />
+            <IconSettingsGear5 />
             <span>Settings</span>
             <ContextMenu.Shortcut>Ctrl+S</ContextMenu.Shortcut>
           </ContextMenu.Item>
@@ -72,17 +93,17 @@ export const WithIconsAndShortcuts: Story = {
         <ContextMenu.Group>
           <ContextMenu.Label>Team</ContextMenu.Label>
           <ContextMenu.Item>
-            <Users />
+            <IconUserDuo />
             <span>Team</span>
           </ContextMenu.Item>
           <ContextMenu.Item>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </ContextMenu.Item>
         </ContextMenu.Group>
         <ContextMenu.Separator />
         <ContextMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
           <ContextMenu.Shortcut>Ctrl+Q</ContextMenu.Shortcut>
         </ContextMenu.Item>
@@ -104,10 +125,10 @@ export const WithCheckboxItems: Story = {
           <ContextMenu.Label>Appearance</ContextMenu.Label>
           <ContextMenu.Separator />
           <ContextMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </ContextMenu.CheckboxItem>
           <ContextMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel
@@ -145,38 +166,38 @@ export const WithSubMenu: Story = {
       <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
       <ContextMenu.Content className="w-56">
         <ContextMenu.Item>
-          <Mail />
+          <IconEmail2 />
           <span>Email</span>
         </ContextMenu.Item>
         <ContextMenu.Item>
-          <MessageSquare />
+          <IconChatBubble7 />
           <span>Message</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Sub>
           <ContextMenu.SubTrigger>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </ContextMenu.SubTrigger>
           <ContextMenu.SubContent>
             <ContextMenu.Item>
-              <Mail />
+              <IconEmail2 />
               <span>Email</span>
             </ContextMenu.Item>
             <ContextMenu.Item>
-              <MessageSquare />
+              <IconChatBubble7 />
               <span>Message</span>
             </ContextMenu.Item>
             <ContextMenu.Separator />
             <ContextMenu.Item>
-              <Plus />
+              <IconPlusMedium />
               <span>More...</span>
             </ContextMenu.Item>
           </ContextMenu.SubContent>
         </ContextMenu.Sub>
         <ContextMenu.Separator />
         <ContextMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
@@ -190,19 +211,97 @@ export const States: Story = {
       <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
       <ContextMenu.Content className="w-56">
         <ContextMenu.Item>
-          <User />
+          <IconUser />
           <span>Default item</span>
         </ContextMenu.Item>
         <ContextMenu.Item disabled>
-          <Cloud />
+          <IconCloud />
           <span>Disabled item</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item variant="destructive">
-          <Trash2 />
+          <TrashIcon />
           <span>Destructive item</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
     </ContextMenu>
+  ),
+};
+
+/** Every item kind side by side, to compare against DropdownMenu / Select / Combobox. */
+export const KitchenSink: Story = {
+  render: () => {
+    const [checked, setChecked] = useState(true);
+    const [radio, setRadio] = useState('medium');
+    return (
+      <ContextMenu>
+        <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
+        <ContextMenu.Content className="w-56">
+          <ContextMenu.Label>Account</ContextMenu.Label>
+          <ContextMenu.Item>Plain item</ContextMenu.Item>
+          <ContextMenu.Item>
+            <IconUser />
+            <span>With icon</span>
+            <ContextMenu.Shortcut>⇧⌘P</ContextMenu.Shortcut>
+          </ContextMenu.Item>
+          <ContextMenu.Item disabled>
+            <IconCreditCard1 />
+            <span>Disabled</span>
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.CheckboxItem checked={checked} onCheckedChange={setChecked}>
+            Checkbox item
+          </ContextMenu.CheckboxItem>
+          <ContextMenu.RadioGroup value={radio} onValueChange={setRadio}>
+            <ContextMenu.RadioItem value="small">Radio small</ContextMenu.RadioItem>
+            <ContextMenu.RadioItem value="medium">Radio medium</ContextMenu.RadioItem>
+          </ContextMenu.RadioGroup>
+          <ContextMenu.Separator />
+          <ContextMenu.Sub>
+            <ContextMenu.SubTrigger>
+              <IconUserAdd />
+              <span>Sub menu</span>
+            </ContextMenu.SubTrigger>
+            <ContextMenu.SubContent>
+              <ContextMenu.Item>
+                <IconEmail2 />
+                <span>Email</span>
+              </ContextMenu.Item>
+              <ContextMenu.Item>
+                <IconChatBubble7 />
+                <span>Message</span>
+              </ContextMenu.Item>
+            </ContextMenu.SubContent>
+          </ContextMenu.Sub>
+          <ContextMenu.Separator />
+          <ContextMenu.Item variant="destructive">
+            <TrashIcon />
+            <span>Destructive</span>
+          </ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>
+    );
+  },
+};
+
+/** Stacking check: a right-click menu opened inside a modal Dialog (z-50) must render above it. */
+export const InsideDialog: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Dialog</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <ContextMenu>
+            <ContextMenu.Trigger className={cn(triggerClass, 'w-full')}>Right click here</ContextMenu.Trigger>
+            <ContextMenu.Content>
+              <ContextMenu.Item>Plain item</ContextMenu.Item>
+              <ContextMenu.Item>Second item</ContextMenu.Item>
+            </ContextMenu.Content>
+          </ContextMenu>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   ),
 };

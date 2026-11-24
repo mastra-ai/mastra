@@ -37,7 +37,7 @@ async function rewritePathAliases(rootDir: string) {
 }
 
 export default defineConfig(options => ({
-  entry: ['src/index.ts', 'src/ui/index.ts'],
+  entry: ['src/index.ts', 'src/ui/index.ts', 'src/chat/index.ts', 'src/hooks/!(shared|__tests__)/index.ts'],
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
@@ -45,9 +45,8 @@ export default defineConfig(options => ({
   clean: !options.watch,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
-    neverBundle: [/^@mastra\/core/],
+    neverBundle: [/^@mastra\/core/, /^@tanstack\/react-query/],
   },
   onSuccess: async () => {
     await generateTypes(process.cwd());

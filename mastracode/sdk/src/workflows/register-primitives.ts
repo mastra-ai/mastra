@@ -28,7 +28,7 @@ import type { Agent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { createNotificationInboxTool } from '@mastra/core/notifications';
 import { LocalFilesystem, LocalSandbox, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
-import { MASTRACODE_WORKSPACE_TOOLS } from '../agents/tool-availability.js';
+import { createMastraCodeWorkspaceTools } from '../agents/tool-availability.js';
 import { LazyNotificationsStorage } from '../agents/tools.js';
 import { workflowBuilderAgent } from '../agents/workflow-builder-agent.js';
 import type { McpManager } from '../mcp';
@@ -75,8 +75,8 @@ export async function registerWorkflowBuilderPrimitives(
       basePath: projectPath,
       allowedPaths: [projectPath, ...allowedPaths],
     }),
-    sandbox: new LocalSandbox({ workingDirectory: projectPath }),
-    tools: MASTRACODE_WORKSPACE_TOOLS,
+    sandbox: new LocalSandbox({ workingDirectory: projectPath, timeout: 30_000 }),
+    tools: createMastraCodeWorkspaceTools(),
   });
   const workspaceTools = await createWorkspaceTools(workspace, { workspace });
   for (const [toolId, tool] of Object.entries(workspaceTools)) {
@@ -85,7 +85,7 @@ export async function registerWorkflowBuilderPrimitives(
 
   // 3. Model-independent web tools. Provider-native web tools (Anthropic/OpenAI)
   //    are model-locked and would freeze workflows to one provider.
-  const configuredWebTools = createConfiguredWebTools();
+  const configuredWebTools = await createConfiguredWebTools();
   if (configuredWebTools) {
     mastra.addTool(configuredWebTools.web_search, 'web-search');
     mastra.addTool(configuredWebTools.web_extract, 'web-extract');

@@ -13,17 +13,22 @@ import {
   inferFactoryResponseShape,
 } from '../../scripts/generate-api-cli-route-metadata.js';
 import { buildAttentionRoutes } from './attention.js';
+import { buildAutomationRunRoutes } from './automation-runs.js';
+import { BoardRoutes } from './boards.js';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
   createWorkItemBodySchema,
   decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
+  sessionRowsQuerySchema,
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
-import { buildSupervisorRoutes } from './supervisor.js';
+import { SandboxEnvRoutes } from './sandbox-envs.js';
+import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -44,21 +49,46 @@ function registeredFactoryRoutes() {
     audit: {},
     projects: {},
     workItems,
-    comments: {},
     queueHealth: {},
     liveSessions: {},
+    projectSessions: async () => [],
+    activeRuns: () => [],
   } as never).routes();
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
-    comments: {} as never,
     liveSessions: {} as never,
     resolveProject: async () => ({}) as never,
   });
-  const supervisor = buildSupervisorRoutes({
-    workItems: workItems as never,
-    resolveProject: async () => ({}) as never,
-  });
-  return [...projects, ...work, ...attention, ...supervisor];
+  const automationRuns = buildAutomationRunRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    configVersion: 'test',
+  } as never);
+  const boards = new BoardRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    storage: {},
+    boards: {},
+  } as never).routes();
+  const skills = new SkillRoutes({ auth: {}, controllerId: 'code', controller: {}, overrides: {} } as never).routes();
+  const intakeRoutes = new IntakeRouteRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    storage: {},
+    boards: {},
+  } as never).routes();
+  const sandboxEnvs = new SandboxEnvRoutes({
+    auth: {},
+    projects: {},
+    sandboxEnvs: {},
+    writable: true,
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes, ...sandboxEnvs];
 }
 
 describe('Factory route contracts', () => {
@@ -75,15 +105,38 @@ describe('Factory route contracts', () => {
       description: null,
     });
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
+    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
       defaultModelId: null,
-      autoRunEnabled: true,
+      reviewTestChecksEnabled: true,
     });
+    expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
+    expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
     expect(createWorkItemBodySchema.parse({ title: ' Card ', stages: ['intake'], ignored: true })).toEqual({
       title: 'Card',
       stages: ['intake'],
     });
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
+  });
+
+  it('accepts legacy card envelopes while validating normalized facts when present', () => {
+    const legacy = {
+      id: projectId,
+      title: 'Existing card',
+      externalSource: null,
+      stages: ['planning'],
+      metadata: { labels: ['docs'] },
+      revision: 7,
+      acceptedAt: '2026-10-01T01:00:00.000Z',
+      autonomyArmedAt: null,
+      plansPreapprovedAt: null,
+    };
+    const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
+    const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
+    const listed = { workItems: [legacy] };
+    expect(list.parse(listed)).toEqual(listed);
+    expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
+    expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
+    expect(single.safeParse({ workItem: { ...legacy, workItem: null } }).success).toBe(false);
   });
 
   it('accepts custom transition identifiers and rejects malformed identifiers', () => {
@@ -122,19 +175,24 @@ describe('Factory route contracts', () => {
     });
     expect(decisionQuerySchema.safeParse({ before: 'invalid' }).success).toBe(false);
 
-    const attentionCursor = Buffer.from(JSON.stringify({ mention: ['2030-01-02T00:00:00.000Z', decisionId] })).toString(
-      'base64url',
-    );
+    const attentionCursor = Buffer.from(
+      JSON.stringify({ 'automation-proposed': ['2030-01-02T00:00:00.000Z', decisionId] }),
+    ).toString('base64url');
     const attention = attentionQuerySchema.parse({
       before: attentionCursor,
       limit: '0',
       search: '  FIND ME  ',
-      kind: ['mention', 'agent-waiting'],
+      kind: ['automation-proposed', 'agent-waiting'],
     });
-    expect(attention).toMatchObject({ view: 'open', limit: 1, search: 'find me', kind: ['mention', 'agent-waiting'] });
+    expect(attention).toMatchObject({
+      view: 'open',
+      limit: 1,
+      search: 'find me',
+      kind: ['automation-proposed', 'agent-waiting'],
+    });
     expect(attentionQuerySchema.parse({}).kind).toBeUndefined();
     expect(attentionQuerySchema.safeParse({ kind: ['bogus'] }).success).toBe(false);
-    expect(attention.before?.get('mention')).toEqual({
+    expect(attention.before?.get('automation-proposed')).toEqual({
       occurredAt: new Date('2030-01-02T00:00:00.000Z'),
       id: decisionId,
     });
@@ -143,7 +201,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.parse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: String(Number.MAX_SAFE_INTEGER),
       }).occurrence,
@@ -151,7 +209,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.safeParse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: '9007199254740992',
       }).success,
@@ -179,23 +237,62 @@ describe('Factory route contracts', () => {
     );
   });
 
+  it('parses a sidebar session-rows view, reading repeated pins and windows', () => {
+    expect(sessionRowsQuerySchema.parse({})).toEqual({
+      sort: 'activity',
+      groupBy: 'none',
+      owner: 'all',
+      pin: new Set(),
+      window: new Map(),
+    });
+    const view = sessionRowsQuerySchema.parse({
+      owner: 'owner:user-2',
+      children: 'true',
+      pin: ['session-1', 'session-2', 'session-1'],
+      window: ['board:work:25', 'user:500'],
+    });
+    expect(view.pin).toEqual(new Set(['session-1', 'session-2']));
+    expect(view.window).toEqual(
+      new Map([
+        ['board:work', 25],
+        ['user', 500],
+      ]),
+    );
+    expect(view.owner).toBe('owner:user-2');
+    for (const window of ['user:0', 'user:501', 'user:01', 'user:', ':5', 'user']) {
+      expect(sessionRowsQuerySchema.safeParse({ window: [window] }).success, window).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ window: ['user:1'] }).success).toBe(true);
+    expect(sessionRowsQuerySchema.safeParse({ window: ['board:work:5', 'board:work:10'] }).success).toBe(false);
+    for (const owner of ['someone', 'owner:', 'mine ']) {
+      expect(sessionRowsQuerySchema.safeParse({ owner }).success, owner).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ children: 'false' }).success).toBe(false);
+  });
+
   it('accepts representative successful response envelopes', () => {
-    const ATTENTION_KINDS = [
-      'automation-failed',
-      'automation-proposed',
-      'mention',
-      'activity',
-      'supervisor-finding',
-      'agent-waiting',
-    ];
+    const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
-      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId }] }).success,
+      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
+        .success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
-        workItems: [{ id: projectId }],
-        runningSessionIds: ['session-1'],
-        parkedSessionIds: ['session-2'],
+        workItems: [
+          {
+            id: projectId,
+            workItem: {
+              provider: 'github',
+              kind: 'issue',
+              key: 'acme/app#42',
+              url: 'https://github.com/acme/app/issues/42',
+              title: 'Fix login',
+              state: 'open',
+              labels: ['bug'],
+              author: 'reporter',
+            },
+          },
+        ],
       }).success,
     ).toBe(true);
     expect(
@@ -203,13 +300,6 @@ describe('Factory route contracts', () => {
         items: [],
         kinds: Object.fromEntries(ATTENTION_KINDS.map(kind => [kind, { open: 0, unread: 0, latest: null }])),
         hasMore: false,
-      }).success,
-    ).toBe(true);
-    expect(
-      FACTORY_ROUTE_CONTRACTS.supervisorHealth.responseSchema.safeParse({
-        checkedAt: new Date().toISOString(),
-        findings: [],
-        counts: { 'decision-failed': 0 },
       }).success,
     ).toBe(true);
   });

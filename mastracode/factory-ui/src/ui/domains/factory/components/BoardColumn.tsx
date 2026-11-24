@@ -1,16 +1,16 @@
+import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useRef, useState } from 'react';
 
-import { CARD_MIME, readDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
+import { useBoardDropZone } from '../hooks/useBoardDropZone';
 import type { BoardStageId } from '../stages';
 import { BoardStageIcon } from './BoardIcons';
 
 /** Header cells and card lanes share this so the two rows stay column-aligned. */
 function columnWidthClass(collapsed: boolean): string {
-  return cn('w-80 min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed && 'lg:w-14');
+  return cn('min-w-0 shrink-0 transition-[width] motion-reduce:transition-none', collapsed ? 'w-14' : 'w-80');
 }
 
 function ColumnTaskBadge({ count, total, label }: { count: number; total: number; label: string }) {
@@ -19,13 +19,16 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
   const dashOffset = circumference * (1 - ratio);
 
   return (
-    <span
+    <Txt
+      as="span"
+      variant="meta"
+      tone="muted"
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="border-border1 bg-surface2 text-ui-xs text-icon4 flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full border px-2 font-medium tabular-nums"
+      className="bg-fill flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full px-2 tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
-        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border1" />
+        <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border" />
         <circle
           cx="7"
           cy="7"
@@ -35,36 +38,13 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
-          className="stroke-icon5 transition-[stroke-dashoffset] motion-reduce:transition-none"
+          className="stroke-foreground transition-[stroke-dashoffset] motion-reduce:transition-none"
         />
       </svg>
       <span aria-hidden>{count}</span>
-    </span>
+    </Txt>
   );
 }
-
-const BOARD_CARD_SELECTOR = '[data-testid="work-item-card"], [data-testid="candidate-card"]';
-const BOARD_CARD_GAP_PX = 10;
-
-function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
-  const cards = cardList.querySelectorAll<HTMLElement>(BOARD_CARD_SELECTOR);
-  if (cards.length === 0) return 0;
-
-  for (let index = 0; index < cards.length; index += 1) {
-    const card = cards.item(index);
-    if (!card) continue;
-    const bounds = card.getBoundingClientRect();
-    if (pointerY < bounds.top + bounds.height / 2) {
-      return Math.max(0, card.offsetTop - (index === 0 ? 0 : BOARD_CARD_GAP_PX / 2));
-    }
-  }
-
-  const lastCard = cards.item(cards.length - 1);
-  return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
-}
-
-const COLUMN_ACTION_REVEAL_CLASS =
-  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
 
 export function BoardColumnHeader({
   phaseKind,
@@ -74,6 +54,7 @@ export function BoardColumnHeader({
   totalTaskCount,
   loading,
   collapsed,
+  hovered,
   headerAction,
   headerExtras,
 }: {
@@ -81,73 +62,57 @@ export function BoardColumnHeader({
   label: string;
   taskCount: number;
   totalTaskCount: number;
-  phaseKind?: 'resting' | 'working' | 'terminal';
+  phaseKind?: BoardPhaseKind;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading: boolean;
   collapsed: boolean;
+  /** The pointer is over this column, header or cards; reveals `headerAction`. */
+  hovered: boolean;
+  /** Opens the composer down a collapsed column, under its label. */
   headerAction?: React.ReactNode;
   headerExtras?: React.ReactNode;
 }) {
   if (collapsed) {
     return (
       <div
-        className={cn(
-          columnWidthClass(true),
-          'group/column relative flex min-h-8 items-center justify-end lg:justify-center',
-        )}
+        data-board-stage={stage}
+        data-hovered={hovered || undefined}
+        data-collapsed
+        className={cn(columnWidthClass(true), 'group/column relative flex min-h-8 items-center justify-center')}
       >
-        <span
-          aria-hidden
-          className={cn(
-            'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
-            headerAction &&
-              'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
-          )}
-        >
+        <Txt as="span" variant="meta" tone="muted" aria-hidden className="flex h-8 items-center tabular-nums">
           {taskCount}
-        </span>
-        {headerAction ? (
-          <div
-            className={cn(
-              'absolute inset-y-0 right-0 flex items-center justify-center lg:inset-x-0',
-              COLUMN_ACTION_REVEAL_CLASS,
-            )}
-          >
-            {headerAction}
-          </div>
-        ) : null}
-        <Txt
-          as="h2"
-          variant="ui-smd"
-          className="text-icon3 pointer-events-none absolute top-full right-0 m-0 py-1 font-semibold [writing-mode:horizontal-tb] lg:right-auto lg:left-1/2 lg:-translate-x-1/2 lg:[writing-mode:vertical-rl]"
-        >
-          {label}
         </Txt>
+        <div className="absolute top-full left-1/2 flex -translate-x-1/2 flex-col items-center gap-2 py-1">
+          <Txt
+            tone="muted"
+            as="h2"
+            variant="label"
+            className="pointer-events-none m-0 whitespace-nowrap [writing-mode:vertical-rl]"
+          >
+            {label}
+          </Txt>
+          {headerExtras}
+          {headerAction}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={cn(columnWidthClass(false), 'group/column flex min-h-8 items-start justify-between gap-2')}>
+    <div
+      data-board-stage={stage}
+      className={cn(columnWidthClass(false), 'flex min-h-8 items-start justify-between gap-2')}
+    >
       <div className="flex h-8 min-w-0 items-center gap-2">
         <BoardStageIcon stage={stage} kind={phaseKind} />
-        <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
+        <Txt tone="muted" as="h2" variant="label" className="m-0 truncate">
           {label}
         </Txt>
-        {loading ? (
-          <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-        ) : totalTaskCount > 0 ? (
-          <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-        ) : null}
+        {loading && <Skeleton className="h-6 w-12 shrink-0 rounded-full" />}
+        {!loading && totalTaskCount > 0 && <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />}
       </div>
-      {headerExtras || headerAction ? (
-        <div className="flex h-8 shrink-0 items-center gap-1">
-          {headerExtras}
-          {headerAction ? (
-            <div className={cn('flex items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
-          ) : null}
-        </div>
-      ) : null}
+      {headerExtras && <div className="flex h-8 shrink-0 items-center gap-1">{headerExtras}</div>}
     </div>
   );
 }
@@ -156,59 +121,38 @@ export function BoardColumn({
   stage,
   label,
   collapsed,
+  hovered,
+  action,
   onDrop,
   children,
 }: {
   stage: BoardStageId;
   label: string;
   collapsed: boolean;
+  hovered: boolean;
+  /** Opens the composer, above the cards so it scrolls with them; shown while `hovered`. */
+  action?: React.ReactNode;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   children: React.ReactNode;
 }) {
-  const [dragOver, setDragOver] = useState(false);
-  const [dropLineTop, setDropLineTop] = useState(0);
-  const cardListRef = useRef<HTMLDivElement>(null);
+  const dropZone = useBoardDropZone({ stage, onDrop });
 
   return (
     <section
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
+      data-board-stage={stage}
+      data-hovered={hovered || undefined}
       className={cn(
         columnWidthClass(collapsed),
-        'flex flex-col transition-[width,background-color] motion-reduce:transition-none',
-        collapsed && 'rounded-lg',
-        collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
+        'group/column',
+        'flex flex-col rounded-lg transition-[width,background-color] motion-reduce:transition-none',
+        dropZone.isDragOver && 'bg-background ring-1 ring-border',
       )}
-      onDragOver={event => {
-        if (!event.dataTransfer.types.includes(CARD_MIME)) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-        setDragOver(true);
-        const cardList = cardListRef.current;
-        if (cardList) setDropLineTop(dropLinePosition(cardList, event.clientY));
-      }}
-      onDragLeave={event => {
-        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
-        setDragOver(false);
-      }}
-      onDrop={event => {
-        event.preventDefault();
-        setDragOver(false);
-        const payload = readDragPayload(event);
-        if (payload) onDrop(payload, stage);
-      }}
+      {...dropZone.dropZoneProps}
     >
-      <div ref={cardListRef} className="relative flex min-h-16 flex-1 flex-col gap-2.5 pb-2">
-        {collapsed ? null : children}
-        <div
-          aria-hidden
-          style={{ top: dropLineTop }}
-          className={cn(
-            'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
-            dragOver ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-      </div>
+      {!collapsed && <div className="mb-1 h-4 shrink-0">{action}</div>}
+      <div className="flex min-h-16 flex-1 flex-col gap-2.5 pb-2">{collapsed ? null : children}</div>
     </section>
   );
 }

@@ -7,6 +7,18 @@ describe('agent-property-access', () => {
     testTransform(transformer, 'agent-property-access');
   });
 
+  it('transforms Agent tools access to the v1 listTools method', () => {
+    const input = `
+const agent = new Agent({});
+const tools = agent.tools;
+`;
+
+    const output = applyTransform(transformer, input);
+
+    expect(output).toContain('const tools = agent.listTools();');
+    expect(output).not.toContain('agent.getTools()');
+  });
+
   it('does not transform properties on non-Agent variables', () => {
     const input = `
 // Some other object, not from new Agent()

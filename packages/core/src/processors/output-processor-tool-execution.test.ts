@@ -62,25 +62,24 @@ describe('Output Processor Tool Result Chunks', () => {
             rawCall: { rawPrompt: [], rawSettings: {} },
             warnings: [],
           };
-        } else {
-          // Second LLM call - after tool execution
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: 'The tool returned: Echo: hello' },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-              },
-            ]),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-            warnings: [],
-          };
         }
+        // Second LLM call - after tool execution
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The tool returned: Echo: hello' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 
@@ -229,25 +228,24 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
             rawCall: { rawPrompt: [], rawSettings: {} },
             warnings: [],
           };
-        } else {
-          // Second LLM call - after tool execution
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: 'The tool executed successfully!' },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-              },
-            ]),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-            warnings: [],
-          };
         }
+        // Second LLM call - after tool execution
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The tool executed successfully!' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 
@@ -458,6 +456,89 @@ describe('processToolResult lifecycle hook', () => {
     }
 
     expect(sawTripwire).toBe(true);
+  });
+
+  describe('abort() ends the run at the first aborted tool result (#26008)', () => {
+    const makeTools = () => ({
+      toolA: createTool({ id: 'toolA', description: 'a', inputSchema: z.object({}), execute: async () => 'A' }),
+      toolB: createTool({ id: 'toolB', description: 'b', inputSchema: z.object({}), execute: async () => 'B' }),
+    });
+
+    const makeModel = (toolNames: string[], modelCalls: { count: number }) =>
+      new MockLanguageModelV2({
+        doStream: async () => {
+          modelCalls.count++;
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              ...toolNames.map(toolName => ({
+                type: 'tool-call' as const,
+                toolCallId: `call-${toolName}`,
+                toolName,
+                input: '{}',
+              })),
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+    const run = async (toolNames: string[], streamOptions: Record<string, unknown> = {}) => {
+      const seen: string[] = [];
+      const modelCalls = { count: 0 };
+      class AbortOnToolA implements Processor {
+        readonly id = 'abort-on-tool-a';
+        async processToolResult({ toolName, abort }: any) {
+          seen.push(toolName);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          if (toolName === 'toolA') abort('blocked toolA');
+        }
+      }
+      const agent = new Agent({
+        id: `tr-abort-${toolNames.length}`,
+        name: 'Test Agent',
+        instructions: 'tr',
+        model: makeModel(toolNames, modelCalls) as any,
+        tools: makeTools(),
+        outputProcessors: [new AbortOnToolA()],
+      });
+      const errorSpy = vi.spyOn(console, 'error');
+      const stream = await agent.stream('go', { maxSteps: 5, ...streamOptions });
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) chunks.push(chunk);
+      // The loop keeps running after the client stream closes; give it time to misbehave.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const logged = errorSpy.mock.calls.flat().map(String).join('\n');
+      errorSpy.mockRestore();
+      return { seen, modelCalls: modelCalls.count, chunks, logged };
+    };
+
+    it('does not throw or process later results with parallel tool calls', async () => {
+      const { seen, modelCalls, chunks, logged } = await run(['toolA', 'toolB']);
+      expect(chunks.filter(c => c.type === 'tripwire')).toHaveLength(1);
+      expect(logged).not.toContain('Controller is already closed');
+      expect(seen).toEqual(['toolA']);
+      expect(modelCalls).toBe(1);
+    });
+
+    it('does not call the model again after a single aborted tool call', async () => {
+      const { modelCalls, chunks } = await run(['toolA']);
+      expect(chunks.filter(c => c.type === 'tripwire')).toHaveLength(1);
+      expect(modelCalls).toBe(1);
+    });
+
+    it('does not let onIterationComplete resume the run after an abort', async () => {
+      const { modelCalls, chunks } = await run(['toolA'], { onIterationComplete: () => ({ continue: true }) });
+      expect(chunks.filter(c => c.type === 'tripwire')).toHaveLength(1);
+      expect(modelCalls).toBe(1);
+    });
   });
 
   it('abort() prevents the raw tool result from reaching the message list', async () => {

@@ -25,6 +25,7 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-base';
 import {
   ATTR_GEN_AI_INPUT_MESSAGES,
+  ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_OUTPUT_MESSAGES,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
@@ -34,7 +35,7 @@ import {
 
 // GenAI usage attribute keys (not all are in @opentelemetry/semantic-conventions yet)
 // @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
-const GEN_AI_USAGE_REASONING_TOKENS = 'gen_ai.usage.reasoning_tokens';
+const GEN_AI_USAGE_REASONING_TOKENS = 'gen_ai.usage.reasoning.output_tokens';
 const GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = 'gen_ai.usage.cache_read.input_tokens';
 const GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS = 'gen_ai.usage.cache_creation.input_tokens';
 const GEN_AI_USAGE_AUDIO_INPUT_TOKENS = 'gen_ai.usage.audio_input_tokens';
@@ -53,9 +54,8 @@ const MASTRA_SPAN_TYPE = 'mastra.span.type';
  * Only non-CHAIN types are mapped here - all other span types default to CHAIN.
  */
 const SPAN_TYPE_TO_KIND: Record<string, OpenInferenceSpanKind> = {
-  // Model spans -> LLM
-  model_generation: OpenInferenceSpanKind.LLM,
-  model_step: OpenInferenceSpanKind.LLM,
+  // The model call itself (gen_ai.operation.name === 'chat') is mapped to LLM
+  // below; the generation loop and its steps around it default to CHAIN.
   model_chunk: OpenInferenceSpanKind.LLM,
   // Tool spans -> TOOL
   tool_call: OpenInferenceSpanKind.TOOL,
@@ -239,7 +239,9 @@ export class OpenInferenceOTLPTraceExporter extends OTLPTraceExporter {
         const spanType = mastraOther[MASTRA_SPAN_TYPE];
         if (typeof spanType === 'string') {
           mutableSpan.attributes[SemanticConventions.OPENINFERENCE_SPAN_KIND] =
-            SPAN_TYPE_TO_KIND[spanType] ?? OpenInferenceSpanKind.CHAIN;
+            attributes[ATTR_GEN_AI_OPERATION_NAME] === 'chat'
+              ? OpenInferenceSpanKind.LLM
+              : (SPAN_TYPE_TO_KIND[spanType] ?? OpenInferenceSpanKind.CHAIN);
         }
       }
 

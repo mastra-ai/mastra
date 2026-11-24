@@ -20,8 +20,8 @@ The MDocument class processes documents for RAG applications. The main methods a
   },
   {
     name: 'type',
-    type: "'text' | 'html' | 'markdown' | 'json' | 'latex'",
-    description: 'Type of document content',
+    type: 'string',
+    description: "Type of document content. Recognized values are 'text', 'html', 'markdown', 'json', and 'latex'.",
   },
 ]}
 />
@@ -67,8 +67,13 @@ static fromJSON(json: string, metadata?: Record<string, any>): MDocument
 Splits document into chunks and optionally extracts metadata.
 
 ```typescript oxfmt:false
-async chunk(params?: ChunkParams): Promise<Chunk[]>
+async chunk(
+  params?: ChunkParams,
+  options?: { observabilityContext?: ObservabilityContext },
+): Promise<Chunk[]>
 ```
+
+Pass `observabilityContext` to attach the chunking and metadata extraction spans to an existing trace.
 
 See [chunk() reference](./chunk) for detailed options.
 

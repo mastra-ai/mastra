@@ -379,6 +379,43 @@ describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
       expect('issues' in resolved && resolved.issues).toBeFalsy();
       expect(resolved.value).toEqual({ memory: { work: { company: 'TechStartup Inc' } } });
     });
+
+    it('drops nulls for optional fields inside nullable objects and arrays', async () => {
+      const tool = updateWorkingMemoryTool({
+        workingMemory: {
+          enabled: true,
+          schema: z.object({
+            profile: z.object({ nickname: z.string().optional(), city: z.string() }).nullable(),
+            pets: z.array(z.object({ name: z.string(), breed: z.string().optional() })).nullable(),
+          }),
+        },
+      } as any);
+      const resolved = await (tool.inputSchema as any)['~standard'].validate({
+        memory: { profile: { nickname: null, city: 'Vancouver' }, pets: [{ name: 'Rex', breed: null }] },
+      });
+
+      expect('issues' in resolved && resolved.issues).toBeFalsy();
+      expect(resolved.value).toEqual({ memory: { profile: { city: 'Vancouver' }, pets: [{ name: 'Rex' }] } });
+    });
+
+    it('keeps nulls for keys the schema does not declare', async () => {
+      const strictTool = updateWorkingMemoryTool({
+        workingMemory: { enabled: true, schema: z.strictObject({ name: z.string().optional() }) },
+      } as any);
+      const strict = await (strictTool.inputSchema as any)['~standard'].validate({
+        memory: { name: 'Ada', unexpected: null },
+      });
+      expect('issues' in strict && strict.issues).toBeTruthy();
+
+      const recordTool = updateWorkingMemoryTool({
+        workingMemory: { enabled: true, schema: z.record(z.string(), z.string().nullable()) },
+      } as any);
+      const record = await (recordTool.inputSchema as any)['~standard'].validate({
+        memory: { city: null, toString: null },
+      });
+      expect('issues' in record && record.issues).toBeFalsy();
+      expect(record.value).toEqual({ memory: { city: null, toString: null } });
+    });
   });
 });
 

@@ -1,11 +1,16 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 
+import { createStateSigner } from '../../../state-signing.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
+import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 
-import { createPlatformStorageForTests } from '../test-utils.js';
+import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
 
 vi.mock('./event-worker.js', () => ({
   PlatformLinearEventWorker: class {
@@ -15,7 +20,7 @@ vi.mock('./event-worker.js', () => ({
   },
 }));
 
-import { PlatformLinearIntegration } from './integration.js';
+import { encodeTeamSourceId, PlatformLinearIntegration } from './integration.js';
 
 const config = {
   baseUrl: 'https://platform.example.com',
@@ -66,6 +71,7 @@ const issue = {
   labels: [{ id: 'label-1', name: 'bug' }],
   state: { id: 'state-1', name: 'Todo', type: 'unstarted' },
   team: { id: 'team-1', key: 'ENG', name: 'Engineering' },
+  project: { id: 'project-1' },
   assignee: user,
   creator: user,
   createdAt: '2026-07-01T00:00:00Z',
@@ -93,6 +99,407 @@ function createIntegration(fetchImpl?: typeof fetch): PlatformLinearIntegration 
 }
 
 describe('PlatformLinearIntegration', () => {
+  describe('workspace connection recovery', () => {
+    const provider = setupServer();
+    const disconnected = { ...workspace, linearWorkspaceId: 'old', linearWorkspaceName: 'Mastra', connected: false };
+    beforeEach(() => provider.listen({ onUnhandledRequest: 'error' }));
+    afterEach(() => provider.close());
+
+    async function recoveryApp() {
+      const seed = await createFactoryStorageForTests();
+      const integration = createIntegration();
+      const sourceControl = seed.sourceControl.forIntegration('linear');
+      const context: IntegrationContext = {
+        auth: fakeAuth(),
+        baseUrl: 'https://factory.example',
+        stateSigner: createStateSigner('test-secret'),
+        storage: {
+          generic: seed.integrations.forIntegration('linear'),
+          sourceControl,
+          sourceControls: [sourceControl],
+          projects: seed.projects,
+          intake: seed.intake,
+          memorySettings: seed.memorySettings,
+          modelDefaults: seed.modelDefaults,
+          channelIdentity: seed.channelIdentity,
+        },
+      };
+      integration.initialize?.({ storage: context.storage.generic, projects: seed.projects, auth: context.auth });
+      const app = new Hono();
+      mountApiRoutes(app, integration.routes(context));
+      return { app, integration };
+    }
+
+    it.each([true, false])('lists disconnected workspaces by name (healthy workspace present: %s)', async healthy => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+          HttpResponse.json({
+            workspaces: [...(healthy ? [workspace] : []), disconnected],
+          }),
+        ),
+      );
+      const { app } = await recoveryApp();
+      const response = await app.request('/web/linear/status');
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toMatchObject({
+        mode: 'platform',
+        connected: healthy,
+        workspaces: expect.arrayContaining([{ id: 'old', name: 'Mastra', urlKey: 'acme', connected: false }]),
+      });
+    });
+
+    it('keeps the intended workspace in the authorization return path and verifies recovery', async () => {
+      let restored = false;
+      let authorizationReturnTo: string | null = null;
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+          HttpResponse.json({ workspaces: [workspace, { ...disconnected, connected: restored }] }),
+        ),
+        http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
+          authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
+          return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
+        }),
+      );
+      const { app } = await recoveryApp();
+      const destination = '/factories/fp-1/settings/intake';
+      const connect = await app.request(
+        `/auth/linear/connect?${new URLSearchParams({ workspace_id: 'old', return_to: destination })}`,
+      );
+      expect(connect.status).toBe(302);
+      expect(authorizationReturnTo).toBe(
+        `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'old', return_to: destination })}`,
+      );
+      if (!authorizationReturnTo) throw new Error('Authorization return path is missing');
+      const mismatch = await app.request(authorizationReturnTo);
+      expect(mismatch.headers.get('location')).toBe(
+        `${destination}?linear_reconnect=not_connected&linear_workspace_id=old`,
+      );
+      restored = true;
+      const repaired = await app.request(authorizationReturnTo);
+      expect(repaired.headers.get('location')).toBe(
+        `${destination}?linear_reconnect=connected&linear_workspace_id=old`,
+      );
+      expect((await app.request('/auth/linear/connect?workspace_id=another-org')).status).toBe(404);
+    });
+
+    it('returns to the requested page when the workspace lookup fails before reconnecting', async () => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => new HttpResponse(null, { status: 503 })),
+      );
+      const { app } = await recoveryApp();
+      const connect = await app.request(
+        `/auth/linear/connect?${new URLSearchParams({ workspace_id: 'old', return_to: '/factories/fp-1/settings/intake' })}`,
+      );
+      expect(connect.status).toBe(302);
+      expect(connect.headers.get('location')).toBe(
+        '/factories/fp-1/settings/intake?linear_reconnect=unavailable&linear_workspace_id=old',
+      );
+    });
+
+    it.each([
+      'https://example.org/steal',
+      '//example.org/steal',
+      '/\\example.org/steal',
+      '/.//factory.example//example.org/steal',
+      '/%2e//example.org/steal',
+    ])('keeps the authorization return on the Factory host for %s', async returnTo => {
+      let authorizationReturnTo: string | null = null;
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(`${config.baseUrl}/v1/server/linear/authorize`, ({ request }) => {
+          authorizationReturnTo = new URL(request.url).searchParams.get('return_to');
+          return new HttpResponse(null, { status: 302, headers: { location: 'https://linear.app/oauth/authorize' } });
+        }),
+      );
+      const { app } = await recoveryApp();
+      await app.request(`/auth/linear/connect?${new URLSearchParams({ return_to: returnTo })}`);
+      expect(authorizationReturnTo).toBe('/');
+      const result = await app.request(
+        `/auth/linear/reconnect-return?${new URLSearchParams({ workspace_id: 'workspace-1', return_to: returnTo })}`,
+      );
+      expect(result.headers.get('location')).toBe('/?linear_reconnect=connected&linear_workspace_id=workspace-1');
+    });
+
+    it.each(['projects', 'issues'])(
+      'keeps healthy workspace intake working when another workspace fails to load %s',
+      async failedResource => {
+        const other = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Unavailable workspace' };
+        const pageInfo = { hasNextPage: false, endCursor: null };
+        provider.use(
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () =>
+            HttpResponse.json({ workspaces: [workspace, other] }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`, () =>
+            HttpResponse.json({ projects: [project], pageInfo }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-2/projects`, () =>
+            failedResource === 'projects'
+              ? new HttpResponse(null, { status: 503 })
+              : HttpResponse.json({ projects: [{ ...project, id: 'project-2' }], pageInfo }),
+          ),
+          http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/issues`, () =>
+            HttpResponse.json({ issues: [issue], pageInfo }),
+          ),
+          http.get(
+            `${config.baseUrl}/v1/server/linear/workspaces/workspace-2/issues`,
+            () => new HttpResponse(null, { status: 503 }),
+          ),
+        );
+        const { app, integration } = await recoveryApp();
+        const response = await app.request('/web/linear/projects');
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({
+          projects: expect.arrayContaining([
+            {
+              id: project1SourceId,
+              name: 'Platform',
+              state: 'started',
+              teams: project.teams,
+              workspaceId: 'workspace-1',
+            },
+          ]),
+          workspaceErrors:
+            failedResource === 'projects' ? [{ workspaceId: 'workspace-2', name: 'Unavailable workspace' }] : [],
+        });
+        const intake = await integration.intake.listIssues({
+          connection: { type: 'oauth', accessToken: 'unused' },
+          sourceIds: [project1SourceId, project2SourceId],
+        });
+        expect(intake.issues.map(item => item.identifier)).toEqual(['ENG-42']);
+      },
+    );
+
+    it('reports a failed listing when no workspace could be read', async () => {
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(
+          `${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`,
+          () => new HttpResponse(null, { status: 503 }),
+        ),
+      );
+      const { app } = await recoveryApp();
+      const response = await app.request('/web/linear/projects');
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({ error: 'linear_fetch_failed' });
+    });
+
+    it('fails a later issue page instead of ending the list when every remaining source fails', async () => {
+      const project3SourceId = sourceId('workspace-1', 'project-3');
+      provider.use(
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces`, () => HttpResponse.json({ workspaces: [workspace] })),
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/projects`, () =>
+          HttpResponse.json({
+            projects: [project, { ...project, id: 'project-3' }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          }),
+        ),
+        http.get(`${config.baseUrl}/v1/server/linear/workspaces/workspace-1/issues`, ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          if (query.get('after')) return new HttpResponse(null, { status: 503 });
+          return query.get('projectIds') === 'project-3'
+            ? HttpResponse.json({
+                issues: [{ ...issue, id: 'issue-3', identifier: 'ENG-43', project: { id: 'project-3' } }],
+                pageInfo: { hasNextPage: true, endCursor: 'page-2' },
+              })
+            : HttpResponse.json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+        }),
+      );
+      const { integration } = await recoveryApp();
+      const sourceIds = [project1SourceId, project3SourceId];
+      const connection = { type: 'oauth' as const, accessToken: 'unused' };
+      const first = await integration.intake.listIssues({ connection, sourceIds });
+      expect(first.issues.map(item => item.identifier).sort()).toEqual(['ENG-42', 'ENG-43']);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      await expect(
+        integration.intake.listIssues({ connection, sourceIds, cursor: first.nextCursor ?? undefined }),
+      ).rejects.toMatchObject({ status: 503 });
+    });
+  });
+  describe('when issues belong to a Linear project', () => {
+    function projectIntegration() {
+      return createIntegration(async input => {
+        const url = new URL(String(input));
+        if (url.pathname.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+        const pageInfo = { hasNextPage: false, endCursor: null };
+        if (url.pathname.endsWith('/projects')) return json({ projects: [project], pageInfo });
+        if (url.pathname.endsWith('/teams')) return json({ teams: [issue.team], pageInfo });
+        if (url.pathname.endsWith('/issues')) return json({ issues: [issue], pageInfo });
+        if (url.pathname.endsWith('/issues/issue-1')) {
+          return json({ ...issue, comments: { nodes: [], pageInfo } });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+    }
+
+    it.each([project1SourceId, encodeTeamSourceId('workspace-1', 'team-1')])(
+      'lists the same project identity as the picker for source %s',
+      async selectedSourceId => {
+        const integration = projectIntegration();
+        const projects = await integration.listProjects();
+        const result = await integration.intake.listIssues({
+          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+          sourceIds: [selectedSourceId],
+        });
+
+        expect(result.issues).toEqual([
+          expect.objectContaining({ sourceId: selectedSourceId, projectId: projects[0].id }),
+        ]);
+      },
+    );
+
+    it('preserves the project identity during detail reads used to reconcile stored cards', async () => {
+      const integration = projectIntegration();
+      await expect(
+        integration.intake.getIssue({
+          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+          sourceId: encodeTeamSourceId('workspace-1', 'team-1'),
+          issueId: 'issue-1',
+        }),
+      ).resolves.toMatchObject({ projectId: project1SourceId });
+    });
+
+    it.each(['workspace-1', 'workspace-2'])('scopes detail project identity to %s', async workspaceId => {
+      const integration = projectIntegration();
+      await expect(
+        integration.intake.getIssue({
+          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+          sourceId: encodeTeamSourceId(workspaceId, 'team-1'),
+          issueId: 'issue-1',
+        }),
+      ).resolves.toMatchObject({ projectId: sourceId(workspaceId, 'project-1') });
+    });
+
+    it('preserves the project identity when a state update is already satisfied', async () => {
+      const integration = projectIntegration();
+      await expect(
+        integration.intake.updateIssue({
+          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+          sourceId: project1SourceId,
+          issueId: 'issue-1',
+          state: { kind: 'byName', name: 'Todo' },
+        }),
+      ).resolves.toMatchObject({ projectId: project1SourceId });
+    });
+  });
+
+  describe('when an issue has no Linear project', () => {
+    it('represents the missing project explicitly during reconciliation', async () => {
+      const integration = createIntegration(async () =>
+        json({
+          ...issue,
+          project: null,
+          comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+        }),
+      );
+      await expect(
+        integration.intake.getIssue({
+          connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+          sourceId: encodeTeamSourceId('workspace-1', 'team-1'),
+          issueId: 'issue-1',
+        }),
+      ).resolves.toMatchObject({ projectId: null });
+    });
+  });
+
+  describe('when stored Linear cards are reconciled', () => {
+    it.each([
+      { name: 'backfills older cards', metadata: {}, project: issue.project, expected: project1SourceId },
+      {
+        name: 'clears removed membership',
+        metadata: { linearProjectId: project1SourceId },
+        project: null,
+        expected: null,
+      },
+      {
+        name: 'updates moved membership',
+        metadata: { linearProjectId: project1SourceId },
+        project: { id: 'project-2' },
+        expected: sourceId('workspace-1', 'project-2'),
+      },
+    ])(
+      '$name so filtering does not depend on the current intake page',
+      async ({ metadata, project: linearProject, expected }) => {
+        const seed = await createPlatformStorageForTests();
+        const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+        const { item } = await seed.workItems.upsert({
+          orgId: project.orgId,
+          userId: project.createdBy,
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+            title: issue.title,
+            stages: ['planning'],
+            sessions: {},
+            metadata: { ...metadata, linearIssueId: issue.id },
+          },
+        });
+        const integration = createIntegration(async input => {
+          if (String(input).endsWith('/workspaces')) return json({ workspaces: [workspace] });
+          return json({
+            ...issue,
+            project: linearProject,
+            comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+          });
+        });
+        const reconcile = attachLinearIssueReconciler(integration, {
+          storage: { projects: seed.projects, intake: seed.intake },
+          runtime: { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() },
+        });
+        await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
+        await expect(seed.workItems.get({ orgId: project.orgId, id: item.id })).resolves.toMatchObject({
+          workItem: expect.objectContaining({ metadata: expect.objectContaining({ linearProjectId: expected }) }),
+        });
+        await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
+      },
+    );
+  });
+
+  describe('when a Linear issue is new to Factory', () => {
+    async function firstSight() {
+      const seed = await createPlatformStorageForTests();
+      const factoryProject = await seed.projects.create({
+        orgId: 'org-1',
+        userId: 'user-1',
+        input: { name: 'Factory' },
+      });
+      await seed.intake.saveConfig({
+        orgId: 'org-1',
+        config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+      });
+      await seed.intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'linear',
+        sourceId: project1SourceId,
+        factoryProjectId: factoryProject.id,
+      });
+      const integration = createIntegration(async input => {
+        const url = new URL(String(input));
+        const pageInfo = { hasNextPage: false, endCursor: null };
+        if (url.pathname.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+        if (url.pathname.endsWith('/workspace-1/projects')) return json({ projects: [project], pageInfo });
+        if (url.pathname.endsWith('/workspace-1/issues')) return json({ issues: [issue], pageInfo });
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      const runtime = { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() };
+      const filed = async () =>
+        (await seed.workItems.listDeferredDecisions('org-1', factoryProject.id)).map(
+          record => (record.decision as { sourceKey?: string }).sourceKey,
+        );
+      return { seed, integration, runtime, filed };
+    }
+
+    it('files it from the reconcile sweep with no board open', async () => {
+      const { seed, integration, runtime, filed } = await firstSight();
+      const reconcile = attachLinearIssueReconciler(integration, {
+        storage: { projects: seed.projects, intake: seed.intake },
+        runtime,
+      });
+
+      await expect(reconcile?.()).resolves.toMatchObject({ observed: 1, failed: 0 });
+      expect(await filed()).toEqual(['linear:ENG-42']);
+    });
+  });
+
   it('does not expose the Platform secret through synthetic Linear connections', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
     const integration = createIntegration(fetchImpl);
@@ -104,6 +511,47 @@ describe('PlatformLinearIntegration', () => {
     expect(storedConnection?.data.accessToken).not.toBe(config.accessToken);
     expect(loadedConnection.accessToken).not.toBe(config.accessToken);
     await expect(integration.getFreshAccessToken(loadedConnection)).resolves.not.toBe(config.accessToken);
+  });
+
+  it('reports a workspace link slug only when exactly one workspace is connected', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    let workspaces = [workspace, workspace2];
+    const integration = createIntegration(vi.fn<typeof fetch>(async () => json({ workspaces })));
+
+    await expect(integration.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      workspaceUrlKey: null,
+    });
+
+    workspaces = [workspace];
+    await expect(integration.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      workspaceUrlKey: 'acme',
+    });
+  });
+
+  it('checks the connection from a single workspace snapshot', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    // The first workspace disconnects between reads.
+    const snapshots = [[workspace, workspace2], [workspace2]];
+    const fetchImpl = vi.fn<typeof fetch>(async () => json({ workspaces: snapshots.shift() ?? [] }));
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.checkConnection('org-1')).resolves.toMatchObject({
+      connected: true,
+      workspaceUrlKey: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('resolves dispatch context with the platform-managed token when a workspace is connected', async () => {
@@ -136,14 +584,28 @@ describe('PlatformLinearIntegration', () => {
     ).resolves.toBeNull();
   });
 
-  it('lists connected workspace projects as Intake sources', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] }),
-      )
-      .mockResolvedValueOnce(json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } }));
+  it('lists connected workspace projects and teams as Intake sources', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, { ...workspace, linearWorkspaceId: 'old', connected: false }] });
+      }
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
     const integration = createIntegration(fetchImpl);
+
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
 
     await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
       {
@@ -152,12 +614,13 @@ describe('PlatformLinearIntegration', () => {
         type: 'project',
         metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', state: 'started' }),
       },
+      {
+        id: teamSourceId,
+        name: 'Engineering',
+        type: 'team',
+        metadata: expect.objectContaining({ workspaceId: 'workspace-1', workspaceName: 'Acme', teamKey: 'ENG' }),
+      },
     ]);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      'https://platform.example.com/v1/server/linear/workspaces',
-      expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
-    );
   });
 
   it('normalizes active project issues and filters labels client-side', async () => {
@@ -196,12 +659,227 @@ describe('PlatformLinearIntegration', () => {
           labels: ['bug'],
         }),
       ],
-      nextCursor: 'cursor-2',
+      nextCursor: expect.any(String),
     });
     const issuesUrl = String(fetchImpl.mock.calls[2]?.[0]);
     expect(issuesUrl).toContain('/workspaces/workspace-1/issues?');
     expect(issuesUrl).toContain('projectIds=project-1');
     expect(issuesUrl).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
+  });
+  it('does not fetch issues from attribution-only workspaces', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    const project2 = {
+      ...project,
+      id: 'project-2',
+      name: 'Other project',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, workspace2] });
+      }
+      if (url.includes('/workspaces/workspace-1/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-2/projects')) {
+        return json({ projects: [project2], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-2/issues')) {
+        return json({ error: 'unavailable' }, 503);
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId],
+      attributionSourceIds: [project1SourceId, project2SourceId],
+    });
+
+    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: project1SourceId })]);
+    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
+    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/issues'))).toBe(false);
+  });
+  it('does not discover sources from attribution-only workspaces during team intake', async () => {
+    const workspace2 = {
+      ...workspace,
+      linearWorkspaceId: 'workspace-2',
+      linearWorkspaceName: 'Other',
+      urlKey: 'other',
+    };
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const projectlessIssue = { ...issue, project: null };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) {
+        return json({ workspaces: [workspace, workspace2] });
+      }
+      if (url.includes('/workspaces/workspace-1/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('/workspaces/workspace-2/teams')) {
+        return json({ error: 'unavailable' }, 503);
+      }
+      if (url.includes('/projects')) {
+        throw new Error(`project discovery must not run for team-only intake: ${url}`);
+      }
+      if (url.includes('/workspaces/workspace-1/issues')) {
+        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [teamSourceId],
+      attributionSourceIds: [teamSourceId, project2SourceId],
+    });
+
+    expect(result.issues).toEqual([expect.objectContaining({ id: 'issue-1', sourceId: teamSourceId })]);
+    const requestedUrls = fetchImpl.mock.calls.map(call => String(call[0]));
+    expect(requestedUrls.some(url => url.includes('/workspaces/workspace-2/teams'))).toBe(false);
+    expect(requestedUrls.some(url => url.includes('/projects'))).toBe(false);
+  });
+
+  it('lists a team source with teamId (no projectIds) and returns projectless issues', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const projectlessIssue = {
+      ...issue,
+      id: 'issue-9',
+      identifier: 'ENG-9',
+      project: null,
+      labels: [] as Array<{ id: string; name: string }>,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('/issues')) {
+        return json({ issues: [projectlessIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [teamSourceId],
+    });
+
+    expect(result.issues).toEqual([
+      expect.objectContaining({ id: 'issue-9', identifier: 'ENG-9', sourceId: teamSourceId }),
+    ]);
+    const issuesCall = fetchImpl.mock.calls.map(c => String(c[0])).find(u => u.includes('/issues'))!;
+    expect(issuesCall).toContain('teamId=team-1');
+    expect(issuesCall).not.toContain('projectIds=');
+    expect(issuesCall).toContain('stateType=triage%2Cbacklog%2Cunstarted%2Cstarted');
+  });
+
+  it('dedupes an issue selected via both a team and its project, project wins (most-specific)', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const overlapping = { ...issue, id: 'issue-1', project: { id: 'project-1' } };
+    const projectlessTeamIssue = {
+      ...issue,
+      id: 'issue-2',
+      identifier: 'ENG-99',
+      project: null,
+      labels: [] as Array<{ id: string; name: string }>,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('projectIds=project-1')) {
+        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('teamId=team-1')) {
+        return json({ issues: [overlapping, projectlessTeamIssue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId, teamSourceId],
+    });
+
+    expect(result.issues).toHaveLength(2);
+    const overlap = result.issues.find(i => i.id === 'issue-1')!;
+    expect(overlap.sourceId).toBe(project1SourceId);
+    const projectless = result.issues.find(i => i.id === 'issue-2')!;
+    expect(projectless.sourceId).toBe(teamSourceId);
+  });
+
+  it('keeps a selected-project issue out of an earlier team page', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const overlapping = { ...issue, project: { id: 'project-1' } };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/v1/server/linear/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/teams')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        });
+      }
+      if (url.includes('projectIds=project-1')) {
+        return json({ issues: [], pageInfo: { hasNextPage: true, endCursor: 'project-next' } });
+      }
+      if (url.includes('teamId=team-1')) {
+        return json({ issues: [overlapping], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    const result = await integration.intake.listIssues({
+      connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+      sourceIds: [project1SourceId, teamSourceId],
+    });
+
+    expect(result.issues).toEqual([]);
+    expect(result.nextCursor).not.toBeNull();
   });
 
   it('fetches issue details with comments and creates comments through the source workspace', async () => {
@@ -242,6 +920,47 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
+  it('uses an opaque team source for issue reads, comments, and updates', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const comment = {
+      id: 'comment-1',
+      body: 'Done',
+      url: 'https://linear.app/acme/issue/ENG-42#comment-comment-1',
+      issue: { id: 'issue-1', identifier: 'ENG-42' },
+      user,
+      parent: null,
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-03T00:00:00Z',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      if (init?.method === 'POST') return json(comment);
+      return json({ ...issue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    });
+    const integration = createIntegration(fetchImpl);
+    const connection = { type: 'oauth' as const, accessToken: 'unused-provider-token' };
+
+    await expect(
+      integration.intake.getIssue({ connection, sourceId: teamSourceId, issueId: 'ENG-42' }),
+    ).resolves.toMatchObject({ id: 'issue-1' });
+    await expect(
+      integration.intake.createComment({ connection, sourceId: teamSourceId, issueId: 'ENG-42', body: 'Done' }),
+    ).resolves.toEqual({ id: 'comment-1', url: comment.url });
+    await expect(
+      integration.intake.updateIssue({
+        connection,
+        sourceId: teamSourceId,
+        issueId: 'ENG-42',
+        state: { kind: 'byType', stateType: 'unstarted' },
+      }),
+    ).resolves.toMatchObject({ id: 'issue-1', stateType: 'unstarted' });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl.mock.calls.every(call => String(call[0]).includes('/workspaces/workspace-1/issues/ENG-42'))).toBe(
+      true,
+    );
+  });
   it('resolves a byType target to a workflow state and PATCHes the Linear issue', async () => {
     const workflowStates = [
       { id: 'state-todo', name: 'Todo', type: 'unstarted', position: 1, teamId: 'team-1' },
@@ -268,7 +987,7 @@ describe('PlatformLinearIntegration', () => {
       issueId: 'issue-1',
       state: { kind: 'byType', stateType: 'completed' },
     });
-    expect(result).toMatchObject({ id: 'issue-1', state: 'Done', stateType: 'completed' });
+    expect(result).toMatchObject({ id: 'issue-1', state: 'Done', stateType: 'completed', projectId: project1SourceId });
 
     const patchCall = fetchImpl.mock.calls.find(call => (call[1] as RequestInit).method === 'PATCH');
     expect(patchCall).toBeDefined();
@@ -292,7 +1011,7 @@ describe('PlatformLinearIntegration', () => {
       issueId: 'issue-1',
       state: { kind: 'byType', stateType: 'unstarted' },
     });
-    expect(result).toMatchObject({ stateType: 'unstarted' });
+    expect(result).toMatchObject({ stateType: 'unstarted', projectId: project1SourceId });
     expect(fetchImpl.mock.calls.some(c => (c[1] as RequestInit).method === 'PATCH')).toBe(false);
   });
 
@@ -360,6 +1079,43 @@ describe('PlatformLinearIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
+  it('probes only routed workspaces while retaining complete source precedence', async () => {
+    const workspace1Source = sourceId('workspace-1', 'project-1');
+    const workspace1TeamSource = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const workspace2TeamSource = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-2', teamId: 'team-2' }),
+    ).toString('base64url')}`;
+    const expectedIssue = {
+      ...issue,
+      id: 'issue-correct',
+      project: null,
+      team: { id: 'team-2', key: 'ENG', name: 'Engineering' },
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/workspace-1/issues/ENG-42')) {
+        return json({ detail: 'Unrelated workspace unavailable' }, 503);
+      }
+      if (url.includes('/workspace-2/issues/ENG-42')) {
+        return json({ ...expectedIssue, comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.fetchIssueDetail(
+        'unused-provider-token',
+        'ENG-42',
+        [workspace1Source, workspace1TeamSource, workspace2TeamSource],
+        [workspace2TeamSource],
+      ),
+    ).resolves.toMatchObject({ id: 'issue-correct', workspaceId: 'workspace-2', teamId: 'team-2' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('tracks independent cursors when selected projects span workspaces', async () => {
     const workspace2 = { ...workspace, linearWorkspaceId: 'workspace-2', linearWorkspaceName: 'Second' };
     const project2 = { ...project, id: 'project-2', name: 'Product' };
@@ -391,7 +1147,79 @@ describe('PlatformLinearIntegration', () => {
       sourceIds: [project1SourceId, project2SourceId],
     });
     expect(result.items).toHaveLength(2);
-    expect(JSON.parse(result.nextCursor!)).toEqual({ [project1SourceId]: null, [project2SourceId]: 'next-2' });
+    expect(JSON.parse(Buffer.from(result.nextCursor!, 'base64url').toString('utf8'))).toEqual({
+      v: 1,
+      sourceSet: expect.any(String),
+      cursors: [null, 'next-2'],
+    });
+
+    await expect(
+      integration.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [project1SourceId],
+        cursor: result.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+  });
+
+  it('rejects a team page that hands back the cursor it was asked for', async () => {
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspace-1/teams')) {
+        // Every page claims more follows and repeats the same cursor.
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: true, endCursor: 'stuck' },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+
+    await expect(
+      integration.intake.listIssues({
+        connection: { type: 'oauth', accessToken: 'unused-provider-token' },
+        sourceIds: [teamSourceId],
+        attributionSourceIds: [teamSourceId],
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
+    // The first page is asked without a cursor and the second with it; nothing beyond that.
+    expect(fetchImpl.mock.calls.filter(call => String(call[0]).includes('/workspace-1/teams'))).toHaveLength(2);
+  });
+
+  it('rejects an issue page that hands back the cursor it was asked for', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspace-1/projects')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspace-1/issues')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: true, endCursor: 'stuck' } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const first = await integration.intake.listItems({
+      orgId: 'org-1',
+      userId: 'user-1',
+      sourceIds: [project1SourceId],
+    });
+    expect(first.nextCursor).not.toBeNull();
+
+    await expect(
+      integration.intake.listItems({
+        orgId: 'org-1',
+        userId: 'user-1',
+        sourceIds: [project1SourceId],
+        cursor: first.nextCursor!,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_cursor' });
   });
 
   it('propagates platform rate limits through Linear capabilities', async () => {
@@ -408,7 +1236,7 @@ describe('PlatformLinearIntegration', () => {
         connection: { type: 'oauth', accessToken: 'unused-provider-token' },
         sourceIds: [project1SourceId],
       }),
-    ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 11 });
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 11000 });
   });
 
   it('rejects GitHub-style app-installation connections', async () => {
@@ -429,6 +1257,12 @@ describe('PlatformLinearIntegration', () => {
         return new Response(null, {
           status: 302,
           headers: { location: 'https://linear.app/oauth/authorize?state=abc' },
+        });
+      }
+      if (url.includes('/v1/server/linear/workspaces/workspace-1/teams?')) {
+        return json({
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+          pageInfo: { hasNextPage: false, endCursor: null },
         });
       }
       return json({ workspaces: [workspace] });
@@ -471,16 +1305,40 @@ describe('PlatformLinearIntegration', () => {
         '/auth/linear/connect',
         '/web/linear/status',
         '/web/linear/projects',
-        '/web/linear/issues',
+        '/web/linear/teams',
       ]),
     );
     expect(routes.some(route => route.path === '/auth/linear/callback')).toBe(false);
+    const teamSourceId = `linear-team:${Buffer.from(
+      JSON.stringify({ workspaceId: 'workspace-1', teamId: 'team-1' }),
+    ).toString('base64url')}`;
     await expect(app.request('/web/linear/status').then(res => res.json())).resolves.toMatchObject({
       enabled: true,
       connected: true,
       reason: 'ready',
       workspace: { name: 'Acme', urlKey: 'acme' },
     });
+    const teams = await app.request('/web/linear/teams');
+    expect(teams.status).toBe(200);
+    await expect(teams.json()).resolves.toEqual({
+      workspaceErrors: [],
+      teams: [
+        {
+          id: 'team-1',
+          key: 'ENG',
+          name: 'Engineering',
+          workspaceId: 'workspace-1',
+          sourceId: teamSourceId,
+        },
+      ],
+    });
+    expect(
+      integration.sourceMatchesIssue(teamSourceId, {
+        workspaceId: 'workspace-1',
+        projectId: null,
+        teamId: 'team-1',
+      }),
+    ).toBe(true);
     const connect = await app.request('/auth/linear/connect');
     expect(connect.status).toBe(302);
     expect(connect.headers.get('location')).toBe('https://linear.app/oauth/authorize?state=abc');
@@ -495,13 +1353,20 @@ describe('PlatformLinearIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('attaches Linear rules to fetched Platform issues', async () => {
+  it('runs custom Linear rules on Platform issues from the sweep, not from board reads', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
       if (url.includes('/workspaces/workspace-1/projects?')) {
         return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues/ENG-42?include=comments')) {
+        return json({
+          ...issue,
+          project: { id: 'project-1' },
+          comments: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+        });
       }
       if (url.includes('/workspaces/workspace-1/issues?')) {
         return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
@@ -518,17 +1383,15 @@ describe('PlatformLinearIntegration', () => {
     });
     await seed.intake.saveConfig({
       orgId: 'org-1',
-      userId: 'user-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    // Board reads only ingest sources explicitly routed to a board of the project.
+    // The sweep only ingests sources explicitly bound to the project.
     await seed.intake.setBinding({
       orgId: 'org-1',
       userId: 'user-1',
       integrationId: 'linear',
       sourceId: project1SourceId,
       factoryProjectId: projectRecord.id,
-      board: 'work',
     });
     const context = {
       auth: fakeAuth(),
@@ -556,9 +1419,19 @@ describe('PlatformLinearIntegration', () => {
       if ('handler' in route) app.on(route.method, route.path, route.handler as never);
     }
 
-    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
+    const detail = await app.request(`/web/linear/issues/ENG-42?factoryProjectId=${projectRecord.id}`);
 
-    expect(response.status).toBe(200);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      identifier: 'ENG-42',
+      title: 'Fix intake',
+      description: 'Issue body',
+    });
+    expect(onEvent).not.toHaveBeenCalled();
+    await expect(attachLinearIssueReconciler(integration, context)?.()).resolves.toMatchObject({
+      observed: 1,
+      failed: 0,
+    });
     expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -609,21 +1482,21 @@ describe('PlatformLinearIntegration', () => {
     ]);
   });
 
-  it('keeps event polling active when issue reconciliation is disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switches', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
-    const config = integration.workers(workerContext)[0]?.config;
-    expect(config?.pollEventsEnabled).toBe(true);
-    expect(config).not.toHaveProperty('reconcileFactoryState');
+    expect(integration.workers(workerContext)[0]?.config).toMatchObject({
+      pollEventsEnabled: true,
+      reconcileFactoryState: expect.any(Function),
+    });
   });
 
   it('registers only issue reconciliation when event polling is disabled', () => {
     vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
@@ -632,15 +1505,5 @@ describe('PlatformLinearIntegration', () => {
       pollEventsEnabled: false,
       reconcileFactoryState: expect.any(Function),
     });
-  });
-
-  it('does not register when polling and issue reconciliation are disabled', () => {
-    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(integration.workers(workerContext)).toEqual([]);
   });
 });

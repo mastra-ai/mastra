@@ -7,6 +7,7 @@ import type { MastraModelConfig } from '../../llm';
 import type { StreamCompletionContext } from '../../loop/network/validation';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import { isTrailingAssistantGuardContinuation } from '../../processors/trailing-assistant-guard';
 import type { RequestContext } from '../../request-context';
 import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
@@ -89,7 +90,9 @@ function isSyntheticReminderContent(content: string): boolean {
 }
 
 function isLatestUserCandidateForGoal(message: MastraDBMessage): boolean {
-  if (!isUserMessageForGoal(message)) return false;
+  // The loop already removes the guard's synthetic turn after each LLM call
+  // (#27568); this check is the backstop for any path that keeps it in the list.
+  if (!isUserMessageForGoal(message) || isTrailingAssistantGuardContinuation(message)) return false;
   const textContent = extractTextContent(message.content);
   return textContent.trim() !== '' && !isSyntheticReminderContent(textContent);
 }
@@ -127,6 +130,9 @@ export function createGoalScorer({
   maxSteps,
   mastra,
   requestContext,
+  inputProcessors,
+  errorProcessors,
+  errorProcessorDefaults,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
@@ -137,6 +143,9 @@ export function createGoalScorer({
   maxSteps?: number;
   mastra?: Mastra;
   requestContext?: RequestContext<any>;
+  inputProcessors?: ScorerJudgeConfig['inputProcessors'];
+  errorProcessors?: ScorerJudgeConfig['errorProcessors'];
+  errorProcessorDefaults?: ScorerJudgeConfig['errorProcessorDefaults'];
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
@@ -148,6 +157,18 @@ export function createGoalScorer({
     judge: {
       model: judgeModel,
       instructions,
+      fallbackJsonPromptInjection: 'inline',
+      // The judge agent talks to the same providers as the main agent, so a prompt
+      // assembled from history written by a different provider can carry history
+      // that provider will reject (e.g. a foreign provider's signed thinking
+      // blocks). The Agent's default error processors include
+      // `ProviderHistoryCompat`, and error-phase processors now receive
+      // `processLLMRequest`, so the judge gets the same provider-history repair
+      // Mastra Code puts on its own agents without wiring it here. Callers may
+      // still supply either list.
+      ...(inputProcessors ? { inputProcessors } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
+      ...(errorProcessorDefaults !== undefined ? { errorProcessorDefaults } : {}),
       ...(hasTools ? { tools } : {}),
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),

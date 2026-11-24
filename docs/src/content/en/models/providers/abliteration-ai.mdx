@@ -7,7 +7,7 @@ description: "Browse abliteration.ai model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/abliteration-ai.svg" alt="abliteration.ai logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />abliteration.ai
 
-Access 3 abliteration.ai models through Mastra's model router. Authentication is handled automatically using the `ABLIT_KEY` environment variable.
+Access 4 abliteration.ai models through Mastra's model router. Authentication is handled automatically using the `ABLIT_KEY` environment variable.
 
 Learn more in the [abliteration.ai documentation](https://docs.abliteration.ai/models).
 
@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
+    "model": "abliteration-ai/abliterated-model-large-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 1,
+    "outputCost": 2
+  },
+  {
     "model": "abliteration-ai/abliterated-model-large-v2",
     "imageInput": false,
     "audioInput": false,
@@ -91,6 +103,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -108,6 +122,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

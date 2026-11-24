@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "User: Return the Mastra Code initial prompt phrase.",
+        "systemMessage": "you will generate a short title",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC initial prompt title"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Return the Mastra Code initial prompt phrase.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC initial prompt response"
+      }
+    }
+  ]
+}

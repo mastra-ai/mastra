@@ -11,7 +11,7 @@ export function SectionHeader({ children, className, inset = false, ...props }: 
       data-slot="section-header"
       className={cn(
         'group-data-[variant=default]/section:grid group-data-[variant=default]/section:grid-cols-[1fr_auto] group-data-[variant=default]/section:items-center',
-        'group-data-[variant=flat]/section:flex group-data-[variant=flat]/section:min-w-0 group-data-[variant=flat]/section:flex-col group-data-[variant=flat]/section:gap-4 group-data-[variant=flat]/section:pb-4 sm:group-data-[variant=flat]/section:flex-row sm:group-data-[variant=flat]/section:items-start sm:group-data-[variant=flat]/section:justify-between sm:group-data-[variant=flat]/section:gap-6',
+        'group-data-[variant=flat]/section:flex group-data-[variant=flat]/section:min-w-0 group-data-[variant=flat]/section:flex-col group-data-[variant=flat]/section:gap-3 group-data-[variant=flat]/section:pb-3 sm:group-data-[variant=flat]/section:flex-row sm:group-data-[variant=flat]/section:items-start sm:group-data-[variant=flat]/section:justify-between sm:group-data-[variant=flat]/section:gap-4',
         'group-data-[variant=factory]/section:flex group-data-[variant=factory]/section:min-w-0 group-data-[variant=factory]/section:flex-col group-data-[variant=factory]/section:gap-2 sm:group-data-[variant=factory]/section:flex-row sm:group-data-[variant=factory]/section:items-start sm:group-data-[variant=factory]/section:justify-between sm:group-data-[variant=factory]/section:gap-4',
         inset && 'px-4',
         className,

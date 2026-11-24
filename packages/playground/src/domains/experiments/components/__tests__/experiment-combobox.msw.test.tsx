@@ -106,6 +106,28 @@ describe('ExperimentCombobox', () => {
     });
   });
 
+  describe('when scoped to a target', () => {
+    it('only offers the experiments the server returns for that target', async () => {
+      const queries: URLSearchParams[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/experiments`, ({ request }) => {
+          queries.push(new URL(request.url).searchParams);
+          return HttpResponse.json({
+            experiments: [experiment],
+            pagination: { ...experimentsResponse.pagination, total: 1 },
+          });
+        }),
+      );
+
+      renderWithProviders(<ExperimentCombobox targetType="agent" targetId="agent-1" onValueChange={() => {}} />);
+
+      await screen.findByRole('option', { name: 'entity-extraction / model-a' });
+      expect(screen.queryByRole('option', { name: 'Experiment #abcdef12' })).toBeNull();
+      expect(queries[0].get('targetType')).toBe('agent');
+      expect(queries[0].get('targetId')).toBe('agent-1');
+    });
+  });
+
   describe('when the user picks an experiment', () => {
     it('emits the experiment id', async () => {
       const onValueChange = vi.fn();

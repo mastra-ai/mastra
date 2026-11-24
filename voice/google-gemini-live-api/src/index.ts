@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MastraVoice } from '@internal/voice';
 import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
@@ -16,6 +15,7 @@ import type {
   AudioConfig,
   GeminiLiveServerMessage,
   GeminiSessionConfig,
+  GeminiAudioTranscriptionConfig,
   IncrementalTurn,
   UpdateMessage,
 } from './types';
@@ -128,6 +128,7 @@ export class GeminiLiveVoice extends MastraVoice<
   private sessionStartTime?: number;
   private isResuming = false;
   private sessionDurationTimeout?: NodeJS.Timeout;
+  private sessionExpiringTimeout?: NodeJS.Timeout;
 
   // Tool integration properties
   private tools?: ToolsInput;
@@ -483,7 +484,7 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Using Vertex AI authentication with OAuth token');
       } else {
         // Live API endpoint - this is specifically for the Live API
-        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
+        wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
         headers = {
           headers: {
             'x-goog-api-key': this.options.apiKey || '',
@@ -505,7 +506,7 @@ export class GeminiLiveVoice extends MastraVoice<
       // Send initial configuration (session_resumption handle is embedded in setup frame)
       this.sendInitialConfig();
       this.sessionStartTime = Date.now();
-      this.sessionId = randomUUID();
+      this.sessionId = globalThis.crypto.randomUUID();
 
       // Wait for session to be created after sending config
       await this.waitForSessionCreated();
@@ -552,10 +553,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.emit('session', { state: 'disconnecting' });
 
     // Clean up session duration monitoring
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-      this.sessionDurationTimeout = undefined;
-    }
+    this.clearSessionTimers();
 
     // Session handle is set by the server via sessionResumptionUpdate frames.
     // Do not overwrite it with the client-side sessionId here.
@@ -922,6 +920,18 @@ export class GeminiLiveVoice extends MastraVoice<
         this.log('Warning: Authentication settings cannot be changed during an active session.');
       }
 
+      // Transcription config is a setup-only field in the Live API, so it can't be sent in a
+      // session.update. Store it so the next connect() uses it.
+      if (config.inputAudioTranscription !== undefined || config.outputAudioTranscription !== undefined) {
+        if (config.inputAudioTranscription !== undefined) {
+          this.options.inputAudioTranscription = config.inputAudioTranscription;
+        }
+        if (config.outputAudioTranscription !== undefined) {
+          this.options.outputAudioTranscription = config.outputAudioTranscription;
+        }
+        this.log('Warning: Transcription settings apply at setup time and take effect on the next connect().');
+      }
+
       const updateMessage: UpdateMessage = {
         type: 'session.update',
         session: {},
@@ -946,6 +956,25 @@ export class GeminiLiveVoice extends MastraVoice<
         // Update internal state
         this.speaker = config.speaker;
         this.log('Updating speaker to:', config.speaker);
+      }
+
+      // Update thinking configuration if provided. Mirrors `sendInitialConfig`: public config is
+      // camelCase, the wire format is snake_case. Merge into any existing generation_config so a
+      // speaker + thinkingConfig update in the same call don't clobber each other. Only emit when a
+      // sub-field is set, so an empty `thinkingConfig: {}` is a no-op rather than a bare object.
+      const tc = config.thinkingConfig;
+      if (tc && (tc.includeThoughts !== undefined || tc.thinkingBudget !== undefined)) {
+        hasUpdates = true;
+        updateMessage.session.generation_config = {
+          ...updateMessage.session.generation_config,
+          thinking_config: {
+            ...(tc.includeThoughts !== undefined && { include_thoughts: tc.includeThoughts }),
+            ...(tc.thinkingBudget !== undefined && { thinking_budget: tc.thinkingBudget }),
+          },
+        };
+
+        this.options.thinkingConfig = tc;
+        this.log('Updating thinkingConfig');
       }
 
       // Update instructions if provided
@@ -1168,15 +1197,13 @@ export class GeminiLiveVoice extends MastraVoice<
     }
 
     // Clear existing monitor if any
-    if (this.sessionDurationTimeout) {
-      clearTimeout(this.sessionDurationTimeout);
-    }
+    this.clearSessionTimers();
 
     // Set timeout for session expiry warning
     const warningTime = durationMs - 5 * 60 * 1000; // 5 minutes before expiry
 
     if (warningTime > 0) {
-      setTimeout(() => {
+      this.sessionExpiringTimeout = setTimeout(() => {
         this.emit('sessionExpiring', {
           expiresIn: 5 * 60 * 1000,
           sessionId: this.sessionId,
@@ -1189,6 +1216,32 @@ export class GeminiLiveVoice extends MastraVoice<
       this.log('Session duration limit reached, disconnecting');
       void this.disconnect();
     }, durationMs);
+  }
+
+  /**
+   * Clear the session expiry and expiry-warning timers
+   * @private
+   */
+  private clearSessionTimers(): void {
+    if (this.sessionDurationTimeout) {
+      clearTimeout(this.sessionDurationTimeout);
+      this.sessionDurationTimeout = undefined;
+    }
+    if (this.sessionExpiringTimeout) {
+      clearTimeout(this.sessionExpiringTimeout);
+      this.sessionExpiringTimeout = undefined;
+    }
+  }
+
+  /**
+   * Release per-session resources when the socket goes away without disconnect().
+   * disconnect() returns early once state is 'disconnected', so the socket close and
+   * error handlers have to end speaker streams and clear session timers themselves.
+   * @private
+   */
+  private releaseSessionResources(): void {
+    this.clearSessionTimers();
+    this.audioStreamManager.cleanupSpeakerStreams();
   }
 
   /**
@@ -1240,14 +1293,29 @@ export class GeminiLiveVoice extends MastraVoice<
     });
 
     this.ws.on('close', (code: number, reason: Buffer) => {
-      this.log('WebSocket connection closed', { code, reason: reason.toString() });
+      const reasonText = reason.toString();
+      this.log('WebSocket connection closed', { code, reason: reasonText });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
+      this.releaseSessionResources();
+      this.emit('session', { state: 'disconnected', code, reason: reasonText });
+
+      // A clean server-initiated close (e.g. 1007 invalid-argument for a bad model id or a
+      // malformed setup frame) arrives as `close`, not as a socket `error`. Surface it as an
+      // `error` so a pending connect() (waitForSessionCreated) rejects immediately with the
+      // real close code and reason instead of waiting out the 30s setup timeout.
+      if (code !== 1000) {
+        this.emit('error', {
+          message: `WebSocket closed during/after setup (code ${code})${reasonText ? `: ${reasonText}` : ''}`,
+          code: 'websocket_closed',
+          details: { code, reason: reasonText },
+        });
+      }
     });
 
     this.ws.on('error', (error: Error) => {
       this.log('WebSocket error', error);
       this.state = 'disconnected';
+      this.releaseSessionResources();
       this.emit('session', { state: 'disconnected' });
       this.emit('error', {
         message: error.message,
@@ -1299,11 +1367,13 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.toolCall) {
       this.log('Processing tool call message');
       await this.handleToolCall(data);
-    } else if (data.usageMetadata) {
+    }
+
+    // Usage metadata and session resumption updates can accompany any primary message.
+    // Handle them independently so content, setup, and tool frames do not suppress them.
+    if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
-      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
-      // so we handle it here too, not in a separate else-if branch
     }
     if (data.sessionResumptionUpdate) {
       this.log('Processing session resumption update', data.sessionResumptionUpdate);
@@ -1487,7 +1557,7 @@ export class GeminiLiveVoice extends MastraVoice<
             toolCall: {
               name: part.functionCall.name,
               args: part.functionCall.args || {},
-              id: part.functionCall.id || randomUUID(),
+              id: part.functionCall.id || globalThis.crypto.randomUUID(),
             },
           };
 
@@ -1505,7 +1575,7 @@ export class GeminiLiveVoice extends MastraVoice<
             const int16Array = this.audioStreamManager.base64ToInt16Array(audioData);
 
             // Use the tracked response ID or generate one if not available
-            const responseId = this.getCurrentResponseId() || randomUUID();
+            const responseId = this.getCurrentResponseId() || globalThis.crypto.randomUUID();
 
             // Get or create the speaker stream for this response
             let speakerStream = this.audioStreamManager.getSpeakerStream(responseId);
@@ -1623,7 +1693,7 @@ export class GeminiLiveVoice extends MastraVoice<
     for (const toolCall of toolCalls) {
       const toolName = toolCall.name || '';
       const toolArgs = toolCall.args || {};
-      const toolId = toolCall.id || randomUUID();
+      const toolId = toolCall.id || globalThis.crypto.randomUUID();
 
       await this.processSingleToolCall(toolName, toolArgs, toolId);
     }
@@ -1894,6 +1964,10 @@ export class GeminiLiveVoice extends MastraVoice<
             };
           };
         };
+        thinking_config?: {
+          include_thoughts?: boolean;
+          thinking_budget?: number;
+        };
       };
       system_instruction?: {
         parts: Array<{
@@ -1908,20 +1982,22 @@ export class GeminiLiveVoice extends MastraVoice<
         }>;
       }>;
       /**
-       * Empty-object flag that enables server-side ASR for the user's spoken
-       * input. When set, the server emits `serverContent.inputTranscription.text`
-       * frames alongside audio. Required to surface what the user said.
+       * Enables server-side ASR for the user's spoken input. When set (even as
+       * `{}`), the server emits `serverContent.inputTranscription.text` frames
+       * alongside audio. Required to surface what the user said.
+       * `language_codes` adds BCP-47 hints; omitted means auto-detect.
        */
-      input_audio_transcription?: Record<string, never>;
+      input_audio_transcription?: { language_codes?: string[] };
       /**
-       * Empty-object flag that enables server-side transcription of the model's
+       * Enables server-side transcription of the model's
        * spoken output. When set, the server emits
        * `serverContent.outputTranscription.text` frames. Required on
        * native-audio models — without this, the spoken response text is never
        * delivered to the client (`modelTurn.parts.text` on native-audio is
-       * reasoning, not spoken content).
+       * reasoning, not spoken content). Accepts the same `language_codes`
+       * hints as `input_audio_transcription`.
        */
-      output_audio_transcription?: Record<string, never>;
+      output_audio_transcription?: { language_codes?: string[] };
       /**
        * Activity handling tells the server how to react to new user activity
        * while the model is still responding. `START_OF_ACTIVITY_INTERRUPTS`
@@ -1966,6 +2042,19 @@ export class GeminiLiveVoice extends MastraVoice<
       };
     }
 
+    // Forward caller-supplied thinking configuration. Public config is camelCase; the wire
+    // format is snake_case (`thinking_config.include_thoughts` / `thinking_budget`), matching
+    // the translation done for `speech_config` above. Only emit `thinking_config` when at least
+    // one sub-field is set, so an empty `thinkingConfig: {}` is a no-op and the setup frame stays
+    // byte-for-byte unchanged — a bare `thinking_config: {}` may be rejected by non-thinking models.
+    const setupThinking = this.options.thinkingConfig;
+    if (setupThinking && (setupThinking.includeThoughts !== undefined || setupThinking.thinkingBudget !== undefined)) {
+      generationConfig.thinking_config = {
+        ...(setupThinking.includeThoughts !== undefined && { include_thoughts: setupThinking.includeThoughts }),
+        ...(setupThinking.thinkingBudget !== undefined && { thinking_budget: setupThinking.thinkingBudget }),
+      };
+    }
+
     // Build the Live API setup message
     const setupMessage: { setup: LiveGenerateContentSetup } = {
       setup: {
@@ -1976,8 +2065,10 @@ export class GeminiLiveVoice extends MastraVoice<
         // unconditionally enable STT in `connect()`. On native-audio models this is the ONLY way
         // to receive the spoken response as text (`modelTurn.parts.text` carries reasoning, not
         // speech), so without these flags the assistant's words are silently dropped client-side.
-        input_audio_transcription: {},
-        output_audio_transcription: {},
+        // Caller-supplied hints (`inputAudioTranscription` / `outputAudioTranscription`) are
+        // mapped to snake_case; with no hints the flags stay `{}` so the frame is unchanged.
+        input_audio_transcription: this.toWireTranscriptionConfig(this.options.inputAudioTranscription),
+        output_audio_transcription: this.toWireTranscriptionConfig(this.options.outputAudioTranscription),
         // Activity-based interrupts surface barge-in as `serverContent.interrupted = true` and
         // cancel the in-flight model response. This is the only way to wire up the `interrupt`
         // event declared in `GeminiLiveEventMap`.
@@ -2031,6 +2122,14 @@ export class GeminiLiveVoice extends MastraVoice<
         `Failed to send Live API setup message: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  /**
+   * Map the public camelCase transcription config to the Live API wire format. Always returns an
+   * object so transcription stays enabled; `language_codes` is only included when set.
+   */
+  private toWireTranscriptionConfig(config?: GeminiAudioTranscriptionConfig): { language_codes?: string[] } {
+    return config?.languageCodes !== undefined ? { language_codes: config.languageCodes } : {};
   }
 
   /**
@@ -2312,4 +2411,4 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 }
 
-export type { IncrementalTurn } from './types';
+export type { GeminiAudioTranscriptionConfig, IncrementalTurn } from './types';

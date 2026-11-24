@@ -1,0 +1,23 @@
+{
+  "groundedness": { "registryKey": "groundedness", "scorerId": "groundedness" },
+  "policy-compliance": {
+    "registryKey": "policyCompliance",
+    "scorerId": "policy-compliance"
+  },
+  "routing-accuracy": {
+    "registryKey": "routingAccuracy",
+    "scorerId": "routing-accuracy"
+  },
+  "tool-call-correctness": {
+    "registryKey": "toolCallCorrectness",
+    "scorerId": "tool-call-correctness"
+  },
+  "multi-turn-consistency": {
+    "registryKey": "multiTurnConsistency",
+    "scorerId": "multi-turn-consistency"
+  },
+  "resolution-quality": {
+    "registryKey": "resolutionQuality",
+    "scorerId": "resolution-quality"
+  }
+}

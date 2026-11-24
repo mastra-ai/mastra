@@ -14,7 +14,7 @@ This is a separate provider from [`@mastra/voice-openai-realtime`](/integrations
 
 > **Note:** The Live API is transported over a server WebSocket only. WebRTC and SIP are not yet supported by this provider.
 
-> **Server-driven turns:** Because GPT-Live controls its own turns, there is no `response.create`. `speak()` appends text to the conversation context and asks the model to say it, but the model decides when and whether to speak (useful for greetings after the session starts). To open a call, call `speak()` once the session is ready.
+> **Server-driven turns:** GPT-Live controls its own turns. `connect()` sends `session.start` and resolves once the server replies with `session.started`. `speak()` sends the text with `session.commentary.append`; the model decides when to say it (useful for a greeting after connecting). Instructions, model and voice are fixed once the session starts; only the delegation (for example the tool list) can change afterwards.
 
 ## Usage example
 
@@ -29,7 +29,7 @@ const voice = new OpenAILiveVoice({
   delegation: {
     type: 'responses',
     responses: {
-      model: 'gpt-4o',
+      model: 'gpt-6-luna',
       tool_choice: 'auto',
     },
   },
@@ -72,14 +72,14 @@ voice.close()
 
 ## Delegation
 
-GPT-Live delegates reasoning and tool execution to a backend model. Under the default `responses` delegation, tools are advertised to the backend under `responses.tools` (not at the top level of the session), and the nested `responses` object requires its own backend `model`. Pass a `delegation` object to configure that backend:
+GPT-Live delegates reasoning and tool execution to a backend model. Under the default `responses` delegation, tools are advertised to the backend under `responses.tools` (not at the top level of the session). The backend model defaults to `gpt-6-luna`. Pass a `delegation` object to configure that backend:
 
 ```typescript
 const voice = new OpenAILiveVoice({
   delegation: {
     type: 'responses',
     responses: {
-      model: 'gpt-4o',
+      model: 'gpt-6-luna',
       tool_choice: 'auto',
     },
   },
@@ -92,12 +92,16 @@ const voice = new OpenAILiveVoice({
 
 - `speaker` — a Node.js readable stream of output audio for playback.
 - `speaking` — `{ audio }` buffers of output audio as they arrive.
-- `writing` — `{ text, role }` assistant transcript deltas.
+- `writing` — `{ text, role }` transcript deltas, `role` is `user` or `assistant`.
+- `delegation` — `{ delegationId, target }` when GPT-Live creates delegated work.
+- `session.started`, `session.updated`, `session.closed` — session lifecycle.
 - `error` — connection or protocol errors.
+
+Under `client` delegation, handle the `delegation` event in your application and report the outcome with `voice.sendDelegationResult(delegationId, text)`.
 
 ## Tools
 
-Register tools with `addTools` or the `tools` constructor option. Tools require `responses` delegation (the `client` delegation mode has no tool channel). When the backend requests a tool via a `delegation.created` event, `OpenAILiveVoice` executes the matching tool, emits `tool-call-start` and `tool-call-result` events, and returns the result via `delegation.function_call_output.create`. The server resumes on its own — no response event is sent:
+Register tools with `addTools` or the `tools` constructor option. Tools require `responses` delegation. When the backend issues a function call, `OpenAILiveVoice` runs the matching tool, emits `tool-call-start` and `tool-call-result` events, returns the result with `response.item.create`, and sends `response.create` once every call in that backend response has a result. An unknown tool gets an error result so the backend is never left waiting:
 
 ```typescript
 voice.addTools({

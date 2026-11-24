@@ -1,0 +1,115 @@
+.composer-tone-label {
+  --composer-tone-color: var(--muted-foreground);
+
+  color: var(--composer-tone-color);
+}
+
+[data-composer-tone='green'] {
+  --composer-tone-color: var(--green-400);
+}
+
+[data-composer-tone='purple'] {
+  --composer-tone-color: var(--purple-300);
+}
+
+[data-composer-tone='orange'] {
+  --composer-tone-color: var(--orange-300);
+}
+
+html.light [data-composer-tone='green'] {
+  --composer-tone-color: var(--green-700);
+}
+
+html.light [data-composer-tone='purple'] {
+  --composer-tone-color: var(--purple-700);
+}
+
+html.light [data-composer-tone='orange'] {
+  --composer-tone-color: var(--orange-800);
+}
+
+/* Radius concentric with the round controls, so the one-line box is a full pill. */
+[data-slot='composer'],
+.composer-ring,
+.composer-box {
+  --composer-inset: calc(var(--spacing) * 3);
+  --composer-line-height: calc(var(--spacing-control-sm) + 2 * var(--composer-inset));
+  --composer-radius: calc(var(--composer-line-height) / 2);
+}
+
+/* Shadows only, never a border: a second edge shows as a double line. Same drop as a menu, since text scrolls under it. */
+.composer-box {
+  --composer-rim: var(--overlay-rim);
+  --composer-rim-active: var(--border-strong);
+  --scroll-area-scrollbar-inset: calc(var(--composer-radius) * 0.7);
+
+  background-color: var(--muted);
+  box-shadow:
+    0 0 0 1px var(--composer-rim),
+    var(--elevation-overlay);
+  transition: box-shadow var(--duration-normal) var(--ease-out-custom);
+}
+
+@media (hover: hover) {
+  .composer-box:hover {
+    --composer-rim: var(--composer-rim-active);
+  }
+}
+
+.composer-box:focus-within {
+  --composer-rim: var(--composer-rim-active);
+}
+
+html.light .composer-box {
+  --composer-rim-active: var(--overlay-rim);
+
+  background-color: var(--card);
+}
+
+html.light .composer-box:not(:hover, :focus-within) {
+  --composer-rim: var(--surface-rim);
+}
+
+.composer-box::before {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(120% 80% at 50% 0%, oklch(100% 0 0deg / 5%), transparent 70%);
+  opacity: 0.6;
+  transition: opacity var(--duration-normal) var(--ease-out-custom);
+  content: '';
+}
+
+.composer-box:is(:hover, :focus-within)::before {
+  opacity: 1;
+}
+
+html.light .composer-box::before {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .composer-sending {
+    display: none;
+  }
+
+  .composer-box,
+  .composer-box::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .composer-box {
+    outline: 1px solid CanvasText;
+  }
+
+  .composer-box:focus-within {
+    outline: 2px solid Highlight;
+  }
+
+  .composer-box::before {
+    display: none;
+  }
+}

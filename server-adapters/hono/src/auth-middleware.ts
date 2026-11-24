@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { coreAuthMiddleware } from '@mastra/server/auth';
+import { coreAuthMiddleware, isCustomRoutePublic } from '@mastra/server/auth';
 import type { Context, MiddlewareHandler } from 'hono';
 
 export interface HonoAuthMiddlewareOptions {
@@ -26,7 +26,10 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: HonoAuthMi
     const path = c.req.path;
     const method = c.req.method;
     const customRouteAuthConfig = new Map<string, boolean>(c.get('customRouteAuthConfig') ?? []);
-    customRouteAuthConfig.set(`${method}:${path}`, true);
+    // Don't reclassify a custom route the app declared public (requiresAuth: false).
+    if (!isCustomRoutePublic(path, method, customRouteAuthConfig)) {
+      customRouteAuthConfig.set(`${method}:${path}`, true);
+    }
 
     const authHeader = c.req.header('Authorization');
     let token: string | null = authHeader ? authHeader.replace('Bearer ', '') : null;
@@ -46,6 +49,10 @@ export function createAuthMiddleware({ mastra, requiresAuth = true }: HonoAuthMi
       token,
       buildAuthorizeContext: () => c,
     });
+
+    for (const [key, value] of Object.entries(result.headers ?? {})) {
+      c.header(key, value, key.toLowerCase() === 'set-cookie' ? { append: true } : undefined);
+    }
 
     if (result.action === 'next') {
       return next();

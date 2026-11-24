@@ -1,29 +1,17 @@
 /**
- * OpenAI Live API wire-protocol constants.
+ * OpenAI GPT-Live wire-protocol constants.
  *
- * OpenAI's Live API (`gpt-live-1`, base path `/v1/live`) is a distinct,
- * **server-driven** full-duplex protocol — NOT the Realtime API contract. The
- * model decides when turns start and end; there is no `response.create`,
- * `response.cancel`, or `turn_detection`. Reasoning and tool use are delegated
- * to a backend (`responses` mode) or handled by the client (`client` mode).
+ * GPT-Live (`/v1/live/sessions`) is a server-driven, full-duplex protocol and is
+ * separate from the Realtime API. Names and shapes follow the published
+ * references:
+ * - https://developers.openai.com/api/reference/resources/live/primary-websocket
+ * - https://developers.openai.com/api/docs/guides/live-delegation
+ * - https://learn.microsoft.com/en-us/azure/foundry/openai/gpt-live-reference
  *
- * Confirmed from OpenAI's "Getting started with GPT-Live" guide and shipped
- * integrations (jambonz, LiveKit GPT-Live plugin):
- * - Endpoint `/v1/live/sessions`; WebSocket transport for server-side audio.
- * - Exactly SIX client → server events (see CLIENT_EVENTS below).
- * - Server → client: `session.started` (ready) and `delegation.created`
- *   (model needs a tool/backend result, answered with
- *   `delegation.function_call_output.create`; the server resumes on its own —
- *   no follow-on response event to send).
- * - `session.update` must be sent first; the model won't accept caller audio
- *   until it has the config. Tools live under `responses.tools` and the nested
- *   `responses` object (with its own backend `model`) is required in `responses`
- *   delegation mode.
- *
- * NOT YET publicly documented: the exact names of the server → client audio and
- * transcript output events. Those handlers below are best-effort and marked
- * `TODO(verify)`; they are isolated here so they can be corrected in one place
- * once OpenAI publishes the Live server-events reference.
+ * Handshake: the client sends `session.start` (model, instructions, audio and
+ * delegation) as the first message and waits for `session.started` before
+ * sending audio or commands. After startup `session.update` can only replace
+ * `delegation` (one complete object); model, instructions and audio are fixed.
  */
 
 /** Live API server WebSocket endpoint. */
@@ -33,7 +21,7 @@ export const LIVE_WS_URL = 'wss://api.openai.com/v1/live/sessions';
 export const DEFAULT_MODEL = 'gpt-live-1';
 
 /** Default backend Responses model used under `responses` delegation. */
-export const DEFAULT_DELEGATION_MODEL = 'gpt-5.5';
+export const DEFAULT_DELEGATION_MODEL = 'gpt-6-luna';
 
 /** Default speaker/voice. */
 export const DEFAULT_VOICE = 'marin';
@@ -43,69 +31,60 @@ export const DEFAULT_VOICE = 'marin';
  */
 export const DEFAULT_USER_AGENT = 'mastra-voice-openai-live';
 
-/** Known Live speaker voices. Best-effort until OpenAI publishes a stable list. */
+/** Known Live speaker voices. */
 export const VOICES = ['marin', 'cedar'];
+
+/** Audio format for input and output: raw mono 24 kHz PCM16 little-endian. */
+export const AUDIO_FORMAT = { type: 'audio/pcm', rate: 24000 } as const;
 
 /** Delegation modes. */
 export const DELEGATION_MODES = {
-  /** Backend Responses model handles reasoning and tool selection. */
+  /** A backend Responses model handles reasoning and tool calls. */
   responses: 'responses',
-  /** The client handles reasoning; no backend tool channel. */
+  /** The application handles delegated work and reports back with context appends. */
   client: 'client',
 } as const;
 
-/**
- * The six client → server events GPT-Live accepts. There is intentionally no
- * `response.create`: GPT-Live is server-driven and resumes turns on its own.
- */
+/** Client → server events. */
 export const CLIENT_EVENTS = {
-  /** Configure the session. Required first; must precede caller audio. */
+  /** First message: initial session configuration. */
+  sessionStart: 'session.start',
+  /** Sparse update; only `delegation` can change after startup. */
   sessionUpdate: 'session.update',
-  /** Append caller input audio (base64). */
-  inputAudioAppend: 'input_audio.append',
-  /** Append text/context to the spoken conversation. */
-  sessionContextAppend: 'session.context.append',
-  /** Append context to the delegation backend. */
-  delegationContextAppend: 'delegation.context.append',
-  /** Return a tool/function result for an open delegation. */
-  delegationFunctionCallOutputCreate: 'delegation.function_call_output.create',
-  /** Close the session. */
+  /** Append caller audio (base64 PCM16). */
+  inputAudioAppend: 'session.input_audio.append',
+  /** Append trusted instructions. */
+  instructionsAppend: 'session.instructions.append',
+  /** Append quiet context. */
+  thinkingAppend: 'session.thinking.append',
+  /** Append content for the model to speak. */
+  commentaryAppend: 'session.commentary.append',
+  /** Responses delegation: submit a function result. */
+  responseItemCreate: 'response.item.create',
+  /** Responses delegation: continue the backend response after results are submitted. */
+  responseCreate: 'response.create',
+  /** Begin graceful shutdown. */
   sessionClose: 'session.close',
 } as const;
 
 /** Server → client events. */
 export const SERVER_EVENTS = {
-  /** The session has started and is ready for audio. */
   sessionStarted: 'session.started',
-  /** The session config was updated. */
   sessionUpdated: 'session.updated',
-  /** The model needs a delegated result; answer with delegationFunctionCallOutputCreate. */
-  delegationCreated: 'delegation.created',
-  /** An error occurred. */
+  /** Base64 output audio in `delta`. There is no output-audio-done event. */
+  outputAudioDelta: 'session.output_audio.delta',
+  inputTranscriptDelta: 'session.input_transcript.delta',
+  outputTranscriptDelta: 'session.output_transcript.delta',
+  /** A unit of delegated work (`delegation.id`, `delegation.target`). */
+  delegationCreated: 'session.delegation.created',
+  /** Envelope for a nested Responses event (`event`), with the outer `delegation_id`. */
+  responseEvent: 'response.event',
+  sessionClosed: 'session.closed',
   error: 'error',
-
-  // TODO(verify): exact server audio/transcript output event names are not yet
-  // publicly documented for the Live API. Best-effort placeholders below.
-  /** A chunk of assistant output audio (base64). */
-  outputAudioDelta: 'output_audio.delta',
-  /** Assistant output audio finished. */
-  outputAudioDone: 'output_audio.done',
-  /** A chunk of assistant transcript text. */
-  outputTranscriptDelta: 'output_audio_transcript.delta',
-  /** Assistant transcript finished. */
-  outputTranscriptDone: 'output_audio_transcript.done',
 } as const;
 
-/** Payload field names used across Live events. */
-export const LIVE_FIELDS = {
-  /** Base64 audio payload on input/output audio events. */
-  audio: 'audio',
-  /** Assistant transcript delta text. */
-  delta: 'delta',
-  /** Tool/function name on a delegation. */
-  name: 'name',
-  /** JSON-encoded arguments on a delegation. */
-  arguments: 'arguments',
-  /** Correlation id for a delegation to answer against. */
-  delegationId: 'delegation_id',
+/** Nested Responses event types handled inside a `response.event` envelope. */
+export const RESPONSE_EVENTS = {
+  outputItemDone: 'response.output_item.done',
+  completed: 'response.completed',
 } as const;

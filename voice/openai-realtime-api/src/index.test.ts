@@ -118,6 +118,7 @@ describe('OpenAIRealtimeVoice', () => {
   describe('function call dispatch', () => {
     it('should send exactly one response.create after multiple function_calls', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      (voice as any).sessionReady = true;
       voice.addTools({
         tool_a: {
           description: 'A',
@@ -146,6 +147,55 @@ describe('OpenAIRealtimeVoice', () => {
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(1);
     });
 
+    it('should send a string output when a tool returns undefined', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      (voice as any).sessionReady = true;
+      voice.addTools({
+        notify: {
+          description: 'Fire and forget',
+          inputSchema: undefined,
+          execute: vi.fn().mockResolvedValue(undefined),
+        },
+      } as any);
+
+      await (voice as any).handleFunctionCalls({
+        response: { output: [{ type: 'function_call', name: 'notify', call_id: 'c1', arguments: '{}' }] },
+      });
+
+      const items = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls
+        .map(([raw]: [string]) => JSON.parse(raw))
+        .filter((ev: any) => ev.type === 'conversation.item.create');
+      expect(items).toHaveLength(1);
+      expect(items[0].item).toMatchObject({ type: 'function_call_output', call_id: 'c1', output: 'null' });
+    });
+
+    it('should ignore function_calls for tools that were not added', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'function_call', name: 'external_tool', call_id: '1', arguments: '{}' }],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
+
+    it('should ignore function_calls whose name is only inherited from Object.prototype', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      voice.addTools({
+        tool_a: { description: 'A', inputSchema: undefined, execute: vi.fn() },
+      } as any);
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [{ type: 'function_call', name: 'toString', call_id: '1', arguments: '{}' }],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
+
     it('should not send response.create when there are no function_call outputs', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
 
@@ -159,6 +209,18 @@ describe('OpenAIRealtimeVoice', () => {
         JSON.parse(raw),
       );
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(0);
+    });
+  });
+
+  describe('sendEvent', () => {
+    it('should keep the type argument when data also carries a type field', () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn(), readyState: 1, OPEN: 1 };
+      (voice as any).sessionReady = true;
+
+      voice.sendEvent('response.create', { type: 'session.update', response: {} });
+
+      const [raw] = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(JSON.parse(raw)).toEqual({ type: 'response.create', response: {} });
     });
   });
 
@@ -453,6 +515,136 @@ describe('OpenAIRealtimeVoice', () => {
       expect(mockCallback).toHaveBeenNthCalledWith(2, { text: 'lo', response_id: 'item_123', role: 'user' });
       expect(mockCallback).toHaveBeenNthCalledWith(3, { text: '\n', response_id: 'item_123', role: 'user' });
       expect(mockCallback).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('speaker stream lifecycle for responses without audio', () => {
+    const wire = (v: OpenAIRealtimeVoice) => {
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      (v as any).ws = {
+        on: vi.fn((event, callback) => {
+          handlers[event] = callback;
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      (v as any).sessionReady = true;
+      (v as any).setupEventListeners();
+      return {
+        send: (ev: Record<string, unknown>) => handlers.message?.(Buffer.from(JSON.stringify(ev))),
+        closeSocket: (code: number, reason: string) => handlers.close?.(code, Buffer.from(reason)),
+      };
+    };
+
+    const endsWithin = (stream: NodeJS.ReadableStream, ms: number) =>
+      Promise.race([
+        new Promise(resolve => stream.once('end', () => resolve('end'))),
+        new Promise(resolve => setTimeout(() => resolve('still open'), ms)),
+      ]);
+
+    const captureSpeaker = (v: OpenAIRealtimeVoice) => {
+      const streams: NodeJS.ReadableStream[] = [];
+      v.on('speaker', stream => {
+        stream.resume();
+        streams.push(stream);
+      });
+      return streams;
+    };
+
+    const functionCall = {
+      id: 'item_1',
+      type: 'function_call',
+      name: 'get_weather',
+      call_id: 'call_1',
+      arguments: '{}',
+    };
+
+    const sendToolOnlyResponse = (send: (ev: Record<string, unknown>) => void, responseId: string) => {
+      send({ type: 'response.created', response: { id: responseId, status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_item.added',
+        response_id: responseId,
+        output_index: 0,
+        item: { ...functionCall, arguments: '' },
+      });
+      send({
+        type: 'response.function_call_arguments.done',
+        response_id: responseId,
+        item_id: 'item_1',
+        call_id: 'call_1',
+        arguments: '{}',
+      });
+      send({ type: 'response.output_item.done', response_id: responseId, output_index: 0, item: functionCall });
+      send({ type: 'response.done', response: { id: responseId, status: 'completed', output: [functionCall] } });
+    };
+
+    it('ends the speaker stream of a tool-call-only response', async () => {
+      const { send } = wire(voice);
+      voice.addTools({
+        get_weather: { description: 'weather', inputSchema: undefined, execute: vi.fn().mockResolvedValue({ t: 21 }) },
+      } as any);
+      const speakers = captureSpeaker(voice);
+
+      sendToolOnlyResponse(send, 'resp_tool');
+
+      expect(speakers).toHaveLength(1);
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends the speaker stream before a slow tool call finishes', async () => {
+      const { send } = wire(voice);
+      voice.addTools({
+        get_weather: { description: 'weather', inputSchema: undefined, execute: () => new Promise(() => {}) },
+      } as any);
+      const speakers = captureSpeaker(voice);
+
+      sendToolOnlyResponse(send, 'resp_slow_tool');
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends the speaker stream of a text-only response', async () => {
+      const { send } = wire(voice);
+      const speakers = captureSpeaker(voice);
+
+      send({ type: 'response.created', response: { id: 'resp_text', status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_text.delta',
+        response_id: 'resp_text',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        delta: 'hello',
+      });
+      send({
+        type: 'response.output_text.done',
+        response_id: 'resp_text',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        text: 'hello',
+      });
+      send({ type: 'response.done', response: { id: 'resp_text', status: 'completed', output: [] } });
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends in-flight speaker streams when the socket closes', async () => {
+      const { send, closeSocket } = wire(voice);
+      const speakers = captureSpeaker(voice);
+
+      send({ type: 'response.created', response: { id: 'resp_live', status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_audio.delta',
+        response_id: 'resp_live',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        delta: Buffer.alloc(320).toString('base64'),
+      });
+      closeSocket(1006, '');
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
     });
   });
 });

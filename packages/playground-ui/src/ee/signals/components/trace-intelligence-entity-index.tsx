@@ -1,6 +1,6 @@
 import type { SignalCatalogEntry, ThemeLearningEntity } from '@mastra/client-js';
-import { Columns2, List, CircleSlashIcon } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useThemeEntities } from '../hooks';
 import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../settings/trace-signal-settings';
@@ -10,16 +10,16 @@ import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
 import { filterAndSortEntities } from './entity-index-model';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
+import { PermissionDenied } from '@/domains/auth/components/permission-denied';
+import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ErrorState } from '@/ds/components/ErrorState';
-import { ListSearch } from '@/ds/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@/ds/components/PageLayout';
-import { PermissionDenied } from '@/ds/components/PermissionDenied';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { SessionExpired } from '@/ds/components/SessionExpired';
+import { IconLayoutColumn } from '@/ds/icons/central/IconLayoutColumn';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
@@ -41,22 +41,22 @@ export interface TraceIntelligenceEntityIndexProps {
 function EntityIndexError({ error }: { error: Error }) {
   if (is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
+      <div className="flex h-full items-center justify-center">
         <SessionExpired />
-      </NoDataPageLayout>
+      </div>
     );
   }
   if (is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
+      <div className="flex h-full items-center justify-center">
         <PermissionDenied resource="Trace Intelligence" />
-      </NoDataPageLayout>
+      </div>
     );
   }
   return (
-    <NoDataPageLayout>
-      <ErrorState title="Failed to load Trace Intelligence" message={error.message} />
-    </NoDataPageLayout>
+    <div className="flex h-full items-center justify-center">
+      <EmptyState tone="error" titleSlot="Failed to load Trace Intelligence" descriptionSlot={error.message} />
+    </div>
   );
 }
 
@@ -76,46 +76,47 @@ function EntityIndexControls({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
-        <ListSearch
+        <SearchInput
+          {...listSearchProps}
           value={search}
-          onSearch={onSearchChange}
-          label="Filter entities"
-          placeholder="Filter by entity identifier"
+          onValueChange={onSearchChange}
+          label="Search agents"
+          placeholder="Search by agent identifier"
         />
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
         <TraceIntelligenceExplainer signalCatalog={signalCatalog} />
         <Select<TraceIntelligenceEntitySort> value={sort} onValueChange={onSortChange}>
-          <SelectTrigger aria-label="Sort entities" size="md" variant="ghost" className="w-auto min-w-36">
+          <SelectTrigger aria-label="Sort agents" size="md" variant="ghost" className="w-auto">
             <SelectValue />
           </SelectTrigger>
           <SelectContent align="end">
             <SelectItem value="default">Default order</SelectItem>
-            <SelectItem value="entity-asc">Entity: A–Z</SelectItem>
-            <SelectItem value="entity-desc">Entity: Z–A</SelectItem>
+            <SelectItem value="entity-asc">Agent: A–Z</SelectItem>
+            <SelectItem value="entity-desc">Agent: Z–A</SelectItem>
           </SelectContent>
         </Select>
         {headerAction}
-        <ButtonsGroup spacing="close" aria-label="Entities view">
+        <ButtonsGroup aria-label="Agents view">
           <Button
             type="button"
-            variant={view === 'list' ? 'primary' : 'outline'}
+            variant={view === 'list' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="List view"
             aria-pressed={view === 'list'}
             onClick={() => onViewChange('list')}
           >
-            <List />
+            <IconListBullets />
           </Button>
           <Button
             type="button"
-            variant={view === 'compact' ? 'primary' : 'outline'}
+            variant={view === 'compact' ? 'primary' : 'default'}
             size="icon-md"
             tooltip="Compact view"
             aria-pressed={view === 'compact'}
             onClick={() => onViewChange('compact')}
           >
-            <Columns2 />
+            <IconLayoutColumn />
           </Button>
         </ButtonsGroup>
       </div>
@@ -155,16 +156,15 @@ export function TraceIntelligenceEntityIndex({
   );
   if (entitiesQuery.isPending) {
     body = (
-      <div role="status" aria-label="Loading Trace Intelligence entities">
+      <div role="status" aria-label="Loading Trace Intelligence agents">
         <DataListSkeleton columns={listColumns} />
       </div>
     );
   } else if (entitiesQuery.data.entities.length === 0 && !hasSearch) {
     body = (
       <EmptyState
-        iconSlot={<CircleSlashIcon aria-hidden="true" />}
-        titleSlot="No Trace Intelligence entities yet"
-        descriptionSlot="Entities appear after Trace Intelligence begins collecting generated signal data."
+        titleSlot="No Trace Intelligence agents yet"
+        descriptionSlot="Agents appear after Trace Intelligence begins collecting generated signal data."
       />
     );
   } else if (view === 'compact') {
@@ -179,8 +179,8 @@ export function TraceIntelligenceEntityIndex({
   }
 
   return (
-    <PageLayout width="narrow" height="full" className="max-w-7xl grid-rows-[auto_minmax(0,1fr)] content-normal">
-      <PageLayout.TopArea>
+    <div className="mx-auto grid size-full min-h-0 max-w-7xl grid-rows-[auto_minmax(0,1fr)]">
+      <div className="pb-3">
         <EntityIndexControls
           search={search}
           sort={sort}
@@ -200,7 +200,7 @@ export function TraceIntelligenceEntityIndex({
             ) : undefined
           }
         />
-      </PageLayout.TopArea>
+      </div>
       <div
         className={
           settingsOpen
@@ -211,6 +211,6 @@ export function TraceIntelligenceEntityIndex({
         <div className="min-h-0 min-w-0">{body}</div>
         {settingsOpen ? <TraceSignalSettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
       </div>
-    </PageLayout>
+    </div>
   );
 }

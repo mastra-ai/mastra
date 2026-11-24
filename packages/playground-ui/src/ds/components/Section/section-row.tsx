@@ -1,95 +1,83 @@
-import { LockKeyholeIcon } from 'lucide-react';
-import type { ComponentProps, ReactNode } from 'react';
-import { Label } from '@/ds/components/Label/label';
+import type { ReactNode } from 'react';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
+import type { FieldProps } from '@/ds/components/Field';
+import { SettingsRowControl } from '@/ds/new/settings/settings-row';
+import { settingsRowLabelClassName } from '@/ds/new/settings/settings-row-label';
 import { cn } from '@/lib/utils';
 
-export type SectionRowProps = Omit<ComponentProps<'div'>, 'children'> & {
+export type SectionRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
   label: ReactNode;
   description?: ReactNode;
   htmlFor?: string;
   children?: ReactNode;
+  required?: boolean;
+  errorMsg?: ReactNode;
 };
+export type SectionViewOnlyRowProps = SectionRowProps & { children: ReactNode };
+export type SectionDestructiveRowProps = SectionRowProps & { children: ReactNode };
 
-export type SectionViewOnlyRowProps = Omit<SectionRowProps, 'children'> & {
-  children: ReactNode;
-};
-
-export type SectionDestructiveRowProps = Omit<SectionRowProps, 'children'> & {
-  children: ReactNode;
-};
-
-type SectionRowLayoutProps = SectionRowProps & {
-  tone?: 'default' | 'destructive';
-  viewOnly?: boolean;
-};
-
-function SectionRowLayout({
+function SectionRowBase({
   label,
   description,
   htmlFor,
   children,
   className,
-  tone = 'default',
+  required = false,
+  errorMsg,
+  disabled,
   viewOnly = false,
+  destructive = false,
   ...props
-}: SectionRowLayoutProps) {
-  const destructive = tone === 'destructive';
-  const labelClassName = cn(
-    'text-ui-md leading-ui-md',
-    destructive ? 'text-accent2' : viewOnly ? 'text-neutral3' : 'text-neutral5',
-    'group-data-[variant=factory]/section:font-medium group-data-[variant=flat]/section:font-medium',
-  );
-
+}: SectionRowProps & { viewOnly?: boolean; destructive?: boolean }) {
   return (
-    <div
+    <Field
+      orientation="responsive"
+      invalid={Boolean(errorMsg)}
+      disabled={disabled || viewOnly}
       data-slot="section-row"
       className={cn(
-        'grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center',
-        'sm:group-data-[variant=default]/section:gap-4',
-        'group-data-[variant=flat]/section:p-4 sm:group-data-[variant=flat]/section:gap-8',
-        'group-data-[variant=factory]/section:px-4 group-data-[variant=factory]/section:py-3 sm:group-data-[variant=factory]/section:gap-4',
+        'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6',
         className,
       )}
       {...props}
     >
       <div className="min-w-0">
-        {htmlFor ? (
-          <Label htmlFor={htmlFor} className={labelClassName}>
-            {label}
-          </Label>
-        ) : (
-          <p className={labelClassName}>{label}</p>
-        )}
-        {description != null ? (
-          <p className="text-ui-md leading-ui-md text-neutral3 mt-1 max-w-[62ch] text-pretty">{description}</p>
-        ) : null}
+        <FieldLabel
+          {...(htmlFor ? { htmlFor } : {})}
+          required={required}
+          className={settingsRowLabelClassName(destructive ? 'destructive' : 'default')}
+        >
+          {label}
+        </FieldLabel>
+        {description != null && <FieldDescription className="mt-1 text-pretty">{description}</FieldDescription>}
+        <FieldError className="mt-1">{errorMsg}</FieldError>
       </div>
-      {children != null ? (
+      {children != null && (
         <div
           data-slot="section-control"
-          className={cn('min-w-0 sm:justify-self-end', viewOnly && 'flex items-center gap-2 text-ui-md text-neutral3')}
+          className={cn(
+            'min-w-0 sm:justify-self-end',
+            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
+          )}
         >
-          {viewOnly ? (
-            <>
-              <LockKeyholeIcon className="size-4 shrink-0" aria-hidden />
-              <span className="sr-only">View only: </span>
-            </>
-          ) : null}
-          {children}
+          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
         </div>
-      ) : null}
-    </div>
+      )}
+    </Field>
   );
 }
 
+/** @deprecated Use SettingsRow from @mastra/playground-ui/new/settings for settings pages. */
 export function SectionRow(props: SectionRowProps) {
-  return <SectionRowLayout {...props} />;
+  return <SectionRowBase {...props} />;
 }
 
+/** @deprecated Use SettingsRow with viewOnly from @mastra/playground-ui/new/settings. */
 export function SectionViewOnlyRow(props: SectionViewOnlyRowProps) {
-  return <SectionRowLayout viewOnly {...props} />;
+  return <SectionRowBase {...props} viewOnly />;
 }
 
+/** @deprecated Use SettingsRow with tone="destructive" from @mastra/playground-ui/new/settings. */
 export function SectionDestructiveRow(props: SectionDestructiveRowProps) {
-  return <SectionRowLayout tone="destructive" {...props} />;
+  return <SectionRowBase {...props} destructive />;
 }

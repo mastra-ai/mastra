@@ -1,13 +1,13 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 
-export interface TreeLabelProps {
+export interface TreeLabelProps extends React.HTMLAttributes<HTMLSpanElement> {
   className?: string;
   children: React.ReactNode;
 }
 
-export const TreeLabel = React.forwardRef<HTMLSpanElement, TreeLabelProps>(({ className, children }, ref) => (
-  <span ref={ref} className={cn('truncate text-neutral5', className)}>
+export const TreeLabel = React.forwardRef<HTMLSpanElement, TreeLabelProps>(({ className, children, ...props }, ref) => (
+  <span ref={ref} className={cn('truncate text-foreground', className)} {...props}>
     {children}
   </span>
 ));

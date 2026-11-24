@@ -700,6 +700,11 @@ input[type='search']::-ms-clear {
   }
 }
 
+.sidebar-group-name > .menu__list-item-collapsible > .menu__link {
+  height: 1.5rem;
+  padding-block: 0;
+}
+
 .sidebar-group-name > .menu__list-item-collapsible span[class*='categoryLinkLabel'] {
   text-transform: uppercase;
   letter-spacing: 0.025em;
@@ -1998,4 +2003,116 @@ a.learn-sidebar-item.is-active {
  */
 #docs-search-results .group > span.truncate {
   flex-shrink: 0;
+}
+
+/* Gateway API pages (docusaurus-theme-openapi-docs) */
+/* The theme separates the reference from the API Explorer column with a border; there is no explorer column */
+main .openapi-left-panel__container {
+  border-right: none;
+}
+
+/* The site's h2 underline and padding misalign the endpoint path next to its method badge */
+.openapi__method-endpoint .openapi__method-endpoint-path {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* The site strips inline padding from every pre, which pushes the method badge against the pill's edge */
+main pre.openapi__method-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.5rem 1rem 0.5rem 0.5rem !important;
+  overflow-x: auto;
+}
+
+main pre.openapi__method-endpoint > .badge {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+main pre.openapi__method-endpoint > .openapi__method-endpoint-path {
+  margin: 0;
+  white-space: nowrap;
+}
+
+/* Put the status codes on their own row under a full-width Responses heading, like Request */
+main .openapi-tabs__response-header-section {
+  display: block;
+  margin-top: 2rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+main .openapi-tabs__response-container {
+  max-width: none;
+  padding-left: 0;
+  margin-top: 1rem;
+}
+
+main .openapi-tabs__response-container > .openapi-tabs__arrow {
+  display: none;
+}
+
+main .openapi-tabs__response-list-container {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0;
+  border-bottom: none;
+}
+
+main .openapi-tabs__response-list-container > .openapi-tabs__response-code-item {
+  margin-right: 0;
+}
+
+/* Content type and Schema/Example switchers use the site's underline tabs instead of the theme's outlined pills */
+main .openapi-tabs__mime-list-container,
+main .openapi-tabs__schema-list-container {
+  overflow-x: auto;
+}
+
+main .openapi-tabs__mime-list-container > .openapi-tabs__mime-item,
+main .openapi-tabs__schema-list-container > .openapi-tabs__schema-item {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-transform: none;
+  color: var(--mastra-text-tertiary);
+}
+
+main .openapi-tabs__mime-list-container > .openapi-tabs__mime-item:hover,
+main .openapi-tabs__schema-list-container > .openapi-tabs__schema-item:hover {
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--mastra-text-primary);
+}
+
+main .openapi-tabs__mime-list-container > .openapi-tabs__mime-item.active,
+main .openapi-tabs__schema-list-container > .openapi-tabs__schema-item.active {
+  border-bottom: 2px solid var(--mastra-green-accent-2);
+  background: none;
+  color: var(--mastra-text-primary);
+}
+
+[data-theme='dark'] main .openapi-tabs__mime-list-container > .openapi-tabs__mime-item.active,
+[data-theme='dark'] main .openapi-tabs__schema-list-container > .openapi-tabs__schema-item.active {
+  border-bottom-color: var(--mastra-green-accent);
+}
+
+/* The Schema tab already labels the response schema; its always-open "Schema" disclosure repeats it */
+main .openapi-markdown__details.response > summary {
+  display: none !important;
+}
+
+/* Section headings inside collapsibles (Header Parameters, Body, ...) get the site's h3 underline otherwise */
+main .openapi-markdown__details > summary h3 {
+  border-bottom: none;
+  padding-bottom: 0;
 }

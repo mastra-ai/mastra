@@ -9,6 +9,22 @@ import type { BrowserContext } from './processor';
 describe('BrowserContextProcessor', () => {
   const processor = new BrowserContextProcessor();
 
+  describe('stateSignal option', () => {
+    it('exposes computeStateSignal by default', () => {
+      expect(typeof processor.computeStateSignal).toBe('function');
+    });
+
+    it('omits computeStateSignal when stateSignal is false but still injects context', () => {
+      const stateless = new BrowserContextProcessor({ stateSignal: false });
+      expect(stateless.computeStateSignal).toBeUndefined();
+
+      const requestContext = new RequestContext();
+      requestContext.set('browser', { provider: 'test' } as BrowserContext);
+      const result = stateless.processInput(createInputArgs({ requestContext })) as any;
+      expect(result.systemMessages).toHaveLength(1);
+    });
+  });
+
   // Helper to create minimal args for processInput
   const createInputArgs = (overrides: Partial<ProcessInputArgs> = {}): ProcessInputArgs => ({
     messages: [],

@@ -1,0 +1,90 @@
+import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
+
+export type JiraRuleOverrides = Partial<
+  Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null | undefined>
+>;
+export type JiraEventRules = Readonly<Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null>>;
+
+function jiraIssueObserved(context: FactoryJiraRuleContext) {
+  if (context.item || !context.intake) return;
+  return {
+    type: 'upsertLinkedWorkItem',
+    idempotencyKey: `${context.ingress.id}:issue-triage`,
+    // Filed on the default board's first phase; the project's intake routes place it from there.
+    board: context.intake.board,
+    source: 'jira-issue',
+    sourceKey: context.issue.id,
+    title: context.issue.title,
+    url: context.issue.url,
+    stage: context.intake.initialPhase,
+    metadata: {
+      identifier: context.issue.identifier,
+      issueRef: context.issue.id,
+      sourceCreatedAt: context.issue.createdAt,
+      state: context.issue.state,
+      stateType: context.issue.stateType,
+      priority: context.issue.priorityLabel,
+      project: context.issue.project,
+      site: context.issue.site,
+      assignee: context.issue.assignee,
+      assignees: (context.issue.assignee ? [context.issue.assignee] : []) as string[],
+      creator: context.issue.author,
+      author: context.issue.author,
+      labels: [...context.issue.labels] as string[],
+      createdAt: context.issue.createdAt,
+      updatedAt: context.issue.updatedAt,
+    },
+  } as const;
+}
+
+function jiraIssueClosed(context: FactoryJiraRuleContext) {
+  if (!context.item || context.item.source !== 'jira-issue') return;
+  // The project's intake routes decide where a closed source sends the card. The board's
+  // `sourceClosed` mapping applies only when no route on the board handles closes; without
+  // one the close goes to the routes alone (see `routeEventDecision`).
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
+  // Only terminal state types trigger close.
+  const stateType = context.issue.stateType;
+  if (stateType !== 'completed' && stateType !== 'canceled') return;
+  const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
+  return closedByRoutes(canceled, {
+    idempotencyKey: `${context.ingress.id}:issue-closed`,
+    board: context.board,
+    stage: target.phase,
+    message: {
+      text: `Jira issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
+    },
+  });
+}
+
+export const defaultJiraRules = Object.freeze({
+  issueObserved: jiraIssueObserved,
+  issueClosed: jiraIssueClosed,
+} satisfies JiraEventRules);
+
+export function resolveJiraRules(overrides?: JiraRuleOverrides): JiraEventRules {
+  if (
+    overrides !== undefined &&
+    (overrides === null ||
+      typeof overrides !== 'object' ||
+      Array.isArray(overrides) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(overrides)))
+  ) {
+    throw new Error('Jira rules must be a plain object.');
+  }
+  const rules: Record<string, FactoryRuleHandler<FactoryJiraRuleContext> | null> = { ...defaultJiraRules };
+  for (const key of Reflect.ownKeys(overrides ?? {})) {
+    if (typeof key !== 'string' || !Object.hasOwn(defaultJiraRules, key)) {
+      throw new Error(`Unknown Jira rule event: ${String(key)}.`);
+    }
+    const handler = overrides?.[key as FactoryJiraEventName];
+    if (handler !== undefined && handler !== null && typeof handler !== 'function') {
+      throw new Error(`Jira rule ${key} must be a function, null, or undefined.`);
+    }
+    if (handler !== undefined) rules[key] = handler;
+  }
+  return recordExplicitRuleOverrides(Object.freeze(rules) as JiraEventRules, overrides);
+}

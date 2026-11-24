@@ -15,12 +15,18 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
   ({ children, className, type = 'button', colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const cellsClass = hasColumnOverride ? undefined : 'data-list-cells';
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
       <button
         ref={ref}
         type={type}
-        className={cn(...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles), 'text-left', className)}
+        className={cn(
+          ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
+          cellsClass,
+          'text-left',
+          className,
+        )}
         style={resolvedStyle}
         data-featured={featured || undefined}
         data-variant={variant ?? 'default'}

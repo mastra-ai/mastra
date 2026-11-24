@@ -1,3 +1,12 @@
+/**
+ * Whether a failed MCP call is worth one transport reconnect and retry.
+ *
+ * Qualifying failures are a detached SDK client, an HTTP 400/401/403/404 from
+ * the endpoint (a gateway or auth layer answering while the backend behind it
+ * is unhealthy or the credentials went stale), or a dropped/refused connection.
+ * The caller reconnects and retries once. Tool execution errors and JSON-RPC
+ * protocol errors are never reconnectable.
+ */
 export function isReconnectableMCPError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
@@ -6,9 +15,6 @@ export function isReconnectableMCPError(error: unknown): boolean {
   const errorMessage = error.message.toLowerCase();
 
   return (
-    errorMessage.includes('no valid session') ||
-    errorMessage.includes('session') ||
-    errorMessage.includes('server not initialized') ||
     errorMessage.includes('not connected') ||
     errorMessage.includes('http 400') ||
     errorMessage.includes('http 401') ||
@@ -18,9 +24,59 @@ export function isReconnectableMCPError(error: unknown): boolean {
     errorMessage.includes('fetch failed') ||
     errorMessage.includes('connection refused') ||
     errorMessage.includes('connection closed') ||
-    errorMessage.includes('sse stream disconnected') ||
     errorMessage.includes('typeerror: terminated')
   );
+}
+
+const CONNECTION_NOT_ESTABLISHED_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT']);
+const REJECTED_BEFORE_DISPATCH_STATUSES = new Set([400, 401, 403, 404]);
+
+/**
+ * Whether a reconnectable failure proves the request never reached the server's
+ * handler, so sending it again cannot repeat its effects.
+ *
+ * A reset socket (`fetch failed` with `UND_ERR_SOCKET`), a cut-off response
+ * (`terminated`) or a closed transport (`Connection closed`) can all follow a
+ * request the server already received and ran, so they return false.
+ */
+export function isUnsentRequestError(error: unknown): boolean {
+  if (!isReconnectableMCPError(error)) return false;
+
+  // A JSON-RPC error (numeric code) or an HTTP response came from the server, so its
+  // structured status decides, whatever the message text quotes.
+  const { httpStatus, code } = getMCPDiscoveryErrorDetails(error);
+  if (typeof code === 'number') return false;
+  if (httpStatus !== undefined) return REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus);
+
+  const message = (error as Error).message.toLowerCase();
+  if (
+    message.includes('not connected') ||
+    message.includes('econnrefused') ||
+    message.includes('connection refused') ||
+    /\bhttp 40[0134]\b/.test(message)
+  ) {
+    return true;
+  }
+
+  return typeof code === 'string' && CONNECTION_NOT_ESTABLISHED_CODES.has(code);
+}
+
+const GATEWAY_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * Whether a failed `tasks/get` poll should be retried while waiting out an outage.
+ *
+ * Adds HTTP 502/503/504 (a proxy or load balancer answering while the server
+ * restarts or deploys) to the reconnectable failures. Kept separate from
+ * {@link isReconnectableMCPError}: `tasks/get` is idempotent, but a `tools/call`
+ * retried after a gateway 5xx could run its work twice.
+ */
+export function isRecoverableTaskPollError(error: unknown): boolean {
+  if (isReconnectableMCPError(error)) return true;
+  if (!(error instanceof Error)) return false;
+  const { httpStatus } = getMCPDiscoveryErrorDetails(error);
+  if (httpStatus !== undefined) return GATEWAY_UNAVAILABLE_STATUSES.has(httpStatus);
+  return /\bhttp 50[234]\b/i.test(error.message);
 }
 
 /** Structured transport metadata for a failed aggregate MCP discovery. */

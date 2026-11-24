@@ -10,7 +10,7 @@ export function SideDialogContent({ children, className }: SideDialogContentProp
   return (
     <DrawerInteractive
       render={
-        <div className={cn('grid content-start gap-6 overflow-y-scroll p-6 pb-8 pl-9', className)}>{children}</div>
+        <div className={cn('grid content-start gap-4 overflow-y-scroll p-4 pb-5 pl-5', className)}>{children}</div>
       }
     />
   );

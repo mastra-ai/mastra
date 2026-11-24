@@ -1,12 +1,12 @@
-import { createHash } from 'node:crypto';
-
-import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
 
 import { MastraEditor } from '../index';
+import { computeInlineWorkspaceIdentity } from './workspace-identity';
 
 async function createEditorWithStore(agents?: Record<string, Agent>) {
   const storage = new InMemoryStore();
@@ -21,7 +21,7 @@ async function createEditorWithStore(agents?: Record<string, Agent>) {
 
 describe('EditorAgentNamespace.update', () => {
   it('creates a new draft version when SDK updates agent snapshot fields', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'sdk-updatable-agent',
@@ -43,9 +43,13 @@ describe('EditorAgentNamespace.update', () => {
 
     const latest = await editor.agent.getById('sdk-updatable-agent', { status: 'draft' });
     expect(await Promise.resolve(latest?.getInstructions())).toBe('TWO');
+    const registered = mastra.getAgent('sdk-updatable-agent');
+    expect(latest).not.toBe(registered);
 
     const versionTwoAgent = await editor.agent.getById('sdk-updatable-agent', { versionNumber: 2 });
     expect(await Promise.resolve(versionTwoAgent?.getInstructions())).toBe('TWO');
+    expect(versionTwoAgent).not.toBe(registered);
+    expect(mastra.getAgent('sdk-updatable-agent')).toBe(registered);
 
     const versions = await agentsStore.listVersions({ agentId: 'sdk-updatable-agent' });
     expect(versions.versions).toHaveLength(2);
@@ -59,7 +63,7 @@ describe('EditorAgentNamespace.update', () => {
   });
 
   it('keeps SDK config updates in draft until they are published', async () => {
-    const { editor, agentsStore } = await createEditorWithStore();
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     await editor.agent.create({
       id: 'published-sdk-agent',
@@ -82,6 +86,11 @@ describe('EditorAgentNamespace.update', () => {
     expect(await Promise.resolve(defaultAgent?.getInstructions())).toBe('ONE');
     const draftAgent = await editor.agent.getById('published-sdk-agent', { status: 'draft' });
     expect(await Promise.resolve(draftAgent?.getInstructions())).toBe('TWO');
+    const versionAgent = await editor.agent.getById('published-sdk-agent', { versionId: versionOne!.id });
+    expect(await Promise.resolve(versionAgent?.getInstructions())).toBe('ONE');
+    expect(draftAgent).not.toBe(defaultAgent);
+    expect(versionAgent).not.toBe(defaultAgent);
+    expect(mastra.getAgent('published-sdk-agent')).toBe(defaultAgent);
 
     const versions = await agentsStore.listVersions({ agentId: 'published-sdk-agent' });
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
@@ -108,6 +117,39 @@ describe('EditorAgentNamespace.update', () => {
     editor.agent.clearCache('version-zero-agent');
     const coldResult = await editor.agent.getById('version-zero-agent', { versionNumber: 0 });
     expect(coldResult).toBeNull();
+  });
+
+  it('clearCache() unregisters stored agents hydrated by version-specific requests', async () => {
+    const codeAgent = new Agent({
+      name: 'code-agent',
+      instructions: 'CODE',
+      model: { provider: 'openai', name: 'gpt-4' } as any,
+    });
+    const { editor, mastra } = await createEditorWithStore({ 'code-agent': codeAgent });
+
+    await editor.agent.create({
+      id: 'versioned-stored-agent',
+      name: 'Versioned Stored Agent',
+      instructions: 'ONE',
+      model: { provider: 'openai', name: 'gpt-4' },
+    });
+
+    // Reset all cache/registry state so the version-specific load is the only
+    // thing that registers the stored agent (version requests skip the value cache).
+    editor.agent.clearCache();
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+
+    const versioned = await editor.agent.getById('versioned-stored-agent', { versionNumber: 1 });
+    expect(versioned).not.toBeNull();
+    // Registered with Mastra even though it was never added to the value cache.
+    expect(mastra.getAgentById('versioned-stored-agent')).toBeDefined();
+
+    editor.agent.clearCache();
+
+    // The version-specifically-registered stored agent must be gone after clear-all.
+    expect(() => mastra.getAgentById('versioned-stored-agent')).toThrow();
+    // Code-defined agents must survive clear-all.
+    expect(mastra.getAgentById('code-agent')).toBe(codeAgent);
   });
 
   it('preserves an explicit activeVersionId while creating a new snapshot version', async () => {
@@ -205,7 +247,7 @@ describe('EditorAgentNamespace.update', () => {
     expect(versionTwo?.skillsFormat).toBe('markdown');
   });
 
-  it('persists durable on the version snapshot and hydrates a durable agent', async () => {
+  it('persists durable on the version snapshot and hydrates resumable streams without durable execution', async () => {
     const { editor, mastra, agentsStore } = await createEditorWithStore();
 
     const created = await editor.agent.create({
@@ -217,16 +259,54 @@ describe('EditorAgentNamespace.update', () => {
     });
 
     expect(created.toRawConfig()?.durable).toBe(true);
-    // `Mastra.addAgent` wraps agents whose `durable` is truthy; the wrapper
-    // points at the underlying agent instead of itself.
-    const registered = mastra.getAgentById('durable-agent') as unknown as { agent?: unknown };
-    expect(registered).toBeDefined();
-    expect(registered.agent).not.toBe(registered);
+    const registered = mastra.getAgentById('durable-agent');
+    expect(registered).toBe(created);
+    expect(registered.hasResumableStreams()).toBe(true);
+    await expect(registered.recover('stored-run')).rejects.toThrow('createDurableAgent');
 
     const versionOne = (await agentsStore.listVersions({ agentId: 'durable-agent' })).versions.find(
       version => version.versionNumber === 1,
     );
     expect(versionOne?.durable).toBe(true);
+  });
+
+  it.each([
+    true,
+    false,
+    { maxSteps: 25, cleanupTimeoutMs: 0 },
+    { id: 'old', name: 'Old', shouldPersistSnapshot: true },
+  ])('loads an existing persisted durable config %j without silent execution migration', async durable => {
+    const { editor, mastra, agentsStore } = await createEditorWithStore();
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    try {
+      await agentsStore.create({
+        agent: {
+          id: 'legacy-durable-agent',
+          name: 'Legacy Durable Agent',
+          instructions: 'ONE',
+          model: { provider: 'openai', name: 'gpt-4' },
+          durable,
+        },
+      });
+      const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
+      expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
+      expect(agent?.hasResumableStreams()).toBe(durable !== false);
+      expect(agent?.durable).toEqual(durable);
+      await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
+      const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
+      expect(migrationWarnings).toHaveLength(typeof durable === 'object' ? 1 : 0);
+      if (typeof durable === 'object') {
+        expect(migrationWarnings[0]![0]).toContain('legacy-durable-agent');
+        // cleanupTimeoutMs and shouldPersistSnapshot are native durable options, not ignored legacy keys.
+        const nativeKeys = ['cleanupTimeoutMs', 'shouldPersistSnapshot'];
+        for (const key of Object.keys(durable)) {
+          if (nativeKeys.includes(key)) expect(migrationWarnings[0]![0]).not.toContain(key);
+          else expect(migrationWarnings[0]![0]).toContain(key);
+        }
+      }
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('creates a version when SDK updates durable', async () => {
@@ -242,16 +322,16 @@ describe('EditorAgentNamespace.update', () => {
 
     const updated = await editor.agent.update({
       id: 'durable-update-agent',
-      durable: { maxSteps: 10 },
+      durable: { cleanupTimeoutMs: 10 },
     });
 
-    expect(updated.toRawConfig()?.durable).toEqual({ maxSteps: 10 });
+    expect(updated.toRawConfig()?.durable).toEqual({ cleanupTimeoutMs: 10 });
 
     const versions = await agentsStore.listVersions({ agentId: 'durable-update-agent' });
     expect(versions.versions).toHaveLength(2);
     const versionTwo = versions.versions.find(version => version.versionNumber === 2);
     expect(versionTwo?.changedFields).toEqual(['durable']);
-    expect(versionTwo?.durable).toEqual({ maxSteps: 10 });
+    expect(versionTwo?.durable).toEqual({ cleanupTimeoutMs: 10 });
   });
 
   it('persists inline workspaces before creating a version from an SDK update', async () => {
@@ -278,10 +358,7 @@ describe('EditorAgentNamespace.update', () => {
       workspace,
     });
 
-    const workspaceId = `inline-${createHash('sha256')
-      .update(JSON.stringify(workspace.config))
-      .digest('hex')
-      .slice(0, 12)}`;
+    const { workspaceId } = computeInlineWorkspaceIdentity(workspace.config);
     const storedWorkspace = await workspaceStore.getByIdResolved(workspaceId);
     expect(storedWorkspace?.name).toBe('Updated Workspace');
   });

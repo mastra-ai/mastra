@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { createHttpLoggingTestSuite } from '@internal/server-adapter-test-utils';
+import { createHttpLoggingTestSuite } from '@mastra/server-adapters-test-suite';
 import Koa from 'koa';
 import type { Context, Next } from 'koa';
 import { describe } from 'vitest';

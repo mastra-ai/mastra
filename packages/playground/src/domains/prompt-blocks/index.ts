@@ -1,29 +1,28 @@
 // Components
-export { PromptBlockCreateContent } from './components/prompt-block-create-content';
 export {
+  PromptBlockCreateContent,
   PromptBlockVersionCombobox,
   type PromptBlockVersionComboboxProps,
-} from './components/prompt-block-version-combobox';
-export { PromptBlockEditSidebar } from './components/prompt-block-edit-page/prompt-block-edit-sidebar';
-export { PromptBlockEditMain } from './components/prompt-block-edit-page/prompt-block-edit-main';
-export {
+  PromptBlockEditSidebar,
+  PromptBlockEditMain,
+  PromptBlockEditContent,
+  type PromptBlockEditContentProps,
+  DeletePromptBlockAction,
   usePromptBlockEditForm,
   type UsePromptBlockEditFormOptions,
-} from './components/prompt-block-edit-page/use-prompt-block-edit-form';
-export {
   promptBlockFormSchema,
   type PromptBlockFormValues,
-} from './components/prompt-block-edit-page/utils/form-validation';
-
-export { PromptsList, type PromptsListProps } from './components/prompts-list/prompts-list';
-export { NoPromptBlocksInfo } from './components/prompts-list/no-prompt-blocks-info';
+  PromptsList,
+  type PromptsListProps,
+  NoPromptBlocksInfo,
+} from '@mastra/playground-ui/domains/prompt-blocks';
 
 // Hooks
 export {
   useStoredPromptBlocks,
   useStoredPromptBlock,
   useStoredPromptBlockMutations,
-} from './hooks/use-stored-prompt-blocks';
+} from '@mastra/react/hooks/prompt-blocks';
 export {
   usePromptBlockVersions,
   usePromptBlockVersion,
@@ -31,4 +30,4 @@ export {
   useActivatePromptBlockVersion,
   useRestorePromptBlockVersion,
   useDeletePromptBlockVersion,
-} from './hooks/use-prompt-block-versions';
+} from '@mastra/react/hooks/prompt-blocks';

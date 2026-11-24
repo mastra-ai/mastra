@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import type { MastraMessagePart } from '../agent/message-list/state/types';
 import {
   extractWorkingMemoryTags,
   extractWorkingMemoryContent,
   removeWorkingMemoryTags,
+  removeWorkingMemoryToolInvocationParts,
+  removeWorkingMemoryToolInvocations,
   removeSystemReminderTags,
 } from './working-memory-utils';
 
@@ -227,5 +230,192 @@ describe('removeSystemReminderTags', () => {
     expect(removeSystemReminderTags('before <system-reminder>unclosed content')).toBe(
       'before <system-reminder>unclosed content',
     );
+  });
+});
+
+describe('removeWorkingMemoryToolInvocationParts', () => {
+  const reasoning = { type: 'reasoning' as const, reasoning: 'thinking', details: [] };
+  const call = (toolCallId: string, toolName: string): MastraMessagePart => ({
+    type: 'tool-invocation',
+    toolInvocation: { state: 'result', toolCallId, toolName, args: {}, result: 'ok' },
+  });
+
+  it('drops a step left with only reasoning', () => {
+    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        call('wm', 'updateWorkingMemory'),
+        ...next,
+      ]),
+    ).toEqual(next);
+  });
+
+  it('drops a step left with only reasoning and whitespace text', () => {
+    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        { type: 'text', text: '\n\n' },
+        call('wm', 'updateWorkingMemory'),
+        ...next,
+      ]),
+    ).toEqual(next);
+  });
+
+  it('drops a step left with only reasoning and working-memory tags', () => {
+    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>\n' },
+        call('wm', 'updateWorkingMemory'),
+        ...next,
+      ]),
+    ).toEqual(next);
+  });
+
+  it('keeps reasoning when another tool call shares the step', () => {
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        { type: 'step-start' },
+        reasoning,
+        call('wm', 'updateWorkingMemory'),
+        call('other', 'lookupWeather'),
+      ]),
+    ).toEqual([{ type: 'step-start' }, reasoning, call('other', 'lookupWeather')]);
+  });
+
+  it('finds step boundaries after tool parts when step-start markers are missing', () => {
+    const reasoningA = { ...reasoning, reasoning: 'A' };
+    const reasoningB = { ...reasoning, reasoning: 'B' };
+    const reasoningC = { ...reasoning, reasoning: 'C' };
+    expect(
+      removeWorkingMemoryToolInvocationParts([
+        reasoningA,
+        call('wm1', 'updateWorkingMemory'),
+        reasoningB,
+        { type: 'text', text: 'Checking' },
+        call('wm2', 'updateWorkingMemory'),
+        call('other', 'lookupWeather'),
+        reasoningC,
+        { type: 'text', text: 'Done' },
+      ]),
+    ).toEqual([
+      reasoningB,
+      { type: 'text', text: 'Checking' },
+      call('other', 'lookupWeather'),
+      reasoningC,
+      { type: 'text', text: 'Done' },
+    ]);
+  });
+
+  describe('Gemini thought signatures on parallel calls (#27231)', () => {
+    const signed = (part: MastraMessagePart, providerMetadata: Record<string, Record<string, any>>) =>
+      ({ ...part, providerMetadata }) as MastraMessagePart;
+    const SKIP = 'skip_thought_signature_validator';
+
+    it('marks the first surviving call with the skip-validator signature, not the removed call signature', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), {
+        google: { thoughtSignature: 'sig-1' },
+        mastra: { createdAt: 1 },
+      });
+      const other = signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 } });
+      const input = [{ type: 'step-start' }, wm, other, call('third', 'lookupTime')] as MastraMessagePart[];
+      const snapshot = structuredClone(input);
+
+      expect(removeWorkingMemoryToolInvocationParts(input)).toEqual([
+        { type: 'step-start' },
+        signed(call('other', 'lookupWeather'), { mastra: { createdAt: 2 }, google: { thoughtSignature: SKIP } }),
+        call('third', 'lookupTime'),
+      ]);
+      expect(input).toEqual(snapshot);
+    });
+
+    it('keeps an existing signature on the surviving call', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-wm' } });
+      const other = signed(call('other', 'lookupWeather'), { google: { thoughtSignature: 'sig-other' } });
+      expect(removeWorkingMemoryToolInvocationParts([{ type: 'step-start' }, wm, other])).toEqual([
+        { type: 'step-start' },
+        other,
+      ]);
+    });
+
+    it('uses the removed call provider namespace and copies no other provider metadata', () => {
+      const wm = signed(call('wm', 'updateWorkingMemory'), {
+        vertex: { thoughtSignature: 'sig-vertex', extra: 'wm-only' },
+        openai: { itemId: 'fc_wm' },
+      });
+      expect(
+        removeWorkingMemoryToolInvocationParts([{ type: 'step-start' }, wm, call('other', 'lookupWeather')]),
+      ).toEqual([
+        { type: 'step-start' },
+        signed(call('other', 'lookupWeather'), { vertex: { thoughtSignature: SKIP } }),
+      ]);
+    });
+
+    it('adds nothing when the removed call is unsigned', () => {
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          call('wm', 'updateWorkingMemory'),
+          call('other', 'lookupWeather'),
+        ]),
+      ).toEqual([{ type: 'step-start' }, call('other', 'lookupWeather')]);
+    });
+
+    it('still drops a step whose only call was the signed working-memory call', () => {
+      const next: MastraMessagePart[] = [{ type: 'step-start' }, { type: 'text', text: 'Done' }];
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          reasoning,
+          signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-1' } }),
+          ...next,
+        ]),
+      ).toEqual(next);
+    });
+
+    it('marks only the first surviving call of the same step', () => {
+      expect(
+        removeWorkingMemoryToolInvocationParts([
+          { type: 'step-start' },
+          signed(call('wm', 'updateWorkingMemory'), { google: { thoughtSignature: 'sig-1' } }),
+          call('a', 'lookupWeather'),
+          { type: 'step-start' },
+          call('b', 'lookupWeather'),
+        ]),
+      ).toEqual([
+        { type: 'step-start' },
+        signed(call('a', 'lookupWeather'), { google: { thoughtSignature: SKIP } }),
+        { type: 'step-start' },
+        call('b', 'lookupWeather'),
+      ]);
+    });
+  });
+
+  it('leaves state-signal setWorkingMemory calls alone', () => {
+    const parts: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, call('wm', 'setWorkingMemory')];
+    expect(removeWorkingMemoryToolInvocationParts(parts)).toBe(parts);
+  });
+});
+
+describe('removeWorkingMemoryToolInvocations', () => {
+  const invocation = (toolName: string) => ({
+    state: 'result' as const,
+    toolCallId: toolName,
+    toolName,
+    args: {},
+    result: 'ok',
+  });
+
+  it('removes updateWorkingMemory entries and drops an emptied array', () => {
+    expect(removeWorkingMemoryToolInvocations([invocation('updateWorkingMemory')])).toBeUndefined();
+    expect(
+      removeWorkingMemoryToolInvocations([invocation('updateWorkingMemory'), invocation('lookupWeather')]),
+    ).toEqual([invocation('lookupWeather')]);
   });
 });

@@ -108,6 +108,18 @@ describe('writeFiles', () => {
     expect(sandbox.written[0]).toEqual({ path: '/app/index.mjs', content: 'export {}' });
   });
 
+  it('accepts an optional options argument through the interface, which narrower impls may ignore', async () => {
+    // NetworkedSandbox.writeFiles only declares (files) — proving the widened
+    // interface signature stays compatible with providers that ignore options.
+    const sandbox = new NetworkedSandbox();
+    const asInterface: WorkspaceSandbox = sandbox;
+
+    const controller = new AbortController();
+    await asInterface.writeFiles?.([{ path: '/app/a.mjs', content: 'export {}' }], { abortSignal: controller.signal });
+
+    expect(sandbox.written).toHaveLength(1);
+  });
+
   it('is undefined on sandboxes that do not implement it', () => {
     const sandbox: WorkspaceSandbox = new PlainSandbox();
     expect(sandbox.writeFiles).toBeUndefined();

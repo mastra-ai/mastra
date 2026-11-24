@@ -264,6 +264,27 @@ describe('InMemorySkillsStorage', () => {
     });
   });
 
+  describe('list pagination with empty entity IDs', () => {
+    it.each([NaN, Infinity, -Infinity, 0.5, -0.5, -1])(
+      'rejects invalid page %s before returning no candidates',
+      async page => {
+        for (const perPage of [undefined, 0, 10, false] as const) {
+          await expect(storage.list({ page, perPage, entityIds: [] })).rejects.toThrow('page must be >= 0');
+        }
+      },
+    );
+
+    it.each([undefined, 0, 10, false] as const)('preserves valid empty results with perPage %s', async perPage => {
+      await expect(storage.list({ page: 0, perPage, entityIds: [] })).resolves.toEqual({
+        skills: [],
+        total: 0,
+        page: 0,
+        perPage: perPage ?? 100,
+        hasMore: false,
+      });
+    });
+  });
+
   describe('listResolved', () => {
     beforeEach(async () => {
       await storage.create({

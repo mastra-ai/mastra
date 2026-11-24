@@ -407,6 +407,26 @@ describe('MastraPlatformExporter', () => {
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
     });
 
+    it('keeps native span fields on the buffered span record', async () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...mockSpan, ...fields },
+      });
+
+      expect((exporter as any).buffer.spans[0]).toMatchObject(fields);
+    });
+
     it('should reset buffer correctly', () => {
       const buffer = (exporter as any).buffer;
       const resetBuffer = (exporter as any).resetBuffer.bind(exporter);
@@ -911,6 +931,43 @@ describe('MastraPlatformExporter', () => {
         expect(headers.Authorization).toBe(`Bearer ${envToken}`);
       } finally {
         await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('ignores environment credentials and project id when resolveFromEnv is false', async () => {
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', createTestJWT({ teamId: 'env', projectId: 'env-project' }));
+      vi.stubEnv('MASTRA_PROJECT_ID', 'not a valid id');
+      vi.stubEnv('MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT', 'https://attacker.example.com/some/path');
+
+      try {
+        // Would throw on the invalid env project id or malformed endpoint if env were consulted.
+        const exporter = new MastraPlatformExporter({ endpoint: 'http://localhost:3000', resolveFromEnv: false });
+        try {
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await exporter.flush();
+          expect(mockFetchWithRetry).not.toHaveBeenCalled();
+        } finally {
+          await exporter.shutdown();
+        }
+
+        const explicitToken = createTestJWT({ teamId: 'explicit', projectId: 'explicit-project' });
+        const explicit = new MastraPlatformExporter({
+          endpoint: 'http://localhost:3000',
+          accessToken: explicitToken,
+          projectId: 'proj_explicit',
+          resolveFromEnv: false,
+        });
+        try {
+          await explicit.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: mockSpan });
+          await explicit.flush();
+          const [url, requestOptions] = mockFetchWithRetry.mock.calls[0] as [string, RequestInit];
+          expect(url).toBe('http://localhost:3000/projects/proj_explicit/ai/spans/publish');
+          expect((requestOptions.headers as Record<string, string>).Authorization).toBe(`Bearer ${explicitToken}`);
+        } finally {
+          await explicit.shutdown();
+        }
+      } finally {
         vi.unstubAllEnvs();
       }
     });

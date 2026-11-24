@@ -76,18 +76,26 @@ export type {
   StreamObjectResult,
   StreamTextResult,
 } from './model/base.types';
-export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
+export type {
+  TripwireProperties,
+  IdentifiedModelConfig,
+  MastraModelConfig,
+  OpenAICompatibleConfig,
+  WidenModelId,
+  WidenedMastraModelConfig,
+} from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
 export {
   GatewayRegistry,
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
+  getModelReasoningOptions,
   modelSupportsAttachments,
   modelSupportsStructuredOutput,
   modelSupportsTemperature,
 } from './model/provider-registry.js';
-export type { AttachmentCapabilities } from './model/provider-registry.js';
+export type { AttachmentCapabilities, ModelReasoningOption } from './model/provider-registry.js';
 
 /**
  * Map of provider ID to the models that provider serves.
@@ -199,6 +207,9 @@ export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined 
 
 export type {
   ProviderConfig,
+  ModelPricing,
+  ModelPricingRates,
+  ModelPricingTier,
   GatewayLanguageModel,
   MastraModelGatewayInterface,
   GatewayAuthRequest,
@@ -210,6 +221,8 @@ export {
   ModelsDevGateway,
   AzureOpenAIGateway,
   MastraGateway,
+  findGatewayForModel,
+  getGatewayId,
 } from './model/gateways';
 export type {
   AzureAccessToken,

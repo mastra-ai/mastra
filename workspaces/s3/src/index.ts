@@ -5,6 +5,6 @@
  * Works with AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces, etc.
  */
 
-export { S3Filesystem, type S3FilesystemOptions, type S3MountConfig } from './filesystem';
+export { S3Filesystem, type S3FilesystemOptions, type S3MountConfig, type MountOwner } from './filesystem';
 export { s3FilesystemProvider, s3BlobStoreProvider } from './provider';
 export { S3BlobStore, type S3BlobStoreOptions } from './blob-store';

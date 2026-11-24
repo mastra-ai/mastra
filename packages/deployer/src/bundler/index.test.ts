@@ -1,9 +1,22 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { prepareFsAgentsEntry, writeFsAgentsEntry } from '../build/fs-routing/prepare';
 import type { SourceDependencyConstraints } from './index';
 import { Bundler, applySourceDependencyRange, getSourceDependencyConstraints, isRegistryVersionSpec } from './index';
+
+const depsMocks = vi.hoisted(() => ({
+  setLogger: vi.fn(),
+  install: vi.fn(),
+}));
+
+vi.mock('../services/deps', () => ({
+  DepsService: class {
+    __setLogger = depsMocks.setLogger;
+    install = depsMocks.install;
+  },
+}));
 
 const tempDirs: string[] = [];
 
@@ -12,6 +25,14 @@ class TestBundler extends Bundler {
 
   getEnvFiles(): Promise<string[]> {
     return Promise.resolve([]);
+  }
+
+  installForTest(outputDirectory: string, rootDir: string, pnpmOverrides?: Record<string, string>) {
+    return this.installDependencies(outputDirectory, rootDir, pnpmOverrides);
+  }
+
+  bundlerOptionsForTest(entryFile: string, outputDirectory: string) {
+    return this.getUserBundlerOptions(entryFile, outputDirectory);
   }
 }
 
@@ -67,7 +88,108 @@ const createSourceApp = async ({
 };
 
 afterEach(async () => {
+  vi.clearAllMocks();
   await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
+
+describe('Bundler.loadEnvVars', () => {
+  it('layers the env files returned by getEnvFiles, later files winning', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-env-'));
+    tempDirs.push(tempDir);
+    const envFile = join(tempDir, '.env');
+    const localFile = join(tempDir, '.env.local');
+    await writeFile(envFile, 'SHARED=base\nBASE_ONLY=1\n');
+    await writeFile(localFile, 'SHARED=local\nLOCAL_ONLY=2\n');
+
+    class EnvBundler extends TestBundler {
+      getEnvFiles(): Promise<string[]> {
+        return Promise.resolve([envFile, localFile]);
+      }
+    }
+
+    const env = await new EnvBundler('env-test').loadEnvVars();
+
+    expect(Object.fromEntries(env)).toEqual({ SHARED: 'local', BASE_ONLY: '1', LOCAL_ONLY: '2' });
+  });
+});
+
+describe('Bundler.getUserBundlerOptions', () => {
+  // With file-based agents the CLI bundles a generated wrapper that only re-exports `mastra`,
+  // so extracting from it found no `new Mastra({...})` and fell back to the defaults (#29048).
+  it('keeps the bundler options from index.ts when the project has file-based agents (#29048)', async () => {
+    const mastraDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-fs-agents-'));
+    tempDirs.push(mastraDir);
+    const userEntry = join(mastraDir, 'index.ts');
+    await writeFile(
+      userEntry,
+      `class Mastra { constructor(config) { this.config = config; } }
+export const mastra = new Mastra({ bundler: { sourcemap: true, externals: ['pg'] } });
+`,
+    );
+    await mkdir(join(mastraDir, 'agents', 'weather'), { recursive: true });
+    await writeFile(join(mastraDir, 'agents', 'weather', 'instructions.md'), 'hi');
+    const outputDirectory = join(mastraDir, '.mastra');
+
+    const fsAgents = await prepareFsAgentsEntry(mastraDir, userEntry, outputDirectory);
+    await writeFsAgentsEntry(fsAgents);
+    const bundler = new TestBundler('Test');
+    bundler.setConfigEntryFile(userEntry);
+
+    expect(fsAgents.entryFile).not.toBe(userEntry);
+    await expect(bundler.bundlerOptionsForTest(fsAgents.entryFile, outputDirectory)).resolves.toEqual({
+      sourcemap: true,
+      externals: ['pg'],
+    });
+  });
+});
+
+describe('Bundler.installDependencies', () => {
+  it('updates the selected lockfile and installs packed workspace dependencies in one operation', async () => {
+    const bundler = new TestBundler('Test');
+    const pnpmOverrides = {
+      '@inner/transitive-c': 'file:./workspace-module/inner-transitive-c-1.0.0.tgz',
+    };
+
+    await bundler.installForTest('/tmp/build', '/tmp/source', pnpmOverrides);
+
+    expect(depsMocks.install).toHaveBeenCalledTimes(1);
+    expect(depsMocks.install).toHaveBeenCalledWith({
+      dir: join('/tmp/build', 'output'),
+      pnpmOverrides,
+      pnpmNodeLinker: undefined,
+      pnpmWorkspaceSettings: undefined,
+    });
+  });
+});
+
+describe('Bundler.listToolsInputOptions', () => {
+  it('returns stable, sorted inputs relative to the project root', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));
+    tempDirs.push(tempDir);
+    const projectRoot = join(tempDir, 'apps', 'api');
+    const toolsDir = join(projectRoot, 'src', 'mastra', 'tools');
+    await mkdir(join(toolsDir, 'nested'), { recursive: true });
+    for (const file of ['b.ts', 'a.ts', join('nested', 'c.ts')]) {
+      await writeFile(join(toolsDir, file), 'export {}', 'utf-8');
+    }
+
+    const bundler = new TestBundler('Test');
+    const toolsGlob = join(toolsDir, '**/*.ts');
+    const first = await bundler.listToolsInputOptions([toolsGlob], projectRoot);
+    const second = await bundler.listToolsInputOptions([join(toolsDir, 'b.ts'), toolsGlob], projectRoot);
+
+    expect(second).toEqual(first);
+    expect(Object.values(first)).toEqual([
+      join(toolsDir, 'a.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'b.ts').replaceAll('\\', '/'),
+      join(toolsDir, 'nested', 'c.ts').replaceAll('\\', '/'),
+    ]);
+    expect(Object.keys(first)).toEqual([
+      'tools/a3576fdd-4db8-3860-0363-043d8e044095',
+      'tools/c8a75e35-2420-ce8d-d5d1-d6a12388c682',
+      'tools/a34d68f6-b252-bc06-1de9-238ce99e3110',
+    ]);
+  });
 });
 
 describe('Bundler.writePackageJson', () => {
@@ -333,6 +455,22 @@ describe('applySourceDependencyRange', () => {
     expect(
       applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: '  ^4.3.6 ' } })),
     ).toEqual({ version: '^4.3.6' });
+  });
+
+  it.each(['^4.3.6 ||   *', '^4.3.6   || >=  0.0', '^4.3.6\t\tx'])(
+    'keeps the resolved version when whitespace pads an unbounded alternative in %j',
+    declared => {
+      expect(
+        applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } })),
+      ).toEqual({ version: '3.25.76' });
+    },
+  );
+
+  it('checks a declared range with a long whitespace run in linear time', () => {
+    const declared = `1${' '.repeat(200_000)}a`;
+    const started = performance.now();
+    applySourceDependencyRange('zod', { version: '3.25.76' }, constraints({ dependencies: { zod: declared } }));
+    expect(performance.now() - started).toBeLessThan(1_000);
   });
 
   it('keeps the resolved alias when the declared value is a bare range for a differently named package', () => {

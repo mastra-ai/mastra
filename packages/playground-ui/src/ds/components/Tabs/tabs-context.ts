@@ -8,16 +8,18 @@ export type TabMeasurement = {
   width: number;
   element: HTMLElement;
   onClick?: () => void;
+  onClose?: () => void;
 };
 
 export const TabsContext = createContext<{
   appearance: 'default' | 'contained';
-  frame: 'stroke' | 'inset';
   value: string;
   select(value: string): void;
 } | null>(null);
 
 export const TabListContext = createContext<{
+  variant: 'line' | 'pill' | 'pill-ghost';
+  size: 'sm' | 'md';
   hiddenValues: ReadonlySet<string>;
   register(tab: TabMeasurement): void;
   unregister(value: string): void;

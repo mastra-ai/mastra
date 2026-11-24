@@ -11,7 +11,7 @@ Most docs pages fit one of these patterns:
 - **Setup or configuration:** Helps readers enable and configure a Mastra-owned feature.
 - **Task-oriented:** Takes readers from a known starting point to a verifiable result.
 
-These are authoring patterns, not mandatory templates. A page may combine them when the result remains coherent.
+These are authoring patterns, not mandatory templates. A page may combine them when the result remains coherent. A guide-like structure doesn't automatically qualify a page for the Guides section; follow [Admission to Guides](INFORMATION_ARCHITECTURE.md#admission-to-guides) before choosing that placement.
 
 ## Overview pages
 
@@ -38,36 +38,9 @@ Useful structures include:
 
 Do not turn the overview into a copy of every child page. It does not need to link every page if the sidebar or a focused index already provides exhaustive navigation.
 
-### Suggested shape
+### Template
 
-```mdx
----
-title: '$CATEGORY'
-description: 'What the category helps readers understand or accomplish.'
-packages:
-  - '@mastra/core'
----
-
-# $CATEGORY
-
-State what the category does and the main decision the page helps readers make.
-
-## Choose an approach
-
-Explain the important options with a table, list, cards, or integration grid.
-
-## Quickstart
-
-Include this only when a short working example clarifies the category.
-
-## Category-wide topic
-
-Add sections for behavior shared across the category.
-
-## Next steps
-
-Add selected follow-up links when they improve navigation.
-```
+Scaffold the page from `.claude/skills/mastra-docs/templates/overview.md`.
 
 Use the category name for the title when it is clear and established. Do not add a suffix only to satisfy a formula.
 
@@ -85,40 +58,9 @@ A focused page should:
 
 Keep related sections together even when the page has more than three H2 sections. Split it when sections have independent audiences, tasks, or canonical ownership.
 
-### Suggested shape
+### Template
 
-````mdx
----
-title: '$FEATURE | $CATEGORY'
-description: 'What the reader will understand or accomplish.'
-packages:
-  - '@mastra/core'
----
-
-# $FEATURE
-
-Define the feature and its role in Mastra.
-
-## When to use $FEATURE
-
-Add this section only when readers need help choosing it.
-
-## Configure $FEATURE
-
-Introduce the example and show the supported setup.
-
-```typescript title="src/mastra/<path>.ts"
-// Complete code for the documented behavior
-```
-
-## Behavior or constraint
-
-Explain the important runtime behavior, decision, or limitation.
-
-## Related
-
-Add selected links when they help readers continue.
-````
+Scaffold the page from `.claude/skills/mastra-docs/templates/concept.md`.
 
 The title commonly follows `$FEATURE | $CATEGORY`, but use the established title pattern for the section. The H1 should name the subject directly.
 
@@ -138,9 +80,11 @@ Conceptual pages may compare patterns, explain architecture, or establish termin
 - Explain defaults and persistence boundaries when they affect behavior.
 - Separate local development assumptions from production requirements.
 
+Scaffold the page from `.claude/skills/mastra-docs/templates/concept.md`, leading with the setup and configuration sections.
+
 ## Task-oriented docs pages
 
-Use a task-oriented page when the main purpose is to create, configure, run, or troubleshoot a Mastra-owned capability. Apply the task sequence in `STYLEGUIDE.md` and use only the sections the task needs.
+Use a task-oriented page when the main purpose is to create, configure, run, or troubleshoot a Mastra-owned capability. Apply the task sequence in `STYLEGUIDE.md` and use only the sections the task needs. Scaffold the page from `.claude/skills/mastra-docs/templates/how-to.md`.
 
 ### Quickstarts
 
@@ -149,3 +93,5 @@ A quickstart is a short task-oriented page or section focused on the fastest sup
 - Prefer repository defaults over explaining every choice.
 - State what generated commands or files create.
 - Keep conceptual explanation brief and link to deeper docs.
+
+Scaffold the section or page from `.claude/skills/mastra-docs/templates/quickstart.md`.

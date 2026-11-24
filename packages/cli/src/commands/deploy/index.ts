@@ -17,16 +17,19 @@ import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import { coreFeatures } from '@mastra/core/features';
 import { ZipArchive } from 'archiver';
+import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { checkBundleSize, uploadArtifact } from '../../utils/deploy-bundle-size.js';
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
-import { abortableDelay } from '../../utils/polling.js';
+import { isEuRegion } from '../../utils/platform-region.js';
+import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -203,7 +206,7 @@ export async function resolveWorkersDeployMode(input: {
   if (input.workersOption === 'dedicated') {
     if (!input.redisRequirementMet) {
       throw new WorkersRedisRequirementError(
-        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file, or run `mastra deploy` without --workers and accept the managed Redis attach when prompted.',
+        'A dedicated workers service requires Redis for coordination (pub/sub), but the deploy env has no usable REDIS_URL. Add REDIS_URL to your env file.',
       );
     }
     return 'dedicated';
@@ -259,28 +262,39 @@ interface ArchitectureNode {
 }
 
 const BOX_INNER_WIDTH = 30;
-const BOX_WIDTH = BOX_INNER_WIDTH + 2;
-const BOX_TEXT_WIDTH = BOX_INNER_WIDTH - 2;
+// Below this the boxes truncate most titles, so narrow terminals get a list instead.
+const MIN_BOX_INNER_WIDTH = 18;
 const BOX_HEIGHT = 4;
 const SLOT_HEIGHT = BOX_HEIGHT + 1;
 const CONNECTOR_GAP_WIDTH = 7;
 const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
+const PANEL_SEPARATOR_WIDTH = 5;
 
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
   neon: { label: 'Neon', tone: 'green' },
+  postgres: { label: 'Postgres', tone: 'blue' },
   mongodb: { label: 'MongoDB', tone: 'green' },
   redis: { label: 'Redis', tone: 'red' },
 };
 
+// Terminal cells, not characters: wide characters (CJK, emoji) take two, as in p.note's wrapping.
 function architectureTextWidth(value: string): number {
-  return Array.from(value).length;
+  return fastStringWidth(value);
 }
 
-function truncateArchitectureText(value: string, width = BOX_TEXT_WIDTH): string {
-  const characters = Array.from(value);
-  if (characters.length <= width) return value;
-  return `${characters.slice(0, width - 1).join('')}…`;
+function truncateArchitectureText(value: string, width: number): string {
+  if (architectureTextWidth(value) <= width) return value;
+  let truncated = '';
+  for (const character of value) {
+    if (architectureTextWidth(`${truncated}${character}`) > width - 1) break;
+    truncated += character;
+  }
+  return `${truncated}…`;
+}
+
+function architectureDiagramWidth(boxInnerWidth: number): number {
+  return 3 * (boxInnerWidth + 2) + 2 * CONNECTOR_GAP_WIDTH;
 }
 
 const DEPLOY_REGION_PRESENTATION: Array<{
@@ -289,7 +303,7 @@ const DEPLOY_REGION_PRESENTATION: Array<{
   location: string;
 }> = [
   {
-    matches: region => region === 'eu' || region === 'ams' || region.startsWith('europe-'),
+    matches: isEuRegion,
     label: 'EU West',
     location: EUROPE_DEPLOY_LOCATION,
   },
@@ -496,17 +510,22 @@ function visibleArchitectureWidth(value: string): number {
   return architectureTextWidth(value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, ''));
 }
 
-function renderArchitectureBox(node: ArchitectureNode | undefined, colors: ArchitectureColors): string[] {
-  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(BOX_WIDTH));
+function renderArchitectureBox(
+  node: ArchitectureNode | undefined,
+  innerWidth: number,
+  colors: ArchitectureColors,
+): string[] {
+  if (!node) return Array.from({ length: BOX_HEIGHT }, () => ' '.repeat(innerWidth + 2));
 
-  const title = truncateArchitectureText(node.title);
-  const subtitle = truncateArchitectureText(node.subtitle);
+  const textWidth = innerWidth - 2;
+  const title = truncateArchitectureText(node.title, textWidth);
+  const subtitle = truncateArchitectureText(node.subtitle, textWidth);
   const border = (value: string) => paintArchitectureTone(colors, node.tone, value);
   return [
-    border(`┌${'─'.repeat(BOX_INNER_WIDTH)}┐`),
-    `${border('│')} ${colors.bold(title)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(title))} ${border('│')}`,
-    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(BOX_TEXT_WIDTH - architectureTextWidth(subtitle))} ${border('│')}`,
-    border(`└${'─'.repeat(BOX_INNER_WIDTH)}┘`),
+    border(`┌${'─'.repeat(innerWidth)}┐`),
+    `${border('│')} ${colors.bold(title)}${' '.repeat(textWidth - architectureTextWidth(title))} ${border('│')}`,
+    `${border('│')} ${colors.dim(subtitle)}${' '.repeat(textWidth - architectureTextWidth(subtitle))} ${border('│')}`,
+    border(`└${'─'.repeat(innerWidth)}┘`),
   ];
 }
 
@@ -563,6 +582,8 @@ export function renderDeploymentArchitecture(
     databases: readonly ProjectDatabase[];
     observabilityEnabled: boolean;
     renderedAt?: Date;
+    /** Columns available for the overview; wider content is wrapped by the terminal note. */
+    width?: number;
   },
   colors: ArchitectureColors = pc,
 ): string {
@@ -598,39 +619,11 @@ export function renderDeploymentArchitecture(
       : []),
   ];
 
-  const slotCount = Math.max(leftNodes.length, rightNodes.length);
-  const centerSlot = Math.floor((slotCount - 1) / 2);
   const centerNode: ArchitectureNode = {
     title: input.environment.name,
     subtitle: formatDeploymentLocation(input.environment.region),
     tone: 'gray',
   };
-  const connectorLineOffset = 2;
-  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
-  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
-  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
-  const lines: string[] = [];
-
-  for (let slot = 0; slot < slotCount; slot++) {
-    const leftBox = renderArchitectureBox(leftNodes[slot], colors);
-    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, colors);
-    const rightBox = renderArchitectureBox(rightNodes[slot], colors);
-
-    for (let line = 0; line < BOX_HEIGHT; line++) {
-      const y = slot * SLOT_HEIGHT + line;
-      lines.push(
-        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
-      );
-    }
-
-    if (slot < slotCount - 1) {
-      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
-      lines.push(
-        `${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${' '.repeat(BOX_WIDTH)}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
-      );
-    }
-  }
-
   const panelLines = renderDeploymentPanel(
     {
       projectName: input.projectName,
@@ -642,14 +635,90 @@ export function renderDeploymentArchitecture(
     },
     colors,
   );
-  const rowCount = Math.max(lines.length, panelLines.length);
   const panelWidth = Math.max(...panelLines.map(visibleArchitectureWidth));
+  const width = input.width ?? Infinity;
+
+  // Narrower terminals wrap every line wider than the note, so pick the widest layout that fits:
+  // panel beside the diagram, panel above a diagram shrunk to fit, or panel above a list.
+  if (panelWidth + PANEL_SEPARATOR_WIDTH + architectureDiagramWidth(BOX_INNER_WIDTH) > width) {
+    const boxInnerWidth = Math.min(BOX_INNER_WIDTH, Math.floor((width - 2 * CONNECTOR_GAP_WIDTH) / 3) - 2);
+    const lines =
+      boxInnerWidth >= MIN_BOX_INNER_WIDTH
+        ? renderArchitectureDiagram(leftNodes, centerNode, rightNodes, boxInnerWidth, colors)
+        : renderArchitectureList(centerNode, [...leftNodes, ...rightNodes], width, colors);
+    return [...panelLines, '', ...lines].join('\n');
+  }
+
+  const lines = renderArchitectureDiagram(leftNodes, centerNode, rightNodes, BOX_INNER_WIDTH, colors);
+  const rowCount = Math.max(lines.length, panelLines.length);
 
   return Array.from({ length: rowCount }, (_, index) => {
     const panelLine = panelLines[index] ?? '';
     const paddedPanelLine = `${panelLine}${' '.repeat(Math.max(0, panelWidth - visibleArchitectureWidth(panelLine)))}`;
     return `${paddedPanelLine}  ${colors.dim('│')}  ${lines[index] ?? ''}`.trimEnd();
   }).join('\n');
+}
+
+function renderArchitectureDiagram(
+  leftNodes: readonly ArchitectureNode[],
+  centerNode: ArchitectureNode,
+  rightNodes: readonly ArchitectureNode[],
+  boxInnerWidth: number,
+  colors: ArchitectureColors,
+): string[] {
+  const slotCount = Math.max(leftNodes.length, rightNodes.length);
+  const centerSlot = Math.floor((slotCount - 1) / 2);
+  const connectorLineOffset = 2;
+  const centerConnectorY = centerSlot * SLOT_HEIGHT + connectorLineOffset;
+  const leftConnectorYs = new Set(leftNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const rightConnectorYs = new Set(rightNodes.map((_, index) => index * SLOT_HEIGHT + connectorLineOffset));
+  const emptyBox = ' '.repeat(boxInnerWidth + 2);
+  const lines: string[] = [];
+
+  for (let slot = 0; slot < slotCount; slot++) {
+    const leftBox = renderArchitectureBox(leftNodes[slot], boxInnerWidth, colors);
+    const centerBox = renderArchitectureBox(slot === centerSlot ? centerNode : undefined, boxInnerWidth, colors);
+    const rightBox = renderArchitectureBox(rightNodes[slot], boxInnerWidth, colors);
+
+    for (let line = 0; line < BOX_HEIGHT; line++) {
+      const y = slot * SLOT_HEIGHT + line;
+      lines.push(
+        `${leftBox[line]}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${centerBox[line]}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}${rightBox[line]}`.trimEnd(),
+      );
+    }
+
+    if (slot < slotCount - 1) {
+      const y = slot * SLOT_HEIGHT + BOX_HEIGHT;
+      lines.push(
+        `${emptyBox}${renderConnectorGap(y, leftConnectorYs, centerConnectorY, 'left', colors)}${emptyBox}${renderConnectorGap(y, rightConnectorYs, centerConnectorY, 'right', colors)}`.trimEnd(),
+      );
+    }
+  }
+
+  return lines;
+}
+
+function renderArchitectureList(
+  centerNode: ArchitectureNode,
+  nodes: readonly ArchitectureNode[],
+  width: number,
+  colors: ArchitectureColors,
+): string[] {
+  const renderItem = (node: ArchitectureNode, prefixWidth: number): string => {
+    const available = Math.max(1, width - prefixWidth);
+    const titleWidth = architectureTextWidth(node.title);
+    // Keep at least a few subtitle characters, or drop the subtitle instead of showing a lone ellipsis.
+    if (available - titleWidth - 2 < 4) return colors.bold(truncateArchitectureText(node.title, available));
+    return `${colors.bold(node.title)}  ${colors.dim(truncateArchitectureText(node.subtitle, available - titleWidth - 2))}`;
+  };
+
+  return [
+    `${paintArchitectureTone(colors, centerNode.tone, '■')} ${renderItem(centerNode, 2)}`,
+    ...nodes.map(
+      (node, index) =>
+        `${colors.dim(index === nodes.length - 1 ? '└─' : '├─')} ${paintArchitectureTone(colors, node.tone, '■')} ${renderItem(node, 5)}`,
+    ),
+  ];
 }
 
 function getPackageName(projectDir: string): string | null {
@@ -849,7 +918,7 @@ export async function resolveProject(
     }
 
     const CREATE_NEW = '__create_new__';
-    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : projects[0]!.id;
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : CREATE_NEW;
     const selected = await p.select({
       message: 'Select a project to deploy to',
       initialValue,
@@ -1063,7 +1132,7 @@ export async function resolveEnvironment(
 /*  Upload to environment deploy endpoint                             */
 /* ------------------------------------------------------------------ */
 
-async function uploadToEnvironment(
+export async function uploadToEnvironment(
   token: string,
   orgId: string,
   projectId: string,
@@ -1075,9 +1144,29 @@ async function uploadToEnvironment(
     envVars?: Record<string, string>;
     mastraVersion?: string;
     disablePlatformObservability?: boolean;
+    dedicatedWorkersEnabled?: boolean;
   },
 ): Promise<{ id: string; uploadUrl: string }> {
   const apiUrl = process.env.MASTRA_PLATFORM_API_URL || 'https://platform.mastra.ai';
+
+  if (opts.dedicatedWorkersEnabled) {
+    const workersResp = await fetch(`${apiUrl}/v1/projects/${projectId}/workers`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        'x-organization-id': orgId,
+      },
+      body: JSON.stringify({ workersEnabled: true }),
+    });
+
+    if (!workersResp.ok) {
+      const err = await workersResp.json().catch(() => ({}));
+      throw new Error(
+        `Failed to enable dedicated workers: ${(err as { detail?: string }).detail || workersResp.statusText}`,
+      );
+    }
+  }
 
   // Create deploy via environment endpoint.
   //
@@ -1100,6 +1189,7 @@ async function uploadToEnvironment(
   if (opts.disablePlatformObservability !== undefined) {
     createBody.disablePlatformObservability = opts.disablePlatformObservability;
   }
+  createBody.artifactBytes = zipBuffer.byteLength;
 
   const createResp = await fetch(`${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploy`, {
     method: 'POST',
@@ -1109,23 +1199,15 @@ async function uploadToEnvironment(
 
   if (!createResp.ok) {
     const err = await createResp.json().catch(() => ({}));
-    throw new Error(`Failed to create deploy: ${(err as { detail?: string }).detail || createResp.statusText}`);
+    const detail = (err as { detail?: string }).detail;
+    // 413 = bundle over the platform limit; its detail already names the size and the fix.
+    if (createResp.status === 413 && detail) throw new Error(detail);
+    throw new Error(`Failed to create deploy: ${detail || createResp.statusText}`);
   }
 
   const { deploy } = (await createResp.json()) as { deploy: { id: string; uploadUrl: string } };
 
-  // Upload artifact
-  const uploadResp = await fetch(deploy.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/zip',
-    },
-    body: zipBuffer,
-  });
-
-  if (!uploadResp.ok) {
-    throw new Error(`Failed to upload artifact: ${uploadResp.statusText}`);
-  }
+  await uploadArtifact(deploy.uploadUrl, zipBuffer);
 
   // Signal upload complete — uses net-new env-scoped endpoint so the
   // unified-runtime CLI never touches /v1/studio/*.
@@ -1236,7 +1318,9 @@ async function streamEnvironmentDeployLogs(
   }
 }
 
-async function pollEnvironmentDeploy(
+class RetryableDeployPollError extends Error {}
+
+export async function pollEnvironmentDeploy(
   token: string,
   orgId: string,
   projectId: string,
@@ -1265,39 +1349,104 @@ async function pollEnvironmentDeploy(
     streamState,
   ).catch(() => {});
 
+  let lastError: string | undefined;
+  let lastRetryNoticeAt: number | undefined;
+  let recoveryNoticePending = false;
+  const pollAbort = new AbortController();
+  const timeoutError = () => new Error(`Status polling timed out${lastError ? `: ${lastError}` : ''}`);
+  const pollTimeout = setTimeout(() => pollAbort.abort(timeoutError()), Math.max(0, maxWaitMs - (Date.now() - start)));
+
   try {
-    while (Date.now() - start < maxWaitMs) {
-      const resp = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-          'x-organization-id': orgId,
+    while (Date.now() - start < maxWaitMs && !pollAbort.signal.aborted) {
+      const result = await withPollingRetries(
+        async () => {
+          let resp: Response;
+          let body: string;
+          const requestAbort = new AbortController();
+          const requestTimeout = setTimeout(() => requestAbort.abort(), 30_000);
+          try {
+            resp = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${currentToken}`,
+                'x-organization-id': orgId,
+              },
+              signal: AbortSignal.any([pollAbort.signal, requestAbort.signal]),
+            });
+            // Fetch resolves at the headers; the body read must also be retried on connection loss.
+            body = await resp.text();
+          } catch (err) {
+            lastError = err instanceof Error ? err.message : String(err);
+            if (!requestAbort.signal.aborted && !isRetryablePollingError(err)) throw err;
+            throw new RetryableDeployPollError(lastError, { cause: err });
+          } finally {
+            clearTimeout(requestTimeout);
+          }
+
+          if (!resp.ok && resp.status !== 401) {
+            let detail: string | undefined;
+            try {
+              detail = (JSON.parse(body) as { detail?: string } | null)?.detail;
+            } catch {
+              // Gateway errors often contain HTML rather than JSON.
+            }
+            lastError = `Poll failed: ${detail || resp.statusText || resp.status}`;
+            if (resp.status < 500) throw new Error(lastError);
+            throw new RetryableDeployPollError(lastError);
+          }
+
+          // Parse inside the retry operation, but never retry malformed JSON.
+          return resp.status === 401 ? undefined : (JSON.parse(body) as { deploy: UnifiedDeployStatus });
         },
-      });
+        {
+          maxRetries: Infinity,
+          initialDelayMs: 2000,
+          maxDelayMs: 30_000,
+          shouldRetry: error => error instanceof RetryableDeployPollError,
+          onRetry: (_error, _attempt, delayMs) => {
+            const now = Date.now();
+            if (lastRetryNoticeAt !== undefined && now - lastRetryNoticeAt < 30_000) return;
+            logWriter.flush({ resetWindow: true });
+            p.log.warn(
+              `${recoveryNoticePending ? 'Still unable' : 'Unable'} to check deployment status. ` +
+                (maxWaitMs - (now - start) > delayMs
+                  ? `Retrying in ${delayMs / 1000}s; deployment may still be running.`
+                  : 'No time remains for another retry; deployment may still be running.'),
+            );
+            lastRetryNoticeAt = now;
+            recoveryNoticePending = true;
+          },
+        },
+        pollAbort.signal,
+      );
 
-      if (resp.status === 401) {
-        currentToken = await getToken();
-        // Back off before retrying so a persistently-401 token cannot spin
-        // the poll loop into a tight retry storm against the platform API.
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
+      if (result === undefined) {
+        currentToken = await getToken(pollAbort.signal);
+      } else {
+        if (recoveryNoticePending) {
+          logWriter.flush({ resetWindow: true });
+          p.log.info('Deployment status checks resumed.');
+          recoveryNoticePending = false;
+        }
+        lastError = undefined;
+        const { deploy } = result;
+        if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
+          return deploy;
+        }
       }
 
-      if (!resp.ok) {
-        const err = (await resp.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(`Poll failed: ${err.detail || resp.statusText}`);
-      }
-
-      const { deploy } = (await resp.json()) as { deploy: UnifiedDeployStatus };
-
-      if (deploy.status === 'running' || deploy.status === 'failed' || deploy.status === 'stopped') {
-        return deploy;
-      }
-
-      await new Promise(r => setTimeout(r, 2000));
+      await abortableDelay(2000, pollAbort.signal);
     }
 
-    throw new Error('Deploy timed out');
+    throw pollAbort.signal.reason ?? timeoutError();
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Unable to confirm deployment status; deployment may still be running. ${detail}\n` +
+        `Check deployment ${deployId}: ${deployDashboardUrl('environment', { orgId, projectId, deployId })}`,
+      { cause: err },
+    );
   } finally {
+    clearTimeout(pollTimeout);
     // Give a connected stream a moment to deliver events already in flight,
     // stop it, wait for the reader to settle, then draw whatever is queued so
     // nothing is lost and nothing prints after the outcome message.
@@ -1808,6 +1957,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
       showWorkersConfig,
       databases,
       observabilityEnabled: projectConfig?.disablePlatformObservability !== true,
+      // p.note wraps its content at the terminal width minus its 6-column frame.
+      width: (process.stdout.columns ?? 80) - 6,
     }),
     'Deployment Overview',
   );
@@ -1820,15 +1971,22 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
+  const zipBuffer = await readFile(zipPath);
+  await checkBundleSize({
+    artifactBytes: zipBuffer.byteLength,
+    outputDir: join(targetDir, '.mastra', 'output'),
+    warn: message => p.log.warn(message),
+  });
+
   t = performance.now();
   s.start('Uploading...');
-  const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadToEnvironment(token, orgId, projectId, environment.id, zipBuffer, {
     gitBranch: gitBranch ?? undefined,
     projectName,
     envVars: envCount > 0 ? envVars : undefined,
     mastraVersion: mastraVersion ?? undefined,
     disablePlatformObservability: projectConfig?.disablePlatformObservability === true,
+    dedicatedWorkersEnabled: workersMode === 'dedicated' && workersEnabled,
   });
   s.stop(`Uploaded (${elapsed(performance.now() - t)})`);
 

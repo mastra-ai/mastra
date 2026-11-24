@@ -1,0 +1,95 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Find the peer reviewer in the other project and connect to it.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_cross_project_list",
+            "name": "agent_connections_list",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_cross_project_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_cross_project_connect",
+            "name": "agent_connect",
+            "arguments": {
+              "ids": ["code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread"]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "connected-agents",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "Cross-project peer connected."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Send the cross-project peer a hello.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_cross_project_send",
+            "name": "agent_signal_send",
+            "arguments": {
+              "targetId": "code-agent:mc-e2e-peer-resource:mc-e2e-peer-thread",
+              "message": "Cross-project hello from the E2E project.",
+              "priority": "high",
+              "expectsReply": false,
+              "messageId": "agent-connections-cross-project-hello"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_cross_project_send",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Cross-project hello sent."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Cross-project hello from the E2E project."
+      },
+      "response": {
+        "content": "Peer received the cross-project hello."
+      }
+    }
+  ]
+}

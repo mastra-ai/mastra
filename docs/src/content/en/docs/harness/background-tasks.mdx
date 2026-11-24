@@ -1,16 +1,16 @@
 ---
-title: "Background tasks | Long-running agents"
-description: "Run long-lived Mastra tool calls and subagents as background tasks while streams remain open, with configurable LLM behavior and completion events."
+title: 'Background tasks | Long-running agents'
+description: 'Run long-lived Mastra tool calls and subagents as background tasks while streams remain open, with per-call dispositions, cancellation, and completion events.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Background tasks
 
 **Added in:** `@mastra/core@1.29.0`
 
-Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement while the LLM continues responding. The task then runs to completion in the background. When it finishes, its result is written to memory and if you use `stream()` with the [`untilIdle`](/reference/streaming/agents/stream) option the agent is re-invoked automatically so the result is processed in the same call.
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement while the LLM continues responding. The task then runs to completion in the background. When it finishes, its result is written to memory and the agent runs a follow-up turn to report it. With the [`untilIdle`](/reference/streaming/agents/stream) option, that turn streams on the same call; otherwise the agent is notified on the thread, as described in [Report a result after the stream ends](#report-a-result-after-the-stream-ends).
 
 ## When to use background tasks
 
@@ -20,7 +20,7 @@ Use background tasks when a tool call may take long enough that the user shouldn
 - Tool calls that hit slow external services, queues, or large data jobs.
 - Workflows triggered from a tool call that may take minutes to complete.
 
-For tool calls that return quickly, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
+For tool calls that return fast, foreground execution using `agent.stream()` and `agent.generate()` is simpler.
 
 :::note
 
@@ -52,16 +52,16 @@ The full set of options is listed in the [backgroundTasks configuration referenc
 
 ## Run a tool in the background
 
-Enabling the manager doesn't run anything in the background by itself as every tool defaults to foreground execution. Tools opt in at one of two layers:
+Enabling the manager doesn't run anything in the background by itself. Tools become eligible at one of two layers:
 
 1. **Tool-level config**: the tool itself declares it as background-eligible.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 
-Once a tool has opted in, the LLM can optionally include a `_background` field in the tool arguments to override the resolved config for a specific call (timeout, retries, or to flip the call back to foreground).
+Eligible tools default to `deferred` execution. Set `defaultDisposition: 'foreground'` at either layer when eligibility should only give the LLM the option to run a call in the background. The LLM can include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
 
 ### Tool-level
 
-Set `background.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
+Set `background.enabled: true` on the tool definition. Tools opted in at this layer are eligible for background execution when called by an agent that has the manager enabled. Their configured default disposition determines whether each call runs inline or in the background unless the call includes a `_background` override.
 
 ```typescript title="src/mastra/tools/research.ts"
 import { createTool } from '@mastra/core/tools'
@@ -74,6 +74,7 @@ export const researchTool = createTool({
   // highlight-start
   background: {
     enabled: true,
+    defaultDisposition: 'deferred',
     timeoutMs: 600_000,
     maxRetries: 1,
   },
@@ -116,20 +117,25 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 ```json
 {
   "topic": "solana",
-  "_background": { "enabled": true, "timeoutMs": 900_000 }
+  "_background": { "disposition": "awaited", "timeoutMs": 900000 }
 }
 ```
 
-The `_background` override is a _modifier_ on tools the developer has already opted in at the tool or agent layer, it's not a standalone opt-in. If a tool hasn't been opted in, `_background.enabled: true` from the model is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+The available dispositions are:
+
+- `foreground`: Run the tool synchronously without background-work lifecycle signals.
+- `deferred`: Dispatch the tool and let the agent continue. The task remains attached to the run, and streams using `untilIdle` wait for it to reconcile.
+- `awaited`: Dispatch the tool through the background task manager, but hold the current branch until its authoritative result has been reconciled.
+
+For compatibility, `_background.enabled: true` selects `deferred`, and `_background.enabled: false` selects `foreground`. An explicit `disposition` takes precedence over `enabled`.
+
+The `_background` override only _modifies_ tools the developer has already opted in at the tool or agent layer. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
 ### Resolution order
 
-When a tool call is dispatched, the resolved background config is computed in this priority order:
+When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
-1. Agent-level `backgroundTasks.tools` entry for the tool.
-1. Tool-level `background` config.
-1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
-1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
+A timeout of `0` means no timeout. Set `timeoutMs: 0` on a tool or agent tool entry, or `defaultTimeoutMs: 0` on the manager, for tasks that should run until they finish or are cancelled.
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
@@ -184,6 +190,62 @@ const stream = await agent.stream('Research solana for me', {
 
 Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 
+To change the default for every `untilIdle: true` call, including calls Mastra makes internally, set `untilIdleMaxIdleMs` on the Mastra `backgroundTasks` config. Use a value longer than your slowest background task so its completion still triggers a continuation turn. A per-call `maxIdleMs` still takes precedence:
+
+```typescript
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    untilIdleMaxIdleMs: 30 * 60_000,
+  },
+})
+```
+
+### Report a result after the stream ends
+
+When a deferred task finishes and no `untilIdle` stream is open for its thread, Mastra sends the agent a `notification` signal with the tag `background-task`. The signal names the tool call and task, and tells the agent the result is now on the tool call. It doesn't copy the result into the prompt. This covers a `stream()` call without `untilIdle`, a client that disconnected, and a task resumed after it [suspended](#suspending-and-resuming).
+
+- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome. The woken run uses the request context of the run that dispatched the task, so a model, instructions, or memory resolved from that context resolve the same way. This also holds when the agent that claimed the thread runs on another server: the context is sent along with the signal, minus the auth token, the signed-in user, and any values that can't be sent as JSON or are too large to serialize. That server's run keeps its own auth token and user.
+- If a run is already active on the thread, including the run that dispatched the task, the signal is delivered to that run's next model request. If that run ends without making another request, the signal runs as its own turn.
+- If another agent's run holds the thread, for example while it waits for a tool approval, the signal waits and wakes the agent once that run ends.
+- If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
+- If the caller cancelled or aborted the `untilIdle` stream that was waiting for the task, no signal is sent either: stopping the stream means the caller doesn't want a reply for that work. A task that suspended and is answered later isn't covered by this, because the stream stopped waiting for it when it suspended.
+
+A run that a signal starts on an idle thread, such as a message sent with `agent.sendSignal()`, stays open until the tasks it dispatched finish, and reports them itself. To end woken runs after their own turn instead, set the temporary `wokenRunsEndAfterTurn` option. Their tasks then report back with this signal when they finish:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    wokenRunsEndAfterTurn: true,
+  },
+})
+```
+
+A signal's own `ifIdle.streamOptions.untilIdle` takes precedence over the option in both directions. In the next major release, ending after the turn becomes the only behavior and `wokenRunsEndAfterTurn` is removed. To keep a woken run open after that, pass `untilIdle: true` in `ifIdle.streamOptions`. Agent controller sessions and channels already pass it.
+
+If you combine `wokenRunsEndAfterTurn` with `notifyAgentOnFinish: false`, nothing reports the tasks of a woken run, so your app has to send the completion itself.
+
+If your app sends its own completion signal, for example from `onTaskComplete`, set `notifyAgentOnFinish: false` on the Mastra `backgroundTasks` config so the agent isn't told twice:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    notifyAgentOnFinish: false,
+    onTaskComplete: async task => {
+      // Send your own notification to task.threadId
+    },
+  },
+})
+```
+
+The signal needs memory with a thread and resource. A task dispatched without them only writes its result to the task record. Awaited tasks don't send the signal, because the run that dispatched them waits for the result.
+
 ### Aggregate properties
 
 `stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but `fullStream` alone spans the initial turn and any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
@@ -218,15 +280,17 @@ const stream = await supervisor.stream('Research AI in education and write an ar
 
 ### Inheriting from the subagent
 
-If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `background.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
+If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `background.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and it can dispatch its eligible ordinary tools in the background inside its loop. Further delegated-agent calls run in the foreground.
 
 The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
 ```typescript title="src/mastra/agents/researcher.ts"
+import { Agent } from '@mastra/core/agent'
+
 const researchAgent = new Agent({
   id: 'research-agent',
   description: 'Gathers factual information.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { deepResearchTool },
   // highlight-start
   backgroundTasks: {
@@ -239,9 +303,11 @@ const researchAgent = new Agent({
 })
 ```
 
-When this `researchAgent` is delegated to from a supervisor that has no backgroundTask configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task, and `deepResearchTool` runs in the foreground inside that invocation, instead of dispatching its own nested background task.
+When this `researchAgent` is delegated to from a supervisor that has no background task configuration for the `researchAgent`, the supervisor still dispatches the whole `researchAgent` invocation as a background task.
 
-Use this pattern when you want a subagent to behave consistently in the background regardless of which supervisor invokes it. Use the supervisor-side opt-in (above) when you want to tune background behavior centrally per supervisor.
+Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
+
+Which layer to use depends on where consistency matters: subagent-level configuration travels with the agent, which keeps its background behavior the same under every supervisor, whereas the supervisor-side opt-in above centralizes that tuning in one place. This boundary stops at a single nested delegation level and has no workflow integration.
 
 ## Suspending and resuming
 
@@ -278,7 +344,7 @@ export const reviewTool = createTool({
 })
 ```
 
-The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false, so the tool returns its real result.
+The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false. The tool returns its real result.
 
 To resume the task once an approval arrives:
 
@@ -289,9 +355,53 @@ await mastra.backgroundTaskManager?.resume(taskId, {
 })
 ```
 
+On the resumed run, `context.agent.suspendPayload` holds the `data` the tool suspended with. Use it to tell which request an answer belongs to without encoding that in `resumeData`.
+
+### Suspend after a durable agent's run finished
+
+On a [durable agent](/docs/harness/durable-agents), a background tool can call `suspend()` after the agent has replied and its run has finished. The task is marked `suspended` and resumes as usual when the storage adapter supports [run fencing](/docs/harness/durable-agents#run-ownership), for example `InMemoryStore`, `@mastra/libsql`, or `@mastra/pg`. These adapters record each claim on the run, so Mastra can check that no other execution claimed the run in the meantime.
+
+The task still fails with a storage adapter that lacks run fencing, because run ownership is then only a PubSub lease, and a released lease can't show whether another execution claimed and finished the run since. On an agent from `createEventedAgent()`, the task also fails when an approval for another tool call resumed the run in the same turn, because the resume's claim counts as another execution.
+
+### Answer a suspended task from a client
+
+While an agent's background tool call is suspended, the assistant message that holds the call records the open request under `metadata.suspendedTools[toolCallId]`. The entry carries `toolName`, `args`, `suspendPayload`, `taskId`, `runId`, and `suspendedAt`, so a chat that reloads the thread can still show the request. The entry is removed when the task resumes or is cancelled.
+
+The entry is written by the process that dispatched the tool call, the same process that writes the task's result into the thread. A task that a worker picks up after a restart has no such process, so neither the open request nor the result reaches the thread.
+
+To answer the request over HTTP, call `POST /api/background-tasks/:backgroundTaskId/resume` with the answer in `resumeData`. The [client SDK](/reference/client-js/mastra-client) wraps the route as `resumeBackgroundTask()`:
+
+```typescript title="src/client/answer-request.ts"
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+
+const task = await client.getBackgroundTask(taskId)
+await client.resumeBackgroundTask(
+  taskId,
+  { reviewer: 'alice@example.com' },
+  { suspendedAt: task.suspendedAt },
+)
+```
+
+Pass the `suspendedAt` you read from the task or the `suspendedTools` entry. When the task has resumed or suspended again since, the server returns `409 Conflict` instead of delivering a stale answer. The route also returns `409` when the task isn't suspended or no concurrency slot is free, and `404` when the task doesn't exist or belongs to another resource. Calling it requires the `background-tasks:execute` permission.
+
+### Resume when no slot is free
+
+By default, `resume()` throws `Concurrency limit reached` when every concurrency slot is in use. Pass `{ onNoSlot: 'queue' }` to queue the resume instead:
+
+```typescript
+const task = await mastra.backgroundTaskManager?.resume(taskId, resumeData, { onNoSlot: 'queue' })
+// task.status is still 'suspended' until a slot frees up
+```
+
+The task stays `suspended` until a slot frees up, then resumes with the queued `resumeData`. Cancelling the task drops the queued resume.
+
+The queue lives in the memory of the process that called `resume()`. If that process exits before the resume runs, the task stays `suspended` and the `resumeData` is lost. To survive restarts, persist the resume data yourself and call `resume()` again.
+
 ### What happens to the agent loop
 
-When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly. Its result is still written into the thread for the next user turn.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly, or use the [resume route](#answer-a-suspended-task-from-a-client). When the task finishes, its result is written into the thread and the agent [wakes to report it](#report-a-result-after-the-stream-ends).
 
 ### Re-registering the executor on resume
 
@@ -307,9 +417,11 @@ Each layer can register terminal-state callbacks. They don't replace one another
 
 - Tool-level `background.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
-- Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
+- Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally. These fire for every task, including tasks from [non-agent owners](#non-agent-owners).
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   storage,
   backgroundTasks: {
@@ -328,31 +440,37 @@ export const mastra = new Mastra({
 
 ### Subscribe to all task events
 
-Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
+Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts" oxfmt:false
-const bgManager = mastra.backgroundTaskManager
-if (!bgManager) throw new Error('Background tasks are not enabled')
+const bgManager = mastra.backgroundTaskManager;
+if (!bgManager) throw new Error('Background tasks are not enabled');
 
-const controller = new AbortController()
-const stream = bgManager.stream({ abortSignal: controller.signal })
+const controller = new AbortController();
+const stream = bgManager.stream({ allResources: true, abortSignal: controller.signal });
 
 for await (const chunk of stream) {
   switch (chunk.type) {
     case 'background-task-running':
-      console.log('started', chunk.payload.taskId, chunk.payload.toolName)
-      break
+      console.log('started', chunk.payload.taskId, chunk.payload.toolName);
+      break;
     case 'background-task-completed':
-      console.log('done', chunk.payload.taskId, chunk.payload.result)
-      break
+      console.log('done', chunk.payload.taskId, chunk.payload.result);
+      break;
     case 'background-task-failed':
-      console.error('failed', chunk.payload.taskId, chunk.payload.error)
-      break
+      console.error('failed', chunk.payload.taskId, chunk.payload.error);
+      break;
   }
 }
 ```
 
 The stream stays open until the caller's `AbortSignal` fires. Always pass an `abortSignal` so you can disconnect cleanly.
+
+:::warning
+
+`allResources: true` delivers task arguments and results for every user. Use it only in trusted server-side code, never to serve a single user's request. Without `resourceId` or `allResources`, `stream()` only delivers tasks that have no `resourceId`. Agent tasks dispatched with memory always have a `resourceId`, so they won't appear in that stream.
+
+:::
 
 ### Filter the stream
 
@@ -374,6 +492,7 @@ const stream = bgManager.stream({
 | `threadId` | Only events from tasks scoped to this memory thread |
 | `resourceId` | Only events from tasks scoped to this resource |
 | `taskId` | Only events for a single task |
+| `allResources` | Include tasks from every resource when `resourceId` is omitted. Trusted server-side code only |
 | `abortSignal` | Closes the stream when the signal aborts |
 
 ### Look up task state directly
@@ -389,6 +508,130 @@ const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
 ```
 
 These read from storage rather than the pubsub stream, so they're suitable for paginated lists and detail views.
+
+## Execution ownership and recovery
+
+Every Mastra process with background tasks enabled runs its own manager. You can run several processes or replicas against the same storage backend. The managers coordinate through an execution lease stored on each task record. A lease is a time-limited claim on a task that its owner must keep renewing. When the owner stops renewing it, another manager can take the task over.
+
+### Deployment requirements
+
+- Every manager must use the same storage backend, and its `updateTask` must apply the write conditions atomically. Mastra's storage adapters do. In-memory storage is only shared within one process.
+- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with Network Time Protocol (NTP), to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. The startup scan recovers a task as soon as its lease has expired by the reader's clock. Follow-up scans wait about one second past the expiry to absorb small differences.
+- A longer [`leaseDurationMs`](/reference/configuration#backgroundtasks) delays recovery after a crash. A shorter one adds storage writes and makes it more likely that a stalled owner loses its lease while still running. The default is 30 seconds and the minimum is 3000 ms.
+
+### Lease guarantees and repeated tool calls
+
+The lease guarantees that at most one manager can commit a task's state at a time. The tool itself can still run more than once when:
+
+- The owner stalls, for example because its event loop is blocked or it can't reach storage, for longer than the lease. Another manager recovers the task while the first execution is still running.
+- The owner crashes after the tool has acted on an external system but before the result is saved. The recovered task runs the tool again.
+- A durable agent restarts the task with `restart()` while the previous execution is still running.
+
+Make tools that change external systems safe to repeat, for example by passing the tool call ID as an idempotency key. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+
+A resume interrupted by shutdown is the one exception to the single-committer guarantee. It restores the previous `suspended` state with a write that checks only that the task is `running`, and that write can overwrite a manager that took the task over in the meantime.
+
+### Claim and renew a lease
+
+Each manager gets a random owner ID when it's created. A restarted process gets a new ID and counts as a new owner.
+
+Before a manager runs a task, it claims the task with a conditional write. The write sets the status to `running`, records the manager's `ownerId`, and sets `leaseExpiresAt` to the current time plus `leaseDurationMs`. It only applies if the task still has the status, owner, and lease that the manager last read. When two managers race for the same task, one claim succeeds and the other manager skips the task without running it.
+
+While the task runs, the owner renews the lease every `leaseDurationMs / 3`, with a minimum of one second. Each renewal is conditional on the task still being `running` under the same owner. The task's final writes, such as `completed`, `failed`, `timed_out`, or `suspended`, carry the same condition, so a manager that lost the task can't overwrite the result of the manager that replaced it.
+
+The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A lease that isn't released, for example because the process crashed, expires on its own.
+
+### Recover a task from a dead owner
+
+A manager treats a `running` task as abandoned only after its lease expires.
+
+When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs tasks scans for abandoned tasks on startup. If the scan finds a lease that hasn't expired yet, the manager scans again shortly after that lease expires, and repeats until no live lease is left. A task that a manager starts after that and then abandons waits for the next startup scan. For each task the scan recovers:
+
+- If the task has `maxRetries` above `0`, it returns to `pending` and is dispatched again.
+- Otherwise, it fails with `Worker process terminated before task completed`.
+
+The recovery write is conditional on the owner and lease that the scan read, so only one manager recovers each task.
+
+If the pubsub redelivers the unacknowledged dispatch of an abandoned task, the redelivery claims the task once its lease expires and runs it again, even when `maxRetries` is `0`.
+
+The manager that runs the recovered task needs an executor for it. See the known limitations under [non-agent owners](#non-agent-owners).
+
+`manager.restart(taskId)` is an explicit takeover. It claims a `running` task even while another manager holds a live lease. Durable agents use it when a redelivered step finds the task for its tool call. The task's results then reach the new stream. A restart on the manager that already runs the task doesn't stop the earlier execution. Both executions share an owner ID, and the earlier one can commit first.
+
+### Stop work after losing a lease
+
+When a lease renewal fails because the task is now owned by another manager or was cancelled, the previous owner aborts the `abortSignal` passed to the tool. After a takeover, `abortSignal.reason` is an error with the message `Background task execution ownership was taken over by another worker`. The abort is best effort. If the manager can't read the task at that point, it doesn't retry the abort. The previous owner normally notices at its next renewal. A stalled event loop or slow storage can delay that renewal. A tool that ignores `abortSignal` keeps running until it returns, but its result is rejected.
+
+## Non-agent owners
+
+Code other than agents can run tasks through the manager. For example, an MCP server can run long tool calls as background tasks. The task's `agentId` is its owner key, and agent streams, `untilIdle`, and the end-of-step wait only see tasks whose `agentId` matches the agent. Use a namespaced owner key such as `mcp-server:<serverId>` so it can't collide with a real agent ID. Mastra doesn't enforce this.
+
+Non-agent owners usually register a static executor with `registerStaticExecutor()` so any process can run or recover their tasks. They can also set these optional task fields:
+
+- `expiresAt`: When cleanup deletes the task. Once a task completes, fails, is cancelled, or times out, cleanup deletes it after `expiresAt` passes instead of using `completedTtlMs` or `failedTtlMs`. Cleanup only runs when you set the `cleanup` option, and it never deletes a pending, running, or suspended task, so cancel expired work first. It also needs a storage adapter version that supports `expiresAt`. Older adapters keep using the global retention settings.
+- `metadata`: JSON stored with the task. The manager doesn't read it.
+
+```typescript
+mastra.backgroundTaskManager?.registerStaticExecutor('mcp-server:ops:deploy', {
+  execute: runDeploy,
+})
+
+await mastra.backgroundTaskManager?.enqueue({
+  agentId: 'mcp-server:ops',
+  toolName: 'mcp-server:ops:deploy',
+  toolCallId: taskId,
+  runId: taskId,
+  args,
+  resourceId: principalId,
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  metadata: { ttlMs: 86_400_000 },
+})
+```
+
+Use `perOwnerConcurrency` to give an owner its own concurrency limit instead of `perAgentConcurrency`. Its tasks still count toward `globalConcurrency`:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  storage,
+  backgroundTasks: {
+    enabled: true,
+    globalConcurrency: 60,
+    perOwnerConcurrency: { 'mcp-server:ops': 50 },
+  },
+})
+```
+
+Known limitations:
+
+- A recovered task runs without the original request. Store anything the executor needs, such as the principal in `resourceId` or other JSON in `metadata`, on the task itself.
+- A `pending` task that isn't pinned holds no lease. On startup, another process can pick it up and dispatch it. If its executor only existed in the original process, the task fails with `No executor registered`. Static executors registered in every process avoid this. Use `pinToWorker` when the original process already started the work.
+- The end-of-step wait in the agent loop only waits for `running` tasks, not `pending` ones. [#28228](https://github.com/mastra-ai/mastra/pull/28228) tracks the fix.
+
+### Pin a task to the current worker
+
+Sometimes work for a task is already running in this process before you enqueue it. For example, an MCP server may start a tool call inside the request and hand it to a background task only if it runs long. Pass `pinToWorker: true` with a task context so no other process starts the same work:
+
+```typescript
+await mastra.backgroundTaskManager?.enqueue(
+  {
+    agentId: 'mcp-server:ops',
+    toolName: 'mcp-server:ops:deploy',
+    toolCallId: taskId,
+    runId: taskId,
+    args,
+  },
+  { executor: { execute: adoptRunningDeploy } },
+  { pinToWorker: true },
+)
+```
+
+`pinToWorker` means work for this task is already in flight on this worker. The `pending` task records this worker as its owner and holds an execution lease, which the worker renews while the task waits for a free slot. Other processes don't recover or dispatch the task while the lease is live.
+
+If the worker dies or shuts down first, that work is lost. Recovery treats the task as a lost attempt, like a running task whose worker died. If `retryCount` is below `maxRetries`, the task uses a retry and runs on another worker, which needs a static executor for it. Otherwise the task fails with `Worker process terminated before task completed`. A task with `maxRetries: 0` never runs on another worker. Other processes check for lapsed pins at startup and then every `leaseDurationMs`, unless `recoverStaleTasksOnStart` is `false`.
+
+A lapsed lease only shows that the worker stopped renewing it, not that the work stopped. A worker whose event loop stalls past the lease can still be running the task when another worker retries it. Make pinned work idempotent, or guard its side effects, if it can be retried.
+
+`pinToWorker` throws without a task context. Tasks that aren't pinned, including all agent tasks, hold no lease while `pending`.
 
 ## Related
 

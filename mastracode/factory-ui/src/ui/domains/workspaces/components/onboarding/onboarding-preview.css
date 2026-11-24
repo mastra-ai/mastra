@@ -1,0 +1,90 @@
+/* The accounts scene's labels fade in after the scene cross-fade. */
+@keyframes onboarding-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-account-labels {
+    animation: onboarding-fade 240ms ease-out 540ms backwards;
+  }
+}
+
+.onboarding-sketch {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-width: 1px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.onboarding-sketch * {
+  vector-effect: non-scaling-stroke;
+}
+.onboarding-sketch-surface {
+  fill: var(--color-card, var(--color-background));
+}
+.onboarding-sketch-link {
+  stroke: var(--color-border);
+}
+.onboarding-illustration:not([data-ready]) {
+  visibility: hidden;
+}
+.onboarding-illustration[data-scene='factory'],
+.onboarding-illustration[data-scene='codebase'] {
+  stroke: color-mix(in oklab, var(--color-muted-foreground) 45%, var(--color-background));
+}
+.onboarding-sketch-detail {
+  stroke: var(--color-border);
+}
+.onboarding-recess {
+  stroke: none;
+}
+.onboarding-landing {
+  stroke-dasharray: 3 4;
+}
+.onboarding-ticket {
+  width: 22%;
+}
+.onboarding-ticket[data-ticket='1'] {
+  left: var(--intake-1-x, 9%);
+  top: var(--intake-1-y, 60.625%);
+  opacity: var(--intake-1-opacity, 1);
+}
+.onboarding-ticket[data-ticket='2'] {
+  left: var(--intake-2-x, 39%);
+  top: var(--intake-2-y, 60.625%);
+  opacity: var(--intake-2-opacity, 1);
+}
+
+.onboarding-preview {
+  display: grid;
+  align-content: center;
+}
+.onboarding-diagram {
+  aspect-ratio: 5 / 4;
+  width: min(100%, calc((100dvh - 7rem) * 1.25));
+}
+.onboarding-scene {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.onboarding-scene[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .onboarding-scene {
+    transition:
+      opacity 160ms ease-out,
+      visibility 0s 160ms;
+  }
+  .onboarding-scene[data-active='true'] {
+    transition:
+      opacity 240ms ease-out 540ms,
+      visibility 0s;
+  }
+}

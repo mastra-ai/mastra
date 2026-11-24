@@ -2,8 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import type { ButtonProps } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Tag, X } from 'lucide-react';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { useState } from 'react';
 
 export function BulkTagPicker({
@@ -30,10 +31,7 @@ export function BulkTagPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size}>
-          <Icon size="sm">
-            <Tag />
-          </Icon>
+        <Button size={size} icon={<IconTag />}>
           Tag {selectedCount} items
         </Button>
       </PopoverTrigger>
@@ -52,22 +50,24 @@ export function BulkTagPicker({
               setSearch('');
             }
           }}
-          placeholder="Search or create tag..."
-          className="mb-1 h-7 text-xs"
+          placeholder="Search or create tag"
+          className="mb-1 h-7 text-caption"
           autoFocus
         />
         <div className="max-h-40 space-y-0.5 overflow-y-auto">
           {filtered.map(tag => (
-            <div key={tag} className="hover:bg-surface3 flex items-center justify-between rounded px-2 py-1 text-xs">
-              <button type="button" onClick={() => onApplyTag(tag)} className="text-neutral4 flex-1 text-left">
-                {tag}
+            <div key={tag} className="flex items-center justify-between rounded px-2 py-1 hover:bg-fill-subtle">
+              <button type="button" onClick={() => onApplyTag(tag)} className="flex-1 text-left text-muted-foreground">
+                <Txt as="span" variant="caption" className="block">
+                  {tag}
+                </Txt>
               </button>
               <button
                 type="button"
                 onClick={() => onRemoveTag(tag)}
-                className="text-neutral2 hover:text-negative1 ml-2"
+                className="ml-2 text-subtle-foreground hover:text-destructive-foreground"
               >
-                <X className="h-3 w-3" />
+                <IconCrossMedium className="size-icon-xs" />
               </button>
             </div>
           ))}
@@ -78,9 +78,11 @@ export function BulkTagPicker({
                 onNewTag(search.trim());
                 setSearch('');
               }}
-              className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
+              className="w-full rounded px-2 py-1 text-left text-info-indicator hover:bg-fill-subtle"
             >
-              Create &amp; apply &quot;{search.trim()}&quot;
+              <Txt as="span" variant="caption" className="block">
+                Create &amp; apply &quot;{search.trim()}&quot;
+              </Txt>
             </button>
           )}
         </div>

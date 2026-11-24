@@ -1,0 +1,76 @@
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+
+import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+
+export const listOrganizationRolesInputSchema = z.object({
+  cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a non-negative integer.')
+    .refine(value => Number.isSafeInteger(Number(value)), 'Cursor must be a non-negative integer.')
+    .optional()
+    .describe('Pagination cursor returned by a previous request. Omit for the first page.'),
+  limit: z.number().int().min(1).max(500).optional(),
+  query: z.string().optional(),
+  order_by: z.string().optional(),
+});
+
+const ResourceSchema = z
+  .object({
+    id: z.string(),
+    object: z.string().optional(),
+    name: z.string(),
+    key: z.string(),
+    description: z.string().nullable().optional(),
+    permissions: z
+      .array(z.object({ id: z.string(), key: z.string().optional(), name: z.string().optional() }).passthrough())
+      .optional(),
+    created_at: z.number().optional(),
+    updated_at: z.number().optional(),
+  })
+  .passthrough();
+
+const ProviderResponseSchema = z.object({ data: z.array(ResourceSchema), total_count: z.number() });
+
+export const listOrganizationRolesOutputSchema = z.object({
+  items: z.array(ResourceSchema),
+  next_cursor: z
+    .string()
+    .regex(/^\d+$/, 'Cursor must be a non-negative integer.')
+    .refine(value => Number.isSafeInteger(Number(value)), 'Cursor must be a non-negative integer.')
+    .optional()
+    .describe('Pagination cursor returned by a previous request. Omit for the first page.'),
+  total: z.number(),
+});
+
+export function listOrganizationRolesTool(proxy: PlatformProxy) {
+  return createTool({
+    id: 'clerk_list_organization_roles',
+    description: 'List Clerk organization roles.',
+    inputSchema: listOrganizationRolesInputSchema,
+    outputSchema: listOrganizationRolesOutputSchema,
+    execute: async (input, { requestContext }): Promise<z.infer<typeof listOrganizationRolesOutputSchema>> => {
+      const platformProxy = proxy.withRequestContext(requestContext);
+      const offset = input.cursor === undefined ? 0 : Number(input.cursor);
+      const response = await platformProxy.get({
+        // https://clerk.com/docs/reference/backend-api/tag/Organization-Roles#operation/ListOrganizationRoles
+        endpoint: '/v1/organization_roles',
+        params: {
+          offset: String(offset),
+          ...(input.limit !== undefined && { limit: String(input.limit) }),
+          ...(input.query !== undefined && { query: input.query }),
+          ...(input.order_by !== undefined && { order_by: input.order_by }),
+        },
+        retries: 3,
+      });
+      const provider = ProviderResponseSchema.parse(response.data);
+      const nextOffset = offset + provider.data.length;
+      return {
+        items: provider.data,
+        ...(nextOffset < provider.total_count && { next_cursor: String(nextOffset) }),
+        total: provider.total_count,
+      };
+    },
+  });
+}

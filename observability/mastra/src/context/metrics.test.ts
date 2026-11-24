@@ -49,6 +49,17 @@ describe('MetricsContextImpl', () => {
     expect(m.labels).toEqual({ agent: 'test-agent' });
   });
 
+  it('should carry usageId only when provided', () => {
+    setupBus();
+    const metrics = new MetricsContextImpl({ cardinalityFilter: new CardinalityFilter(), observabilityBus: bus });
+
+    metrics.emit('mastra_model_total_input_tokens', 1, undefined, { usageId: 'usage-1' });
+    metrics.emit('mastra_agent_runs', 1);
+
+    expect(emittedEvents[0]!.metric.usageId).toBe('usage-1');
+    expect('usageId' in emittedEvents[1]!.metric).toBe(false);
+  });
+
   it('should include labels passed to emit()', () => {
     setupBus();
     const cardinalityFilter = new CardinalityFilter();

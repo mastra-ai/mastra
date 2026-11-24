@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   mockSpawn: vi.fn(),
   dispatchEvent: vi.fn(),
+  getThreadLifecycleGeneration: vi.fn(() => 0),
   showError: vi.fn(),
   showInfo: vi.fn(),
   showFormattedError: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('node:child_process', () => ({
 
 vi.mock('../event-dispatch.js', () => ({
   dispatchEvent: mocks.dispatchEvent,
+  getThreadLifecycleGeneration: mocks.getThreadLifecycleGeneration,
 }));
 
 vi.mock('../display.js', () => ({
@@ -58,6 +60,7 @@ function createBareTui(hookManager?: Record<string, unknown>) {
   tui.state = {
     hookManager,
     assistantRenderRegistry: new AssistantRenderRegistry(),
+    editor: {},
     ui: { stop: vi.fn(), requestRender: vi.fn() },
     idleCounter: { setTimingState: vi.fn(), update: vi.fn() },
   };
@@ -123,6 +126,22 @@ describe('MastraTUI hook wiring', () => {
     expect(runAgentEnd).toHaveBeenCalledWith(reason ?? 'complete');
     expect(runStop).toHaveBeenCalledWith(undefined, expectedStopReason);
     expect(clearRunId).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run post-dispatch thread synchronization for a stale lifecycle', async () => {
+    const tui = createBareTui() as ReturnType<typeof createBareTui> & {
+      refreshBackgroundActivity: ReturnType<typeof vi.fn>;
+      syncThreadActivePackMetadata: ReturnType<typeof vi.fn>;
+    };
+    tui.state.session = { thread: { getId: vi.fn(() => 'thread-a') } };
+    tui.refreshBackgroundActivity = vi.fn();
+    tui.syncThreadActivePackMetadata = vi.fn();
+    mocks.getThreadLifecycleGeneration.mockReturnValueOnce(0).mockReturnValueOnce(2);
+
+    await tui.handleEvent({ type: 'thread_changed', threadId: 'thread-a', previousThreadId: 'thread-b' });
+
+    expect(tui.refreshBackgroundActivity).not.toHaveBeenCalled();
+    expect(tui.syncThreadActivePackMetadata).not.toHaveBeenCalled();
   });
 
   it('does not run Stop hook for non-agent_end events', async () => {
@@ -339,7 +358,7 @@ describe('MastraTUI hook wiring', () => {
     expect(runPermissionRequest).not.toHaveBeenCalled();
   });
 
-  it('does not fire PermissionRequest on ask_user suspension', async () => {
+  it('does not fire PermissionRequest from the queued handler on ask_user suspension', async () => {
     const runPermissionRequest = vi.fn().mockResolvedValue(createHookResult());
     const tui = createBareTui({ runPermissionRequest });
 

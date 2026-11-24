@@ -31,6 +31,8 @@ type ScheduleRecord = {
   metadata?: Record<string, unknown> | string | null;
   owner_type?: string | null;
   owner_id?: string | null;
+  run_at?: number | null;
+  end_at?: number | null;
   workflow_id?: string | null;
 };
 
@@ -87,6 +89,8 @@ function scheduleToRecord(schedule: Schedule): ScheduleRecord {
     metadata: schedule.metadata == null ? null : serializeJson(schedule.metadata),
     owner_type: schedule.ownerType ?? null,
     owner_id: schedule.ownerId ?? null,
+    run_at: schedule.runAt ?? null,
+    end_at: schedule.endAt ?? null,
     workflow_id: schedule.target.type === 'workflow' ? schedule.target.workflowId : null,
   };
 }
@@ -113,6 +117,8 @@ function recordToSchedule(record: ScheduleRecord): Schedule {
   if (metadata != null) schedule.metadata = metadata;
   if (record.owner_type != null) schedule.ownerType = String(record.owner_type) as Schedule['ownerType'];
   if (record.owner_id != null) schedule.ownerId = String(record.owner_id);
+  if (record.run_at != null) schedule.runAt = Number(record.run_at);
+  if (record.end_at != null) schedule.endAt = Number(record.end_at);
   return schedule;
 }
 
@@ -275,6 +281,12 @@ export class SchedulesConvex extends SchedulesStorage {
     if ('ownerId' in patch) {
       updates.owner_id = patch.ownerId ?? null;
     }
+    if ('runAt' in patch) {
+      updates.run_at = patch.runAt ?? null;
+    }
+    if ('endAt' in patch) {
+      updates.end_at = patch.endAt ?? null;
+    }
 
     if (Object.keys(updates).length === 0) {
       const existing = await this.getSchedule(id);
@@ -295,6 +307,7 @@ export class SchedulesConvex extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     return this.#db.updateScheduleNextFire({
       id,
@@ -302,6 +315,7 @@ export class SchedulesConvex extends SchedulesStorage {
       newNextFireAt,
       lastFireAt,
       lastRunId,
+      newStatus,
     });
   }
 

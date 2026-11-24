@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
@@ -24,9 +22,10 @@ export class IssueReconcileWorker extends MastraWorker {
   readonly #intervalMs: number;
   readonly #leaseTtlMs: number;
   readonly #leaseKey: string;
-  readonly #leaseOwner = randomUUID();
+  readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
+  #rerun = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
   #leaseProvider: LeaseProvider = NoopLeaseProvider;
@@ -53,7 +52,7 @@ export class IssueReconcileWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('IssueReconcileWorker: call init() before start()');
     this.#running = true;
-    this.deps.logger.info(`${this.#integrationId} issue reconcile worker started`, { intervalMs: this.#intervalMs });
+    this.deps.logger.debug(`${this.#integrationId} issue reconcile worker started`, { intervalMs: this.#intervalMs });
     this.#schedule(0);
   }
 
@@ -69,13 +68,29 @@ export class IssueReconcileWorker extends MastraWorker {
     return this.#running;
   }
 
+  /**
+   * Runs a sweep now instead of waiting for the next interval. A request
+   * that arrives during a sweep runs one more sweep right after it.
+   */
+  requestRun(): void {
+    if (!this.#running) return;
+    if (this.#inFlight) {
+      this.#rerun = true;
+      return;
+    }
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#schedule(0);
+  }
+
   #schedule(delayMs: number): void {
     if (!this.#running) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       const run = this.#tick().finally(() => {
         this.#inFlight = undefined;
-        this.#schedule(this.#intervalMs);
+        const rerun = this.#rerun;
+        this.#rerun = false;
+        this.#schedule(rerun ? 0 : this.#intervalMs);
       });
       this.#inFlight = run;
     }, delayMs);
@@ -93,13 +108,11 @@ export class IssueReconcileWorker extends MastraWorker {
     // an overlapping sweep partway through this one.
     const renewalTimer = setInterval(
       () => {
-        void this.#leaseProvider
-          .renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs)
-          .catch(error => {
-            this.deps?.logger.warn(`${this.#integrationId} issue reconcile lease renewal failed`, {
-              error: error instanceof Error ? error.message : String(error),
-            });
+        void this.#leaseProvider.renewLease(this.#leaseKey, this.#leaseOwner, this.#leaseTtlMs).catch(error => {
+          this.deps?.logger.warn(`${this.#integrationId} issue reconcile lease renewal failed`, {
+            error: error instanceof Error ? error.message : String(error),
           });
+        });
       },
       Math.max(1_000, Math.floor(this.#leaseTtlMs / 3)),
     );
@@ -131,7 +144,5 @@ export class IssueReconcileWorker extends MastraWorker {
 function getLeaseProvider(pubsub: PubSub): LeaseProvider {
   const getProvider = (pubsub as PubSub & { getLeaseProvider?: () => LeaseProvider | undefined }).getLeaseProvider;
   if (typeof getProvider === 'function') return getProvider.call(pubsub) ?? NoopLeaseProvider;
-  return isLeaseProvider(pubsub)
-    ? pubsub
-    : ((pubsub as PubSub & { lease?: LeaseProvider }).lease ?? NoopLeaseProvider);
+  return isLeaseProvider(pubsub) ? pubsub : ((pubsub as PubSub & { lease?: LeaseProvider }).lease ?? NoopLeaseProvider);
 }

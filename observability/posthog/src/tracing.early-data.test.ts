@@ -35,7 +35,7 @@ const { mockCapture } = vi.hoisted(() => {
 vi.mock('posthog-node', () => {
   return {
     PostHog: class {
-      capture = mockCapture;
+      captureAi = mockCapture;
       shutdown = vi.fn().mockResolvedValue(undefined);
     },
   };

@@ -1,8 +1,8 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useChat } from '@mastra/react';
-import { Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { useChat } from '@mastra/react/chat';
 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   SKILL_BUILDER_INSTRUCTIONS,
   SKILL_BUILDER_TOOL_NAME,
@@ -131,15 +131,15 @@ export function SkillChatComposer({
   }, [initialUserMessage, sendMessage, threadId, clientTools]);
 
   const emptyState = (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-8 text-center">
-      <div className="bg-accent5/10 rounded-full p-3">
-        <Sparkles className="text-accent5 h-6 w-6" />
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-4 py-5 text-center">
+      <div className="rounded-full bg-info-subtle p-3 [&>svg]:size-6">
+        <IconSparklesTwo className="text-info-indicator" />
       </div>
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-md" className="text-neutral5 font-medium" as="p">
+        <Txt variant="subheading" tone="ink" as="p">
           {hasFields ? 'Refine your skill' : 'Describe your skill'}
         </Txt>
-        <Txt variant="ui-sm" className="text-neutral3" as="p">
+        <Txt variant="caption" tone="muted" as="p">
           {hasFields
             ? 'Ask the agent to adjust the name, description, or instructions.'
             : 'Tell the agent what this skill should do and it will fill in the details for you.'}
@@ -164,7 +164,7 @@ export function SkillChatComposer({
         disabled={isRunning}
         canSubmit={!!trimmed && !isRunning}
         isRunning={isRunning}
-        placeholder={hasFields ? 'Ask the agent to refine…' : 'Describe your skill…'}
+        placeholder={hasFields ? 'Ask the agent to refine' : 'Describe your skill'}
         inputTestId="skill-builder-conversation-input"
         submitTestId="skill-builder-conversation-submit"
         containerTestId="skill-builder-conversation-composer"

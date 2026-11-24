@@ -31,7 +31,14 @@ import type { ProviderStatus, SandboxStartOutcome, SandboxStartResult } from '..
 import { SandboxNotReadyError } from './errors';
 import { MountManager } from './mount-manager';
 import type { SandboxProcessManager } from './process-manager';
-import type { SandboxComputer, SandboxFileInput, SandboxNetworking, WorkspaceSandbox } from './sandbox';
+import { DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES } from './process-manager/process-handle';
+import type {
+  SandboxComputer,
+  SandboxFileInput,
+  SandboxNetworking,
+  WorkspaceSandbox,
+  WriteFilesOptions,
+} from './sandbox';
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
@@ -51,6 +58,11 @@ export type SandboxStartHook = (args: {
   sandbox: WorkspaceSandbox;
   outcome?: SandboxStartOutcome;
 }) => void | Promise<void>;
+
+/** Options forwarded to a provider's sandbox start implementation. */
+export interface SandboxStartOptions {
+  abortSignal?: AbortSignal;
+}
 
 /**
  * Options for the MastraSandbox base class constructor.
@@ -181,6 +193,9 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   executeCommand?(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult>;
 
+  /** Default timeout for foreground commands; background spawns are unaffected. */
+  protected defaultCommandTimeout?: number;
+
   /** Optional networking capability - implement to expose public port URLs */
   readonly networking?: SandboxNetworking;
 
@@ -194,7 +209,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * `useDefineForClassFields` from emitting `this.writeFiles = undefined`
    * which would shadow prototype methods defined by subclasses.
    */
-  writeFiles?(files: SandboxFileInput[]): Promise<void>;
+  writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   /** Process manager */
   readonly processes?: SandboxProcessManager;
@@ -235,7 +250,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
   protected _startPromise?: Promise<SandboxStartResult | void>;
 
   /** The subclass's `start()`, captured before the constructor shadows it. */
-  private readonly _implStart: () => void | Promise<SandboxStartResult | void>;
+  private readonly _implStart: (options?: SandboxStartOptions) => void | Promise<SandboxStartResult | void>;
 
   /** Whether acquisition runs through {@link find}/{@link connect}/{@link create}. */
   private readonly _useAcquisitionPrimitives: boolean;
@@ -282,7 +297,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     // status handling, and onStart hook as `_start()`/`ensureRunning()`.
     const hasStartOverride = this.start !== MastraSandbox.prototype.start;
     this._implStart = this.start.bind(this);
-    this.start = () => this._start();
+    this.start = options => this._start(options);
     // Rung selection: a subclass `start()` override wins; otherwise the
     // primitives drive acquisition when `create()` is implemented. Anything
     // declared as a class field is invisible here and lands on the base
@@ -320,11 +335,23 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
 
           const handle = await pm.spawn(fullCommand, {
             ...opts,
+            timeout: opts?.timeout ?? this.defaultCommandTimeout,
             ...(args?.length ? { originalInvocation: { command, args: [...args] } } : {}),
-            maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity,
+            // Unbounded retention lets a command with huge output grow the buffer past
+            // V8's max string length, which throws RangeError inside the stdout handler
+            // and crashes the process. Callers that need every byte pass Infinity.
+            maxRetainedBytes: opts?.maxRetainedBytes ?? DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
+            // executeCommand runs to completion and collects output; nothing can
+            // feed the process's stdin, so close it at spawn. Otherwise a command
+            // that reads stdin (e.g. `rg` with no path argument) blocks forever.
+            stdinMode: 'ignore',
           });
           try {
             const result = await handle.wait();
+            // A process the command left behind can still hold its output after
+            // the command returns. Nothing gets a PID to manage it once the
+            // handle is released, so stop it now.
+            if (handle.exitCode === undefined) await handle.kill();
 
             this.logger.debug('Command completed', {
               sandbox: this.name,
@@ -432,7 +459,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    *
    * Subclasses override `start()` to provide their startup logic.
    */
-  async _start(): Promise<SandboxStartResult | void> {
+  async _start(options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     // Already running — definitionally not a fresh create. Reporting
     // 'connected' (rather than nothing) keeps every path through the wrapper
     // result-bearing for providers whose `start()` always reports one.
@@ -458,7 +485,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
     }
 
     // Create and store the start promise
-    this._startPromise = this._executeStart();
+    this._startPromise = this._executeStart(options);
 
     try {
       return await this._startPromise;
@@ -471,12 +498,12 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * Internal start execution - handles status, the onStart hook, and mount
    * processing.
    */
-  private async _executeStart(): Promise<SandboxStartResult | void> {
+  private async _executeStart(options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     this.status = 'starting';
 
     let result: SandboxStartResult | void;
     try {
-      result = this._useAcquisitionPrimitives ? await this._acquire() : await this._implStart();
+      result = this._useAcquisitionPrimitives ? await this._acquire(options) : await this._implStart(options);
       // Status must flip to 'running' BEFORE the onStart hook: hooks run
       // commands, which reach `ensureRunning()` and would otherwise join the
       // in-flight `_startPromise` and deadlock awaiting their own start.
@@ -528,14 +555,14 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * a provider-native handle for {@link connect} to adopt, or `undefined` when
    * nothing usable exists. Avoid side effects where the provider's API allows.
    */
-  protected find?(): Promise<THandle | undefined>;
+  protected find?(options?: SandboxStartOptions): Promise<THandle | undefined>;
 
   /**
    * Adopt/wake/resume the handle {@link find} returned. Throwing fails
    * `start()`: a provider that should fall back to creating fresh puts that
    * policy in `find` (return `undefined` for an unusable handle) instead.
    */
-  protected connect?(handle: THandle): Promise<void> | void;
+  protected connect?(handle: THandle, options?: SandboxStartOptions): Promise<void> | void;
 
   /**
    * Provision a fresh VM/environment for this sandbox's logical id.
@@ -543,11 +570,11 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * acquisition, which derives the outcome from the branch that ran: find then
    * connect reports 'connected', create reports 'created'.
    */
-  protected create?(): Promise<void> | void;
+  protected create?(options?: SandboxStartOptions): Promise<void> | void;
 
   /** Base-orchestrated acquisition (rung 1 — see {@link start}). */
-  private async _acquire(): Promise<SandboxStartResult> {
-    const handle = this.find ? await this.find() : undefined;
+  private async _acquire(options?: SandboxStartOptions): Promise<SandboxStartResult> {
+    const handle = this.find ? await this.find(options) : undefined;
     if (handle != null) {
       // Checked rather than optional: adopting nothing would still report
       // 'connected'. The constructor rejects this pairing, but a `connect`
@@ -555,10 +582,10 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
       if (!this.connect) {
         throw new Error(`${this.constructor.name}: find() requires connect() to adopt the handle it returns.`);
       }
-      await this.connect(handle);
+      await this.connect(handle, options);
       return { outcome: 'connected' };
     }
-    await this.create!();
+    await this.create!(options);
     return { outcome: 'created' };
   }
 
@@ -585,7 +612,7 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    * resolves that id on start — reconnect/resume when the provider finds an
    * existing VM for it, create otherwise.
    */
-  async start(): Promise<SandboxStartResult | void> {
+  async start(_options?: SandboxStartOptions): Promise<SandboxStartResult | void> {
     // Also where a misspelled override and a class-FIELD `start`/`create` land,
     // since field initializers run too late for the constructor to see them.
     throw new Error(

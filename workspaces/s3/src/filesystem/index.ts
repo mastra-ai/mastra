@@ -30,6 +30,17 @@ import type {
 import { MastraFilesystem, FileNotFoundError, FileExistsError } from '@mastra/core/workspace';
 
 /**
+ * Owner of the files inside a FUSE mount, as numeric uid/gid.
+ *
+ * Set this when commands run as a different OS user than the one the sandbox
+ * mounts as, so that user can read and write the mounted files.
+ */
+export interface MountOwner {
+  uid: number;
+  gid: number;
+}
+
+/**
  * S3 mount configuration.
  * Returned by S3Filesystem.getMountConfig() for FUSE mounting in sandboxes.
  */
@@ -55,6 +66,11 @@ export interface S3MountConfig extends FilesystemMountConfig {
   prefix?: string;
   /** Mount as read-only */
   readOnly?: boolean;
+  /**
+   * Owner of the files inside the mount, as numeric uid/gid.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -168,6 +184,7 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
    * - Cloudflare R2: 'https://{accountId}.r2.cloudflarestorage.com'
    * - MinIO: 'http://localhost:9000'
    * - DigitalOcean Spaces: 'https://{region}.digitaloceanspaces.com'
+   * - Neon Object Storage: 'https://{branchId}.storage.{cell}.{region}.aws.neon.tech'
    */
   endpoint?: string;
   /** Force path-style URLs (required for some S3-compatible services) */
@@ -176,6 +193,13 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
   prefix?: string;
   /** Mount as read-only (blocks write operations, mounts read-only in sandboxes) */
   readOnly?: boolean;
+  /**
+   * Owner of the files inside the FUSE mount, as numeric uid/gid.
+   * Use this when sandbox commands run as a different OS user than the one
+   * performing the mount, so that user can read and write the mounted files.
+   * When unset, the sandbox probes the default user's uid/gid.
+   */
+  owner?: MountOwner;
 }
 
 /**
@@ -209,6 +233,20 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
  * });
  * ```
  *
+ * @example Neon Object Storage
+ * ```typescript
+ * import { S3Filesystem } from '@mastra/s3';
+ *
+ * // Values come from `neon env pull` (branch-scoped credentials)
+ * const fs = new S3Filesystem({
+ *   bucket: 'my-bucket',
+ *   region: process.env.AWS_REGION!,
+ *   accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+ *   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+ *   endpoint: process.env.AWS_ENDPOINT_URL_S3!,
+ * });
+ * ```
+ *
  * @example MinIO (local)
  * ```typescript
  * import { S3Filesystem } from '@mastra/s3';
@@ -238,6 +276,7 @@ export class S3Filesystem extends MastraFilesystem {
   readonly name = 'S3Filesystem';
   readonly provider = 's3';
   readonly readOnly?: boolean;
+  readonly owner?: MountOwner;
 
   status: ProviderStatus = 'pending';
 
@@ -278,6 +317,7 @@ export class S3Filesystem extends MastraFilesystem {
     this.displayName = options.displayName ?? this.getDefaultDisplayName(this.icon);
     this.description = options.description;
     this.readOnly = options.readOnly;
+    this.owner = options.owner;
   }
 
   /**
@@ -335,6 +375,13 @@ export class S3Filesystem extends MastraFilesystem {
 
     if (this.readOnly) {
       config.readOnly = true;
+    }
+
+    if (this.owner) {
+      // Copy the ids: the mount marker hashes this config, so a caller that mutates
+      // the object it passed in must not change the ownership that was mounted.
+      // Reading the fields also keeps an accessor-backed owner, which a spread would drop.
+      config.owner = { uid: this.owner.uid, gid: this.owner.gid };
     }
 
     return config;
@@ -432,6 +479,10 @@ export class S3Filesystem extends MastraFilesystem {
       return 'azure';
     }
 
+    if (hostname.endsWith('.neon.tech') && hostname.includes('.storage.')) {
+      return 'neon';
+    }
+
     if (hostname.includes('minio')) {
       return 'minio';
     }
@@ -460,6 +511,8 @@ export class S3Filesystem extends MastraFilesystem {
         return 'Azure Blob';
       case 'minio':
         return 'MinIO';
+      case 'neon':
+        return 'Neon Object Storage';
       case 's3':
         return 'S3';
       default:

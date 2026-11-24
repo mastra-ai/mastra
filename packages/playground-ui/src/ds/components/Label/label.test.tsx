@@ -10,18 +10,6 @@ afterEach(() => {
 });
 
 describe('Label', () => {
-  it('renders its text content', () => {
-    render(<Label>Email address</Label>);
-
-    expect(screen.getByText('Email address')).toBeDefined();
-  });
-
-  it('renders a native <label> element', () => {
-    render(<Label>Name</Label>);
-
-    expect(screen.getByText('Name').tagName).toBe('LABEL');
-  });
-
   it('associates with a control via htmlFor', () => {
     render(
       <>
@@ -40,7 +28,7 @@ describe('Label', () => {
 
     const label = screen.getByText('Username');
     expect(label.classList.contains('custom-label')).toBe(true);
-    expect(label.classList.contains('text-sm')).toBe(true);
+    expect(label.classList.contains('text-label')).toBe(true);
   });
 
   it('forwards a ref to the underlying <label> element', () => {

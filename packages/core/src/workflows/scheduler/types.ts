@@ -2,9 +2,9 @@ import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 
 /**
  * Declarative schedule configuration for a workflow. When set on a workflow,
- * the scheduler will publish a `workflow.start` event on the cron schedule.
+ * the scheduler starts a run on the cron schedule.
  *
- * Only supported on the evented engine.
+ * Supported on the default and evented engines.
  *
  * A workflow may declare a single schedule (the `id` is optional and defaults
  * to a stable internal value), or an array of schedules where every entry
@@ -22,8 +22,22 @@ export type WorkflowScheduleConfig<TInput = unknown, TState = unknown, TRequestC
   id?: string;
   /**
    * Cron expression (5-, 6-, or 7-part). Validated at workflow construction time.
+   * Exactly one of `cron` or `runAt` must be set.
    */
-  cron: string;
+  cron?: string;
+  /**
+   * Fire exactly once at this time (`Date` or ms epoch), then mark the
+   * schedule `completed`. Mutually exclusive with `cron` and `endAt`.
+   * A completed one-off is not re-created on redeploy; changing `runAt`
+   * re-arms it.
+   */
+  runAt?: Date | number;
+  /**
+   * Stop a cron schedule after this time (`Date` or ms epoch). Once the next
+   * occurrence is past `endAt` the schedule is marked `completed`.
+   * Only valid together with `cron`.
+   */
+  endAt?: Date | number;
   /**
    * Optional IANA timezone (e.g. 'America/New_York'). Defaults to the host timezone.
    */
@@ -149,6 +163,16 @@ export type SchedulerConfig = {
    */
   staleSkipsBeforeEscalation?: number;
 };
+
+/**
+ * Carried on `workflow.start` data for scheduler and manual fires; the
+ * workflow event processor uses it to run default-engine fires in-process.
+ */
+export interface ScheduledWorkflowTrigger {
+  scheduleId: string;
+  scheduledFireAt: number;
+  triggerKind: 'schedule-fire' | 'manual';
+}
 
 /**
  * @deprecated Renamed to {@link SchedulerConfig}. The scheduler now drives both

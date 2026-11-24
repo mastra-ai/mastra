@@ -10,5 +10,7 @@ export default defineConfig({
     isolate: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Keep cost estimates on the bundled snapshot; `pricing-registry.test.ts` turns refresh on per test.
+    env: { MASTRA_AUTO_REFRESH_PRICING: 'false' },
   },
 });

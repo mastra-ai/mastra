@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
 import { Agent } from '../agent';
 import { LocalFilesystem } from '../workspace/filesystem';
@@ -197,6 +197,16 @@ describe('Workspace Registration', () => {
       } catch (error: any) {
         expect(error.details.availableIds).toContain('existing-workspace');
       }
+    });
+
+    it('returns undefined without logging when optional and the workspace is missing', () => {
+      const workspace = createWorkspace('existing-workspace');
+      const mastra = new Mastra({ workspace });
+      const trackException = vi.spyOn(mastra.getLogger(), 'trackException');
+
+      expect(mastra.getWorkspaceById('non-existent', { optional: true })).toBeUndefined();
+      expect(mastra.getWorkspaceById('existing-workspace', { optional: true })).toBe(workspace);
+      expect(trackException).not.toHaveBeenCalled();
     });
   });
 

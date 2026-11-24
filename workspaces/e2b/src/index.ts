@@ -1,4 +1,5 @@
 export { E2BSandbox, type E2BSandboxOptions } from './sandbox';
+export { E2BSandboxFilesystem } from './sandbox/filesystem';
 export { E2BProcessManager } from './sandbox/process-manager';
 export {
   createDefaultMountableTemplate,
@@ -16,6 +17,7 @@ export {
   refreshRepoTemplate,
   repoTemplateRef,
   type RepoTemplateOptions,
+  type RepoTemplateRepository,
   type RepoTemplateIdentity,
   type RepositoryAccess,
   type RefreshRepoTemplateResult,
@@ -25,6 +27,8 @@ export {
   type E2BGCSMountConfig,
   type E2BAzureBlobMountConfig,
   type E2BMountConfig,
+  type MountOwner,
 } from './sandbox/mounts';
 export { e2bSandboxProvider } from './provider';
+export { E2BFactorySandbox, type E2BFactorySandboxOptions, type E2BFactorySandboxSettings } from './factory-sandbox';
 export { E2BCodeModeTransport } from './code-mode/transport';

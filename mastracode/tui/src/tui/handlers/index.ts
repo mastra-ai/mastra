@@ -6,7 +6,7 @@ export {
   handleAgentError,
   handleGoalEvaluation,
 } from './agent-lifecycle.js';
-export { handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
+export { handlePackFallbackState, handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
 export {
   handleOMObservationStart,
   handleOMObservationEnd,
@@ -14,10 +14,7 @@ export {
   handleOMReflectionEnd,
   handleOMFailed,
   handleOMBufferingStart,
-  handleOMBufferingEnd,
-  handleOMBufferingFailed,
   handleOMActivation,
-  handleOMThreadTitleUpdated,
 } from './om.js';
 export { handleAskQuestion, handleSandboxAccessRequest, handlePlanApproval } from './prompts.js';
 export { handleSubagentStart, handleSubagentToolStart, handleSubagentToolEnd, handleSubagentEnd } from './subagent.js';
@@ -26,6 +23,7 @@ export {
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
+  handleCommandExit,
   handleShellOutput,
   handleToolInputStart,
   handleToolInputDelta,

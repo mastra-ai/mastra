@@ -1,4 +1,5 @@
-import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -7,68 +8,70 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  Brain,
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleSlash,
-  CircleX,
-  ListFilter,
-  Repeat,
-  type LucideIcon,
-} from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
+import type { LucideIcon } from 'lucide-react';
+import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';
 import { relativeTime } from '../../lib/date/relativeTime';
 import { dayHeading, groupByDay } from '../domains/factory/activity';
-import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
+import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
-import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
-import { TIMESTAMP } from '../domains/factory/components/panel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
-import { SkeletonRows } from '../ui/SkeletonRows';
+import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
+import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
+import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
+import { IconFilter2 } from '@mastra/playground-ui/icons/central/IconFilter2';
+import { IconArrowsRepeatRightLeft } from '@mastra/playground-ui/icons/central/IconArrowsRepeatRightLeft';
+import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 
-const DECISION_GROUPS: ReadonlyArray<{
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  statuses: FactoryDecisionStatus[] | undefined;
-}> = [
-  { key: 'all', label: 'All effects', icon: ListFilter, statuses: undefined },
-  { key: 'active', label: 'Active', icon: CircleDashed, statuses: ['pending', 'leased', 'retry'] },
-  { key: 'proposed', label: 'Awaiting approval', icon: CirclePause, statuses: ['proposed'] },
-  { key: 'failed', label: 'Failed', icon: CircleX, statuses: ['failed'] },
-  { key: 'succeeded', label: 'Succeeded', icon: CircleCheck, statuses: ['succeeded'] },
-];
+const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
+  all: { label: 'All effects', icon: IconFilter2 },
+  active: { label: 'Active', icon: IconCircleDashed },
+  proposed: { label: 'Awaiting approval', icon: IconPause },
+  failed: { label: 'Failed', icon: IconCircleX },
+  succeeded: { label: 'Succeeded', icon: IconCircleCheck },
+};
+
+const DECISION_GROUPS = RULE_DECISION_GROUPS.map(group => ({ ...group, ...GROUP_PRESENTATION[group.key] }));
 
 const STATUS_STYLE: Record<
   FactoryDecisionStatus,
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
-  pending: { icon: CircleDashed, tone: 'blue', label: 'queued' },
-  proposed: { icon: CirclePause, tone: 'yellow', label: 'awaiting approval' },
-  dismissed: { icon: CircleSlash, tone: 'neutral', label: 'dismissed' },
-  superseded: { icon: CircleSlash, tone: 'neutral', label: 'superseded' },
-  leased: { icon: CircleDashed, tone: 'cyan', label: 'running', live: true },
-  retry: { icon: CircleDashed, tone: 'orange', label: 'retrying', live: true },
-  succeeded: { icon: CircleCheck, tone: 'green', label: 'done' },
-  failed: { icon: CircleX, tone: 'red', label: 'failed' },
+  pending: { icon: IconCircleDashed, tone: 'info', label: 'queued' },
+  proposed: { icon: IconPause, tone: 'warning', label: 'awaiting approval' },
+  dismissed: { icon: IconCircleBanSign, tone: 'neutral', label: 'dismissed' },
+  superseded: { icon: IconCircleBanSign, tone: 'neutral', label: 'superseded' },
+  leased: { icon: IconCircleDashed, tone: 'cyan', label: 'running', live: true },
+  retry: { icon: IconCircleDashed, tone: 'orange', label: 'retrying', live: true },
+  succeeded: { icon: IconCircleCheck, tone: 'success', label: 'done' },
+  failed: { icon: IconCircleX, tone: 'destructive', label: 'failed' },
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
 export function RulesPage() {
-  return <FactoryPageShell>{project => <RulesContent factoryProjectId={project.id} />}</FactoryPageShell>;
+  const factory = useActiveFactory();
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout variant="page" {...slots}>
+      <div className="flex h-full min-h-0 flex-col">
+        <RulesContent factoryProjectId={factory.id} />
+      </div>
+    </PageLayout>
+  );
 }
 
 function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedGroup = searchParams.get('group');
-  const decisionGroup = DECISION_GROUPS.find(entry => entry.key === requestedGroup)?.key ?? 'all';
+  const { key: decisionGroup, statuses: decisionStatuses } = ruleDecisionGroup(searchParams.get('group'));
   const decisionFilter = DECISION_GROUPS.find(entry => entry.key === decisionGroup);
-  const decisionStatuses = decisionFilter?.statuses;
   const decisionsQuery = useFactoryDecisionHistory(factoryProjectId, decisionGroup, decisionStatuses);
   const retryDecision = useFactoryDecisionAction(factoryProjectId, 'retry');
   const approveDecision = useFactoryDecisionAction(factoryProjectId, 'approve');
@@ -88,7 +91,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <Txt as="h2" variant="ui-sm" className="text-icon6 m-0" id="rule-decisions-heading">
+        <Txt tone="ink" as="h2" variant="column" className="m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
         <div className="w-full lg:hidden">
@@ -96,7 +99,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             value={decisionGroup}
             onValueChange={group => setSearchParams(group === 'all' ? {} : { group }, { replace: true })}
           >
-            <SelectTrigger variant="outline" size="sm" aria-label="Rule decision filter" className="w-full">
+            <SelectTrigger size="sm" aria-label="Rule decision filter" className="w-full">
               {decisionFilter?.label ?? 'All effects'}
             </SelectTrigger>
             <SelectContent>
@@ -108,14 +111,13 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
             </SelectContent>
           </Select>
         </div>
-        <ButtonsGroup className="hidden lg:flex" spacing="close" role="group" aria-label="Rule decision filter">
+        <ButtonsGroup size="sm" className="hidden lg:flex" role="group" aria-label="Rule decision filter">
           {DECISION_GROUPS.map(entry => {
             const Icon = entry.icon;
             return (
               <Button
                 key={entry.key}
-                variant={decisionGroup === entry.key ? 'primary' : 'outline'}
-                size="sm"
+                variant={decisionGroup === entry.key ? 'primary' : 'default'}
                 aria-pressed={decisionGroup === entry.key}
                 onClick={() => setSearchParams(entry.key === 'all' ? {} : { group: entry.key }, { replace: true })}
               >
@@ -134,12 +136,12 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
       )}
 
       {decisionsQuery.isPending ? (
-        <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
+        <RuleDecisionsSkeleton />
       ) : decisions.length === 0 ? (
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter className="text-icon3 size-5" aria-hidden />}
+          iconSlot={<IconFilter2 aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -148,7 +150,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
           }
           actionSlot={
             hasDecisionFilter ? (
-              <Button variant="outline" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
+              <Button size="sm" onClick={() => setSearchParams({}, { replace: true })}>
                 Show all effects
               </Button>
             ) : undefined
@@ -170,7 +172,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
                         mark={<StatusIcon size={14} className={RAIL_MARK_TONE[tone]} aria-hidden />}
                       >
                         <DecisionRow
-                          factoryProjectId={factoryProjectId ?? ''}
                           decision={decision}
                           retrying={retryDecision.isPending && retryDecision.variables === decision.id}
                           approving={approveDecision.isPending && approveDecision.variables === decision.id}
@@ -189,6 +190,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
               hasNextPage={decisionsQuery.hasNextPage}
               isFetchingNextPage={decisionsQuery.isFetchingNextPage}
               onLoadMore={() => void decisionsQuery.fetchNextPage()}
+              loaded={decisions.length}
               label="Load more effects"
             />
           </div>
@@ -199,7 +201,6 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
 }
 
 function DecisionRow({
-  factoryProjectId,
   decision,
   retrying,
   approving,
@@ -208,7 +209,6 @@ function DecisionRow({
   onApprove,
   onDismiss,
 }: {
-  factoryProjectId: string;
   decision: FactoryDecisionSummary;
   retrying: boolean;
   approving: boolean;
@@ -217,7 +217,6 @@ function DecisionRow({
   onApprove: () => void;
   onDismiss: () => void;
 }) {
-  const navigate = useNavigate();
   const { tone, label, live } = STATUS_STYLE[decision.status];
   const progress = decision.completedAt
     ? `Completed ${relativeTime(decision.completedAt)}`
@@ -225,58 +224,54 @@ function DecisionRow({
 
   return (
     <div className={cn('flex min-h-7 min-w-0 items-center gap-2 py-0.5', RAIL_ROW_BODY)}>
-      <Txt as="span" variant="ui-sm" className="text-icon6 shrink-0 truncate font-medium">
+      <Txt tone="ink" as="span" variant="column" className="shrink-0 truncate">
         {decision.type}
       </Txt>
-      <Badge size="xs" variant={tone} emphasis="muted" {...(live ? { indicator: 'pulse' as const } : {})}>
+      <Badge size="xs" variant={tone} emphasis="subtle" {...(live ? { indicator: 'pulse' as const } : {})}>
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="muted" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge
+          size="xs"
+          variant="neutral"
+          emphasis="subtle"
+          icon={<IconArrowsRepeatRightLeft aria-hidden />}
+          title="Attempts"
+        >
           {decision.attempts}
         </Badge>
       ) : null}
       {decision.lastError ? (
-        <Txt as="span" variant="ui-xs" className="text-icon3 min-w-0 flex-1 truncate" title={decision.lastError}>
+        <Txt tone="muted" as="span" variant="meta" className="min-w-0 flex-1 truncate" title={decision.lastError}>
           {decision.lastError}
         </Txt>
       ) : null}
       <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
-        {decision.status === 'failed' ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            tooltip="Ask supervisor"
-            aria-label={`Ask supervisor about failed ${decision.type} decision`}
-            onClick={() =>
-              void navigate(
-                supervisorAskPath(
-                  factoryProjectId,
-                  `Explain why rule decision ${decision.id} failed and recommend the safest repair.`,
-                ),
-              )
-            }
-          >
-            <Brain aria-hidden />
-          </Button>
-        ) : null}
         {decision.status === 'proposed' ? (
           <>
-            <Button variant="ghost" size="xs" disabled={approving || dismissing} onClick={onDismiss}>
+            <Button variant="ghost" size="sm" disabled={approving || dismissing} onClick={onDismiss}>
               {dismissing ? 'Dismissing…' : 'Dismiss'}
             </Button>
-            <Button size="xs" disabled={approving || dismissing} onClick={onApprove}>
+            <Button size="sm" disabled={approving || dismissing} onClick={onApprove}>
               {approving ? 'Starting…' : 'Run'}
             </Button>
           </>
         ) : decision.status === 'failed' && decision.canRetry ? (
-          <Button variant="outline" size="xs" disabled={retrying} onClick={onRetry}>
+          <Button size="sm" disabled={retrying} onClick={onRetry}>
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}
-        <time dateTime={decision.createdAt} className={cn(TIMESTAMP, 'shrink-0')} title={progress}>
+        <Txt
+          as="time"
+          variant="meta"
+          tone="muted"
+          font="mono"
+          dateTime={decision.createdAt}
+          className={cn('shrink-0')}
+          title={progress}
+        >
           {relativeTime(decision.createdAt)}
-        </time>
+        </Txt>
       </div>
     </div>
   );

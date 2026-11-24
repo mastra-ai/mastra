@@ -4,6 +4,7 @@ import type { ModelItem } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 const BUILT_IN_SUBAGENT_TYPES: Array<{ id: string; label: string; description: string }> = [
@@ -37,7 +38,7 @@ async function showSubagentModelListForScope(
     return;
   }
 
-  const currentSubagentModel = ctx.state.session.subagents.model.get({ agentType });
+  const currentSubagentModel = requireLocal(ctx.state, '/subagents').session.subagents.model.get({ agentType });
   const scopeLabel = scope === 'global' ? `${agentTypeLabel} · Global` : `${agentTypeLabel} · Thread`;
 
   return new Promise(resolve => {
@@ -50,7 +51,7 @@ async function showSubagentModelListForScope(
         ctx.state.ui.hideOverlay();
         await promptForApiKeyIfNeeded(ctx.state.ui, model, ctx.authStorage);
         try {
-          await ctx.state.session.subagents.model.set({ modelId: model.id, agentType });
+          await requireLocal(ctx.state, '/subagents').session.subagents.model.set({ modelId: model.id, agentType });
           if (scope === 'global') {
             const settings = loadSettings();
             settings.models.subagentModels[agentType] = model.id;

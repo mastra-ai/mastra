@@ -92,9 +92,13 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('imports with an extension that have exports mapping', async () => {
       const pkgJson = { name: 'hono', exports: { 'hono/utils/mime.js': './dist/utils/mime.js' } };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'hono', rootPath: '/project/node_modules/hono' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: 'hono',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/hono',
+        packageJsonPath: '/project/node_modules/hono/package.json',
+        packageJson: { name: 'hono', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       const result = await resolveId('hono/utils/mime.js', '/project/src/index.ts');
@@ -104,28 +108,42 @@ describe('nodeModulesExtensionResolver', () => {
   });
 
   describe('imports with JS extension', () => {
-    it('It will resolve the import to the correct path if no exports present', async () => {
-      const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
-      // @ts-expect-error  type should be correct
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
+    it.for([
+      { rootPath: '/project/node_modules/lodash', resolvedId: '/project/node_modules/lodash/fp/get.js' },
+      // #29571: native Windows paths must not leak backslashes into the import specifier
+      { rootPath: 'C:\\project\\node_modules\\lodash', resolvedId: 'C:\\project\\node_modules\\lodash\\fp\\get.js' },
+    ])(
+      'It will resolve the import to the correct path if no exports present ($rootPath)',
+      async ({ rootPath, resolvedId }) => {
+        vi.mocked(getPackageInfo).mockResolvedValue({
+          name: 'lodash',
+          version: '1.0.0',
+          rootPath,
+          packageJsonPath: `${rootPath}/package.json`,
+          packageJson: { name: 'lodash', version: '1.0.0' },
+        });
+        vi.mocked(readFile).mockResolvedValue(JSON.stringify({ name: 'lodash' }));
 
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
+        mockNodeResolveHandler.mockResolvedValue({ id: resolvedId });
 
-      const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
+        const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
 
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.js',
-      });
-    });
+        expect(result).toMatchObject({
+          external: true,
+          id: 'lodash/fp/get.js',
+        });
+      },
+    );
 
     it('handles .mjs extension', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: 'lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/lodash',
+        packageJsonPath: '/project/node_modules/lodash/package.json',
+        packageJson: { name: 'lodash', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.mjs' });
@@ -140,9 +158,13 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('handles .cjs extension', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: 'lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/lodash',
+        packageJsonPath: '/project/node_modules/lodash/package.json',
+        packageJson: { name: 'lodash', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
@@ -159,9 +181,13 @@ describe('nodeModulesExtensionResolver', () => {
   describe('imports without extension', () => {
     it('resolves the import to the correct path if no exports present', async () => {
       const pkgJson = { name: 'lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: 'lodash', rootPath: '/project/node_modules/lodash' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: 'lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/lodash',
+        packageJsonPath: '/project/node_modules/lodash/package.json',
+        packageJson: { name: 'lodash', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
@@ -186,9 +212,13 @@ describe('nodeModulesExtensionResolver', () => {
   describe('scoped packages', () => {
     it('handles scoped package subpath imports with exports', async () => {
       const pkgJson = { name: '@my/lodash', exports: {} };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: '@my/lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/@my/lodash',
+        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
+        packageJson: { name: '@my/lodash', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
       mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/fp/get.cjs' });
@@ -200,11 +230,14 @@ describe('nodeModulesExtensionResolver', () => {
 
     it('adds extension for scoped package without exports', async () => {
       const pkgJson = { name: '@my/lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
-      // @ts-expect-error  type should be correct
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: '@my/lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/@my/lodash',
+        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
+        packageJson: { name: '@my/lodash', version: '1.0.0' },
+      });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-      // @ts-expect-error Partial input is fine
       mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/utils.cjs' });
 
       const result = await resolveId('@my/lodash/utils', '/project/src/index.ts');
@@ -215,10 +248,13 @@ describe('nodeModulesExtensionResolver', () => {
 
   describe('edge cases', () => {
     it('handles package.json read failure gracefully', async () => {
-      // ts-expect-error @typescript-eslint/no-unused-vars
-      const _pkgJson = { name: '@my/lodash' };
-      // @ts-expect-error parital is fine
-      vi.mocked(getPackageInfo).mockResolvedValue({ name: '@my/lodash', rootPath: '/project/node_modules/@my/lodash' });
+      vi.mocked(getPackageInfo).mockResolvedValue({
+        name: '@my/lodash',
+        version: '1.0.0',
+        rootPath: '/project/node_modules/@my/lodash',
+        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
+        packageJson: { name: '@my/lodash', version: '1.0.0' },
+      });
 
       vi.mocked(readFile).mockImplementation(() => {
         throw new Error('ENOENT');

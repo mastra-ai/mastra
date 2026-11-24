@@ -1,0 +1,31 @@
+import type { TraceQueryTrace } from '@mastra/core/storage';
+import { displayTraceName } from '../trace-list-columns';
+import type { TracesListViewTrace } from './traces-list-view';
+
+export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListViewTrace[] {
+  return traces.map(trace => ({
+    traceId: trace.traceId,
+    spanId: trace.rootSpanId,
+    parentSpanId: trace.parentSpanId,
+    name: displayTraceName(trace.name),
+    createdAt: trace.createdAt,
+    inputPreview: trace.inputPreview,
+    outputPreview: trace.outputPreview ?? undefined,
+    errorPreview: trace.errorPreview ?? undefined,
+    metadata: trace.metadata,
+    entityId: trace.entityId,
+    entityName: trace.entityName,
+    entityType: trace.entityType,
+    threadId: trace.threadId,
+    resourceId: trace.resourceId,
+    environment: trace.environment,
+    status: trace.status,
+    outcome: trace.outcome,
+    stopReason: trace.stopReason,
+    stopReasonContext: trace.stopReasonContext,
+    startedAt: trace.startedAt,
+    endedAt: trace.endedAt,
+    timeToFirstChunkMs: trace.timeToFirstChunkMs,
+    timeToFirstTokenMs: trace.timeToFirstTokenMs,
+  }));
+}

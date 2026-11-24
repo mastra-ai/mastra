@@ -46,9 +46,12 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 function makeAuthStorage() {
   return {
-    set: vi.fn(),
-    remove: vi.fn(),
-  } as unknown as AuthStorage & { set: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> };
+    addAccount: vi.fn(async () => undefined),
+    logout: vi.fn(),
+  } as unknown as AuthStorage & {
+    addAccount: ReturnType<typeof vi.fn>;
+    logout: ReturnType<typeof vi.fn>;
+  };
 }
 
 let authStorage: ReturnType<typeof makeAuthStorage>;
@@ -73,7 +76,6 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: opts?.enabled, isOrganizationAdmin: opts?.isOrganizationAdmin }),
       authStorage,
       modelCredentials: opts?.noCredentials ? undefined : seed.credentials,
-      memorySettings: seed.memorySettings,
     }).routes(),
   );
   return app;
@@ -154,7 +156,7 @@ describe('paste-code flow (anthropic)', () => {
     const cred = await seed.credentials.getCredential(TENANT_A, 'anthropic');
     expect(cred).toMatchObject({ type: 'oauth', access: 'a-1' });
     // Server-side only: never written to the local auth.json in tenant mode.
-    expect(authStorage.set).not.toHaveBeenCalled();
+    expect(authStorage.addAccount).not.toHaveBeenCalled();
   });
 
   it("keeps user A's credential invisible to user B", async () => {
@@ -163,7 +165,7 @@ describe('paste-code flow (anthropic)', () => {
     await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
 
     expect(await seed.credentials.listCredentials('org1', 'user-b')).toEqual([]);
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeUndefined();
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'user')).toBeUndefined();
   });
 
   it('deletes the session after completion (replay returns 404)', async () => {
@@ -222,6 +224,32 @@ describe('device-code flow (openai)', () => {
     // Immediately polling again is rate-limited — still one upstream call.
     await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
     expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1);
+  });
+
+  it('tells a poll that arrives while another poll holds the session to retry shortly', async () => {
+    const app = buildApp(userA);
+    const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
+    await makePollable(sessionId);
+
+    let releaseUpstream!: () => void;
+    pollCodexDeviceLogin.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          releaseUpstream = () => resolve({ status: 'pending', nextPollMs: 5000 });
+        }),
+    );
+
+    // Poll A claims the session and waits on the provider.
+    const first = post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    await vi.waitFor(() => expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1));
+
+    // Poll B arrives while A still holds the claim.
+    const second = await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
+    expect(await second.json()).toEqual({ status: 'pending', nextPollMs: 250 });
+    expect(pollCodexDeviceLogin).toHaveBeenCalledTimes(1);
+
+    releaseUpstream();
+    expect(await (await first).json()).toMatchObject({ status: 'pending', nextPollMs: 5000 });
   });
 
   it('stores the credential under the openai-codex auth id on completion', async () => {
@@ -329,36 +357,33 @@ describe('session cancel and sign-out', () => {
     expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toBeUndefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-b' }, 'anthropic')).toBeDefined();
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'anthropic')).toBeDefined();
-    expect(authStorage.remove).not.toHaveBeenCalled();
+    expect(authStorage.logout).not.toHaveBeenCalled();
   });
 });
 
 // ── Org-scoped sign-in ───────────────────────────────────────────────────
 
-describe('personal OM defaults follow login', () => {
-  it("seeds the caller's unset OM models from the provider on paste-code completion", async () => {
+describe('provider login preserves OM selection intent', () => {
+  it('leaves automatic roles unset after paste-code completion', async () => {
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
     await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
 
-    expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({
-      observerModelId: 'anthropic/claude-haiku-4-5',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
-    });
+    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
     expect(await seed.memorySettings.get({ orgId: 'org1', userId: 'user-b' })).toBeNull();
   });
 
-  it('seeds from the device-code provider on poll completion', async () => {
+  it('leaves automatic roles unset after device-code completion', async () => {
     pollCodexDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/openai/oauth/start')).json();
     await makePollable(sessionId);
     await post(app, '/web/config/providers/openai/oauth/poll', { sessionId });
 
-    expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({ observerModelId: 'openai/gpt-5.4-mini' });
+    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
   });
 
-  it('keeps an OM model the user already chose', async () => {
+  it('keeps an explicit role pinned without materializing the automatic sibling', async () => {
     await seed.memorySettings.patch({ ...TENANT_A, patch: { observerModelId: 'openai/gpt-5.4-mini' } });
     const app = buildApp(userA);
     const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
@@ -366,44 +391,8 @@ describe('personal OM defaults follow login', () => {
 
     expect(await seed.memorySettings.get(TENANT_A)).toMatchObject({
       observerModelId: 'openai/gpt-5.4-mini',
-      reflectorModelId: 'anthropic/claude-haiku-4-5',
+      reflectorModelId: null,
     });
-  });
-
-  it('does not seed for org-scoped sign-in or providers without a built-in OM pack', async () => {
-    const app = buildApp(userA);
-    const { sessionId } = await (
-      await post(app, '/web/config/providers/anthropic/oauth/start', { scope: 'org' })
-    ).json();
-    await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-
-    pollGitHubCopilotDeviceLogin.mockResolvedValue({ status: 'complete', credentials: CODEX_CREDS });
-    const { sessionId: copilotSession } = await (
-      await post(app, '/web/config/providers/github-copilot/oauth/start')
-    ).json();
-    await makePollable(copilotSession);
-    await post(app, '/web/config/providers/github-copilot/oauth/poll', { sessionId: copilotSession });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-  });
-
-  it('still reports login success and releases the session when OM seeding fails', async () => {
-    vi.spyOn(seed.memorySettings, 'patch').mockRejectedValueOnce(new Error('memory settings unavailable'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const app = buildApp(userA);
-    const { sessionId } = await (await post(app, '/web/config/providers/anthropic/oauth/start')).json();
-
-    const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ status: 'complete' });
-    expect(await seed.credentials.getCredential(TENANT_A, 'anthropic')).toMatchObject({ type: 'oauth' });
-    expect(await seed.memorySettings.get(TENANT_A)).toBeNull();
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('seed personal OM defaults'), expect.anything());
-    // Session was deleted, not left claimed.
-    const replay = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
-    expect(replay.status).toBe(404);
-    warn.mockRestore();
   });
 });
 
@@ -423,8 +412,8 @@ describe('org-scoped sign-in', () => {
       type: 'oauth',
       access: 'a-1',
     });
-    // Visible to other org members through resolution.
-    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic')).toBeDefined();
+    // Visible to other org members through factory-scoped resolution.
+    expect(await seed.credentials.resolveCredential('org1', 'user-b', 'anthropic', 'org')).toBeDefined();
   });
 
   it('device-code poll stores an org-scoped credential when started with scope org', async () => {
@@ -521,7 +510,7 @@ describe('local mode', () => {
 
     const res = await post(app, '/web/config/providers/anthropic/oauth/complete', { sessionId, code: 'c' });
     expect(res.status).toBe(200);
-    expect(authStorage.set).toHaveBeenCalledWith('anthropic', expect.objectContaining({ type: 'oauth' }));
+    expect(authStorage.addAccount).toHaveBeenCalledWith('anthropic', ANTHROPIC_CREDS);
   });
 
   it('signs out via AuthStorage using the auth provider id', async () => {
@@ -529,6 +518,6 @@ describe('local mode', () => {
       method: 'DELETE',
     });
     expect(res.status).toBe(200);
-    expect(authStorage.remove).toHaveBeenCalledWith('openai-codex');
+    expect(authStorage.logout).toHaveBeenCalledWith('openai-codex');
   });
 });

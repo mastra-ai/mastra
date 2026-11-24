@@ -9,7 +9,7 @@ const meta: Meta<typeof MarkdownRenderer> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-150 p-4">
+        <div className="w-150 max-w-[calc(100vw-2rem)] p-4">
           <Story />
         </div>
       </TooltipProvider>
@@ -97,6 +97,7 @@ Regular text after the quote.`,
 
 export const Tables: Story = {
   args: {
+    tableActions: true,
     children: `## Agent Comparison
 
 | Agent Name | Model | Temperature | Max Tokens |
@@ -104,6 +105,42 @@ export const Tables: Story = {
 | Support | GPT-4 | 0.7 | 4096 |
 | Sales | GPT-4-Turbo | 0.5 | 2048 |
 | Research | Claude-3 | 0.9 | 8192 |`,
+  },
+};
+
+const FACTORY_TABLE = `One factory, **Acme Platform**, with 19 cards.
+
+| Board | Stage | Cards |
+| --- | --- | --- |
+| Work | Intake | 4 (one is linked to a GitHub issue) |
+| Work | Triage | 2 |
+| Work | Planning | 2 |
+| Work | Building | 2 |
+| Work | Review | 2 |
+| Work | PR review | 1 (linked to a PR) |
+| Work | Done / Canceled | 2 / 1 |
+| Review | Intake / Reviewing / Done | 1 / 1 / 1 (all linked to PRs) |`;
+
+export const ChatTable: Story = {
+  args: {
+    children: FACTORY_TABLE,
+  },
+};
+
+export const ChatTableWithActions: Story = {
+  args: {
+    ...ChatTable.args,
+    tableActions: true,
+  },
+};
+
+export const SingleColumnTable: Story = {
+  args: {
+    children: `| Stage |
+| --- |
+| Intake |
+| Planning |
+| Building |`,
   },
 };
 
@@ -203,7 +240,7 @@ function StreamCadence() {
       <button
         type="button"
         onClick={() => setRun(count => count + 1)}
-        className="text-icon5 border-border1 text-ui-sm self-start rounded-md border px-3 py-1"
+        className="self-start rounded-md border border-border px-3 py-1 text-caption text-foreground"
       >
         Replay
       </button>

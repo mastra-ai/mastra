@@ -114,9 +114,10 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
   /**
    * Process a span by filtering sensitive data across its key fields.
    * Fields processed: attributes, metadata, input, output, errorInfo, requestContext.
+   * The span is mutated in place, as the SpanOutputProcessor contract requires.
    *
    * @param span - The input span to filter
-   * @returns A new span with sensitive values redacted
+   * @returns The same span instance with sensitive values redacted
    */
   process(span: AnySpan): AnySpan {
     const indexedState = this.redactionStyle === 'indexed' ? this.getTraceState(span.traceId) : undefined;
@@ -125,6 +126,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     span.input = this.tryFilter(span.input, indexedState);
     span.output = this.tryFilter(span.output, indexedState);
     span.errorInfo = this.tryFilter(span.errorInfo, indexedState);
+    span.stopReasonContext = this.tryFilter(span.stopReasonContext, indexedState);
     span.requestContext = this.tryFilter(span.requestContext, indexedState);
     return span;
   }
@@ -187,11 +189,11 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
       const normKey = this.normalizeKey(key);
 
       if (this.isSensitive(normKey)) {
-        if (obj[key] && typeof obj[key] === 'object') {
-          filtered[key] = this.deepFilter(obj[key], seen, indexedState);
-        } else {
-          filtered[key] = this.redactValue(obj[key], normKey, indexedState);
-        }
+        // Everything under a sensitive key is sensitive, including nested objects and arrays.
+        filtered[key] =
+          obj[key] && typeof obj[key] === 'object'
+            ? this.redactionToken
+            : this.redactValue(obj[key], normKey, indexedState);
       } else {
         filtered[key] = this.deepFilter(obj[key], seen, indexedState);
       }

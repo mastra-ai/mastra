@@ -10,6 +10,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_jobs:
+        description: Tier keys (job:<key>) this PR skips; see scripts/test-tiers/select.mjs.
+        required: false
+        type: string
+        default: '[]'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -21,17 +26,17 @@ permissions: {}
 jobs:
   publish-e2e-registry:
     name: Publish E2E registry
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
     outputs:
       digest: ${{ steps.registry_digest.outputs.digest }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       TURBO_CACHE: remote:r
-      MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
       MASTRA_E2E_REGISTRY_PORT: '4873'
 
     steps:
@@ -41,6 +46,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -59,6 +70,11 @@ jobs:
         working-directory: ./e2e-tests/_local-registry-setup
         run: pnpm run publish-ci-registry
         env:
+          # The job has `id-token: write` for StarSling Disks. With it, `pnpm publish` tries an OIDC token
+          # exchange for every package before falling back (~2 min over ~280 packages); a local registry
+          # takes no OIDC token, so skip the exchange on this step only.
+          ACTIONS_ID_TOKEN_REQUEST_URL: ''
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ''
           MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
@@ -74,7 +90,7 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Upload E2E registry artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -84,10 +100,11 @@ jobs:
     needs: publish-e2e-registry
     if: inputs.experiment_worker_e2e_changed
     name: E2E experiments
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -95,6 +112,12 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -104,7 +127,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -129,7 +152,6 @@ jobs:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/experiment-worker-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/experiment-worker-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_ARTIFACT_PATH: ${{ runner.temp }}/mastra-e2e-registry/registry-snapshot.tar
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST: ${{ needs.publish-e2e-registry.outputs.digest }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
@@ -137,7 +159,7 @@ jobs:
 
       - name: Upload experiments reports and transcripts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiments-pr-reports
           path: ${{ runner.temp }}/experiments-reports
@@ -147,10 +169,12 @@ jobs:
   e2e-monorepo:
     needs: publish-e2e-registry
     name: E2E monorepo
-    runs-on: starsling-ubuntu-24.04
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/monorepo') }}
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -163,8 +187,19 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: '1.4.3'
 
       - name: Build
         run: pnpm turbo --filter "./packages/core" --filter "./packages/cli" build
@@ -174,7 +209,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -186,16 +221,22 @@ jobs:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-  e2e-softwarefactory:
+  # The small E2E suites share one runner: setup and build once, then one install and one test
+  # step per suite. Each suite's steps run even when an earlier suite failed, and each tiered
+  # suite still skips on its own job:e2e/<key> (scripts/test-tiers/update.mjs reads the step
+  # results). Step names match the old job names so a failure reads the same. Every step has its
+  # own timeout and the job allows their sum, so a stalled build or suite can't use up the time
+  # of the suites after it; the suites normally finish in about 4 minutes together.
+  e2e-light:
     needs: publish-e2e-registry
-    name: E2E softwarefactory template
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 30
+    name: E2E light suites
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 226
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -207,225 +248,227 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        timeout-minutes: 1
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
+        timeout-minutes: 10
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Install and build the CLI
+      # npm import needs only the registry, not the build, so it runs first.
+      - name: Download E2E registry artifact
+        id: registry
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      - name: 'E2E npm import: install e2e test dependencies'
+        id: npm_import_install
+        # Installs from the E2E registry only; it needs no build.
+        if: ${{ !cancelled() && steps.registry.outcome == 'success' }}
+        working-directory: ./e2e-tests/npm-import
+        timeout-minutes: 10
+        run: pnpm install
+
+      - name: E2E npm import
+        if: ${{ !cancelled() && steps.npm_import_install.outcome == 'success' }}
+        timeout-minutes: 15
+        working-directory: ./e2e-tests/npm-import
+        run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
+      # deployers and Type check need every package built; the others need a few.
+      - name: Build
+        id: build
+        if: ${{ !cancelled() }}
+        timeout-minutes: 25
+        env:
+          FULL: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') || !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') }}
+          NO_BUNDLING: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') }}
+          CREATE_MASTRA: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') }}
+          COMMONJS: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') }}
         run: |
-          pnpm install --frozen-lockfile --filter ./mastracode/mastra-factory...
-          pnpm --filter ./mastracode/mastra-factory build
+          if [ "$FULL" = true ]; then
+            pnpm build
+            exit 0
+          fi
+          filters=()
+          if [ "$NO_BUNDLING" = true ]; then
+            for pkg in @mastra/core @mastra/evals @mastra/libsql @mastra/loggers @mastra/memory @mastra/observability mastra; do
+              filters+=(--filter "$pkg")
+            done
+          fi
+          if [ "$CREATE_MASTRA" = true ]; then filters+=(--filter create-mastra); fi
+          if [ "$COMMONJS" = true ]; then filters+=(--filter @mastra/core --filter @mastra/loggers); fi
+          if [ ${#filters[@]} -gt 0 ]; then
+            pnpm turbo "${filters[@]}" build
+          else
+            echo "Only npm import runs; it installs from the E2E registry and needs no build."
+          fi
 
-      - name: Install e2e test dependencies
-        working-directory: ./e2e-tests/softwarefactory
-        run: pnpm install
-
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
-        working-directory: ./e2e-tests/softwarefactory
-        run: pnpm test
+      # Build and the registry download gate every suite below. When either fails, each selected
+      # suite fails a step in its own name, so the tier updater records the prerequisite failure
+      # for that suite only; tiered-out suites stay skipped.
+      - name: 'E2E no-bundling: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
         env:
-          MASTRA_TELEMETRY_DISABLED: '1'
-          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
-          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: softwarefactory-e2e-test
-          MASTRA_E2E_REGISTRY_PORT: '4873'
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E no-bundling did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
-  e2e-no-bundling:
-    needs: publish-e2e-registry
-    name: E2E no-bundling
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
+      - name: 'E2E create-mastra: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E create-mastra did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
+      - name: 'E2E CommonJS: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E CommonJS did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
+      - name: 'E2E deployers: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E deployers did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
-      - name: Build
-        run: pnpm turbo --filter "@mastra/core" --filter "@mastra/evals" --filter "@mastra/libsql" --filter "@mastra/loggers" --filter "@mastra/memory" --filter "@mastra/observability" --filter "mastra" build
+      - name: 'E2E Type check: not run, a prerequisite failed'
+        if: ${{ !cancelled() && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') && (steps.build.outcome != 'success' || steps.registry.outcome != 'success') }}
+        timeout-minutes: 1
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          REGISTRY: ${{ steps.registry.outcome }}
+        run: |
+          echo "::error::E2E Type check did not run: Build was $BUILD and the registry download was $REGISTRY."
+          exit 1
 
-      - name: Install e2e test dependencies
+      - name: 'E2E no-bundling: install e2e test dependencies'
+        id: no_bundling_install
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') }}
         working-directory: ./e2e-tests/no-bundling
+        timeout-minutes: 10
         run: pnpm install
 
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
+      - name: E2E no-bundling
+        if: ${{ !cancelled() && steps.no_bundling_install.outcome == 'success' }}
+        timeout-minutes: 15
         working-directory: ./e2e-tests/no-bundling
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-  e2e-create-mastra:
-    needs: publish-e2e-registry
-    name: E2E create-mastra
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build
-        run: pnpm turbo --filter "create-mastra" build
-
-      - name: Install e2e test dependencies
+      - name: 'E2E create-mastra: install e2e test dependencies'
+        id: create_mastra_install
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') }}
         working-directory: ./e2e-tests/create-mastra
+        timeout-minutes: 10
         run: pnpm install
 
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
+      - name: E2E create-mastra
+        if: ${{ !cancelled() && steps.create_mastra_install.outcome == 'success' }}
+        timeout-minutes: 15
         working-directory: ./e2e-tests/create-mastra
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-  e2e-commonjs:
-    needs: publish-e2e-registry
-    name: E2E CommonJS
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build
-        run: pnpm turbo --filter "@mastra/core" --filter "@mastra/loggers" build
-
-      - name: Install e2e test dependencies
+      - name: 'E2E CommonJS: install e2e test dependencies'
+        id: commonjs_install
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') }}
         working-directory: ./e2e-tests/commonjs
+        timeout-minutes: 10
         run: pnpm install
 
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
+      - name: E2E CommonJS
+        if: ${{ !cancelled() && steps.commonjs_install.outcome == 'success' }}
+        timeout-minutes: 15
         working-directory: ./e2e-tests/commonjs
         run: pnpm test
         env:
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-  e2e-deployers:
-    needs: publish-e2e-registry
-    name: E2E deployers
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
-
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
-        timeout-minutes: 20
-        with:
-          ref: ${{ inputs.head_sha }}
-
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-
-      - name: Build
-        run: pnpm build
-
-      - name: Install e2e test dependencies
+      - name: 'E2E deployers: install e2e test dependencies'
+        id: deployers_install
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') }}
         working-directory: ./e2e-tests/deployers
+        timeout-minutes: 10
         run: pnpm install
 
-      - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          name: e2e-verdaccio-registry
-          path: ${{ runner.temp }}/mastra-e2e-registry
-
-      - name: Test
+      - name: E2E deployers
+        if: ${{ !cancelled() && steps.deployers_install.outcome == 'success' }}
+        timeout-minutes: 20
         working-directory: ./e2e-tests/deployers
         run: pnpm test
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
-  e2e-type-check:
+      - name: 'E2E Type check: install e2e test type-check'
+        id: type_check_install
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.registry.outcome == 'success' && !contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check') }}
+        working-directory: ./e2e-tests/type-check
+        timeout-minutes: 10
+        run: pnpm install
+
+      - name: E2E Type check
+        if: ${{ !cancelled() && steps.type_check_install.outcome == 'success' }}
+        timeout-minutes: 20
+        working-directory: ./e2e-tests/type-check
+        run: pnpm test
+        env:
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
+  e2e-mcp-compat:
     needs: publish-e2e-registry
-    name: E2E Type check
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 20
+    name: E2E MCP compatibility
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/mcp-compat') }}
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 15
     permissions:
       contents: read
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-      TURBO_CACHE: remote:r
+      id-token: write
+    # Installs from the E2E registry and runs PR-controlled scripts: no Turbo credentials needed here.
 
     steps:
       - name: Checkout repo
@@ -434,34 +477,51 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build
-        run: pnpm build
-
-      - name: Install e2e test type-check
-        working-directory: ./e2e-tests/type-check
-        run: pnpm install
+      - name: Install registry setup dependencies
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm install --frozen-lockfile
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
 
-      - name: Test
-        working-directory: ./e2e-tests/type-check
-        run: pnpm test
+      # Installs core and its workspace dependencies from the E2E registry into disposable
+      # consumers: published @mastra/mcp 1.x (the compatibility floor for the core MCP
+      # contract) and the core-native suspend/resume fixture.
+      - name: Test core against published MCP 1.x and the core-native fixture
+        run: pnpm --filter "@mastra/mcp" test:compat
         env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
-          MASTRA_E2E_REGISTRY_TAG: e2e-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
+      # Regression check: runs `changeset version` on a scratch changeset so core's workspace
+      # dependencies have versions that are not on npmjs yet, as on a version-packages PR, and
+      # re-runs the compat consumers. Rewrites the checkout, so it must stay the last step.
+      - name: Test core against published MCP 1.x in a version-packages state
+        run: pnpm --filter "@mastra/mcp" test:compat:version-packages
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-kitchen-sink:
     name: E2E kitchen-sink (${{ matrix.shard }}/${{ strategy.job-total }})
-    runs-on: starsling-ubuntu-24.04
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/kitchen-sink') }}
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -469,6 +529,7 @@ jobs:
         shard: [1, 2, 3, 4]
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -480,6 +541,12 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -507,11 +574,13 @@ jobs:
 
   e2e-client-js:
     name: E2E client-js (optional)
-    runs-on: starsling-ubuntu-24.04
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:e2e/client-js') }}
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -523,6 +592,12 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ inputs.head_sha }}
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

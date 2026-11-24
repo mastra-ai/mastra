@@ -1,0 +1,37 @@
+{
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build:lib": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsdown.config.ts",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        "package.json",
+        "!**/*.md",
+        "!**/*.test.ts",
+        "!**/*.spec.ts",
+        "!**/__tests__/**"
+      ],
+      "outputs": ["dist/**", "!dist/docs/**"]
+    },
+    "build": {
+      "dependsOn": ["build:lib", "generate:provider-docs"],
+      "inputs": ["package.json"]
+    },
+    "generate:provider-docs": {
+      // Regenerates Connect provider docs (reference, generated integration pages, partials)
+      // from src/providers and scripts/provider-docs-metadata.ts.
+      // Writes outside the package (docs/), so it cannot be cached.
+      "inputs": [
+        "src/providers/**",
+        "scripts/generate-provider-docs.ts",
+        "scripts/provider-docs-lib.ts",
+        "scripts/provider-docs-metadata.ts"
+      ],
+      "cache": false
+    }
+  }
+}

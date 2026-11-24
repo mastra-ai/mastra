@@ -4,14 +4,15 @@ import type { ToolsInput } from '@internal/voice';
 import { MastraVoice } from '@internal/voice';
 import { WebSocket } from 'ws';
 import {
+  AUDIO_FORMAT,
   CLIENT_EVENTS,
   DEFAULT_DELEGATION_MODEL,
   DEFAULT_MODEL,
   DEFAULT_USER_AGENT,
   DEFAULT_VOICE,
   DELEGATION_MODES,
-  LIVE_FIELDS,
   LIVE_WS_URL,
+  RESPONSE_EVENTS,
   SERVER_EVENTS,
   VOICES,
 } from './protocol';
@@ -25,12 +26,14 @@ type StreamWithId = PassThrough & { id: string };
 type TTools = ToolsInput;
 
 /**
- * Delegation configuration passed through to the Live session. GPT-Live
- * delegates reasoning/tools to a backend model (e.g. a Responses model). The
- * shape is provider-defined and forwarded verbatim in the session config.
+ * Delegation configuration sent in `session.start`. Under `responses`
+ * delegation a backend Responses model handles reasoning and tool calls; under
+ * `client` delegation the application receives `delegation` events and reports
+ * back with `sendDelegationResult`.
  */
 export interface OpenAILiveDelegationConfig {
-  type: 'responses' | string;
+  type: 'responses' | 'client';
+  acknowledgement_delay_ms?: number;
   responses?: {
     model?: string;
     tools?: unknown[];
@@ -57,7 +60,7 @@ export interface OpenAILiveVoiceConfig {
   tools?: TTools;
   /** Backend delegation configuration forwarded to the session. */
   delegation?: OpenAILiveDelegationConfig;
-  /** Extra session config merged into the session.update payload. */
+  /** Extra session config merged into the session.start payload. */
   sessionConfig?: Record<string, unknown>;
   /** Maximum connection handshake duration in milliseconds. Defaults to 15,000. */
   connectTimeoutMs?: number;
@@ -100,10 +103,10 @@ export class OpenAILiveVoice extends MastraVoice {
   private delegation?: OpenAILiveDelegationConfig;
   private sessionConfig?: Record<string, unknown>;
   private debug: boolean;
-  private queue: unknown[] = [];
+  private pendingToolCalls: Map<string, Promise<void>[]> = new Map();
   private connectionAbort?: AbortController;
   private toolExecutors: Map<string, OpenAIExecuteFunction> = new Map();
-  private speakerStreams: Map<string, StreamWithId> = new Map();
+  private speakerStream?: StreamWithId;
 
   constructor(private liveOptions: OpenAILiveVoiceConfig = {}) {
     super();
@@ -143,34 +146,41 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   /**
-   * Equips the session with instructions. Applied on connect, or immediately if
-   * already connected.
+   * Sets the session instructions. Instructions are fixed once the session has
+   * started, so while connected they are appended with `session.instructions.append`.
    */
   addInstructions(instructions?: string) {
     this.instructions = instructions;
-    if (this.state === 'open') this.sendSessionUpdate();
+    if (this.state === 'open' && instructions) {
+      this.sendEvent(CLIENT_EVENTS.instructionsAppend, { delegation_id: null, content: instructions });
+    }
   }
 
   /**
-   * Equips the session with tools. Applied on connect, or immediately if already
-   * connected.
+   * Sets the tools available to the backend. While connected under `responses`
+   * delegation the new list is sent with `session.update`.
    */
   addTools(tools?: TTools) {
     this.tools = tools || {};
-    if (this.state === 'open') this.sendSessionUpdate();
+    if (this.state === 'open') this.sendDelegationUpdate();
   }
 
   /**
-   * Updates the session configuration, merged into subsequent session updates.
+   * Merges extra fields into the `session.start` payload used on the next
+   * connect. GPT-Live only accepts `delegation` changes after startup, so a
+   * `delegation` field is also sent to an open session.
    */
   updateConfig(sessionConfig: Record<string, unknown>): void {
     this.sessionConfig = { ...this.sessionConfig, ...sessionConfig };
-    if (this.state === 'open') this.sendSessionUpdate();
+    if ('delegation' in sessionConfig) {
+      this.delegation = sessionConfig.delegation as OpenAILiveDelegationConfig | undefined;
+      if (this.state === 'open') this.sendDelegationUpdate();
+    }
   }
 
   /**
-   * Establishes a connection to the OpenAI Live session. Must be called before
-   * `send` or `speak`.
+   * Opens the Live session: connects the socket, sends `session.start` and waits
+   * for `session.started`. Must be called before `send` or `speak`.
    */
   async connect({ timeout }: { timeout?: number } = {}): Promise<void> {
     const url = this.liveOptions.url || LIVE_WS_URL;
@@ -193,8 +203,13 @@ export class OpenAILiveVoice extends MastraVoice {
     this.connectionAbort = controller;
     this.setupEventListeners();
 
+    const timeoutMs = timeout ?? this.liveOptions.connectTimeoutMs ?? 15_000;
+    const deadline = Date.now() + timeoutMs;
     try {
-      await Promise.all([this.waitForOpen(), this.waitForSessionReady(timeout)]);
+      await this.waitForHandshake('open', timeoutMs);
+      const started = this.waitForHandshake(SERVER_EVENTS.sessionStarted, Math.max(deadline - Date.now(), 1));
+      ws.send(JSON.stringify({ type: CLIENT_EVENTS.sessionStart, session: this.buildSessionConfig() }));
+      await started;
     } catch (error) {
       controller.abort(error);
       this.state = 'close';
@@ -206,7 +221,6 @@ export class OpenAILiveVoice extends MastraVoice {
     }
 
     this.state = 'open';
-    this.sendSessionUpdate();
   }
 
   disconnect() {
@@ -215,13 +229,13 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   /**
-   * Disconnects from the Live session and cleans up resources. Shared teardown
-   * path for both `close()` and `disconnect()`.
+   * Closes the Live session and cleans up resources. Shared teardown path for
+   * both `close()` and `disconnect()`.
    */
   close() {
     const ws = this.ws;
     if (ws) {
-      if (this.state === 'open' && ws.readyState === ws.OPEN) {
+      if (this.state === 'open' && ws.readyState === WebSocket.OPEN) {
         try {
           ws.send(JSON.stringify({ type: CLIENT_EVENTS.sessionClose }));
         } catch {
@@ -231,18 +245,15 @@ export class OpenAILiveVoice extends MastraVoice {
       ws.close();
     }
 
-    for (const stream of this.speakerStreams.values()) {
-      stream.end();
-    }
-    this.speakerStreams.clear();
-
+    this.endSpeakerStream();
+    this.pendingToolCalls.clear();
     this.state = 'close';
     this.ws = undefined;
   }
 
   /**
-   * Streams audio data to the Live session. Accepts a readable stream or an
-   * Int16Array of PCM samples.
+   * Streams caller audio (24 kHz mono PCM16) to the Live session. Accepts a
+   * readable stream or an Int16Array of samples.
    */
   async send(audioData: NodeJS.ReadableStream | Int16Array): Promise<void> {
     if (this.state !== 'open') {
@@ -256,7 +267,7 @@ export class OpenAILiveVoice extends MastraVoice {
         stream.on('data', chunk => {
           try {
             const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-            this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { [LIVE_FIELDS.audio]: buffer.toString('base64') });
+            if (buffer.length > 0) this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { audio: buffer.toString('base64') });
           } catch (err) {
             this.emit('error', err);
             reject(err as Error);
@@ -270,8 +281,9 @@ export class OpenAILiveVoice extends MastraVoice {
       });
     } else if (audioData instanceof Int16Array) {
       try {
-        const base64Audio = this.int16ArrayToBase64(audioData);
-        this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { [LIVE_FIELDS.audio]: base64Audio });
+        if (audioData.length > 0) {
+          this.sendEvent(CLIENT_EVENTS.inputAudioAppend, { audio: this.int16ArrayToBase64(audioData) });
+        }
       } catch (err) {
         this.emit('error', err);
       }
@@ -281,12 +293,9 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   /**
-   * Adds text to the spoken conversation as context and asks the model to speak.
-   *
-   * GPT-Live is server-driven: there is no `response.create` and no way to force
-   * an exact utterance. This appends the text (plus an instruction to say it) via
-   * `session.context.append`; the model decides when and how to speak. This is
-   * commonly used to open a call with a greeting after `session.started`.
+   * Gives the model text to speak with `session.commentary.append`. GPT-Live is
+   * server-driven, so the model decides when to say it. Commonly used to open a
+   * call with a greeting after connecting.
    */
   async speak(input: string | NodeJS.ReadableStream): Promise<void> {
     if (typeof input !== 'string') {
@@ -301,13 +310,28 @@ export class OpenAILiveVoice extends MastraVoice {
       throw new Error('Input text is empty');
     }
 
-    this.sendEvent(CLIENT_EVENTS.sessionContextAppend, {
-      context: `Say the following to the user now: ${input}`,
-    });
+    if (this.state !== 'open') {
+      console.warn('Cannot speak when not connected. Call connect() first.');
+      return;
+    }
+
+    this.sendEvent(CLIENT_EVENTS.commentaryAppend, { delegation_id: null, content: input });
   }
 
   /**
-   * `listen` is not supported as a discrete call on the Live API — transcripts
+   * Reports the result of a client delegation so the model can speak it. Only
+   * for `client` delegation; `delegationId` comes from the `delegation` event.
+   */
+  sendDelegationResult(delegationId: string, content: string): void {
+    if (this.state !== 'open') {
+      console.warn('Cannot send a delegation result when not connected.');
+      return;
+    }
+    this.sendEvent(CLIENT_EVENTS.commentaryAppend, { delegation_id: delegationId, content });
+  }
+
+  /**
+   * `listen` is not supported as a discrete call on the Live API; transcripts
    * arrive as `writing` events during a session. Provided for contract
    * completeness.
    */
@@ -315,15 +339,7 @@ export class OpenAILiveVoice extends MastraVoice {
     this.logger.debug('listen is not supported by OpenAI Live; use connect + send and the writing event');
   }
 
-  waitForOpen(): Promise<void> {
-    return this.waitForHandshake('open');
-  }
-
-  waitForSessionReady(timeout?: number): Promise<void> {
-    return this.waitForHandshake('session.started', timeout);
-  }
-
-  private waitForHandshake(event: 'open' | 'session.started', timeout?: number): Promise<void> {
+  private waitForHandshake(event: 'open' | typeof SERVER_EVENTS.sessionStarted, timeoutMs: number): Promise<void> {
     const ws = this.ws;
     const signal = this.connectionAbort?.signal;
     return new Promise((resolve, reject) => {
@@ -362,11 +378,10 @@ export class OpenAILiveVoice extends MastraVoice {
         reject(error);
       };
       const onClose = (code: number, reason: Buffer) =>
-        onError(new Error(`OpenAI Live WebSocket closed during handshake (${code}: ${reason.toString()})`));
+        onError(new Error(`OpenAI Live WebSocket closed during handshake (${code}: ${reason?.toString() ?? ''})`));
       const onProtocolError = (ev: any) =>
         onError(new Error(ev?.error?.message ?? 'OpenAI Live protocol error', { cause: ev?.error }));
       const onAbort = () => onError(signal!.reason);
-      const timeoutMs = timeout ?? this.liveOptions.connectTimeoutMs ?? 15_000;
       const timer = setTimeout(
         () => onError(new Error(`OpenAI Live connection timed out after ${timeoutMs}ms`)),
         timeoutMs,
@@ -403,42 +418,49 @@ export class OpenAILiveVoice extends MastraVoice {
     }
   }
 
-  private sendSessionUpdate() {
-    const transformed = transformTools(this.tools);
-    const liveTools = transformed.map(t => t.liveTool);
-
-    this.toolExecutors = new Map(transformed.map(t => [t.liveTool.name, t.execute]));
-
-    // GPT-Live delegates reasoning/tools to a backend under `responses`
-    // delegation (the default). Tools live under `responses.tools`, and the
-    // nested `responses` object requires its own backend `model`. Under
-    // `client` delegation there is no tool channel, so tools are omitted.
-    const delegation: OpenAILiveDelegationConfig = this.delegation ?? { type: DELEGATION_MODES.responses };
-    if (delegation.type === DELEGATION_MODES.responses) {
-      delegation.responses = {
-        model: DEFAULT_DELEGATION_MODEL,
-        ...delegation.responses,
-        tools: delegation.responses?.tools ?? liveTools,
-      };
-    }
-
-    this.updateSessionConfig({
+  /** Builds the `session.start` configuration. */
+  private buildSessionConfig(): Record<string, unknown> {
+    return {
       model: this.liveOptions.model || DEFAULT_MODEL,
-      instructions: this.instructions,
-      voice: this.speaker,
-      delegation,
+      ...(this.instructions ? { instructions: this.instructions } : {}),
+      audio: { format: { ...AUDIO_FORMAT }, output: { voice: this.speaker } },
+      delegation: this.buildDelegation(),
       ...this.sessionConfig,
-    });
+    };
   }
 
-  private updateSessionConfig(session: Record<string, unknown>): void {
-    this.sendEvent(CLIENT_EVENTS.sessionUpdate, { session });
+  /**
+   * Builds a fresh delegation object from the current tools and config. The
+   * caller's delegation object is never modified, so later `addTools` calls
+   * advertise the new list.
+   */
+  private buildDelegation(): OpenAILiveDelegationConfig {
+    const transformed = transformTools(this.tools);
+    this.toolExecutors = new Map(transformed.map(t => [t.liveTool.name, t.execute]));
+
+    const configured = this.delegation ?? { type: DELEGATION_MODES.responses };
+    if (configured.type !== DELEGATION_MODES.responses) {
+      return { ...configured };
+    }
+    const liveTools = transformed.map(t => t.liveTool);
+    const responses = { model: DEFAULT_DELEGATION_MODEL, ...configured.responses };
+    if (liveTools.length > 0) responses.tools = liveTools;
+    return { ...configured, responses };
+  }
+
+  /** Sends the complete delegation object; GPT-Live replaces delegation as a whole. */
+  private sendDelegationUpdate(): void {
+    const delegation = this.buildDelegation();
+    if (delegation.type !== DELEGATION_MODES.responses) return;
+    this.sendEvent(CLIENT_EVENTS.sessionUpdate, { session: { delegation } });
+  }
+
+  private endSpeakerStream(): void {
+    this.speakerStream?.end();
+    this.speakerStream = undefined;
   }
 
   private setupEventListeners(): void {
-    const speakerStreams = this.speakerStreams;
-    const DEFAULT_STREAM_ID = 'default';
-
     if (!this.ws) {
       throw new Error('WebSocket not initialized');
     }
@@ -448,11 +470,8 @@ export class OpenAILiveVoice extends MastraVoice {
       if (this.ws === ws) this.emit('error', error);
     });
     ws.on('close', () => {
-      for (const stream of speakerStreams.values()) {
-        stream.end();
-      }
-      speakerStreams.clear();
       if (this.ws === ws) {
+        this.endSpeakerStream();
         this.state = 'close';
       }
     });
@@ -475,48 +494,49 @@ export class OpenAILiveVoice extends MastraVoice {
 
     this.client.on(SERVER_EVENTS.sessionStarted, ev => {
       this.emit('session.started', ev);
-      const queue = this.queue.splice(0, this.queue.length);
-      for (const queued of queue) {
-        this.ws?.send(JSON.stringify(queued));
-      }
     });
     this.client.on(SERVER_EVENTS.sessionUpdated, ev => {
       this.emit('session.updated', ev);
     });
+    this.client.on(SERVER_EVENTS.sessionClosed, ev => {
+      this.endSpeakerStream();
+      this.emit('session.closed', ev);
+    });
 
+    // Output audio has no done event, so one speaker stream lasts for the session.
     this.client.on(SERVER_EVENTS.outputAudioDelta, (ev: any) => {
-      const base64 = ev[LIVE_FIELDS.audio] ?? ev[LIVE_FIELDS.delta];
-      if (!base64) return;
-      const audio = Buffer.from(base64, 'base64');
-      const id = ev.response_id ?? DEFAULT_STREAM_ID;
-      this.emit('speaking', { audio });
+      if (!ev?.delta) return;
+      const audio = Buffer.from(ev.delta, 'base64');
+      this.emit('speaking', { audio, start_ms: ev.start_ms, end_ms: ev.end_ms });
 
-      let stream = speakerStreams.get(id);
-      if (!stream) {
-        stream = new PassThrough() as StreamWithId;
-        stream.id = id;
-        speakerStreams.set(id, stream);
+      if (!this.speakerStream) {
+        const stream = new PassThrough() as StreamWithId;
+        stream.id = 'default';
+        this.speakerStream = stream;
         this.emit('speaker', stream);
       }
-      stream.write(audio);
-    });
-    this.client.on(SERVER_EVENTS.outputAudioDone, (ev: any) => {
-      const id = ev.response_id ?? DEFAULT_STREAM_ID;
-      this.emit('speaking.done', { response_id: id });
-      const stream = speakerStreams.get(id);
-      stream?.end();
-      speakerStreams.delete(id);
+      this.speakerStream.write(audio);
     });
 
+    this.client.on(SERVER_EVENTS.inputTranscriptDelta, (ev: any) => {
+      this.emit('writing', { text: ev.delta, role: 'user', start_ms: ev.start_ms, end_ms: ev.end_ms });
+    });
     this.client.on(SERVER_EVENTS.outputTranscriptDelta, (ev: any) => {
-      this.emit('writing', { text: ev[LIVE_FIELDS.delta], role: 'assistant' });
-    });
-    this.client.on(SERVER_EVENTS.outputTranscriptDone, () => {
-      this.emit('writing', { text: '\n', role: 'assistant' });
+      this.emit('writing', { text: ev.delta, role: 'assistant', start_ms: ev.start_ms, end_ms: ev.end_ms });
     });
 
-    this.client.on(SERVER_EVENTS.delegationCreated, async (ev: any) => {
-      await this.handleDelegation(ev);
+    this.client.on(SERVER_EVENTS.delegationCreated, (ev: any) => {
+      const delegation = ev?.delegation;
+      if (!delegation?.id) return;
+      if (delegation.target === DELEGATION_MODES.client) {
+        // Recommended right away so the model doesn't wait on an acknowledgement.
+        this.sendEvent(CLIENT_EVENTS.thinkingAppend, { delegation_id: delegation.id, content: '' });
+      }
+      this.emit('delegation', { delegationId: delegation.id, target: delegation.target, offsetMs: ev.offset_ms });
+    });
+
+    this.client.on(SERVER_EVENTS.responseEvent, (ev: any) => {
+      void this.handleResponseEvent(ev);
     });
 
     this.client.on(SERVER_EVENTS.error, ev => {
@@ -525,54 +545,70 @@ export class OpenAILiveVoice extends MastraVoice {
   }
 
   /**
-   * Handle a `delegation.created` event by executing the requested tool and
-   * returning its result via `delegation.function_call_output.create`. GPT-Live
-   * is server-driven: there is NO follow-on `response.create` — the server
-   * resumes the delegation on its own once the output is delivered.
+   * Handles a nested Responses event under `responses` delegation. Function calls
+   * are answered with `response.item.create`; once the backend response completes
+   * and every result is submitted, `response.create` continues it.
    */
-  private async handleDelegation(ev: any) {
-    const delegationId = ev?.[LIVE_FIELDS.delegationId] ?? ev?.delegation?.[LIVE_FIELDS.delegationId] ?? ev?.id;
-    const call = ev?.function_call ?? ev?.delegation?.function_call ?? ev;
-    const name = call?.[LIVE_FIELDS.name];
-    const rawArgs = call?.[LIVE_FIELDS.arguments];
-    try {
-      const context = typeof rawArgs === 'string' ? JSON.parse(rawArgs || '{}') : (rawArgs ?? {});
-      const execute = name ? this.toolExecutors.get(name) : undefined;
-      const tool = name ? this.tools?.[name] : undefined;
-      if (!execute) {
-        console.warn(`Tool "${name}" not found`);
-        return;
-      }
+  private async handleResponseEvent(envelope: any) {
+    const delegationId: string | undefined = envelope?.delegation_id;
+    const event = envelope?.event;
+    if (!event || !delegationId) return;
 
-      this.emit('tool-call-start', {
-        toolCallId: delegationId,
-        toolName: name,
-        toolDescription: tool?.description,
-        args: context,
-      });
+    if (event.type === RESPONSE_EVENTS.outputItemDone && event.item?.type === 'function_call') {
+      const pending = this.pendingToolCalls.get(delegationId) ?? [];
+      pending.push(this.runToolCall(delegationId, event.item));
+      this.pendingToolCalls.set(delegationId, pending);
+      return;
+    }
 
-      const result = await execute(context);
-
-      this.emit('tool-call-result', {
-        toolCallId: delegationId,
-        toolName: name,
-        toolDescription: tool?.description,
-        args: context,
-        result,
-      });
-
-      this.sendDelegationOutput(delegationId, JSON.stringify(result));
-    } catch (e) {
-      const err = e as Error;
-      console.warn(`Error calling tool "${name}":`, err.message);
-      this.sendDelegationOutput(delegationId, JSON.stringify({ error: err.message }));
+    if (event.type === RESPONSE_EVENTS.completed) {
+      const pending = this.pendingToolCalls.get(delegationId);
+      if (!pending?.length) return;
+      this.pendingToolCalls.delete(delegationId);
+      await Promise.all(pending);
+      if (this.state === 'open') this.sendEvent(CLIENT_EVENTS.responseCreate, {});
     }
   }
 
-  private sendDelegationOutput(delegationId: string, output: string): void {
-    this.sendEvent(CLIENT_EVENTS.delegationFunctionCallOutputCreate, {
-      [LIVE_FIELDS.delegationId]: delegationId,
-      output,
+  private async runToolCall(delegationId: string, item: any): Promise<void> {
+    const name: string | undefined = item?.name;
+    const callId: string | undefined = item?.call_id;
+    if (!callId) return;
+    let output: unknown;
+    try {
+      const args = typeof item.arguments === 'string' ? JSON.parse(item.arguments || '{}') : (item.arguments ?? {});
+      const execute = name ? this.toolExecutors.get(name) : undefined;
+      const tool = name ? this.tools?.[name] : undefined;
+      if (!execute) {
+        output = { error: `Tool "${name}" not found` };
+      } else {
+        this.emit('tool-call-start', {
+          toolCallId: callId,
+          toolName: name,
+          toolDescription: tool?.description,
+          args,
+          delegationId,
+        });
+        const result = await execute(args);
+        this.emit('tool-call-result', {
+          toolCallId: callId,
+          toolName: name,
+          toolDescription: tool?.description,
+          args,
+          result,
+          delegationId,
+        });
+        output = result;
+      }
+    } catch (e) {
+      const err = e as Error;
+      console.warn(`Error calling tool "${name}":`, err.message);
+      output = { error: err.message };
+    }
+
+    if (this.state !== 'open') return;
+    this.sendEvent(CLIENT_EVENTS.responseItemCreate, {
+      item: { type: 'function_call_output', call_id: callId, output: JSON.stringify(output ?? null) },
     });
   }
 
@@ -580,16 +616,13 @@ export class OpenAILiveVoice extends MastraVoice {
     return Buffer.from(int16Array.buffer, int16Array.byteOffset, int16Array.byteLength).toString('base64');
   }
 
-  private sendEvent(type: string, data: any) {
-    if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
-      this.queue.push({ type, ...data });
-    } else {
-      this.ws.send(
-        JSON.stringify({
-          type,
-          ...data,
-        }),
-      );
+  private sendEvent(type: string, data: Record<string, unknown>) {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Nothing is queued: an event for a closed session must not leak into the next one.
+      this.emit('error', new Error(`OpenAI Live session is not open; dropped ${type}`));
+      return;
     }
+    ws.send(JSON.stringify({ type, ...data }));
   }
 }

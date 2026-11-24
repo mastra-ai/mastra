@@ -78,14 +78,12 @@ describe('AgentController thread selection — session scope', () => {
       id: 'a',
       ownerId: 'owner',
       resourceId: 'shared',
-      scope: '/wt/a',
       tags: { projectPath: '/wt/a' },
     });
     const b = await controller.createSession({
       id: 'b',
       ownerId: 'owner',
       resourceId: 'shared',
-      scope: '/wt/b',
       tags: { projectPath: '/wt/b' },
     });
 
@@ -101,7 +99,6 @@ describe('AgentController thread selection — session scope', () => {
       id: 'a',
       ownerId: 'owner',
       resourceId: 'shared',
-      scope: '/wt/a',
       tags: { projectPath: '/wt/a' },
     });
 

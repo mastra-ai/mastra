@@ -219,9 +219,12 @@ describe('deployWorkerToSandbox', () => {
       workerOutput: Buffer.from('worker-output').toString('base64'),
     });
     const deployment = await deploy(sandbox, { mode: 'job' });
+    const executeCommand = vi.spyOn(sandbox, 'executeCommand');
 
     const output = await deployment.readOutput('stdout', { offset: 3, maxBytes: 6 });
     expect(Buffer.from(output.data).toString()).toBe('ker-ou');
+    // The size line and base64 head must survive, so ask for all output to be retained.
+    expect(executeCommand.mock.calls[0]?.[2]).toMatchObject({ maxRetainedBytes: Infinity });
     expect(output).toMatchObject({
       stream: 'stdout',
       offset: 3,

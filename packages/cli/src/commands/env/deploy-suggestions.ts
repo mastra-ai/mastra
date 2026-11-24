@@ -67,7 +67,7 @@ async function resolveTarget(
   const environments = await fetchEnvironments(token, orgId, project.id);
   if (environments.length === 0) {
     throw new Error(
-      `No environments found for project ${project.name}. Deploy first with \`mastra deploy\`, then rerun \`mastra env suggestions\`.`,
+      `No environments found for project ${project.name}. Deploy first with \`mastra deploy\`, then rerun \`mastra env diagnosis\`.`,
     );
   }
 
@@ -90,7 +90,7 @@ async function resolveTarget(
   const latest = pickLatestDeployForEnv(deploys, environment.id);
   if (!latest) {
     throw new Error(
-      `No deploys found for environment ${environment.slug} in project ${project.name}. The suggestions command helps debug failed deployments; run it after a deployment fails with \`mastra env suggestions <deploy-id>\` or \`mastra env suggestions --environment ${environment.slug}\`.`,
+      `No deploys found for environment ${environment.slug} in project ${project.name}. The diagnosis command helps debug failed deployments; run it after a deployment fails with \`mastra env diagnosis <deploy-id>\` or \`mastra env diagnosis --environment ${environment.slug}\`.`,
     );
   }
 
@@ -124,7 +124,7 @@ export async function envSuggestionsAction(deployId: string | undefined, opts: S
     return;
   }
 
-  p.intro('mastra env suggestions');
+  p.intro('mastra env diagnosis');
   try {
     const token = await getToken();
     const { orgId } = await resolveCurrentOrg(token);

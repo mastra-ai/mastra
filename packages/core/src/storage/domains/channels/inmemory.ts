@@ -10,7 +10,11 @@ export class InMemoryChannelsStorage extends ChannelsStorage {
   #configs = new Map<string, ChannelConfig>();
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
-    this.#installations.set(installation.id, { ...installation });
+    const existing = this.#installations.get(installation.id);
+    this.#installations.set(installation.id, {
+      ...installation,
+      createdAt: existing?.createdAt ?? installation.createdAt,
+    });
   }
 
   async getInstallation(id: string): Promise<ChannelInstallation | null> {

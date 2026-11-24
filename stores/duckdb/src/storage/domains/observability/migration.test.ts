@@ -96,6 +96,41 @@ describe('migrateSignalTables (DuckDB)', () => {
     expect(backups).toHaveLength(0);
   });
 
+  it('preserves legacy feedback values without assigning a typed representation', async () => {
+    await db.execute(`
+      CREATE TABLE feedback_events (
+        timestamp TIMESTAMP NOT NULL,
+        traceId VARCHAR NOT NULL,
+        feedbackSource VARCHAR NOT NULL,
+        feedbackType VARCHAR NOT NULL,
+        value VARCHAR NOT NULL,
+        reviewStatus VARCHAR NOT NULL
+      )
+    `);
+    await db.execute(
+      `INSERT INTO feedback_events (timestamp, traceId, feedbackSource, feedbackType, value, reviewStatus)
+       VALUES (TIMESTAMP '2026-01-01 00:00:00', 'trace-a', 'user', 'rating', '3', 'needs-review')`,
+    );
+
+    await migrateSignalTables(db);
+
+    expect(await hasPrimaryKey(db, 'feedback_events')).toBe(true);
+    const rows = await db.query<{
+      feedbackId: string;
+      value: string;
+      valueString: string | null;
+      valueNumber: number | null;
+    }>(`SELECT feedbackId, value, valueString, valueNumber FROM feedback_events`);
+    expect(rows).toEqual([
+      {
+        feedbackId: expect.stringMatching(UUID_RE),
+        value: '3',
+        valueString: null,
+        valueNumber: null,
+      },
+    ]);
+  });
+
   it('preserves existing non-empty IDs and backfills empty ones', async () => {
     await db.execute(`
       CREATE TABLE log_events (

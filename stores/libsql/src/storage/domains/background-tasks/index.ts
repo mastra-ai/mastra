@@ -4,6 +4,7 @@ import type {
   TaskFilter,
   TaskListResult,
   UpdateBackgroundTask,
+  UpdateBackgroundTaskOptions,
 } from '@mastra/core/background-tasks';
 import { BackgroundTasksStorage, TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetentionPolicy } from '@mastra/core/storage';
@@ -11,11 +12,22 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue } from '../../db/client';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
-function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+function serializeJson(v: unknown): InValue {
+  if (v === undefined) return null;
+
+  let serialized: string | undefined;
+  try {
+    serialized = JSON.stringify(v);
+  } catch (error) {
+    throw new Error('Failed to serialize background task value as JSON', { cause: error });
+  }
+  if (serialized === undefined) {
+    throw new Error('Failed to serialize background task value as JSON');
+  }
+  return serialized;
 }
 
 function parseJson(val: unknown): any {
@@ -51,10 +63,15 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     startedAt: row.startedAt ? new Date(String(row.startedAt)) : undefined,
     suspendedAt: row.suspendedAt ? new Date(String(row.suspendedAt)) : undefined,
     completedAt: row.completedAt ? new Date(String(row.completedAt)) : undefined,
+    ownerId: row.ownerId != null ? String(row.ownerId) : undefined,
+    leaseExpiresAt: row.leaseExpiresAt ? new Date(String(row.leaseExpiresAt)) : undefined,
+    expiresAt: row.expiresAt ? new Date(String(row.expiresAt)) : undefined,
+    metadata: parseJson(row.metadata),
   };
 }
 
 export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   /**
    * Completed/failed task records accumulate. Anchored on `completedAt`, which
    * is NULL while a task is in-flight (pending/running/suspended) — so `completedAt
@@ -71,7 +88,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     super();
     const client = resolveClient(config);
     this.#client = client;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async init(): Promise<void> {
@@ -83,7 +105,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
     await this.#db.alterTable({
       tableName: TABLE_BACKGROUND_TASKS,
       schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
-      ifNotExists: ['suspend_payload', 'suspendedAt'],
+      ifNotExists: ['suspend_payload', 'suspendedAt', 'ownerId', 'leaseExpiresAt', 'expiresAt', 'metadata'],
     });
   }
 
@@ -125,6 +147,10 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         startedAt: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        ownerId: task.ownerId ?? null,
+        leaseExpiresAt: task.leaseExpiresAt?.toISOString() ?? null,
+        expiresAt: task.expiresAt?.toISOString() ?? null,
+        metadata: task.metadata ?? null,
       },
     });
   }
@@ -132,7 +158,7 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
   async updateTask(
     taskId: string,
     update: UpdateBackgroundTask,
-    options?: { expectedStatus?: BackgroundTask['status'] },
+    options?: UpdateBackgroundTaskOptions,
   ): Promise<boolean> {
     const setClauses: string[] = [];
     const params: InValue[] = [];
@@ -169,6 +195,22 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       setClauses.push('completedAt = ?');
       params.push(update.completedAt?.toISOString() ?? null);
     }
+    if ('ownerId' in update) {
+      setClauses.push('ownerId = ?');
+      params.push(update.ownerId ?? null);
+    }
+    if ('leaseExpiresAt' in update) {
+      setClauses.push('leaseExpiresAt = ?');
+      params.push(update.leaseExpiresAt?.toISOString() ?? null);
+    }
+    if ('expiresAt' in update) {
+      setClauses.push('expiresAt = ?');
+      params.push(update.expiresAt?.toISOString() ?? null);
+    }
+    if ('metadata' in update) {
+      setClauses.push('metadata = jsonb(?)');
+      params.push(serializeJson(update.metadata));
+    }
 
     if (setClauses.length === 0) return false;
 
@@ -178,10 +220,36 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
       where += ' AND status = ?';
       params.push(options.expectedStatus);
     }
-    const result = await this.#client.execute({
-      sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
-      args: params,
-    });
+    if (options?.expectedOwnerId !== undefined) {
+      if (options.expectedOwnerId === null) {
+        where += ' AND ownerId IS NULL';
+      } else {
+        where += ' AND ownerId = ?';
+        params.push(options.expectedOwnerId);
+      }
+    }
+    if (options?.expectedLeaseExpiresAt !== undefined) {
+      if (options.expectedLeaseExpiresAt === null) {
+        where += ' AND leaseExpiresAt IS NULL';
+      } else {
+        where += ' AND leaseExpiresAt = ?';
+        params.push(options.expectedLeaseExpiresAt.toISOString());
+      }
+    }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        where += ' AND suspendedAt IS NULL';
+      } else {
+        where += ' AND suspendedAt = ?';
+        params.push(options.expectedSuspendedAt.toISOString());
+      }
+    }
+    const result = await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
+        args: params,
+      }),
+    );
     return result.rowsAffected > 0;
   }
 
@@ -235,7 +303,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
@@ -280,10 +353,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
   }
 
   async deleteTask(taskId: string): Promise<void> {
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`,
-      args: [taskId],
-    });
+    await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE id = ?`,
+        args: [taskId],
+      }),
+    );
   }
 
   async deleteTasks(filter: TaskFilter): Promise<void> {
@@ -303,7 +378,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
           ? 'suspendedAt'
           : filter.dateFilterBy === 'completedAt'
             ? 'completedAt'
-            : 'createdAt';
+            : filter.dateFilterBy === 'expiresAt'
+              ? 'expiresAt'
+              : 'createdAt';
+    if (filter.hasExpiresAt !== undefined) {
+      conditions.push(filter.hasExpiresAt ? 'expiresAt IS NOT NULL' : 'expiresAt IS NULL');
+    }
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= ?`);
       params.push(filter.fromDate.toISOString());
@@ -323,10 +403,12 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
 
     if (conditions.length === 0) return; // Safety: don't delete everything
 
-    await this.#client.execute({
-      sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE ${conditions.join(' AND ')}`,
-      args: params,
-    });
+    await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `DELETE FROM ${TABLE_BACKGROUND_TASKS} WHERE ${conditions.join(' AND ')}`,
+        args: params,
+      }),
+    );
   }
 
   async getRunningCount(): Promise<number> {

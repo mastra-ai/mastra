@@ -3,9 +3,9 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
-import type { GithubPullRequestReconciler } from '../../github/rules.js';
+import type { GithubPullRequestDiscovery, GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventDispatchIntegration, PlatformGithubEventStorage } from './event-worker.js';
 
@@ -70,6 +70,8 @@ function createWorker(input: {
   ingestFactoryEvent?: (event: Parameters<typeof dispatchGithubWebhook>[0]) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
+  discoverPullRequests?: GithubPullRequestDiscovery;
+  pullRequestDiscoveryIntervalMs?: number;
   reconcileIntervalMs?: number;
   pullRequestReconcileIntervalMs?: number;
   issueReconcileIntervalMs?: number;
@@ -91,12 +93,16 @@ function createWorker(input: {
           repositoryExternalId: String(row.repositoryId),
         })),
       ),
-      listByExternalRepository: vi.fn(async (args: { installationExternalId: string; repositoryExternalId: string }) => {
-        const match = configured.find(
-          row => String(row.installationId) === args.installationExternalId && String(row.repositoryId) === args.repositoryExternalId,
-        );
-        return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
-      }),
+      listByExternalRepository: vi.fn(
+        async (args: { installationExternalId: string; repositoryExternalId: string }) => {
+          const match = configured.find(
+            row =>
+              String(row.installationId) === args.installationExternalId &&
+              String(row.repositoryId) === args.repositoryExternalId,
+          );
+          return match ? [{ orgId: match.orgId ?? 'org-1', factoryProjectId: 'proj-1' }] : [];
+        },
+      ),
     },
     repositories: {
       findByExternalId: vi.fn(async (args: { orgId: string; externalId: string }) => {
@@ -106,7 +112,7 @@ function createWorker(input: {
     },
   };
   return new PlatformGithubEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     controller: {} as never,
     github: input.github ?? createGithub(),
     storage: input.storage,
@@ -114,6 +120,8 @@ function createWorker(input: {
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
     reconcileIssuesFactoryState: input.reconcileIssuesFactoryState,
+    discoverPullRequests: input.discoverPullRequests,
+    pullRequestDiscoveryIntervalMs: input.pullRequestDiscoveryIntervalMs,
     reconcileIntervalMs: input.reconcileIntervalMs,
     pullRequestReconcileIntervalMs: input.pullRequestReconcileIntervalMs,
     issueReconcileIntervalMs: input.issueReconcileIntervalMs,
@@ -211,6 +219,11 @@ describe('PlatformGithubEventWorker', () => {
     await worker.start();
     await vi.advanceTimersByTimeAsync(0);
 
+    const parsedIssueOpened = {
+      event: 'issues',
+      deliveryId: 'delivery-opened',
+      payload: { action: 'opened' },
+    };
     const parsedPullRequestOpened = {
       event: 'pull_request',
       deliveryId: 'delivery-pr-opened',
@@ -244,15 +257,16 @@ describe('PlatformGithubEventWorker', () => {
     });
     // A pull request being opened is what mints its Review card, so it has to
     // reach the rules engine; synchronize and review_requested feed the
-    // re-review path, and closed feeds the reconciler. An opened *issue* is
-    // deliberately absent — the factory picks new issues up via the reconciler.
+    // re-review path, and closed feeds the reconciler. An opened issue mints
+    // its Work card the same way, so it has to reach the rules engine too.
     // Pushes feed the base-checkpoint trigger wrapped around the ingest.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(5);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedPullRequestOpened);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedSynchronize);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedReviewRequested);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedClosed);
-    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedPush);
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(6);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, parsedIssueOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(2, parsedPullRequestOpened);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(3, parsedSynchronize);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(4, parsedReviewRequested);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(5, parsedClosed);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(6, parsedPush);
     expect(dispatch).toHaveBeenCalledTimes(6);
     expect(dispatch).toHaveBeenNthCalledWith(
       1,
@@ -287,7 +301,7 @@ describe('PlatformGithubEventWorker', () => {
     await resumed.stop();
   });
 
-  it('forwards created PR comments to Factory rules but never retriggers from edits', async () => {
+  it('forwards created PR comments and PR verdict edits to Factory rules, never issue comment edits', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
       delivered: 1,
@@ -326,8 +340,20 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'issue_comment',
                 payload: { action: 'edited' },
               },
+              {
+                id: '2003-0',
+                deliveryId: 'delivery-pr-comment-edited',
+                event: 'issue_comment',
+                payload: { action: 'edited', issue: { pull_request: { url: 'pr' } } },
+              },
+              {
+                id: '2004-0',
+                deliveryId: 'delivery-review-edited',
+                event: 'pull_request_review',
+                payload: { action: 'edited' },
+              },
             ],
-            nextCursor: '2002-0',
+            nextCursor: '2004-0',
           });
         }
         return json({ events: [], nextCursor: null });
@@ -348,8 +374,10 @@ describe('PlatformGithubEventWorker', () => {
 
     // A submitted review and a new pull-request comment are the two ways review
     // feedback reaches the agent that authored the branch. Comment edits stay
-    // with the subscription dispatcher — re-waking on an edit would double-fire.
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    // with the subscription dispatcher, except edits on a pull request: the
+    // review skill edits its verdict in place, and the rules engine decides
+    // whether the edit carries a verdict worth waking the author for.
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(4);
     expect(ingestFactoryEvent).toHaveBeenNthCalledWith(1, {
       event: 'pull_request_review',
       deliveryId: 'delivery-review',
@@ -360,7 +388,71 @@ describe('PlatformGithubEventWorker', () => {
       deliveryId: 'delivery-comment',
       payload: { action: 'created' },
     });
-    expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({ deliveryId: 'delivery-pr-comment-edited' }),
+    );
+    expect(ingestFactoryEvent).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({ deliveryId: 'delivery-review-edited' }),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(5);
+    await worker.stop();
+  });
+
+  it("forwards issue label and assignee changes to Factory rules, so they reach the card's routes", async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>().mockResolvedValue({
+      delivered: 1,
+      failed: 0,
+      skipped: 0,
+      ignored: false,
+    });
+    const ingestFactoryEvent = vi.fn(async () => ({ status: 'committed' }));
+    const actions = ['labeled', 'unlabeled', 'assigned', 'unassigned', 'milestoned'];
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101 }] });
+      }
+      if (url.pathname.endsWith('/repositories/101/events')) {
+        if (url.searchParams.has('afterTimestamp')) {
+          return json({
+            events: [
+              ...actions.map((action, index) => ({
+                id: `300${index}-0`,
+                deliveryId: `delivery-${action}`,
+                event: 'issues',
+                payload: { action },
+              })),
+              { id: '3100-0', deliveryId: 'delivery-pr-labeled', event: 'pull_request', payload: { action: 'labeled' } },
+              { id: '3101-0', deliveryId: 'delivery-pr-reopened', event: 'pull_request', payload: { action: 'reopened' } },
+              { id: '3102-0', deliveryId: 'delivery-pr-edited', event: 'pull_request', payload: { action: 'edited' } },
+            ],
+            nextCursor: '3102-0',
+          });
+        }
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const worker = createWorker({ fetchImpl, storage: settings.storage, now: () => 1_000, dispatch, ingestFactoryEvent });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ingestFactoryEvent.mock.calls.map(([event]) => (event as { deliveryId: string }).deliveryId)).toEqual([
+      'delivery-labeled',
+      'delivery-unlabeled',
+      'delivery-assigned',
+      'delivery-unassigned',
+      'delivery-pr-labeled',
+      'delivery-pr-reopened',
+    ]);
     await worker.stop();
   });
 
@@ -651,7 +743,7 @@ describe('PlatformGithubEventWorker', () => {
         })),
       );
       const worker = new PlatformGithubEventWorker({
-        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        client: createPlatformConnectClient({ baseUrl, accessToken, fetch: fetchImpl }),
         controller: {} as never,
         github: createGithub(),
         storage: settings.storage,
@@ -989,6 +1081,59 @@ describe('PlatformGithubEventWorker', () => {
     expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(2);
   });
 
+  it('discovers missed pull request opens every five minutes while the per-card sweep stays hourly', async () => {
+    const settings = createSettingsStorage();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    let clock = 1_000_000;
+    const reconcileFactoryState = vi.fn<GithubPullRequestReconciler>(async () => ({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const discoverPullRequests = vi.fn<GithubPullRequestDiscovery>(async () => ({
+      repositories: 1,
+      listed: 1,
+      created: 1,
+      repaired: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => clock,
+      reconcileFactoryState,
+      discoverPullRequests,
+      pollEventsEnabled: false,
+    });
+
+    const deps = createDeps();
+    await worker.init(deps);
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let tick = 0; tick < 12; tick += 1) {
+      clock += 5 * 60_000;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    }
+    await worker.stop();
+
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+    expect(discoverPullRequests).toHaveBeenCalledTimes(13);
+    // With the linked projects the poll already read, so discovery needn't read them again.
+    expect(discoverPullRequests).toHaveBeenCalledWith([
+      { id: 101, fullName: 'acme/repo', installationId: 7, projects: [{ orgId: 'org-1', factoryProjectId: 'proj-1' }] },
+    ]);
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      'Platform GitHub pull request discovery replayed missed opens',
+      expect.objectContaining({ created: 1, candidateRepositories: 1 }),
+    );
+  });
+
   it('reconciles without tailing events when event polling is disabled', async () => {
     const settings = createSettingsStorage();
     const dispatch = vi.fn<typeof dispatchGithubWebhook>();
@@ -1082,9 +1227,7 @@ describe('PlatformGithubEventWorker', () => {
         if (url.pathname.endsWith('/repositories/101/events')) {
           if (url.searchParams.has('afterTimestamp')) {
             return json({
-              events: [
-                { id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } },
-              ],
+              events: [{ id: '1000-0', deliveryId: 'delivery-1', event: 'issues', payload: { action: 'opened' } }],
               nextCursor: '1000-0',
             });
           }

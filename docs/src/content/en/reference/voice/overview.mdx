@@ -4,23 +4,6 @@ description: "Use Mastra Voice for text-to-speech, speech-to-text, and real-time
 packages:
   - "@mastra/core"
   - "@mastra/node-audio"
-  - "@mastra/voice-aws-nova-sonic"
-  - "@mastra/voice-azure"
-  - "@mastra/voice-cloudflare"
-  - "@mastra/voice-deepgram"
-  - "@mastra/voice-elevenlabs"
-  - "@mastra/voice-gladia"
-  - "@mastra/voice-google"
-  - "@mastra/voice-google-gemini-live"
-  - "@mastra/voice-murf"
-  - "@mastra/voice-modelslab"
-  - "@mastra/voice-openai"
-  - "@mastra/voice-openai-realtime"
-  - "@mastra/voice-sarvam"
-  - "@mastra/voice-speechify"
-  - "@mastra/voice-inworld"
-  - "@mastra/voice-xai-realtime"
-  - "@mastra/livekit"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -52,12 +35,12 @@ const voiceAgent = new Agent({
 
 You can then use the following voice capabilities:
 
-### Text to Speech (TTS)
+### Text to speech (TTS)
 
 Turn your agent's responses into natural-sounding speech using Mastra's TTS capabilities.
 Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
-For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
+For detailed configuration options and advanced features, see the [Text-to-Speech guide](./text-to-speech).
 
 <Tabs>
   <TabItem value="openai" label="OpenAI">
@@ -332,7 +315,7 @@ For detailed configuration options and advanced features, check out our [Text-to
   </TabItem>
 </Tabs>
 
-### Speech to Text (STT)
+### Speech to text (STT)
 
 Transcribe spoken content using providers like OpenAI, ElevenLabs, and more. For detailed configuration options and more, check out [Speech to Text](./speech-to-text).
 
@@ -569,7 +552,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
   </TabItem>
 </Tabs>
 
-### Speech to Speech (STS)
+### Speech to speech (STS)
 
 Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents.
 For detailed configuration options and advanced features, check out [Speech to Speech](./speech-to-speech).
@@ -1208,7 +1191,7 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 playAudio(responseAudio)
 ```
 
-### Using AI SDK Model Providers
+### Using AI SDK model providers
 
 You can also use AI SDK models directly with `CompositeVoice`:
 

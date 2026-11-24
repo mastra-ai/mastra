@@ -5,6 +5,7 @@
 import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
 import type { OAuthProviderInterface } from '@mastra/code-sdk/auth/types';
 import { theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 /**
  * Interface for auth provider that the selector needs.
@@ -13,10 +14,13 @@ import { theme } from '../theme.js';
 export interface AuthProviderSource {
   getOAuthProviders(): OAuthProviderInterface[];
   isLoggedIn(providerId: string): boolean;
+  /** Number of registered accounts for the provider, when the source tracks them. */
+  countAccounts?(providerId: string): number;
 }
 
 export class LoginSelectorComponent extends Box {
   private listContainer: Container;
+  private list: PickerList<{ id: string; name: string }>;
   private allProviders: { id: string; name: string }[] = [];
   private selectedIndex: number = 0;
   private mode: 'login' | 'logout';
@@ -48,6 +52,15 @@ export class LoginSelectorComponent extends Box {
 
     // Create list container
     this.listContainer = new Container();
+    this.list = new PickerList({
+      paddingX: 1,
+      paddingY: 1,
+      renderItem: (provider, isSelected) => [this.renderProvider(provider, isSelected)],
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
+    });
     this.addChild(this.listContainer);
 
     this.addChild(new Spacer(1));
@@ -63,26 +76,8 @@ export class LoginSelectorComponent extends Box {
 
   private updateList(): void {
     this.listContainer.clear();
-
-    for (let i = 0; i < this.allProviders.length; i++) {
-      const provider = this.allProviders[i];
-      if (!provider) continue;
-
-      const isSelected = i === this.selectedIndex;
-
-      // Check if user has stored OAuth credentials for this provider.
-      const isLoggedIn = this.authSource.isLoggedIn(provider.id);
-      const statusIndicator = isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured');
-
-      let line = '';
-      if (isSelected) {
-        line = theme.fg('accent', '→ ' + provider.name) + statusIndicator;
-      } else {
-        line = '  ' + provider.name + statusIndicator;
-      }
-
-      this.listContainer.addChild(new Text(line));
-    }
+    this.list.setItems(this.allProviders, this.selectedIndex);
+    this.listContainer.addChild(this.list);
 
     // Show "no providers" if empty
     if (this.allProviders.length === 0) {
@@ -90,6 +85,19 @@ export class LoginSelectorComponent extends Box {
         this.mode === 'login' ? 'No OAuth providers available' : 'No OAuth providers logged in. Use /connect first.';
       this.listContainer.addChild(new Text(theme.fg('muted', message)));
     }
+  }
+
+  private renderProvider(provider: { id: string; name: string }, isSelected: boolean): string {
+    // Check if user has stored OAuth credentials for this provider.
+    const isLoggedIn = this.authSource.isLoggedIn(provider.id);
+    const accountCount = this.authSource.countAccounts?.(provider.id) ?? 0;
+    const accountSuffix =
+      accountCount > 0 ? theme.fg('muted', ` (${accountCount} account${accountCount === 1 ? '' : 's'})`) : '';
+    const statusIndicator =
+      (isLoggedIn ? theme.fg('success', ' ✓ stored') : theme.fg('muted', ' • unconfigured')) + accountSuffix;
+
+    if (isSelected) return theme.fg('accent', '→ ' + provider.name) + statusIndicator;
+    return '  ' + provider.name + statusIndicator;
   }
 
   handleInput(keyData: string): void {

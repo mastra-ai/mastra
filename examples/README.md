@@ -3,21 +3,21 @@
 Navigate to the example directory you want to run. For example:
 
 ```bash
-cd examples/ai-sdk-v5
+cd examples/agent
 ```
 
 Install the packages:
 
 ```bash
-npm install
+pnpm install --ignore-workspace
 ```
 
 > The examples have a separate `package.json` file and are not part of the Mastra workspace.
 > Most examples can use `npm install`.
 > If an example links local workspace packages, use `pnpm install --ignore-workspace` from that example directory instead.
 
-Run the appropriate CLI command in your terminal (may vary by example). For example for the `ai-sdk-v5` example:
+Run the appropriate CLI command in your terminal (may vary by example). For example for the `agent` example:
 
 ```bash
-npm run dev
+pnpm mastra:dev
 ```

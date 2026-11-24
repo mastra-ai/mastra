@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BrainIcon, MessagesSquareIcon } from 'lucide-react';
-
 import { TokenBudget } from './token-budget';
 import { TokenBudgetDetail } from './token-budget-detail';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
 
 const meta: Meta<typeof TokenBudget> = {
   title: 'DataDisplay/TokenBudget',
@@ -27,7 +27,7 @@ export const Default: Story = {};
 
 export const Budgets: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 flex items-center gap-5 rounded-xl border p-4">
+    <div className="flex items-center gap-5 rounded-xl border border-border bg-background p-4">
       <TokenBudget label="Messages" tokens={5_200} threshold={8_000} tone="messages" />
       <TokenBudget label="Observations" tokens={7_200} threshold={8_000} tone="warning" />
       <TokenBudget label="Memory" tokens={1_200} threshold={8_000} tone="memory" working />
@@ -37,9 +37,9 @@ export const Budgets: Story = {
 
 export const Details: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 grid w-112 gap-5 rounded-xl border p-5">
+    <div className="grid w-112 gap-5 rounded-xl border border-border bg-background p-5">
       <TokenBudgetDetail
-        icon={<MessagesSquareIcon />}
+        icon={<IconChatBubbles />}
         label="Messages"
         tokens={5_200}
         threshold={8_000}
@@ -47,7 +47,7 @@ export const Details: Story = {
         description="Compaction starts when this window fills."
       />
       <TokenBudgetDetail
-        icon={<BrainIcon />}
+        icon={<IconBrain />}
         label="Observations"
         tokens={1_900}
         threshold={8_000}

@@ -594,10 +594,9 @@ export const detectAISDKVersion = async (projectPath: string): Promise<'v1' | 'v
           if (majorVersion >= 2) {
             console.info(`Detected ${pkg} v${majorVersion} -> using v2 specification`);
             return 'v2';
-          } else {
-            console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
-            return 'v1';
           }
+          console.info(`Detected ${pkg} v${majorVersion} -> using v1 specification`);
+          return 'v1';
         }
       }
     }
@@ -665,7 +664,7 @@ export const createModelInstance = async (
 // Helper function to resolve model from request context with AI SDK version detection
 export const resolveModel = async ({
   requestContext,
-  defaultModel = 'openai/gpt-4.1',
+  defaultModel = 'openai/gpt-6-luna',
   projectPath,
 }: {
   requestContext: RequestContext;

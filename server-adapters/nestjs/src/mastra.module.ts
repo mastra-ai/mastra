@@ -1,6 +1,7 @@
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
+import type { MCPOptions } from '@mastra/server/server-adapter';
 import { Module } from '@nestjs/common';
 import type { DynamicModule, MiddlewareConsumer, NestModule, Provider, Type } from '@nestjs/common';
 
@@ -18,6 +19,7 @@ import { MastraService } from './mastra.service';
 import { BodyLimitMiddleware } from './middleware/body-limit.middleware';
 import { JsonBodyMiddleware } from './middleware/json-body.middleware';
 import { AuthService } from './services/auth.service';
+import { CustomRouteService } from './services/custom-route.service';
 import { RequestContextService } from './services/request-context.service';
 import { RouteHandlerService } from './services/route-handler.service';
 import { ShutdownService } from './services/shutdown.service';
@@ -111,12 +113,7 @@ export interface MastraModuleOptions {
   };
 
   /** MCP transport options */
-  mcpOptions?: {
-    /** Run in serverless mode */
-    serverless?: boolean;
-    /** Custom session ID generator */
-    sessionIdGenerator?: () => string;
-  };
+  mcpOptions?: MCPOptions;
 }
 
 /**
@@ -218,6 +215,7 @@ export class MastraModule implements NestModule {
         RequestContextService,
         ShutdownService,
         AuthService,
+        CustomRouteService,
         BodyLimitMiddleware,
         JsonBodyMiddleware,
         // Guards are available for use but NOT registered as APP_GUARD
@@ -231,7 +229,7 @@ export class MastraModule implements NestModule {
         RequestTrackingInterceptor,
         MastraExceptionFilter,
       ],
-      exports: [MASTRA, MastraService],
+      exports: [MASTRA, MastraService, AuthService],
     };
   }
 
@@ -308,6 +306,7 @@ export class MastraModule implements NestModule {
         RequestContextService,
         ShutdownService,
         AuthService,
+        CustomRouteService,
         BodyLimitMiddleware,
         JsonBodyMiddleware,
         // Guards are available for use but NOT registered as APP_GUARD
@@ -321,7 +320,7 @@ export class MastraModule implements NestModule {
         RequestTrackingInterceptor,
         MastraExceptionFilter,
       ],
-      exports: [MASTRA, MastraService],
+      exports: [MASTRA, MastraService, AuthService],
     };
   }
 

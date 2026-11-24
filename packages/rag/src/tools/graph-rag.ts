@@ -28,10 +28,6 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
     ...defaultGraphOptions,
     ...(options.graphOptions || {}),
   };
-  // Initialize GraphRAG
-  const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
-  let isInitialized = false;
-
   const inputSchema = options.enableFilter ? filterSchema : z.object(baseSchema).passthrough();
 
   return createTool({
@@ -98,41 +94,40 @@ export const createGraphRAGTool = (options: GraphRagToolOptions) => {
           logger.debug('vectorQuerySearch returned results', { count: results.length });
         }
 
-        // Initialize graph if not done yet
-        if (!isInitialized) {
-          // Get all chunks and embeddings for graph construction
-          const chunks = results.map(result => ({
-            text: result?.metadata?.text,
-            metadata: result.metadata ?? {},
-          }));
-          const embeddings = results.map(result => ({
-            vector: result.vector || [],
-          }));
-
-          if (logger) {
-            logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
-          }
-          const buildSpan = parentSpan?.createChildSpan({
-            type: SpanType.GRAPH_ACTION,
-            name: 'graph build',
-            input: { nodeCount: chunks.length },
-            attributes: {
-              action: 'build',
-              nodeCount: chunks.length,
-              threshold: graphOptions.threshold,
-            },
-          });
-          try {
-            graphRag.createGraph(chunks, embeddings);
-          } catch (err) {
-            buildSpan?.error({ error: err as Error, endSpan: true });
-            throw err;
-          }
-          buildSpan?.end();
-          isInitialized = true;
-        } else if (logger) {
-          logger.debug('Graph already initialized, skipping graph construction');
+        if (results.length === 0) {
+          return { relevantContext: [], sources: [] };
         }
+
+        // Build a graph from this execution's retrieved candidates only.
+        const graphRag = new GraphRAG(graphOptions.dimension, graphOptions.threshold);
+        const chunks = results.map(result => ({
+          text: result?.metadata?.text,
+          metadata: result.metadata ?? {},
+        }));
+        const embeddings = results.map(result => ({
+          vector: result.vector || [],
+        }));
+
+        if (logger) {
+          logger.debug('Initializing graph', { chunkCount: chunks.length, embeddingCount: embeddings.length });
+        }
+        const buildSpan = parentSpan?.createChildSpan({
+          type: SpanType.GRAPH_ACTION,
+          name: 'graph build',
+          input: { nodeCount: chunks.length },
+          attributes: {
+            action: 'build',
+            nodeCount: chunks.length,
+            threshold: graphOptions.threshold,
+          },
+        });
+        try {
+          graphRag.createGraph(chunks, embeddings);
+        } catch (err) {
+          buildSpan?.error({ error: err as Error, endSpan: true });
+          throw err;
+        }
+        buildSpan?.end();
 
         // Get reranked results using GraphRAG
         const traverseSpan = parentSpan?.createChildSpan({

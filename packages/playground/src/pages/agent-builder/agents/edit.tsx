@@ -1,5 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { AgentBuilderEditLayout } from '@mastra/playground-ui/domains/agents/components/agent-builder-edit-layout';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { useAuthCapabilities } from '@mastra/react/hooks/auth';
+import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -33,11 +38,8 @@ import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wiza
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
-import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
-import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
@@ -183,6 +185,7 @@ const MobileInitialCtas = () => {
   return (
     <div className="flex flex-col gap-2 lg:hidden" data-testid="agent-builder-mobile-initial-ctas">
       <Button
+        icon={<AgentIcon />}
         variant="primary"
         onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
         data-testid="agent-builder-mobile-initial-cta-chat"
@@ -190,7 +193,7 @@ const MobileInitialCtas = () => {
         Chat with my agent
       </Button>
       <Button
-        variant="outline"
+        icon={<IconSettingsSliderHor />}
         onClick={() => startViewTransition(() => next())}
         data-testid="agent-builder-mobile-initial-cta-config"
       >

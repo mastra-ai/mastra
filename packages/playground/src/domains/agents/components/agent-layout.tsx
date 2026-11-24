@@ -1,12 +1,6 @@
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
-import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
-import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
+import { useThreadsPanel } from '@mastra/playground-ui/domains/agents/chat';
+import { AgentConversationLayout } from '@mastra/playground-ui/domains/agents/components/agent-conversation-layout';
 import { useEffect, useRef } from 'react';
-import type { Ref } from 'react';
-import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
 import { useMemoryTimeline } from '../context/memory-timeline-context';
 
@@ -14,12 +8,8 @@ export interface AgentLayoutProps {
   agentId: string;
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
-  /** Lets the caller collapse/expand the left panel (e.g. "Hide threads panel"). */
-  leftPanel?: Ref<CollapsiblePanelHandle>;
   rightSlot?: React.ReactNode;
-  /** Accessible label for the mobile drawer that hosts the left slot */
   leftDrawerLabel?: string;
-  /** Accessible label for the mobile drawer that hosts the right slot */
   rightDrawerLabel?: string;
   browserOverlay?: React.ReactNode;
 }
@@ -30,23 +20,16 @@ export const AgentLayout = ({
   agentId,
   children,
   leftSlot,
-  leftPanel,
   rightSlot,
-  leftDrawerLabel = 'Open left panel',
-  rightDrawerLabel = 'Open right panel',
+  leftDrawerLabel,
+  rightDrawerLabel,
   browserOverlay,
 }: AgentLayoutProps) => {
-  const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
+  const threadsPanel = useThreadsPanel();
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
   const wasMemoryTimelineOpen = useRef(false);
   const sizeBeforeMemoryDetail = useRef<string | null>(null);
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    // Bumped to v6 because the OM detail now replaces the Memory content in the
-    // single left panel and expands it to ~50%; avoids restoring stale widths.
-    id: `agent-layout-v6-${agentId}`,
-    storage: localStorage,
-  });
 
   useEffect(() => {
     const leftPanel = leftPanelRef.current;
@@ -56,76 +39,26 @@ export const AgentLayout = ({
     wasMemoryTimelineOpen.current = isMemoryTimelineOpen;
 
     if (isMemoryTimelineOpen && !wasOpen) {
-      // Opening OM: capture the current width, then expand to half the layout.
       sizeBeforeMemoryDetail.current = `${leftPanel.getSize().inPixels}px`;
       leftPanel.resize('50%');
     } else if (!isMemoryTimelineOpen && wasOpen) {
-      // Closing OM: restore the width the panel had before opening the detail.
       leftPanel.resize(sizeBeforeMemoryDetail.current ?? MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE);
       sizeBeforeMemoryDetail.current = null;
     }
   }, [isMemoryTimelineOpen]);
 
-  // Resizable side panels are a desktop paradigm; below the breakpoint the
-  // side slots move into edge drawers and the main content takes the full width.
-  if (isMobile) {
-    return (
-      <div className="relative h-full w-full overflow-hidden">
-        <div className="h-full w-full min-w-0">{children}</div>
-        {leftSlot && (
-          <PanelDrawer direction="left" label={leftDrawerLabel}>
-            {leftSlot}
-          </PanelDrawer>
-        )}
-        {rightSlot && (
-          <PanelDrawer direction="right" label={rightDrawerLabel}>
-            {rightSlot}
-          </PanelDrawer>
-        )}
-        {browserOverlay}
-      </div>
-    );
-  }
-
   return (
-    <div className="relative h-full w-full overflow-hidden">
-      <PanelGroup
-        className="h-full min-h-0 w-full min-w-0"
-        defaultLayout={defaultLayout}
-        onLayoutChange={onLayoutChange}
-      >
-        {leftSlot && (
-          <CollapsiblePanel
-            id="left-slot"
-            direction="left"
-            ref={leftPanel}
-            panelRef={leftPanelRef}
-            collapsible
-            collapsedSize={0}
-            minSize={256}
-            maxSize={'50%'}
-            defaultSize={300}
-            className="min-w-0"
-          >
-            {leftSlot}
-          </CollapsiblePanel>
-        )}
-
-        {leftSlot && <PanelSeparator />}
-        <Panel id="main-slot" className="relative grid min-w-0 overflow-y-auto">
-          {children}
-        </Panel>
-        {rightSlot && (
-          <>
-            <PanelSeparator />
-            <Panel id="right-slot" minSize={320} maxSize={'45%'} defaultSize={420} className="min-w-0">
-              {rightSlot}
-            </Panel>
-          </>
-        )}
-      </PanelGroup>
-      {/* Browser modal overlay - center view mode */}
-      {browserOverlay}
-    </div>
+    <AgentConversationLayout
+      layoutId={`agent-layout-v6-${agentId}`}
+      leftSlot={leftSlot}
+      rightSlot={rightSlot}
+      leftDrawerLabel={leftDrawerLabel}
+      rightDrawerLabel={rightDrawerLabel}
+      browserOverlay={browserOverlay}
+      leftPanelRef={leftPanelRef}
+      onLeftPanelRegister={threadsPanel?.registerPanel}
+    >
+      {children}
+    </AgentConversationLayout>
   );
 };

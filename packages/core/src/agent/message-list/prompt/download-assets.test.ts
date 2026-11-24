@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraError } from '../../../error';
 import { downloadFromUrl } from './download-assets';
 
+// Retries are driven through fetchWithRetry's backoff with fake timers, so these tests need the real waitDelay
+// rather than the instant one from @internal/test-utils/setup.
+vi.unmock('../../../utils/retry-after');
+
 describe('downloadFromUrl', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -101,6 +105,24 @@ describe('downloadFromUrl', () => {
     // to react programmatically (e.g. match the failing URL back to a
     // specific message part for recovery) still get exact equality.
     expect(error.details).toEqual({ url: signedUrl });
+  });
+
+  it('fails a malformed data URL once, without retries, and without logging its payload', async () => {
+    const delays = mockRetryDelays();
+    const url = 'data:image/svg+xml;base64,/api/images/foo.svg';
+    let caught: unknown;
+    try {
+      await downloadFromUrl({ url: new URL(url), downloadRetries: 3 });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(MastraError);
+    const error = caught as MastraError;
+    expect(error.id).toBe('DOWNLOAD_ASSETS_FAILED');
+    expect(error.message).toBe('Failed to download asset: data:image/svg+xml;base64,<19 chars>');
+    expect(error.details).toEqual({ url });
+    expect(delays).toEqual([]);
   });
 
   it('should retry server error responses', async () => {

@@ -1,9 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { SaveIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
@@ -16,24 +18,26 @@ export interface StudioConfigFormProps {
 
 export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
+  // Rows keep an id so removing one doesn't hand its inputs to the next.
+  const nextHeaderId = useRef(0);
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
 
-    return Object.entries(initialConfig.headers).map(([name, value]) => ({ name, value }));
+    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextHeaderId.current++, name, value }));
   });
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
 
-    const formData = new FormData(e.target as HTMLFormElement);
-    const url = formData.get('url') as string;
-    const rawApiPrefix = ((formData.get('apiPrefix') as string) ?? '').trim();
+    const formData = new FormData(event.currentTarget);
+    const url = readFormText(formData, 'url');
+    const rawApiPrefix = readFormText(formData, 'apiPrefix').trim();
     const apiPrefix = rawApiPrefix.length ? rawApiPrefix : undefined;
 
     const formHeaders: Record<string, string> = {};
-    for (let i = 0; i < headers.length; i++) {
-      const headerName = formData.get(`headers.${i}.name`) as string;
-      const headerValue = formData.get(`headers.${i}.value`) as string;
+    for (let headerIndex = 0; headerIndex < headers.length; headerIndex++) {
+      const headerName = readFormText(formData, `headers.${headerIndex}.name`);
+      const headerValue = readFormText(formData, `headers.${headerIndex}.value`);
       formHeaders[headerName] = headerValue;
     }
 
@@ -43,38 +47,51 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
-    setHeaders(prev => [...prev, header]);
+    setHeaders(prev => [...prev, { ...header, id: nextHeaderId.current++ }]);
   };
 
   const handleRemoveHeader = (index: number) => {
     setHeaders(prev => prev.filter((_, i) => i !== index));
   };
 
+  const connectionFields = [
+    {
+      name: 'url',
+      label: 'Mastra instance URL',
+      placeholder: 'e.g: http://localhost:4111',
+      required: true,
+      defaultValue: initialConfig?.baseUrl,
+    },
+    {
+      name: 'apiPrefix',
+      label: 'API prefix',
+      placeholder: 'e.g: /api (default)',
+      defaultValue: initialConfig?.apiPrefix || '',
+    },
+  ];
+
   return (
     <TooltipProvider delayDuration={0}>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <TextFieldBlock
-          name="url"
-          label="Mastra instance URL"
-          placeholder="e.g: http://localhost:4111"
-          required
-          defaultValue={initialConfig?.baseUrl}
-        />
-
-        <TextFieldBlock
-          name="apiPrefix"
-          label="API prefix"
-          placeholder="e.g: /api (default)"
-          defaultValue={initialConfig?.apiPrefix || ''}
-        />
-
+      <Form onSubmit={handleSubmit} className="gap-6">
+        {connectionFields.map(({ label, ...field }) => (
+          <Field key={field.name}>
+            <FieldLabel required={field.required}>{label}</FieldLabel>
+            <Input {...field} />
+            <FieldError />
+          </Field>
+        ))}
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="mt-10! ml-auto">
-          <SaveIcon />
-          Save Configuration
+        <Button type="submit" className="mt-4 ml-auto" icon={<IconFloppyDisk1 />}>
+          Save configuration
         </Button>
-      </form>
+      </Form>
     </TooltipProvider>
   );
 };
+
+function readFormText(formData: FormData, name: string) {
+  const value = formData.get(name);
+  if (typeof value !== 'string') throw new Error(`Missing text field: ${name}`);
+  return value;
+}

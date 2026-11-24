@@ -143,7 +143,7 @@ describe('Anthropic e2e test', () => {
   it('should be successful with structured_output', { timeout: 40_000 }, async () => {
     const schema = z.object(allSchemas);
 
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,
@@ -162,6 +162,9 @@ describe('Anthropic e2e test', () => {
       }),
       prompt:
         'You are a test agent. Your task is to respond with valid JSON matching the schema provided. When a field is optional or nullable please mark it as null..',
+      // From @ai-sdk/anthropic 3.0.138, `auto` falls back to a JSON tool when the schema has an
+      // open object (objectPassthrough, objectLoose). This test covers native structured output.
+      providerOptions: { anthropic: { structuredOutputMode: 'outputFormat' } },
     });
 
     expect(result.finishReason).toBe('stop');
@@ -207,7 +210,7 @@ describe('Anthropic e2e test', () => {
 
   it('should handle tool call with manySchemas input', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,
@@ -248,7 +251,7 @@ describe('Anthropic e2e test', () => {
 
   it('should handle tool call with manySchemas input and output', { timeout: 60_000 }, async () => {
     const schema = z.object(allSchemas);
-    const model = anthropic('claude-sonnet-4-0');
+    const model = anthropic('claude-sonnet-4-6');
 
     const compat = new AnthropicSchemaCompatLayer({
       provider: model.provider,

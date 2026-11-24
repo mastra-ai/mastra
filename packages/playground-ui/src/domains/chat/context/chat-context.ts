@@ -16,6 +16,8 @@ export interface ChatSendArgs {
   message: string;
   /** Attachments already converted to core user messages (images / files). */
   attachments?: CoreUserMessage[];
+  /** Entries added to this turn's request context, on top of the agent's own, e.g. an interface's state. */
+  requestContext?: Record<string, unknown>;
 }
 
 export interface MessagesContextValue {
@@ -26,6 +28,8 @@ export interface MessagesContextValue {
 export interface RunningContextValue {
   /** True while streaming OR awaiting a tool approval. Gates composer send/cancel state. */
   isRunning: boolean;
+  /** Matches the runId on streamed message metadata; absent before execution starts. */
+  activeRunId?: string;
   /** Cancels the in-flight run (abort + OM reset + cancelRun). */
   cancelRun: () => void | Promise<void>;
   /** Whether the composer may send a new message mid-stream (thread signals). */
@@ -33,7 +37,19 @@ export interface RunningContextValue {
 }
 
 export interface SendContextValue {
-  send: (args: ChatSendArgs) => void;
+  /**
+   * Resolves to `false` when the server can't have stored the message (no response, or a refusal such
+   * as a body too large), so the composer can put it back.
+   */
+  send: (args: ChatSendArgs) => void | Promise<boolean>;
+  /**
+   * Holds context for the agent's next turn, keyed by where it comes from (such as an MCP App's tool
+   * call). On the next send, each source's latest value goes out once in the user turn, inside an
+   * `<mcp-app-context trust="untrusted">` block marked as data rather than instructions, then is
+   * cleared. Keep it out of the system prompt: apps are third parties. `undefined` or an empty string
+   * drops a source's context. Absent when the chat can't carry it.
+   */
+  setModelContext?: (sourceId: string, context: string | undefined) => void;
 }
 
 export interface TasksContextValue {
@@ -63,4 +79,6 @@ export const ChatAgentContext = createContext<AgentContextValue | undefined>(und
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
+export const useChatModelContext = (): SendContextValue['setModelContext'] =>
+  useContext(ChatSendContext).setModelContext;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;

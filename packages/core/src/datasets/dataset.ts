@@ -19,17 +19,29 @@ import type {
   ExperimentResultStatus,
   ExperimentStatus,
   ExperimentTenancyFilters,
+  ListDatasetItemsInput,
   ListDatasetItemsOutput,
   ListExperimentResultsOutput,
+  ListExperimentsInput,
   ListExperimentsOutput,
+  ListExperimentResultsInput,
   TargetType,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
+import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
+import { durableRunOptions } from './experiment/durable.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
+import type { ExperimentItemRunOptions } from './experiment/item.js';
 import { experimentScoreId } from './experiment/scorer.js';
-import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
+import type {
+  ExperimentConfig,
+  StartExperimentAsyncConfig,
+  StartExperimentConfig,
+  ExperimentSummary,
+} from './experiment/types.js';
+import { EXPERIMENT_WORKFLOW_ID } from './experiment/workflow-id.js';
 import { deleteExperimentTraces } from './experiment-traces.js';
 
 /**
@@ -267,6 +279,7 @@ export class Dataset {
     page?: number;
     perPage?: number;
     search?: string;
+    orderBy?: ListDatasetItemsInput['orderBy'];
   }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
 
@@ -283,6 +296,7 @@ export class Dataset {
       datasetId: this.id,
       ...(args?.version !== undefined ? { version: args.version } : {}),
       ...(args?.search ? { search: args.search } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       filters: this.#scope,
     });
@@ -377,10 +391,16 @@ export class Dataset {
   /**
    * Start an experiment asynchronously (fire-and-forget).
    * Returns immediately with the experiment ID and pending status.
+   *
+   * With `durable: true` the experiment runs as an evented workflow whose run
+   * id is the experiment id; see {@link StartExperimentAsyncConfig.durable}.
    */
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
-    config: StartExperimentConfig<I, O, E>,
+    asyncConfig: StartExperimentAsyncConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
+    const { durable, ...config } = asyncConfig;
+    assertAgentModelTarget(config);
+    const durableRun = durable ? durableRunOptions(config) : undefined;
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -422,7 +442,7 @@ export class Dataset {
         totalItems: items.length,
         name: config.name,
         description: config.description,
-        metadata: config.metadata,
+        metadata: withAgentModelMetadata(config.metadata, config.agentModel),
         provenance: config.provenance,
         experimentSetId: config.grouping?.experimentSetId,
         comparisonId: config.grouping?.comparisonId,
@@ -431,7 +451,28 @@ export class Dataset {
         agentVersion: config.agentVersion,
         organizationId: dataset.organizationId ?? null,
         projectId: dataset.projectId ?? null,
+        ...(durableRun ? { scorerIds: durableRun.scorerIds ?? null } : {}),
       });
+    }
+
+    if (durableRun) {
+      try {
+        await this.#mastra.__ensureExperimentWorkflow();
+        const run = await this.#mastra.__getInternalWorkflow(EXPERIMENT_WORKFLOW_ID).createRun({ runId: experimentId });
+        await run.startAsync({
+          inputData: {
+            datasetId: this.id,
+            experimentId,
+            organizationId: this.#scope?.organizationId,
+            projectId: this.#scope?.projectId,
+            ...durableRun.runOptions,
+          },
+        });
+      } catch (err) {
+        await experimentsStore?.updateExperiment({ id: experimentId, status: 'failed', completedAt: new Date() });
+        throw err;
+      }
+      return { experimentId, status: 'pending' as const, totalItems: items.length };
     }
 
     // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
@@ -482,6 +523,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentsInput['orderBy'];
   }): Promise<ListExperimentsOutput> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
@@ -496,6 +538,7 @@ export class Dataset {
       ...(args?.variantId !== undefined ? { variantId: args.variantId } : {}),
       ...(args?.trialIndex !== undefined ? { trialIndex: args.trialIndex } : {}),
       ...(args?.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -579,6 +622,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentResultsInput['orderBy'];
   }): Promise<ListExperimentResultsOutput> {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
@@ -588,6 +632,7 @@ export class Dataset {
       ...(args.status !== undefined ? { status: args.status } : {}),
       ...(args.tags !== undefined ? { tags: args.tags } : {}),
       ...(args.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -841,22 +886,28 @@ export class Dataset {
    * keyed by `(experimentId, itemId, attempt)`.
    *
    * Built for caller-driven loops (mode 2): a durable orchestrator (e.g. a
-   * Temporal workflow) fans out one call per item and owns retries/timeouts —
-   * a retried call converges on the same row. Requires an experiment created
-   * with a target via {@link Dataset.createExperiment}.
+   * Temporal workflow) fans out one call per item — a retried call converges
+   * on the same row. Requires an experiment created with a target via
+   * {@link Dataset.createExperiment}. The run options (`agentModel`,
+   * `unmockedToolPolicy`, `itemTimeout`, `maxRetries`, `versions`) behave as
+   * they do in {@link Dataset.startExperiment}; the experiment record doesn't
+   * store them, so pass them on every call.
    *
    * Scorer precedence: experiment `scorers` → item `scorerIds` → dataset
    * `scorerIds` → none.
    */
-  async runExperimentItem(args: {
-    experimentId: string;
-    itemId: string;
-    /** Zero-based repetition index for repeated trials. Defaults to `0`. */
-    attempt?: number;
-    /** Request context merged with the item's own request context (item wins). */
-    requestContext?: Record<string, unknown>;
-  }): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
+  async runExperimentItem(
+    args: ExperimentItemRunOptions & {
+      experimentId: string;
+      itemId: string;
+      /** Zero-based repetition index for repeated trials. Defaults to `0`. */
+      attempt?: number;
+      /** Request context merged with the item's own request context (item wins). */
+      requestContext?: Record<string, unknown>;
+    },
+  ): Promise<{ result: ExperimentResult; scores: Awaited<ReturnType<typeof executeExperimentItem>>['scores'] }> {
     const experiment = await this.#getOwnedExperiment(args.experimentId);
+    assertAgentModelTarget({ agentModel: args.agentModel, targetType: experiment.targetType ?? undefined });
     if (experiment.targetType === null) {
       throw new MastraError({
         id: 'EXPERIMENT_HAS_NO_TARGET',
@@ -901,10 +952,17 @@ export class Dataset {
         requestContext: item.requestContext ?? undefined,
         metadata: item.metadata ?? undefined,
         scorerIds: item.scorerIds ?? undefined,
+        toolMocks: item.toolMocks ?? undefined,
+        unmockedToolPolicy: item.unmockedToolPolicy ?? undefined,
       },
       datasetScorerIds: dataset?.scorerIds ?? null,
       attempt: args.attempt ?? 0,
       requestContext: args.requestContext,
+      agentModel: args.agentModel,
+      unmockedToolPolicy: args.unmockedToolPolicy,
+      itemTimeout: args.itemTimeout,
+      maxRetries: args.maxRetries,
+      versions: args.versions,
       organizationId: experiment.organizationId ?? dataset?.organizationId ?? null,
       projectId: experiment.projectId ?? dataset?.projectId ?? null,
     });

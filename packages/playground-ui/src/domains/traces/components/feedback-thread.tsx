@@ -1,0 +1,366 @@
+import type { FeedbackItem } from '@mastra/client-js';
+import type { FeedbackListItem, FeedbackListResponse } from '@mastra/react/hooks/feedback';
+import { useState } from 'react';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
+import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
+import { AlertDialog } from '@/ds/components/AlertDialog';
+import { Avatar } from '@/ds/components/Avatar';
+import { Button } from '@/ds/components/Button';
+import {
+  Comment,
+  CommentItem,
+  CommentItemActions,
+  CommentItemAuthor,
+  CommentItemAvatar,
+  CommentItemBody,
+  CommentItemContent,
+  CommentItemHeader,
+  CommentItemTimestamp,
+  CommentList,
+} from '@/ds/components/Comment';
+import type { CommentVariant } from '@/ds/components/Comment';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+import { formatDate } from '@/utils/date-format';
+
+export type FeedbackThreadProps = {
+  /**
+   * Rows flagged `isPending` are not stored yet: they show "Sending…" and get no actions.
+   * Rows with `deleteStatus: 'deleting'` show "Deleting…" and get no actions; `failed` rows are
+   * shown again with an error.
+   */
+  feedbackData?: FeedbackListResponse | null;
+  isLoadingFeedbackData?: boolean;
+  onPageChange?: (page: number) => void;
+  /** Rejecting (or throwing) keeps the draft in the composer so it can be retried. */
+  onSubmit: (text: string) => void | Promise<unknown>;
+  isSubmitting?: boolean;
+  submitError?: string;
+  /** When provided, records with a feedbackId get a delete action. */
+  onDelete?: (feedbackId: string) => void | Promise<unknown>;
+  isDeleting?: boolean;
+  /**
+   * Shown in the delete confirmation when the delete request fails. Only shown after a delete is
+   * confirmed in the open dialog, so a stale error does not appear when the dialog is opened again.
+   */
+  deleteError?: string;
+  /**
+   * Comment layout variant. Defaults to `thread` (avatar gutter + content column);
+   * `embed` renders a compact card suitable for inline use.
+   */
+  variant?: CommentVariant;
+  /** When provided, unreviewed rows get a "Mark reviewed" action. */
+  onMarkReviewed?: (feedbackId: string) => void;
+  /** feedbackId whose review-status update is in flight (disables its action). */
+  pendingFeedbackId?: string;
+};
+
+// The server defaults `reviewStatus` to `needs-review`, so a missing value means the same.
+function FeedbackReviewStatusBadge({ status }: { status: FeedbackItem['reviewStatus'] }) {
+  const resolved = status === 'reviewed' ? 'reviewed' : 'needs-review';
+  return (
+    <ReviewStatusBadge data-slot="feedback-review-status" status={resolved}>
+      {resolved === 'reviewed' ? 'Reviewed' : 'Needs review'}
+    </ReviewStatusBadge>
+  );
+}
+
+function FeedbackItemStatus({ item }: { item: FeedbackListItem }) {
+  if (item.isPending) {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-pending">
+        Sending…
+      </Txt>
+    );
+  }
+  if (item.deleteStatus === 'deleting') {
+    return (
+      <Txt as="span" variant="meta" tone="muted" data-slot="feedback-deleting">
+        Deleting…
+      </Txt>
+    );
+  }
+  return <FeedbackReviewStatusBadge status={item.reviewStatus} />;
+}
+
+function formatBody(fb: FeedbackItem): string {
+  const text = fb.comment || (typeof fb.value === 'string' ? fb.value : '');
+  if (text) return text;
+  if (fb.feedbackType === 'thumbs') return fb.value === 1 ? '\u{1F44D}' : '\u{1F44E}';
+  return String(fb.value ?? '');
+}
+
+type FeedbackItemsProps = Pick<FeedbackThreadProps, 'onMarkReviewed' | 'pendingFeedbackId'> & {
+  variant: CommentVariant;
+  items: FeedbackListItem[];
+  onRequestDelete?: (feedbackId: string) => void;
+  isDeleting: boolean;
+};
+
+function FeedbackItems({
+  variant,
+  items,
+  onRequestDelete,
+  isDeleting,
+  onMarkReviewed,
+  pendingFeedbackId,
+}: FeedbackItemsProps) {
+  const rows = items.map((fb, index) => {
+    const ts = new Date(fb.timestamp);
+    const author = feedbackAuthorLabel(fb);
+    const avatar = author ? <Avatar name={author} src={fb.author?.avatarUrl} size="sm" /> : null;
+    const name = author && <CommentItemAuthor>{author}</CommentItemAuthor>;
+    const timestamp = (
+      <CommentItemTimestamp dateTime={ts.toISOString()}>{formatDate(ts, 'date-time')}</CommentItemTimestamp>
+    );
+    const feedbackId = fb.feedbackId;
+    // A pending comment has no stored record yet, and a deleting one is on its way out,
+    // so there is nothing to review or delete.
+    const status = <FeedbackItemStatus item={fb} />;
+    const hasActions = Boolean(feedbackId && !fb.isPending && fb.deleteStatus !== 'deleting');
+    const canMarkReviewed = Boolean(hasActions && onMarkReviewed && fb.reviewStatus !== 'reviewed');
+    const canDelete = Boolean(hasActions && onRequestDelete);
+    const actions = feedbackId && (canMarkReviewed || canDelete) && (
+      <CommentItemActions>
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
+                <IconDotGrid1x3Horizontal />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end">
+            {canMarkReviewed && (
+              <DropdownMenu.Item
+                disabled={pendingFeedbackId === feedbackId}
+                onSelect={() => onMarkReviewed?.(feedbackId)}
+              >
+                <Icon size="xs">
+                  <IconClipboard2 />
+                </Icon>
+                Mark reviewed
+              </DropdownMenu.Item>
+            )}
+            {canDelete && (
+              <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
+                <Icon size="xs">
+                  <TrashIcon />
+                </Icon>
+                Delete feedback
+              </DropdownMenu.Item>
+            )}
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </CommentItemActions>
+    );
+    const body = <CommentItemBody>{formatBody(fb)}</CommentItemBody>;
+    const key = feedbackId ?? `${fb.traceId}-${index}`;
+
+    // The thread variant lays the row out as avatar gutter + content column.
+    // Without an author there is nothing to align under, so skip the gutter entirely.
+    if (variant === 'thread') {
+      return (
+        <CommentItem key={key}>
+          {avatar && <CommentItemAvatar>{avatar}</CommentItemAvatar>}
+          <CommentItemContent>
+            <CommentItemHeader>
+              {name}
+              {timestamp}
+              {status}
+              {actions}
+            </CommentItemHeader>
+            {body}
+          </CommentItemContent>
+        </CommentItem>
+      );
+    }
+
+    // Stacked variants have no gutter, so the avatar sits inline in the header.
+    return (
+      <CommentItem key={key}>
+        <CommentItemHeader>
+          {avatar}
+          {name}
+          {timestamp}
+          {status}
+          {actions}
+        </CommentItemHeader>
+        {body}
+      </CommentItem>
+    );
+  });
+
+  // Thread rows are stream entries rendered as `div`s, not list items.
+  return variant === 'thread' ? <>{rows}</> : <CommentList>{rows}</CommentList>;
+}
+
+/**
+ * Feedback rendered as a comment thread: a composer above, existing records below.
+ * Pagination, submission, deletion, and review status are driven by the caller.
+ */
+export function FeedbackThread({
+  feedbackData,
+  isLoadingFeedbackData,
+  onPageChange,
+  onSubmit,
+  isSubmitting = false,
+  submitError,
+  onDelete,
+  isDeleting = false,
+  deleteError,
+  variant = 'thread',
+  onMarkReviewed,
+  pendingFeedbackId,
+}: FeedbackThreadProps) {
+  const [text, setText] = useState('');
+  const [feedbackIdToDelete, setFeedbackIdToDelete] = useState<string>();
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const sendBlocked = text.trim().length === 0 || isSubmitting;
+
+  const feedbackItems = feedbackData?.feedback ?? [];
+  const currentPage = feedbackData?.pagination?.page ?? 0;
+  const hasMore = feedbackData?.pagination?.hasMore ?? false;
+  const deleteFailed = feedbackItems.some(item => item.deleteStatus === 'failed');
+
+  const handleDeleteConfirm = async () => {
+    if (!feedbackIdToDelete || !onDelete) return;
+
+    setDeleteConfirmed(true);
+    try {
+      await onDelete(feedbackIdToDelete);
+      setFeedbackIdToDelete(undefined);
+    } catch {
+      // Keep the confirmation open so the deletion can be retried.
+    }
+  };
+
+  const requestDelete = (feedbackId: string) => {
+    setDeleteConfirmed(false);
+    setFeedbackIdToDelete(feedbackId);
+  };
+
+  return (
+    <Comment variant={variant} className="min-h-0 gap-3">
+      {/* Same size/variant as the timeline search field so switching tabs doesn't shift the layout. */}
+      <form
+        aria-label="Leave feedback"
+        className="flex w-full items-center gap-2"
+        onSubmit={async event => {
+          event.preventDefault();
+          if (sendBlocked) return;
+          try {
+            await onSubmit(text.trim());
+            setText('');
+          } catch {
+            // Keep the draft so the comment isn't lost; the caller surfaces the failure.
+          }
+        }}
+      >
+        <InputGroup size="sm">
+          <InputGroupInput
+            aria-label="Leave feedback"
+            placeholder="Leave feedback"
+            value={text}
+            onChange={event => setText(event.target.value)}
+          />
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
+              <IconArrowUp />
+            </InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </form>
+      {submitError && (
+        <Notice variant="destructive" role="alert">
+          <Notice.Message>{submitError}</Notice.Message>
+        </Notice>
+      )}
+      {deleteFailed && (
+        <Notice variant="destructive" role="alert">
+          <Notice.Message>Could not delete feedback. Please try again.</Notice.Message>
+        </Notice>
+      )}
+
+      <div className="min-h-0 overflow-y-auto">
+        {isLoadingFeedbackData ? (
+          <Txt variant="body" tone="muted">
+            Loading feedback...
+          </Txt>
+        ) : feedbackItems.length === 0 ? (
+          <Txt variant="body" tone="muted" className="text-center">
+            No feedback yet
+          </Txt>
+        ) : (
+          <FeedbackItems
+            variant={variant}
+            items={feedbackItems}
+            onRequestDelete={onDelete ? requestDelete : undefined}
+            isDeleting={isDeleting}
+            onMarkReviewed={onMarkReviewed}
+            pendingFeedbackId={pendingFeedbackId}
+          />
+        )}
+      </div>
+
+      {(hasMore || currentPage > 0) && (
+        <div className="flex items-center gap-2">
+          <Button
+            icon={<IconChevronLeftMedium />}
+            size="sm"
+            variant="ghost"
+            disabled={currentPage === 0}
+            onClick={() => onPageChange?.(currentPage - 1)}
+          >
+            Previous
+          </Button>
+          <Button
+            icon={<IconChevronRightMedium />}
+            size="sm"
+            variant="ghost"
+            disabled={!hasMore}
+            onClick={() => onPageChange?.(currentPage + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
+
+      <AlertDialog
+        open={feedbackIdToDelete !== undefined}
+        onOpenChange={open => {
+          if (!open && !isDeleting) setFeedbackIdToDelete(undefined);
+        }}
+      >
+        <AlertDialog.Content>
+          <AlertDialog.Header>
+            <AlertDialog.Title>Delete feedback?</AlertDialog.Title>
+            <AlertDialog.Description>
+              This permanently deletes this feedback comment. This action cannot be undone.
+            </AlertDialog.Description>
+          </AlertDialog.Header>
+          {deleteConfirmed && deleteError && (
+            <Notice variant="destructive" role="alert">
+              <Notice.Message>{deleteError}</Notice.Message>
+            </Notice>
+          )}
+          <AlertDialog.Footer>
+            <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
+            <Button icon={<TrashIcon />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </AlertDialog.Footer>
+        </AlertDialog.Content>
+      </AlertDialog>
+    </Comment>
+  );
+}

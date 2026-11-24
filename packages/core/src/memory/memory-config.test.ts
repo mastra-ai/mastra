@@ -7,6 +7,40 @@ import { InMemoryStore } from '../storage';
 import { MockMemory } from './mock';
 
 describe('MastraMemory FGA', () => {
+  it('includes the acting agent in thread authorization metadata', async () => {
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+    const requestContext = new RequestContext();
+    const user = { id: 'user-1', organizationMembershipId: 'membership-1' };
+
+    await MockMemory.checkThreadFGA({
+      mastra: {
+        getServer: () => ({ fga: fgaProvider }),
+      } as any,
+      user,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      agentId: 'agent-1',
+      requestContext,
+      permission: MastraFGAPermissions.MEMORY_READ,
+    });
+
+    expect(fgaProvider.require).toHaveBeenCalledWith(user, {
+      resource: { type: 'thread', id: 'thread-1' },
+      permission: MastraFGAPermissions.MEMORY_READ,
+      context: {
+        requestContext,
+        resourceId: 'resource-1',
+        metadata: {
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          agentId: 'agent-1',
+        },
+      },
+    });
+  });
+
   it('bypasses thread membership resolution for a tenant-scoped trusted actor', async () => {
     const fgaProvider = {
       require: vi.fn().mockResolvedValue(undefined),
@@ -179,6 +213,32 @@ describe('MastraMemory config serialization', () => {
     });
   });
 
+  it('should serialize per-provider activateAfterIdle for observational memory', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          activateAfterIdle: { default: 'auto', anthropic: '1h' },
+          model: 'test-model',
+        },
+      },
+    });
+
+    const serialized = memory.getConfig().observationalMemory;
+    expect(serialized).toEqual({
+      scope: 'thread',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+      model: 'test-model',
+      shareTokenBudget: undefined,
+      temporalMarkers: undefined,
+      retrieval: undefined,
+    });
+    expect(JSON.parse(JSON.stringify(serialized))).toMatchObject({
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+    });
+  });
+
   it('should serialize temporalMarkers for observational memory', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
@@ -199,5 +259,30 @@ describe('MastraMemory config serialization', () => {
       temporalMarkers: true,
       retrieval: undefined,
     });
+  });
+
+  it('round-trips observation and reflection maxRetries and failurePolicy through getConfig()', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          model: 'test-model',
+          observation: { maxRetries: 1, failurePolicy: 'continue' },
+          reflection: { maxRetries: 0, failurePolicy: 'abort' },
+        },
+      },
+    });
+
+    const omConfig = memory.getConfig().observationalMemory;
+    expect(omConfig).toMatchObject({
+      observation: { maxRetries: 1, failurePolicy: 'continue' },
+      reflection: { maxRetries: 0, failurePolicy: 'abort' },
+    });
+
+    const restored = new MockMemory({
+      storage: new InMemoryStore(),
+      options: { observationalMemory: omConfig },
+    });
+    expect(restored.getConfig().observationalMemory).toEqual(omConfig);
   });
 });

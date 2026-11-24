@@ -1,126 +1,116 @@
 /**
- * Browser-side helpers for the factory knowledge graph (read-only).
+ * Browser-side helpers for a Factory project's Knowledge (read-only).
  *
- * Talks to the server's `/web/factory/projects/:id/knowledge/*` routes. The
- * payload shapes mirror `mastracode/factory/src/routes/knowledge.ts` — the
- * default view is project scope (org + project records); passing a `threadId`
- * requests the server-validated thread drill-down view.
+ * Talks to `/web/factory/projects/:id/knowledge/*` (`mastracode/factory/src/routes/knowledge.ts`), which
+ * reads the page store as the project's org and project scopes: the member sees org and project pages,
+ * never another project's or a session's.
  */
+import type {
+  KnowledgeExplorerActivity,
+  KnowledgeExplorerGraph,
+  KnowledgeExplorerPageDetail,
+  KnowledgeExplorerTreeLevel,
+  KnowledgeExplorerTreeRequest,
+} from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+import type { KnowledgePagePayload } from '@mastra/playground-ui/domains/knowledge/pageTypes';
 
-import { requestJson } from './request';
+import { isRecord } from '../../../../lib/isRecord';
+import { readSSE } from '../../../lib/readSSE';
+import { RequestError, requestJson } from './request';
 
-export type KnowledgeRung = 'org' | 'resource' | 'thread';
-
-export interface KnowledgeGraphNode {
-  id: string;
-  name: string;
-  kind: string;
-  description?: string;
-  scope: string[];
-  rung: KnowledgeRung;
-  /** A pinned record's wikilinks reference this node (the pin accent). */
-  pinned: boolean;
-  /** Knowledge records owned by this node inside the snapshot window (not a total). */
-  recordCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface KnowledgeGraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  /** Always 'wikilink' — the record's owner node is the edge source. */
-  type: 'wikilink';
-  recordId: string;
-  /** Derived from a PINNED record — the pin marks the relationship (A9). */
-  pinned?: boolean;
-}
-
-/**
- * A knowledge record as a first-class graph element (A11): a windowed record with the
- * in-window nodes it touches, owner first (pins omit the hidden reserved
- * owner). Rendered by arity — 1: dot, 2: line, 3+: junction.
- */
-export interface KnowledgeGraphRecord {
-  id: string;
-  nodeIds: string[];
-  pinned: boolean;
-  /** Knowledge record text, truncated server-side for hover cards. */
-  text: string;
-}
-
-export interface KnowledgeGraphPayload {
-  view: 'project' | 'thread';
-  threadId?: string;
-  nodes: KnowledgeGraphNode[];
-  edges: KnowledgeGraphEdge[];
-  records: KnowledgeGraphRecord[];
-  truncated: boolean;
-  outOfWindow: Array<{ id: string; name: string }>;
-  unresolvedCapped: { count: number; names: string[] };
-  pinCensus: { resource: number; thread: number | null };
-  version: string | null;
-}
-
-export interface KnowledgeNodeRecord {
-  id: string;
-  node: string;
-  relation: 'owned' | 'mentions';
-  text: string;
-  scope: string[];
-  rung: KnowledgeRung;
-  sourceThreadId: string;
-  capturedAt: string;
-  when?: string;
-  /** This record IS a pin (authored under the reserved pinned node). */
-  pinned: boolean;
-  metadata?: Record<string, unknown>;
-}
-
-export interface KnowledgeNodePayload {
-  node: {
-    id: string;
-    name: string;
-    kind: string;
-    content: string;
-    scope: string[];
-    rung: KnowledgeRung;
-    createdAt: string;
-    updatedAt: string;
-  };
-  records: KnowledgeNodeRecord[];
+export interface KnowledgeSearchPayload {
+  results: Array<{ page: KnowledgePagePayload }>;
 }
 
 function knowledgeBase(baseUrl: string, factoryProjectId: string): string {
   return `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/knowledge`;
 }
 
-function threadQuery(threadId: string | undefined): string {
-  return threadId ? `?threadId=${encodeURIComponent(threadId)}` : '';
-}
-
-export async function fetchKnowledgeGraph(
+export function fetchKnowledgeGraph(
   baseUrl: string,
   factoryProjectId: string,
-  threadId?: string,
   signal?: AbortSignal,
-): Promise<KnowledgeGraphPayload> {
-  return requestJson<KnowledgeGraphPayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/graph${threadQuery(threadId)}`,
-    { signal },
-  );
+): Promise<KnowledgeExplorerGraph> {
+  return requestJson(`${knowledgeBase(baseUrl, factoryProjectId)}/graph`, { signal });
 }
 
-export async function fetchKnowledgeNode(
+export function fetchKnowledgePage(
   baseUrl: string,
   factoryProjectId: string,
-  nodeId: string,
-  threadId?: string,
+  pageId: string,
+  noteCursor?: string,
   signal?: AbortSignal,
-): Promise<KnowledgeNodePayload> {
-  return requestJson<KnowledgeNodePayload>(
-    `${knowledgeBase(baseUrl, factoryProjectId)}/nodes/${encodeURIComponent(nodeId)}${threadQuery(threadId)}`,
-    { signal },
-  );
+): Promise<KnowledgeExplorerPageDetail> {
+  const query = noteCursor ? `?${new URLSearchParams({ noteCursor })}` : '';
+  return requestJson(`${knowledgeBase(baseUrl, factoryProjectId)}/pages/${encodeURIComponent(pageId)}${query}`, {
+    signal,
+  });
+}
+
+/** One level of the page tree: the root scopes when `parentId` is null. */
+export function fetchKnowledgeTreeLevel(
+  baseUrl: string,
+  factoryProjectId: string,
+  request: KnowledgeExplorerTreeRequest,
+  signal?: AbortSignal,
+): Promise<KnowledgeExplorerTreeLevel> {
+  const params = new URLSearchParams();
+  if (request.parentId) params.set('parentId', request.parentId);
+  if (request.cursor) params.set('cursor', request.cursor);
+  const query = params.size ? `?${params}` : '';
+  return requestJson(`${knowledgeBase(baseUrl, factoryProjectId)}/tree${query}`, { signal });
+}
+
+export function fetchKnowledgeActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  pageId: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeExplorerActivity> {
+  return requestJson(`${knowledgeBase(baseUrl, factoryProjectId)}/activity?${new URLSearchParams({ pageId })}`, {
+    signal,
+  });
+}
+
+export function fetchKnowledgeSearch(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<KnowledgeSearchPayload> {
+  return requestJson(`${knowledgeBase(baseUrl, factoryProjectId)}/search?${new URLSearchParams({ q: query })}`, {
+    signal,
+  });
+}
+
+/** One committed write the member can read: re-read what it names through the other routes. */
+export interface KnowledgeChangeNotice {
+  kind: 'scope' | 'page' | 'note' | 'pin';
+  op: string;
+  pageId?: string;
+  scopeId?: string;
+  at: string;
+}
+
+/** Follows the project's Knowledge change stream until it ends, errors or `signal` aborts. */
+export async function streamKnowledgeChanges(
+  baseUrl: string,
+  factoryProjectId: string,
+  handlers: { onChange: (change: KnowledgeChangeNotice) => void; onConnected: () => void },
+  signal: AbortSignal,
+): Promise<void> {
+  const response = await fetch(`${knowledgeBase(baseUrl, factoryProjectId)}/events`, {
+    headers: { Accept: 'text/event-stream' },
+    credentials: 'include',
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new RequestError(`Knowledge change stream failed (${response.status})`, response.status);
+  }
+  handlers.onConnected();
+  await readSSE(response.body, (event, data) => {
+    if (event !== 'change') return;
+    const parsed: unknown = JSON.parse(data);
+    if (isRecord(parsed)) handlers.onChange(parsed as unknown as KnowledgeChangeNotice);
+  });
 }

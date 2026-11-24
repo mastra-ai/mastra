@@ -19,7 +19,7 @@ function createMessage(overrides: Partial<MastraDBMessage> = {}): MastraDBMessag
   } as MastraDBMessage;
 }
 
-describe('MemoryLibSQL.cloneThread hydrateMessages', () => {
+describe('MemoryLibSQL.copyThread / cloneThread', () => {
   let client: Client;
   let store: MemoryLibSQL;
 
@@ -58,15 +58,14 @@ describe('MemoryLibSQL.cloneThread hydrateMessages', () => {
     client.close();
   });
 
-  it('copies rows in-DB and returns empty clonedMessages when hydrateMessages is false', async () => {
-    const result = await store.cloneThread({
+  it('copyThread copies rows in-DB without returning payloads', async () => {
+    const result = await store.copyThread({
       sourceThreadId: 'source-thread',
       resourceId: 'resource-1',
-      options: { hydrateMessages: false },
     });
 
     // No payloads returned to the JS heap.
-    expect(result.clonedMessages).toEqual([]);
+    expect(result).not.toHaveProperty('clonedMessages');
 
     // messageIdMap maps every source message id to a new id.
     expect(Object.keys(result.messageIdMap ?? {}).sort()).toEqual(['msg-1', 'msg-2']);
@@ -90,7 +89,7 @@ describe('MemoryLibSQL.cloneThread hydrateMessages', () => {
     expect(dest.messages.every(m => m.resourceId === 'resource-1')).toBe(true);
   });
 
-  it('returns hydrated clonedMessages by default', async () => {
+  it('cloneThread returns the copied messages read back from the destination thread', async () => {
     const result = await store.cloneThread({
       sourceThreadId: 'source-thread',
       resourceId: 'resource-1',
@@ -102,5 +101,7 @@ describe('MemoryLibSQL.cloneThread hydrateMessages', () => {
       { format: 2, parts: [{ type: 'text', text: 'second' }] },
     ]);
     expect(Object.keys(result.messageIdMap ?? {}).sort()).toEqual(['msg-1', 'msg-2']);
+    expect(result.clonedMessages.map(m => m.id).sort()).toEqual(Object.values(result.messageIdMap ?? {}).sort());
+    expect(result.clonedMessages.every(m => m.threadId === result.thread.id)).toBe(true);
   });
 });

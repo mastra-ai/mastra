@@ -4,8 +4,12 @@ import type { IMastraLogger } from '../logger';
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
+import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { removeUndefinedValues } from '../utils';
+import { waitMs } from '../utils/test-waits';
+import { MAX_DRAIN_TIMEOUT_MS as MAX_TIMER_DELAY_MS } from '../worker/drain-timeout';
 import type { ExecutionGraph } from './execution-engine';
+import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
 import { getEntryId } from './step-entry';
 import type {
@@ -43,7 +47,7 @@ async function validateWithStandardSchema<T>(
     };
   }
 
-  return { success: true, data: resolvedResult.value as T };
+  return { success: true, data: resolvedResult.value };
 }
 
 export async function validateStepInput({
@@ -94,7 +98,7 @@ export async function validateStepResumeData({
   resumeData?: any;
   step: Partial<Pick<Step<string, any, any>, 'resumeSchema'>>;
 }) {
-  if (!resumeData) {
+  if (resumeData === undefined) {
     return { resumeData: undefined, validationError: undefined };
   }
 
@@ -159,7 +163,7 @@ export async function validateStepStateData({
   validateInputs,
 }: {
   stateData?: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'stateSchema'>>;
   validateInputs: boolean;
 }) {
   if (!stateData) {
@@ -188,7 +192,7 @@ export async function validateStepRequestContext({
   validateInputs,
 }: {
   requestContext?: RequestContext;
-  step: Step<string, any, any>;
+  step: Pick<Step<string, any, any>, 'id' | 'requestContextSchema'>;
   validateInputs: boolean;
 }) {
   let validationError: Error | undefined;
@@ -218,13 +222,31 @@ export function getResumeLabelsByStepId(
 ) {
   return Object.entries(resumeLabels)
     .filter(([_, value]) => value.stepId === stepId)
-    .reduce(
-      (acc, [key, value]) => {
-        acc[key] = value;
-        return acc;
-      },
-      {} as Record<string, { stepId: string; foreachIndex?: number }>,
-    );
+    .reduce<Record<string, { stepId: string; foreachIndex?: number }>>((acc, [key, value]) => {
+      acc[key] = value;
+      return acc;
+    }, {});
+}
+
+/**
+ * Calls `callback` once `duration` ms have passed and returns a function that cancels it.
+ * Node and Bun fire a `setTimeout` delay above 2^31-1 ms after 1 ms, so a longer duration
+ * is waited out in consecutive timers. A duration that is not positive (including NaN)
+ * fires at once; `Infinity` never fires.
+ * @internal
+ */
+export function setLongTimeout(callback: () => void, duration: number): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = (remaining: number) => {
+    if (!(remaining > 0)) {
+      timer = setTimeout(callback, 0);
+      return;
+    }
+    const chunk = Math.min(remaining, MAX_TIMER_DELAY_MS);
+    timer = setTimeout(() => (chunk === remaining ? callback() : arm(remaining - chunk)), chunk);
+  };
+  arm(duration);
+  return () => clearTimeout(timer);
 }
 
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
@@ -235,16 +257,13 @@ export function abortableSleep(duration: number, signal?: AbortSignal): Promise<
     }
 
     const onAbort = () => {
-      clearTimeout(timeout);
+      cancel();
       resolve();
     };
-    const timeout = setTimeout(
-      () => {
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      },
-      Math.max(0, duration),
-    );
+    const cancel = setLongTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, duration);
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
@@ -292,11 +311,69 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
-const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+/**
+ * Defines `writer` on execute params as a memoized getter so the stream is only
+ * allocated when step code actually reads it. The property stays enumerable so
+ * spreading the params still carries `writer` along.
+ */
+export function defineLazyWriter<T extends object, W>(
+  params: T,
+  createWriter: () => W,
+): NoInfer<T> & { writer: NoInfer<W> } {
+  let writer: W | undefined;
+  return Object.defineProperty(params, 'writer', {
+    enumerable: true,
+    configurable: true,
+    get: () => (writer ??= createWriter()),
+  }) as T & { writer: W };
+}
+
+/**
+ * Defines `getState` on step params, resolving to `view()` or only its named top-level keys. On storage
+ * v2 runs, reading `state` throws and points to `getState`, as sync `getStepResult` does. That getter
+ * isn't enumerable, so spreading the params still works.
+ */
+export function defineStateAccessors<T extends object>(
+  params: T,
+  view: () => Record<string, any>,
+  storageV2: boolean,
+): NoInfer<T> & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> } {
+  Object.defineProperty(params, 'getState', {
+    enumerable: true,
+    configurable: true,
+    writable: true,
+    value: async (keys?: readonly string[]) => pickStateKeys(view(), keys),
+  });
+  if (storageV2) {
+    Object.defineProperty(params, 'state', {
+      enumerable: false,
+      configurable: true,
+      get: (): never => {
+        throw new MastraError({
+          id: 'WORKFLOW_STORAGE_V2_SYNC_STATE',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: "`state` isn't available in workflows with storageVersion: 2. Use `await getState()` instead.",
+        });
+      },
+    });
+  }
+  return params as T & { getState: (keys?: readonly string[]) => Promise<Record<string, any>> };
+}
+
+/** Applies a storage v2 `setState` change set to `state`: a key set to `undefined` is deleted. */
+export function applyStateDelta(state: Record<string, any>, delta: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(delta)) {
+    if (value === undefined) delete state[key];
+    else state[key] = value;
+  }
+}
+
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
  * Whether an entry is a "single step-like" entry: a plain user step or one of the
- * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ * declarative variants (agent / tool / classifier / mapping) that resolve to exactly one step.
  */
 export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
   return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);
@@ -441,8 +518,8 @@ export const createTimeTravelExecutionParams = (params: {
 
   for (const [index, entry] of graph.steps.entries()) {
     const currentExecPathLength = executionPath.length;
-    //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
-    if (currentExecPathLength > 0 && !resumeData) {
+    //if resumeData was provided (any value but undefined), steps down the graph until the suspended step will have stepResult info to use
+    if (currentExecPathLength > 0 && resumeData === undefined) {
       break;
     }
     const stepIds = getStepIds(entry);
@@ -462,20 +539,22 @@ export const createTimeTravelExecutionParams = (params: {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
         } else {
-          stepPayload = prevStepIds.reduce(
-            (acc, stepId) => {
-              acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
-              return acc;
-            },
-            {} as Record<string, any>,
-          );
+          stepPayload = prevStepIds.reduce<Record<string, any>>((acc, stepId) => {
+            acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
+            return acc;
+          }, {});
         }
       }
     }
 
     //the stepResult input is basically the payload of the first step
     if (index === 0 && stepIds.includes(firstStepId)) {
-      stepResults.input = (context?.[firstStepId]?.payload ?? inputData ?? snapshotContext?.input) as any;
+      // An explicit null inputData replaces the stored input; only an omitted one falls back (#29424).
+      // When the target is inside a nested workflow (steps.length > 1), inputData belongs to that
+      // nested step, so the parent keeps its stored input.
+      const replacesInput = steps.length === 1 && inputData !== undefined;
+      stepResults.input = (context?.[firstStepId]?.payload ??
+        (replacesInput ? inputData : snapshotContext?.input)) as any;
     } else if (index === 0) {
       stepResults.input =
         stepIds?.reduce((acc, stepId) => {
@@ -505,10 +584,8 @@ export const createTimeTravelExecutionParams = (params: {
     stepIds.forEach(stepId => {
       let result;
       const stepContext = context?.[stepId] ?? snapshotContext[stepId];
-      // Siblings of the time-travel target inside a conditional were not selected by the
-      // branch's condition, so they should be reported as skipped rather than as a fake
-      // success (otherwise their empty output leaks into the conditional's aggregated result).
-      const isUnselectedConditionalSibling = isTargetEntry && entry.type === 'conditional' && !steps?.includes(stepId);
+      const isUnselectedConditionalSibling =
+        entry.type === 'conditional' && !steps.includes(stepId) && (isTargetEntry || !stepContext);
       const defaultStepStatus = steps?.includes(stepId)
         ? 'running'
         : isUnselectedConditionalSibling
@@ -518,9 +595,18 @@ export const createTimeTravelExecutionParams = (params: {
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+      // A target in the first entry has no previous step, so it replays the workflow input the
+      // default engine also gives it, kept even when null or undefined instead of becoming {}
+      // (#29424). New inputData replaces it, except when the target is a nested workflow
+      // (steps.length > 1): there inputData belongs to the step inside it.
+      const isFirstEntryTarget = !prevStep && stepId === firstStepId;
+      const firstEntryInput =
+        steps.length === 1 ? stepResults.input : (context?.[stepId]?.payload ?? snapshotContext.input);
       result = {
         status,
-        payload: context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {},
+        payload: isFirstEntryTarget
+          ? firstEntryInput
+          : (context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {}),
         output: isCompleteStatus
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
@@ -597,41 +683,84 @@ export const createRestartExecutionParams = ({
     }
   }
 
-  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+  let firstEntryActiveStepsPath: Record<string, number[]> = {};
 
   const firstEntry = graph.steps[0]!;
 
   if (isSingleStepEntry(firstEntry)) {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry)]: [0],
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
-      (acc, step) => {
-        acc[getSingleStepEntryId(step)] = [0];
-        return acc;
-      },
-      {} as Record<string, number[]>,
-    );
+    firstEntryActiveStepsPath = firstEntry.steps.reduce<Record<string, number[]>>((acc, step) => {
+      acc[getSingleStepEntryId(step)] = [0];
+      return acc;
+    }, {});
   }
+
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
-    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
+    activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
+    isPreFirstStepRestart,
   };
 
   return restartData;
 };
+
+/**
+ * Top-level index the default engine should restart from.
+ *
+ * The engine checkpoints an entry when it finishes but only moves the pointer
+ * when the next entry starts. A checkpoint with nothing running whose
+ * pointed-at entry saved only successful results was written in that gap, so
+ * restart resumes at the next entry instead of replaying a finished one (#24615).
+ * Any other checkpoint resumes at the entry it points to.
+ *
+ * Skips at most one entry, so a step id reused later in the graph is never
+ * mistaken for finished.
+ */
+export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExecutionParams): number {
+  const startIdx = restart.activePaths[0]!;
+  const entry = steps[startIdx];
+  if (!entry || restart.activePaths.length !== 1 || Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+    return startIdx;
+  }
+
+  const results = getStepIds(entry).map(id => restart.stepResults[id]);
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
+
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
+}
 
 /**
  * Re-hydrates serialized errors in step results back into proper Error instances.
@@ -644,7 +773,8 @@ export const createRestartExecutionParams = ({
 export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) {
   if (steps) {
     for (const step of Object.values(steps)) {
-      if (step.status === 'failed' && 'error' in step && step.error) {
+      // `context.input` holds the raw workflow input, which can be `null`.
+      if (step?.status === 'failed' && 'error' in step && step.error) {
         step.error = getErrorFromUnknown(step.error, { serializeStack: false });
       }
     }
@@ -659,15 +789,21 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
-  // Strip nestedRunId from metadata but keep other user-defined fields
+  let cleaned: Record<string, unknown> = rest;
+
+  // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    const {
+      nestedRunId: _nestedRunId,
+      foreachNestedRunIds: _foreachNestedRunIds,
+      ...userMetadata
+    } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
-      return { ...rest, metadata: userMetadata };
+      cleaned = { ...rest, metadata: userMetadata };
     }
   }
 
-  return rest;
+  return withoutNestedRunStartState(cleaned);
 }
 
 /**
@@ -717,6 +853,14 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   const result = stepResult as Record<string, unknown>;
   const cleaned = cleanSingleResult(result);
+
+  // The evented engine persists a running forEach with null slots for unfinished iterations
+  // (they drive storage merges and completion checks). Those are bookkeeping, not output:
+  // like the default engine, a running step exposes no output until it finishes.
+  if (cleaned.status === 'running' && Array.isArray(cleaned.output)) {
+    delete cleaned.output;
+    return cleaned;
+  }
 
   // If output is an array (forEach results), clean each iteration result
   // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
@@ -795,9 +939,9 @@ export function resolveForeachConcurrency(
   return Math.floor(resolved);
 }
 
-const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
+export const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
 const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
-const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
+export const RESUME_SNAPSHOT_WAIT_STATUSES = new Set(['running', 'pending']);
 
 export async function waitForSuspendedSnapshot(
   workflowsStore:
@@ -808,7 +952,13 @@ export async function waitForSuspendedSnapshot(
   {
     timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
     missingSnapshotGraceReads = 1,
-  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
+    onClaimedRunFinished,
+  }: {
+    timeoutMs?: number;
+    missingSnapshotGraceReads?: number;
+    /** Called when a `running`/`pending` row is seen and then disappears (its run finished and was cleaned up). */
+    onClaimedRunFinished?: () => void;
+  } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
@@ -823,11 +973,16 @@ export async function waitForSuspendedSnapshot(
     if (snapshot) {
       if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
       observedTransitionableSnapshot = true;
-    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+    } else if (observedTransitionableSnapshot) {
+      if (onClaimedRunFinished) {
+        onClaimedRunFinished();
+        return null;
+      }
+    } else if (++missingReads >= missingSnapshotGraceReads) {
       return null;
     }
 
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+    await new Promise(resolve => setTimeout(resolve, waitMs(RESUME_SNAPSHOT_POLL_INTERVAL_MS, 1)));
   }
 
   return snapshot;

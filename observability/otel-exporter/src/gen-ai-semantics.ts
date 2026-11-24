@@ -1,10 +1,10 @@
 /**
  * Utilities for converting Mastra Spans to OTel Spans
  * with Semantic conventions for generative AI systems
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/README.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-events.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-spans.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-agent-spans.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/README.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-events.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-agent-spans.md
  * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/non-normative/examples-llm-calls/
  * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
  */
@@ -13,11 +13,22 @@ import { SpanType } from '@mastra/core/observability';
 import type {
   AgentRunAttributes,
   AnyExportedSpan,
+  MCPServerRequestAttributes,
   MCPToolCallAttributes,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
+  ModelStepAttributes,
   RagEmbeddingAttributes,
   ToolCallAttributes,
   UsageStats,
+  WorkflowConditionalAttributes,
+  WorkflowConditionalEvalAttributes,
+  WorkflowLoopAttributes,
+  WorkflowParallelAttributes,
+  WorkflowRunAttributes,
+  WorkflowSleepAttributes,
+  WorkflowStepAttributes,
+  WorkflowWaitEventAttributes,
 } from '@mastra/core/observability';
 import type { Attributes } from '@opentelemetry/api';
 import {
@@ -51,8 +62,11 @@ import {
   ATTR_SERVER_ADDRESS,
   ATTR_SERVER_PORT,
   ATTR_GEN_AI_TOOL_NAME,
+  ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS,
+  ATTR_GEN_AI_WORKFLOW_NAME,
 } from '@opentelemetry/semantic-conventions/incubating';
-import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
+import { isModelInferenceEnabled } from './features';
+import { convertMastraMessagesToGenAIMessages, convertMastraOutputToGenAIMessages } from './gen-ai-messages';
 
 /**
  * Token usage attributes following OTel GenAI semantic conventions.
@@ -65,7 +79,7 @@ export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
   'gen_ai.usage.cache_creation.5m_input_tokens'?: number;
   'gen_ai.usage.cache_creation.1h_input_tokens'?: number;
-  'gen_ai.usage.reasoning_tokens'?: number;
+  [ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS]?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
 }
@@ -88,7 +102,7 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
 
   // Reasoning tokens from outputDetails
   if (usage.outputDetails?.reasoning !== undefined) {
-    metrics['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
+    metrics[ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS] = usage.outputDetails.reasoning;
   }
 
   // Cache read input tokens (subset of input_tokens)
@@ -133,13 +147,40 @@ function addModelRequestAttributes(
   Object.assign(attributes, formatUsageMetrics(attrs.usage));
 }
 
+/** Attributes of whichever span represents the model call. */
+type ModelCallAttributes = ModelGenerationAttributes & ModelInferenceAttributes;
+
+/**
+ * Whether this span is exported as the GenAI inference (`chat`) span.
+ *
+ * Exactly one span per model call carries `gen_ai.request.model`, the messages
+ * and `gen_ai.usage.*`, because OTel backends (Langfuse, Phoenix, ...) sum usage
+ * across nested spans. With paired packages that emit MODEL_INFERENCE, that is
+ * the call; MODEL_GENERATION is then the parent loop and MODEL_STEP one turn of
+ * it. Older pairings only emit MODEL_GENERATION, which keeps the `chat` role.
+ */
+export function isModelCallSpan(type: SpanType): boolean {
+  return type === (isModelInferenceEnabled() ? SpanType.MODEL_INFERENCE : SpanType.MODEL_GENERATION);
+}
+
+export interface GenAISemanticsOptions {
+  /**
+   * Override {@link isModelCallSpan} for this span. Exporters that flatten the
+   * generation loop into a single `chat` span pass `true` for MODEL_GENERATION.
+   */
+  modelCall?: boolean;
+}
+
 /**
  * Get the operation name based on span type for gen_ai.operation.name
  */
-function getOperationName(span: AnyExportedSpan): string {
+function getOperationName(span: AnyExportedSpan, modelCall = isModelCallSpan(span.type)): string {
+  if (modelCall) {
+    return 'chat';
+  }
   switch (span.type) {
-    case SpanType.MODEL_GENERATION:
-      return 'chat';
+    case SpanType.MODEL_STEP:
+      return 'agent_step';
     case SpanType.RAG_EMBEDDING:
       return 'embeddings';
     case SpanType.TOOL_CALL:
@@ -163,14 +204,32 @@ function sanitizeSpanName(name: string): string {
 
 function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
-    case SpanType.MODEL_GENERATION: {
-      const attrs = span.attributes as ModelGenerationAttributes;
+    case SpanType.MODEL_GENERATION:
+    case SpanType.MODEL_INFERENCE: {
+      const attrs = span.attributes as ModelCallAttributes | undefined;
       return attrs?.model;
     }
     case SpanType.RAG_EMBEDDING: {
       const attrs = span.attributes as RagEmbeddingAttributes;
       return attrs?.model;
     }
+
+    // Workflow step spans set their own entityId (the step id) but inherit
+    // entityName from the enclosing workflow, so identify them by entityId.
+    case SpanType.WORKFLOW_STEP:
+      return span.entityId;
+
+    // Control-flow spans set no entity of their own and would otherwise inherit
+    // the enclosing workflow's entityName, collapsing siblings onto one name.
+    // Fall through to the authored span name, which already carries the
+    // condition index / branch descriptor.
+    case SpanType.WORKFLOW_CONDITIONAL:
+    case SpanType.WORKFLOW_CONDITIONAL_EVAL:
+    case SpanType.WORKFLOW_PARALLEL:
+    case SpanType.WORKFLOW_LOOP:
+    case SpanType.WORKFLOW_SLEEP:
+    case SpanType.WORKFLOW_WAIT_EVENT:
+      return undefined;
 
     default:
       return span.entityName ?? span.entityId;
@@ -180,11 +239,11 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
 /**
  * Get an OTEL-compliant span name based on span type and attributes
  */
-export function getSpanName(span: AnyExportedSpan): string {
+export function getSpanName(span: AnyExportedSpan, options?: GenAISemanticsOptions): string {
   const identifier = getSpanIdentifier(span);
 
   if (identifier) {
-    const operation = getOperationName(span);
+    const operation = getOperationName(span, options?.modelCall);
     return `${operation} ${identifier}`;
   }
 
@@ -193,15 +252,37 @@ export function getSpanName(span: AnyExportedSpan): string {
 }
 
 /**
+ * Adds authored workflow entry identity (id, description, metadata) for
+ * control-flow spans. Metadata is JSON-serialized to keep nested values and
+ * falsy members (false, 0) intact; absent fields add no key.
+ */
+function addEntryAttributes(
+  attributes: Attributes,
+  spanType: string,
+  attrs: { entryId?: string; entryDescription?: string; entryMetadata?: Record<string, unknown> },
+): void {
+  if (attrs.entryId !== undefined) {
+    attributes[`mastra.${spanType}.entry_id`] = attrs.entryId;
+  }
+  if (attrs.entryDescription !== undefined) {
+    attributes[`mastra.${spanType}.entry_description`] = attrs.entryDescription;
+  }
+  if (attrs.entryMetadata !== undefined) {
+    attributes[`mastra.${spanType}.entry_metadata`] = JSON.stringify(attrs.entryMetadata);
+  }
+}
+
+/**
  * Gets OpenTelemetry attributes from Mastra Span
  * Following OTEL Semantic Conventions for GenAI
  */
-export function getAttributes(span: AnyExportedSpan): Attributes {
+export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOptions): Attributes {
   const attributes: Attributes = {};
   const spanType = span.type.toLowerCase();
+  const modelCall = options?.modelCall ?? isModelCallSpan(span.type);
 
   // Add gen_ai.operation.name based on span type
-  attributes[ATTR_GEN_AI_OPERATION_NAME] = getOperationName(span);
+  attributes[ATTR_GEN_AI_OPERATION_NAME] = getOperationName(span, modelCall);
 
   // Add span type for better visibility
   attributes['mastra.span.type'] = span.type;
@@ -211,7 +292,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.input !== undefined) {
     const inputStr = typeof span.input === 'string' ? span.input : JSON.stringify(span.input);
     // Add specific attributes based on span type
-    if (span.type === SpanType.MODEL_GENERATION) {
+    if (modelCall) {
       attributes[ATTR_GEN_AI_INPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(inputStr);
     } else if (
       span.type === SpanType.TOOL_CALL ||
@@ -227,8 +308,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.output !== undefined) {
     const outputStr = typeof span.output === 'string' ? span.output : JSON.stringify(span.output);
     // Add specific attributes based on span type
-    if (span.type === SpanType.MODEL_GENERATION) {
-      attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(outputStr);
+    if (modelCall) {
+      attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraOutputToGenAIMessages(
+        outputStr,
+        (span.attributes as ModelCallAttributes | undefined)?.finishReason,
+      );
       // TODO
       // attributes['gen_ai.output.type'] = image/json/speech/text/<other>
     } else if (
@@ -243,8 +327,8 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   }
 
   // Add model-specific attributes using OTEL semantic conventions
-  if (span.type === SpanType.MODEL_GENERATION && span.attributes) {
-    const modelAttrs = span.attributes as ModelGenerationAttributes;
+  if (modelCall && span.attributes) {
+    const modelAttrs = span.attributes as ModelCallAttributes;
 
     addModelRequestAttributes(attributes, modelAttrs);
 
@@ -278,7 +362,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
         attributes[ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY] = modelAttrs.parameters.frequencyPenalty;
       }
       if (modelAttrs.parameters.stopSequences) {
-        attributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] = JSON.stringify(modelAttrs.parameters.stopSequences);
+        attributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] = modelAttrs.parameters.stopSequences;
       }
       if (modelAttrs.parameters.seed) {
         attributes[ATTR_GEN_AI_REQUEST_SEED] = modelAttrs.parameters.seed;
@@ -292,7 +376,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
     // Response attributes
     if (modelAttrs.finishReason) {
-      attributes[ATTR_GEN_AI_RESPONSE_FINISH_REASONS] = JSON.stringify([modelAttrs.finishReason]);
+      attributes[ATTR_GEN_AI_RESPONSE_FINISH_REASONS] = [modelAttrs.finishReason];
     }
     if (modelAttrs.responseModel) {
       attributes[ATTR_GEN_AI_RESPONSE_MODEL] = modelAttrs.responseModel;
@@ -307,6 +391,16 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
     if (modelAttrs.serverPort !== undefined) {
       attributes[ATTR_SERVER_PORT] = modelAttrs.serverPort;
+    }
+  }
+
+  if (span.type === SpanType.MODEL_STEP && span.attributes) {
+    const stepAttrs = span.attributes as ModelStepAttributes;
+    if (stepAttrs.stepIndex !== undefined) {
+      attributes[`mastra.${spanType}.step_index`] = stepAttrs.stepIndex;
+    }
+    if (stepAttrs.isContinued !== undefined) {
+      attributes[`mastra.${spanType}.is_continued`] = stepAttrs.isContinued;
     }
   }
 
@@ -373,6 +467,9 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     if (span.entityName) {
       attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
+    if (agentAttrs.provider) {
+      attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(agentAttrs.provider);
+    }
     if (agentAttrs.conversationId) {
       attributes[ATTR_GEN_AI_CONVERSATION_ID] = agentAttrs.conversationId;
     }
@@ -380,14 +477,152 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[`mastra.${spanType}.max_steps`] = agentAttrs.maxSteps;
     }
     if (agentAttrs.availableTools) {
-      attributes[`gen_ai.tool.definitions`] = JSON.stringify(agentAttrs.availableTools);
+      attributes['gen_ai.tool.definitions'] = JSON.stringify(
+        agentAttrs.availableTools.map(name => ({ type: 'function', name })),
+      );
     }
 
     //TODO:
     // attributes[ATTR_GEN_AI_AGENT_DESCRIPTION] = agentAttrs.description;
     // attributes[ATTR_GEN_AI_REQUEST_MODEL] = agentAttrs.model.name;
 
-    attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
+    if (agentAttrs.instructions) {
+      attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = JSON.stringify([
+        { type: 'text', content: agentAttrs.instructions },
+      ]);
+    }
+  }
+
+  // Add MCP server request attributes (OTel MCP semantic conventions where they exist)
+  if (span.type === SpanType.MCP_SERVER_REQUEST && span.attributes) {
+    const requestAttrs = span.attributes as MCPServerRequestAttributes;
+    attributes['mcp.method.name'] = requestAttrs.mcpMethod;
+    attributes[`mastra.${spanType}.server_name`] = requestAttrs.mcpServer;
+    if (requestAttrs.targetName) {
+      attributes[`mastra.${spanType}.target_name`] = requestAttrs.targetName;
+    }
+    if (requestAttrs.serverVersion) {
+      attributes[`mastra.${spanType}.server_version`] = requestAttrs.serverVersion;
+    }
+    if (requestAttrs.mcpProtocolVersion) {
+      attributes['mcp.protocol.version'] = requestAttrs.mcpProtocolVersion;
+    }
+    if (requestAttrs.clientName) {
+      attributes[`mastra.${spanType}.client_name`] = requestAttrs.clientName;
+    }
+    if (requestAttrs.clientVersion) {
+      attributes[`mastra.${spanType}.client_version`] = requestAttrs.clientVersion;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_RUN && span.entityName) {
+    attributes[ATTR_GEN_AI_WORKFLOW_NAME] = span.entityName;
+  }
+
+  // Add workflow-specific attributes. Control-flow spans carry native branch,
+  // loop, sleep and wait metadata that is otherwise dropped on export. Values
+  // are emitted under the existing `mastra.<span_type>.<snake_case>` convention;
+  // arrays/dates are serialized and false/0 are preserved (guard on !== undefined).
+  if (span.type === SpanType.WORKFLOW_RUN && span.attributes) {
+    const runAttrs = span.attributes as WorkflowRunAttributes;
+    if (runAttrs.status !== undefined) {
+      attributes[`mastra.${spanType}.status`] = runAttrs.status;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_STEP) {
+    if (span.entityId) {
+      attributes[`mastra.${spanType}.step_id`] = span.entityId;
+    }
+    if (span.attributes) {
+      const stepAttrs = span.attributes as WorkflowStepAttributes;
+      if (stepAttrs.status !== undefined) {
+        attributes[`mastra.${spanType}.status`] = stepAttrs.status;
+      }
+      addEntryAttributes(attributes, spanType, stepAttrs);
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL && span.attributes) {
+    const condAttrs = span.attributes as WorkflowConditionalAttributes;
+    if (condAttrs.conditionCount !== undefined) {
+      attributes[`mastra.${spanType}.condition_count`] = condAttrs.conditionCount;
+    }
+    if (condAttrs.truthyIndexes !== undefined) {
+      attributes[`mastra.${spanType}.truthy_indexes`] = JSON.stringify(condAttrs.truthyIndexes);
+    }
+    if (condAttrs.selectedSteps !== undefined) {
+      attributes[`mastra.${spanType}.selected_steps`] = JSON.stringify(condAttrs.selectedSteps);
+    }
+    addEntryAttributes(attributes, spanType, condAttrs);
+  }
+
+  if (span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL && span.attributes) {
+    const evalAttrs = span.attributes as WorkflowConditionalEvalAttributes;
+    if (evalAttrs.conditionIndex !== undefined) {
+      attributes[`mastra.${spanType}.condition_index`] = evalAttrs.conditionIndex;
+    }
+    if (evalAttrs.result !== undefined) {
+      attributes[`mastra.${spanType}.result`] = evalAttrs.result;
+    }
+  }
+
+  if (span.type === SpanType.WORKFLOW_PARALLEL && span.attributes) {
+    const parallelAttrs = span.attributes as WorkflowParallelAttributes;
+    if (parallelAttrs.branchCount !== undefined) {
+      attributes[`mastra.${spanType}.branch_count`] = parallelAttrs.branchCount;
+    }
+    if (parallelAttrs.parallelSteps !== undefined) {
+      attributes[`mastra.${spanType}.parallel_steps`] = JSON.stringify(parallelAttrs.parallelSteps);
+    }
+    addEntryAttributes(attributes, spanType, parallelAttrs);
+  }
+
+  if (span.type === SpanType.WORKFLOW_LOOP && span.attributes) {
+    const loopAttrs = span.attributes as WorkflowLoopAttributes;
+    if (loopAttrs.loopType !== undefined) {
+      attributes[`mastra.${spanType}.loop_type`] = loopAttrs.loopType;
+    }
+    if (loopAttrs.iteration !== undefined) {
+      attributes[`mastra.${spanType}.iteration`] = loopAttrs.iteration;
+    }
+    if (loopAttrs.totalIterations !== undefined) {
+      attributes[`mastra.${spanType}.total_iterations`] = loopAttrs.totalIterations;
+    }
+    if (loopAttrs.concurrency !== undefined) {
+      attributes[`mastra.${spanType}.concurrency`] = loopAttrs.concurrency;
+    }
+    addEntryAttributes(attributes, spanType, loopAttrs);
+  }
+
+  if (span.type === SpanType.WORKFLOW_SLEEP && span.attributes) {
+    const sleepAttrs = span.attributes as WorkflowSleepAttributes;
+    if (sleepAttrs.durationMs !== undefined) {
+      attributes[`mastra.${spanType}.duration_ms`] = sleepAttrs.durationMs;
+    }
+    if (sleepAttrs.untilDate !== undefined) {
+      attributes[`mastra.${spanType}.until_date`] = sleepAttrs.untilDate.toISOString();
+    }
+    if (sleepAttrs.sleepType !== undefined) {
+      attributes[`mastra.${spanType}.sleep_type`] = sleepAttrs.sleepType;
+    }
+    addEntryAttributes(attributes, spanType, sleepAttrs);
+  }
+
+  if (span.type === SpanType.WORKFLOW_WAIT_EVENT && span.attributes) {
+    const waitAttrs = span.attributes as WorkflowWaitEventAttributes;
+    if (waitAttrs.eventName !== undefined) {
+      attributes[`mastra.${spanType}.event_name`] = waitAttrs.eventName;
+    }
+    if (waitAttrs.timeoutMs !== undefined) {
+      attributes[`mastra.${spanType}.timeout_ms`] = waitAttrs.timeoutMs;
+    }
+    if (waitAttrs.eventReceived !== undefined) {
+      attributes[`mastra.${spanType}.event_received`] = waitAttrs.eventReceived;
+    }
+    if (waitAttrs.waitDurationMs !== undefined) {
+      attributes[`mastra.${spanType}.wait_duration_ms`] = waitAttrs.waitDurationMs;
+    }
   }
 
   // Add error information if present
@@ -417,12 +652,12 @@ const PROVIDER_ALIASES: Record<string, string[]> = {
   anthropic: ['anthropic', 'claude'],
   'aws.bedrock': ['awsbedrock', 'bedrock', 'amazonbedrock'],
   'azure.ai.inference': ['azureaiinference', 'azureinference'],
-  'azure.ai.openai': ['azureaiopenai', 'azureopenai', 'msopenai', 'microsoftopenai'],
+  'azure.ai.openai': ['azureaiopenai', 'azureopenai', 'msopenai', 'microsoftopenai', 'azure'],
   cohere: ['cohere'],
   deepseek: ['deepseek'],
-  'gcp.gemini': ['gcpgemini', 'gemini'],
+  'gcp.gemini': ['gcpgemini', 'gemini', 'google', 'googlegenerativeai'],
   'gcp.gen_ai': ['gcpgenai', 'googlegenai', 'googleai'],
-  'gcp.vertex_ai': ['gcpvertexai', 'vertexai'],
+  'gcp.vertex_ai': ['gcpvertexai', 'vertexai', 'vertex', 'googlevertex'],
   groq: ['groq'],
   'ibm.watsonx.ai': ['ibmwatsonxai', 'watsonx', 'watsonxai'],
   mistral_ai: ['mistral', 'mistralai'],
@@ -439,21 +674,23 @@ function normalizeProviderString(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+const PROVIDER_BY_ALIAS = new Map(
+  Object.entries(PROVIDER_ALIASES).flatMap(([canonical, aliases]) => aliases.map(alias => [alias, canonical])),
+);
+
 /**
  * Attempts to map a providerName to one of the canonical OTel provider names.
- * If no match is found, returns the original providerName unchanged.
+ * AI SDK provider ids add the API after a dot (`openai.chat`, `google.vertex.chat`),
+ * so shorter dot prefixes are tried until one matches.
+ * If no match is found, returns the original providerName in lowercase.
  */
 function normalizeProvider(providerName: string): string {
-  const normalized = normalizeProviderString(providerName);
-
-  for (const [canonical, aliases] of Object.entries(PROVIDER_ALIASES)) {
-    for (const alias of aliases) {
-      if (normalized === alias) {
-        return canonical;
-      }
+  const segments = providerName.split('.');
+  for (let end = segments.length; end > 0; end--) {
+    const canonical = PROVIDER_BY_ALIAS.get(normalizeProviderString(segments.slice(0, end).join('.')));
+    if (canonical) {
+      return canonical;
     }
   }
-
-  // No match → return the raw input in lowercase
   return providerName.toLowerCase();
 }

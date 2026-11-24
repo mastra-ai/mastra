@@ -1,8 +1,9 @@
 ---
 title: "Reference: Configuration | Observability"
-description: "Configure Mastra observability instances, tracing exporters, sampling, propagation, span filters, and the global observability registry."
+description: "Configure Mastra observability instances, tracing exporters, sampling, propagation, span filters, metric label cardinality, and the global observability registry."
 packages:
   - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 import PropertiesTable from "@site/src/components/PropertiesTable";
@@ -58,12 +59,14 @@ interface ObservabilityInstanceConfig {
   serviceName: string
   sampling?: SamplingStrategy
   exporters?: ObservabilityExporter[]
+  retainStorageExporterOnPlatform?: boolean
   spanOutputProcessors?: SpanOutputProcessor[]
   includeInternalSpans?: boolean
   excludeSpanTypes?: SpanType[]
   spanFilter?: (span: AnyExportedSpan) => boolean
   requestContextKeys?: string[]
   serializationOptions?: SerializationOptions
+  cardinality?: CardinalityConfig
   logging?: { enabled?: boolean; level?: LogLevel }
 }
 ```
@@ -92,6 +95,13 @@ interface ObservabilityInstanceConfig {
     name: 'exporters',
     type: 'ObservabilityExporter[]',
     description: 'Trace data exporters',
+    required: false,
+  },
+  {
+    name: 'retainStorageExporterOnPlatform',
+    type: 'boolean',
+    description:
+      'Defaults to `false`. Retains configured `MastraStorageExporter` instances on Platform, including later registration. Known local storage remains blocked, and deprecated `DefaultExporter` remains disabled. See [storage export on Platform](/docs/observability/integrations/exporters/mastra-storage#export-to-storage-and-platform) for configuration, adapter requirements, and restrictions.',
     required: false,
   },
   {
@@ -164,6 +174,33 @@ interface ObservabilityInstanceConfig {
     ],
   },
   {
+    name: 'cardinality',
+    type: 'CardinalityConfig',
+    description:
+      'Controls which metric labels are removed before storage, for both automatic and custom metrics. By default, Mastra removes high-cardinality labels such as `trace_id` and `user_id`, and labels whose value is a UUID. See [cardinality protection](/reference/observability/metrics/metrics-context#cardinality-protection) for the defaults.',
+    required: false,
+    properties: [
+      {
+        type: 'CardinalityConfig',
+        parameters: [
+          {
+            name: 'blockedLabels',
+            type: 'string[]',
+            description:
+              'Label names to remove. Replaces the default list; spread `DEFAULT_BLOCKED_LABELS` from `@mastra/core/observability` to extend it, or pass `[]` to allow every label name.',
+            isOptional: true,
+          },
+          {
+            name: 'blockUUIDs',
+            type: 'boolean',
+            description: 'Remove labels whose value is a UUID (default: true)',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'logging',
     type: '{ enabled?: boolean; level?: LogLevel }',
     description:
@@ -200,7 +237,16 @@ type SamplingStrategy =
   | { type: 'always' }
   | { type: 'never' }
   | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
+  | { type: 'custom'; sampler: (options?: CustomSamplerOptions) => boolean }
+```
+
+## `CustomSamplerOptions`
+
+```typescript
+interface CustomSamplerOptions {
+  requestContext?: RequestContext
+  metadata?: Record<string, any>
+}
 ```
 
 ## `ConfigSelector`

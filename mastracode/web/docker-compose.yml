@@ -43,6 +43,10 @@ services:
     # persistence volume is needed for local dev.
     image: redis:8-alpine
     container_name: mastracode-web-redis
+    # noeviction is already Redis's default; it's spelled out because pub/sub keys
+    # (streams, consumer groups, leases) are live state, not cache, and production
+    # Redis must use the same policy (managed services often default to an evicting one).
+    command: ['redis-server', '--maxmemory-policy', 'noeviction']
     ports:
       - '63799:6379'
     healthcheck:

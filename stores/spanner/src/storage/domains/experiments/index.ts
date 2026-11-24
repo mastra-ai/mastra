@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Database, Transaction } from '@google-cloud/spanner';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
@@ -6,6 +5,7 @@ import {
   createStorageErrorId,
   ExperimentsStorage,
   normalizePerPage,
+  resolveListOrderBy,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_EXPERIMENTS,
@@ -262,7 +262,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       const experiment: Experiment = {
         id,
         name: input.name ?? undefined,
@@ -428,6 +428,10 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   }
 
   async listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['createdAt', 'status'], {
+      field: 'createdAt',
+      direction: 'DESC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -497,7 +501,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT * FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent('createdAt', 'column name')} DESC
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,
@@ -592,7 +596,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
     try {
       const now = new Date();
-      const id = input.id ?? randomUUID();
+      const id = input.id ?? globalThis.crypto.randomUUID();
       return await this.#withPurgeBarrier(input.experimentId, input.itemId, async (tx, marker) => {
         const result: ExperimentResult = {
           id,
@@ -696,7 +700,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
         if (!existingRow) {
           const result: ExperimentResult = {
-            id: randomUUID(),
+            id: globalThis.crypto.randomUUID(),
             experimentId: input.experimentId,
             itemId: input.itemId,
             ...values,
@@ -882,6 +886,10 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   }
 
   async listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput> {
+    const orderBy = resolveListOrderBy(args.orderBy, ['startedAt', 'createdAt'], {
+      field: 'startedAt',
+      direction: 'ASC',
+    });
     const { page = 0, perPage: perPageInput } = args.pagination;
     const perPage = normalizePerPage(perPageInput, 100);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
@@ -932,7 +940,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       const limit = perPageInput === false ? total : perPage;
       const [rows] = await this.database.run({
         sql: `SELECT * FROM ${tableName} ${whereSql}
-              ORDER BY ${quoteIdent('startedAt', 'column name')} ASC
+              ORDER BY ${quoteIdent(orderBy.field, 'column name')} ${orderBy.direction}, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...params, limit, offset },
         json: true,

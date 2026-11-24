@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { NotificationsStorage, TABLE_NOTIFICATIONS } from '@mastra/core/storage';
 import type {
   CreateNotificationInput,
@@ -21,6 +19,9 @@ import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
+
+/** Ids per updateMany/find command — keeps the `$in` filter far below MongoDB's 16 MiB BSON limit. */
+const BULK_ID_BATCH_SIZE = 500;
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
@@ -251,7 +252,7 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
     const now = input.createdAt ?? new Date();
     const record: NotificationRecord = {
-      id: input.id ?? randomUUID(),
+      id: input.id ?? globalThis.crypto.randomUUID(),
       threadId: input.threadId,
       source: input.source,
       kind: input.kind,
@@ -351,6 +352,31 @@ export class NotificationsMongoDB extends NotificationsStorage {
 
     const updated = await this.getNotification({ threadId: input.threadId, id: input.id });
     if (!updated) throw new Error(`Notification ${input.id} was not found for thread ${input.threadId}`);
+    return updated;
+  }
+
+  // Inlined instead of importing `UpdateNotificationsStatusInput` so this adapter's `.d.ts` stays valid
+  // against older @mastra/core versions that predate the bulk method.
+  override async updateNotificationsStatus(input: {
+    threadId: string;
+    ids: string[];
+    status: NotificationStatus;
+  }): Promise<NotificationRecord[]> {
+    const ids = Array.from(new Set(input.ids));
+    if (ids.length === 0) return [];
+
+    const now = new Date();
+    const update = { $set: { status: input.status, ...statusTimestamp(input.status, now), updatedAt: now } };
+    const collection = await this.getCollection();
+    const updated: NotificationRecord[] = [];
+    // Keep each command's `$in` list bounded so very long id lists stay under the BSON document limit.
+    for (let offset = 0; offset < ids.length; offset += BULK_ID_BATCH_SIZE) {
+      const filter = { threadId: input.threadId, id: { $in: ids.slice(offset, offset + BULK_ID_BATCH_SIZE) } };
+      await collection.updateMany(filter, update);
+      // updateMany reports counts only; re-read the matched rows so callers get the updated records.
+      const rows = await collection.find({ ...filter, status: input.status }).toArray();
+      for (const row of rows) updated.push(rowToNotification(row));
+    }
     return updated;
   }
 

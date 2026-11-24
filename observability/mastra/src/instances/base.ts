@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
-import { SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
+import { InternalSpans, SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
 import type {
   Span,
   ObservabilityExporter,
@@ -21,6 +21,7 @@ import type {
   ObservabilityInstance,
   CustomSamplerOptions,
   ExportedSpan,
+  SpanSnapshot,
   AnyExportedSpan,
   TraceState,
   TracingOptions,
@@ -33,6 +34,7 @@ import type {
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
+import type { ObservabilityHandler } from '../bus/route-event';
 import type { ObservabilityInstanceConfig } from '../config';
 import { SamplingStrategyType } from '../config';
 import { LoggerContextImpl } from '../context/logger';
@@ -41,9 +43,10 @@ import { resolveExportedSpanId } from '../ids';
 import { emitAutoExtractedMetrics, emitTokenMetricsForUsage } from '../metrics/auto-extract';
 import { CardinalityFilter } from '../metrics/cardinality';
 import { resolveModelId } from '../model-id';
-import { NoOpSpan } from '../spans';
+import { BaseSpan, NoOpSpan } from '../spans';
 import { isPlainRecord, mergeMetadata, stripUndefined } from '../spans/metadata';
 import { addUsageStats } from '../usage';
+import { isMastraDeprecatedStorageExporter, shouldSkipStorageExporterOnPlatform } from './platform-policy';
 
 function hasMetadataKey(metadata: unknown, key: string): boolean {
   if (!metadata || typeof metadata !== 'object') {
@@ -103,6 +106,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   #mastraEnvironment?: string;
 
+  // Construction happens before Mastra installs the application logger.
+  #pendingStorageExporterWarnings = new Set<ObservabilityExporter>();
+  #hasApplicationLogger = false;
+
   /**
    * For excluded MODEL_GENERATION spans whose constructor clears `attributes`,
    * we stash the lightweight provider/model from creation options so
@@ -113,12 +120,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
 
+    const exporters = config.exporters ?? [];
+    const effectiveExporters = exporters.filter(
+      exporter => !shouldSkipStorageExporterOnPlatform(exporter, config.retainStorageExporterOnPlatform),
+    );
+
     // Apply defaults for optional fields
     this.config = {
       serviceName: config.serviceName,
       name: config.name,
       sampling: config.sampling ?? { type: SamplingStrategyType.ALWAYS },
-      exporters: config.exporters ?? [],
+      exporters: effectiveExporters,
+      retainStorageExporterOnPlatform: config.retainStorageExporterOnPlatform ?? false,
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
@@ -128,6 +141,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       serializationOptions: config.serializationOptions,
       logging: config.logging,
     };
+
+    for (const exporter of exporters) {
+      if (!effectiveExporters.includes(exporter)) {
+        this.warnStorageExporterSkipped(exporter);
+      }
+    }
 
     // Initialize cardinality filter for metrics (uses user config or defaults)
     this.cardinalityFilter = new CardinalityFilter(config.cardinality);
@@ -158,6 +177,11 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   __setLogger(logger: IMastraLogger) {
     super.__setLogger(logger);
+    this.#hasApplicationLogger = true;
+    for (const exporter of this.#pendingStorageExporterWarnings) {
+      this.warnStorageExporterSkipped(exporter);
+    }
+    this.#pendingStorageExporterWarnings.clear();
 
     // Propagate logger to all exporters that support it
     this.exporters.forEach(exporter => {
@@ -216,11 +240,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return new NoOpSpan<TType>({ ...rest, metadata }, this);
       }
       // Parent is valid (sampled), so child will also be sampled - continue to create actual span
-    } else {
+    } else if (!(options.samplingDecision ?? this.shouldSample(customSamplerOptions))) {
       // Root span: perform sampling check
-      if (!this.shouldSample(customSamplerOptions)) {
-        return new NoOpSpan<TType>({ ...rest, metadata }, this);
-      }
+
+      return new NoOpSpan<TType>({ ...rest, metadata }, this);
     }
 
     // Compute or inherit TraceState
@@ -231,7 +254,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceState = options.parent.traceState;
     } else {
       // Root span: compute new TraceState
-      traceState = this.computeTraceState(tracingOptions);
+      traceState = options.traceState ?? this.computeTraceState(tracingOptions);
     }
 
     // Merge tracingOptions.metadata with span metadata (tracingOptions.metadata takes precedence for root
@@ -256,6 +279,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Tags are only passed for root spans (no parent)
     const tags = !options.parent ? tracingOptions?.tags : undefined;
 
+    // A caller-supplied name replaces the default entity name on root spans only,
+    // so one workflow or agent can label each run for trace lists.
+    const name = !options.parent && tracingOptions?.rootSpanName ? tracingOptions.rootSpanName : rest.name;
+
     // Extract traceId and parent ids from tracingOptions for root spans (no parent)
     // These allow nested workflows to join the parent workflow's trace.
     // tracingOptions.parentSpanId is the public external-correlation channel,
@@ -268,6 +295,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const span = this.createSpan<TType>({
       ...rest,
+      name,
       traceId,
       parentSpanId,
       externalParentSpanId,
@@ -276,6 +304,25 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       tags,
       requestContext,
     });
+
+    // nestUnderParent only holds when the run really joined the requested trace
+    // under the requested parent. The span drops invalid ids and a bridge can
+    // pick its own trace; the run then owns its trace and keeps its summary.
+    if (
+      !options.parent &&
+      traceState?.nestedUnderParent &&
+      (!tracingOptions?.traceId ||
+        span.traceId !== tracingOptions.traceId ||
+        !tracingOptions.parentSpanId ||
+        !(span instanceof BaseSpan) ||
+        span.externalParentSpanId !== tracingOptions.parentSpanId)
+    ) {
+      const { nestedUnderParent: _ignored, ...ownTraceState } = traceState;
+      span.traceState = ownTraceState;
+      this.logger.debug(
+        '[Observability] Ignoring tracingOptions.nestUnderParent: the run did not join the requested trace under the requested parent',
+      );
+    }
 
     // For excluded MODEL_GENERATION spans the constructor clears attributes,
     // losing provider/model needed for cost estimation. Stash them from the
@@ -311,10 +358,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * - Can have end(), update(), error() called on it
    * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
    *
-   * @param cached - The exported span data to rebuild from
+   * @param cached - The span snapshot to rebuild from
    * @returns A span that can have lifecycle methods called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+  rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
+    // Durable snapshots of unsampled spans must stay unsampled when rebuilt.
+    if (cached.id === 'no-op' && cached.traceId === 'no-op-trace') {
+      return new NoOpSpan<TType>({ name: cached.name, type: cached.type, traceState: cached.traceState }, this);
+    }
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
@@ -322,6 +373,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       traceId: cached.traceId,
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
+      externalParentSpanId: cached.externalParentSpanId,
+      resumedFromSpanId: cached.resumedFromSpanId,
+      outcome: cached.outcome,
+      stopReason: cached.stopReason,
+      stopReasonContext: cached.stopReasonContext,
+      links: cached.links,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
       attributes: cached.attributes,
@@ -329,12 +386,41 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityType: cached.entityType,
       entityId: cached.entityId,
       entityName: cached.entityName,
+      tags: cached.tags,
+      tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
+      traceState: this.rebuildTraceState(cached),
     });
+
+    // The rebuilt span has no live parent, so restore the lineage computed before export
+    if (span instanceof BaseSpan) {
+      span.restoreEntityLineage(cached);
+      span.restoreErrorCount(cached);
+      span.requestContext = cached.requestContext;
+    }
+
+    // Rebuilding an existing completed segment must not reopen its outcome.
+    if (cached.endTime) {
+      span.endTime = cached.endTime instanceof Date ? cached.endTime : new Date(cached.endTime);
+      span.output = cached.output;
+      span.errorInfo = cached.errorInfo;
+    }
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
     return span;
+  }
+
+  /**
+   * Restore the trace-level rules for a rebuilt span. Spans saved with
+   * `exportSpan()` before `snapshot()` existed fall back to the instance's
+   * configured keys, so an in-flight durable run keeps at least those across an upgrade.
+   */
+  private rebuildTraceState<TType extends SpanType>(cached: SpanSnapshot<TType>): TraceState | undefined {
+    if (cached.traceState) return cached.traceState;
+    const fallback = this.computeTraceState();
+    if (!cached.nestedUnderParent) return fallback;
+    return { requestContextKeys: fallback?.requestContextKeys ?? [], nestedUnderParent: true };
   }
 
   // ============================================================================
@@ -393,11 +479,33 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     return [...this.exporters];
   }
 
+  private warnStorageExporterSkipped(exporter: ObservabilityExporter): void {
+    if (!this.#hasApplicationLogger) {
+      this.#pendingStorageExporterWarnings.add(exporter);
+      return;
+    }
+    this.logger.warn(
+      isMastraDeprecatedStorageExporter(exporter)
+        ? 'Deprecated DefaultExporter skipped on Mastra Platform. Use MastraStorageExporter with retainStorageExporterOnPlatform: true for remote storage export.'
+        : 'Storage exporter skipped on Mastra Platform. Set retainStorageExporterOnPlatform: true on this observability config to allow remote storage export.',
+      {
+        exporterName: exporter.name,
+        serviceName: this.config.serviceName,
+        instanceName: this.config.name,
+      },
+    );
+  }
+
   /**
    * Register an additional exporter at runtime.
    * Adds to both the bus (for event routing) and the config (for getExporters).
    */
   registerExporter(exporter: ObservabilityExporter): void {
+    if (shouldSkipStorageExporterOnPlatform(exporter, this.config.retainStorageExporterOnPlatform)) {
+      this.warnStorageExporterSkipped(exporter);
+      return;
+    }
+
     this.observabilityBus.registerExporter(exporter);
     this.config.exporters ??= [];
     if (this.config.exporters.includes(exporter)) {
@@ -467,7 +575,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     }
 
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: LoggerContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new LoggerContextImpl({
       traceId: span?.traceId,
@@ -489,7 +599,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
     const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
-    const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
+    // Pass metadata through untouched: MetricsContextImpl snapshots it in its
+    // constructor, so cloning here would deep-copy span metadata twice.
+    const metadata: Record<string, unknown> | undefined = span?.metadata;
 
     return new MetricsContextImpl({
       traceId: span?.traceId,
@@ -515,8 +627,12 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Internal hook used by RecordedTrace/RecordedSpan hydration to route
    * non-tracing annotation events back through the normal exporter pipeline.
    */
-  __emitRecordedEvent(event: ObservabilityEvent): void {
-    this.emitObservabilityEvent(event);
+  __emitRecordedEvent(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
+    if (shouldHandle) {
+      this.observabilityBus.emit(event, shouldHandle);
+    } else {
+      this.emitObservabilityEvent(event);
+    }
   }
 
   /**
@@ -630,14 +746,19 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const configuredKeys = this.config.requestContextKeys ?? [];
     const additionalKeys = tracingOptions?.requestContextKeys ?? [];
 
-    // Merge: configured + additional
-    const allKeys = [...configuredKeys, ...additionalKeys];
+    // Merge: configured + additional. A resume passes the saved trace state's keys back in, which
+    // already hold the configured ones.
+    const allKeys = [...new Set([...configuredKeys, ...additionalKeys])];
 
     const hideInput = tracingOptions?.hideInput;
     const hideOutput = tracingOptions?.hideOutput;
 
+    // startSpan() drops this again when the span does not end up under the
+    // requested parent.
+    const nestedUnderParent = tracingOptions?.nestUnderParent === true;
+
     // Return undefined if no TraceState properties are needed
-    if (allKeys.length === 0 && !hideInput && !hideOutput) {
+    if (allKeys.length === 0 && !hideInput && !hideOutput && !nestedUnderParent) {
       return undefined;
     }
 
@@ -645,6 +766,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       requestContextKeys: allKeys,
       ...(hideInput !== undefined && { hideInput }),
       ...(hideOutput !== undefined && { hideOutput }),
+      ...(nestedUnderParent && { nestedUnderParent }),
     };
   }
 
@@ -712,7 +834,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       }
 
       try {
-        span = processor.process(span);
+        const processed = processor.process(span);
+        // exportSpan/isValid are instance members of the live span, so a copy
+        // can't be exported: a plain copy throws for started/updated spans and is
+        // silently dropped for ended spans, and a copy that forwards exportSpan
+        // exports the original's unredacted data. Require the same instance.
+        if (processed !== undefined && processed !== span) {
+          this.logger.error(
+            `[Observability] Processor error [name=${processor.name}]: process() must return the span it received (or undefined to drop it), not a copy. Span dropped.`,
+          );
+          return undefined;
+        }
+        span = processed;
       } catch (error) {
         this.logger.error(`[Observability] Processor error [name=${processor.name}]`, error);
         // Continue with other processors
@@ -792,7 +925,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    */
   protected emitSpanEnded(
     span: AnySpan,
-    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string },
+    excludedModelUsage?: { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean },
   ): void {
     let processedSpan: AnySpan | undefined;
     let spanWasProcessed = false;
@@ -814,6 +947,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
               excludedModelUsage.usage,
               excludedModelUsage.provider,
               excludedModelUsage.model,
+              excludedModelUsage.usageIncomplete,
               this.getMetricsContext(processedSpan),
             );
           }
@@ -875,7 +1009,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureModelUsageRollup<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string } | undefined {
+  ):
+    | { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean }
+    | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     // If the span itself will be exported, the existing auto-extract pipeline
     // emits its metrics; nothing to roll up.
@@ -895,8 +1031,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
 
     const provider = endAttrs?.provider ?? liveAttrs?.provider;
     const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { ancestor, usage, provider, model };
+    return { ancestor, usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -909,7 +1046,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureExcludedModelUsage<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ): { usage: UsageStats; provider?: string; model?: string } | undefined {
+  ): { usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean } | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     if (span.isInternal) return undefined;
     if (!this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) return undefined;
@@ -930,8 +1067,9 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       liveAttrs?.model,
       stashed?.model,
     );
+    const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { usage, provider, model };
+    return { usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -940,8 +1078,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * ancestor's metrics context so cost / token labels point at the visible
    * span instead of the hidden agent that incurred them.
    */
-  private applyUsageRollup(target: { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string }): void {
-    const { ancestor, usage, provider, model } = target;
+  private applyUsageRollup(target: {
+    ancestor: AnySpan;
+    usage: UsageStats;
+    provider?: string;
+    model?: string;
+    usageIncomplete?: boolean;
+  }): void {
+    const { ancestor, usage, provider, model, usageIncomplete } = target;
 
     // Mutate the live ancestor's attributes directly. BaseSpan's constructor
     // guarantees `attributes` is always at least `{}` (see spans/base.ts),
@@ -951,7 +1095,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     attrs.internalUsage = addUsageStats(attrs.internalUsage, usage);
 
     try {
-      emitTokenMetricsForUsage(usage, provider, model, this.getMetricsContext(ancestor));
+      emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
     } catch (err) {
       this.logger.error('[Observability] Usage rollup metric emission error:', err);
     }
@@ -1069,23 +1213,26 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Phase 1: Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
     await this.observabilityBus.shutdown();
 
-    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed
-    const shutdownPromises: Promise<void>[] = [
-      ...this.exporters.map(e => e.shutdown()),
-      ...this.spanOutputProcessors.map(p => p.shutdown()),
-    ];
-    if (this.config.bridge) {
-      shutdownPromises.push(this.config.bridge.shutdown());
-    }
-    if (shutdownPromises.length > 0) {
-      const results = await Promise.allSettled(shutdownPromises);
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
-        }
-      }
-    }
+    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed. An exporter can
+    // report drops while it shuts down, so the handlers of those reports get and flush them first.
+    const handlers = [...this.exporters, ...(this.config.bridge ? [this.config.bridge] : [])];
+    const dropHandlers = handlers.filter(h => h.onDroppedEvent);
+    const others = [...handlers.filter(h => !h.onDroppedEvent), ...this.spanOutputProcessors];
+    await this.settleShutdownSteps(others.map(c => c.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
+    await this.settleShutdownSteps(dropHandlers.map(h => h.flush()));
+    await this.settleShutdownSteps(dropHandlers.map(h => h.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
 
     this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
+  }
+
+  private async settleShutdownSteps(steps: Promise<void>[]): Promise<void> {
+    const results = await Promise.allSettled(steps);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
+      }
+    }
   }
 }

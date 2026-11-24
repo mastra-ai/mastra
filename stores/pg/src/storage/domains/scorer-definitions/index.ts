@@ -22,9 +22,10 @@ import type {
   ListScorerDefinitionVersionsInput,
   ListScorerDefinitionVersionsOutput,
 } from '@mastra/core/storage/domains/scorer-definitions';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { DbClient, PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
@@ -78,7 +79,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Tables
@@ -102,7 +103,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return ScorerDefinitionsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -194,6 +195,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
   async create(input: { scorerDefinition: StorageCreateScorerDefinitionInput }): Promise<StorageScorerDefinitionType> {
     const { scorerDefinition } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_SCORER_DEFINITIONS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -212,13 +214,14 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
           scorerDefinition.authorId ?? null,
           scorerDefinition.organizationId ?? null,
           scorerDefinition.projectId ?? null,
-          scorerDefinition.metadata ? JSON.stringify(scorerDefinition.metadata) : null,
+          scorerDefinition.metadata ? toPgJson(scorerDefinition.metadata) : null,
           nowIso,
           nowIso,
           nowIso,
           nowIso,
         ],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const {
@@ -251,18 +254,21 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         updatedAt: now,
       };
     } catch (error) {
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({
-          indexName: TABLE_SCORER_DEFINITIONS,
-          schemaName: getSchemaName(this.#schema),
-        });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [scorerDefinition.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({
+            indexName: TABLE_SCORER_DEFINITIONS,
+            schemaName: getSchemaName(this.#schema),
+          });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [scorerDefinition.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       if (error instanceof MastraError) throw error;
@@ -319,7 +325,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       if (metadata !== undefined) {
         const mergedMetadata = { ...(existingScorer.metadata || {}), ...metadata };
         setClauses.push(`metadata = $${paramIndex++}`);
-        values.push(JSON.stringify(mergedMetadata));
+        values.push(toPgJson(mergedMetadata));
       }
 
       // Always update timestamps
@@ -436,7 +442,7 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
 
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
-        queryParams.push(JSON.stringify(metadata));
+        queryParams.push(toPgJson(metadata));
       }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -520,12 +526,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
           input.name,
           input.description ?? null,
           input.type,
-          input.model ? JSON.stringify(input.model) : null,
+          input.model ? toPgJson(input.model) : null,
           input.instructions ?? null,
-          input.scoreRange ? JSON.stringify(input.scoreRange) : null,
-          input.presetConfig ? JSON.stringify(input.presetConfig) : null,
-          input.defaultSampling ? JSON.stringify(input.defaultSampling) : null,
-          input.changedFields ? JSON.stringify(input.changedFields) : null,
+          input.scoreRange ? toPgJson(input.scoreRange) : null,
+          input.presetConfig ? toPgJson(input.presetConfig) : null,
+          input.defaultSampling ? toPgJson(input.defaultSampling) : null,
+          input.changedFields ? toPgJson(input.changedFields) : null,
           input.changeMessage ?? null,
           nowIso,
           nowIso,

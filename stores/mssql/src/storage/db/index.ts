@@ -2,6 +2,7 @@ import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   createStorageErrorId,
+  TABLE_OBSERVATIONAL_MEMORY,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SPANS,
   TABLE_SCHEMAS,
@@ -16,6 +17,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import sql from 'mssql';
+import type { Queryable } from './run-fencing';
 import { getSchemaName, getTableName } from './utils';
 
 // Re-export the types for convenience
@@ -146,6 +148,33 @@ export class MssqlDB extends MastraBase {
     'instructions', // evals.instructions - evaluation instructions
     'other', // traces.other - additional trace data
   ];
+
+  /**
+   * Observational memory text columns that hold observation text or JSON, which outgrow the
+   * indexable NVARCHAR(400) default.
+   */
+  private readonly OBSERVATIONAL_MEMORY_LARGE_TEXT_COLUMNS = [
+    'activeObservations',
+    'activeObservationsPendingUpdate',
+    'config',
+    'bufferedObservations',
+    'bufferedReflection',
+  ];
+
+  /** The SQL type for one column of `tableName`, applying per-table sizing. */
+  private getColumnSqlType(tableName: string, columnName: string, def: StorageColumn, isIndexed: boolean): string {
+    if (tableName === TABLE_OBSERVATIONAL_MEMORY && def.type === 'text') {
+      if (this.OBSERVATIONAL_MEMORY_LARGE_TEXT_COLUMNS.includes(columnName)) return 'NVARCHAR(MAX)';
+      // 'resource:' or 'thread:' plus an id of up to 400 characters; 900 bytes, still indexable.
+      if (columnName === 'lookupKey') return 'NVARCHAR(450)';
+    }
+    return this.getSqlType(
+      def.type,
+      isIndexed,
+      this.LARGE_DATA_COLUMNS.includes(columnName),
+      this.COMPOSITE_INDEX_COLUMNS.includes(columnName),
+    );
+  }
 
   protected getSqlType(
     type: StorageColumn['type'],
@@ -313,7 +342,7 @@ export class MssqlDB extends MastraBase {
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
-    transaction?: sql.Transaction;
+    transaction?: Queryable;
   }): Promise<void> {
     try {
       // Filter out columns that don't exist in the actual database table
@@ -352,6 +381,29 @@ export class MssqlDB extends MastraBase {
         error,
       );
     }
+  }
+
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date | number;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const result = await this.pool
+      .request()
+      .input('limit', sql.Int, limit)
+      .input('cutoff', typeof cutoff === 'number' ? sql.BigInt : sql.DateTime2, cutoff)
+      .query(`DELETE TOP (@limit) FROM ${fullTableName} WHERE [${column}] < @cutoff`);
+    return result.rowsAffected[0] ?? 0;
   }
 
   async clearTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
@@ -413,9 +465,7 @@ export class MssqlDB extends MastraBase {
           if (def.primaryKey) constraints.push('PRIMARY KEY');
           if (!def.nullable) constraints.push('NOT NULL');
           const isIndexed = !!def.primaryKey || uniqueConstraintColumns.includes(name);
-          const useLargeStorage = this.LARGE_DATA_COLUMNS.includes(name);
-          const useSmallStorage = this.COMPOSITE_INDEX_COLUMNS.includes(name);
-          return `[${parsedName}] ${this.getSqlType(def.type, isIndexed, useLargeStorage, useSmallStorage)} ${constraints.join(' ')}`.trim();
+          return `[${parsedName}] ${this.getColumnSqlType(tableName, name, def, isIndexed)} ${constraints.join(' ')}`.trim();
         })
         .join(',\n');
 
@@ -821,10 +871,7 @@ export class MssqlDB extends MastraBase {
           const columnExists = Array.isArray(checkResult.recordset) && checkResult.recordset.length > 0;
           if (!columnExists) {
             const columnDef = schema[columnName];
-            const useLargeStorage = this.LARGE_DATA_COLUMNS.includes(columnName);
-            const useSmallStorage = this.COMPOSITE_INDEX_COLUMNS.includes(columnName);
-            const isIndexed = !!columnDef.primaryKey;
-            const sqlType = this.getSqlType(columnDef.type, isIndexed, useLargeStorage, useSmallStorage);
+            const sqlType = this.getColumnSqlType(tableName, columnName, columnDef, !!columnDef.primaryKey);
             // Align with createTable: nullable columns omit NOT NULL, non-nullable columns include it
             const nullable = columnDef.nullable ? '' : 'NOT NULL';
             const defaultValue = !columnDef.nullable ? this.getDefaultValue(columnDef.type) : '';
