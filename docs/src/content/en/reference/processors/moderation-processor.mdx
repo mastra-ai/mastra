@@ -155,7 +155,7 @@ const processor = new ModerationProcessor({
     name: 'processOutputStream',
     type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; writer?: unknown; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
     description:
-      'Processes streaming output parts to moderate content during streaming. `writer` emits buffered text when `bufferSize` is greater than 0, and `requestContext` is passed to the moderation agent.',
+      'Processes streaming output parts to moderate content during streaming. When `bufferSize` is greater than 0 and a `writer` is passed, text deltas are buffered and checked together, and the method returns the flushed text. Without a `writer`, each text delta is checked separately. `requestContext` is passed to the moderation agent.',
     isOptional: false,
   },
 ]}

@@ -219,7 +219,7 @@ const result = await run.start({
 
 Pass `perStep: true` to run only the next step. The run then reports status `paused`, and `steps` holds the output of the step that ran.
 
-A paused run isn't suspended, so `run.resume()` throws `This workflow run was not suspended`. Calling `run.start()` again reruns the workflow from its first step. To continue, call [`run.timeTravel()`](./timeTravel) on the same run with the ID of the next step. It reuses the stored results of the steps that already ran:
+A paused run isn't suspended, so `run.resume()` throws `This workflow run was not suspended`. Calling `run.start()` again reruns the workflow from its first step. To continue, call [`run.timeTravel()`](./timeTravel) on the same run with the ID of the next step. It reuses the stored results of the steps that already ran. The workflow needs configured [storage](/docs/storage), and the paused run's snapshot must still be in it. Otherwise, `timeTravel()` throws `Snapshot not found for run <runId>`:
 
 ```typescript
 const run = await workflow.createRun()
