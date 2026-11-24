@@ -600,6 +600,7 @@ export function createDurableLLMMappingStep() {
               runId: _runId,
               agentId: _agentId,
               state,
+              options: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options,
               requestContext,
             });
             saveQueueManager = rebuilt?.saveQueueManager;
