@@ -747,8 +747,14 @@ export function toolCallTape(
 // expectEngineParity — the main entry point for parity tests
 // ---------------------------------------------------------------------------
 
-export type ParityEngine = 'plain' | 'durable' | 'evented';
-export const PARITY_ENGINES: readonly ParityEngine[] = ['plain', 'durable', 'evented'];
+export type ParityEngine = 'plain' | 'durable' | 'evented' | 'native-default' | 'native-evented';
+export const PARITY_ENGINES: readonly ParityEngine[] = [
+  'plain',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+];
 
 /**
  * Stream options every engine types identically. `onStepFinish` and
@@ -977,11 +983,13 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
   // only resumable when the run's snapshot reached storage, and a deferred
   // background task is only dispatched when the host manages them and its
   // workers are running. Both need the host the engines actually share.
+  const executionEngine = engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
     ...scenario.host,
+    ...(executionEngine ? { durable: { executionEngine } } : {}),
   });
   // Workers are a host concern, not an agent one: the run only sees a bound
   // manager once they are up.

@@ -13,7 +13,12 @@ import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { toStandardSchema } from '../../../schema';
 import {
+  clearStepPartIndexes,
+  findIterationOffsetInParts,
+  findStepPartBoundaries,
   persistProcessorDataChunk,
+  reconcileBufferedStepTexts,
+  resolveMessageText,
   resolveOutputMessageSkippingCompletionChecks,
   resolveProcessorWriterMessageId,
 } from '../../../stream/base/output';
@@ -32,7 +37,7 @@ import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence'
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
-import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
+import type { AgentFinishEventData, DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 import { foldBackgroundResults } from './shared/background-results';
 import { hydrateMessageListState } from './shared/message-list-state';
@@ -58,6 +63,8 @@ export interface DurableFinishSideEffectsOptions {
 
 export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
+  finishMessages?: AgentFinishEventData['messages'];
+  rewrittenStepTexts?: string[];
   outputText: string;
   /**
    * True when processOutputResult changed `outputText`, including emptying it. Only then should
@@ -304,6 +311,7 @@ export async function runDurableFinishSideEffects({
 
   const outputTextBeforeProcessing = resolveOutputText(messageList);
 
+  let rewrittenStepTexts: string[] | undefined;
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -327,14 +335,58 @@ export async function runDurableFinishSideEffects({
         agent,
         processorStates: registryEntry.processorStates,
       });
-      await runner.runOutputProcessors(
-        messageList,
-        createObservabilityContext(tracingContext),
-        effectiveRequestContext,
-        0,
-        outputResultWriter,
-        outputResult,
-      );
+      const steps = outputResult?.steps;
+      const lastStep = steps?.at(-1);
+      const responses = messageList.get.response.db();
+      const feedbackContinuation =
+        steps &&
+        steps.length > 1 &&
+        responses.some(msg => {
+          const result = msg.content.metadata?.completionResult;
+          return (
+            result && typeof result === 'object' && 'suppressFeedback' in result && result.suppressFeedback === true
+          );
+        });
+      const reply = feedbackContinuation ? resolveOutputMessageSkippingCompletionChecks(messageList) : undefined;
+      const parts = reply?.content.parts;
+      const offset = parts ? findIterationOffsetInParts(parts, lastStep?.text) : undefined;
+      const split =
+        reply && offset !== undefined ? messageList.splitResponseMessageAtPartOffset(reply.id, offset) : undefined;
+      const earlierSteps = split ? steps?.slice(0, -1).map(step => ({ ...step })) : undefined;
+      const earlierReply = split
+        ? messageList.get.response.db().find(msg => msg.id === split.earlierMessageId)
+        : undefined;
+      const earlierText = earlierReply ? resolveMessageText(earlierReply) : undefined;
+      const earlierBoundaries = earlierSteps ? findStepPartBoundaries(earlierReply, earlierSteps) : undefined;
+      try {
+        await runner.runOutputProcessors(
+          messageList,
+          createObservabilityContext(tracingContext),
+          effectiveRequestContext,
+          0,
+          outputResultWriter,
+          outputResult,
+        );
+        if (split && earlierSteps && lastStep) {
+          const processed = messageList.get.response.db();
+          const earlier = processed.find(msg => msg.id === split.earlierMessageId);
+          const current = processed.find(msg => msg.id === split.currentMessageId);
+          reconcileBufferedStepTexts(
+            earlierSteps,
+            earlier ? resolveMessageText(earlier) : '',
+            earlier,
+            earlierBoundaries,
+            earlierText,
+          );
+          const stepTexts = [...earlierSteps.map(step => step.text), current ? resolveMessageText(current) : ''];
+          if (stepTexts.some((text, index) => text !== steps?.[index]?.text)) rewrittenStepTexts = stepTexts;
+        }
+      } finally {
+        if (split) {
+          clearStepPartIndexes(messageList.get.response.db());
+          messageList.coalesceSplitResponseMessages(split.earlierMessageId, split.currentMessageId);
+        }
+      }
     } catch (error) {
       if (error instanceof TripWire) {
         // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
@@ -373,6 +425,11 @@ export async function runDurableFinishSideEffects({
   // memory, so resolve the final response text before persistence runs.
   const outputText = resolveOutputText(messageList);
   const outputTextChanged = outputText !== outputTextBeforeProcessing;
+  const finishMessages = {
+    all: messageList.get.all.aiV5.model(),
+    user: messageList.get.input.aiV5.model(),
+    nonUser: messageList.get.response.aiV5.model(),
+  };
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
@@ -481,6 +538,8 @@ export async function runDurableFinishSideEffects({
     messageListState: messageList.serialize(),
     outputText,
     outputTextChanged,
+    finishMessages,
+    rewrittenStepTexts,
     titleGeneration,
     titleForStream,
     structuredOutputChunks,

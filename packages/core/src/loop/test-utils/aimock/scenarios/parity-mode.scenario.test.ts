@@ -205,17 +205,16 @@ function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation
   };
 }
 
+const objectChunkDifference: EngineDifference = {
+  reason:
+    'COR-1390: durable engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
+  expect: declareWrappedObjectChunks,
+};
 const DECLARE_OBJECT_CHUNKS = {
-  durable: {
-    reason:
-      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
-    expect: declareWrappedObjectChunks,
-  },
-  evented: {
-    reason:
-      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
-    expect: declareWrappedObjectChunks,
-  },
+  durable: objectChunkDifference,
+  evented: objectChunkDifference,
+  'native-default': objectChunkDifference,
+  'native-evented': objectChunkDifference,
 };
 
 function structuredScenario(overrides: Partial<EngineParityScenario> = {}): EngineParityScenario {
@@ -598,7 +597,12 @@ describeParity('parity mode', target => {
           ],
         },
         host: { backgroundTasks: { enabled: true } },
-        differences: { durable: difference, evented: difference },
+        differences: {
+          durable: difference,
+          evented: difference,
+          'native-default': difference,
+          'native-evented': difference,
+        },
       }),
     );
 
@@ -647,7 +651,12 @@ describeParity('parity mode', target => {
             backgroundTasks: { tools: { notify: true } },
           }),
         host: { backgroundTasks: { enabled: true } },
-        differences: { durable: difference, evented: difference },
+        differences: {
+          durable: difference,
+          evented: difference,
+          'native-default': difference,
+          'native-evented': difference,
+        },
       }),
     );
 
@@ -679,7 +688,12 @@ describeParity('parity mode', target => {
       backgroundScenario(
         {
           host: { backgroundTasks: { enabled: true } },
-          differences: { durable: difference, evented: difference },
+          differences: {
+            durable: difference,
+            evented: difference,
+            'native-default': difference,
+            'native-evented': difference,
+          },
         },
         withHostExecutions,
         200,
