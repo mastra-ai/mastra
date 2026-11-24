@@ -43,6 +43,15 @@ const PRESET_OPTIONS = {
     fractionalSecondDigits: 3,
   },
   timePrecise: { hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 },
+  logLine: {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 3,
+    hourCycle: 'h23',
+  },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type FormatterKey = keyof typeof PRESET_OPTIONS;
@@ -164,6 +173,11 @@ export function formatDateRange(start: DateInput, end: DateInput, options: Omit<
   return getFormatter('dayMonthYear', options.locale, options.timeZone)
     .formatRange(from, to)
     .replace(/\u2009/g, ' ');
+}
+
+export function formatLogLineTimestamp(value: DateInput, { locale }: { locale?: string } = {}) {
+  const date = toDate(value);
+  return date ? getFormatter('logLine', locale).format(date) : undefined;
 }
 
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */

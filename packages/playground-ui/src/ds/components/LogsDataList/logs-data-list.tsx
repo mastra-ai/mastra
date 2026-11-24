@@ -14,6 +14,7 @@ import {
   LogsDataListEntityCell,
   LogsDataListMessageCell,
   LogsDataListDataCell,
+  LogsDataListLineCell,
 } from './logs-data-list-cells';
 
 export const LogsDataList = Object.assign(DataListRoot, {
@@ -33,5 +34,6 @@ export const LogsDataList = Object.assign(DataListRoot, {
   EntityCell: LogsDataListEntityCell,
   MessageCell: LogsDataListMessageCell,
   DataCell: LogsDataListDataCell,
+  LineCell: LogsDataListLineCell,
   NextPageLoading: DataListNextPageLoading,
 });

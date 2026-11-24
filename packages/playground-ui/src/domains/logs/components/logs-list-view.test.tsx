@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogRecord } from '../types';
 import { LogsListView } from './logs-list-view';
@@ -71,5 +71,65 @@ describe('LogsListView fit', () => {
       expect(grid?.className).toContain('max-w-full');
       expect(grid?.className).not.toContain('w-max');
     });
+  });
+});
+
+describe('LogsListView stream density', () => {
+  const sandboxLines: LogRecord[] = [
+    {
+      timestamp: '2026-11-24T09:29:30.956Z',
+      level: 'warn',
+      message: 'Memory usage above 80% of limit',
+      data: { used_mb: '842', limit_mb: '1024' },
+    },
+    { timestamp: '2026-11-24T09:31:07.956Z', level: 'info', message: 'Process.Start stream ended' },
+  ];
+  const idMap = new Map(sandboxLines.map((log, i) => [log, `line-${i}`]));
+
+  it('renders plain log lines oldest first without a column header, with fields after the message', () => {
+    render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={vi.fn()} />);
+
+    const rows = screen.getAllByRole('button');
+    expect(rows.map(r => r.textContent)).toEqual([
+      expect.stringContaining('Memory usage above 80% of limitused_mb: 842limit_mb: 1024'),
+      expect.stringContaining('Process.Start stream ended'),
+    ]);
+    expect(rows[0]?.textContent).toContain('warn');
+    expect(screen.queryByText('Message')).toBeNull();
+  });
+
+  it('keeps the newest line in view once the logs load', async () => {
+    render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={vi.fn()} />);
+
+    await waitFor(() => expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'end' }));
+  });
+
+  it('loads older logs from a button above the lines', () => {
+    const onFetchNextPage = vi.fn();
+    render(
+      <LogsListView
+        density="stream"
+        logs={sandboxLines}
+        logIdMap={idMap}
+        onLogClick={vi.fn()}
+        hasNextPage
+        onFetchNextPage={onFetchNextPage}
+      />,
+    );
+
+    const loadOlder = screen.getByRole('button', { name: 'Load older logs' });
+    const firstLine = screen.getByRole('button', { name: /Memory usage above 80% of limit/ });
+    expect(loadOlder.compareDocumentPosition(firstLine)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    fireEvent.click(loadOlder);
+    expect(onFetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it('opens the clicked line', () => {
+    const onLogClick = vi.fn();
+    render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={onLogClick} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Process.Start stream ended/ }));
+
+    expect(onLogClick).toHaveBeenCalledWith(sandboxLines[1]);
   });
 });

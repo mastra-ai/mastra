@@ -1,13 +1,14 @@
 import { Badge } from '../Badge';
 import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
+import { logLevelTextClass } from './log-level-styles';
+import type { LogLevel } from './log-level-styles';
 import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { cn } from '@/lib/utils';
-
-type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+import { formatLogLineTimestamp, toDate } from '@/utils/date-format';
 
 const LEVEL_VARIANT: Record<LogLevel, BadgeVariant> = {
   debug: 'neutral',
@@ -115,4 +116,43 @@ export function LogsDataListDataCell({ data }: LogsDataListDataCellProps) {
     .join(', ');
 
   return <DataListTextCell font="mono">{summary}</DataListTextCell>;
+}
+
+export interface LogsDataListLineCellProps {
+  timestamp: Date | string;
+  level: LogLevel;
+  message: string;
+  fields?: Record<string, unknown> | null;
+}
+
+function formatFieldValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export function LogsDataListLineCell({ timestamp, level, message, fields }: LogsDataListLineCellProps) {
+  const fieldEntries = fields ? Object.entries(fields) : [];
+
+  return (
+    <DataListCell className="block py-0.5 font-mono whitespace-normal">
+      <span className="flex flex-wrap items-baseline gap-x-4">
+        <time dateTime={toDate(timestamp)?.toISOString()} className="shrink-0 tabular-nums">
+          {formatLogLineTimestamp(timestamp) ?? String(timestamp)}
+        </time>
+        <span className={cn('w-12 shrink-0 uppercase', logLevelTextClass[level])}>{level}</span>
+        <span className="min-w-0 grow basis-60 wrap-anywhere whitespace-pre-wrap text-foreground">
+          {message}
+          {fieldEntries.map(([key, value]) => (
+            <span key={key} className="ml-3">
+              <span className="text-muted-foreground">{key}:</span> {formatFieldValue(value)}
+            </span>
+          ))}
+        </span>
+      </span>
+    </DataListCell>
+  );
 }

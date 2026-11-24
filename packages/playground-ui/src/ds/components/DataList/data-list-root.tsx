@@ -40,6 +40,8 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
+export type DataListDensity = 'default' | 'compact';
+
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
   columns: string;
@@ -47,6 +49,7 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  density?: DataListDensity;
   /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
   scrollable?: boolean;
   /**
@@ -188,6 +191,11 @@ const dataListVariantBackground: Record<DataListVariant, string> = {
   light: 'var(--background)',
 };
 
+const dataListDensityClasses: Record<DataListDensity, string | undefined> = {
+  default: undefined,
+  compact: '[&_.data-list-row]:min-h-6',
+};
+
 const dataListFitClasses: Record<DataListFit, string> = {
   content: 'w-max max-w-none min-w-full',
   container: 'w-full max-w-full',
@@ -280,6 +288,7 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
+  density = 'default',
   scrollable = true,
   mask,
   scrollRef,
@@ -316,6 +325,7 @@ function DataListBase({
         ...dataListGridStyles,
         scrollable && fades.top && dataListTopFadeStyles,
         dataListFitClasses[fit],
+        dataListDensityClasses[density],
       )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
