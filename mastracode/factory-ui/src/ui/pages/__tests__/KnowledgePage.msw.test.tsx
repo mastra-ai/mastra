@@ -414,4 +414,18 @@ describe('KnowledgePage', () => {
     expect(await screen.findByRole('alert', {}, { timeout: 5_000 })).toHaveTextContent('Knowledge is misconfigured');
     expect(await screen.findByText('Couldn’t load the pages.')).toBeInTheDocument();
   });
+
+  it('keeps the open page’s path in the tree when the top tree level fails', async () => {
+    stubKnowledge();
+    server.use(
+      http.get(`${KNOWLEDGE}/tree`, ({ request }) =>
+        new URL(request.url).searchParams.has('parentId')
+          ? HttpResponse.json({ pages: [], truncated: false })
+          : HttpResponse.json({ error: 'failed', message: 'Knowledge is misconfigured' }, { status: 500 }),
+      ),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?page=runbook`);
+    expect(await screen.findByText('Couldn’t load the pages.', {}, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await screen.findByRole('treeitem', { name: /Deploy runbook/ })).toBeInTheDocument();
+  });
 });

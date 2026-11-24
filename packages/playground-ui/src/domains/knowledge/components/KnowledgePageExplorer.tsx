@@ -1359,26 +1359,31 @@ export function KnowledgePageExplorer({
           <div className="p-2">
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
-        ) : rootLevelFailed ? (
-          <Txt as="p" variant="caption" tone="muted" className="p-3">
-            Couldn’t load the pages.
-          </Txt>
         ) : (
-          <KnowledgePageTree
-            key={focusScope ? focusScope.id : 'all'}
-            pages={treePages}
-            pinnedIds={graph.pinnedIds}
-            selectedPageId={selectedPageId}
-            onSelect={selectFromTree}
-            initiallyExpanded={focusScope ? [focusScope.id] : undefined}
-            {...(source.useTreeLevels
-              ? {
-                  mayHaveChildren: lazy.mayHaveChildren,
-                  onExpandedChange: lazy.onExpandedChange,
-                  loadMore: lazy.loadMore,
-                }
-              : {})}
-          />
+          <>
+            {rootLevelFailed ? (
+              <Txt as="p" variant="caption" tone="muted" className="p-3">
+                Couldn’t load the pages.
+              </Txt>
+            ) : null}
+            {rootLevelFailed && treePages.length === 0 ? null : (
+              <KnowledgePageTree
+                key={focusScope ? focusScope.id : 'all'}
+                pages={treePages}
+                pinnedIds={graph.pinnedIds}
+                selectedPageId={selectedPageId}
+                onSelect={selectFromTree}
+                initiallyExpanded={focusScope ? [focusScope.id] : undefined}
+                {...(source.useTreeLevels
+                  ? {
+                      mayHaveChildren: lazy.mayHaveChildren,
+                      onExpandedChange: lazy.onExpandedChange,
+                      loadMore: lazy.loadMore,
+                    }
+                  : {})}
+              />
+            )}
+          </>
         )}
       </div>
     </>
