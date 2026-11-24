@@ -1091,13 +1091,12 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
 
   let scenarioFailed = false;
   try {
-    if (wrapper && engine === 'evented') {
-      // Without atomic storage the evented agent silently runs on the default
-      // engine, which would make "evented == plain" a durable-vs-plain check.
+    if (engine === 'evented' || engine === 'native-evented') {
+      // Without atomic storage, both evented variants can fall back to the default engine.
       // Checked inside the try so a failed check still shuts the host down.
-      const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
+      const engineType = (wrapper ? wrapper.getWorkflow() : agent['getWorkflow']()).engineType;
       if (engineType !== 'evented') {
-        throw new Error(`expectEngineParity: evented agent resolved to the '${engineType}' engine, not 'evented'`);
+        throw new Error(`expectEngineParity: ${engine} agent resolved to the '${engineType}' engine, not 'evented'`);
       }
     }
     if (scenario.run) await scenario.run(handle);

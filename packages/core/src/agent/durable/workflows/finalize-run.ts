@@ -370,7 +370,11 @@ export async function runDurableFinishSideEffects({
         if (split && earlierSteps && lastStep) {
           const processed = messageList.get.response.db();
           const earlier = processed.find(msg => msg.id === split.earlierMessageId);
-          const current = processed.find(msg => msg.id === split.currentMessageId);
+          const resolved = resolveOutputMessageSkippingCompletionChecks(messageList);
+          const current =
+            resolved && resolved.id !== split.earlierMessageId
+              ? resolved
+              : processed.find(msg => msg.id === split.currentMessageId);
           reconcileBufferedStepTexts(
             earlierSteps,
             earlier ? resolveMessageText(earlier) : '',

@@ -39,6 +39,7 @@ import {
   normalizeRequest,
   normalizePayload,
   normalizeChunkPayload,
+  runOnEngine,
 } from '../parity';
 
 function systemText(request: CapturedRequest): string {
@@ -993,9 +994,9 @@ describe('expectEngineParity', () => {
     ).rejects.toThrow('durable: declared difference has no reason');
   });
 
-  it('fails when the evented agent falls back to the default engine', async () => {
+  it.each(['evented', 'native-evented'] as const)('fails when %s falls back to the default engine', async engine => {
     await expect(
-      expectEngineParity({
+      runOnEngine(engine, {
         model: { tapes: [textOnlyTape('Hello.')] },
         buildAgent: ({ model }) =>
           new Agent({ id: 'parity-self-fallback', name: 'Self Fallback', instructions: 'Hi', model }),
@@ -1006,7 +1007,7 @@ describe('expectEngineParity', () => {
           return storage;
         },
       }),
-    ).rejects.toThrow("evented agent resolved to the 'default' engine");
+    ).rejects.toThrow(`expectEngineParity: ${engine} agent resolved to the 'default' engine`);
   });
 
   it('flags a declared chunk difference once it stops reproducing', async () => {

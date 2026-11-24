@@ -1403,7 +1403,7 @@ export class Agent<
 
     const durable = config.durable;
     if (durable && typeof durable === 'object') {
-      const legacyKeys = ['maxSteps', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      const legacyKeys = ['id', 'name'].filter(key => Object.hasOwn(durable, key));
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
