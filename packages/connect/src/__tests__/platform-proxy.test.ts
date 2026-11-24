@@ -201,6 +201,27 @@ describe('createPlatformProxy request context binding', () => {
     await proxy.updateMetadata({ cloudId: 'cloud-1' });
     await expect(proxy.getMetadata()).resolves.toEqual({ region: 'us-east-1', cloudId: 'cloud-1' });
   });
+
+  it('lets metadata set on the connection later outrank a value the overlay cached', async () => {
+    let stored: Record<string, unknown> | null = null;
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => Response.json({ connection_config: {}, metadata: stored }));
+    const toolset = createPlatformProxy({
+      connectionId: 'conn-1',
+      client: { accessToken: 'token', baseUrl: 'https://example.test', fetch: fetchMock },
+    });
+
+    await toolset.withRequestContext(new RequestContext()).updateMetadata({ cloudId: 'discovered' });
+    stored = { cloudId: null };
+    await expect(toolset.withRequestContext(new RequestContext()).getMetadata()).resolves.toEqual({
+      cloudId: 'discovered',
+    });
+    stored = { cloudId: 'chosen' };
+    await expect(toolset.withRequestContext(new RequestContext()).getMetadata()).resolves.toEqual({
+      cloudId: 'chosen',
+    });
+  });
 });
 
 describe('callProxy retry policy', () => {
