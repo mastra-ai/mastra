@@ -641,7 +641,9 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       // back under its parent, the anchor).
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/folder', name: 'Folder' });
       await knowledge.movePage({ scope: 'docs:acme', path: 'notion/l1/p1', parent: 'notion/folder' });
-      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({ counts: { updated: 1, refused: 0 } });
+      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({
+        counts: { updated: 1, refused: 0 },
+      });
       const updated = await page('notion/p1');
       expect(updated?.id).toBe(before!.id);
       expect(updated?.body).toBe('new');
