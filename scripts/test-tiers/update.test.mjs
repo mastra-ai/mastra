@@ -1215,22 +1215,43 @@ test('a run still failing after its second try is left for the next day, and the
   assert.equal(result.left, 1);
 });
 
-test('a transient error at the deadline still ends the day with the rest left', () => {
+test('the deadline also stops the retries, and runs still failing count as left', () => {
   let clock = 0;
+  const fetched = [];
   const result = inspectRuns(
     tiers({}),
     [run(1, 10), run(2, 11), run(3, 12)],
     r => {
       clock += 10;
-      if (r.id === 2) throw ghDown();
+      fetched.push(r.id);
+      if (r.id !== 3) throw ghDown();
       return [];
     },
-    { deadline: 15, now: () => clock },
+    { deadline: 45, now: () => clock },
   );
+  assert.deepEqual(fetched, [3, 2, 1, 2, 1]);
   assert.deepEqual(
     result.settled.map(r => r.id),
     [3],
   );
+  assert.equal(result.left, 2);
+});
+
+test('a deadline inside the retries leaves the deferred runs and the unread ones', () => {
+  let clock = 0;
+  const fetched = [];
+  const result = inspectRuns(
+    tiers({}),
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      clock += 10;
+      fetched.push(r.id);
+      if (r.id !== 3) throw ghDown();
+      return [];
+    },
+    { deadline: 35, now: () => clock },
+  );
+  assert.deepEqual(fetched, [3, 2, 1, 2]);
   assert.equal(result.left, 2);
 });
 
