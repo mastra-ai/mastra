@@ -60,9 +60,7 @@ describe('ModelRoutingSection', () => {
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
     expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
     expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
-    expect(
-      await within(region('Personal defaults')).findByRole('button', { name: 'New pack' }),
-    ).toBeInTheDocument();
+    expect(await within(region('Personal defaults')).findByRole('button', { name: 'New pack' })).toBeInTheDocument();
     expect(await within(region('Factory defaults')).findByRole('button', { name: 'New pack' })).toBeInTheDocument();
   });
 
@@ -211,14 +209,18 @@ describe('ModelRoutingSection', () => {
     await user.click(within(factoryDefaults).getByRole('button', { name: 'Settings' }));
     await user.click(await within(factoryDefaults).findByRole('button', { name: 'New pack' }));
     await user.type(within(factoryDefaults).getByRole('textbox', { name: 'Name' }), 'Build');
-    await pickModel(user, 'Model', 'openai/gpt-5');
+    await pickModel(user, 'Choose a model', 'openai/gpt-5');
     await user.click(within(factoryDefaults).getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
 
     expect(patchedBodies).toEqual([
       {
         modelPacks: [
-          { id: expect.any(String), name: 'Build', models: [{ modelId: 'openai/gpt-5', thinkingLevel: DEFAULT_THINKING_LEVEL }] },
+          {
+            id: expect.any(String),
+            name: 'Build',
+            models: [{ modelId: 'openai/gpt-5', thinkingLevel: DEFAULT_THINKING_LEVEL }],
+          },
         ],
         defaultModelPackId: expect.any(String),
       },

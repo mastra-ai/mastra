@@ -233,7 +233,7 @@ describe('Settings ownership', () => {
     const personal = await screen.findByRole('region', { name: 'Personal defaults' });
     await user.click(await within(personal).findByRole('button', { name: 'New pack' }));
     await user.type(within(personal).getByRole('textbox', { name: 'Name' }), 'Everyday');
-    await pickModel(user, 'Model', 'openai/gpt-5');
+    await pickModel(user, 'Choose a model', 'openai/gpt-5');
     await user.click(within(personal).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(personalDefaults.modelId).toBe('openai/gpt-5'));
     await act(() => router.navigate(-1));

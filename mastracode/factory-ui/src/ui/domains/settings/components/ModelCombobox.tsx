@@ -63,6 +63,7 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
  */
 export function ModelCombobox({
   models,
+  occupiedModelIds,
   value,
   onValueChange,
   auto,
@@ -77,6 +78,7 @@ export function ModelCombobox({
   'aria-label': ariaLabel,
 }: {
   models: AvailableModelOption[];
+  occupiedModelIds?: readonly string[];
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
@@ -91,9 +93,13 @@ export function ModelCombobox({
   'aria-label'?: string;
 }) {
   const [query, setQuery] = useState('');
+  const customId = query.trim();
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
-    const catalog = models
+    const choices = occupiedModelIds
+      ? models.filter(model => model.id === value || !occupiedModelIds.includes(model.id))
+      : models;
+    const catalog = choices
       .toSorted(
         (a, b) =>
           a.provider.localeCompare(b.provider) ||
@@ -106,7 +112,7 @@ export function ModelCombobox({
     const isAutoValue = autoChoice.length > 0 && value === AUTO_VALUE;
     const orphan = value && !isAutoValue && !known.has(value) ? [modelOption(value, modelProvider(value))] : [];
     return [...autoChoice, ...orphan, ...catalog];
-  }, [models, value, autoEffectiveModelId]);
+  }, [models, value, autoEffectiveModelId, occupiedModelIds]);
 
   return (
     <Combobox
@@ -120,7 +126,7 @@ export function ModelCombobox({
       }
       searchPlaceholder="Search models"
       emptyText="No matching model."
-      allowCustomValue={MODEL_ID_PATTERN.test(query.trim())}
+      allowCustomValue={MODEL_ID_PATTERN.test(customId) && !occupiedModelIds?.includes(customId)}
       onInputValueChange={setQuery}
       disabled={disabled}
       showChevron={showChevron}

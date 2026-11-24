@@ -59,13 +59,20 @@ describe('PersonalModelPacks', () => {
     await user.click(await screen.findByRole('button', { name: 'New pack' }));
     const form = screen.getByRole('form', { name: 'New pack' });
     await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Deep');
-    await pickModel(user, 'Model', 'openai/gpt-5');
+    await pickModel(user, 'Choose a model', 'openai/gpt-5');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
     await waitForMutationsIdle(client);
 
     expect(puts).toEqual([
       {
-        modelPacks: [everyday, { id: expect.any(String), name: 'Deep', models: [{ modelId: 'openai/gpt-5', thinkingLevel: expect.any(String) }] }],
+        modelPacks: [
+          everyday,
+          {
+            id: expect.any(String),
+            name: 'Deep',
+            models: [{ modelId: 'openai/gpt-5', thinkingLevel: expect.any(String) }],
+          },
+        ],
         defaultModelPackId: everyday.id,
       },
     ]);
@@ -83,13 +90,15 @@ describe('PersonalModelPacks', () => {
     await user.type(within(form).getByRole('textbox', { name: 'Name' }), 'Everyday');
     await user.click(within(form).getByRole('button', { name: 'Save' }));
 
-    expect(await within(form).findByText('Pick a model for every row, or remove the empty ones')).toBeInTheDocument();
+    expect(await within(form).findByText('Choose a model before saving.')).toBeInTheDocument();
     expect(puts).toEqual([]);
   });
 
   it('warns when no connected account can run the default pack model', async () => {
     renderPacks({
-      modelPacks: [{ id: 'gone', name: 'Gone', models: [{ modelId: 'google/gemini-2.5-pro', thinkingLevel: 'medium' }] }],
+      modelPacks: [
+        { id: 'gone', name: 'Gone', models: [{ modelId: 'google/gemini-2.5-pro', thinkingLevel: 'medium' }] },
+      ],
       defaultModelPackId: 'gone',
     });
 

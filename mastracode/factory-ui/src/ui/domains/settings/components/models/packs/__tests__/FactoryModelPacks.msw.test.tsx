@@ -75,71 +75,80 @@ async function packRow(name: string) {
 }
 
 describe('FactoryModelPacks', () => {
-  it('lists each pack with its model chain and marks the default', async () => {
+  it('shows each pack’s primary model and thinking level inline and marks the default', async () => {
     renderPacks({ packSet: { modelPacks: [build, quick], defaultModelPackId: build.id } });
 
     const buildRow = await packRow('Build');
     expect(within(buildRow).getByText('Default')).toBeInTheDocument();
-    expect(within(buildRow).getByText(/High/)).toBeInTheDocument();
+    expect(within(buildRow).getByRole('combobox', { name: 'Primary model' })).toHaveTextContent('Claude Sonnet 4.6');
+    expect(within(buildRow).getByRole('combobox', { name: 'Primary model thinking' })).toHaveTextContent('High');
     const quickRow = await packRow('Quick');
     expect(within(quickRow).queryByText('Default')).not.toBeInTheDocument();
-    expect(within(quickRow).getByText(/Low/)).toBeInTheDocument();
+    expect(within(quickRow).getByRole('combobox', { name: 'Primary model thinking' })).toHaveTextContent('Low');
   });
 
   it('shows the packs read-only to someone who is not an organization admin', async () => {
     renderPacks({ packSet: { modelPacks: [build], defaultModelPackId: build.id }, orgKeyAdmin: false });
 
     expect(await screen.findByText('Only organization admins can change these packs.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit Build' })).not.toBeInTheDocument();
+    const buildRow = await packRow('Build');
+    expect(within(buildRow).getByText('Claude Sonnet 4.6')).toBeInTheDocument();
+    expect(within(buildRow).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(buildRow).queryByRole('button', { name: 'Delete Build' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New pack' })).not.toBeInTheDocument();
   });
 
-  it('saves an edited pack with an added and reordered fallback', async () => {
+  it('adds, adjusts, and promotes a fallback inline without opening an editor', async () => {
     const user = userEvent.setup();
     const { client, patches } = renderPacks({ packSet: { modelPacks: [build], defaultModelPackId: build.id } });
 
-    await user.click(await screen.findByRole('button', { name: 'Edit Build' }));
-    const form = screen.getByRole('form', { name: 'Edit Build' });
-    await user.click(within(form).getByRole('button', { name: 'Add fallback' }));
-    await pickModel(user, 'Fallback 1', 'openai/gpt-5');
-    await user.click(within(form).getByRole('combobox', { name: 'Fallback 1 thinking' }));
+    await pickModel(user, 'Add model', 'openai/gpt-5');
+    const fallback = await screen.findByRole('combobox', { name: 'Fallback 1' });
+    expect(fallback).toHaveTextContent('GPT-5');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('combobox', { name: 'Fallback 1 thinking' }));
     await user.click(await screen.findByRole('option', { name: 'Extra high' }));
-    await user.click(within(form).getByRole('button', { name: 'Move fallback 1 up' }));
-    await user.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Fallback 1 thinking' })).toHaveTextContent('Extra high'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Fallback 1 actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Move up' }));
     await waitForMutationsIdle(client);
 
-    expect(patches).toEqual([
-      {
-        modelPacks: [
-          {
-            id: build.id,
-            name: 'Build',
-            models: [
-              { modelId: 'openai/gpt-5', thinkingLevel: 'xhigh' },
-              { modelId: 'anthropic/claude-sonnet-4-6', thinkingLevel: 'high' },
-            ],
-          },
-        ],
-        defaultModelPackId: build.id,
-      },
-    ]);
+    expect(patches).toHaveLength(3);
+    expect(patches.at(-1)).toEqual({
+      modelPacks: [
+        {
+          ...build,
+          models: [{ modelId: 'openai/gpt-5', thinkingLevel: 'xhigh' }, build.models[0]],
+        },
+      ],
+      defaultModelPackId: build.id,
+    });
     const offer = await screen.findByRole('dialog', { name: /Also switch running sessions to/ });
     await user.click(within(offer).getByRole('button', { name: 'Keep them as-is' }));
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit Build' })).not.toBeInTheDocument());
+    expect(screen.getByRole('combobox', { name: 'Primary model' })).toHaveTextContent('GPT-5');
   });
 
-  it('keeps the editor open and saves nothing when the name is taken', async () => {
+  it('keeps a duplicate rename inline and saves the corrected name without changing the model', async () => {
     const user = userEvent.setup();
-    const { patches } = renderPacks({ packSet: { modelPacks: [build], defaultModelPackId: build.id } });
+    const { client, patches } = renderPacks({ packSet: { modelPacks: [build, quick], defaultModelPackId: build.id } });
 
-    await user.click(await screen.findByRole('button', { name: 'New pack' }));
-    const form = screen.getByRole('form', { name: 'New pack' });
-    await user.type(within(form).getByRole('textbox', { name: 'Name' }), ' build ');
-    await pickModel(user, 'Model', 'openai/gpt-5');
-    await user.click(within(form).getByRole('button', { name: 'Save' }));
-
-    expect(await within(form).findByText('Another pack already has this name')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Rename Build' }));
+    const name = screen.getByRole('textbox', { name: 'Pack name' });
+    await user.clear(name);
+    await user.type(name, ' quick {Enter}');
+    expect(await screen.findByText('Another pack already has this name')).toBeInTheDocument();
     expect(patches).toEqual([]);
+
+    await user.clear(name);
+    await user.type(name, ' Deep {Enter}');
+    await waitForMutationsIdle(client);
+
+    expect(patches).toEqual([{ modelPacks: [{ ...build, name: 'Deep' }, quick], defaultModelPackId: build.id }]);
+    expect(within(await packRow('Deep')).getByRole('combobox', { name: 'Primary model' })).toHaveTextContent(
+      'Claude Sonnet 4.6',
+    );
   });
 
   it('makes another pack the default', async () => {
@@ -192,10 +201,16 @@ describe('FactoryModelPacks', () => {
       patchStatus: 403,
     });
 
-    await user.click(await screen.findByRole('button', { name: 'Make Quick the default' }));
+    const buildRow = await packRow('Build');
+    await user.click(within(buildRow).getByRole('combobox', { name: 'Add model' }));
+    const option = await screen.findByRole('option', { name: /openai\/gpt-5/ });
+    await user.click(option);
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Only organization admins can change Factory model packs');
-    expect(within(await packRow('Build')).getByText('Default')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Only organization admins can change Factory model packs',
+    );
+    expect(within(buildRow).queryByRole('combobox', { name: 'Fallback 1' })).not.toBeInTheDocument();
+    expect(within(buildRow).getByRole('combobox', { name: 'Add model' })).toBeEnabled();
   });
 });

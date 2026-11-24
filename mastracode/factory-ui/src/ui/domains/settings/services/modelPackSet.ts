@@ -19,7 +19,11 @@ export function withPackRemoved(set: ModelPackSet, packId: string): ModelPackSet
   };
 }
 
-export function packNameTaken(set: ModelPackSet, name: string, packId: string | undefined): boolean {
+export function modelPackNameError(set: ModelPackSet, name: string, packId?: string): string | undefined {
   const wanted = name.trim().toLowerCase();
-  return set.modelPacks.some(pack => pack.id !== packId && pack.name.trim().toLowerCase() === wanted);
+  if (!wanted) return 'Give the pack a name';
+  if (set.modelPacks.some(pack => pack.id !== packId && pack.name.trim().toLowerCase() === wanted)) {
+    return 'Another pack already has this name';
+  }
+  return undefined;
 }
