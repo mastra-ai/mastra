@@ -1,5 +1,5 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { AgentBuilderEditLayout } from '@mastra/playground-ui/domains/agents/components/agent-builder-edit-layout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
@@ -328,8 +328,4 @@ const ProfileSlot = () => {
   );
 };
 
-const AgentBuilderAgentEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
-    <Spinner />
-  </div>
-);
+const AgentBuilderAgentEditSkeleton = () => <BrandLoader fill />;
