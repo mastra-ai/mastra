@@ -11,8 +11,16 @@ const execFileAsync = promisify(execFile)
 /** Sections formatted by `format:mdx`. Generated model pages are excluded. */
 export const FORMATTED_SECTIONS = ['docs', 'integrations', 'reference']
 
+/** Pages generated from an OpenAPI document by scripts/gateway-api/generate.ts. */
+export const GENERATED_API_PAGE = /\.api\.mdx$/
+
+/** Authored pages. Generated pages only get link and description checks. */
 export function isFormattedFile(file: Pick<ContentFile, 'path' | 'section'>): boolean {
-  return file.path.startsWith(`${CONTENT_ROOT}/`) && FORMATTED_SECTIONS.includes(file.section)
+  return (
+    file.path.startsWith(`${CONTENT_ROOT}/`) &&
+    FORMATTED_SECTIONS.includes(file.section) &&
+    !GENERATED_API_PAGE.test(file.path)
+  )
 }
 
 type FormatMdx = (source: string, options?: Record<string, unknown>, filePath?: string) => Promise<string>

@@ -72,11 +72,11 @@
   background: var(--background);
 }
 
-.tabbed-container-data-list .text-placeholder {
+.tabbed-container-data-list .text-subtle-foreground {
   color: var(--muted-foreground);
 }
 
-.tabbed-container-data-list .data-list-top .text-placeholder {
+.tabbed-container-data-list .data-list-top .text-subtle-foreground {
   color: var(--foreground);
 }
 

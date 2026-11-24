@@ -3,10 +3,9 @@
   "temperature": ["deepseek/deepseek-v4.1-flash", "xiaomi/mimo-v2.6-flash", "z-ai/glm-5.3-flash"],
   "structuredOutput": ["z-ai/glm-5.3-flash"],
   "reasoning": {
-    "z-ai/glm-5.3-flash": [
+    "xiaomi/mimo-v2.6-flash": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4.1-flash": [
@@ -15,9 +14,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "xiaomi/mimo-v2.6-flash": [
+    "z-ai/glm-5.3-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

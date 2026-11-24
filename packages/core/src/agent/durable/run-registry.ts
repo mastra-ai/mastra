@@ -1,6 +1,6 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraScorer } from '../../evals/base';
-import { EventEmitterPubSub } from '../../events/event-emitter';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
@@ -243,7 +243,7 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  * execution behind a broker, which another process may be executing.
  */
 function detachesOnShutdown(mastra: Mastra, entry: RunRegistryEntry): boolean {
-  return !!entry.eventedExecution && !(mastra.pubsub.__rawBus() instanceof EventEmitterPubSub);
+  return !!entry.eventedExecution && reachesOtherProcesses(mastra.pubsub);
 }
 
 export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): boolean {

@@ -1326,6 +1326,13 @@ export interface ObservationalMemoryRecord {
    * to separate reflected vs unreflected observations.
    */
   reflectedObservationLineCount?: number;
+  /**
+   * Set to `true` only on the generation `swapBufferedReflectionToActive` creates when it checked,
+   * in the same atomic step, that the stored `bufferedReflection` and
+   * `reflectedObservationLineCount` were still the caller's snapshot. Never persisted; absent on
+   * every other read and on records from adapters that do not make that check.
+   */
+  bufferedReflectionVerified?: boolean;
 
   /**
    * Message IDs observed in the current generation.
@@ -1548,6 +1555,12 @@ export interface UpdateBufferedReflectionInput {
  * and appends any unreflected observations that were added after the reflection started.
  */
 export interface SwapBufferedReflectionToActiveInput {
+  /**
+   * The caller's snapshot. When it carries a `bufferedReflection`, the swap applies only if the
+   * stored `bufferedReflection` and `reflectedObservationLineCount` still equal the snapshot's;
+   * otherwise nothing is created and the stored record is returned. A generation created after
+   * that check is returned with `bufferedReflectionVerified: true`.
+   */
   currentRecord: ObservationalMemoryRecord;
   /**
    * Token count for the combined new activeObservations (bufferedReflection + unreflected).

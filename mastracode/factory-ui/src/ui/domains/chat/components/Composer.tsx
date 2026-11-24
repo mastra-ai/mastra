@@ -58,7 +58,7 @@ import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 import { useVoiceDictation } from './useVoiceDictation';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'> & {
-  /** Leads the status row above the composer, e.g. who is steering this session. */
+  /** Leads the status row below the composer, e.g. who is steering this session. */
   statusLead?: ReactNode;
 };
 
@@ -329,7 +329,6 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
 
   return (
     <>
-      <StatusLine>{statusLead}</StatusLine>
       <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
         <ComposerHeader placement="overlay" open={connectionNotice !== undefined}>
           {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
@@ -380,6 +379,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
           </ComposerBox>
         </ComposerRing>
       </ComposerRoot>
+      <StatusLine>{statusLead}</StatusLine>
     </>
   );
 }

@@ -18,18 +18,22 @@ function extractElements(doc: any): string[] {
   const topics = doc.topics().out('array') || [];
   const terms = doc.terms().out('array') || [];
 
+  // Fixed locale, so that scores don't depend on the machine's default locale
+  const wordSegmenter = new Intl.Segmenter('en', { granularity: 'word' });
+
   // Helper function to clean and split terms
   const cleanAndSplitTerm = (term: string): string[] => {
-    // First normalize the string
-    const normalized = normalizeString(term);
+    // First normalize the string, then recompose it, because Japanese only splits correctly in its composed form
+    const normalized = normalizeString(term).normalize('NFC');
 
-    // Split on word boundaries and filter out empty strings
-    return normalized
-      .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
-      .replace(/[^a-z0-9]+/g, ' ') // Replace non-alphanumeric with spaces
-      .trim()
-      .split(/\s+/)
-      .filter(word => word.length > 0);
+    const runs =
+      normalized
+        .replace(/([a-z])([A-Z])/g, '$1 $2') // Split camelCase
+        // Latin words, or letters and numerals of another script with their marks, or digits of another script
+        .match(/[a-z0-9]+|(?:(?![\p{scx=Latin}\p{scx=Common}])[\p{L}\p{Nl}\p{No}]\p{M}*)+|\p{Nd}+/gu) ?? [];
+
+    // Split on word boundaries, also in scripts without spaces such as Japanese, Chinese, and Thai
+    return runs.flatMap(run => Array.from(wordSegmenter.segment(run), part => part.segment));
   };
 
   // Process all elements

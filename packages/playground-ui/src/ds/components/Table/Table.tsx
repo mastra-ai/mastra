@@ -69,7 +69,7 @@ export type TableHeaderProps = ComponentProps<'thead'> & {
 };
 
 const insideHeaderStyles = [
-  '[&>tr>th]:border-b [&>tr>th]:bg-background [&>tr>th]:bg-clip-padding',
+  '[&>tr>th]:border-b [&>tr>th]:bg-row [&>tr>th]:bg-clip-padding',
   '[&>tr>th:first-child]:rounded-tl-lg [&>tr>th:last-child]:rounded-tr-lg',
 ];
 
@@ -120,7 +120,7 @@ const insetHeadClass = cn(
 );
 
 const legacyHeadClass =
-  'h-full text-left text-meta tracking-wide whitespace-nowrap text-placeholder uppercase first:pl-3 last:pr-3';
+  'h-full text-left text-meta tracking-wide whitespace-nowrap text-muted-foreground uppercase first:pl-3 last:pr-3';
 
 export const Th = ({ className, children, align, ...props }: ThProps) => {
   const variant = useTableVariant();

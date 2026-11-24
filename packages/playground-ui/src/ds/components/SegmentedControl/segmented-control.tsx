@@ -117,6 +117,7 @@ export function SegmentedControl<T extends string = string>({
         data-size={size}
         className={cn(
           raisedSurfaceStyle,
+          '[--surface-rim:var(--control-rim)]',
           'relative inline-flex w-fit shrink-0 items-stretch rounded-full p-0.5',
           // Circular icon items have no padding of their own to keep them apart.
           iconOnly && 'gap-0.5',

@@ -3,6 +3,7 @@ import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
+import { reachesOtherProcesses } from '../events/reach';
 import type { EventCallback } from '../events/types';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
@@ -1215,7 +1216,7 @@ export class AgentThreadStreamRuntime {
    * `generation` only to name the owner a new acquisition takes.
    */
   #threadLeaseOwner(pubsub: PubSub | undefined, runId: string, generation?: number): string {
-    if (this.#getPubSub(pubsub).__rawBus() instanceof EventEmitterPubSub) return threadLeaseOwner(runId);
+    if (!reachesOtherProcesses(this.#getPubSub(pubsub))) return threadLeaseOwner(runId);
     if (generation !== undefined) return threadLeaseOwner(runId, generation);
     const state = this.#getState(pubsub);
     return state.leaseOwners.get(runId) ?? threadLeaseOwner(runId, state.threadRunsById.get(runId)?.generation);

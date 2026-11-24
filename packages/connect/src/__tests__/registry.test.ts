@@ -37,6 +37,7 @@ describe('shipped provider registry', () => {
       'outlook',
       'posthog',
       'resend',
+      'sendgrid',
       'sharepoint-online',
       'slack',
       'snowflake',

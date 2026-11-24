@@ -3,7 +3,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { ChunkFrom } from '../../../stream/types';
 import { AGENT_STREAM_TOPIC } from '../../streams/constants';
 import { createDurableAgentStream, emitChunkEvent, emitFinishEvent, emitSuspendedEvent } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 const suspendedData = { toolCallId: 'call-1', toolName: 'askTool', suspendPayload: {} } as any;
 
@@ -193,7 +193,7 @@ describe('durable stream adapter suspension ordering', () => {
       onSuspended: () => {
         seenAtSuspend.push(chunkSeen);
       },
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
     const reading = (async () => {
       for await (const _chunk of output.fullStream) {

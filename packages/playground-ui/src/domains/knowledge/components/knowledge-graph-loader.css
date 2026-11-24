@@ -1,0 +1,150 @@
+/* One animated value keeps the connector rim and its travelling node together. */
+@property --knowledge-loader-progress {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.knowledge-loader-scene {
+  --tint: var(--color-brand-purple);
+  --rim: color-mix(in oklab, var(--tint) 52%, var(--muted-foreground));
+  --face: color-mix(in oklab, var(--tint) 11%, var(--card));
+  --side: color-mix(in oklab, var(--tint) 23%, var(--card));
+  --cycle: 5.6s;
+}
+
+/* The hatched ground and offset faces follow the illustrated empty states. */
+.knowledge-loader-scene::before {
+  position: absolute;
+  inset: 13% 1% 4%;
+  background: repeating-linear-gradient(-33deg, var(--border) 0 1px, transparent 1px 5px);
+  mask-image: radial-gradient(ellipse closest-side, black 10%, transparent);
+  content: '';
+}
+
+.knowledge-loader-branch {
+  position: absolute;
+  top: calc(50% + var(--from-y));
+  left: calc(50% + var(--from-x));
+  rotate: var(--angle);
+}
+
+.knowledge-loader-edge {
+  position: absolute;
+  width: var(--reach);
+  height: 1px;
+  background: color-mix(in oklab, var(--rim) 72%, var(--card));
+  scale: var(--knowledge-loader-progress) 1;
+  transform-origin: left center;
+}
+
+.knowledge-loader-node {
+  position: absolute;
+  translate: calc(var(--reach) * var(--knowledge-loader-progress)) 0;
+}
+
+.knowledge-loader-puck {
+  --depth: 4px;
+
+  position: absolute;
+  width: var(--node-size);
+  aspect-ratio: 1.65;
+  border: 1px solid var(--rim);
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--card), var(--face));
+  box-shadow:
+    0 var(--depth) 0 -1px var(--side),
+    0 var(--depth) 0 var(--rim);
+  translate: -50% -50%;
+  rotate: calc(-1 * var(--angle, 0deg));
+}
+
+.knowledge-loader-branch[data-leaf] .knowledge-loader-puck {
+  --depth: 2px;
+}
+
+.knowledge-loader-hub {
+  --node-size: 52px;
+  --depth: 7px;
+
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, var(--face), var(--side));
+}
+
+.knowledge-loader-hub::after {
+  width: 42%;
+  aspect-ratio: inherit;
+  border: 1px solid var(--rim);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, var(--rim) 20%, transparent 31%), var(--face);
+  content: '';
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .knowledge-loader-branch {
+    animation: knowledge-loader-grow var(--cycle) ease-in-out var(--delay) infinite both;
+  }
+
+  .knowledge-loader-branch[data-leaf] {
+    animation-name: knowledge-loader-grow-leaf;
+  }
+
+  .knowledge-loader-hub {
+    animation: knowledge-loader-breathe var(--cycle) ease-in-out infinite;
+  }
+}
+
+@keyframes knowledge-loader-grow {
+  0%,
+  3%,
+  78%,
+  100% {
+    --knowledge-loader-progress: 0;
+    opacity: 0;
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  15%,
+  60% {
+    --knowledge-loader-progress: 1;
+    opacity: 1;
+  }
+}
+
+@keyframes knowledge-loader-grow-leaf {
+  0%,
+  2%,
+  43%,
+  100% {
+    --knowledge-loader-progress: 0;
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  13%,
+  30% {
+    --knowledge-loader-progress: 1;
+    opacity: 1;
+  }
+}
+
+@keyframes knowledge-loader-breathe {
+  0%,
+  23%,
+  100% {
+    translate: -50% -50%;
+  }
+
+  9% {
+    translate: -50% calc(-50% - 3px);
+  }
+}

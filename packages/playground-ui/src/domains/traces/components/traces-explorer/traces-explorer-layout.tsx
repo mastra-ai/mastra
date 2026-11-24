@@ -37,7 +37,7 @@ export function TracesExplorerLayout({
     ) : undefined;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
+    <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={pinned}>
       <TracesExplorerBody toolbar={toolbar} chart={chart} renderError={renderError}>
         {children}
       </TracesExplorerBody>

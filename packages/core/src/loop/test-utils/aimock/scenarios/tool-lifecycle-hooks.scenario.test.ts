@@ -5,7 +5,7 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import type { ToolsInput } from '../../../../agent';
-import type { DurableAgentStreamOptions } from '../../../../agent/durable/durable-agent';
+import type { DurableAgentStreamOptions } from '../../../../agent/durable/types';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';

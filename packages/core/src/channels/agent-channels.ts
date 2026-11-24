@@ -33,6 +33,8 @@ import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { createChatLogger } from './chat-logger';
+import { createChannelToolScope } from './chat-tools';
+import type { ChannelToolScope, ChannelToolsSettings } from './chat-tools';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -1336,6 +1338,20 @@ export class AgentChannels {
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
+  }
+
+  /**
+   * The conversation a channel tool call runs in, for `createChannelTools`.
+   * @internal
+   */
+  async __resolveToolScope(
+    context: { requestContext?: RequestContext; agent?: { threadId?: string } } | undefined,
+    settings: ChannelToolsSettings,
+  ): Promise<ChannelToolScope> {
+    const { adapter, threadId } = await this.getAdapterFromContext(context ?? {});
+    if (!this.chat) throw new Error('Channels are not initialized yet.');
+    const platform = Object.keys(this.adapters).find(key => this.adapters[key] === adapter) ?? adapter.name;
+    return createChannelToolScope({ chat: this.chat, adapter, platform, threadId, settings });
   }
 
   // ---------------------------------------------------------------------------
