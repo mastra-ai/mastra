@@ -20,7 +20,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach } from 'vitest';
 
-type GuardState = { lstatSync: typeof fs.lstatSync; baseline?: Map<string, string> };
+type GuardState = {
+  lstatSync: typeof fs.lstatSync;
+  readdirSync: typeof fs.readdirSync;
+  baseline?: Map<string, string>;
+};
 
 // Once per worker, before any test can mock fs or change the environment.
 const g = globalThis as { __mastraRegistryFileGuard?: GuardState };
@@ -29,41 +33,56 @@ const state = (g.__mastraRegistryFileGuard ??= ((): GuardState => {
   process.env.HOME = home;
   process.env.USERPROFILE = home;
   process.on('exit', () => fs.rmSync(home, { recursive: true, force: true }));
-  return { lstatSync: fs.lstatSync };
+  return { lstatSync: fs.lstatSync, readdirSync: fs.readdirSync };
 })());
 
 const core = __dirname;
+const capabilityDirs = [
+  path.join(core, 'dist', 'capabilities'),
+  path.join(core, 'src', 'llm', 'model', 'capabilities'),
+];
 const watched = [
   path.join(core, 'dist'),
   path.join(core, 'dist', 'provider-registry.json'),
   path.join(core, 'dist', 'llm', 'model'),
   path.join(core, 'dist', 'llm', 'model', 'provider-types.generated.d.ts'),
-  path.join(core, 'dist', 'capabilities'),
   path.join(core, 'src', 'llm', 'model', 'provider-registry.json'),
   path.join(core, 'src', 'llm', 'model', 'provider-types.generated.d.ts'),
-  path.join(core, 'src', 'llm', 'model', 'capabilities'),
+  ...capabilityDirs,
 ];
 
+function statOf(p: string): string {
+  try {
+    const s = state.lstatSync(p);
+    return `${s.isDirectory() ? 'dir' : 'file'} mtime=${s.mtimeMs} size=${s.size} ino=${s.ino}`;
+  } catch {
+    return 'missing';
+  }
+}
+
 function snapshot(): Map<string, string> {
-  return new Map(
-    watched.map(p => {
-      try {
-        const s = state.lstatSync(p);
-        return [p, `${s.isDirectory() ? 'dir' : 'file'} mtime=${s.mtimeMs} size=${s.size} ino=${s.ino}`];
-      } catch {
-        return [p, 'missing'];
-      }
-    }),
-  );
+  // Capability files are listed individually: overwriting one in place does not change its directory's lstat.
+  const capabilityFiles = capabilityDirs.flatMap(dir => {
+    try {
+      return state.readdirSync(dir).map(name => path.join(dir, name));
+    } catch {
+      return [];
+    }
+  });
+  return new Map([...watched, ...capabilityFiles].map(p => [p, statOf(p)]));
 }
 
 state.baseline ??= snapshot();
 
 function check(when: string) {
   const current = snapshot();
-  const changed = watched.filter(p => current.get(p) !== state.baseline!.get(p));
+  const changed = [...new Set([...state.baseline!.keys(), ...current.keys()])].filter(
+    p => (current.get(p) ?? 'missing') !== (state.baseline!.get(p) ?? 'missing'),
+  );
   if (changed.length === 0) return;
-  const details = changed.map(p => `  ${p}\n    before: ${state.baseline!.get(p)}\n    after:  ${current.get(p)}`);
+  const details = changed.map(
+    p => `  ${p}\n    before: ${state.baseline!.get(p) ?? 'missing'}\n    after:  ${current.get(p) ?? 'missing'}`,
+  );
   // Report each change once, not again in every later test of this worker.
   state.baseline = current;
   throw new Error(
