@@ -182,8 +182,12 @@ export interface PlatformGitLabApiClientConfig {
   /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
   client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
-  /** Runs before every request that changes GitLab state; throwing stops the request. */
-  beforeWrite?: () => Promise<void>;
+  /**
+   * Confirms the proxy still reaches the instance this client is for: before a
+   * request that changes GitLab state, and after a read before its data is
+   * used. Throwing stops the write or discards the read.
+   */
+  confirmInstance?: () => Promise<void>;
 }
 
 export class GitLabApiClient {
@@ -641,14 +645,14 @@ export class GitLabApiClient {
     });
 
     if (this.#platform) {
-      if (method !== 'GET') await this.#platform.beforeWrite?.();
+      if (method !== 'GET') await this.#platform.confirmInstance?.();
+      let data: unknown;
       try {
-        const data = await this.#platform.client.proxy(this.#platform.connectionId, {
+        data = await this.#platform.client.proxy(this.#platform.connectionId, {
           method,
           path: `${apiPath}${suffix}`,
           body: options.body,
         });
-        return (data ?? undefined) as T;
       } catch (error) {
         if (error instanceof MastraConnectError && error.status !== undefined) {
           throw new GitLabApiError(error.detail ?? error.message, error.status);
@@ -658,6 +662,8 @@ export class GitLabApiClient {
         if (error instanceof Error && typeof status === 'number') throw new GitLabApiError(error.message, status);
         throw new GitLabApiError(error instanceof Error ? error.message : String(error), null);
       }
+      if (method === 'GET') await this.#platform.confirmInstance?.();
+      return (data ?? undefined) as T;
     }
 
     const direct = this.#direct!;

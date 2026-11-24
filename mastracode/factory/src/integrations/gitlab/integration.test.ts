@@ -695,7 +695,11 @@ describe('PlatformGitLabIntegration', () => {
         ['ops/infra', { version: 2, host: 'gitlab.example.com', projectId: '7' }],
       ]);
       const contextReads = fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/context'));
-      expect(contextReads).toEqual(['https://integrations.example.com/v2/connections/a1b_selfhosted/context']);
+      // One read for the context, one confirming the instance after the listing.
+      expect(contextReads).toEqual([
+        'https://integrations.example.com/v2/connections/a1b_selfhosted/context',
+        'https://integrations.example.com/v2/connections/a1b_selfhosted/context',
+      ]);
     });
 
     it.each([
@@ -921,14 +925,27 @@ describe('PlatformGitLabIntegration', () => {
       }
     });
 
-    it('reads a self-hosted instance once per connection listing', async () => {
-      const fetchMock = stubPlatform(() => json({ connection_config: { hostname: 'gitlab.example.com' }, metadata: null }));
+    it('does not list projects from another instance under the old host inside the cache window', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
       const gitlab = discovering();
+      const hosts = async () =>
+        (await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).map(
+          source => decodeSourceId(source.id).host,
+        );
+      expect(await hosts()).toEqual(['gitlab.com', 'gitlab.example.com']);
 
-      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
-
-      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/context'))).toHaveLength(1);
+      // Reconnected to another instance; the connection list is still cached
+      // and nothing invalidates it.
+      hostname = 'gitlab.other.com';
+      expect(await hosts()).toEqual(['gitlab.com']);
+      await expect(
+        gitlab.versionControl.getPullRequest({
+          connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' },
+          sourceId: '7:ops/infra',
+          pullRequestId: '3',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
     });
 
     it('registers self-hosted connect sessions separately and lists both kinds under gitlab', () => {

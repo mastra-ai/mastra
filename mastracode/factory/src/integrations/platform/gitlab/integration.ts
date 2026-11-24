@@ -232,8 +232,9 @@ export class PlatformGitLabIntegration
         client: this.binding,
         connectionId: connection.id,
         // The proxy reaches whichever instance the connection names now, so a
-        // write first confirms that is still the instance this context is for.
-        ...(selfHosted ? { beforeWrite: async () => void (await this.#freshHost(connection)) } : {}),
+        // write first confirms that is still the instance this context is for,
+        // and a read confirms it before its results are used under this host.
+        ...(selfHosted ? { confirmInstance: async () => void (await this.#freshHost(connection)) } : {}),
       }),
       connection: gitlabConnection(connection.id),
       host,
