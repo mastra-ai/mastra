@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      # Mounts the StarSling Disks pnpm store (setup-pnpm-node).
       id-token: write
     services:
       postgres:
