@@ -1,0 +1,246 @@
+---
+title: 'Reference: ConnectEvents | Connect'
+description: 'API reference for ConnectEvents and isConnectEvent() in @mastra/connect: receive provider webhook events for a project, resume from a stored cursor, and narrow payloads to typed provider contracts.'
+packages:
+  - '@mastra/connect'
+---
+
+# ConnectEvents
+
+Subscribes to a project's provider events: the webhooks the platform receives for the project's connections, such as a GitHub pull request opening or a Linear issue changing. Iterate it to receive each event as a `ConnectEvent`, and narrow events with `isConnectEvent()` to get a payload typed from the provider's published contract.
+
+## Usage example
+
+```typescript title="src/events.ts"
+import { ConnectEvents, isConnectEvent } from '@mastra/connect'
+
+const events = new ConnectEvents({
+  cursorStore: {
+    load: () => db.get('connect-events-cursor'),
+    save: cursor => db.set('connect-events-cursor', cursor),
+  },
+  onGap: () => resyncFromProviders(),
+})
+
+for await (const event of events) {
+  if (isConnectEvent(event, 'github', 'pull_request.opened')) {
+    await reviewPullRequest(event.payload.repository.full_name, event.payload.pull_request.number)
+  }
+  if (isConnectEvent(event, 'linear', ['Issue.create', 'Issue.update'])) {
+    await syncIssue(event.payload.data.id)
+  }
+}
+```
+
+Delivery is at-least-once: an event whose handling throws, or that you break out on, is delivered again. Make handlers idempotent, for example by keying them on `event.sourceEventId ?? event.id`.
+
+## Constructor parameters
+
+`ConnectEvents` takes one options object. It also accepts every [`ConnectClientOptions`](/reference/connect/tools#connectclientoptions) field, such as `accessToken` and `projectId`, which fall back to the same environment variables.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cursorStore',
+    type: '{ load(): EventCursor | null | undefined | Promise<...>; save(cursor: EventCursor): void | Promise<void> }',
+    description:
+      'Where to keep the last processed event. Loaded when iteration starts, and saved once you ask for the next event. A stored event id resumes exactly, and a stored timestamp alone resumes by time. With nothing stored, delivery starts at the newest event.',
+    isOptional: true,
+  },
+  {
+    name: 'onGap',
+    type: '(gap: EventStreamGap) => void | Promise<void>',
+    description:
+      "Called, and awaited, when events after the cursor can no longer be delivered. `gap.reason` is `trimmed` when the events were removed from storage, or `cursor_rejected` when the cursor was refused and delivery resumed from the last processed event's time. Without it, delivery continues past a trimmed gap silently, and a rejected cursor ends the subscription with `invalid_cursor`.",
+    isOptional: true,
+  },
+  {
+    name: 'after',
+    type: 'string',
+    description: 'Resume after this event id. Takes precedence over `cursorStore`.',
+    isOptional: true,
+  },
+  {
+    name: 'afterTimestamp',
+    type: 'number',
+    description: 'Start after this time, in milliseconds since the epoch, when there is no event id to resume from.',
+    isOptional: true,
+  },
+  {
+    name: 'signal',
+    type: 'AbortSignal',
+    description: 'Ends the subscription when aborted.',
+    isOptional: true,
+  },
+  {
+    name: 'eventsUrl',
+    type: 'string',
+    description:
+      'Events service URL. Falls back to `MASTRA_EVENTS_API_URL`, then the regional URL for `MASTRA_PLATFORM_REGION` (`us` or `eu`).',
+    isOptional: true,
+    defaultValue: "'https://events.mastra.ai'",
+  },
+  {
+    name: 'reconnectDelayMs',
+    type: 'number',
+    description:
+      'First reconnect delay. Later attempts back off exponentially with jitter. Defaults to the delay the server sends, or 1000.',
+    isOptional: true,
+  },
+  {
+    name: 'maxReconnectDelayMs',
+    type: 'number',
+    description: 'Upper bound for the reconnect delay.',
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    description: 'Reconnect when nothing, not even a keep-alive, arrives for this long.',
+    isOptional: true,
+    defaultValue: '45000',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cursor',
+    type: 'string | undefined',
+    description:
+      'The last delivered event id, or the start cursor before any event. `undefined` while resuming by time, until the new stream is ready.',
+  },
+  {
+    name: 'ready',
+    type: 'Promise<string>',
+    description:
+      'Resolves to the start cursor once the first stream opens, after iteration starts. Rejects if the subscription fails or closes before that.',
+  },
+]}
+/>
+
+## Methods
+
+### `close()`
+
+Ends the subscription. A pending iteration finishes without an error.
+
+### `[Symbol.asyncIterator]()`
+
+Returns an iterator of `ConnectEvent`. A `ConnectEvents` can be iterated once. Create a new one to subscribe again. The subscription reconnects after server closes, network failures and 5xx responses, resuming after the last delivered event.
+
+## ConnectEvent
+
+Each event carries these fields. Until you narrow it, `integrationId` and `eventType` are strings and `payload` is `unknown`.
+
+<PropertiesTable
+  content={[
+  { name: 'id', type: 'string', description: 'The event id, which is also the cursor to resume after it.' },
+  { name: 'timestamp', type: 'number', description: 'When the event was stored, in milliseconds since the epoch.' },
+  { name: 'connectionId', type: 'string', description: 'The connection the provider sent the webhook for.' },
+  { name: 'integrationId', type: 'string', description: "The connection's integration, such as `github`." },
+  {
+    name: 'eventType',
+    type: 'string',
+    description:
+      "The provider's event type, as the platform identified it. See [Typed payloads](#typed-payloads) for each integration's format.",
+  },
+  {
+    name: 'sourceEventId',
+    type: 'string | null',
+    description: "The provider's delivery id, when the platform could identify one.",
+  },
+  {
+    name: 'payload',
+    type: 'unknown',
+    description: 'The webhook body, parsed from JSON, or the raw string when `payloadParseError` is set.',
+  },
+  {
+    name: 'payloadParseError',
+    type: 'true',
+    description: 'Set when the body was not valid JSON.',
+    isOptional: true,
+  },
+  {
+    name: 'unverified',
+    type: 'boolean',
+    description:
+      "`true` when the platform could not verify the provider's signature. Don't act on such a payload; at most use it as a prompt to re-read the provider's state.",
+  },
+]}
+/>
+
+## isConnectEvent()
+
+```typescript
+function isConnectEvent(event, integrationId, eventType): boolean
+```
+
+Returns `true` when `event` is a verified, parsed event of `integrationId` whose `eventType` is `eventType`, or one of them when you pass an array. TypeScript then narrows `event.payload` to the provider's documented shape. Unverified events and payloads that weren't JSON never match.
+
+When you pass several event types, check `event.eventType` to narrow `event.payload` to one of them. An integration or event type without typed payloads is a compile error.
+
+Payloads aren't validated at runtime. The types describe what the provider documents it sends, so a provider can still send a field the types don't list, or omit one.
+
+## Typed payloads
+
+`ConnectEventPayloads` maps each integration id to its event types and their payload types. They're built from each provider's published contract:
+
+| Integration | `eventType` format | Example | Contract |
+| - | - | - | - |
+| `github` | `X-GitHub-Event` header, then `.` and the body's `action` when it has one | `pull_request.opened`, `push` | GitHub's REST API description |
+| `linear` | `Linear-Event` header, then `.` and the body's `action` | `Issue.create`, `OAuthApp.revoked` | Linear's GraphQL schema and webhook docs |
+| `gitlab` | `X-Gitlab-Event` header | `Merge Request Hook` | GitLab's webhook events docs |
+| `jira` | The body's `webhookEvent` | `jira:issue_updated` | Jira's REST API description and webhook docs |
+| `incident-io` | The body's `event_type` | `public_incident.incident_created_v2` | incident.io's OpenAPI description |
+
+Each integration's map is also exported, such as `GithubWebhookPayloads`, so you can name a payload type in your own code:
+
+```typescript
+import type { GithubWebhookPayloads } from '@mastra/connect'
+
+type PullRequestOpened = GithubWebhookPayloads['pull_request.opened']
+```
+
+To type events of another integration, or more events of a typed one, extend `ConnectEventPayloads`:
+
+```typescript title="src/connect-events.d.ts"
+declare module '@mastra/connect' {
+  interface ConnectEventPayloads {
+    slack: {
+      message: { type: 'event_callback'; event: { text: string; channel: string } }
+    }
+  }
+}
+```
+
+## Errors
+
+The constructor throws a `MastraConnectError` with a `code` property when its configuration is incomplete or invalid:
+
+| Code | When |
+| - | - |
+| `missing_access_token` | No platform token configured |
+| `missing_project_id` | No project configured |
+| `invalid_options` | An option is invalid, such as a non-positive delay or a malformed `after` |
+
+Iteration ends by throwing a `MastraConnectError` when the subscription can't continue:
+
+| Code | When |
+| - | - |
+| `invalid_options` | The events service rejected the subscription |
+| `invalid_cursor` | The cursor can't be resumed from, and there is no time to fall back to or no `onGap` |
+| `unauthorized` | The events service refused the token (401 or 403) |
+| `platform_error` | The events service answered with another error that won't succeed on retry, such as a 404 |
+| `invalid_response` | The events service sent a malformed event |
+
+A `cursorStore` or `onGap` that throws ends iteration with that error.
+
+## Related
+
+- [Connect](/docs/mastra-platform/connect)
+- [tools()](/reference/connect/tools)

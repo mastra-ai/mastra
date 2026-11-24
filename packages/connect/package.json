@@ -30,6 +30,7 @@
     "build:watch": "pnpm build:lib --watch",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "generate-provider": "tsx scripts/generate-provider.ts",
+    "generate:event-payloads": "tsx scripts/generate-event-payloads.ts",
     "generate:provider-docs": "tsx scripts/generate-provider-docs.ts",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",

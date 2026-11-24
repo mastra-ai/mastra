@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { resolveClient, stripTrailingSlashes } from './client.js';
 import type { ConnectClientOptions, ResolvedClient } from './client.js';
 import { MastraConnectError, parseRetryAfterMs } from './errors.js';
+import type { ConnectEventPayloads } from './event-payloads/index.js';
 
 const DEFAULT_EVENTS_URL = 'https://events.mastra.ai';
 const REGIONAL_EVENTS_URLS: Record<'us' | 'eu', string> = {
@@ -117,15 +118,22 @@ export interface TopicEvent {
   fields: Record<string, string>;
 }
 
-/** A provider event from a project's `connect` topic. */
-export interface ConnectEvent {
+/** Fields every event from a project's `connect` topic carries. */
+export interface ConnectEventEnvelope {
   id: string;
   timestamp: number;
   connectionId: string;
-  integrationId: string;
-  eventType: string;
   /** The provider's delivery id, when the platform could identify one. */
   sourceEventId: string | null;
+}
+
+/**
+ * A provider event from a project's `connect` topic, with its payload as
+ * received: any integration, any event type, verified or not.
+ */
+export interface UntypedConnectEvent extends ConnectEventEnvelope {
+  integrationId: string;
+  eventType: string;
   /** The raw provider body, parsed from JSON. */
   payload: unknown;
   /** Set when `payload` was not valid JSON; `payload` is then the raw string. */
@@ -137,6 +145,76 @@ export interface ConnectEvent {
    * the signature was checked.
    */
   unverified: boolean;
+}
+
+type IntegrationOf<Payloads> = Extract<keyof Payloads, string>;
+type EventTypeOf<Payloads, I extends keyof Payloads> = Extract<keyof Payloads[I], string>;
+
+/** A Connect integration id with typed event payloads. */
+export type ConnectEventIntegration = IntegrationOf<ConnectEventPayloads>;
+
+/** An event type of `I` with a typed payload. */
+export type ConnectEventType<I extends ConnectEventIntegration> = EventTypeOf<ConnectEventPayloads, I>;
+
+/**
+ * A verified, parsed event whose payload is typed from the provider's
+ * contract. Payloads aren't validated at runtime: the types describe what
+ * the provider documents it sends.
+ */
+export interface TypedConnectEvent<
+  I extends ConnectEventIntegration,
+  E extends ConnectEventType<I>,
+> extends ConnectEventEnvelope {
+  integrationId: I;
+  eventType: E;
+  payload: ConnectEventPayloads[I][E];
+  payloadParseError?: undefined;
+  unverified: false;
+}
+
+/**
+ * The typed events of integration `I` and event types `E`, one union member
+ * per event type, so checking `eventType` narrows `payload`.
+ */
+export type ConnectEventOf<I extends ConnectEventIntegration, E extends ConnectEventType<I> = ConnectEventType<I>> =
+  E extends ConnectEventType<I> ? TypedConnectEvent<I, E> : never;
+
+/** Every typed event, discriminated by `integrationId` and then `eventType`. */
+export type KnownConnectEvent = { [I in ConnectEventIntegration]: ConnectEventOf<I> }[ConnectEventIntegration];
+
+/**
+ * A provider event from a project's `connect` topic. Narrow it with
+ * {@link isConnectEvent} to get the payload typed from the provider's
+ * contract (see {@link ConnectEventPayloads}).
+ */
+export type ConnectEvent = KnownConnectEvent | UntypedConnectEvent;
+
+/**
+ * Whether `event` is a verified, parsed `eventType` event of `integrationId`,
+ * narrowing its payload to the provider's documented shape. Unverified events
+ * and payloads that weren't JSON never match.
+ *
+ * @example
+ * ```ts
+ * for await (const event of new ConnectEvents()) {
+ *   if (isConnectEvent(event, 'github', 'pull_request.opened')) {
+ *     console.log(event.payload.pull_request.title);
+ *   }
+ *   if (isConnectEvent(event, 'linear', ['Issue.create', 'Issue.update'])) {
+ *     console.log(event.payload.data.title);
+ *   }
+ * }
+ * ```
+ */
+export function isConnectEvent<I extends ConnectEventIntegration, E extends ConnectEventType<I>>(
+  event: UntypedConnectEvent,
+  integrationId: I,
+  eventType: E | readonly E[],
+): event is ConnectEventOf<I, E> {
+  if (event.unverified || event.payloadParseError || event.integrationId !== integrationId) return false;
+  return typeof eventType === 'string'
+    ? event.eventType === eventType
+    : (eventType as readonly string[]).includes(event.eventType);
 }
 
 const gapSchema = z.object({ after: z.string(), resumedAfter: z.string() });

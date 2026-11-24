@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraConnectError } from '../errors.js';
-import { ConnectEvents, EventsClient, parseServerSentEvents, resolveEventsUrl } from '../events.js';
+import { ConnectEvents, EventsClient, isConnectEvent, parseServerSentEvents, resolveEventsUrl } from '../events.js';
 import type { ConnectEventsOptions, EventCursor, EventStreamGap, EventsClientOptions, TopicEvent } from '../events.js';
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -1117,6 +1117,49 @@ describe('ConnectEvents', () => {
         unverified: true,
       },
     ]);
+  });
+
+  it('narrows only verified, parsed events of the asked integration and event types', async () => {
+    const fields = (integrationId: string, eventType: string, extra: Record<string, string> = {}) => ({
+      connectionId: 'conn_1',
+      integrationId,
+      eventType,
+      payload: JSON.stringify({ action: 'opened', number: 7 }),
+      ...extra,
+    });
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', fields('github', 'pull_request.opened')));
+        res.write(event('12', fields('github', 'pull_request.opened', { unverified: 'true' })));
+        res.write(event('13', fields('github', 'pull_request.opened', { payload: '{not json' })));
+        res.write(event('14', fields('gitlab', 'pull_request.opened')));
+        res.write(event('15', fields('github', 'pull_request.closed')));
+        res.write(event('16', fields('github', 'issues.opened')));
+      },
+    ]);
+    const delivered = await take(connectEvents(s.url), 6);
+
+    expect(delivered.map(e => isConnectEvent(e, 'github', 'pull_request.opened'))).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(delivered.map(e => isConnectEvent(e, 'github', ['pull_request.opened', 'pull_request.closed']))).toEqual([
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+    ]);
+    const [opened] = delivered;
+    if (!opened || !isConnectEvent(opened, 'github', 'pull_request.opened')) throw new Error('expected a match');
+    expect(opened.payload.number).toBe(7);
   });
 
   it('falls back to the environment for credentials, project and events URL', async () => {

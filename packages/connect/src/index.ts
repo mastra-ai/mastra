@@ -31,8 +31,29 @@ export type {
   ConnectRequestMethod,
   ListConnectionsInput,
 } from './connect-client.js';
-export { ConnectEvents } from './events.js';
-export type { ConnectEvent, ConnectEventsOptions, EventCursor, EventCursorStore, EventStreamGap } from './events.js';
+export { ConnectEvents, isConnectEvent } from './events.js';
+export type {
+  ConnectEvent,
+  ConnectEventEnvelope,
+  ConnectEventIntegration,
+  ConnectEventOf,
+  ConnectEventsOptions,
+  ConnectEventType,
+  EventCursor,
+  EventCursorStore,
+  EventStreamGap,
+  KnownConnectEvent,
+  TypedConnectEvent,
+  UntypedConnectEvent,
+} from './events.js';
+export type {
+  ConnectEventPayloads,
+  GithubWebhookPayloads,
+  GitlabWebhookPayloads,
+  IncidentIoWebhookPayloads,
+  JiraWebhookPayloads,
+  LinearWebhookPayloads,
+} from './event-payloads/index.js';
 export type {
   ConnectClientOptions,
   ConnectionContext,
