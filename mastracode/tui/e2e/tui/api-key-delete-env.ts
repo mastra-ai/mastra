@@ -50,7 +50,7 @@ export const apiKeyDeleteEnvScenario = {
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
     await runtime.waitForScreenText(
-      /Key stored locally\. Press Enter to update or Delete to remove\./i,
+      /Key stored locally\. Press Enter to update or (Fn\+)?Delete to remove\./i,
       terminal,
       8_000,
     );
