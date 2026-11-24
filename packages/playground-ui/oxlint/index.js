@@ -426,14 +426,16 @@ function buttonLoading(context) {
     const value = unwrap(node);
     if (isIcon(value, iconImports) || isNothing(value)) return '';
     if (value.type === 'JSXElement' || value.type === 'JSXFragment') return value.children.map(labelText).join('');
-    if (value.type === 'JSXText' || value.type === 'Literal') return String(value.value).replace(/\s+/g, '');
-    return textOf(value);
+    // JSX drops a line break and its indentation.
+    if (value.type === 'JSXText') return value.value.replace(/\s*\n\s*/g, '').replace(/\s+/g, ' ');
+    if (value.type === 'Literal') return String(value.value);
+    return `{${textOf(value)}}`;
   }
 
   function changesWith(states, node) {
     const changes =
       node.type === 'ConditionalExpression'
-        ? labelText(node.consequent) !== labelText(node.alternate) &&
+        ? labelText(node.consequent).trim() !== labelText(node.alternate).trim() &&
           parts(node).some(hasText) &&
           isDecidedBy(states, node.test)
         : node.type === 'LogicalExpression' &&

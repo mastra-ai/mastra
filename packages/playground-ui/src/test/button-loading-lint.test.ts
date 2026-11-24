@@ -173,6 +173,11 @@ tester.run('button-loading', plugin.rules['button-loading'], {
       errors: [label()],
     },
     {
+      name: 'flags a variable against the same word as text, and words that only differ in spacing',
+      code: jsx("<Button loading={saving}>{saving ? action : 'action'} {saving ? 'Set up' : 'Setup'}</Button>"),
+      errors: [label(), label()],
+    },
+    {
       name: 'flags the opposite of a negated loading',
       code: jsx("<Button loading={!ready}>{ready ? 'Save' : 'Waiting…'}</Button>"),
       errors: [label()],
