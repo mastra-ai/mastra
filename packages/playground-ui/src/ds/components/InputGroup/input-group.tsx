@@ -89,6 +89,9 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       className={cn(
         inputGroupClassName,
         textFieldWidthStyle,
+        // In a flex row it fills the row, unless a settings row gives it a fixed width. Brackets: tailwind-merge
+        // doesn't replace `flex-1` with the `flex-(--x)` form.
+        'flex-[var(--text-field-flex,1)]',
         controlHeight[resolved],
         controlSpacing[resolved],
         controlIconState,

@@ -42,7 +42,8 @@ const sideHeadingClassName =
  * full width on phones); selects and other field triggers hug their value up to that same width
  * (`fieldTriggerWidthStyle`).
  */
-const fieldWidthsClassName = '[--field-max-width:13.75rem] [--field-width:auto] sm:[--text-field-width:13.75rem]';
+const fieldWidthsClassName =
+  '[--field-max-width:13.75rem] [--field-width:auto] sm:[--text-field-flex:0_1_auto] sm:[--text-field-width:13.75rem]';
 /**
  * The controls. Switches and buttons keep their size, so a row of only those never wraps for lack of room. Several
  * controls put straight in the row share the column, at least 13.75rem wide: a text field takes what the others leave.
@@ -52,7 +53,7 @@ const sideControlClassName = cn(
   fieldWidthsClassName,
   'flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:self-stretch',
   'sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55',
-  '[&>:is(input,[data-slot=input-group]):not(:only-child)]:[--text-field-width:100%]',
+  '[&>:is(input,[data-slot=input-group]):not(:only-child)]:[--text-field-flex:1] [&>:is(input,[data-slot=input-group]):not(:only-child)]:[--text-field-width:100%]',
 );
 
 /**
