@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Txt } from '@/ds/components/Txt';
 import { GitFork } from 'lucide-react';
 
 import type { BranchForkMarkerData } from './build-branch-fork-markers';

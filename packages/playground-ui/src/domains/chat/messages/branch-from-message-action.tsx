@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button } from '@/ds/components/Button';
 import { GitFork } from 'lucide-react';
 
 export const BranchFromMessageAction = ({ onBranch, disabled }: { onBranch: () => void; disabled?: boolean }) => (
