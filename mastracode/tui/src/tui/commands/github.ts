@@ -522,8 +522,10 @@ async function unsubscribeAll(ctx: SlashCommandContext): Promise<void> {
 async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void> {
   const currentInterval = loadSettings().signals.githubPollIntervalMs ?? 300_000;
   const currentLabel = formatDuration(currentInterval);
+  const intervalMap: Record<string, number> = { '30s': 30_000, '1m': 60_000, '2m': 120_000, '5m': 300_000 };
+  const currentPreset = Object.keys(intervalMap).find(label => intervalMap[label] === currentInterval);
   const markCurrent = (label: string, description: string) =>
-    label === currentLabel ? `${description} (current)` : description;
+    label === currentPreset ? `${description} (current)` : description;
   const answer = await askModalQuestion(ctx.state.ui, {
     question: `GitHub polling interval (current: ${currentLabel})`,
     options: [
@@ -533,15 +535,14 @@ async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void>
       { label: '5m', description: markCurrent('5m', 'Check every five minutes') },
       {
         label: 'Custom',
-        description: `Enter seconds${['30s', '1m', '2m', '5m'].includes(currentLabel) ? '' : ' (current)'}`,
+        description: `Enter seconds${currentPreset ? '' : ' (current)'}`,
       },
     ],
     allowCustomResponse: false,
-    selectedOptionLabel: ['30s', '1m', '2m', '5m'].includes(currentLabel) ? currentLabel : 'Custom',
+    selectedOptionLabel: currentPreset ?? 'Custom',
   });
   if (!answer) return;
 
-  const intervalMap: Record<string, number> = { '30s': 30_000, '1m': 60_000, '2m': 120_000, '5m': 300_000 };
   let interval = intervalMap[answer];
   if (answer === 'Custom') {
     const custom = await askModalQuestion(ctx.state.ui, {

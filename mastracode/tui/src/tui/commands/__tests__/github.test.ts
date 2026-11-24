@@ -579,6 +579,22 @@ describe('handleGithubCommand', () => {
     expect(mocks.saveSettings).not.toHaveBeenCalled();
   });
 
+  it('keeps a custom interval custom when its label rounds to a preset', async () => {
+    const { ctx } = createContext();
+    mocks.loadSettings.mockReturnValue({
+      signals: { experimentalGithubSignals: true, githubPollIntervalMs: 60_900 },
+    });
+    mocks.askModalQuestion.mockResolvedValueOnce('Poll interval').mockResolvedValueOnce(null);
+
+    await handleGithubCommand(ctx, []);
+
+    expect(mocks.askModalQuestion).toHaveBeenNthCalledWith(
+      2,
+      ctx.state.ui,
+      expect.objectContaining({ selectedOptionLabel: 'Custom' }),
+    );
+  });
+
   it('saves a custom GitHub poll interval', async () => {
     const { ctx } = createContext();
     const settings = { signals: { experimentalGithubSignals: true, githubPollIntervalMs: 45_000 } };
