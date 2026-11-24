@@ -6,20 +6,23 @@ import { Memory } from '../../../index';
 
 const observations =
   'Date: Nov 18, 2026\n- Event on November 20, 2026\n\n--- message boundary (2026-11-18T23:00:00.000Z) ---\n\nDate: Nov 21, 2026\n- User will visit (estimated November 18, 2026)';
-const instants = ['2026-11-19T00:00:00Z', '2026-11-19T07:59:59Z', '2026-11-19T08:00:00Z'];
+const instants = ['2026-11-19T00:00:00Z', '2026-11-19T07:59:59Z', '2026-11-19T08:00:00Z', '2026-11-22T08:00:00Z'];
 
 afterEach(() => vi.useRealTimers());
 
 describe('stable observation date prefix', () => {
-  it.each([false, true])(
-    'keeps the Agent observation prefix stable across record-local midnight (readOnly=%s)',
-    async readOnly => {
+  it.each(
+    [false, true].flatMap(readOnly => [undefined, true, false].map(liveDateHints => ({ readOnly, liveDateHints }))),
+  )(
+    'keeps the Agent observation prefix stable across record-local midnight (readOnly=$readOnly, liveDateHints=$liveDateHints)',
+    async ({ readOnly, liveDateHints }) => {
       const store = new InMemoryStore();
       const memory = new Memory({
         storage: store,
         options: {
           lastMessages: 0,
           observationalMemory: {
+            liveDateHints,
             scope: 'thread',
             observation: { model: 'openai/gpt-4o-mini', messageTokens: 100_000, bufferTokens: false },
             reflection: { observationTokens: 100_000 },
@@ -82,7 +85,7 @@ describe('stable observation date prefix', () => {
           memory: { thread: threadId, resource: resourceId, options: { readOnly } },
         });
       }
-      expect(prompts).toHaveLength(3);
+      expect(prompts).toHaveLength(instants.length);
       const systems = prompts.map(prompt => prompt.filter(message => message.role === 'system'));
       const prefix = systems.map(messages => {
         const closing = messages.findIndex(message => message.content === '</observations>');
@@ -105,8 +108,8 @@ describe('stable observation date prefix', () => {
         const hints = messages.filter(
           message => typeof message.content === 'string' && message.content.startsWith('<observation-date-hints>'),
         );
-        expect(hints).toHaveLength(1);
-        expect(messages.indexOf(hints[0]!)).toBeGreaterThan(closing);
+        expect(hints).toHaveLength(liveDateHints === false ? 0 : 1);
+        if (hints.length) expect(messages.indexOf(hints[0]!)).toBeGreaterThan(closing);
       }
       const hints = systems.map(
         messages =>
@@ -115,11 +118,15 @@ describe('stable observation date prefix', () => {
           )?.content,
       );
       expect(hints[0]).toBe(hints[1]);
-      expect(hints[0]).toContain('Date: Nov 18, 2026 (today)');
-      expect(hints[0]).toContain('November 20, 2026 (in 2 days)');
-      expect(hints[2]).toContain('Date: Nov 18, 2026 (yesterday)');
-      expect(hints[2]).toContain('November 20, 2026 (tomorrow)');
-      expect(hints[2]).toContain('likely already happened');
+      if (liveDateHints === false) {
+        for (const messages of systems.slice(1)) expect(JSON.stringify(messages)).toBe(JSON.stringify(systems[0]));
+      } else {
+        expect(hints[0]).toContain('Date: Nov 18, 2026 (today)');
+        expect(hints[0]).toContain('November 20, 2026 (in 2 days)');
+        expect(hints[2]).toContain('Date: Nov 18, 2026 (yesterday)');
+        expect(hints[2]).toContain('November 20, 2026 (tomorrow)');
+        expect(hints[2]).toContain('likely already happened');
+      }
       expect(observe).not.toHaveBeenCalled();
       expect(await storage.getObservationalMemory({ threadId, resourceId })).toEqual(before);
     },

@@ -458,8 +458,14 @@ export function buildObservationDateHints(
   timeZone?: string,
 ): string | undefined {
   const today = calendarDayIn(currentDate, timeZone);
+  const todayLabel = new Date(today * DAY_MS).toISOString().slice(0, 10);
+  const opening = `<observation-date-hints>\nToday is ${todayLabel} in the observation time zone (${resolveTimeZone(timeZone) ?? 'process local'}). These live annotations refer to the absolute observations above; they are not additional observations.`;
+  const closing = '\n</observation-date-hints>';
+  const omission =
+    '\nAdditional date cues omitted. Interpret remaining absolute dates against today; past planned actions likely already happened.';
   const lines: string[] = [];
-  let remaining = 8000;
+  // Reserve all wrapper text and the optional omission notice within the finished suffix's 8,000-character limit.
+  let remaining = 8000 - opening.length - closing.length - omission.length;
   let omitted = false;
   for (const line of observations.split('\n')) {
     // Every supported date form carries a four-digit year; most observation lines carry none.
@@ -474,18 +480,7 @@ export function buildObservationDateHints(
     remaining -= annotated.length + 1;
   }
   if (!lines.length && !omitted) return undefined;
-  const todayLabel = new Date(today * DAY_MS).toISOString().slice(0, 10);
-  return [
-    '<observation-date-hints>',
-    `Today is ${todayLabel} in the observation time zone (${resolveTimeZone(timeZone) ?? 'process local'}). These live annotations refer to the absolute observations above; they are not additional observations.`,
-    ...lines,
-    ...(omitted
-      ? [
-          'Additional date cues omitted. Interpret remaining absolute dates against today; past planned actions likely already happened.',
-        ]
-      : []),
-    '</observation-date-hints>',
-  ].join('\n');
+  return `${opening}${lines.map(line => `\n${line}`).join('')}${omitted ? omission : ''}${closing}`;
 }
 
 export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;

@@ -423,6 +423,7 @@ type InvocationModelResolution<TModel> = {
 export class ObservationalMemory {
   private storage: MemoryStorage;
   private tokenCounter: TokenCounter;
+  private readonly liveDateHints: boolean;
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
@@ -613,6 +614,7 @@ export class ObservationalMemory {
 
     this.shouldObscureThreadIds = config.obscureThreadIds || false;
     this.storage = config.storage;
+    this.liveDateHints = config.liveDateHints ?? true;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
     this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
@@ -2101,7 +2103,8 @@ export class ObservationalMemory {
       : optimizeObservationsForContext(observations);
 
     // Relative dates change at record-local midnight; keep them outside the stable observation chunks.
-    const dateHints = currentDate ? buildObservationDateHints(optimized, currentDate, timeZone) : undefined;
+    const dateHints =
+      this.liveDateHints && currentDate ? buildObservationDateHints(optimized, currentDate, timeZone) : undefined;
     const stableObservations = currentDate ? addObservationDateGaps(optimized) : optimized;
 
     const messages = [

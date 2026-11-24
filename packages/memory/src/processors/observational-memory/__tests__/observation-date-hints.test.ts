@@ -54,13 +54,21 @@ describe('separate observation date hints', () => {
   it('bounds repeated cues and oversized lines, retaining a current-day fallback', () => {
     const text = Array.from({ length: 300 }, (_, index) => `- Fact ${index}: November 20, 2026`).join('\n');
     const hints = buildObservationDateHints(text, now, zone)!;
-    expect(hints.length).toBeLessThan(8500);
+    expect(hints.length).toBeLessThanOrEqual(8000);
     expect(hints.match(/Fact /g)).toHaveLength(64);
     expect(hints).toContain('Today is 2026-11-19');
     expect(hints).toContain('Additional date cues omitted');
     const oversized = buildObservationDateHints(`${'x'.repeat(20000)} November 20, 2026`, now, zone)!;
     expect(oversized.length).toBeLessThan(500);
     expect(oversized).toContain('Additional date cues omitted');
+  });
+
+  it('includes tags, the today explanation and omission notice in the 8,000-character suffix limit', () => {
+    const hints = buildObservationDateHints(`${'x'.repeat(7900)} November 20, 2026`, now, zone)!;
+    expect(hints.length).toBeLessThanOrEqual(8000);
+    expect(hints).toContain('Today is 2026-11-19');
+    expect(hints).toContain('Additional date cues omitted');
+    expect(hints.endsWith('</observation-date-hints>')).toBe(true);
   });
 
   it('bounds combined cue length, not just the number of dates', () => {
@@ -71,7 +79,7 @@ describe('separate observation date hints', () => {
       now,
       zone,
     )!;
-    expect(hints.length).toBeLessThan(8500);
+    expect(hints.length).toBeLessThanOrEqual(8000);
     expect(hints).toContain('Additional date cues omitted');
   });
 

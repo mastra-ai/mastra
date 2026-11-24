@@ -126,6 +126,8 @@ export type {
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
 type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> & {
+  /** Append live relative-date cues after observations. Defaults to true. */
+  liveDateHints?: ObservationalMemoryConfig['liveDateHints'];
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
@@ -2286,6 +2288,7 @@ ${workingMemory}`;
     return new OMClass({
       storage: memoryStore,
       memory: this,
+      liveDateHints: omConfig.liveDateHints,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,

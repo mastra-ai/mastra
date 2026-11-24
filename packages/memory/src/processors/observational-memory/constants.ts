@@ -87,7 +87,7 @@ KNOWLEDGE UPDATES: When asked about current state (e.g., "where do I currently..
 
 USER STATEMENTS VS ASSISTANT SUGGESTIONS: Treat what the user said about their own life, plans, decisions, and dates as authoritative, unless data or their own later messages say otherwise. Treat what the assistant said, such as proposed schedules, example dates, and recommendations, as suggestions rather than facts about what happened, unless the user adopted or confirmed them. What the assistant did, such as editing a file, running a command, or calling a tool, is a record of what happened.
 
-PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (check the relative time like "3 weeks ago"), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
+PLANNED ACTIONS: If the user stated they planned to do something (e.g., "I'm going to...", "I'm looking forward to...", "I will...") and the date they planned to do it is now in the past (compare the absolute dates; use relative-time hints when available), assume they completed the action unless there's evidence they didn't. For example, if someone said "I'll start my new diet on Monday" and that was 2 weeks ago, assume they started the diet.
 
 MOST RECENT USER INPUT: Treat the most recent user message as the highest-priority signal for what to do next. Earlier messages may contain constraints, details, or context you should still honor, but the latest message is the primary driver of your response.
 
