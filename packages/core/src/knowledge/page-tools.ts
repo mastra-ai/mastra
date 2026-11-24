@@ -391,6 +391,7 @@ function bodyView(
     from?: KnowledgeLinePosition;
     more: string[];
     maxTokens: number;
+    canEdit: boolean;
   },
 ): {
   body?: string;
@@ -480,7 +481,7 @@ function bodyView(
       : undefined;
     if (skeleton !== undefined) {
       more.push(
-        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer. To edit, read that part first: this view has no range to write back.`,
+        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer.${input.canEdit ? ' To edit, read that part first: this view has no range to write back.' : ''}`,
       );
       return { lines: skeleton, lineCount: lines.count };
     }
@@ -515,7 +516,7 @@ function bodyView(
   };
 }
 
-function readTool(host: KnowledgePageToolHost) {
+function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
   return createTool({
     id: 'knowledge_read',
     description:
@@ -523,7 +524,8 @@ function readTool(host: KnowledgePageToolHost) {
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
-      'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
+      'Those part reads return just that part of the body.' +
+      (canEdit ? ' To edit part of a long body, pass the `range` a read gave you to knowledge_page.' : ''),
     inputSchema: {
       type: 'object',
       properties: {
@@ -649,6 +651,7 @@ function readTool(host: KnowledgePageToolHost) {
           from,
           more,
           maxTokens: maxTokensOf(host),
+          canEdit,
         });
         return {
           page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
@@ -728,7 +731,7 @@ function readTool(host: KnowledgePageToolHost) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host) });
+      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host), canEdit });
       const noteList = await noteSummaries(run, notes.notes, mentionCache);
       const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
         ...note,
@@ -1091,13 +1094,14 @@ const NUMBERED_LINE = /^\s*\d+\u2502/;
  * Without one, a body longer than one read returns is refused: the writer can only have seen part
  * of it, and writing that part back would drop the rest.
  */
-function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): string | undefined {
+function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number, canRead: boolean): string | undefined {
+  const read = canRead ? 'knowledge_read' : 'read';
   const stored = page.body ?? '';
   if (args.body !== undefined) {
     const written = args.body.split('\n').filter(line => line.trim());
     if (written.length && written.every(line => NUMBERED_LINE.test(line))) {
       throw new Error(
-        'This body still has the line numbers a knowledge_read put in front of each line ("12│"). Write the text without them.',
+        `This body still has the line numbers a ${read} put in front of each line ("12│"). Write the text without them.`,
       );
     }
   }
@@ -1112,12 +1116,12 @@ function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): s
     let start = lines.startOffset(args.range.start);
     let end = lines.endOffset(args.range.end);
     if (start > end) {
-      throw new Error(`The range starts after it ends. Pass the range a knowledge_read returned.`);
+      throw new Error(`The range starts after it ends. Pass the range a ${read} returned.`);
     }
     // A read from `start` returns at most this window, so a wider range can't be one a read gave.
     if (end > knowledgeBodyWindow(lines, start, stored.length, maxTokens).end) {
       throw new Error(
-        `Lines ${args.range.start.line}–${args.range.end.line} run past what one knowledge_read from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
+        `Lines ${args.range.start.line}–${args.range.end.line} run past what one ${read} from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
           'Edit the body part by part: write each part back with the range its own read returned.',
       );
     }
@@ -1131,9 +1135,11 @@ function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): s
   }
   if (args.body !== undefined && estimateTokenCount(stored) > maxTokens) {
     throw new Error(
-      `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write without a range replaces all of it. ` +
-        'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
-        'read other parts with from, section or match and write each back with its own range.',
+      `This page's body is ${stored.length} characters, more than one ${read} returns, and a body write without a range replaces all of it. ` +
+        (canRead
+          ? 'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
+            'read other parts with from, section or match and write each back with its own range.'
+          : 'Without a read there is no range to write it back with, so leave this page unchanged.'),
     );
   }
   return args.body;
@@ -1153,7 +1159,7 @@ type PageInput = {
   expectedVersion?: number;
 };
 
-function pageTool(host: KnowledgePageToolHost) {
+function pageTool(host: KnowledgePageToolHost, canRead: boolean) {
   return createTool({
     id: 'knowledge_page',
     description:
@@ -1190,8 +1196,7 @@ function pageTool(host: KnowledgePageToolHost) {
         },
         range: {
           type: 'object',
-          description:
-            'Edit: a range a knowledge_read returned (or part of one), e.g. {"start": {"line": 12}, "end": {"line": 14}}. `body` then replaces lines 12 through 14; an empty body removes them. A `col` limits it to part of a very long line. Needs expectedVersion.',
+          description: `Edit: a range a ${canRead ? 'knowledge_read' : 'read'} returned (or part of one), e.g. {"start": {"line": 12}, "end": {"line": 14}}. \`body\` then replaces lines 12 through 14; an empty body removes them. A \`col\` limits it to part of a very long line. Needs expectedVersion.`,
           properties: { start: linePositionSchema, end: linePositionSchema },
           required: ['start', 'end'],
           additionalProperties: false,
@@ -1233,7 +1238,7 @@ function pageTool(host: KnowledgePageToolHost) {
             expectedVersion: args.expectedVersion ?? page.version,
             name: args.name,
             description: args.description,
-            body: writtenBody(args, page, maxTokensOf(host)),
+            body: writtenBody(args, page, maxTokensOf(host), canRead),
             provenance,
           });
           await embed(host, index => index.indexPage(updated), pageEmbedFailed(storage, updated));
@@ -1449,11 +1454,11 @@ function noteTool(host: KnowledgePageToolHost) {
   });
 }
 
-function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => void) {
+function pinTool(host: KnowledgePageToolHost, canRead: boolean, onChange?: (context: unknown) => void) {
   return createTool({
     id: 'knowledge_pin',
     description:
-      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, like knowledge_list from it, `depth` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ' +
+      `Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, ${canRead ? 'like knowledge_list from it, ' : ''}\`depth\` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ` +
       "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it, and a listing shows only the pages they can read.",
     inputSchema: {
       type: 'object',
@@ -1789,13 +1794,13 @@ export function buildKnowledgePageTools(
   if (groups.read) {
     tools.knowledge_list = listTool(host);
     tools.knowledge_search = searchTool(host);
-    tools.knowledge_read = readTool(host);
+    tools.knowledge_read = readTool(host, groups.write);
     tools.knowledge_activity = activityTool(host);
   }
   if (groups.write) {
-    tools.knowledge_page = pageTool(host);
+    tools.knowledge_page = pageTool(host, groups.read);
     tools.knowledge_note = noteTool(host);
   }
-  if (groups.pins) tools.knowledge_pin = pinTool(host, onPinChange);
+  if (groups.pins) tools.knowledge_pin = pinTool(host, groups.read, onPinChange);
   return tools;
 }

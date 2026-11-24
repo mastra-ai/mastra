@@ -8,6 +8,7 @@ import {
   knowledgePageKeyProblem,
   knowledgePagesResetMessage,
   legacyKnowledgeTablesToDrop,
+  KnowledgeInvalidCursorError,
 } from '@internal/core/knowledge-compat';
 import type { KnowledgePagesSchemaInspection } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -101,7 +102,7 @@ function decodeCursor(cursor: string): [string, string] {
   } catch {
     // fall through
   }
-  throw new Error('Invalid Knowledge cursor');
+  throw new KnowledgeInvalidCursorError(cursor);
 }
 
 function clampLimit(limit: number | undefined, max: number): number {
