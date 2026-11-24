@@ -10854,6 +10854,18 @@ export class Agent<
   }
 
   /**
+   * The resource and thread that a `runId`-only `sendSignal`, `sendMessage` or `queueMessage`
+   * target resolves to, or undefined when this process doesn't track the run. Servers use it to
+   * check that a caller owns the run before sending to it. Core rejects a target whose `resourceId` doesn't own
+   * its `runId`, but that is a consistency check, not authorization: Core doesn't know who is calling and trusts a
+   * `runId`-only target. Callers that take `runId` from untrusted input must authenticate the caller and compare
+   * this owner with the caller's trusted resource before sending.
+   */
+  getThreadRunTarget(runId: string): { resourceId?: string; threadId: string } | undefined {
+    return agentThreadStreamRuntime.getThreadRunTarget(runId, this.getPubSub());
+  }
+
+  /**
    * Lists suspended agent runs from workflow snapshot storage — runs waiting on
    * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
    * tool that called `suspend()`.
