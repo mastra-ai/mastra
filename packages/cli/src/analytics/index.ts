@@ -63,9 +63,12 @@ function pickCommandArgs(args: object): Record<string, unknown> {
   );
 }
 
-/** Errors can quote a URL the user passed, so drop its credentials and query string. */
+/**
+ * Errors can quote a URL the user passed, so drop its query string, or all of it when it may hold
+ * credentials. Where those end is ambiguous: passwords can contain `/` or `?`, and queries `@`.
+ */
 function stripUrlSecrets(message: string): string {
-  return message.replace(/:\/\/\S+/g, url => url.replace(/\/\/.*@/, '//').replace(/[?#].*/, ''));
+  return message.replace(/:\/\/\S+/g, url => (/[^/]@/.test(url) ? '://[redacted]' : url.replace(/[?#].*/, '')));
 }
 
 interface CommandData {

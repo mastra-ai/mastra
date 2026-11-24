@@ -144,15 +144,21 @@ describe('command analytics', () => {
     expect(received.join()).not.toContain(API_KEY);
   });
 
-  it('removes credentials and query strings from URLs in reported errors', async () => {
-    const error = new Error(`Template "https://user:${API_KEY}@git.test/a/b?token=${API_KEY}" not found`);
+  it.each([
+    ['https://git.test/a?token=KEY', 'https://git.test/a'],
+    ['https://git.test/a?token=label@KEY', 'https://[redacted]'],
+    ['https://user:KEY@git.test/a?b=KEY', 'https://[redacted]'],
+    ['postgres://user:/?#KEY@db.test/a', 'postgres://[redacted]'],
+    ['https://registry.npmjs.org/@mastra/core', 'https://registry.npmjs.org/@mastra/core'],
+  ])('removes credentials and query strings from %s in reported errors', async (url, reported) => {
+    const error = new Error(`Could not fetch ${url.replaceAll('KEY', API_KEY)} (404)`);
 
     await expect(
       analytics.trackCommandExecution({ command: 'create', args: {}, execution: () => Promise.reject(error) }),
     ).rejects.toBe(error);
 
     const events = await commandEvents();
-    expect(events[0]).toMatchObject({ status: 'error', error: 'Template "https://git.test/a/b not found' });
+    expect(events[0]).toMatchObject({ status: 'error', error: `Could not fetch ${reported} (404)` });
     expect(received.join()).not.toContain(API_KEY);
   });
 });
