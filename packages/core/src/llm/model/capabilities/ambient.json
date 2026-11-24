@@ -39,17 +39,6 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
@@ -59,7 +48,18 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
         "values": ["high", "max"]

@@ -24,6 +24,7 @@ import { loadMemoryContextMessages } from './observation-turn/load-memory-contex
 import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
+import { idsMarkedForResave, resaveCountedMessagesFor, withMessagesMarkedForResave } from './resave-counted-messages';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 import type { ObservationModelContext } from './types';
@@ -224,13 +225,21 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     if (!activeTurn || activeTurn.ended) return;
 
     const terminalList = messageList ?? activeTurn.messageList;
-    const unsavedMessages = [...terminalList.get.input.db(), ...terminalList.get.response.db()];
+    const ownMessages = [...terminalList.get.input.db(), ...terminalList.get.response.db()];
+    const unsavedMessages = withMessagesMarkedForResave(terminalList, ownMessages);
 
     try {
       await activeTurn.end(terminalList);
     } catch (error) {
       if (unsavedMessages.length > 0) {
-        await this.engine.persistMessages(unsavedMessages, activeTurn.threadId, activeTurn.resourceId).catch(() => {});
+        await this.engine
+          .persistMessages(
+            unsavedMessages,
+            activeTurn.threadId,
+            activeTurn.resourceId,
+            idsMarkedForResave(terminalList, ownMessages),
+          )
+          .catch(() => {});
       }
       throw error;
     }
@@ -469,6 +478,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
         const step = this.turn.step(stepNumber);
+        // Counts prepare() makes for stored history are saved with the messages by the normal save.
+        const resaveCounted = resaveCountedMessagesFor(messageList, threadId);
         let ctx;
         try {
           ctx = await step.prepare();
@@ -519,6 +530,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
         });
+
+        resaveCounted();
 
         // ── Token persistence (processor-specific) ──────────
         // prepare() already counted the current unobserved window and resource context.
@@ -587,6 +600,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
         const persistenceMessageList = messageList.cloneForPersistence();
+        // The final reply has had no step after it to count it. Count it now, so it's saved with
+        // its counts and the next request reads them instead of counting it again.
+        this.engine.getTokenCounter().countMessages(persistenceMessageList.get.response.db());
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
@@ -614,9 +630,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // messages so the final assistant text from the resumed turn is not lost.
           const newOutput = persistenceMessageList.get.response.db();
           const newInput = persistenceMessageList.get.input.db();
-          const messagesToSave = [...newInput, ...newOutput];
+          const ownMessages = [...newInput, ...newOutput];
+          const messagesToSave = withMessagesMarkedForResave(persistenceMessageList, ownMessages);
           if (messagesToSave.length > 0 && context.threadId) {
-            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            await this.engine.persistMessages(
+              messagesToSave,
+              context.threadId,
+              context.resourceId,
+              idsMarkedForResave(persistenceMessageList, ownMessages),
+            );
           }
         }
 

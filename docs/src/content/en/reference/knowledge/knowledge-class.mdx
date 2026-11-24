@@ -157,13 +157,13 @@ const tools = knowledge.createTools({
 #### `getPinnedContext()`
 
 ```typescript oxfmt:false
-getPinnedContext(options: { principals: readonly string[] }): Promise<KnowledgePinnedEntry[]>
+getPinnedContext(options: { principals: readonly string[]; read?: boolean }): Promise<KnowledgePinnedEntry[]>
 ```
 
-Returns the pinned pages a caller holding `principals` receives, rendered as an agent run receives them: only pages it can read, within the instance's pin budget. Use it beside `createTools({ principals })` when a host serves Knowledge outside an agent run. Throws for an empty list or an undeclared principal.
+Returns the pinned pages a caller holding `principals` receives, rendered as an agent run receives them: only pages it can read, within the instance's pin budget. Use it beside `createTools({ principals })` when a host serves Knowledge outside an agent run, and pass the same `read` as that call (default: the instance's `tools.read`) so entries point at `knowledge_read` and `knowledge_list` only when the caller has them. Throws for an empty list or an undeclared principal.
 
 ```typescript
-const pins = await knowledge.getPinnedContext({ principals: ['agent:claude-code'] })
+const pins = await knowledge.getPinnedContext({ principals: ['agent:claude-code'], read: true })
 // [{ id, text, name, scope }]
 ```
 

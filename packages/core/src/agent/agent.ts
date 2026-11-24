@@ -2541,6 +2541,7 @@ export class Agent<
         new PinnedStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
           readPins: context => knowledge.__deliveredPins(context),
+          ...knowledge.__toolGroups,
         }),
       );
     }
@@ -10853,6 +10854,18 @@ export class Agent<
   }
 
   /**
+   * The resource and thread that a `runId`-only `sendSignal`, `sendMessage` or `queueMessage`
+   * target resolves to, or undefined when this process doesn't track the run. Servers use it to
+   * check that a caller owns the run before sending to it. Core rejects a target whose `resourceId` doesn't own
+   * its `runId`, but that is a consistency check, not authorization: Core doesn't know who is calling and trusts a
+   * `runId`-only target. Callers that take `runId` from untrusted input must authenticate the caller and compare
+   * this owner with the caller's trusted resource before sending.
+   */
+  getThreadRunTarget(runId: string): { resourceId?: string; threadId: string } | undefined {
+    return agentThreadStreamRuntime.getThreadRunTarget(runId, this.getPubSub());
+  }
+
+  /**
    * Lists suspended agent runs from workflow snapshot storage — runs waiting on
    * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
    * tool that called `suspend()`.
@@ -13018,6 +13031,7 @@ export class Agent<
       - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
+      - write the title in the same language the user's messages are written in
       - do not use quotes or colons
       - the entire text you return will be used as the title`;
 

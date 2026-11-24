@@ -1,5 +1,88 @@
 # @mastra/core
 
+## 1.86.0-alpha.8
+
+### Minor Changes
+
+- Added durable experiments. Pass `durable: true` to `startExperimentAsync()` and the experiment runs as an evented workflow with one step per item, so a process that stops or redeploys no longer leaves it stuck at `running`. With workers on a pubsub that redelivers events, such as Redis Streams, another worker picks up an item that was cut off, and each item still records one result. ([#31204](https://github.com/mastra-ai/mastra/pull/31204))
+
+  ```typescript
+  const { experimentId } = await dataset.startExperimentAsync({
+    durable: true,
+    targetType: 'agent',
+    targetId: 'translation-agent',
+    scorers: ['accuracy'],
+  });
+  ```
+
+  Durable runs only accept options that can be stored, such as registered targets, scorer IDs, a `provider/modelId` `agentModel` and a plain JSON `requestContext`. Inline tasks, hooks, `onEvent`, `signal`, scorer objects, non-JSON `requestContext` values and invalid `maxConcurrency`, `itemTimeout` or `maxRetries` values throw `EXPERIMENT_NOT_DURABLE` before anything is created. The caller's auth token, user, roles and permissions are removed from `requestContext` before the run is published or stored. Without `durable`, experiments run in process as before.
+
+  `runExperimentItem()` now also accepts `agentModel`, `itemTimeout`, `maxRetries`, `unmockedToolPolicy` and `versions`, and applies the item's tool mocks, so a caller-driven item behaves like an item in a native run.
+
+  An item whose `itemTimeout` expires while it waits to retry now fails with the timeout right away instead of waiting out the backoff, and result rows written by `runExperimentItem()` now keep the item's `metadata`.
+
+- Added a warning for evented workflows and evented agents that run on a setup that can't support several processes. ([#31233](https://github.com/mastra-ai/mastra/pull/31233))
+
+  Running evented execution on more than one process needs a pubsub that redelivers unacknowledged events and a workflows store with step guards. Mastra now logs a warning the first time an evented run is created when:
+
+  - the pubsub delivers to other processes but doesn't redeliver a stopped worker's events, as with `UnixSocketPubSub`
+  - the pubsub redelivers events and the workflows store has no step guards
+
+  The default `EventEmitterPubSub` doesn't warn. It delivers inside one process, which is how evented workflows and agents run locally and in tests. Set `MASTRA_DISABLE_EVENTED_SETUP_WARNING=true` to disable the warning.
+
+  **New `PubSub.deliversAcrossProcesses` property**
+
+  It defaults to `true`. If you see the warning with a custom pubsub, declare what its transport does:
+
+  ```ts
+  import { PubSub } from '@mastra/core/events';
+
+  class MyBrokerPubSub extends PubSub {
+    // The broker gives an unacknowledged event to another consumer of the group.
+    override get redeliversUnacked() {
+      return true;
+    }
+
+    // publish(), subscribe(), unsubscribe(), flush()
+  }
+
+  class MyInProcessPubSub extends PubSub {
+    // Every subscriber lives in the publishing process.
+    override get deliversAcrossProcesses() {
+      return false;
+    }
+
+    // publish(), subscribe(), unsubscribe(), flush()
+  }
+  ```
+
+  See [evented workflows and agents](https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents) for the supported pubsubs and storage adapters.
+
+- Agents can now ask what changed in Knowledge over a period. The new `knowledge_activity` read tool lists page and note changes between `since` and `until`, newest first, with who made each change. It can be narrowed to one page or scope with `from`. Note changes show the note's current text, or that it was removed. Like every other read tool, it only shows changes to pages and notes the run can read. ([#31200](https://github.com/mastra-ai/mastra/pull/31200))
+
+  ```ts
+  // "What changed since Q3?"
+  await tools.knowledge_activity.execute({ since: '2026-07-01' });
+  ```
+
+  `listPageActivity` accepts `since`, `until` and a `before` position, and stores report `supportsActivityDateRange` when they handle them. In-memory, LibSQL and PostgreSQL support it. The tool refuses stores without it rather than return unbounded history. Reads without dates are unchanged.
+
+### Patch Changes
+
+- Improved JSDoc on commonly used `@mastra/core` types so editors and coding agents reading the published `.d.ts` files get accurate answers: `Agent.generate()` overloads, `FullOutput` tool calls and results, `ToolCallPayload` / `ToolResultPayload`, accepted model config forms (`MastraModelConfig`, `BaseModelConfig`), `AgentConfig`, `ToolExecuteFunction` arguments, and per-call execution options such as `maxSteps` and `stopWhen`. ([#31278](https://github.com/mastra-ai/mastra/pull/31278))
+
+- Fixed time travel to a step inside a nested workflow on the evented engine. The step now re-runs with the input recorded in the run instead of `{}`, and time travel to a step inside a nested `.foreach()` no longer hangs or re-runs iterations that already succeeded. `resumeData` passed to time travel now reaches a suspended step inside a nested workflow. ([#29827](https://github.com/mastra-ai/mastra/pull/29827))
+
+- Fixed `execute_command` (and other workspace tools that cap output by tokens) freezing the process for seconds when a command prints a lot of output. The token limit now estimates the full output with a cheap word count, cuts it down to the part that can be kept, and runs the exact token count only on that part, so a 30 MB output no longer blocks every other request, session and timer. Small outputs are truncated exactly as before. ([#31003](https://github.com/mastra-ai/mastra/pull/31003))
+
+- Fixed reconnecting to a run on an agent created with `new Agent({ durable: { executionEngine } })`. After another worker took over the run, the observe endpoint could send output from the execution that lost it and end the stream early. It now drops that output, the same way it already did for `createDurableAgent` agents. Inngest agents keep reading their own stream. ([#31228](https://github.com/mastra-ai/mastra/pull/31228))
+
+- Fixed restarting a workflow whose nested workflow step had started but whose nested run was never saved. The restart, including recovery on boot, used to fail the whole run with "This workflow run was not active". It now starts the nested workflow with the step's input and the parent's state. State changes made by other parallel steps are kept. ([#31032](https://github.com/mastra-ai/mastra/pull/31032))
+
+- Fixed `dataset.createExperiment()` and `dataset.startExperimentAsync()` loading every dataset item only to count them. Creating an experiment now asks storage for the count, so it stays fast on large datasets. Fixes [#31083](https://github.com/mastra-ai/mastra/issues/31083). ([#31290](https://github.com/mastra-ai/mastra/pull/31290))
+
+- Fixed evented workflow runs that ran steps again after they had already ended. This happened when a step event was delivered late, for example when the message broker handed an unacknowledged message from a stopped worker to another worker. A finished run now ignores late step events instead of running steps again, and a late failure no longer marks a successful run as failed. ([#31033](https://github.com/mastra-ai/mastra/pull/31033))
+
 ## 1.86.0-alpha.7
 
 ### Minor Changes
