@@ -410,6 +410,7 @@ export function usePendingConnect(options: UsePendingConnectOptions = {}) {
       const split = values ? splitHeadlessAuthValues(headlessAuthFields(provider), values) : {};
       const handle = startHeadlessAuth({
         sessionToken,
+        apiBaseUrl: created.apiBaseUrl,
         integrationId: created.integrationId,
         authType: provider.authType,
         credentials: split.credentials,

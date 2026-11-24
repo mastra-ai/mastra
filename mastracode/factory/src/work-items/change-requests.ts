@@ -18,6 +18,18 @@ export function pullRequestSources(item: SourcedItem): WorkItemSourceRow[] {
   return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
 }
 
+/**
+ * On a pull request's source metadata: the ids of the other cards of issues it closes, besides
+ * the card holding it. They link to it without holding it; see `closingLinksIn`.
+ */
+export const CLOSES_WORK_ITEM_IDS_KEY = 'closesWorkItemIds';
+
+/** The cards a pull request source closes besides the one holding it. */
+export function closedWorkItemIds(source: Pick<WorkItemSourceRow, 'metadata'>): string[] {
+  const listed = source.metadata?.[CLOSES_WORK_ITEM_IDS_KEY];
+  return Array.isArray(listed) ? listed.filter((id): id is string => typeof id === 'string') : [];
+}
+
 /** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
 export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
   const metadata = source.metadata ?? {};

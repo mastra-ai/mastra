@@ -303,6 +303,25 @@ export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
 >;
 
 /**
+ * Configuration for {@link Dataset.startExperimentAsync}.
+ */
+export type StartExperimentAsyncConfig<I = unknown, O = unknown, E = unknown> = StartExperimentConfig<I, O, E> & {
+  /**
+   * Run the experiment as an evented workflow, one step per item, instead of a
+   * promise in the starting process. Each item is redelivered if its process
+   * dies, so the experiment still finishes. Needs a pubsub that redelivers
+   * (e.g. Redis Streams) and workers or a push handler to be durable; on the
+   * default in-memory pubsub it runs in process.
+   *
+   * Every option must be JSON: a registered target, scorer ids, and a
+   * `provider/model` string for `agentModel`. Inline `task`, hooks, `onEvent`,
+   * `signal`, scorer objects and `persistence: 'none'` throw
+   * `EXPERIMENT_NOT_DURABLE`.
+   */
+  durable?: boolean;
+};
+
+/**
  * Persisted output of an agent target. Fields whose shape depends on the agent
  * (structured output, tool payloads, provider usage) are kept loose.
  */

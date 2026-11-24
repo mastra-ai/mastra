@@ -219,8 +219,12 @@ export const VariantSizeMatrix: Story = {
           <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
             lg
           </Button>
-          <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
-            <TrashIcon />
+          <Button
+            icon={<TrashIcon />}
+            variant={variant}
+            size="lg"
+            render={variant === 'link' ? <a href="#" /> : undefined}
+          >
             with icon
           </Button>
         </Fragment>

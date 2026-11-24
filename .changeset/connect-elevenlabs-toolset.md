@@ -17,6 +17,6 @@ const elevenlabsAgent = new Agent({
   name: 'ElevenLabs agent',
   instructions: 'Use the connected ElevenLabs tools to narrate messages, transcribe recordings, and score videos.',
   model: 'openai/gpt-5.6',
-  tools: tools({ providers: { elevenlabs: { requireApproval: ['elevenlabs_clone_voice'] } } }),
+  tools: tools({ providers: ['elevenlabs'], requireApproval: ['elevenlabs_clone_voice'] }),
 });
 ```

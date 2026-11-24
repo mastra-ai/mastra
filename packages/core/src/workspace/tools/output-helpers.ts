@@ -1,7 +1,7 @@
 import { estimateTokenCount } from 'tokenx';
 
 import { isValidationError } from '../../tools/validation';
-import { sliceByTokensSafe } from '../../utils/slice-by-tokens';
+import { sliceByTokensSafe, sliceSafe } from '../../utils/slice-by-tokens';
 
 /** Default number of lines to return (tail). */
 export const DEFAULT_TAIL_LINES = 200;
@@ -101,6 +101,196 @@ function splitTail(output: string, tail: number | null | undefined): TailSplit {
 // ---------------------------------------------------------------------------
 
 /**
+ * tokenx is synchronous and allocates per word, so running it over a multi-MB
+ * output blocks the event loop for seconds. Outputs up to this many chars per
+ * token of budget are counted and cut exactly as before; longer ones never reach
+ * tokenx whole (see `countTokensOver` and `sliceEdge`).
+ */
+const WINDOW_CHARS_PER_TOKEN = 32;
+
+/**
+ * tokenx never gives a non-whitespace segment fewer than one token per this many
+ * UTF-16 chars: 6 by default, and up to 4 code points (8 chars when astral) for
+ * its language rules. So text with more non-whitespace chars than
+ * `limit * MAX_CHARS_PER_TOKEN` is over `limit`.
+ */
+const MAX_CHARS_PER_TOKEN = 8;
+
+const WHITESPACE_RUN_RE = /\s+/g;
+const STRUCTURED_WHITESPACE_RE = /\n\s/;
+
+// Char classes for approximateTokenCount, mirroring tokenx's segment split.
+const WS = 0;
+const PUNCT = 1;
+const DIGIT = 2;
+const WORD = 3;
+const CHAR_CLASS = new Uint8Array(128).fill(WORD);
+for (const c of ' \t\n\r\v\f') CHAR_CLASS[c.charCodeAt(0)] = WS;
+for (const c of '.,!?;(){}[]<>:/\\|@#$%^&*+=`~_"-') CHAR_CLASS[c.charCodeAt(0)] = PUNCT;
+for (let c = 48; c <= 57; c++) CHAR_CLASS[c] = DIGIT;
+
+/** Same set as the regex `\s`, which is what tokenx splits words on. */
+function isWhitespace(code: number): boolean {
+  return (
+    code === 0xa0 ||
+    code === 0x1680 ||
+    (code >= 0x2000 && code <= 0x200a) ||
+    code === 0x2028 ||
+    code === 0x2029 ||
+    code === 0x202f ||
+    code === 0x205f ||
+    code === 0x3000 ||
+    code === 0xfeff
+  );
+}
+
+function runTokens(kind: number, length: number, onlyDigits: boolean): number {
+  if (kind === WS) return 0;
+  if (length <= 3) return 1;
+  if (kind === PUNCT) return Math.ceil(length / 2);
+  return onlyDigits ? Math.ceil(length / 3) : Math.ceil(length / 6);
+}
+
+/**
+ * One pass over char codes with no allocations: an approximate token count
+ * (tokenx's rules for ASCII text, used only for the "of ~N tokens" total) and
+ * the number of non-whitespace chars.
+ */
+function scanTokens(text: string): { approx: number; nonWhitespace: number } {
+  let approx = 0;
+  let nonWhitespace = 0;
+  let kind = -1;
+  let length = 0;
+  let onlyDigits = true;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const cls = code < 128 ? CHAR_CLASS[code]! : isWhitespace(code) ? WS : WORD;
+    const runKind = cls === DIGIT ? WORD : cls;
+    if (runKind !== kind) {
+      if (length) approx += runTokens(kind, length, onlyDigits);
+      kind = runKind;
+      length = 0;
+      onlyDigits = true;
+    }
+    length++;
+    if (cls !== WS) nonWhitespace++;
+    if (cls !== DIGIT) onlyDigits = false;
+  }
+  if (length) approx += runTokens(kind, length, onlyDigits);
+  return { approx, nonWhitespace };
+}
+
+/**
+ * Exact token count of `output` when it may fit `limit`, else an approximation.
+ * Returns `undefined` when the output fits, so callers return it as is.
+ */
+function countTokensOver(output: string, limit: number): number | undefined {
+  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
+    const exact = estimateTokenCount(output);
+    return exact <= limit ? undefined : exact;
+  }
+  const { approx, nonWhitespace } = scanTokens(output);
+  if (nonWhitespace > limit * MAX_CHARS_PER_TOKEN) return approx;
+  // Little non-whitespace text in a long output: tokenx counts each whitespace run
+  // as 0 tokens, or 1 when it holds a newline followed by more whitespace, so
+  // collapsing every run to ' ' or '\n ' keeps the count and shrinks the input.
+  const collapsed = output.replace(WHITESPACE_RUN_RE, run => (STRUCTURED_WHITESPACE_RE.test(run) ? '\n ' : ' '));
+  const exact = estimateTokenCount(collapsed);
+  return exact <= limit ? undefined : exact;
+}
+
+/**
+ * `budget` tokens from one end of `output`. Outputs within the overall `limit`'s
+ * size cap are cut exactly as before, by `sliceByTokensSafe(output, 0, budget)`
+ * (`'head'`) or `sliceByTokensSafe(output, -budget)` (`'tail'`). Longer ones hand
+ * tokenx only a window at that end, measured as tokenx sees it: whitespace runs
+ * are collapsed (see `countTokensOver`), so padding can't crowd real text out of
+ * the window. The cut is mapped back to the original text, whitespace and all.
+ *
+ * For those longer outputs the cut is approximate: it fits `budget` by tokenx's
+ * count of the kept text, but can land elsewhere than tokenizing the whole output
+ * would. tokenx counts a segment by its whole length, so a window that ends inside
+ * a long segment counts it differently (at a 2,000-token budget, 65,000 'a' then
+ * 'é' keeps 12,000 chars here and 6,000 when the whole output is tokenized).
+ */
+function sliceEdge(output: string, budget: number, limit: number, side: 'head' | 'tail'): string {
+  if (output.length <= Math.max(limit, 1) * WINDOW_CHARS_PER_TOKEN) {
+    return side === 'head' ? sliceByTokensSafe(output, 0, budget) : sliceByTokensSafe(output, -budget);
+  }
+
+  // Grow the window from the kept end until its collapsed size reaches the cap:
+  // tokenx counts at least 1 token per 10 collapsed chars, so it holds over 3x the budget.
+  const target = Math.max(budget, 1) * WINDOW_CHARS_PER_TOKEN;
+  let size = 0;
+  let inWhitespace = false;
+  let edge = side === 'head' ? 0 : output.length;
+  while (side === 'head' ? edge < output.length : edge > 0) {
+    const code = output.charCodeAt(side === 'head' ? edge : edge - 1);
+    const whitespace = code < 128 ? CHAR_CLASS[code] === WS : isWhitespace(code);
+    const cost = whitespace ? (inWhitespace ? 0 : 2) : 1;
+    if (size + cost > target) break;
+    size += cost;
+    inWhitespace = whitespace;
+    edge += side === 'head' ? 1 : -1;
+  }
+  const window = side === 'head' ? output.slice(0, edge) : output.slice(edge);
+
+  // Collapse whitespace runs, remembering where each one sits in both strings.
+  const runs: { collapsedStart: number; collapsedEnd: number; start: number; end: number }[] = [];
+  let collapsed = '';
+  let last = 0;
+  for (const match of window.matchAll(WHITESPACE_RUN_RE)) {
+    collapsed += window.slice(last, match.index);
+    const replacement = STRUCTURED_WHITESPACE_RE.test(match[0]) ? '\n ' : ' ';
+    runs.push({
+      collapsedStart: collapsed.length,
+      collapsedEnd: collapsed.length + replacement.length,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+    collapsed += replacement;
+    last = match.index + match[0].length;
+  }
+  collapsed += window.slice(last);
+
+  // tokenx keeps or drops a 0- or 1-token whitespace run whole, so a cut lands on a run's edge or between other chars.
+  const toWindowIndex = (index: number): number => {
+    let shift = 0;
+    for (const run of runs) {
+      if (index < run.collapsedStart) break;
+      if (index <= run.collapsedEnd) return index === run.collapsedEnd ? run.end : run.start;
+      shift = run.end - run.collapsedEnd;
+    }
+    return index + shift;
+  };
+
+  if (side === 'head') {
+    const kept = fitBudget(sliceByTokensSafe(collapsed, 0, budget), budget, side);
+    return sliceSafe(window, 0, toWindowIndex(kept.length));
+  }
+  const kept = fitBudget(sliceByTokensSafe(collapsed, -budget), budget, side);
+  return sliceSafe(window, toWindowIndex(collapsed.length - kept.length));
+}
+
+/**
+ * tokenx slices a segment by the chars-per-token of its language, picked from the
+ * chars it contains, so a cut that drops the char that picked it (a lone 'ж' in a run
+ * of CJK) can count several times over `budget` on its own. Recount the kept text,
+ * which is no longer than the bounded input it was cut from, and cut it again until
+ * it fits.
+ */
+function fitBudget(kept: string, budget: number, side: 'head' | 'tail'): string {
+  // `kept.length > 0`: an empty string counts 0 tokens, which never fits a negative budget.
+  for (let tokens = estimateTokenCount(kept); kept.length > 0 && tokens > budget; tokens = estimateTokenCount(kept)) {
+    const next = side === 'head' ? sliceByTokensSafe(kept, 0, budget) : sliceByTokensSafe(kept, -budget);
+    // tokenx can't trim it any further: drop chars in proportion to the overshoot instead.
+    const length = next.length < kept.length ? next.length : Math.floor((kept.length * budget) / tokens);
+    kept = side === 'head' ? sliceSafe(kept, 0, length) : sliceSafe(kept, kept.length - length);
+  }
+  return kept;
+}
+
+/**
  * Token-based output limit. Truncates output to fit within a token budget.
  * Uses tokenx for fast token estimation and truncates at the token level
  * (not line boundaries) to maximise use of the budget.
@@ -118,10 +308,10 @@ export async function applyTokenLimit(
 ): Promise<string> {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
+  const totalTokens = countTokensOver(output, limit);
+  if (totalTokens === undefined) return output;
 
-  const kept = from === 'start' ? sliceByTokensSafe(output, -limit) : sliceByTokensSafe(output, 0, limit);
+  const kept = from === 'start' ? sliceEdge(output, limit, limit, 'tail') : sliceEdge(output, limit, limit, 'head');
 
   const position = from === 'start' ? 'last' : 'first';
   return from === 'start'
@@ -158,14 +348,14 @@ export async function applyTokenLimitSandwich(
 function sandwich(output: string, limit: number, headRatio: number, firstLine: number): string {
   if (!output) return output;
 
-  const totalTokens = estimateTokenCount(output);
-  if (totalTokens <= limit) return output;
+  const totalTokens = countTokensOver(output, limit);
+  if (totalTokens === undefined) return output;
   const headBudget = Math.floor(limit * headRatio);
   const tailBudget = limit - headBudget;
 
   // `head` is a prefix and `tail` a suffix of `output` (the surrogate repair keeps lengths).
-  let head = headBudget > 0 ? sliceByTokensSafe(output, 0, headBudget) : '';
-  let tail = tailBudget > 0 ? sliceByTokensSafe(output, -tailBudget) : '';
+  let head = headBudget > 0 ? sliceEdge(output, headBudget, limit, 'head') : '';
+  let tail = tailBudget > 0 ? sliceEdge(output, tailBudget, limit, 'tail') : '';
   const headEnd = head.length;
   let tailStart = output.length - tail.length;
   // The notice gets its own line, so a line break (`\n` or `\r\n`) at either cut is redundant.

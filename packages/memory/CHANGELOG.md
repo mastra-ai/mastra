@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 1.41.3-alpha.4
+
+### Patch Changes
+
+- Reduced memory use on Cloudflare Workers and other V8 runtimes that bundle @mastra/memory or @mastra/server. Their published JavaScript now only uses Latin-1 characters in code. V8 stores a bundle's source at one byte per character instead of two only when the whole bundle is Latin-1, so the saving applies when your own code and other dependencies are Latin-1 as well. In a minimal Worker with an agent, memory and the Mastra server, heap after six requests dropped from 56.8 MiB to 43.8 MiB. ([#31265](https://github.com/mastra-ai/mastra/pull/31265))
+
+- Fixed Observational Memory formatting the full recent conversation for every observation even when no `onExtracted` hook uses it. The history is now rendered only when a hook is about to receive it. ([#29378](https://github.com/mastra-ai/mastra/pull/29378))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+
+## 1.41.3-alpha.3
+
+### Patch Changes
+
+- Fixed buffered reflection values appearing in thread metadata before activation. Pending values survive reloads and are never published if their buffer is superseded. Background reflection also resumes for the newest memory generation when another process replaced the previous one while an awaited `onReflectionEnd` hook was still running. Staged values publish only when the storage adapter confirms its swap consumed that exact buffer (`bufferedReflectionVerified`); on an adapter that does not, the reflection still activates but its staged values stay unpublished. A buffered reflection that `afterReflection` empties no longer blocks the next buffering attempt, and one cleared with `clear()` while it waited no longer buffers for the recreated memory. Fixes [#27262](https://github.com/mastra-ai/mastra/issues/27262). ([#28293](https://github.com/mastra-ai/mastra/pull/28293))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+
 ## 1.41.3-alpha.2
 
 ### Patch Changes

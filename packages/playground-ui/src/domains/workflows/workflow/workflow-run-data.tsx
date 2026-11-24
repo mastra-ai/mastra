@@ -26,7 +26,7 @@ function RunDataValue({ value }: { value: unknown }) {
       value={safeStringify(value, 2)}
       editable={false}
       lineNumbers={false}
-      className="max-h-72 overflow-auto rounded-lg border border-border bg-background p-3"
+      className="max-h-72 overflow-auto rounded-lg bg-nested p-3"
     />
   );
 }

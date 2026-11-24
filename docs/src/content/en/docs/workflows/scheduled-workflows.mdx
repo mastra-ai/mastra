@@ -53,7 +53,7 @@ Declaring `schedule` doesn't change how the workflow runs. Scheduled fires run i
 
 Split-worker deployments are the exception. When the [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) environment variable is set to any value, including `false`, `createWorkflow` builds scheduled workflows on the **evented execution engine** so that every process in the deployment runs them the same way. Scheduled fires then run on the [orchestration worker](/docs/deployment/workers#orchestration-worker), and Mastra logs a warning to the console when the workflow is created. The public API (`workflow.start()`, `workflow.startAsync()`, `resume()`) doesn't change.
 
-Evented runs require a storage adapter that applies concurrent updates atomically, such as `@mastra/libsql` or `@mastra/pg`. With any other adapter, `createRun()` throws an error that lists the supported adapters.
+Evented runs require a storage adapter that applies concurrent updates atomically, such as `@mastra/libsql` or `@mastra/pg`. With any other adapter, `createRun()` throws an error that lists the supported adapters. A split deployment also needs a PubSub backend that redelivers unacknowledged events and a storage adapter with workflow step guards. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
 
 Only the environment variable triggers the switch, because `createWorkflow` runs before `Mastra` reads its `workers` option. If you split workers with the `workers` option instead, import `createWorkflow` from `@mastra/core/workflows/evented` for your scheduled workflows.
 

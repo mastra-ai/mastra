@@ -87,7 +87,6 @@ const config: Config = {
   customFields: {
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
-    hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
     // Analytics
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
@@ -95,7 +94,6 @@ const config: Config = {
   },
   plugins: [
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
-    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {

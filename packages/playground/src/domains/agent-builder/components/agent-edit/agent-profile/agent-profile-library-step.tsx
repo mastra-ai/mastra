@@ -35,11 +35,8 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       title="Add to your library"
       description="Adding your agent to the library makes it visible to everyone in your workspace, so teammates can discover it, try it out, and copy it as a starting point for their own agents."
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <IconArrowRight />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >
@@ -51,7 +48,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
           <IconLibrary />
         </Icon>
         {isInLibrary ? (
-          <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
+          <p className="flex items-center gap-2 text-subtle-foreground" data-testid="agent-builder-library-added">
             <Icon>
               <IconCheckmark2Medium />
             </Icon>

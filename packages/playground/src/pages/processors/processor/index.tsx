@@ -19,47 +19,46 @@ export function Processor() {
     error,
   } = useProcessor({ processorId: processorId!, queryOptions: { enabled: !!processorId } });
 
+  const authError = is401UnauthorizedError(error) || is403ForbiddenError(error);
+
+  // If this is a workflow processor, redirect to the workflow graph UI
+  if (!isLoading && !authError && processor?.isWorkflow) {
+    return <Navigate to={`/workflows/${processorId}/graph`} replace />;
+  }
+
+  const ready = !isLoading && !error;
+
+  return (
+    <PageLayout variant="page" body={ready ? 'fixed' : 'scroll'} breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">{processorId}</h1>
+      <ProcessorBody processorId={processorId!} isLoading={isLoading} error={error} />
+    </PageLayout>
+  );
+}
+
+function ProcessorBody({ processorId, isLoading, error }: { processorId: string; isLoading: boolean; error: unknown }) {
   // 401 check - session expired
   if (error && is401UnauthorizedError(error)) {
-    return (
-      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">{processorId}</h1>
-        <SessionExpired variant="fill" />
-      </PageLayout>
-    );
+    return <SessionExpired variant="fill" />;
   }
 
   // 403 check - permission denied for processors
   if (error && is403ForbiddenError(error)) {
-    return (
-      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">{processorId}</h1>
-        <PermissionDenied variant="fill" resource="processors" />
-      </PageLayout>
-    );
-  }
-
-  // If this is a workflow processor, redirect to the workflow graph UI
-  if (!isLoading && processor?.isWorkflow) {
-    return <Navigate to={`/workflows/${processorId}/graph`} replace />;
+    return <PermissionDenied variant="fill" resource="processors" />;
   }
 
   if (isLoading) {
     return (
-      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">{processorId}</h1>
-        <Skeleton className="mb-4 h-8 w-48" />
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-8 w-48" />
         <Skeleton className="h-32 w-full" />
-      </PageLayout>
+      </div>
     );
   }
 
   return (
-    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-      <h1 className="sr-only">{processorId}</h1>
-      <div className="h-full w-full overflow-y-hidden">
-        <ProcessorPanel processorId={processorId!} />
-      </div>
-    </PageLayout>
+    <div className="h-full w-full overflow-y-hidden">
+      <ProcessorPanel processorId={processorId} />
+    </div>
   );
 }

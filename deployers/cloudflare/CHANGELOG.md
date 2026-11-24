@@ -1,5 +1,26 @@
 # @mastra/deployer-cloudflare
 
+## 1.3.0-alpha.3
+
+### Minor Changes
+
+- Cloudflare Worker builds are now minified by default. This roughly halves the Worker's upload size and cuts its memory use by about 30%, which leaves more of the Worker memory limit for your agents. Function and class names are kept, and with the source maps Wrangler 4.150 and later upload by default, Cloudflare logs map stack traces from uncaught errors back to the files in `.mastra/output`. To map them back to your own `src/` files, also set `bundler: { sourcemap: true }` on `new Mastra()`. ([#31189](https://github.com/mastra-ai/mastra/pull/31189))
+
+  To turn minification off, pass it to the deployer:
+
+  ```typescript
+  new CloudflareDeployer({
+    name: 'my-worker',
+    minify: false,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/deployer@1.86.0-alpha.8
+
 ## 1.2.45-alpha.2
 
 ### Patch Changes

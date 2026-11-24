@@ -32,7 +32,7 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
 import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
@@ -114,6 +114,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -197,6 +198,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request context */
   requestContext?: RequestContext;
+  /** @internal Called when a non-reserved context entry cannot be snapshotted. */
+  onRequestContextEntryOmitted?: () => void;
   /** Logger */
   logger?: IMastraLogger;
   /** Mastra instance (for version overrides, background tasks, etc.) */
@@ -641,7 +644,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // snapshotRequestContextEntries; the versions entry is pinned back to the
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
-  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(
+    requestContext,
+    options.onRequestContextEntryOmitted,
+  );
   // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
   // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
   // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
@@ -672,6 +678,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,

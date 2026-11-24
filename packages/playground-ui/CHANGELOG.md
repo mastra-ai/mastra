@@ -1,5 +1,94 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.12
+
+### Minor Changes
+
+- Added the `playground-ui/button-icon-prop` lint rule: a text Button's icon goes in its `icon` or `iconEnd` prop, not in its children beside the label. The prop sets the icon's size and padding for the button's size, so every button matches. Icon-only buttons still take the icon as their child. ([#31282](https://github.com/mastra-ai/mastra/pull/31282))
+
+  ```tsx
+  // Before
+  <Button>
+    <Icon size="xs"><IconGauge /></Icon>
+    Create scorer
+  </Button>
+  <Button>Continue <IconArrowRight /></Button>
+
+  // After
+  <Button icon={<IconGauge />}>Create scorer</Button>
+  <Button iconEnd={<IconArrowRight />}>Continue</Button>
+  ```
+
+  The rule is on in the recommended config and covers `Button`, `DialogAction`, `Notice.Button` and `JSONSchemaForm.AddField`. Buttons inside the package follow it too, and the "Add variable" buttons in the prompt block editor no longer show two plus icons.
+
+### Patch Changes
+
+- Fixed pages fading out at their top and bottom edges as they scroll. Page content now scrolls to a clean edge in every `PageLayout` variant. Smaller scroll areas, such as menus, dialogs and data lists, still fade. ([#31239](https://github.com/mastra-ai/mastra/pull/31239))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`441e238`](https://github.com/mastra-ai/mastra/commit/441e2389a99d52475f44c7b05c1823166cef6cd0), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`76164d0`](https://github.com/mastra-ai/mastra/commit/76164d0e1c52ee650efef574d2951faf614e79ae), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/memory@1.41.3-alpha.4
+  - @mastra/client-js@1.62.0-alpha.8
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/react@1.16.0-alpha.8
+
+## 71.0.0-alpha.11
+
+### Patch Changes
+
+- Disable zoom buttons at the Knowledge graph’s zoom limits, using the same controls as Workflow. ([#31227](https://github.com/mastra-ai/mastra/pull/31227))
+
+## 71.0.0-alpha.10
+
+### Minor Changes
+
+- Reworked the neutral colors in both themes. Supporting text is easier to read, and cards, menus and dialogs share one fill. Fields are the card color on the page and a light tint inside cards and dialogs. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+  Added color roles, so a class says what it paints:
+
+  - `text-subtle-foreground` for counts, timestamps and hints. `text-placeholder` is now only for input placeholders and disabled labels.
+  - `bg-nested` for a box inside a card, `bg-row` for table rows, `border-separator` for lines between rows.
+  - `text-icon` and `text-muted-icon` for the icon beside a label.
+
+  ```tsx
+  // Before
+  <div className="rounded-lg border border-border bg-background">…</div>
+  <span className="text-placeholder">12 runs</span>
+
+  // After
+  <div className="rounded-lg bg-nested">…</div>
+  <span className="text-subtle-foreground">12 runs</span>
+  ```
+
+  Removed the `--elevation-lip`, `--inset-highlight` and `--field-rim-on-surface` variables.
+
+### Patch Changes
+
+- Pan in both directions with two-finger scrolling on the Knowledge graph in Studio and Factory. Pinch or use the zoom controls to change magnification. ([#31224](https://github.com/mastra-ai/mastra/pull/31224))
+
+- Fixed the missing right border on Studio's agent side panel (threads and editor). ([#31209](https://github.com/mastra-ai/mastra/pull/31209))
+
+- Let Factory’s Knowledge graph fill its canvas behind floating controls and pan from the edges with a trackpad. Use the Workflow canvas background in Knowledge and preserve the rounded app frame around the full-width graph. ([#31210](https://github.com/mastra-ai/mastra/pull/31210))
+
+- Headless Connect in Studio now uses the Nango host returned with the connect session, so connecting accounts works against a self-hosted Nango. Without a host it keeps using Nango Cloud. The host must use HTTPS (plain HTTP is allowed for localhost). ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Fixed provider logos on the Agents list being almost invisible in dark mode. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+- Fixed the missing shadow on the page card. It used the removed `--elevation-lip` variable. ([#31236](https://github.com/mastra-ai/mastra/pull/31236))
+
+- Fixed key symbols in shortcut hints looking smaller than the letters beside them. ⌘, ↵, ⌫, arrows and the other key symbols now match the letters' height in `Kbd`, `CommandShortcut`, `DropdownMenu.Shortcut`, `ContextMenu.Shortcut` and `Sidebar.SearchTrigger`, the same on every operating system. The gaps between keys are balanced too, and `⌘K` and `⌘ K` look the same. Screen readers announce the keys by name ("Command K"). No changes needed where shortcuts are rendered. ([#31216](https://github.com/mastra-ai/mastra/pull/31216))
+
+- `useChatSend()` now returns the same function for as long as the chat is mounted. Components can keep it, or list it as a dependency: it no longer changes on every streamed chunk, and it always sends with the chat's current agent and settings. ([#31138](https://github.com/mastra-ai/mastra/pull/31138))
+
+- Show an animated Knowledge graph while Factory and Studio load. Show a still illustration when reduced motion is enabled. ([#31207](https://github.com/mastra-ai/mastra/pull/31207))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/memory@1.41.3-alpha.3
+  - @mastra/client-js@1.61.2-alpha.7
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/react@1.16.0-alpha.7
+
 ## 71.0.0-alpha.9
 
 ### Minor Changes

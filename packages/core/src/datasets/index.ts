@@ -11,4 +11,5 @@ export {
 export type { DatasetSnapshot, DatasetSnapshotContent, DatasetSnapshotOptions } from './snapshot';
 export { Dataset } from './dataset.js';
 export { DatasetsManager } from './manager.js';
-export type { StartExperimentConfig } from './experiment/types.js';
+export type { StartExperimentAsyncConfig, StartExperimentConfig } from './experiment/types.js';
+export { EXPERIMENT_NOT_DURABLE } from './experiment/durable.js';

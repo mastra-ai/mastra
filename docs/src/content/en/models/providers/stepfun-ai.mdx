@@ -7,7 +7,7 @@ description: "Browse StepFun (Global) model IDs, capabilities, context windows, 
 
 # <img src="https://models.dev/logos/stepfun-ai.svg" alt="StepFun (Global) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />StepFun (Global)
 
-Access 7 StepFun (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
+Access 8 StepFun (Global) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
 
 Learn more in the [StepFun (Global) documentation](https://platform.stepfun.ai/docs/en/overview/concept).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "stepfun-ai/step-3.5-flash"
+  model: "stepfun-ai/step-1o-turbo-vision"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "stepfun-ai/step-1o-turbo-vision",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.36,
+    "outputCost": 1.15
+  },
   {
     "model": "stepfun-ai/step-3.5-flash",
     "imageInput": false,
@@ -94,18 +106,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.7
   },
   {
-    "model": "stepfun-ai/step-tts-2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "stepfun-ai/stepaudio-2.5-asr",
     "imageInput": false,
     "audioInput": true,
@@ -116,6 +116,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": null,
     "inputCost": null,
     "outputCost": null
+  },
+  {
+    "model": "stepfun-ai/stepaudio-2.5-chat",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": 1.5,
+    "outputCost": 3.5
   },
   {
     "model": "stepfun-ai/stepaudio-2.5-tts",
@@ -146,7 +158,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.stepfun.ai/v1",
-    id: "stepfun-ai/step-3.5-flash",
+    id: "stepfun-ai/step-1o-turbo-vision",
     apiKey: process.env.STEPFUN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -167,7 +179,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "stepfun-ai/stepaudio-2.5-tts"
-      : "stepfun-ai/step-3.5-flash";
+      : "stepfun-ai/step-1o-turbo-vision";
   }
 });
 ```

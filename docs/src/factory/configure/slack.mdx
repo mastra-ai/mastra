@@ -1,0 +1,201 @@
+---
+title: Slack | Configuration
+description: Set up your own Slack app for Factory and link your account so you can start sessions from Slack.
+---
+
+import SlackManifestBuilder from '@site/src/components/SlackManifestBuilder'
+
+# Slack
+
+Start and continue Factory sessions through a Slack direct message or app mention. A linked Slack account routes new sessions to its **Default factory**. Reply in an existing thread to continue its session.
+
+## Before you connect
+
+Factory doesn't include a shared Slack app. Each Factory uses a Slack app that you create in your own Slack workspace, and the app's credentials are stored in the Factory Server's environment. Setting this up takes about 15 minutes and is a one-time task for the person who manages the Factory deployment.
+
+**Settings → Connections** reports that Slack isn't set up until those credentials are configured. If Slack is already set up, skip to [Link your account](#link-your-account).
+
+You need:
+
+- A running Factory with working model access, a target repository, and a verified [sandbox configuration](/configure/sandboxes).
+- Permission to change the Factory Server's environment variables. On Mastra platform, you need access to the [project](https://projects.mastra.ai) that hosts the Factory.
+- Permission to install apps in your Slack workspace, or a Slack workspace administrator who can approve the install.
+
+## Create your own Slack app
+
+### Find your Factory's public URL
+
+Slack sends events to your Factory over HTTPS, so it needs the Factory's public origin, for example `https://your-factory.example.com`.
+
+- **Mastra platform:** Use the Factory URL that `npm run deploy` reported for the environment.
+- **Self-hosted:** Use the server's public HTTPS origin.
+- **Local testing:** Forward a public HTTPS tunnel to the Factory Server, as described in [Test locally with a tunnel](#test-locally-with-a-tunnel).
+
+Slack uses these paths on that origin:
+
+| Slack setting | Path to append to the public origin |
+| - | - |
+| OAuth redirect URL for account linking | `/connect/slack/oidc/callback` |
+| Event Subscriptions request URL | `/api/agent-controllers/mastra-code/channels/slack/webhook` |
+| Interactivity request URL | `/api/agent-controllers/mastra-code/channels/slack/webhook` |
+
+The webhook paths use the generated Factory controller's ID. A customized controller must use its own registered path.
+
+If you don't want to expose a webhook URL, [Socket Mode](#connect-without-a-public-url) uses an outbound connection instead.
+
+### Test locally with a tunnel
+
+For local testing, forward a public HTTPS tunnel to the Factory Server. Keep browser authentication on its working local origin and set the separate channels origin:
+
+```dotenv title=".env"
+MASTRACODE_PUBLIC_URL=http://localhost:4111
+MASTRACODE_CHANNELS_PUBLIC_URL=https://your-factory-tunnel.example.com
+```
+
+Use the tunnel origin in the Slack app settings. Keep the tunnel running while testing. Changing its hostname requires updating both the server configuration and the Slack app settings.
+
+### Create the app from the manifest
+
+The recommended setup creates the app from a manifest. It configures the bot user, scopes, event subscriptions, interactivity, and OAuth redirect URL in one step. Enter the name your teammates will see in Slack and your Factory's public URL from the previous step. The manifest below updates as you type. The create link becomes available once the URL is a valid HTTPS origin.
+
+<SlackManifestBuilder />
+
+1. Select **Create the Slack app**. Slack opens its **Create an app from a manifest** dialog with your manifest filled in.
+1. Choose the Slack workspace where you'll use Factory, review the manifest, and select **Create**.
+
+If Slack opens with an empty manifest, select **Create New App** in [Slack's app settings](https://api.slack.com/apps), choose **Paste a manifest**, and paste the manifest above. The [JSON version of the manifest](/examples/slack-app-manifest.json) uses the example origin, so replace `https://your-factory.example.com` before using it.
+
+Create a new app from the manifest rather than starting from a template or an existing app. In an Enterprise Grid organization, some templates turn on org-wide deployment and Slack doesn't allow turning it off afterwards. This manifest sets `org_deploy_enabled: false`, so applying it to such an app fails.
+
+To configure the app by hand instead:
+
+- Enable a bot user and the **App Home** messages tab.
+- Add the manifest's bot scopes and the OAuth redirect URL.
+- Enable interactivity.
+- Subscribe to the `app_mention`, `message.channels`, `message.groups`, `message.im`, and `message.mpim` bot events.
+
+The `app_mentions:read` scope lets the app read mentions but doesn't subscribe it to the `app_mention` event, so configure both.
+
+The manifest's bot scopes cover messages, history, user lookup, reactions, files, and assistant features. Review them with your workspace administrator. Reinstall the app after changing its installation permissions.
+
+### Install the app and copy its credentials
+
+1. In the app's **Install App** settings, install it into your workspace. If your workspace requires approval, an administrator must approve the request.
+1. Copy these values from the app settings:
+
+| Value | Where to find it in the Slack app settings | Environment variable |
+| - | - | - |
+| Signing secret | **Basic Information → App Credentials** | `SLACK_APP_SIGNING_SECRET` |
+| Client ID | **Basic Information → App Credentials** | `SLACK_APP_CLIENT_ID` |
+| Client secret | **Basic Information → App Credentials** | `SLACK_APP_CLIENT_SECRET` |
+| Bot User OAuth Token (starts with `xoxb-`) | **OAuth & Permissions** | `SLACK_APP_BOT_TOKEN` |
+
+The signing secret enables the integration and verifies inbound requests. The bot token allows replies. Account linking needs the client ID and secret. [Sign in with Slack](https://docs.slack.dev/authentication/sign-in-with-slack/) uses them to link each user's Slack identity through OpenID Connect, which is a separate flow from bot installation.
+
+### Add the credentials to the Factory Server
+
+Treat these values as secrets. Configure [credential encryption](/reference/environment-variables#stored-credential-encryption) before users connect, and keep the signing secret stable across restarts.
+
+**Mastra platform:** In [Mastra platform](https://projects.mastra.ai), open the project that hosts the Factory. In the environment's settings, add the four variables under **Environment variables**. Saved changes take effect after you restart or redeploy the environment.
+
+**Self-hosted or local:** Add the values to the server environment, preserving the other generated settings:
+
+```dotenv title=".env"
+SLACK_APP_SIGNING_SECRET=your-slack-signing-secret
+SLACK_APP_BOT_TOKEN=xoxb-your-slack-bot-token
+SLACK_APP_CLIENT_ID=your-slack-client-id
+SLACK_APP_CLIENT_SECRET=your-slack-client-secret
+```
+
+If Slack callbacks must use a different origin from the browser-facing `MASTRACODE_PUBLIC_URL`, also set `MASTRACODE_CHANNELS_PUBLIC_URL` to that HTTPS origin. When it's unset, Factory uses the public URL.
+
+### Restart and verify
+
+1. Restart the Factory Server or redeploy the Mastra platform environment.
+1. If the request URL in the Slack app's **Event Subscriptions** settings doesn't show as verified, select **Retry** once the server runs with the signing secret.
+1. In Factory, open **Settings → Connections**. Slack now shows **Connect Slack**.
+1. Invite the app to a test channel, or open its direct messages.
+
+The shared setup is complete. Each teammate links their own Slack account in [Link your account](#link-your-account).
+
+### Connect without a public URL
+
+To avoid exposing a public webhook URL, connect through Slack's Socket Mode. Enable **Socket Mode** in the Slack app settings, create an app-level token with the `connections:write` scope, and add it to the server environment:
+
+```dotenv title=".env"
+SLACK_APP_TOKEN=xapp-your-slack-app-token
+```
+
+When `SLACK_APP_TOKEN` is configured, Factory uses an outbound Socket Mode connection. The Slack webhook URL and `SLACK_APP_SIGNING_SECRET` aren't required. Keep the OAuth redirect URL and client credentials configured for account linking.
+
+## Link your account
+
+1. In Factory, open **Settings → Connections → Slack**.
+1. Select **Connect Slack** and complete the Slack sign-in flow.
+1. Return to Factory and confirm the displayed workspace and Slack identity.
+1. Under **Session behavior**, choose a **Default factory**.
+
+This account link and default Factory are personal. Each teammate links their own identity. The default controls where new Slack sessions are routed. Existing sessions stay with their original Factory.
+
+## Talk to the agent in a thread
+
+A direct message or an app mention starts a session. After the first mention, the agent follows the whole thread. Later messages in that thread go to the session without a mention. The agent replies only when a message needs a response. Teammates can join the conversation the same way, as long as they've linked their Slack account.
+
+To keep the agent out of part of a thread:
+
+- Start a message with `aside` and the agent ignores it. See [Sessions](/using/sessions).
+- Mention the app with only the word `mute` to stop it listening to the thread. The app reacts to confirm. From then on, it responds only to messages that mention it.
+- Mention the app with only the word `unmute` to resume.
+
+The thread stays that way until someone sends `unmute`, even across server restarts. Only people allowed to continue the session can send either command.
+
+The agent works in the background in the thread. Slack shows a typing status while it runs, and tool calls aren't shown. To see each step, open the session in Factory.
+
+### Share files and previews
+
+In a thread, the agent can upload files it produced, such as a report, export, or screenshot, as attachments. It can also post [app preview](/using/previews) links so you can open a running app from Slack. Uploading files needs the `files:write` bot scope. The example manifest includes it. If your app was created from an older manifest, add the scope and reinstall the app.
+
+### Generative cards
+
+Generative cards are experimental. When enabled, the agent can post structured content as Slack Block Kit cards, such as status summaries, tables, charts, and link buttons. Turn them on in the adapter options of the `SlackIntegration` you pass to `integrations` in [`MastraFactory`](/reference/mastra-factory-api):
+
+```typescript title="src/mastra/index.ts"
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration'
+
+const slack = new SlackIntegration({
+  signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
+  botToken: process.env.SLACK_APP_BOT_TOKEN,
+  adapterOptions: { generativeUI: true },
+})
+```
+
+Generative cards need the `@json-render/chat` package installed in the Factory project, listed in `bundler.dynamicPackages` so the server build resolves it at runtime.
+
+### Channels and direct messages
+
+Agents in Slack sessions act as the Slack app. By default, a session reads and posts only in its own channel and can't send direct messages. Set `tools` on the integration to widen that:
+
+```typescript title="src/mastra/index.ts"
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration'
+
+const slack = new SlackIntegration({
+  signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
+  botToken: process.env.SLACK_APP_BOT_TOKEN,
+  tools: {
+    channels: 'all',
+    channelAccess: 'post',
+    directMessages: 'anyone',
+  },
+})
+```
+
+| Option | Values | Default |
+| - | - | - |
+| `channels` | `session` for the session's own channel, `selected` for the channels in `channelIds`, or `all` for every channel the app is in | `session` |
+| `channelIds` | Slack channel IDs, such as `C0123456789`, used with `selected` | None |
+| `channelAccess` | `read` to read other channels and post only in the session's channel, or `post` to post in them too | `post` |
+| `directMessages` | `none` or `anyone` | `none` |
+
+Posting doesn't ask for approval. The app can only read and post in channels it's a member of.
+
+To test your connection or diagnose errors, see [Slack troubleshooting](/troubleshooting#test-and-troubleshoot-slack).

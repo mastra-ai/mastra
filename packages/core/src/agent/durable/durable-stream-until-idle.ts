@@ -15,7 +15,8 @@ import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import { runIdleLoop } from '../../loop/shared/stream-until-idle-helpers';
 import type { MessageListInput } from '../message-list';
 
-import type { DurableAgent, DurableAgentStreamOptions, DurableAgentStreamResult } from './durable-agent';
+import type { DurableAgent } from './durable-agent';
+import type { DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 
 export interface DurableStreamUntilIdleDeps {
   activeStreams: Map<string, () => void>;

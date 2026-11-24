@@ -1,0 +1,75 @@
+{
+  "providerId": "figma",
+  "localId": "figma",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-11-24T15:48:23.099Z",
+  "toolCount": 29,
+  "skippedActions": [
+    {
+      "action": "delete-webhook",
+      "reason": "excluded: webhooks are managed by Mastra, not agents"
+    },
+    {
+      "action": "file-nodes",
+      "reason": "imports unsupported template SDK types: createSync"
+    },
+    {
+      "action": "get-project",
+      "reason": "excluded: needs projects:read, which public Figma OAuth apps cannot request"
+    },
+    {
+      "action": "get-webhook",
+      "reason": "excluded: webhooks are managed by Mastra, not agents"
+    },
+    {
+      "action": "list-files",
+      "reason": "excluded: needs projects:read, which public Figma OAuth apps cannot request"
+    },
+    {
+      "action": "list-projects",
+      "reason": "excluded: needs projects:read, which public Figma OAuth apps cannot request"
+    },
+    {
+      "action": "list-webhooks",
+      "reason": "excluded: webhooks are managed by Mastra, not agents"
+    },
+    {
+      "action": "update-webhook",
+      "reason": "excluded: webhooks are managed by Mastra, not agents"
+    }
+  ],
+  "files": {
+    "index.ts": "b73b27b4830e5130500b2211a5c0c5561fd5749aa15332333ba86d93a3d8594b",
+    "tools.ts": "cda5f2bcbfc6d1551a2b58c2cb545162cfc40b3b94c099cd256c318a37c4da41",
+    "tools/create-comment-reaction.ts": "328c489ba9f26dff7c4f35fbae4d805a156a8a5bc20ad4ec3211512b53f2a015",
+    "tools/create-comment.ts": "2c13502a10b16d6893b2a9c183dcc24a5274e8470381d8e6be8f2f94bb413550",
+    "tools/create-dev-resources.ts": "fcf23db8a3d8f5f619a2389c4c2818419b13672cddf8d15c40bfa91cec70961a",
+    "tools/delete-comment-reaction.ts": "f0061a6fee62d3664a575c4b2313d31a743a9fe99c06da658026c7fdb913a862",
+    "tools/delete-comment.ts": "14abeefa5525bbcb01f1979c1be177783de2262e5b84fef4dbffd1b8528926c3",
+    "tools/delete-dev-resource.ts": "ba21a5aa447432d477947b012deded5b661c610414ffa447279dac8e63e73db5",
+    "tools/get-comment.ts": "3e6f0dc65086eca0f97a078e78b0921ba7c674b95b9177caf8f02e8d30f25906",
+    "tools/get-component-set.ts": "19eb5cdf26610a200c659b04106265479a6a8663ebc658822d40fea43b878e59",
+    "tools/get-component.ts": "664a0bbce0fecad5f8b9845c1447cde99b4ed567f7a0bf2c734453286d0b8a07",
+    "tools/get-current-user.ts": "ad4829e0e329b025ed598d1de81fe29be927ad000ccc1f3b591f1d5a41d498fa",
+    "tools/get-file-component-sets.ts": "e1bdede04dc3071aa59916f3dd00e68d1d25a2eb68b38d2ea9489d8f8125b302",
+    "tools/get-file-components.ts": "f135367eecff94f27b72735df7a4f7dea2bff58318d087d98bfcee2a9a5ace8d",
+    "tools/get-file-node.ts": "a2b2f8c241f9ca2631b9d7f13d7d2287c0143e940075aa8d5971b84599e57ba3",
+    "tools/get-file-styles.ts": "cc785762ac1847c97d33154ffa74a5c0df1a3f912a80734f7e3165d5c71f5b58",
+    "tools/get-local-variables.ts": "b1b36887946df9b32cb6405a7c3497cdcac0ce818b21691528fdf1ce4a192ceb",
+    "tools/get-published-variables.ts": "06f0f8feba816833b384380187d668ad1cc853a34316a8486d7aa309d4145bd1",
+    "tools/get-style.ts": "71bbb20c99b7a14c82c2ef3505096a94dc0a6e8b4c8eaf9b8d0c07269170f505",
+    "tools/get-version.ts": "203b8c6ce3cd75934bcdaa4d0b38e13245ced5d80a46188c47acefd2ca4167d6",
+    "tools/list-comment-reactions.ts": "8fafa23e0308ea7c1f9809d6b796778d0470a11d21ec3861c40bd11ded638c89",
+    "tools/list-comments.ts": "3aa0df96bff81de820e669a0a569c47153bf27a3b5d8ab6852cdfb4f345ff8fe",
+    "tools/list-component-sets.ts": "aeff57f16c4dbd0d95f6fb51418343f146d4e9ffb5ce030246480f66572e231f",
+    "tools/list-components.ts": "0f2c3d5502468ba7390bcc25135d3821e3d0ccabb1b0ace3105c4c4b244888c6",
+    "tools/list-dev-resources.ts": "51526b9345545c577df9065828fc2403009829765d983fe09b6a6425c241864e",
+    "tools/list-file-nodes.ts": "1de903a32776e7952507c1455a8c646a3cdafeb52487a564ec6cb27b1a62ee89",
+    "tools/list-styles.ts": "786623f3f78f08a50a448262122d9f6334b0d755311bdd35ea8412d662f3b999",
+    "tools/list-versions.ts": "65554a65dc5b7ab6bc6324f2a920f80680bf4f3bd727047bbd9a342967bd7230",
+    "tools/render-images.ts": "72b1c51389ad081075329921dec871a532991de473b8c93723e17cfc2b683e96",
+    "tools/update-dev-resources.ts": "761de09057a52ad091d30204e1b98d7c7b32136d2eb32a9cc5a4aaa32066c865",
+    "tools/update-variables.ts": "eceb7884d8fbd1b8691387e49826efe6b11f8804226a35b2e51441313258c511"
+  }
+}

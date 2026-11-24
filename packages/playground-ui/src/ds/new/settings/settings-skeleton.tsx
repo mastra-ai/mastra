@@ -35,7 +35,7 @@ export function SettingsSkeleton({ label, rows = 2, variant = 'row', className }
       role="status"
       aria-label={label}
       data-slot="settings-skeleton"
-      className={cn('grid divide-y divide-border *:py-3.25 *:first:pt-0 *:last:pb-0', className)}
+      className={cn('grid divide-y divide-separator *:py-3.25 *:first:pt-0 *:last:pb-0', className)}
     >
       {Array.from({ length: rows }, (_, index) => (
         <Placeholder key={index} />

@@ -59,7 +59,7 @@ export type ControlTriggerVisualVariant = 'default' | 'ghost';
 // colour, and swapping that would drop the control out of the material it shares with a
 // field. `ghost` has no material to wash, so it takes a fill rung.
 export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
-  default: 'data-[popup-open]:[--surface-tint:var(--fill)] data-[popup-open]:text-foreground',
+  default: 'data-[popup-open]:[--surface-tint:var(--field-open)] data-[popup-open]:text-foreground',
   ghost: 'data-[popup-open]:bg-fill-subtle data-[popup-open]:text-foreground',
 };
 

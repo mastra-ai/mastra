@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../../../error';
 import type { PubSub } from '../../../events/pubsub';
-import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
-import { AgenticLoopBuilder } from '../../../loop/loop-builder';
+import { BaseAgenticLoopBuilder } from '../../../loop/base-loop-builder';
+import type { LoopContinuationPredicate } from '../../../loop/base-loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
@@ -240,7 +240,7 @@ function runTopicReplays(rt: DurableLoopRuntime): boolean {
   // Not `getAgentById`, which reports a missing agent as an error; this runs on every step.
   const agent = Object.values(rt.mastra?.listAgents() ?? {}).find(registered => registered.id === rt.agentId);
   // An agent not registered here leaves the engine's bus to go by.
-  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub;
+  const agentBus = (agent as { pubsub?: Partial<PubSub> } | undefined)?.pubsub ?? agent?.__getStreamBus?.()?.pubsub;
   return agentBus?.__replaysTopic?.(topic) ?? true;
 }
 
@@ -256,7 +256,7 @@ function liveOrRebuiltAgentSpan(
 }
 
 /**
- * Builds the durable agent loop on the shared `AgenticLoopBuilder` topology.
+ * Builds the durable agent loop on the shared `BaseAgenticLoopBuilder` shape.
  *
  * The durable loop implements the same agentic loop pattern as the main loop
  * (LLM execution → tool-call foreach → mapping → background check → signal
@@ -264,21 +264,18 @@ function liveOrRebuiltAgentSpan(
  * through workflow input/output so it is durable across process restarts and
  * execution engine replays.
  *
- * Migration status: every method is still a whole-method
- * override delegating to the durable step files. As the shared cores land,
- * these overrides shrink until only the runtime hooks remain (state
- * resolution via registry + serialized `messageListState`, pubsub chunk
- * transport, the evented `workflowFactory`, and snapshot policies).
+ * Every method delegates to the durable step files; behavior shared with the
+ * main loop lives in the shared step cores (`loop/shared`), not in a common
+ * superclass.
  */
-export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
+export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
   readonly #options?: DurableAgenticWorkflowOptions;
   readonly #maxSteps: number;
   readonly #shouldPersistSnapshot: ShouldPersistSnapshotFn;
 
   constructor(options?: DurableAgenticWorkflowOptions) {
-    // No main-loop params: the durable loop resolves its runtime from the run
-    // registry and serialized iteration state. Any base method that reads
-    // `this.params` on this path throws (see AgenticLoopBuilder).
+    // The durable loop resolves its runtime from the run registry and
+    // serialized iteration state rather than per-run params.
     super();
     this.#options = options;
     this.#maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
@@ -1173,8 +1170,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                 steps,
               },
             });
-            const textRewritten = !!lastStep && finishResult.outputTextChanged;
-            if (lastStep && finishResult.outputTextChanged) {
+            const rewrittenStepTexts = finishResult.rewrittenStepTexts;
+            const textRewritten = !!lastStep && (finishResult.outputTextChanged || !!rewrittenStepTexts);
+            if (rewrittenStepTexts) {
+              for (const [index, text] of rewrittenStepTexts.entries()) {
+                storedSteps[index] = { ...storedSteps[index]!, text };
+                steps[index] = { ...steps[index]!, text };
+              }
+              finalText = finishResult.outputText;
+            } else if (lastStep && finishResult.outputTextChanged) {
               lastStep.text = finishResult.outputText;
               steps[steps.length - 1] = { ...steps[steps.length - 1]!, text: finishResult.outputText };
               finalText = finishResult.outputText;
@@ -1243,7 +1247,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               await emitFinishEvent(pubsub, state.runId, {
                 output: finalOutput.output,
                 stepResult: finalOutput.stepResult,
-                messages: finishMessages,
+                messages: finishResult.finishMessages ?? finishMessages,
                 ...(textRewritten && { textRewritten }),
                 ...(stopCause && { stopCause }),
               });

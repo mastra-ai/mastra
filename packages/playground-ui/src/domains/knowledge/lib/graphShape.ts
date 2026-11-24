@@ -58,6 +58,8 @@ export const KNOWLEDGE_DOT_HIT_MARGIN = 8;
 const PLACEHOLDER_PREFIX = 'more:';
 const REST_PREFIX = 'rest:';
 const GROUP_PREFIX = 'group:';
+/** Marks the rest circle that counts root scopes rather than one page's children. */
+const ROOTS_REST_KEY = 'roots:';
 
 /** A stand-in dot for a child that hasn't loaded yet; `parentId` is the page whose children it stands for. */
 export function isChildPlaceholder(page: Pick<KnowledgePagePayload, 'id'>): boolean {
@@ -67,6 +69,16 @@ export function isChildPlaceholder(page: Pick<KnowledgePagePayload, 'id'>): bool
 /** The circle that says how many more children the centre has than are drawn; it opens nothing. */
 export function isRestCircle(page: Pick<KnowledgePagePayload, 'id'>): boolean {
   return page.id.startsWith(REST_PREFIX);
+}
+
+/**
+ * What a click on a rest circle reveals more of, as the key of `revealed`: the root scopes (`rootKey`) for
+ * the hub's root-scope circle, else the page whose children it counts.
+ */
+export function restRevealKey(page: Pick<KnowledgePagePayload, 'id' | 'parentId'>): string | null {
+  const key = page.id.slice(REST_PREFIX.length);
+  if (key.startsWith(ROOTS_REST_KEY)) return key.slice(ROOTS_REST_KEY.length);
+  return page.parentId ?? null;
 }
 
 /** One circle standing for several sibling scopes of one type, e.g. a resource's memory threads. */
@@ -425,8 +437,8 @@ export const REST_BATCH = 12;
 export const PLACEHOLDER_CAP = 8;
 /** Most circles whose children are loaded just to draw them as dots around it. */
 export const WANTED_CIRCLE_CAP = 24;
-/** Roots drawn beside the root at the centre when nothing is focused. */
-export const SIBLING_ROOT_CAP = 8;
+/** Roots drawn as circles beside the root at the centre when nothing is focused; the rest are counted on a "+N more" circle. */
+export const SIBLING_ROOT_CAP = WANTED_CIRCLE_CAP - 1;
 /** Children around a page that fit at full size; past this the circles shrink to make room. */
 export const CROWD_START = 16;
 /** Smallest a crowded ring's circles shrink to, as a fraction of their usual size. */
@@ -478,6 +490,8 @@ export interface LazyGraphInput {
   openGroups: ReadonlySet<string>;
   /** Children drawn past the cap, per parent: what clicks on its "+N more" circle have revealed. */
   revealed?: ReadonlyMap<string, number>;
+  /** More root scopes wait on the server past those loaded, so the roots' "+N more" circle stays to fetch them. */
+  moreRoots?: boolean;
   cap?: number;
 }
 
@@ -529,7 +543,31 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
   // Pages one level out that draw as circles too, with their own children drawn as dots.
   const rootCircleIds = promotedCircles(children, center);
   if (center) add(center, 0);
-  if (center && !focus) for (const root of roots.slice(1, 1 + SIBLING_ROOT_CAP)) add(root, 1);
+  // Roots that hold pages come first, then the most recently changed, so a busy or fresh scope is never the
+  // one counted away; past the cap the rest wait on one "+N more" circle on the hub.
+  const siblingRoots =
+    center && !focus
+      ? roots
+          .filter(root => root.id !== center.id)
+          .sort(
+            (a, b) =>
+              Number((b.childCount ?? 0) > 0) - Number((a.childCount ?? 0) > 0) ||
+              (a.updatedAt === b.updatedAt ? 0 : a.updatedAt > b.updatedAt ? -1 : 1) ||
+              comparePagePosition(a, b),
+          )
+      : [];
+  const rootLimit = SIBLING_ROOT_CAP + (input.revealed?.get(input.rootKey) ?? 0);
+  for (const root of siblingRoots.slice(0, rootLimit)) add(root, 1);
+  const hiddenRoots = Math.max(0, siblingRoots.length - rootLimit);
+  if (center && !focus && (hiddenRoots > 0 || input.moreRoots)) {
+    const rest = syntheticPage(`${REST_PREFIX}${ROOTS_REST_KEY}${input.rootKey}`, center, {
+      // Past the loaded roots their number is unknown, so the count says so.
+      name: hiddenRoots > 0 ? `+${hiddenRoots}${input.moreRoots ? '+' : ''} more scopes` : 'More scopes',
+      ...(hiddenRoots > 0 && !input.moreRoots ? { childCount: hiddenRoots } : {}),
+    });
+    drawn.set(rest.id, rest);
+    depth.set(rest.id, 1);
+  }
   // The path up from the focus, however far, so it is clear where the focus sits.
   for (let up = focus?.parentId ? byId.get(focus.parentId) : undefined, at = 1; up; at++) {
     if (!depth.has(up.id)) add(up, at);
@@ -607,7 +645,7 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
 
   const wanted = focus
     ? [focus.id, ...(focus.parentId && focus.parentId !== focus.id ? [focus.parentId] : [])]
-    : roots.map(root => root.id);
+    : [...(center ? [center.id] : []), ...siblingRoots.slice(0, rootLimit).map(root => root.id)];
   // One level beyond the circles: the children of the pages drawn as circles, so their own children show as dots.
   const circles = [...depth]
     .filter(([id, at]) => (at <= 1 || rootCircleIds.has(id)) && !wanted.includes(id))

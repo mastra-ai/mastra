@@ -1,5 +1,52 @@
 # @mastra/factory
 
+## 0.31.0-alpha.9
+
+### Minor Changes
+
+- Added self-hosted GitLab to Platform-connected Factories. Connect an instance from Settings or onboarding with **Connect self-hosted** (or **Add self-hosted** once GitLab is connected) by entering its hostname and a personal or group access token. Its projects then show up for intake and repositories next to gitlab.com ones, and Factory clones and calls the API on that instance. An expired self-hosted connection reconnects with a new token on the same instance; its hostname cannot be changed. ([#30955](https://github.com/mastra-ai/mastra/pull/30955))
+
+  Known limitation: if a self-hosted connection is moved to another instance outside Factory, and moved back while Factory is fetching a repository credential, a clone can use the other instance's token against the original instance. Closing this depends on Mastra Platform pinning the hostname on reconnect (mastra-ai/platform#5637).
+
+### Patch Changes
+
+- The Factory planning and building skills now state where a plan file must go for both sandbox layouts. `submit_plan` resolves the submitted path against the session workspace root and accepts only a `.md` file directly inside its `.artifacts/plans/`: with one repository in the sandbox the workspace root _is_ that checkout, and with several it is the parent directory holding one directory per repository. The old wording said "at the workspace root — never inside a repository checkout" for every case, which in a one-repository sandbox pointed agents at `mastra/.artifacts/plans/issue-5.md` — a path `submit_plan` rejects — instead of the accepted `<checkout>/.artifacts/plans/issue-5.md`. ([#30227](https://github.com/mastra-ai/mastra/pull/30227))
+
+- Added Pull request and Trust filters to Factory boards. Pull request keeps the cards that have a pull request (a pull request's own card, an issue card with one attached, or an issue card that another card's pull request resolves) or the ones that don't. Trust keeps the cards from authors with write access, or the ones from outside, using the same check intake rules use: a GitHub or GitLab card whose author has no trust stamp counts as from outside, and cards from sources no outsider can file, such as Linear and manual cards, count as trusted. Both combine with the other filters, so you can pick GitHub cards that have a pull request: ([#31037](https://github.com/mastra-ai/mastra/pull/31037))
+
+  ```
+  GET /web/factory/projects/:projectId/boards/work/phases?source=github&pullRequest=with&trust=untrusted
+  ```
+
+  A pull request that fixes several issues is still held by the first issue's card, and the other issues' cards now link to it: searching the pull request's number or link finds them, they count as having a pull request, and they show the holding card as related.
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`ba7ef19`](https://github.com/mastra-ai/mastra/commit/ba7ef199bdf4b637814ec493c75152e703213029), [`ba7ef19`](https://github.com/mastra-ai/mastra/commit/ba7ef199bdf4b637814ec493c75152e703213029), [`a8e1c75`](https://github.com/mastra-ai/mastra/commit/a8e1c7555b65b72edbbfb232e16e0b2dcc7b4b5c), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8), [`bd4eb6f`](https://github.com/mastra-ai/mastra/commit/bd4eb6fb466b8d23bf5e721d3d8f153709db3d0f)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/connect@1.5.0-alpha.3
+  - @mastra/code-sdk@1.21.0-alpha.9
+  - @mastra/mcp@2.11.0-alpha.1
+
+## 0.31.0-alpha.8
+
+### Patch Changes
+
+- **Model picker** — The Factory model picker now lists a Fast entry (for example `openai/gpt-6.2-sol:fast`) next to each OpenAI model that has a Fast tier when OpenAI is connected with a ChatGPT sign-in. Picking it requests Fast processing for that model. ([#30882](https://github.com/mastra-ai/mastra/pull/30882))
+
+- Factory's Slack tools now come from `createChannelTools()` in `@mastra/core/channels` and `createSlackTools()` in `@mastra/slack`. The limits stay the same, with three changes to the tools: ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+  - The channel tools reject ids without a platform prefix, such as `C0123ABC`, with a hint to use the full id, such as `slack:C0123ABC`. The Slack-only tools still add the `slack:` prefix for you.
+  - `sendDirectMessage` takes `{ userId, message }` instead of `{ userId, text }`, like the other posting tools.
+  - Group DMs the bot is in are now refused like other people's DMs, even with `channels: 'all'`.
+
+- Fixed Factory-owned runs using a deployment-provided Mastra Gateway without requiring an organization model key. ([#31211](https://github.com/mastra-ai/mastra/pull/31211))
+
+- Updated dependencies [[`6bc0c6c`](https://github.com/mastra-ai/mastra/commit/6bc0c6cdc68342e32bb48076f9e9ba17e6669256), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`ac8fa30`](https://github.com/mastra-ai/mastra/commit/ac8fa30038d3223310f99664db7fc2ac8868ab82), [`86b6a1e`](https://github.com/mastra-ai/mastra/commit/86b6a1e2fbd49278d3a8a98ea54f8be58e532f6b), [`3475846`](https://github.com/mastra-ai/mastra/commit/347584609d702849923d691b57099a0a9582266d), [`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`e7e5f7e`](https://github.com/mastra-ai/mastra/commit/e7e5f7ecac4293ad21e67657a69fc913e5ff8b15), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/code-sdk@1.21.0-alpha.8
+  - @mastra/connect@1.5.0-alpha.2
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/slack@1.10.0-alpha.1
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 0.31.0-alpha.7
 
 ### Patch Changes

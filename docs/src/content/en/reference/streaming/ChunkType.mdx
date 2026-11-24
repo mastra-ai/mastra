@@ -1673,7 +1673,7 @@ When consumed by [`Agent.streamUntilIdle()`](/reference/streaming/agents/streamU
             description: 'ID of the agent that dispatched the task',
           },
           {
-            name: 'suspendData',
+            name: 'suspendPayload',
             type: 'unknown',
             isOptional: true,
             description: 'Whatever the tool passed to `suspend(data)`',
@@ -2132,7 +2132,7 @@ For queue-count events on the same thread, see the [Thread events reference](/re
 
 `ThreadRunStatusChunk` reports a run's outcome independently of stored-message replay. It's exported from `@mastra/core/stream` and emitted only when `subscribeToThread()` receives `withRunStatus: true`. The option defaults to `false`.
 
-Live output precedes its status. `success`, `failed`, and `aborted` are final outcomes. `suspended` is resumable, so the same run can later emit more output and a final outcome. A status doesn't close the subscription.
+Live output precedes its status. `success`, `failed`, and `aborted` are final outcomes. `suspended` is resumable, so the same run can later emit more output and a final outcome. `interrupted` means `mastra.shutdown()` stopped a durable agent's run mid-run, for example during a rolling restart. A process that crashes doesn't report it. It isn't final either: if recovery is enabled, it can continue the run under the same `runId`, which then emits more output and a final outcome. If nothing recovers the run, `interrupted` is the last status it reports. A regular agent's run that `mastra.shutdown()` stops reports `failed`. A status doesn't close the subscription.
 
 <PropertiesTable
   content={[
@@ -2141,8 +2141,8 @@ Live output precedes its status. `success`, `failed`, and `aborted` are final ou
   { name: 'from', type: 'ChunkFrom', description: 'Always AGENT for thread run outcomes.' },
   {
     name: 'payload',
-    type: '{ status: "success" | "failed" | "aborted" | "suspended" }',
-    description: 'Run outcome. Suspended runs can resume.',
+    type: '{ status: "success" | "failed" | "aborted" | "suspended" | "interrupted" }',
+    description: 'Run outcome. Suspended runs can continue, and so can interrupted runs if recovery is enabled.',
   },
 ]}
 />

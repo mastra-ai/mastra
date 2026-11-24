@@ -439,6 +439,48 @@ describe('connectProviderAction', () => {
     expect(url).toContain('params[subdomain]=acme');
   });
 
+  it('opens OAuth consent on the Nango host returned with the session', async () => {
+    vi.stubEnv('MASTRA_NANGO_HOST', '');
+    vi.mocked(createProjectConnectSession).mockResolvedValue({
+      connectionId: 'conn_new',
+      integrationId: 'linear',
+      connectUrl: 'https://connect.example/session',
+      sessionToken: 'session_tok',
+      apiBaseUrl: 'https://nango.internal.example',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    vi.mocked(fetchProjectConnections)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([connection({ id: 'conn_new' })]);
+
+    await connectProviderAction('linear', { yes: true });
+    vi.unstubAllEnvs();
+
+    expect(openBrowser).toHaveBeenCalledWith(
+      'https://nango.internal.example/oauth/connect/linear?connect_session_token=session_tok',
+    );
+  });
+
+  it('removes the pending connection when the session Nango host is not HTTPS', async () => {
+    vi.stubEnv('MASTRA_NANGO_HOST', '');
+    vi.mocked(createProjectConnectSession).mockResolvedValue({
+      connectionId: 'conn_new',
+      integrationId: 'linear',
+      connectUrl: 'https://connect.example/session',
+      sessionToken: 'session_tok',
+      apiBaseUrl: 'http://nango.internal.example',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    vi.mocked(removeProjectConnection).mockResolvedValue(undefined);
+    vi.mocked(fetchProjectConnections).mockResolvedValue([]);
+
+    await expect(connectProviderAction('linear', { yes: true })).rejects.toThrow(/HTTPS/);
+    vi.unstubAllEnvs();
+
+    expect(openBrowser).not.toHaveBeenCalled();
+    expect(removeProjectConnection).toHaveBeenCalledWith('tok', 'org_1', 'proj_1', 'conn_new');
+  });
+
   it('stops polling as soon as the connection reports an error', async () => {
     vi.mocked(fetchProjectConnections)
       .mockResolvedValueOnce([])

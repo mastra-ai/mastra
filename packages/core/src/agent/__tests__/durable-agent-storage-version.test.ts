@@ -23,6 +23,7 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 /** Calls the approval-gated tool, so the run suspends and stays stored. */
 function createModel() {
+  let nextCallId = 1;
   return new MockLanguageModelV2({
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -31,7 +32,7 @@ function createModel() {
         {
           type: 'tool-call',
           toolCallType: 'function',
-          toolCallId: 'call-1',
+          toolCallId: `call-${nextCallId++}`,
           toolName: 'approvalTool',
           input: '{}',
           providerExecuted: false,
@@ -48,7 +49,7 @@ function fakeLogger() {
   return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any;
 }
 
-type AgentKind = 'durable' | 'evented';
+type AgentKind = 'durable' | 'evented' | 'native-default' | 'native-evented';
 
 const cleanups: Array<() => Promise<void> | void> = [];
 
@@ -68,7 +69,9 @@ async function storeOneRun(
   const storage = new InMemoryStore();
   if (!journal) vi.spyOn(storage.stores!.workflows!, 'supportsRunJournal').mockReturnValue(false);
   const pubsub = new EventEmitterPubSub();
+  const executionEngine = kind === 'native-default' ? 'default' : kind === 'native-evented' ? 'evented' : undefined;
   const agent = new Agent({
+    durable: executionEngine ? { executionEngine, storageVersion } : undefined,
     id: 'version-agent',
     name: 'Version Agent',
     instructions: 'Use the tool.',
@@ -83,20 +86,25 @@ async function storeOneRun(
       }),
     },
   });
-  const durableAgent =
-    kind === 'evented'
+  const wrapper = executionEngine
+    ? undefined
+    : kind === 'evented'
       ? createEventedAgent({ agent, pubsub, storageVersion })
       : createDurableAgent({ agent, pubsub, storageVersion });
   const logger = fakeLogger();
-  const mastra = new Mastra({ logger, storage, pubsub, agents: { versionAgent: durableAgent } });
+  const mastra = new Mastra({ logger, storage, pubsub, agents: { versionAgent: wrapper ?? agent } });
   cleanups.push(
     () => mastra.shutdown(),
     () => pubsub.close(),
   );
 
   const onSuspended = vi.fn();
-  const stream = await durableAgent.stream('Go', { onSuspended });
-  cleanups.push(() => stream.cleanup());
+  if (wrapper) {
+    const stream = await wrapper.stream('Go', { onSuspended });
+    cleanups.push(() => stream.cleanup());
+  } else {
+    await agent.stream('Go', { onSuspended });
+  }
   await vi.waitFor(() => expect(onSuspended).toHaveBeenCalled());
 
   const workflows = (await storage.getStore('workflows'))!;
@@ -106,7 +114,7 @@ async function storeOneRun(
   return { storedVersion: runs[0]!.storageVersion ?? 1, warnings };
 }
 
-describe.each(['durable', 'evented'] as const)('%s agent storage version', kind => {
+describe.each(['durable', 'evented', 'native-default', 'native-evented'] as const)('%s agent storage version', kind => {
   it('stores new runs as version 1 by default', async () => {
     const { storedVersion, warnings } = await storeOneRun(kind);
     expect(storedVersion).toBe(1);
@@ -125,4 +133,44 @@ describe.each(['durable', 'evented'] as const)('%s agent storage version', kind 
       expect.stringMatching(/'version-agent' sets storageVersion: 2, .*storing new runs as version 1/),
     ]);
   });
+});
+
+describe.each(['default', 'evented'] as const)('native %s durable step limit', executionEngine => {
+  it.each([
+    { defaultMaxSteps: undefined, callMaxSteps: undefined, expected: 1 },
+    { defaultMaxSteps: 2, callMaxSteps: undefined, expected: 2 },
+    { defaultMaxSteps: 2, callMaxSteps: 3, expected: 3 },
+  ])(
+    'makes $expected model requests with the configured step limit',
+    async ({ defaultMaxSteps, callMaxSteps, expected }) => {
+      const model = createModel();
+      const requests = vi.spyOn(model, 'doStream');
+      const agent = new Agent({
+        id: 'limited-agent',
+        name: 'Limited Agent',
+        instructions: 'Use the tool.',
+        model,
+        durable: { executionEngine, maxSteps: 1 },
+        defaultOptions: defaultMaxSteps === undefined ? undefined : { maxSteps: defaultMaxSteps },
+        tools: {
+          approvalTool: createTool({
+            id: 'approvalTool',
+            description: 'A tool to call repeatedly.',
+            inputSchema: z.object({}),
+            execute: async () => 'done',
+          }),
+        },
+      });
+      const pubsub = new EventEmitterPubSub();
+      const mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), pubsub, logger: false });
+      cleanups.push(
+        () => mastra.shutdown(),
+        () => pubsub.close(),
+      );
+
+      const result = await agent.generate('Go', callMaxSteps === undefined ? undefined : { maxSteps: callMaxSteps });
+      expect(result.finishReason).toBe('tool-calls');
+      expect(requests).toHaveBeenCalledTimes(expected);
+    },
+  );
 });

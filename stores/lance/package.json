@@ -1,6 +1,6 @@
 {
   "name": "@mastra/lance",
-  "version": "1.6.2-alpha.0",
+  "version": "1.6.2-alpha.1",
   "description": "Lance provider for Mastra - includes both vector and db storage capabilities",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,7 +29,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.31.0",
+    "@lancedb/lancedb": "^0.41.0",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {
