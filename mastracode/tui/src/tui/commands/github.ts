@@ -3,6 +3,7 @@ import { GITHUB_SIGNALS_METADATA_KEY } from '@mastra/github-signals';
 import type { GithubPRSignalInput, GithubSubscriptionMode } from '@mastra/github-signals';
 import { GithubPRPickerDialog, githubPRId } from '../components/github-pr-picker.js';
 import type { GithubPRPickerItem } from '../components/github-pr-picker.js';
+import { formatDuration } from '../format-duration.js';
 import { askModalQuestion } from '../modal-question.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
@@ -20,11 +21,6 @@ function formatLocalTimestamp(value: unknown): string | undefined {
     timeStyle: 'medium',
     hour12: true,
   }).format(date);
-}
-
-function formatPollInterval(value: number): string {
-  if (value % 60_000 === 0) return `${value / 60_000}m`;
-  return `${Math.round(value / 1000)}s`;
 }
 
 const GITHUB_USAGE =
@@ -159,7 +155,7 @@ async function describeGithubSubscriptions(ctx: SlashCommandContext): Promise<st
     ? (githubSignalsProcessor?.isPollingThread({ threadId, resourceId: thread.resourceId }) ?? false)
     : false;
   const pollIntervalMs = githubSignalsProcessor?.getPollIntervalMs?.();
-  const header = `GitHub Signals debug for ${threadId}: ${subscriptions.length} subscription${subscriptions.length === 1 ? '' : 's'}, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatPollInterval(pollIntervalMs)}` : ''}`;
+  const header = `GitHub Signals debug for ${threadId}: ${subscriptions.length} subscription${subscriptions.length === 1 ? '' : 's'}, polling=${pollingActive ? 'active' : 'inactive'}${pollIntervalMs ? `, interval=${formatDuration(pollIntervalMs)}` : ''}`;
 
   const lines = subscriptions.map(subscription => {
     if (!isPlainObject(subscription)) return '- invalid subscription metadata';
@@ -525,7 +521,7 @@ async function unsubscribeAll(ctx: SlashCommandContext): Promise<void> {
 
 async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void> {
   const currentInterval = loadSettings().signals.githubPollIntervalMs ?? 300_000;
-  const currentLabel = formatPollInterval(currentInterval);
+  const currentLabel = formatDuration(currentInterval);
   const markCurrent = (label: string, description: string) =>
     label === currentLabel ? `${description} (current)` : description;
   const answer = await askModalQuestion(ctx.state.ui, {
@@ -566,7 +562,7 @@ async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void>
   settings.signals.githubPollIntervalMs = interval;
   saveSettings(settings);
   ctx.showInfo(
-    `GitHub polling interval set to ${formatPollInterval(interval)}. Restart MastraCode for this to take effect.`,
+    `GitHub polling interval set to ${formatDuration(interval)}. Restart MastraCode for this to take effect.`,
   );
 }
 

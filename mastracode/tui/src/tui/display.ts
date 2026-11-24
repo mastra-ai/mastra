@@ -124,7 +124,10 @@ export function showFormattedError(
     const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
     const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
     const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
-    errorText += theme.fg('muted', ` (retry${retryProgress} in ${formatDuration(retryDelay, { precision: 'ms' })})`);
+    errorText += theme.fg(
+      'muted',
+      ` (retry${retryProgress} in ${formatDuration(retryDelay, { precision: retryDelay % 1000 ? 'ms' : 's' })})`,
+    );
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];

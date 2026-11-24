@@ -14,7 +14,7 @@ export type DurationPrecision = 'ms' | 's' | 'm';
 
 /**
  * Formats a duration the same way everywhere in the TUI: the two largest units, space-separated
- * ("2d 3h", "1h 20m", "4m 5s", "12s"), dropping a zero second unit ("1h", not "1h 0m").
+ * ("2d 3h", "1h 20m", "4m 5s", "12s"), leaving out the smaller one when it's zero ("1h", not "1h 0m").
  *
  * `precision` is the smallest unit shown: `ms` adds "340ms" and "1.2s" below a minute (for things
  * that finish fast, like tool calls), `m` hides seconds ("<1m" below a minute).

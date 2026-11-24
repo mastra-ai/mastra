@@ -559,7 +559,7 @@ describe('handleGithubCommand', () => {
 
   it('shows custom current GitHub poll intervals in the poll interval modal', async () => {
     const { ctx } = createContext();
-    const settings = { signals: { experimentalGithubSignals: true, githubPollIntervalMs: 45_000 } };
+    const settings = { signals: { experimentalGithubSignals: true, githubPollIntervalMs: 90_000 } };
     mocks.loadSettings.mockReturnValue(settings);
     mocks.askModalQuestion.mockResolvedValueOnce('Poll interval').mockResolvedValueOnce(null);
 
@@ -569,7 +569,7 @@ describe('handleGithubCommand', () => {
       2,
       ctx.state.ui,
       expect.objectContaining({
-        question: 'GitHub polling interval (current: 45s)',
+        question: 'GitHub polling interval (current: 1m 30s)',
         options: expect.arrayContaining([
           expect.objectContaining({ label: 'Custom', description: 'Enter seconds (current)' }),
         ]),

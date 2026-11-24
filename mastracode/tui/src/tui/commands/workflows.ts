@@ -9,6 +9,7 @@
 import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 import type { StoredWorkflowRow, WorkflowRunEvent } from '@mastra/code-sdk/workflows/service';
 import { RequestContext } from '@mastra/core/request-context';
+import { formatDuration } from '../format-duration.js';
 import { requireLocal } from '../runtime.js';
 import { getTermWidth } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
@@ -400,7 +401,9 @@ export async function handleWorkflowsCommand(
                 const ms = started ? Date.now() - started : undefined;
                 const status = (evt.payload as { status?: string } | undefined)?.status;
                 const mark = status === 'success' ? '✓' : status === 'failed' ? '✗' : '·';
-                ctx.showInfo(`  ${mark} ${stepId}${ms !== undefined ? ` (${ms}ms)` : ''}`);
+                ctx.showInfo(
+                  `  ${mark} ${stepId}${ms !== undefined ? ` (${formatDuration(ms, { precision: 'ms' })})` : ''}`,
+                );
                 break;
               }
               default:

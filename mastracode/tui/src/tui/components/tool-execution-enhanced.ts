@@ -1465,7 +1465,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       maxStreamLines = Math.abs(parseInt(tailMatch[1]!, 10));
     }
 
-    const timeoutSuffix = timeout ? theme.fg('muted', ` (timeout ${timeout}s)`) : '';
+    const timeoutSuffix = timeout ? theme.fg('muted', ` (timeout ${formatDuration(timeout * 1000)})`) : '';
     const cwdSuffix = cwd ? theme.fg('muted', ` in ${cwd}`) : '';
     const timeSuffix = this.isPartial ? timeoutSuffix : this.getDurationSuffix();
 

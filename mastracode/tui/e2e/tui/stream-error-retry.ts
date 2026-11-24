@@ -57,7 +57,7 @@ export const streamErrorRetryScenario = {
 
     terminal.submit(PROMPT);
     await runtime.waitForScreenText(/write EPIPE.*retry 1\/10 in 500ms/i, terminal);
-    await runtime.waitForScreenText(/Server error.*retry 2\/10 in 1\.0s/i, terminal);
+    await runtime.waitForScreenText(/Server error.*retry 2\/10 in 1s/i, terminal);
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.keyCtrlC();
