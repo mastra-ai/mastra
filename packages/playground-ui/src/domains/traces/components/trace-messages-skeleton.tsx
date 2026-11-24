@@ -10,7 +10,7 @@ export interface TraceMessagesSkeletonProps {
   delayed?: boolean;
 }
 
-/** One `text-body` line box (14px × 143% ≈ 20px) holding a bar. */
+/** One `text-body` line box (14px on a 20px line) holding a bar. */
 function BodyLine({ width }: { width: string }) {
   return (
     <div className="flex h-5 items-center">
