@@ -301,7 +301,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <IconExclamationTriangle className="mt-0.5 size-4 shrink-0 text-warning-foreground" aria-hidden />
+        <IconExclamationTriangle className="mt-0.5 size-icon-md shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
           <Txt as="p" variant="subheading" tone="ink">
             Something went wrong while building the agent.
@@ -345,7 +345,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <Code
-              className="max-h-48 overflow-auto rounded-md bg-sidebar p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
+              className="max-h-48 overflow-auto rounded-md bg-nested p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
               code={error.details}
             />

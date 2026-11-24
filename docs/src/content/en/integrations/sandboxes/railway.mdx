@@ -131,7 +131,7 @@ const sandbox = new RailwaySandbox({
 
 `RailwaySandbox` refreshes the checkpoint shortly before the idle timeout. Recovery restores the latest successful checkpoint. It doesn't restore running processes or filesystem writes made after the last checkpoint.
 
-Set `seedCheckpointName` to provide a boot-only fallback when `checkpointName` doesn't exist yet. Railway restores `checkpointName` first when both checkpoints exist. Later snapshots write only to `checkpointName`, so each sandbox keeps an independent recovery history.
+Set `seedCheckpointName` to provide a boot-only fallback when `checkpointName` doesn't exist yet. Railway restores `checkpointName` first when both checkpoints exist. Later snapshots write only to `checkpointName`, which keeps each sandbox's recovery history independent.
 
 ```typescript
 const sandbox = new RailwaySandbox({

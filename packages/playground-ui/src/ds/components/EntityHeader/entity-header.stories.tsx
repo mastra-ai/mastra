@@ -3,7 +3,7 @@ import { Badge } from '../Badge';
 import { EntityHeader } from './entity-header';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 const meta: Meta<typeof EntityHeader> = {
@@ -59,7 +59,7 @@ export const LongTitle: Story = {
   render: () => (
     <div className="w-75 rounded-lg bg-card">
       <EntityHeader
-        icon={<IconSettingsGear1 />}
+        icon={<IconSettingsGear5 />}
         title="This is a very long title that should be truncated when it exceeds the available width"
       />
     </div>

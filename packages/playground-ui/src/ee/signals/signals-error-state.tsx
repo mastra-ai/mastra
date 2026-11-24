@@ -14,9 +14,12 @@ export function SignalsErrorState({
   onClear?: () => void;
 }) {
   return (
-    <section className="m-4 rounded-lg border border-border bg-background p-6 lg:m-6" role="alert">
+    <section className="m-4 rounded-lg bg-nested p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
-        <IconExclamationTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-destructive-foreground" />
+        <IconExclamationTriangle
+          aria-hidden="true"
+          className="mt-0.5 size-icon-lg shrink-0 text-destructive-foreground"
+        />
         <div>
           <Txt as="h1" variant="subheading" tone="ink">
             {message}

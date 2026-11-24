@@ -23,6 +23,8 @@ import { REVIEW_CONTEXT } from './boards/define-board.js';
 import type { RepositoryAccess, VersionControl } from './capabilities/version-control.js';
 import { redactCredentials } from './environment/build.js';
 import { groupRepositoryIds, groupedRepositoryAccess } from './environment/repository-access.js';
+import { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
+import type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
@@ -203,10 +205,14 @@ class CodeSkillSource implements SkillSource {
   }
 }
 
-/** A project's edited SKILL.md, served in place of the original's. */
+/**
+ * A project's SKILL.md for one skill: an edit served in place of the original's, or, with `created`, a skill
+ * the project added that is served even when the app has no skill of that name.
+ */
 export interface FactorySkillOverride {
   content: string;
   updatedAt: Date;
+  created?: boolean;
 }
 
 const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
@@ -265,13 +271,56 @@ export class FactorySkillSource implements SkillSource {
 
   /**
    * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
-   * edited; the skill's other files still come from its layer. `exists` and `readdir` never
-   * consult edits, so an edit whose skill was removed from the app is never discovered.
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` only
+   * consult created skills, so an edit whose skill was removed from the app is never discovered.
    */
   async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
     const [skillName, file, ...rest] = relativePath.split(path.sep);
     if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
     return (await this.skillOverrides()).get(skillName);
+  }
+
+  /**
+   * True when a code, folder, or bundled skill has this name, so a created skill of the name is its edit
+   * instead. Only a SKILL.md makes a skill, as for the catalog: a folder left without one serves nothing.
+   */
+  async #servedByLayer(skillName: string): Promise<boolean> {
+    const skillFile = path.join(skillName, 'SKILL.md');
+    if (this.#codeSource && (await this.#codeSource.exists(skillName))) return true;
+    if (this.#localSource && (await this.#localSource.exists(skillFile))) return true;
+    return this.#bundledSource.exists(skillFile);
+  }
+
+  /** Names of the skills the project created that no layer serves; each is a directory holding only its SKILL.md. */
+  async #createdSkillNames(): Promise<string[]> {
+    const names: string[] = [];
+    for (const [name, override] of await this.skillOverrides()) {
+      if (override.created && !(await this.#servedByLayer(name))) names.push(name);
+    }
+    return names;
+  }
+
+  /** The created skill this mount-relative path is in (its directory or its SKILL.md), when no layer serves it. */
+  async #createdSkillAt(relativePath: string): Promise<{ file: boolean; override: FactorySkillOverride } | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || rest.length > 0 || (file !== undefined && file !== 'SKILL.md')) return undefined;
+    const override = (await this.skillOverrides()).get(skillName);
+    if (!override?.created || (await this.#servedByLayer(skillName))) return undefined;
+    return { file: file !== undefined, override };
+  }
+
+  /** A created skill's folder: its SKILL.md, plus whatever an app skill left in a folder of the same name. */
+  async #createdSkillEntries(relativePath: string): Promise<SkillSourceEntry[]> {
+    const entries = new Map<string, SkillSourceEntry>();
+    for (const source of [this.#bundledSource, this.#localSource]) {
+      try {
+        for (const entry of (await source?.readdir(relativePath)) ?? []) entries.set(entry.name, entry);
+      } catch {
+        // Nothing under the name in this layer, or a file rather than a folder.
+      }
+    }
+    entries.set('SKILL.md', { name: 'SKILL.md', type: 'file' });
+    return [...entries.values()];
   }
 
   async exists(skillPath: string): Promise<boolean> {
@@ -280,7 +329,8 @@ export class FactorySkillSource implements SkillSource {
     if (await this.#isHiddenReviewPath(relative)) return false;
     if (await this.#ownedByCode(relative)) return this.#codeSource!.exists(relative);
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
-    return this.#bundledSource.exists(relative);
+    if (await this.#bundledSource.exists(relative)) return true;
+    return (await this.#createdSkillAt(relative)) !== undefined;
   }
 
   async stat(skillPath: string): Promise<SkillSourceStat> {
@@ -295,6 +345,16 @@ export class FactorySkillSource implements SkillSource {
         size: Buffer.byteLength(override.content),
         createdAt: override.updatedAt,
         modifiedAt: override.updatedAt,
+      };
+    }
+    const created = await this.#createdSkillAt(relative);
+    if (created) {
+      return {
+        name: relative,
+        type: 'directory',
+        size: 0,
+        createdAt: created.override.updatedAt,
+        modifiedAt: created.override.updatedAt,
       };
     }
     return (await this.#layerFor(relative)).stat(relative);
@@ -314,6 +374,11 @@ export class FactorySkillSource implements SkillSource {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
       if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
+      const created = relative === '' ? undefined : await this.#createdSkillAt(relative);
+      if (created) {
+        if (created.file) throw skillSourceEnoent(skillPath);
+        return this.#createdSkillEntries(relative);
+      }
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
@@ -321,16 +386,21 @@ export class FactorySkillSource implements SkillSource {
       if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
         throw skillSourceEnoent(skillPath);
       }
-      const [bundledEntries, localEntries, codeEntries] = await Promise.all([
+      const [bundledEntries, localEntries, codeEntries, createdNames] = await Promise.all([
         bundledExists ? this.#bundledSource.readdir(relative) : [],
         localExists ? this.#localSource!.readdir(relative) : [],
         relative === '' && this.#codeSource ? this.#codeSource.readdir('') : [],
+        relative === '' ? this.#createdSkillNames() : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
       for (const entry of bundledEntries) merged.set(entry.name, entry);
       // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
       for (const entry of codeEntries) merged.set(entry.name, entry);
+      // Created skills only fill names no layer serves a skill under; a stray file of that name doesn't hide one.
+      for (const name of createdNames) {
+        if (merged.get(name)?.type !== 'directory') merged.set(name, { name, type: 'directory' });
+      }
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
@@ -344,13 +414,14 @@ export class FactorySkillSource implements SkillSource {
   }
 
   /**
-   * Names the Factory mount serves: bundled skills plus the app's code and local skills.
-   * Repository skills with these names are hidden so they cannot collide with
-   * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
+   * Names the Factory mount serves: bundled skills plus the app's code and local skills and the
+   * project's created skills. Repository skills with these names are hidden so they cannot collide
+   * with Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
    */
   async #reservedNames(): Promise<Set<string>> {
     const reserved = new Set(FACTORY_SKILL_NAMES);
     for (const entry of (await this.#codeSource?.readdir('')) ?? []) reserved.add(entry.name);
+    for (const name of await this.#createdSkillNames()) reserved.add(name);
     if (!this.#localSource) return reserved;
     try {
       for (const entry of await this.#localSource.readdir('')) {
@@ -558,30 +629,8 @@ async function forEachConcurrently<T>(items: T[], limit: number, run: (item: T) 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
 }
 
-export interface SessionEnvironmentRepo {
-  projectRepositoryId: string;
-  repositoryId: string;
-  slug: string;
-  /** The session's base branch: the link's branch when set, else the repository default. */
-  defaultBranch: string;
-  /** The repository's own default branch, which the template image clones and pins. */
-  templateBranch: string;
-  position: number;
-  setupCommand: string | undefined;
-  teardownCommand: string | undefined;
-}
-
-/** The session's factory environment, resolved from the project and its `inEnvironment` links. */
-export interface SessionEnvironment {
-  /** The factory's display name. */
-  factoryName: string;
-  repos: SessionEnvironmentRepo[];
-  workspaceSetupCommand: string | undefined;
-  /** Only an absolute root is passed on; the templates reject anything else. */
-  workingDirectory: string | undefined;
-  /** The project's stored provider settings document, `{}` when nothing was set. */
-  settings: Record<string, unknown>;
-}
+export { environmentSandboxContext, resolveProjectEnvironment } from './environment/session-environment.js';
+export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/session-environment.js';
 
 /**
  * Resolve the factory environment a session boots from: the project's
@@ -602,101 +651,6 @@ async function resolveSessionEnvironment(
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
   return resolveProjectEnvironment(storage, project);
-}
-
-/**
- * The project's environment as a session (or an environment build) sees it:
- * every `inEnvironment` link under this source-control integration in
- * position order, plus the project's settings, setup command and workdir.
- */
-export async function resolveProjectEnvironment(
-  storage: Pick<SourceControlStorageHandle, 'projectRepositories' | 'repositories'>,
-  project: FactoryProject,
-): Promise<SessionEnvironment> {
-  const orgId = project.orgId;
-  const links = (await storage.projectRepositories.listByProject({ orgId, factoryProjectId: project.id }))
-    .filter(link => link.inEnvironment)
-    .sort((a, b) => a.position - b.position || a.createdAt.getTime() - b.createdAt.getTime());
-  const repos: SessionEnvironmentRepo[] = [];
-  const directories = new Set<string>();
-  for (const link of links) {
-    const repository = await storage.repositories.get({ orgId, id: link.repositoryId });
-    if (!repository) {
-      console.warn('[Mastra Factory] Environment repository link has no repository row; skipping it', {
-        orgId,
-        factoryProjectId: project.id,
-        projectRepositoryId: link.id,
-      });
-      continue;
-    }
-    // Two repositories that share a directory name would clobber each other's
-    // checkout under the root (and the template refuses them); the earlier
-    // position wins, the later link is left out of this boot.
-    const directory = repositoryDirectoryName(repository.slug);
-    if (directories.has(directory)) {
-      console.warn(
-        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
-        {
-          orgId,
-          factoryProjectId: project.id,
-          projectRepositoryId: link.id,
-          slug: repository.slug,
-          directory,
-        },
-      );
-      continue;
-    }
-    directories.add(directory);
-    repos.push({
-      projectRepositoryId: link.id,
-      repositoryId: repository.id,
-      slug: repository.slug,
-      defaultBranch: link.branch || repository.defaultBranch,
-      templateBranch: repository.defaultBranch,
-      position: link.position,
-      setupCommand: link.setupCommand ?? undefined,
-      teardownCommand: link.teardownCommand ?? undefined,
-    });
-  }
-  const workdir = project.sandboxWorkingDirectory?.trim();
-  return {
-    factoryName: project.name,
-    repos,
-    workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
-    workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
-    settings: project.sandboxSettings ?? {},
-  };
-}
-
-/**
- * The context fields the list form of the repo templates needs: one entry per
- * environment repository, each minting its own token at build time, with
- * `getRepositoryAccess` present but undefined (the two are mutually exclusive
- * for the template). Shared by session boot and environment builds so both
- * resolve the same template identity; `resolveHead` is only set when given.
- */
-export function environmentSandboxContext(
-  environment: SessionEnvironment,
-  options: {
-    orgId: string;
-    getRepositoryAccess: (args: { orgId: string; repositoryId: string }) => Promise<RepositoryAccess>;
-    resolveHead?: FactorySandboxContext['resolveHead'];
-  },
-): Omit<FactorySandboxContext, 'sessionId'> {
-  return {
-    setupCommand: undefined,
-    getRepositoryAccess: undefined,
-    repos: environment.repos.map(repo => ({
-      getRepositoryAccess: () => options.getRepositoryAccess({ orgId: options.orgId, repositoryId: repo.repositoryId }),
-      ...(repo.setupCommand ? { setupCommand: repo.setupCommand } : {}),
-    })),
-    ...(environment.workspaceSetupCommand ? { workspaceSetupCommand: environment.workspaceSetupCommand } : {}),
-    // A repository whose setup fails still lands in the image; the boot hook
-    // re-runs that setup from `setup-failed`.
-    continueOnSetupFailure: true,
-    ...(environment.workingDirectory ? { workingDirectory: environment.workingDirectory } : {}),
-    ...(options.resolveHead ? { resolveHead: options.resolveHead } : {}),
-  };
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
@@ -1265,7 +1219,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return {
           revision: snapshot.revision,
           overrides: new Map(
-            snapshot.overrides.map(o => [o.skillName, { content: o.content, updatedAt: o.updatedAt }] as const),
+            snapshot.overrides.map(
+              o =>
+                [
+                  o.skillName,
+                  { content: o.content, updatedAt: o.updatedAt, ...(o.kind === 'created' ? { created: true } : {}) },
+                ] as const,
+            ),
           ),
         };
       })();
@@ -1486,13 +1446,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return workspace;
     };
 
-    let existing: Workspace | undefined;
-    try {
-      existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-    } catch {
-      // Not registered yet.
-      existing = undefined;
-    }
+    // A miss is expected here; `optional` returns undefined instead of logging an error.
+    let existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as Workspace | undefined;
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
       existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
@@ -1852,7 +1807,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       inFlight: string | undefined,
       repeated: Set<string>,
     ) => {
-      const builtAt = new Date();
       try {
         for (const state of states) {
           if (state.setupStatus === 'skipped') continue;
@@ -1866,7 +1820,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             id: repo.projectRepositoryId,
             status: state.setupStatus === 'failed' ? 'failed' : 'configured',
             error: error === undefined ? null : redactCredentials(error).slice(-2000),
-            builtAt,
           });
         }
       } catch (error) {

@@ -9,7 +9,6 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import { AGENT_CONTROLLER_ID } from '../domains/chat/services/constants';
 import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
@@ -48,7 +47,7 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' })],
+            repositories: [listedRepository('repo-1', 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -73,10 +72,14 @@ function stubReviewBoard(decision?: FactoryDecisionSummary) {
         runs: data.runningSessionIds.map(resourceId => ({ runId: 'run-42', resourceId, threadId: 'thread-42' })),
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.get(`${projectUrl}/work-items`, () =>
-      HttpResponse.json({ workItems: data.items, runningSessionIds: data.runningSessionIds }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+      HttpResponse.json({
+        sessions: data.items.flatMap(item =>
+          Object.values(item.sessions).map(ref => ({ sessionId: ref.sessionId, branch: ref.branch })),
+        ),
+      }),
     ),
+    http.get(`${projectUrl}/work-items`, () => HttpResponse.json({ workItems: data.items })),
     http.post(`${projectUrl}/work-items`, () => {
       data.items = [{ ...reviewItem }];
       return HttpResponse.json({ workItem: data.items[0] });
@@ -125,7 +128,6 @@ describe('Review card action lifecycle', () => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard();
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
-    // The Review column's own header is a button of that name: press the card's.
     const card = await screen.findByRole('article', { name: reviewItem.title });
     await user.click(within(card).getByRole('button', { name: 'Review' }));
 
@@ -135,7 +137,6 @@ describe('Review card action lifecycle', () => {
 
     transitionGate.resolve();
     await waitFor(() => expect(data.decisionRefreshStarted).toBe(true));
-    // The transition has committed, but its decisions query is still in flight.
     expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled();
     decisionsGate.resolve();
     await waitForMutationsIdle(client);
@@ -148,9 +149,7 @@ describe('Review card action lifecycle', () => {
     await user.click(menuReview);
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: `Details for ${reviewItem.title}` }));
-    const panel = await screen.findByRole('dialog', { name: reviewItem.title });
-    expect(within(panel).getByRole('button', { name: 'Starting…' })).toBeDisabled();
+    expect(within(reviewing).getByRole('button', { name: 'Starting…' })).toBeDisabled();
 
     data.items = data.items.map(item => ({
       ...item,
@@ -163,16 +162,16 @@ describe('Review card action lifecycle', () => {
     await Promise.all([
       client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) }),
       client.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(FACTORY_ID) }),
-      client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL) }),
+      client.invalidateQueries({ queryKey: queryKeys.sessionActivity(FACTORY_ID) }),
     ]);
     await waitFor(() =>
-      expect(within(panel).getByRole('link', { name: 'Open session' })).toHaveAttribute(
+      expect(within(reviewing).getByRole('link', { name: new RegExp(`${reviewItem.title}$`) })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/workspaces/session-42/threads/thread-42`,
       ),
     );
-    expect(within(panel).queryByRole('button', { name: 'Review' })).toBeNull();
-    await waitFor(() => expect(within(panel).queryByText('Starting an automated run…')).toBeNull());
+    expect(within(reviewing).queryByRole('button', { name: 'Review' })).toBeNull();
+    await waitFor(() => expect(within(reviewing).queryByText('Starting an automated run…')).toBeNull());
     expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action' })]);
   });
 

@@ -7,7 +7,7 @@ import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll'
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -107,7 +107,7 @@ const TaskListLabel = ({ task }: { task: TaskListItem }) => {
         className={cn(
           'col-start-1 row-start-1 truncate transition-[opacity,color,translate,filter]',
           taskGraphMotion,
-          task.status === 'pending' ? 'text-muted-foreground/70' : 'text-muted-foreground',
+          task.status === 'pending' ? 'text-subtle-foreground' : 'text-muted-foreground',
           active ? '-translate-y-1 opacity-0 blur-[2px]' : 'translate-y-0 opacity-100 blur-none',
         )}
       >
@@ -278,8 +278,8 @@ export const TaskList = ({
             !open && 'group-hover/task-list:text-foreground',
           )}
         >
-          <IconChevronBottom
-            className={cn('size-3.5 transition-[rotate]', taskGraphMotion, open ? 'rotate-180' : 'rotate-0')}
+          <IconChevronDownMedium
+            className={cn('size-icon-sm transition-[rotate]', taskGraphMotion, open ? 'rotate-180' : 'rotate-0')}
           />
         </button>
       </div>

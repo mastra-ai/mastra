@@ -205,7 +205,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
 
     it('opens its ancestors, highlights its row and scrolls it to the start of the view', () => {
       renderWithProviders(<Host requested={[]} />);
-      expect(within(tree().getByRole('treeitem', { name: /^site:mastra/ })).queryByText('Second article')).toBeNull();
+      expect(within(tree().getByRole('treeitem', { name: /^Site/ })).queryByText('Second article')).toBeNull();
       const dot = document.querySelector('.react-flow__node [data-page-id="second"]')?.closest('.react-flow__node');
       if (!dot) throw new Error('no second dot');
       fireEvent.click(dot);
@@ -376,9 +376,9 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     it('focuses a different page instead of opening when the second click lands elsewhere', () => {
       renderWithProviders(<Host requested={[]} />);
       fireEvent.click(row('Pricing'));
-      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Site'));
       expect(screen.getByTestId('view').textContent).toBe('graph');
-      expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
+      expect(row('Site').getAttribute('aria-selected')).toBe('true');
     });
   });
 
@@ -442,7 +442,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
 
     it('counts the children it still does not draw on the "+N more" circle, not in a line that shifts the layout', () => {
       const { container } = renderWithProviders(<Host requested={[]} siteChildCount={5} />);
-      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Site'));
       expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('aria-label')).toBe(
         'Show 3 more of 3',
       );
@@ -462,7 +462,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
 
       it('draws the next batch of children, counting down, until the circle is gone', () => {
         const { container } = renderWithProviders(<Host requested={[]} extraSiblings={60} siteChildCount={62} />);
-        fireEvent.click(row('site:mastra'));
+        fireEvent.click(row('Site'));
         expect(restNode()?.textContent).toContain('+14 more');
         expect(restNode()?.getAttribute('aria-label')).toBe('Show 12 more of 14');
         expect(restNode()?.className).toContain('cursor-pointer');
@@ -508,7 +508,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
 
     it('goes back one focus at a time through the walk', () => {
       renderWithProviders(<Host requested={[]} />);
-      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Site'));
       fireEvent.click(row('Pricing'));
       fireEvent.click(row('Articles'));
       expect(row('Articles').getAttribute('aria-selected')).toBe('true');
@@ -516,7 +516,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
       expect(screen.getByTestId('view').textContent).toBe('graph');
       fireEvent.click(back());
-      expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
+      expect(row('Site').getAttribute('aria-selected')).toBe('true');
       expect(back().disabled).toBe(true);
     });
   });
@@ -524,12 +524,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   describe('when the server capped a count', () => {
     it('shows it as a lower bound in the tree', () => {
       renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
-      expect(within(row('site:mastra')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
+      expect(within(row('Site')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
     });
 
     it('adds no line above the graph, so refocusing never moves it', () => {
       const { container } = renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
-      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Site'));
       expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
       expect(container.textContent ?? '').not.toMatch(/pages under .* drawn/);
     });

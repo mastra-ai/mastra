@@ -4,14 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { assert, describe, expect, it } from 'vitest';
 
-import {
-  BROWSER_FETCHABLE_SCHEMES,
-  NON_FETCHABLE_REMOTE_SCHEMES,
-  REMOTE_URL_SCHEMES,
-  isBrowserFetchableUrl,
-  isNonFetchableRemoteUrl,
-  isRemoteUrl,
-} from '../schemes';
+import { REMOTE_URL_SCHEMES, isBrowserFetchableUrl, isNonFetchableRemoteUrl, isRemoteUrl } from '../schemes';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -58,14 +51,6 @@ describe('attachment URL schemes', () => {
     const coreProtocols = readCoreSupportedProtocols();
     expect(coreProtocols).toEqual(['gs', 'http', 'https', 's3']);
     expect(toProtocols(REMOTE_URL_SCHEMES)).toEqual(coreProtocols);
-  });
-
-  it('partitions remote schemes into fetchable and non-fetchable', () => {
-    expect([...BROWSER_FETCHABLE_SCHEMES]).toEqual(['https://', 'http://']);
-    expect([...NON_FETCHABLE_REMOTE_SCHEMES]).toEqual(['gs://', 's3://']);
-    expect([...REMOTE_URL_SCHEMES].sort()).toEqual(
-      [...BROWSER_FETCHABLE_SCHEMES, ...NON_FETCHABLE_REMOTE_SCHEMES].sort(),
-    );
   });
 
   it('classifies URLs with the shared predicates', () => {

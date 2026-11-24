@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b-desktop",
-  "version": "0.1.13",
+  "version": "0.1.15-alpha.0",
   "description": "E2B Desktop (computer-use) sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -52,7 +52,8 @@
     "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

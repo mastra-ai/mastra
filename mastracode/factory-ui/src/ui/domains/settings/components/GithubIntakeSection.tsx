@@ -5,7 +5,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
 import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { IntakeProviderCard, toggleSource, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
@@ -44,15 +44,6 @@ export function GithubIntakeSection({
       listed={listed}
       connection={listed ? connected && <GithubManageButton /> : status?.enabled === true && <GithubConnectButton />}
       description={githubDescription(status, unavailable)}
-      syncControl={
-        <IntakeSyncControl
-          accessibleLabel="Sync GitHub issues"
-          description="Import open issues from selected repositories."
-          checked={config.github.enabled}
-          disabled={!connected}
-          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
-        />
-      }
       action={
         unavailable && (
           <Button
@@ -67,10 +58,10 @@ export function GithubIntakeSection({
         )
       }
     >
-      {connected && config.github.enabled && (
+      {connected && (
         <>
           <SourcePicker
-            label="Repositories"
+            label="Bring in issues from"
             addLabel="Add repository"
             itemIcon={<SettingsIntegrationIcon provider="github" />}
             groups={[{ id: 'repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
@@ -79,9 +70,7 @@ export function GithubIntakeSection({
             loading={factoriesQuery.isPending}
             error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
             onRetry={() => void factoriesQuery.refetch()}
-            onToggleItem={slug =>
-              selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, slug) }))
-            }
+            onToggleItem={slug => selection.update(current => toggleSource(current, slug))}
           />
           {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />

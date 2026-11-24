@@ -1,10 +1,10 @@
+import { datasetVersionsResponse } from '@mastra/playground-ui/domains/datasets';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import ExperimentsPage from '..';
 import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { emptyDatasetItems } from '@/domains/datasets/components/__tests__/fixtures/dataset-items';
-import { datasetVersionsResponse } from '@/domains/datasets/components/__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import {
   buildListExperimentsResponse,

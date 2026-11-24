@@ -28,7 +28,7 @@ import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
 import { IconPlugin1 } from '@/ds/icons/central/IconPlugin1';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconTodos } from '@/ds/icons/central/IconTodos';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
@@ -192,7 +192,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                     separator: true,
                     links: [
                       { name: 'Environments', url: '/environments', icon: <IconAgents />, opensView: true },
-                      { name: 'Settings', url: '/settings', icon: <IconSettingsGear1 />, opensView: true },
+                      { name: 'Settings', url: '/settings', icon: <IconSettingsGear5 />, opensView: true },
                     ],
                   },
                 ]}
@@ -205,7 +205,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 <Sidebar.NavLink link={{ name: 'Usage', url: '/gateway/usage', icon: <MetricsIcon /> }} />
                 <Sidebar.NavLink link={{ name: 'Threads', url: '/gateway/threads', icon: <WorkflowIcon /> }} />
                 <Sidebar.NavLink link={{ name: 'Logs', url: '/gateway/logs', icon: <LogsIcon /> }} />
-                <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <IconSettingsGear1 /> }} />
+                <Sidebar.NavLink link={{ name: 'Settings', url: '/gateway/settings', icon: <IconSettingsGear5 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
 
@@ -218,7 +218,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
 
             <Sidebar.NavStack.View value="settings" title="Settings" returnFocusRef={menuTriggerRef}>
               <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'General', url: '/settings', icon: <IconSettingsGear1 /> }} isActive />
+                <Sidebar.NavLink link={{ name: 'General', url: '/settings', icon: <IconSettingsGear5 /> }} isActive />
                 <Sidebar.NavLink link={{ name: 'Connect', url: '/settings/connect', icon: <IconPlugin1 /> }} />
               </Sidebar.NavList>
             </Sidebar.NavStack.View>
@@ -266,7 +266,7 @@ function SidebarStory({ header = 'default', version, variant = 'default' }: Side
                 Environments
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={() => openView('settings')}>
-                <IconSettingsGear1 />
+                <IconSettingsGear5 />
                 Settings
               </DropdownMenu.Item>
               <DropdownMenu.Separator />

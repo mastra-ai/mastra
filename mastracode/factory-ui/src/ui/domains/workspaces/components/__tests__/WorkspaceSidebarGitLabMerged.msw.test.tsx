@@ -84,6 +84,7 @@ function stubSidebar(status: PullRequestSubscription['status']) {
         pullRequestNumber: MERGE_REQUEST_IID,
         status,
         url: `https://gitlab.com/${PROJECT_PATH}/-/merge_requests/${MERGE_REQUEST_IID}`,
+        updatedAt: '2026-07-22T00:00:00.000Z',
       };
       const matches = url.searchParams.get('threadId') === 'review-thread';
       return HttpResponse.json({ subscriptions: matches ? [subscription] : [] });

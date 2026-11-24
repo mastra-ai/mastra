@@ -20,6 +20,7 @@ import {
   StepFunIcon,
   UpstageIcon,
   CheckIcon,
+  CircleDotIcon,
   ClaudeIcon,
   ChevronIcon,
   CommitIcon,
@@ -74,14 +75,14 @@ import {
 import { Button } from '@/ds/components/Button';
 import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
 import { IconPlay } from '@/ds/icons/central/IconPlay';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Sizes } from '@/ds/tokens/sizes';
 
@@ -121,6 +122,7 @@ const icons = [
   { name: 'ApiIcon', component: ApiIcon },
   { name: 'BranchIcon', component: BranchIcon },
   { name: 'CheckIcon', component: CheckIcon },
+  { name: 'CircleDotIcon', component: CircleDotIcon },
   { name: 'ChevronIcon', component: ChevronIcon },
   { name: 'CommitIcon', component: CommitIcon },
   { name: 'CrossIcon', component: CrossIcon },
@@ -350,8 +352,8 @@ export const BrandIcons: Story = {
 const strokeGlyphs = [
   IconPlusMedium,
   IconMagnifyingGlass,
-  IconSettingsGear1,
-  IconChevronBottom,
+  IconSettingsGear5,
+  IconChevronDownMedium,
   IconPencil,
   IconSquareBehindSquare1,
   IconCrossMedium,

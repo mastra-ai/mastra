@@ -15,11 +15,12 @@ import type { ChunkType } from '../../stream/types';
 import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { rebindProcessorTools } from '../../utils';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
-import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
+import { CONTINUATION_STOP_CAUSE_KEY, REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { TOOL_ABORT_GRACE_MS, TOOL_SETTLE_MARGIN_MS } from '../shared/tool-abort-grace';
 import { createTimeoutAbortSignal, isMastraTimeoutError, settledOrElapsed } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
+import { REQUIRE_TOOL_APPROVAL_FALLBACK_KEY } from './agentic-execution/tool-approval-verdict';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
 export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
@@ -57,7 +58,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   const loopSource = {
     start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       let totalTimeoutSignal: AbortSignal | undefined;
-      // Stamp chunks when the loop produces them; consumers may read them much later.
+      // Stamp and trace chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
           // The total deadline ends the run with a timeout error after the tool grace window.
@@ -72,6 +73,11 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
           streamController.enqueue(chunk);
+          try {
+            rest.modelSpanTracker?.recordChunk?.(chunk);
+          } catch {
+            // Optional tracing must not prevent accepted output from reaching the caller.
+          }
           streamPublisher?.publish(chunk, messageList);
         },
         close: () => {
@@ -461,15 +467,18 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (typeof requireToolApproval === 'function') {
           // Store the function so the tool-call-step can evaluate it per call. RequestContext.toJSON()
-          // strips non-serializable values, so this never reaches the persisted suspend snapshot — that
-          // is fine because approval is only decided at call time, before any suspend/resume.
+          // strips non-serializable values, so the function never reaches the persisted snapshot; the
+          // stand-in does, so calls that start after a resume without the function still need approval.
           requestContext.set('__mastra_requireToolApproval', requireToolApproval);
+          requestContext.set(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY, true);
         } else if (requireToolApproval) {
           requestContext.set('__mastra_requireToolApproval', true);
+          requestContext.delete(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY);
         } else {
           // Clear any value left over from a prior call so a reused RequestContext can't leak a
           // stale function/`true` into a call where approval is no longer required.
           requestContext.delete('__mastra_requireToolApproval');
+          requestContext.delete(REQUIRE_TOOL_APPROVAL_FALLBACK_KEY);
         }
 
         if (rest.goal) {
@@ -588,6 +597,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
+        const stopCause = rest.tracingScope?.get(CONTINUATION_STOP_CAUSE_KEY);
         finishQueued = safeEnqueue(controller, {
           type: 'finish',
           runId,
@@ -599,6 +609,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
+            ...(stopCause ? { stopCause } : {}),
           },
         });
 

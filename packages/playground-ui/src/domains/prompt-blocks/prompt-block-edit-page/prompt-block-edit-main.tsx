@@ -1,0 +1,61 @@
+import type { UseFormReturn } from 'react-hook-form';
+import { Controller, useWatch } from 'react-hook-form';
+import { SectionHeader } from '../section-header';
+import type { PromptBlockFormValues } from './utils/form-validation';
+
+import { DisplayConditionsDialog } from '@/domains/instruction-blocks';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import type { RuleGroup } from '@/utils/rule-engine';
+
+interface PromptBlockEditMainProps {
+  form: UseFormReturn<PromptBlockFormValues>;
+  /** Key that changes when form is reset with new data, forces CodeEditor to remount */
+  formResetKey?: number;
+}
+
+export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditMainProps) {
+  const { control, setValue } = form;
+
+  const schema = useWatch({ control, name: 'variables' });
+  const rules = useWatch({ control, name: 'rules' });
+
+  const handleRulesChange = (ruleGroup: RuleGroup | undefined) => {
+    setValue('rules', ruleGroup, { shouldDirty: true });
+  };
+
+  return (
+    <div className="flex h-full flex-col gap-3 px-4">
+      <div className="flex items-center justify-between">
+        <SectionHeader
+          title="Content"
+          subtitle="Write the prompt block content. Use {{variableName}} for template variables."
+        />
+        <DisplayConditionsDialog
+          entityName="Prompt Block"
+          schema={schema}
+          rules={rules}
+          onRulesChange={handleRulesChange}
+        />
+      </div>
+      <Controller
+        name="content"
+        control={control}
+        render={({ field }) => (
+          <div className="flex flex-1 flex-col">
+            <CodeEditor
+              key={formResetKey}
+              value={field.value ?? ''}
+              onChange={field.onChange}
+              language="markdown"
+              showCopyButton
+              placeholder="Enter prompt block content"
+              highlightVariables
+              schema={schema}
+              className="min-h-[200px] flex-1"
+            />
+          </div>
+        )}
+      />
+    </div>
+  );
+}

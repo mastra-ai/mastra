@@ -1,13 +1,14 @@
 {
   "name": "@mastra/redis-streams",
-  "version": "0.9.0-alpha.1",
+  "version": "0.9.1-alpha.1",
   "description": "Mastra Redis Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {
@@ -33,7 +34,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "redis": "5.12.1"
+    "redis": "5.12.3"
   },
   "devDependencies": {
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.139",
@@ -46,6 +47,7 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/pg": "workspace:*",
+    "@mastra/redis": "workspace:*",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

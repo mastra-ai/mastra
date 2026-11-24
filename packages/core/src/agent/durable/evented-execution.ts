@@ -150,7 +150,7 @@ export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event
   if (published) return;
   // Nothing is left to settle the run. Release the captured claim and thread lease so the coordinator sees the
   // loss and the thread can take a new run. Both releases are fenced to this execution, never a successor's.
-  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
+  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim, 'abandoned');
   if (claim.threadId) {
     await agentThreadStreamRuntime.abandonDurableThreadLease(
       mastra.pubsub,
@@ -220,11 +220,11 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   // Storage-backed deletes are fenced; lease-only stores retain their existing best-effort write guarantees.
   if (event.type !== 'workflow.suspend') {
     for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-      await store?.deleteWorkflowRunById({ runId: event.runId, workflowName, storageVersion: 1, fence });
+      await store?.deleteWorkflowRunById({ runId: event.runId, workflowName, fence });
     }
   }
   // Keep the released generation as the retry barrier before dropping the thread token.
-  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
+  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim, 'settled');
   if (claim.threadId && event.type !== 'workflow.suspend') {
     await agentThreadStreamRuntime.releaseDurableThreadLease(
       mastra.pubsub,

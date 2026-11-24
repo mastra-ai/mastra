@@ -100,9 +100,9 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 
 ### Central Icons
 
-New interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `CirclePause`, for the `Loader2` spinner, and for filled stars, which would need a second Central style. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
+Interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `Network`. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
 
-Each icon is its own module under `@mastra/playground-ui/icons/central/`. Wrap it in `Icon` for the standard sizes, the same as any other icon. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+Each icon is its own module under `@mastra/playground-ui/icons/central/`. An icon inside a design system component, such as a button or menu item, takes its size from that component. Anywhere else, wrap it in `Icon` or give it a `size-icon-*` class. Don't set `size`, `width`, `height` or a size class on an icon: the `playground-ui/icon-size-from-parent` lint rule reports it. The **Icons** docs page in Storybook covers the sizes and the optical inset a few edge-to-edge shapes get. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
 
 ```tsx
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -339,26 +339,28 @@ Semantic values follow the existing `html.light` mode; dark mode is the default.
 
 #### Surfaces
 
-| Token          | Utility         | Used for                                                                            |
-| -------------- | --------------- | ----------------------------------------------------------------------------------- |
-| `--background` | `bg-background` | The page canvas                                                                     |
-| `--sidebar`    | `bg-sidebar`    | App chrome, one step behind the canvas                                              |
-| `--card`       | `bg-card`       | Cards, panels, settings sections                                                    |
-| `--popover`    | `bg-popover`    | Menus, dropdowns, tooltips                                                          |
-| `--dialog`     | `bg-dialog`     | Dialogs, drawers, alert dialogs. Off-white in light mode so fields inside stand out |
-| `--muted`      | `bg-muted`      | A quiet region inside a container                                                   |
+| Token          | Utility         | Used for                                      |
+| -------------- | --------------- | --------------------------------------------- |
+| `--background` | `bg-background` | The page canvas                               |
+| `--sidebar`    | `bg-sidebar`    | App chrome, one step behind the canvas        |
+| `--card`       | `bg-card`       | Cards, panels, settings sections              |
+| `--popover`    | `bg-popover`    | Menus, dropdowns, tooltips                    |
+| `--dialog`     | `bg-dialog`     | Dialogs, drawers, alert dialogs               |
+| `--nested`     | `bg-nested`     | A box inside a card or dialog, with no border |
+| `--muted`      | `bg-muted`      | A quiet region inside a container             |
 
 #### Fields
 
-Text fields, textareas, input groups, and the default Select, Combobox, and DateTimePicker triggers read their fill and outline from these tokens. You don't set them at the call site: cards, overlays, and dialogs set them for every field inside, so a field is never darker than the surface it sits on.
+Text fields, textareas, input groups, and the default Select, Combobox, and DateTimePicker triggers read their fill and outline from these tokens. You don't set them at the call site: the page, cards, overlays, dialogs, and boxes painted with `bg-card` set them for every field inside, so the same field is the card color on the page and a light tint inside a card.
 
-| Token                | Utility             | Used for                                                                                 |
-| -------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
-| `--field`            | `bg-field`          | Field fill. `--card` on the page, `--field-on-surface` inside a card, overlay, or dialog |
-| `--field-on-surface` | none                | Field fill inside a surface: one step lighter in dark mode, white in light mode          |
-| `--field-disabled`   | `bg-field-disabled` | Disabled field fill                                                                      |
-| `--field-rim`        | none                | Resting outline. Stronger inside white surfaces in light mode                            |
-| `--field-rim-focus`  | none                | Focus outline                                                                            |
+| Token                           | Utility             | Used for                                                                                                                           |
+| ------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `--field`                       | `bg-field`          | Field fill. `--card` on the page, `--field-on-surface` inside a card, overlay, or dialog, `--field-on-nested` on a `bg-nested` box |
+| `--field-on-surface`            | none                | Field fill inside a surface: a light tint of the card                                                                              |
+| `--field-hover`, `--field-open` | none                | Tint of a field while hovered, and while its menu is open                                                                          |
+| `--field-disabled`              | `bg-field-disabled` | Disabled field fill                                                                                                                |
+| `--field-rim`                   | none                | Resting outline                                                                                                                    |
+| `--field-rim-focus`             | none                | Focus outline                                                                                                                      |
 
 A field in an error state sets `--field-rim` and `--field-rim-focus` to `--destructive-indicator`, so the red outline shows on every surface and stays red while focused.
 
@@ -412,7 +414,7 @@ Opacity is allowed only through design-system tokens, for layers whose job is to
 - Scrims and overlays: `scrim`.
 - Badge fills: `badge-{hue}-strong` and `badge-{hue}-subtle`, so a badge tints with the card or row it sits on.
 - Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
-- Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
+- Effects that fade, glow, or animate inside a design-system component, such as the Composer ring.
 
 Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions.
 
@@ -420,16 +422,18 @@ Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()`
 
 Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`. Existing roles cover the following uses without adding a new token value:
 
-| Role                | Token / utility                                              | Use                                                                     |
-| ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Surface edge        | `--surface-rim` / `border-surface-rim`                       | App frame, panel and card edges; frame headers that meet them           |
-| Content divider     | `--border` / `border-border`                                 | Internal separators and filled control edges                            |
-| Outlined control    | `--border-strong` / `border-border-strong`                   | Transparent controls at rest                                            |
-| Hover / focus       | `--border-hover`, `--border-focus`                           | Interactive control states                                              |
-| Field edge          | `--field-rim`, `--field-rim-on-surface`, `--field-rim-focus` | Field recipes resolve the edge for their parent surface and focus state |
-| Badge / avatar trim | `--inset-highlight`, `--inset-rim`                           | `shadow-inset` combines a top highlight and rim                         |
+| Role                | Token / utility                            | Use                                                            |
+| ------------------- | ------------------------------------------ | -------------------------------------------------------------- |
+| Surface edge        | `--surface-rim` / `border-surface-rim`     | App frame, panel and card edges; frame headers that meet them  |
+| Row divider         | `--separator` / `border-separator`         | Lines between rows of a card, list or settings group           |
+| Content divider     | `--border` / `border-border`               | Internal separators and filled control edges                   |
+| Outlined control    | `--border-strong` / `border-border-strong` | Transparent controls at rest                                   |
+| Hover / focus       | `--border-hover`, `--border-focus`         | Interactive control states                                     |
+| Field edge          | `--field-rim`, `--field-rim-focus`         | `shadow-input` draws the field edge and repaints it on focus   |
+| Overlay edge        | `--overlay-rim`                            | `shadow-overlay` draws the edge of menus, popovers and dialogs |
+| Badge / avatar trim | `--inset-rim`                              | `shadow-inset` draws a 1px rim                                 |
 
-`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box; `shadow-raised` and `shadow-overlay` combine it with a lip and drop shadows. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
+`border-surface-rim` is an inline Tailwind alias of the existing `--surface-rim`, also exported in `BorderColors`. It resolves local overrides on the styled element. `shadow-rim` draws this same color inside the box, and `shadow-raised` adds a drop shadow to it. `shadow-overlay` combines `--overlay-rim` with a larger drop shadow. None of them draw a top highlight. Do not add a border on an edge those recipes already draw. `MainCard` reserves 1px for its inset rim so child dividers cannot overlap it.
 
 `Header` is a layout primitive: every instance uses `border-surface-rim`, matching the surrounding frame or panel. Call sites do not choose a tone. `border={false}` hides the edge. Internal content separators use `border-border` directly or a separator component.
 
@@ -454,6 +458,8 @@ To migrate removed tokens:
 | `--ring`, `ring-ring`                                 | `--border-focus`, `ring-border-focus`             |
 | `--shadow-focus-ring`, `--focus-halo`                 | none; focus has no halo                           |
 | `--surface-rim-focus`, `--field-rim-focus-on-surface` | `--border-focus`                                  |
+| `--field-rim-on-surface`                              | `--field-rim`                                     |
+| `--elevation-lip`, `--inset-highlight`                | none; surfaces have no top highlight              |
 | `focusRing.visible` and siblings                      | `focusRing`, or `focusRingInset` in clipped rows  |
 
 Keyboard focus is a 1px `--border-focus` outline on `:focus-visible`, and the base layer draws it on any focusable element that does not style its own. `focusRing` from `primitives/transitions` applies it explicitly, `focusRingInset` draws it inside a full-bleed row whose edge is clipped, and `focusRingOffset` sets it 2px out on checkboxes, radios, switches, and filled `primary` and `destructive` buttons, where a flush line vanishes into the fill. It is an outline, not a `ring-*`, because a ring rewrites `box-shadow` and would erase a raised surface's rim. Fields, buttons, and clickable cards show focus on that rim instead: `surfaceRimFocus` from `primitives/form-element` repaints it to `--border-focus`, the same colour and weight, and the surface keeps its elevation.

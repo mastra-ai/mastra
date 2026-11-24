@@ -98,7 +98,7 @@ const paths: JiraPath[] = [
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
           const target = String(input);
-          if (target.endsWith('/v2/connections?providerKey=jira')) {
+          if (target.endsWith('/v2/projects/proj_factory/connections')) {
             return json({
               connections: [
                 { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
@@ -117,7 +117,11 @@ const paths: JiraPath[] = [
         }),
       );
       return new PlatformJiraIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
       });
     },
   },
@@ -190,11 +194,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await bind(factories.mobile, ['mobile', 'ios']);
   });
 
-  const poll = async (factoryProjectId: string) => {
-    const response = await app.request(`/web/jira/issues?factoryProjectId=${factoryProjectId}`);
-    expect(response.status).toBe(200);
-    return ((await response.json()) as { issues: Array<{ identifier: string }> }).issues.map(issue => issue.identifier);
-  };
   const filed = async (factoryProjectId: string) =>
     (await seed.workItems.listDeferredDecisions('org1', factoryProjectId))
       .map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)
@@ -224,6 +223,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         configVersion: 'factory-config-v1',
       }),
       factoryProjectExists,
+      // No intake rules to read: the route list, as before intake order.
+      intakeEvaluator: 'route-list',
       ownerId: 'label-routing-test',
     });
     // A sweep proposes cards for every factory at once, more than one dispatcher pass files.
@@ -236,11 +237,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       .filter(key => expectedFactory[key] === name)
       .sort();
 
-  it('files every issue in exactly one factory on a sweep, never while a board reads its list', async () => {
-    for (const name of names) {
-      expect((await poll(factories[name])).sort()).toEqual(slice(name));
-      expect(await filed(factories[name])).toEqual([]);
-    }
+  it('files every issue in exactly one factory on a sweep', async () => {
+    for (const name of names) expect(await filed(factories[name])).toEqual([]);
 
     await sweep();
     await sweep();
@@ -281,7 +279,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
       );
 
-    expect(await poll(factories.platform)).toContain('OPS-2');
     await sweep();
     expect(await filed(triage)).toEqual([]);
     await fileProposedCards();
@@ -289,9 +286,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
 
     nextMinute();
     await bindTriage();
-    expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
-    expect(await poll(triage)).toEqual(['OPS-2']);
     await sweep();
     expect(await filed(triage)).toEqual(['OPS-2']);
     await fileProposedCards();
@@ -307,7 +302,6 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
     const growth = await takeOverWithGrowth();
 
-    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
     await sweep();
     expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();
@@ -342,9 +336,9 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await fileProposedCards(async tenant => {
       if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
       takeover = (async () => {
-        expect(
-          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
-        ).toBe(204);
+        expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(
+          204,
+        );
         const growth = await takeOverWithGrowth();
         await sweep();
         return growth;

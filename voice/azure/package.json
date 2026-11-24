@@ -1,12 +1,13 @@
 {
   "name": "@mastra/voice-azure",
-  "version": "0.12.3",
+  "version": "0.12.4-alpha.0",
   "description": "Mastra Azure speech integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

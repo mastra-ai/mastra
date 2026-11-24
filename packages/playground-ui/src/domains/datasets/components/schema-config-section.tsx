@@ -1,0 +1,295 @@
+'use client';
+import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
+import type { JSONSchema7 } from 'json-schema';
+import { useState, useEffect, useRef } from 'react';
+import { useAgentSchema } from '../hooks/use-agent-schema';
+import { useScorerSchema } from '../hooks/use-scorer-schema';
+import { SchemaField } from './schema-settings/schema-field';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Notice } from '@/ds/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Txt } from '@/ds/components/Txt';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/utils/cn';
+
+type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
+type ScorerTargetType = 'agent' | 'custom';
+
+interface SchemaConfigSectionProps {
+  inputSchema: Record<string, unknown> | null | undefined;
+  outputSchema: Record<string, unknown> | null | undefined;
+  requestContextSchema: Record<string, unknown> | null | undefined;
+  onChange: (schemas: {
+    inputSchema: Record<string, unknown> | null;
+    outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
+  }) => void;
+  disabled?: boolean;
+  defaultOpen?: boolean;
+}
+
+/**
+ * Collapsible section for configuring dataset schemas.
+ * Supports source-based auto-population from Agent, Workflow, or Scorer schemas.
+ */
+export function SchemaConfigSection({
+  inputSchema,
+  outputSchema,
+  requestContextSchema,
+  onChange,
+  disabled = false,
+  defaultOpen = false,
+}: SchemaConfigSectionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [sourceType, setSourceType] = useState<SourceType>('custom');
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const [scorerTargetType, setScorerTargetType] = useState<ScorerTargetType>('agent');
+
+  // Fetch workflows for workflow source selection
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
+  const workflowOptions = workflows ? Object.entries(workflows) : [];
+
+  // Fetch workflow schema when workflow selected
+  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
+    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
+    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
+  });
+
+  // Static schemas for agent and scorer
+  const agentSchema = useAgentSchema();
+  const scorerSchema = useScorerSchema();
+
+  // Get source schemas based on source type
+  const getSourceSchemas = (): { inputSchema: JSONSchema7 | null; outputSchema: JSONSchema7 | null } => {
+    switch (sourceType) {
+      case 'agent':
+        return {
+          inputSchema: agentSchema.inputSchema,
+          outputSchema: agentSchema.outputSchema,
+        };
+      case 'workflow':
+        if (!workflowSchema) return { inputSchema: null, outputSchema: null };
+        return {
+          inputSchema: workflowSchema.inputSchema ?? null,
+          outputSchema: workflowSchema.outputSchema ?? null,
+        };
+      case 'scorer':
+        return {
+          inputSchema: scorerTargetType === 'agent' ? scorerSchema.agentInputSchema : scorerSchema.customInputSchema,
+          outputSchema: scorerSchema.outputSchema,
+        };
+      default:
+        return { inputSchema: null, outputSchema: null };
+    }
+  };
+
+  const sourceSchemas = getSourceSchemas();
+  // Auto-populate when not custom (scorer always auto-populates with agent or custom schema)
+  const isAutoPopulate = sourceType !== 'custom';
+
+  // Track previous source key to detect source changes
+  const prevSourceKeyRef = useRef<string | null>(null);
+
+  // Auto-populate when source changes
+  // - When source/workflow changes: re-populate all ENABLED schemas (even if not empty)
+  // - When toggling on a schema: populate if empty (handled by SchemaField)
+  useEffect(() => {
+    if (sourceType === 'custom') return;
+    if (!sourceSchemas.inputSchema && !sourceSchemas.outputSchema) return;
+
+    // Create a key representing the current source selection
+    const currentSourceKey =
+      sourceType === 'workflow'
+        ? `workflow:${selectedWorkflow}`
+        : sourceType === 'scorer'
+          ? `scorer:${scorerTargetType}`
+          : sourceType;
+
+    // Check if source changed (not just initial render)
+    const sourceChanged = prevSourceKeyRef.current !== null && prevSourceKeyRef.current !== currentSourceKey;
+    prevSourceKeyRef.current = currentSourceKey;
+
+    // For workflow, also need to wait for schema to load
+    if (sourceType === 'workflow' && !workflowSchema) return;
+
+    const isInputEnabled = inputSchema !== null && inputSchema !== undefined;
+    const isOutputEnabled = outputSchema !== null && outputSchema !== undefined;
+
+    // Check if schemas are empty (for initial population when toggling on)
+    const isInputEmpty =
+      inputSchema && inputSchema.type === 'object' && Object.keys(inputSchema.properties || {}).length === 0;
+    const isOutputEmpty =
+      outputSchema && outputSchema.type === 'object' && Object.keys(outputSchema.properties || {}).length === 0;
+
+    // Populate if: source changed and schema is enabled, OR schema is enabled but empty
+    const shouldPopulateInput = sourceSchemas.inputSchema && isInputEnabled && (sourceChanged || isInputEmpty);
+    const shouldPopulateOutput = sourceSchemas.outputSchema && isOutputEnabled && (sourceChanged || isOutputEmpty);
+
+    if (shouldPopulateInput || shouldPopulateOutput) {
+      onChange({
+        inputSchema: shouldPopulateInput
+          ? (sourceSchemas.inputSchema as Record<string, unknown>)
+          : (inputSchema ?? null),
+        outputSchema: shouldPopulateOutput
+          ? (sourceSchemas.outputSchema as Record<string, unknown>)
+          : (outputSchema ?? null),
+        requestContextSchema: requestContextSchema ?? null,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceType, selectedWorkflow, workflowSchema, scorerTargetType]);
+
+  const handleInputSchemaChange = (schema: Record<string, unknown> | null) => {
+    onChange({
+      inputSchema: schema,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: requestContextSchema ?? null,
+    });
+  };
+
+  const handleOutputSchemaChange = (schema: Record<string, unknown> | null) => {
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: schema,
+      requestContextSchema: requestContextSchema ?? null,
+    });
+  };
+
+  const handleRequestContextSchemaChange = (schema: Record<string, unknown> | null) => {
+    onChange({
+      inputSchema: inputSchema ?? null,
+      outputSchema: outputSchema ?? null,
+      requestContextSchema: schema,
+    });
+  };
+
+  const handleSourceChange = (value: SourceType) => {
+    setSourceType(value);
+    // Reset workflow selection when switching away from workflow
+    if (value !== 'workflow') {
+      setSelectedWorkflow(null);
+    }
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <CollapsibleTrigger className={cn(quietTextHover, 'flex w-full items-center gap-2 py-2', 'text-subheading')}>
+        <DisclosureChevron direction="right" className="size-4" />
+        Schema Configuration (Optional)
+      </CollapsibleTrigger>
+
+      <CollapsibleContent className="space-y-4 pt-4">
+        <Notice variant="info" title="JSON Schema Format">
+          <Notice.Message>
+            Schemas use{' '}
+            <a
+              href="https://json-schema.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-info-indicator"
+            >
+              JSON Schema
+            </a>{' '}
+            for validation and type checking.
+          </Notice.Message>
+        </Notice>
+
+        <div className="grid gap-2">
+          <div className="flex flex-wrap items-end gap-2">
+            <Field className="w-40">
+              <FieldLabel size="bigger">Import From</FieldLabel>
+              <Select value={sourceType} onValueChange={v => handleSourceChange(v)} disabled={disabled}>
+                <SelectTrigger size="sm" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Custom</SelectItem>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="workflow">Workflow</SelectItem>
+                  <SelectItem value="scorer">Scorer</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
+            {sourceType === 'workflow' && (
+              <Select value={selectedWorkflow ?? ''} onValueChange={setSelectedWorkflow} disabled={disabled}>
+                <SelectTrigger aria-label="Workflow" size="sm" className="w-48">
+                  <SelectValue placeholder="Select workflow" />
+                </SelectTrigger>
+                <SelectContent>
+                  {workflowsLoading ? (
+                    <SelectItem value="__loading__" disabled>
+                      Loading...
+                    </SelectItem>
+                  ) : workflowOptions.length === 0 ? (
+                    <SelectItem value="__empty__" disabled>
+                      No workflows
+                    </SelectItem>
+                  ) : (
+                    workflowOptions.map(([id, wf]) => (
+                      <SelectItem key={id} value={id}>
+                        {wf.name || id}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
+
+            {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
+              <Txt as="span" variant="caption" tone="muted">
+                Loading schema...
+              </Txt>
+            )}
+
+            {sourceType === 'scorer' && (
+              <Select value={scorerTargetType} onValueChange={v => setScorerTargetType(v)} disabled={disabled}>
+                <SelectTrigger aria-label="Scorer target type" size="sm" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="agent">Agent</SelectItem>
+                  <SelectItem value="custom">Custom</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          {sourceType === 'scorer' && (
+            <Txt variant="caption" tone="muted">
+              {scorerTargetType === 'agent'
+                ? 'For calibrating agent-type scorers'
+                : 'For calibrating custom scorers (input/output as any)'}
+            </Txt>
+          )}
+        </div>
+
+        <SchemaField
+          label="Input Schema"
+          value={inputSchema}
+          onChange={handleInputSchemaChange}
+          sourceSchema={isAutoPopulate ? sourceSchemas.inputSchema : undefined}
+          autoPopulate={isAutoPopulate}
+        />
+
+        <SchemaField
+          label="Ground Truth Schema"
+          value={outputSchema}
+          onChange={handleOutputSchemaChange}
+          sourceSchema={isAutoPopulate ? sourceSchemas.outputSchema : undefined}
+          autoPopulate={isAutoPopulate}
+        />
+
+        <SchemaField
+          label="Request Context Schema"
+          value={requestContextSchema}
+          onChange={handleRequestContextSchemaChange}
+          autoPopulate={false}
+        />
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}

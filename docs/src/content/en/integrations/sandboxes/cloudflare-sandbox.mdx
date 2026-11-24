@@ -5,7 +5,7 @@ packages:
   - "@mastra/cloudflare-sandbox"
 ---
 
-# Cloudflare Sandbox
+# Cloudflare sandbox
 
 `CloudflareSandbox` executes commands and manages files in a remote [Cloudflare Sandbox](https://developers.cloudflare.com/sandbox/) through the [Sandbox Bridge HTTP API](https://developers.cloudflare.com/sandbox/bridge/http-api/).
 
@@ -52,7 +52,7 @@ The provider creates a remote sandbox when the workspace starts. Pass `sandboxId
 
 ## Execute commands
 
-Pass command arguments, environment variables, a working directory, and streaming callbacks through `executeCommand()`. The provider sends the command as an `argv` array, so the bridge handles shell escaping:
+Pass command arguments, environment variables, a working directory, and streaming callbacks through `executeCommand()`. Because the provider sends the command as an `argv` array, the bridge handles shell escaping:
 
 ```typescript
 const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
@@ -69,7 +69,7 @@ const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
 
 Relative paths are resolved under `/workspace`. Absolute paths must also resolve within `/workspace`. Each file is sent as its own bridge request, and the bridge caps a single file at 32 MiB.
 
-The Cloudflare sandbox cannot set per-file permissions, so a `writeFiles` call that includes a `mode` is rejected rather than silently ignored.
+The Cloudflare sandbox can't set per-file permissions, so a `writeFiles` call that includes a `mode` is rejected rather than silently ignored.
 
 ```typescript
 await workspace.sandbox?.writeFiles?.([
@@ -117,11 +117,11 @@ const workspace = new Workspace({
 
 The bridge mounts buckets with s3fs, so only `type: 's3'` mount configs are accepted. GCS and Azure filesystems, and S3 credentials that include a `sessionToken`, return a failed `MountResult` without contacting the bridge.
 
-The default `getInstructions()` text tells the model that `/workspace` does not survive between commands and lists the mounted paths to write to instead.
+The default `getInstructions()` text tells the model that `/workspace` doesn't survive between commands and lists the mounted paths to write to instead.
 
 ## Persist and restore the workspace
 
-`persistWorkspace()` archives `/workspace` and returns the raw tar bytes; `hydrateWorkspace()` restores it from those bytes. Use this for one-off backups. It is not a substitute for mounts: restoring must happen before the first command after a wake, and a persist taken from a freshly woken container overwrites the archive with an empty workspace.
+`persistWorkspace()` archives `/workspace` and returns the raw tar bytes. `hydrateWorkspace()` restores it from those bytes. Use this for one-off backups. It's not a substitute for mounts: restoring must happen before the first command after a wake, and a persist taken from a freshly woken container overwrites the archive with an empty workspace.
 
 ```typescript
 // Back up before the container can sleep
@@ -206,4 +206,4 @@ For execution sessions, use the `CloudflareSandboxBridgeClient` methods (`create
 
 ## Limitations
 
-The provider surfaces command execution, streamed output, file reads and writes, S3-compatible bucket mounts, and workspace persistence directly on the sandbox. Sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals are not exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.
+The provider surfaces command execution, streamed output, file reads and writes, S3-compatible bucket mounts, and workspace persistence directly on the sandbox. Sessions are available on the bridge client (`CloudflareSandboxBridgeClient`) but not on the `CloudflareSandbox` surface. PTY terminals aren't exposed, and the provider doesn't support background process management, stdin, snapshots, or port URLs.

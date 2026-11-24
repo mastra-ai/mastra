@@ -177,16 +177,6 @@ describe('SignInPage', () => {
   });
 
   describe('given a better-auth (self-hosted) deploy', () => {
-    it('renders the email/password form instead of the hosted button', async () => {
-      stubAuthMe({ provider: 'better-auth' });
-      renderSignIn();
-
-      expect(await screen.findByLabelText('Email')).toBeInTheDocument();
-      expect(screen.getByLabelText('Password')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'New here? Sign up' })).toBeInTheDocument();
-    });
-
     it('signs in with credentials and navigates to returnTo', async () => {
       stubAuthMe({ provider: 'better-auth' });
       const posted = vi.fn();

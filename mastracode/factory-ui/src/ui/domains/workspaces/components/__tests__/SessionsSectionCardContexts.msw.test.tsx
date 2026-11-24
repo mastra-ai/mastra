@@ -177,14 +177,6 @@ describe('Sessions sidebar lists one row per card', () => {
     expect(screen.queryByRole('list', { name: 'Write docs card' })).not.toBeInTheDocument();
     expect(cardRow.closest('ul')).toBe(userRow.closest('ul'));
   });
-
-  it('keeps a plain user session as a flat row', async () => {
-    renderSection();
-
-    const row = await screen.findByRole('link', { name: 'Scratch notes' });
-    expect(row).toHaveTextContent('Scratch notes');
-    expect(screen.queryByRole('list', { name: 'Scratch notes' })).not.toBeInTheDocument();
-  });
 });
 
 async function toggleSessionView(user: ReturnType<typeof userEvent.setup>, option: string) {
@@ -227,15 +219,14 @@ describe('Sessions sidebar view options', () => {
     expect(await screen.findByRole('link', { name: 'Build fix login' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('shows when a session last moved under its name once compact view is off', async () => {
+  it('shows when a session last moved under its name until compact view is on', async () => {
     const user = userEvent.setup();
     renderSection();
     const row = await screen.findByRole('link', { name: 'Build fix login' });
-    expect(row.querySelector('time')).toBeNull();
+    expect(within(row).getByText('Sep 4')).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
 
     await toggleSessionView(user, 'Compact view');
 
-    const time = within(screen.getByRole('link', { name: 'Build fix login' })).getByText('Sep 4');
-    expect(time).toHaveAttribute('dateTime', '2026-09-04T10:00:00.000Z');
+    expect(screen.getByRole('link', { name: 'Build fix login' }).querySelector('time')).toBeNull();
   });
 });

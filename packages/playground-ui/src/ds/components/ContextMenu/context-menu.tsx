@@ -2,8 +2,9 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import * as React from 'react';
 import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import {
   menuItemCheckClass,
@@ -175,8 +176,12 @@ const ContextMenuSeparator = React.forwardRef<HTMLDivElement, ContextMenuPrimiti
 );
 ContextMenuSeparator.displayName = 'ContextMenuSeparator';
 
-const ContextMenuShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-  return <span className={cn(menuShortcutClass, className)} {...props} />;
+const ContextMenuShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+  return (
+    <span className={cn(menuShortcutClass, className)} {...props}>
+      <KeyLabel>{children}</KeyLabel>
+    </span>
+  );
 };
 ContextMenuShortcut.displayName = 'ContextMenuShortcut';
 
@@ -191,7 +196,7 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
     >
       {children}
       <span className={menuItemTrailingIconClass}>
-        <IconChevronBottom className="-rotate-90" />
+        <IconChevronDownMedium className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
   ),

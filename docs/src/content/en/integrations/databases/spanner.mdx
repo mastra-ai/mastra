@@ -28,7 +28,7 @@ const storage = new SpannerStore({
 })
 ```
 
-The instance and database must already exist. The adapter creates the required tables on first use, so the credentials provided to the Spanner client need permission to run schema changes (or run `storage.init()` once during a deploy step with elevated credentials).
+The instance and database must already exist. The adapter creates the required tables on first use, which means the credentials provided to the Spanner client need permission to run schema changes (or run `storage.init()` once during a deploy step with elevated credentials).
 
 ## Parameters
 
@@ -228,7 +228,7 @@ A few behaviors differ from other relational adapters:
 - Identifiers are quoted with backticks.
 - DDL is applied through `database.updateSchema(...)`, which is asynchronous (long-running operation).
 - `NULLS FIRST/LAST` isn't supported. Ordering with NULL handling is emulated through an `IS NULL` ordering key.
-- JSON containment isn't supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan): most one-shot lookups still work but deeply nested structural matches aren't expressible.
+- JSON containment isn't supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan): most one-shot lookups still work but nested structural matches aren't expressible.
 
 ### Direct database access
 

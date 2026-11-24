@@ -7,7 +7,7 @@ description: "Browse RunInfra model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/runinfra.svg" alt="RunInfra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />RunInfra
 
-Access 8 RunInfra models through Mastra's model router. Authentication is handled automatically using the `RUNINFRA_GATEWAY_KEY` environment variable.
+Access 9 RunInfra models through Mastra's model router. Authentication is handled automatically using the `RUNINFRA_GATEWAY_KEY` environment variable.
 
 Learn more in the [RunInfra documentation](https://runinfra.ai/docs).
 
@@ -80,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.1,
     "outputCost": 0.4
+  },
+  {
+    "model": "runinfra/stepfun-ai/Step-5-Preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 32768,
+    "inputCost": 0.9,
+    "outputCost": 2.43
   },
   {
     "model": "runinfra/zai-org/GLM-5.3",

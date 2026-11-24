@@ -1,0 +1,26 @@
+{
+  "temperature": [
+    "auto",
+    "auto-best",
+    "auto-coding",
+    "auto-fastest-quality",
+    "auto-reasoning",
+    "auto-tooling",
+    "auto-value",
+    "auto-value-coding",
+    "auto-value-reasoning",
+    "auto-value-tooling"
+  ],
+  "structuredOutput": [
+    "auto",
+    "auto-best",
+    "auto-coding",
+    "auto-fastest-quality",
+    "auto-reasoning",
+    "auto-tooling",
+    "auto-value",
+    "auto-value-coding",
+    "auto-value-reasoning",
+    "auto-value-tooling"
+  ]
+}

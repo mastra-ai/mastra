@@ -1,6 +1,6 @@
 import type { DashboardWidget } from '@mastra/core/storage/dashboards';
 import { MetricsCard, onCardHover } from '@mastra/playground-ui/components/MetricsCard';
-import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
@@ -28,6 +28,7 @@ export function useConfigure(
   datePreset: ObservabilityDatePreset | 'custom',
   customRange: ObservabilityWidgetDateRange | undefined,
   filters: readonly unknown[] | undefined,
+  project: string | undefined,
 ): ReactNode {
   const configurable = useHostConfigurable(app);
   if (!configurable || !app.getHostCapabilities()?.updateModelContext?.structuredContent) return undefined;
@@ -39,6 +40,7 @@ export function useConfigure(
       datePreset,
       ...(customRange ? { customRange } : {}),
       ...(filters?.length ? { filters: [...filters] } : {}),
+      ...(project ? { project } : {}),
     };
     void app
       .updateModelContext({
@@ -49,7 +51,7 @@ export function useConfigure(
   };
   return (
     <MetricsCard.Action label={`Configure ${name}`} onClick={onConfigure} className={onCardHover}>
-      <IconSettingsGear1 />
+      <IconSettingsGear5 />
     </MetricsCard.Action>
   );
 }

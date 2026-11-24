@@ -17,7 +17,7 @@ import { ThreadRail } from '@/ds/components/ThreadRail';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
-import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
 
 function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () => void }) {
   const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario);
@@ -45,7 +45,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
               <ChatShell.Column className="gap-8 py-6">
                 {turns.length === 0 && (
                   <EmptyState
-                    iconSlot={<IconBubbleWide />}
+                    iconSlot={<IconChatBubble7 />}
                     titleSlot="Start a conversation"
                     descriptionSlot="Add a file or send a message to try the composer."
                   />

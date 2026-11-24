@@ -7,7 +7,6 @@ const shared = {
   nodeProtocol: 'strip' as const,
   dts: false,
   treeshake: true,
-  sourcemap: true,
 };
 
 // The ESM and CJS builds must bundle dependencies differently.
