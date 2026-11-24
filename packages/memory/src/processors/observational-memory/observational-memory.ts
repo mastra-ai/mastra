@@ -2216,7 +2216,7 @@ export class ObservationalMemory {
    * because the markers need to be persisted to storage.
    *
    * `rememberedIds` are the ids of messages that were loaded from storage at the start
-   * of the turn. A sealed one holding a completed boundary is upserted onto its stored
+   * of the turn (including ones later promoted to the response bucket). A sealed one holding a completed boundary is upserted onto its stored
    * row, so if that row is gone the message was deleted during the turn and is not saved
    * back. A boundary holder that is not remembered is this turn's own and has no row yet.
    */
@@ -3002,7 +3002,7 @@ ${formattedMessages}
             messagesToSave,
             threadId,
             resourceId,
-            new Set(messageList.get.remembered.db().map(m => m.id)),
+            messageList.getRememberedAndInputMessageIds(),
           );
         }
 

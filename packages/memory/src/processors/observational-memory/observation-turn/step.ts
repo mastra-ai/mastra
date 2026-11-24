@@ -712,7 +712,7 @@ export class ObservationStep {
           messagesToSeal,
           threadId,
           resourceId,
-          new Set(this.turn.messageList.get.remembered.db().map(m => m.id)),
+          this.turn.messageList.getRememberedAndInputMessageIds(),
         );
       }
     }

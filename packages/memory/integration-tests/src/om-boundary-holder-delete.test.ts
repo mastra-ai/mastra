@@ -91,7 +91,41 @@ describe('Observational Memory saving a sealed message that holds a completed bo
     } as any);
 
     await memory.deleteMessages([id]);
-    await om.persistMessages([live!], threadId, RESOURCE, new Set(list.get.remembered.db().map(m => m.id)));
+    await om.persistMessages([live!], threadId, RESOURCE, list.getRememberedAndInputMessageIds());
+
+    const rows = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    expect(rows).toEqual([]);
+  });
+
+  it('does not bring back a deleted remembered message that was promoted to the response bucket', async () => {
+    const { memory, memoryStore, threadId, om } = await setup('promoted');
+    const id = `${threadId}-holder`;
+    await memory.saveMessages({
+      messages: [
+        {
+          ...sealedBoundaryHolder(threadId, id, new Date(0)),
+          content: {
+            format: 2,
+            parts: [{ type: 'text', text: 'Observed words. '.repeat(20) }],
+            metadata: { mastra: { sealed: true } },
+          },
+        },
+      ],
+    });
+    const list = new MessageList({ threadId, resourceId: RESOURCE });
+    const [stored] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+    list.add(stored!, 'memory');
+    const [live] = list.get.remembered.db();
+    live!.content.parts.push({
+      type: 'data-om-observation-end',
+      data: { cycleId: 'c', operationType: 'observation' },
+    } as any);
+    // Promote the same message to the response bucket, as a step-2 text merge does.
+    list.add(live!, 'response');
+    expect(list.get.remembered.db().map(m => m.id)).not.toContain(id);
+
+    await memory.deleteMessages([id]);
+    await om.persistMessages([live!], threadId, RESOURCE, list.getRememberedAndInputMessageIds());
 
     const rows = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
     expect(rows).toEqual([]);
