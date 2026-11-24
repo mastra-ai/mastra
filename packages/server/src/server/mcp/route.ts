@@ -13,6 +13,7 @@ import {
   resolveBuiltinMCPPath,
   warnOnReservedMCPServerId,
 } from './config';
+import { OFFICIAL_SKILL_FILES } from './official-skills.generated';
 
 let requestStateKey: Uint8Array | undefined;
 
@@ -216,6 +217,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       appResources: apps?.appResources,
       // Clients without MCP Apps support see no app links, resources, or `ui` capability.
       appsRequireClientSupport: true,
+      skills: config.skills ? OFFICIAL_SKILLS : undefined,
       toolResult: {
         // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
         // output, the model reads a summary of it instead.
@@ -246,6 +248,15 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     };
   },
 });
+
+/**
+ * The official Mastra skills, vendored by `pnpm sync:mastra-skills`. One object for every request, so
+ * `MCPServer` builds their digests once. They change only with a release, so clients may cache them.
+ */
+const OFFICIAL_SKILLS = {
+  files: OFFICIAL_SKILL_FILES,
+  cacheHint: { ttlMs: 60 * 60 * 1000, cacheScope: 'public' as const },
+};
 
 const mountedPaths = new WeakMap<Mastra, string>();
 

@@ -277,6 +277,12 @@ export type ServerMCPConfig = {
    */
   apps?: boolean;
   /**
+   * Serve the official Mastra Agent Skills (`skill://mastra/SKILL.md`, `skill://mastra-factory/SKILL.md`) to
+   * clients that support the MCP Skills extension. Needs a version of `@mastra/mcp` that serves skills.
+   * @default true
+   */
+  skills?: boolean;
+  /**
    * Base URL of Studio, which MCP Apps use for "Open in Studio" links. Under `mastra dev` it defaults to the
    * local Studio, built from `studioProtocol`, `studioHost`, `studioPort`, and `studioBase`. Elsewhere the
    * links are only shown when this is set. `false` hides them.

@@ -157,7 +157,9 @@ describe('built-in MCP server apps', () => {
     const client = await server.connect('tracer', { rendersApps: false });
 
     expect(client.getServerCapabilities()?.extensions?.[UI]).toBeUndefined();
-    expect(client.getServerCapabilities()?.resources).toBeUndefined();
+    // Resources are declared for the official skills, but no app is among them.
+    const { resources } = await client.listResources();
+    expect(resources.filter(resource => resource.uri.startsWith('ui://'))).toEqual([]);
     const { tools } = await client.listTools();
     const getTrace = tools.find(tool => tool.name === 'get_trace');
     expect(getTrace).toBeDefined();

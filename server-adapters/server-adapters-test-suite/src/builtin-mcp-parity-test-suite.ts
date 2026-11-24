@@ -871,6 +871,59 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
     });
   });
 
+  describe(`${suiteName} — official Mastra skills`, () => {
+    const originalDev = process.env.MASTRA_DEV;
+    const started: Array<{ close: () => Promise<void> }> = [];
+    const clients: MCPClient[] = [];
+    afterEach(async () => {
+      await Promise.all(clients.splice(0).map(client => client.disconnect()));
+      await Promise.all(started.splice(0).map(server => server.close()));
+      if (originalDev === undefined) delete process.env.MASTRA_DEV;
+      else process.env.MASTRA_DEV = originalDev;
+    });
+
+    const connectTo = async (mcp: ServerMCPConfig = {}) => {
+      process.env.MASTRA_DEV = 'true';
+      const server = await startServer(new Mastra({ logger: false, server: { mcp } }));
+      started.push(server);
+      const client = new MCPClient({
+        id: `mcp-skills-${clients.length}`,
+        servers: { mastra: { url: new URL(`${server.url}/api/mcp`) } },
+      });
+      clients.push(client);
+      return client;
+    };
+
+    it('serves them with every file verified against its digest', async () => {
+      const client = await connectTo();
+      const { mastra: skills = [] } = await client.skills.list();
+      expect(skills.map(skill => skill.uri)).toEqual(['skill://mastra-factory/SKILL.md', 'skill://mastra/SKILL.md']);
+
+      const mastraSkill = skills.find(skill => skill.uri === 'skill://mastra/SKILL.md')!;
+      expect(mastraSkill.frontmatter.name).toBe('mastra');
+      const manifest = await client.skills.read('mastra', mastraSkill);
+      expect(manifest.verified).toBe(true);
+      expect(manifest.body).toMatch(/\S/);
+
+      // Every file the entry lists reads back with the size and digest it was listed with.
+      for (const { uri } of mastraSkill.resources as { uri: string }[]) {
+        expect((await client.skills.read('mastra', mastraSkill, uri)).verified).toBe(true);
+      }
+      const children = await client.skills.readDirectory('mastra', 'skill://mastra');
+      expect(children).toContainEqual({
+        uri: 'skill://mastra/references',
+        name: 'references',
+        mimeType: 'inode/directory',
+      });
+    });
+
+    it('serves none when server.mcp.skills is false', async () => {
+      const client = await connectTo({ skills: false });
+      expect(await client.skills.list()).toEqual({ mastra: [] });
+      await expect(client.resources.read('mastra', 'skill://mastra/SKILL.md')).rejects.toThrow();
+    });
+  });
+
   describe(`${suiteName} — Studio descriptor route`, () => {
     const originalDev = process.env.MASTRA_DEV;
     afterEach(() => {
