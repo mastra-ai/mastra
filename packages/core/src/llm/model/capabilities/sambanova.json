@@ -9,10 +9,9 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "GLM-5.3": [
+    "gemma-4-31B-it": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "MiniMax-M3.1-Flash": [
@@ -21,9 +20,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemma-4-31B-it": [
+    "GLM-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

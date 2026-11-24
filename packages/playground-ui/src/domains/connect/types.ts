@@ -91,6 +91,12 @@ export interface UserConnectSessionResponse {
    * URL is never exposed to the browser.
    */
   launchUrl: string;
+  /**
+   * Base URL of the vendor API the headless connect SDK must call (e.g. a
+   * self-hosted Nango). Absent or null on servers/platforms that predate it,
+   * in which case the SDK keeps its default host.
+   */
+  apiBaseUrl?: string | null;
   expiresAt: string | null;
 }
 

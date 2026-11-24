@@ -218,6 +218,40 @@ export async function restartEnvironment(
   }
 }
 
+/**
+ * Save an environment's env vars and/or their kinds.
+ *
+ * `envVars` replaces the whole stored map, so callers must send every var
+ * they want to keep. Write-only secrets can be kept by sending
+ * `SECRET_VALUE_PLACEHOLDER` as their value. `envVarMeta` flags apply to the
+ * named vars only; other vars keep their stored kind.
+ */
+export async function updateEnvironmentVars(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  updates: { envVars?: Record<string, string>; envVarMeta?: Record<string, { secret: boolean }> },
+): Promise<Environment> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to update environment variables', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { environment: Environment };
+  return data.environment;
+}
+
 export async function deleteEnvironment(token: string, orgId: string, projectId: string, envId: string): Promise<void> {
   const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}`, {
     method: 'DELETE',

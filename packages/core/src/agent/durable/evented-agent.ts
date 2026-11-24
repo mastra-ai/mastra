@@ -7,13 +7,10 @@
  * Events are streamed via pubsub as the workflow executes.
  */
 
-import type { Mastra } from '../../mastra';
 import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
-import type { DurableAgentConfig } from './durable-agent';
-
-import { EventedExecutionEngine } from './evented-execution-engine';
+import type { DurableAgentConfig } from './types';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -98,13 +95,7 @@ export class EventedAgent<
    * in-process engine.
    * @internal
    */
-  protected override get workflowEngine(): 'default' | 'evented' {
-    return 'evented';
-  }
-
-  protected override createExecutionEngine(mastra?: Mastra): EventedExecutionEngine {
-    return new EventedExecutionEngine(this.id, mastra);
-  }
+  protected static override readonly executionEngine = 'evented' as const;
 }
 
 /**

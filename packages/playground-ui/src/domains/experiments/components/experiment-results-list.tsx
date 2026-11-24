@@ -185,7 +185,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                     {result.status ? (
                       <ReviewStatusBadge status={result.status} />
                     ) : (
-                      <span className="text-placeholder">—</span>
+                      <span className="text-subtle-foreground">—</span>
                     )}
                   </DataList.Cell>
                 )}

@@ -1,5 +1,85 @@
 # @mastra/connect
 
+## 1.5.0-alpha.2
+
+### Minor Changes
+
+- Added `ConnectEvents`, a single class for receiving a project's provider events. It takes the client configuration and where to start in one options object, and you iterate it directly: ([#31222](https://github.com/mastra-ai/mastra/pull/31222))
+
+  ```ts
+  import { ConnectEvents } from '@mastra/connect';
+
+  const events = new ConnectEvents({
+    cursorStore: { load: () => db.get('events-cursor'), save: cursor => db.set('events-cursor', cursor) },
+    onGap: () => resyncFromProviders(),
+  });
+
+  for await (const event of events) {
+    await handle(event.integrationId, event.eventType, event.payload);
+  }
+  ```
+
+  **Breaking (prerelease only):** `EventsClient`, `EventSubscription`, `connectEvents()`, `ConnectClient.events`, the `eventsUrl` option on `ConnectClient`, and the `EventsClientOptions`, `SubscribeOptions` and `TopicEvent` types are no longer exported. Pass `eventsUrl` to `ConnectEvents` instead.
+
+- Added support for self-hosted GitLab. Connections on the platform's **GitLab (self-hosted)** integration (`gitlab-self-hosted`), which connect a self-managed instance with an access token and its hostname, now get the same `gitlab_*` tools as gitlab.com connections. Calls go to the instance the connection was made for. ([#30954](https://github.com/mastra-ai/mastra/pull/30954))
+
+  Configure both kinds under `providers.gitlab`. With both a gitlab.com and a self-hosted connection, the agent picks one per call through `gitlab__list_connections` and `connection_name`, or you pin one:
+
+  ```ts
+  const connectTools = tools({
+    providers: { gitlab: { connectionId: process.env.SELF_HOSTED_GITLAB_CONNECTION_ID } },
+  });
+  ```
+
+  Options keyed by `gitlab-self-hosted` are rejected with a message pointing at `providers.gitlab`.
+
+### Patch Changes
+
+- Raised the `@mastra/core` peer range to `>=1.86.0-0 <2.0.0-0`, matching `@mastra/slack`, which now needs the channel tool helpers added in that core release. ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+- Fixed the Google Analytics `run_pivot_report` tool so it accepts a property as `properties/123456789` as well as `123456789`, like `run_report` and `batch_run_reports`. Passing the prefixed form sent the request to the wrong URL and Google answered 404. ([#31194](https://github.com/mastra-ai/mastra/pull/31194))
+
+- Connect sessions now include `apiBaseUrl`, the Nango host the platform issued the session for. `POST /connect/:provider/sessions` returns it so browsers can reach a self-hosted Nango; it is `null` when the platform does not report one. ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/slack@1.10.0-alpha.1
+
+## 1.5.0-alpha.1
+
+### Minor Changes
+
+- Added a SendGrid toolset with 53 tools. Agents can send email, and manage marketing contacts, lists, segments, custom fields, dynamic templates and template versions, sender identities, and global and group suppressions, and read and clear blocks, bounces, invalid emails, and spam reports. ([#30844](https://github.com/mastra-ai/mastra/pull/30844))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const sendgridAgent = new Agent({
+    id: 'sendgrid-agent',
+    name: 'SendGrid agent',
+    instructions: 'Use the connected SendGrid tools to manage contacts, lists, and templates.',
+    model: 'openai/gpt-5.6',
+    tools: tools({ providers: ['sendgrid'] }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `anthropic_cancel_message_batch` failing after a successful cancel. Anthropic returns `null` for a batch's end time, archive time, and results URL until they exist, and the tool rejected those nulls even though the batch was cancelled. It now leaves those fields out of the result, as the other batch tools already do. ([#31180](https://github.com/mastra-ai/mastra/pull/31180))
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`182a01f`](https://github.com/mastra-ai/mastra/commit/182a01f0d684de865c42cb9a1c0cdd61d9009d12), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/core@1.86.0-alpha.6
+  - @mastra/discord@1.3.5-alpha.0
+  - @mastra/mcp@2.11.0-alpha.1
+  - @mastra/slack@1.9.1-alpha.0
+  - @mastra/teams@0.1.6-alpha.0
+  - @mastra/telegram@0.2.6-alpha.0
+
 ## 1.5.0-alpha.0
 
 ### Minor Changes

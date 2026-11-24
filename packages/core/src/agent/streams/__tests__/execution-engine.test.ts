@@ -8,14 +8,14 @@ const values = [
   true,
   {},
   { cleanupTimeoutMs: 0 },
-  { executionEngine: 'durable' },
+  { executionEngine: 'default' },
   { executionEngine: 'evented' },
   { executionEngine: false },
   false,
 ] satisfies (boolean | AgentStreamsConfig | undefined)[];
 
 describe('registered execution policy', () => {
-  for (const hostEngine of [undefined, false, 'durable', 'evented'] satisfies (ExecutionEngine | undefined)[]) {
+  for (const hostEngine of [undefined, false, 'default', 'evented'] satisfies (ExecutionEngine | undefined)[]) {
     it.each(values)('preserves opt-outs and explicit selection for %j with host ' + String(hostEngine), durable => {
       const policy = new ExecutionEnginePolicy(durable);
       const shouldCache = () => false;
@@ -45,14 +45,14 @@ describe('registered execution policy', () => {
     expect(policy.engine).toBe('evented');
     expect(policy.register({ executionEngine: 'evented', cleanupTimeoutMs: 999 })).toBeUndefined();
     expect(policy.durable).toEqual({ executionEngine: 'evented', shouldCache, cleanupTimeoutMs: 0 });
-    expect(policy.register({ executionEngine: 'durable' })).toBe('locked');
+    expect(policy.register({ executionEngine: 'default' })).toBe('locked');
     expect(policy.engine).toBe('evented');
   });
 
   it('locks a first hostless call while still accepting stream defaults at registration', () => {
     const policy = new ExecutionEnginePolicy(undefined);
     policy.freeze();
-    expect(policy.register({ executionEngine: 'durable', cleanupTimeoutMs: 0 })).toBe('locked');
+    expect(policy.register({ executionEngine: 'default', cleanupTimeoutMs: 0 })).toBe('locked');
     expect(policy.engine).toBe(false);
     expect(policy.durable).toEqual({ executionEngine: false, cleanupTimeoutMs: 0 });
     expect(policy.inherited).toBe(false);
@@ -61,23 +61,23 @@ describe('registered execution policy', () => {
   it('clones inherited provenance without sharing registration state', () => {
     const source = new ExecutionEnginePolicy(undefined);
     const provisional = source.clone();
-    provisional.register({ executionEngine: 'durable' });
+    provisional.register({ executionEngine: 'default' });
     expect(source.engine).toBe(false);
     expect(source.inherited).toBe(false);
     source.register({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
     const registered = source.clone();
     expect(registered.inherited).toBe(true);
-    expect(registered.register({ executionEngine: 'durable', cleanupTimeoutMs: 99 })).toBe('locked');
+    expect(registered.register({ executionEngine: 'default', cleanupTimeoutMs: 99 })).toBe('locked');
     expect(registered.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
     expect(source.durable).toEqual({ executionEngine: 'evented', cleanupTimeoutMs: 0 });
-    expect(provisional.engine).toBe('durable');
+    expect(provisional.engine).toBe('default');
   });
 
   it('does not allow mutable config aliases to change lifetime selection', () => {
     const config: AgentStreamsConfig = { executionEngine: 'evented' };
     const policy = new ExecutionEnginePolicy(config);
     policy.freeze();
-    config.executionEngine = 'durable';
+    config.executionEngine = 'default';
     const effective = policy.durable;
     if (typeof effective === 'object') effective.executionEngine = false;
     expect(policy.engine).toBe('evented');

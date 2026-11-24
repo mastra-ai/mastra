@@ -123,12 +123,14 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     if (TERMINAL_AGENT_EVENTS.has(event.type)) return { type: event.type, runId: event.runId, data: {} };
     return oversizedPlaceholder(event.runId, event.type, (event.data as { type?: string } | undefined)?.type, bytes);
   }
-  const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown };
+  const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown; stopCause?: unknown };
   const output = data.output ?? {};
+  const stopCause = typeof data.stopCause === 'string' ? data.stopCause : undefined;
   const reduced = {
     ...event,
     data: {
       stepResult: data.stepResult,
+      ...(stopCause ? { stopCause } : {}),
       output: { text: output.text, usage: output.usage, steps: [] },
     },
   };
@@ -139,6 +141,7 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     ...event,
     data: {
       stepResult: typeof reason === 'string' ? { reason } : undefined,
+      ...(stopCause ? { stopCause } : {}),
       output: { steps: [] } as Record<string, unknown>,
     },
   };
@@ -148,6 +151,82 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     if (byteSize(fallback) > REALTIME_MAX_BYTES) delete fallback.data.output[key];
   }
   return fallback;
+}
+
+/** Read a complete JSON string literal starting at `start` (pointing at `"`), returning `[value, nextIndex]` or `null` if truncated. */
+function readJsonString(raw: string, start: number): [string, number] | null {
+  if (raw[start] !== '"') return null;
+  let i = start + 1;
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (ch === '\\') {
+      i += 2;
+      continue;
+    }
+    if (ch === '"') {
+      try {
+        return [JSON.parse(raw.slice(start, i + 1)) as string, i + 1];
+      } catch {
+        return null;
+      }
+    }
+    i++;
+  }
+  return null;
+}
+
+/**
+ * Extract a direct string property of the top-level `data` object from a possibly
+ * truncated JSON event string, ignoring keys nested inside `output`, tool results, etc.
+ */
+function extractDirectDataStringField(raw: string, field: string): string | undefined {
+  let i = 0;
+  const skipWs = () => {
+    while (i < raw.length && /\s/.test(raw[i]!)) i++;
+  };
+  skipWs();
+  if (raw[i] !== '{') return undefined;
+  i++;
+  let depth = 1;
+  let inDataObject = false;
+  let dataDepth = -1;
+
+  while (i < raw.length && depth > 0) {
+    skipWs();
+    if (i >= raw.length) break;
+    const ch = raw[i];
+    if (ch === '"') {
+      const parsed = readJsonString(raw, i);
+      if (!parsed) return undefined;
+      const [str, next] = parsed;
+      i = next;
+      skipWs();
+      if (raw[i] === ':') {
+        i++;
+        skipWs();
+        if (depth === 1 && str === 'data' && raw[i] === '{') {
+          inDataObject = true;
+          dataDepth = 2;
+          depth = 2;
+          i++;
+          continue;
+        }
+        if (inDataObject && depth === dataDepth && str === field) {
+          const val = readJsonString(raw, i);
+          return val ? val[0] : undefined;
+        }
+      }
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      depth++;
+    } else if (ch === '}' || ch === ']') {
+      if (inDataObject && depth === dataDepth) inDataObject = false;
+      depth--;
+    }
+    i++;
+  }
+  return undefined;
 }
 
 /**
@@ -168,12 +247,17 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
     return oversizedPlaceholder(runId, type ?? 'unknown', chunkType, undefined);
   }
   const reason = raw.match(/"stepResult"\s*:\s*\{[^{}]*"reason"\s*:\s*"([^"]+)"/)?.[1];
+  const stopCause = type === 'finish' ? extractDirectDataStringField(raw, 'stopCause') : undefined;
   return {
     type,
     runId,
     data:
       type === 'finish'
-        ? { output: { steps: [] }, stepResult: reason ? { reason } : undefined }
+        ? {
+            output: { steps: [] },
+            stepResult: reason ? { reason } : undefined,
+            ...(stopCause ? { stopCause } : {}),
+          }
         : type === 'error'
           ? { error: { name: 'Error', message: OVERSIZED_ERROR_MESSAGE } }
           : {},

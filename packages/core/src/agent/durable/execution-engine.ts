@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -20,13 +21,10 @@ import {
   markErrorForStreamRejection,
   RECOVER_SHUTDOWN_ERROR_ID,
 } from './constants';
-import type {
-  DurableAgentActiveRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-} from './durable-agent';
 import type { UntrackedRunLiveness } from './execution-fence';
 import {
+  DurableExecutionFenceError,
+  EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   fencePubSub,
   readRunGeneration,
@@ -36,8 +34,18 @@ import {
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
-import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
-import { createDurableAgenticWorkflow } from './workflows/create-durable-agentic-workflow';
+import type {
+  DurableAgentActiveRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  AgentStreamEvent,
+  DurableAgenticWorkflowInput,
+  DurableToolCallInput,
+} from './types';
+import {
+  createDurableAgenticWorkflow,
+  defaultShouldPersistSnapshot,
+} from './workflows/create-durable-agentic-workflow';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { latestMessageListState } from './workflows/shared/message-list-state';
@@ -64,7 +72,7 @@ export interface DurableWorkflowOptions {
   guardrailLogger?: IMastraLogger;
 }
 
-export class DurableExecutionEngine {
+export class DefaultAgentExecutionEngine {
   #workflow: DurableWorkflow | null = null;
   #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
   #warnedPersistencePolicy = false;
@@ -1003,5 +1011,99 @@ export class DurableExecutionEngine {
     _guardrailLogger: IMastraLogger | undefined,
   ): { sharedExecution: boolean; usesRunPubSub: boolean } {
     return { sharedExecution: false, usesRunPubSub: true };
+  }
+}
+
+/**
+ * Evented engine variant. Lives in this module, right after its parent, so the
+ * `extends` never runs while `DefaultAgentExecutionEngine` is still loading:
+ * this module's imports lead back to `Agent`, which imports both engines.
+ */
+const PARKABLE_LOCAL_STATUSES = new Set<DurableRun['workflowRunStatus']>(['pending', 'running', 'suspended']);
+
+export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
+  #warnedUnfencedSharedExecution = false;
+
+  override get executionMode(): 'blocking' | 'background' {
+    return 'background';
+  }
+
+  // Evented execution can return before the suspended snapshot lands.
+  override get suspendPersistedOnReturn(): boolean {
+    return false;
+  }
+
+  // The local run learns of a worker's suspension only from the start result, which can trail the
+  // stored snapshot (until then it reads pending or running): it is parked once the snapshot says so.
+  // A stored suspended snapshot is the workers' final write for the segment, so none still uses the run.
+  protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status']): boolean {
+    return persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus);
+  }
+
+  // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).
+  // Read after the run started its local workers, if it has any.
+  override get executesStepsLocally(): boolean {
+    return this.mastra?.__hasLocalWorkflowExecution() ?? true;
+  }
+
+  override prepareExecution(
+    pubsub: PubSub | undefined,
+    fence: ExecutionFence | undefined,
+    workflowEngine: 'default' | 'evented',
+    logger: IMastraLogger,
+    guardrailLogger: IMastraLogger | undefined,
+  ): { sharedExecution: boolean; usesRunPubSub: boolean } {
+    const engine = this.resolveWorkflowEngine(workflowEngine, logger);
+    const sharedTransport =
+      engine === 'evented' && pubsub !== undefined && !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedExecution = sharedTransport && fence?.generation !== undefined;
+    if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
+      this.#warnedUnfencedSharedExecution = true;
+      guardrailLogger?.warn(
+        `EventedAgent '${this.id}': shared execution without storage-backed run fencing keeps its existing ` +
+          'behavior: API shutdown or loss can interrupt remote workers. Use a shared fencing-capable storage adapter ' +
+          'to keep workers running independently of the API process.',
+      );
+    }
+    return { sharedExecution, usesRunPubSub: engine === 'default' };
+  }
+
+  override finishExecution(
+    runId: string,
+    executionFence: ExecutionFence | undefined,
+    sharedExecution: boolean,
+    completion: ExecutionCompletion,
+  ): ExecutionOutcome {
+    if (!sharedExecution) return super.finishExecution(runId, executionFence, sharedExecution, completion);
+    executionFence?.detach();
+    if ('error' in completion) {
+      // With no successor, only the disconnected observer can close its stream.
+      if (
+        completion.error instanceof DurableExecutionFenceError &&
+        completion.error.id === EXECUTION_UNVERIFIED_ERROR_ID
+      ) {
+        return { owner: 'workers', error: completion.error };
+      }
+      this.mastra?.getLogger()?.warn('Evented durable observer disconnected; workers retain settlement authority', {
+        runId,
+        error: completion.error,
+      });
+    }
+    return { owner: 'workers' };
+  }
+
+  override resolveShouldPersistSnapshot(_predicate?: ShouldPersistSnapshotFn): ShouldPersistSnapshotFn {
+    return defaultShouldPersistSnapshot;
+  }
+  override warnOnRiskyPersistencePolicy(
+    predicate: ShouldPersistSnapshotFn | undefined,
+    guardrailLogger: IMastraLogger | undefined,
+  ): void {
+    if (predicate)
+      guardrailLogger?.warn(
+        `EventedAgent '${this.id}': ignoring the shouldPersistSnapshot option. ` +
+          'The evented engine requires the full snapshot set (pending|paused|suspended|running) — ' +
+          `the initial 'running' write creates the base row that suspend-merges and multi-worker coordination build on.`,
+      );
   }
 }

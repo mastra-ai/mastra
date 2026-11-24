@@ -62,14 +62,14 @@ const LOGGED_EVENT_DELIVERY_TIMEOUT_MS = 10_000;
  * untagged events, from runs fenced by a pubsub lease, are always kept.
  *
  * `minGeneration` and `rereadMinGeneration` work as on
- * {@link DurableAgentStreamOptions}. The result is a boolean, so event order is
+ * {@link DurableStreamAdapterOptions}. The result is a boolean, so event order is
  * kept, except while a failed claim read must be retried before a stream-ending
  * event, which is the only time it is a promise.
  */
 export function createRunGenerationFilter({
   minGeneration,
   rereadMinGeneration,
-}: Pick<DurableAgentStreamOptions, 'minGeneration' | 'rereadMinGeneration'>): (
+}: Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>): (
   event: AgentStreamEvent,
 ) => boolean | Promise<boolean> {
   let newestGeneration = minGeneration;
@@ -205,7 +205,7 @@ function pickDefined(source: Record<string, unknown>, keys: string[]): Record<st
 async function withBufferedStepResponses(
   runSteps: unknown[] | undefined,
   output: { steps: Promise<unknown[]> },
-  toolContext?: Pick<DurableAgentStreamOptions, 'runId' | 'initialToolCalls' | 'offset'>,
+  toolContext?: Pick<DurableStreamAdapterOptions, 'runId' | 'initialToolCalls' | 'offset'>,
 ): Promise<unknown[]> {
   const { runId, initialToolCalls = [], offset: streamOffset } = toolContext ?? {};
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
@@ -300,7 +300,7 @@ function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {
 /**
  * Options for creating a durable agent stream
  */
-export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+export interface DurableStreamAdapterOptions<OUTPUT = undefined> {
   /** Signal chunks to hide from this caller's stream. */
   hideSignals?: AgentExecutionOptionsBase<OUTPUT>['hideSignals'];
   /** Pubsub instance to subscribe to */
@@ -451,7 +451,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
 /**
  * Result from creating a durable agent stream
  */
-export interface DurableAgentStreamResult<OUTPUT = undefined> {
+export interface DurableStreamAdapterResult<OUTPUT = undefined> {
   /** The MastraModelOutput that streams from pubsub events */
   output: MastraModelOutput<OUTPUT>;
   /** Cleanup function to unsubscribe from pubsub */
@@ -486,8 +486,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
  * Callbacks are invoked as events arrive.
  */
 export function createDurableAgentStream<OUTPUT = undefined>(
-  options: DurableAgentStreamOptions<OUTPUT>,
-): DurableAgentStreamResult<OUTPUT> {
+  options: DurableStreamAdapterOptions<OUTPUT>,
+): DurableStreamAdapterResult<OUTPUT> {
   const {
     pubsub,
     runId,
@@ -945,6 +945,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               stepResult: data.stepResult,
               ...(data.messages ? { messages: data.messages } : {}),
               ...(data.textRewritten ? { textRewritten: true } : {}),
+              ...(data.stopCause ? { stopCause: data.stopCause } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
