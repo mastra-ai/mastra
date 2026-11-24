@@ -9,6 +9,7 @@ import { executionFailureTermination } from '../../observability/execution-outco
 import { ExecutionEngine } from '../../workflows/execution-engine';
 import type { ExecutionEngineOptions, ExecutionGraph } from '../../workflows/execution-engine';
 import { workflowTermination } from '../execution-outcome';
+import { residentStepResultsLoader } from '../run-journal';
 import type {
   SerializedStepFlowEntry,
   StepResult,
@@ -16,14 +17,31 @@ import type {
   RestartExecutionParams,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowStepResults,
   NestedWorkflowParent,
 } from '../types';
 import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
-import { getStepId } from './workflow-event-processor/utils';
+import { endedPaused, getStepId } from './workflow-event-processor/utils';
+
+type FinishWaiter = (event: Event) => void;
+
+interface FinishSubscription {
+  waiters: Map<string, Set<FinishWaiter>>;
+  callback: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+  /** Settles once the subscribe call does; every waiter that joins meanwhile shares it. */
+  ready: Promise<void>;
+}
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
+  /**
+   * One `workflows-finish` subscription per pubsub, shared by every caller of this engine that is
+   * waiting for a run to finish. Each finish event is routed to the waiters for its runId, so it
+   * costs one delivery no matter how many runs are in flight. The subscription is made when the
+   * first waiter arrives and dropped when the last one leaves.
+   */
+  #finishSubscriptions = new Map<PubSub, FinishSubscription>();
 
   constructor({
     mastra,
@@ -55,6 +73,73 @@ export class EventedExecutionEngine extends ExecutionEngine {
       return this.mastra.__getInternalWorkflow(workflowId, runId);
     }
     return this.mastra!.getWorkflow(workflowId);
+  }
+
+  /**
+   * Registers `waiter` for `runId`'s `workflows-finish` events. The waiter is in place before this
+   * returns, so a finish published after the caller awaits `ready` can't be missed. `ready` rejects
+   * if the shared subscription can't be made; the caller must still call `remove()`.
+   */
+  private waitForFinish(pubsub: PubSub, runId: string, waiter: FinishWaiter) {
+    let subscription = this.#finishSubscriptions.get(pubsub);
+    if (!subscription) {
+      const waiters = new Map<string, Set<FinishWaiter>>();
+      const callback = async (event: Event, ack?: () => Promise<void>) => {
+        await ack?.();
+        const forRun = event.runId ? waiters.get(event.runId) : undefined;
+        if (!forRun) return;
+        for (const notify of [...forRun]) {
+          try {
+            notify(event);
+          } catch (err) {
+            this.mastra?.getLogger()?.error('Failed to handle workflows-finish event:', err);
+          }
+        }
+      };
+      const created: FinishSubscription = {
+        waiters,
+        callback,
+        // Live-tail: persistent pubsubs replay retained events from 'earliest', which would hand
+        // waiters stale finish events (e.g. a run's own prior suspend). Safe because every caller
+        // awaits this before publishing its start/resume event.
+        ready: pubsub.subscribe('workflows-finish', callback, { startFrom: 'latest' }),
+      };
+      // A failed subscribe is dropped so the next caller tries again.
+      created.ready.catch(() => {
+        if (this.#finishSubscriptions.get(pubsub) === created) this.#finishSubscriptions.delete(pubsub);
+      });
+      this.#finishSubscriptions.set(pubsub, created);
+      subscription = created;
+    }
+
+    const { waiters } = subscription;
+    let forRun = waiters.get(runId);
+    if (!forRun) {
+      forRun = new Set();
+      waiters.set(runId, forRun);
+    }
+    forRun.add(waiter);
+
+    const current = subscription;
+    let removed = false;
+    const remove = () => {
+      if (removed) return;
+      removed = true;
+      forRun.delete(waiter);
+      if (forRun.size === 0 && waiters.get(runId) === forRun) waiters.delete(runId);
+      if (waiters.size > 0 || this.#finishSubscriptions.get(pubsub) !== current) return;
+      this.#finishSubscriptions.delete(pubsub);
+      void current.ready.then(
+        () =>
+          pubsub
+            .unsubscribe('workflows-finish', current.callback)
+            .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err)),
+        // A failed subscribe was already reported to the waiters that needed it.
+        () => {},
+      );
+    };
+
+    return { ready: current.ready, remove };
   }
 
   /**
@@ -136,7 +221,14 @@ export class EventedExecutionEngine extends ExecutionEngine {
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    storageVersion?: 1 | 2;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * Called once the start/resume event is published. `Run.startAsync()` returns at this point
+     * and leaves the returned promise to settle in the background, so lifecycle callbacks still
+     * run when the worker reports the finish.
+     */
+    onDispatched?: () => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -181,16 +273,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     let pendingCleanupFinish: Event | undefined;
-    const finishCb = async (event: Event, ack?: () => Promise<void>) => {
+    const finish = this.waitForFinish(pubsub, params.runId, event => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
-      if (event.runId !== params.runId || isForeignExecution?.(event.data?.requestContext, params.requestContext)) {
-        await ack?.();
-        return;
-      }
-
+      if (isForeignExecution?.(event.data?.requestContext, params.requestContext)) return;
       if (
-        [
+        ![
           'workflow.end',
           'workflow.fail',
           'workflow.suspend',
@@ -198,43 +286,36 @@ export class EventedExecutionEngine extends ExecutionEngine {
           'workflow.finish-cleanup-complete',
         ].includes(event.type)
       ) {
-        await ack?.();
-        if (
-          (event.type === 'workflow.end' ||
-            event.type === 'workflow.fail' ||
-            event.type === 'workflow.publish-failed') &&
-          event.data.finishPendingCleanup
-        ) {
-          pendingCleanupFinish = event;
-          return;
-        }
-        if (event.type === 'workflow.finish-cleanup-complete') {
-          if (!pendingCleanupFinish) return;
-          event = pendingCleanupFinish;
-        }
-        await pubsub.unsubscribe('workflows-finish', finishCb);
-        if (event.type === 'workflow.publish-failed') {
-          rejectResult(new Error(event.data.message));
-          return;
-        }
-        // Re-hydrate serialized errors back to Error instances when workflow fails
-        if (event.type === 'workflow.fail' && event.data.stepResults) {
-          event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
-        }
-        resolveResult(event.data);
         return;
       }
+      if (
+        (event.type === 'workflow.end' || event.type === 'workflow.fail' || event.type === 'workflow.publish-failed') &&
+        event.data.finishPendingCleanup
+      ) {
+        pendingCleanupFinish = event;
+        return;
+      }
+      if (event.type === 'workflow.finish-cleanup-complete') {
+        if (!pendingCleanupFinish) return;
+        event = pendingCleanupFinish;
+      }
+      finish.remove();
+      if (event.type === 'workflow.publish-failed') {
+        rejectResult(new Error(event.data.message));
+        return;
+      }
+      // Re-hydrate serialized errors back to Error instances when workflow fails
+      if (event.type === 'workflow.fail' && event.data.stepResults) {
+        event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);
+      }
+      resolveResult(event.data);
+    });
 
-      await ack?.();
-    };
-
-    // AWAIT subscription first - ensures listener is registered before any events fire
+    // The waiter is registered; wait for the shared subscription before publishing so no finish is missed.
     try {
-      // Live-tail: persistent pubsubs replay retained events from 'earliest', which
-      // would hand this waiter stale finish events (e.g. this run's own prior suspend).
-      // Safe because we subscribe before publishing the start/resume event below.
-      await pubsub.subscribe('workflows-finish', finishCb, { startFrom: 'latest' });
+      await finish.ready;
     } catch (err) {
+      finish.remove();
       releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
       throw err;
@@ -243,15 +324,15 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // A caller whose execution lost the run would otherwise wait forever: a successor's finish is foreign to it,
     // and a run released with nobody left to finish it publishes none. Stop waiting, without writing anything.
     const stopWatchingLoss = watchExecutionLoss?.(params.requestContext, params.runId, error => {
-      void pubsub
-        .unsubscribe('workflows-finish', finishCb)
-        .catch(err => this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', err))
-        .finally(() => rejectResult(error));
+      finish.remove();
+      rejectResult(error);
     });
     if (stopWatchingLoss) void resultPromise.then(stopWatchingLoss, stopWatchingLoss);
 
     // NOW safe to publish - listener is guaranteed to be registered
     // Wrap in try/catch to ensure proper cleanup and rejection on errors
+    // The processor reads a run's storage version off each event; it can't look it up.
+    const storageVersionTag = params.storageVersion === 2 ? { storageVersion: 2 as const } : {};
     try {
       if (params.resume) {
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.resume.resumePath);
@@ -269,7 +350,8 @@ export class EventedExecutionEngine extends ExecutionEngine {
               ? await this.eventProcessor.restoreParentWorkflow(params.parentWorkflow)
               : undefined,
             executionPath: params.resume.resumePath,
-            stepResults: params.resume.stepResults,
+            // On storage v2 successful steps were loaded as summaries; the processor loads them.
+            ...(params.storageVersion !== 2 && { stepResults: params.resume.stepResults }),
             resumeSteps: params.resume.steps,
             prevResult: { status: 'success', output: prevResult?.payload },
             resumeData: params.resume.resumePayload,
@@ -281,6 +363,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             state: resumeState,
             outputOptions: params.outputOptions,
             forEachIndex: params.resume.forEachIndex,
+            ...storageVersionTag,
           },
         });
       } else if (params.timeTravel) {
@@ -304,6 +387,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             format: params.format,
             perStep: params.perStep,
             state: params.timeTravel.state,
+            ...storageVersionTag,
           },
         });
       } else if (params.restart) {
@@ -335,6 +419,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             format: params.format,
             perStep: params.perStep,
             state: params.restart.state,
+            ...storageVersionTag,
           },
         });
       } else {
@@ -351,16 +436,18 @@ export class EventedExecutionEngine extends ExecutionEngine {
             perStep: params.perStep,
             initialState: params.initialState,
             outputOptions: params.outputOptions,
+            ...storageVersionTag,
           },
         });
       }
     } catch (err) {
-      // Clean up subscription and reject the promise on error
-      await pubsub.unsubscribe('workflows-finish', finishCb);
+      // Stop waiting and reject the promise on error
+      finish.remove();
       rejectResult(err);
       releaseTracking();
       throw err;
     }
+    params.onDispatched?.();
 
     // Wait for workflow to complete
     let resultData: any;
@@ -388,13 +475,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
       }
       cleanStepResults[stepId] = cleanStepResult(stepResult);
     }
+    // On storage v2 the result's steps are a loader, as on the default engine. The finish event
+    // carries every step result, so the loader holds them all and reads none from storage.
+    const steps = params.storageVersion === 2 ? residentStepResultsLoader(cleanStepResults) : cleanStepResults;
 
     // Build the callback argument with proper typing for invokeLifecycleCallbacks
     let callbackArg: {
       status: WorkflowRunStatus;
       result?: any;
       error?: any;
-      steps: Record<string, StepResult<any, any, any, any>>;
+      steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, 1 | 2>;
       state?: Record<string, any>;
       tripwire?: StepTripwireInfo;
     };
@@ -412,7 +502,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       if (tripwireData && typeof tripwireData === 'object' && 'reason' in tripwireData) {
         callbackArg = {
           status: 'tripwire',
-          steps: cleanStepResults,
+          steps,
           state: finalState,
           tripwire: tripwireData,
         };
@@ -420,27 +510,27 @@ export class EventedExecutionEngine extends ExecutionEngine {
         callbackArg = {
           status: 'failed',
           error: resultData.prevResult.error,
-          steps: cleanStepResults,
+          steps,
           state: finalState,
         };
       }
     } else if (resultData.prevResult.status === 'suspended') {
       callbackArg = {
         status: 'suspended',
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       callbackArg = {
         status: 'paused',
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
     } else {
       callbackArg = {
         status: resultData.prevResult.status,
         result: resultData.prevResult?.output,
-        steps: cleanStepResults,
+        steps,
         state: finalState,
       };
     }
@@ -468,7 +558,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     if (resultData.prevResult.status === 'suspended') {
       const suspendedSteps = Object.entries(resultData.stepResults)
         .map(([stepId, stepResult]: [string, any]) => {
-          if (stepResult.status === 'suspended') {
+          if (stepResult?.status === 'suspended') {
             const existingPath = stepResult.suspendPayload?.__workflow_meta?.path ?? [];
             // Prepend stepId to match default engine's suspended array format
             return [stepId, ...existingPath];
@@ -497,7 +587,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           steps: callbackArg.steps,
         } as TOutput;
       }
-    } else if (resultData.prevResult.status === 'paused' || params.perStep) {
+    } else if (endedPaused(resultData, params.perStep)) {
       result = {
         status: 'paused',
         steps: callbackArg.steps,

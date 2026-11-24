@@ -3,7 +3,7 @@ import type { ExternalWorkItemSource } from './storage/domains/work-items/base.j
 /**
  * Where a card came from, in the vocabulary branch naming reads. Server rows
  * map their `externalSource` into this with {@link workItemBranchSource}; the
- * board's own `WorkItem['source']` is already this union.
+ * board reads a card's source with {@link workItemBoardSource}.
  */
 export type WorkItemBranchSource =
   | 'github-issue'
@@ -13,6 +13,9 @@ export type WorkItemBranchSource =
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
+  | 'github-dependabot-alert'
+  | 'vanta-vulnerability'
+  | 'detail-finding'
   | 'slack-thread'
   | 'manual';
 
@@ -33,8 +36,20 @@ export function workItemBranchSource(externalSource: ExternalWorkItemSource | nu
   if (externalSource.integrationId === 'incidentio') return 'incidentio-follow-up';
   // Only GitHub, GitLab, Linear, Jira, and incident.io carry provider identities; anything
   // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
+  if (externalSource.integrationId === 'vanta') return 'vanta-vulnerability';
+  if (externalSource.integrationId === 'detail') return 'detail-finding';
   if (externalSource.integrationId !== 'github') return 'manual';
+  if (externalSource.type === 'dependabot-alert') return 'github-dependabot-alert';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
+}
+
+/**
+ * The source a board shows a card under and filters it by. The board's source filter and the
+ * board UI both read it from here, so a card can't show one source and be filtered as another.
+ * Branch naming reads a Slack thread as a plain work item; on the board it is its own source.
+ */
+export function workItemBoardSource(externalSource: ExternalWorkItemSource | null | undefined): WorkItemBranchSource {
+  return externalSource?.integrationId === 'slack' ? 'slack-thread' : workItemBranchSource(externalSource);
 }
 
 function branchNumber(metadata: Record<string, unknown>, key: string): number | undefined {
@@ -118,6 +133,20 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   return `factory/item-${item.id}`;
 }
 
+/**
+ * The branch a card's pull or merge request is reviewed on. A PR's own card gets
+ * the same name {@link workItemBranch} gives it; an issue card reviewing a PR
+ * attached to it gets a branch apart from its builder's issue branch, so the
+ * reviewer and the builder never share a checkout.
+ */
+export function pullRequestBranch(input: { id: string; provider: 'github' | 'gitlab'; number: number }): string {
+  const suffix = itemSuffix(input.id);
+  if (input.provider === 'gitlab') {
+    return suffix ? `factory/gitlab-mr-${input.number}-${suffix}` : `factory/item-${input.id}-mr-${input.number}`;
+  }
+  return suffix ? `factory/pr-${input.number}-${suffix}` : `factory/pr-${input.number}`;
+}
+
 /** The pre-suffix GitHub branch, for reusing sessions opened before card names were unique. */
 export function legacyGithubWorkItemBranch(branch: string): string | undefined {
   const match = /^(factory\/(?:issue|pr)-[1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
@@ -140,4 +169,26 @@ export function mergeRequestNumberFromBranch(branch: string): number | undefined
   const match = /^factory\/gitlab-mr-([1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);
   const number = match ? Number(match[1]) : undefined;
   return number !== undefined && Number.isSafeInteger(number) ? number : undefined;
+}
+
+export const USER_BRANCH_PREFIX = 'user/';
+export const USER_SESSION_BRANCH_PREFIX = `${USER_BRANCH_PREFIX}session-`;
+// Slack thread sessions live on `slack/<thread>` branches (integrations/slack/slack.ts threadBranch).
+export const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
+
+export function isPersonSessionBranch(branch: string): boolean {
+  return branch.startsWith(USER_BRANCH_PREFIX) || branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
+}
+
+/** Whether a provider-reported branch name is safe to show an agent or pass to git. */
+export function isSafeBranchName(value: string): boolean {
+  return (
+    /^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(value) &&
+    !value.includes('..') &&
+    !value.includes('//') &&
+    !value.includes('@{') &&
+    !value.endsWith('.') &&
+    !value.endsWith('/') &&
+    !value.endsWith('.lock')
+  );
 }

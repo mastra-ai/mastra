@@ -24,4 +24,10 @@ export interface WorkItemProviderAdapter {
     source: ExternalWorkItemSource | null,
     metadata: Record<string, unknown> | null,
   ): ProviderWorkItemSource | null;
+  /**
+   * Where the item lives at its provider, for rules to route by: a GitHub repository or GitLab
+   * project path (`acme/app`, `acme/platform/api`), a Linear team key, a Jira project key. Null
+   * when the item doesn't say; absent for providers without such a scope.
+   */
+  repository?(item: Pick<ProviderWorkItemSource, 'key' | 'metadata'>): string | null;
 }

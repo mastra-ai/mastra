@@ -40,7 +40,7 @@ These steps take you from an empty project to a voice agent you can talk to. A v
   </StepItem>
 
   <StepItem>
-    Add a voice agent to your Mastra instance and expose a connection route. The `liveKitConnectionRoute()` helper adds a `POST /voice/livekit/connection-details` endpoint that mints a LiveKit token and dispatches your agent into a room:
+    Add a voice agent to your Mastra instance and expose a connection route. The `liveKitConnectionRoute()` helper adds a `POST /voice/livekit/connection-details` endpoint that creates a LiveKit token and dispatches your agent into a room:
 
     ```typescript title="src/mastra/index.ts"
     import { Mastra } from '@mastra/core/mastra'
@@ -142,7 +142,7 @@ export default createLiveKitWorker({
 - `turnDetection: 'multilingual'`: Runs LiveKit's semantic end-of-turn model locally on CPU. It reads the live transcript to avoid cutting users off mid-thought. Use `'vad'` or `'stt'` for silence-based endpointing instead.
 - `endpointing`: Bounds how long the agent waits after the user stops speaking.
 - `interruption`: Controls barge-in. When the user speaks over the agent, LiveKit stops playback and cancels the in-flight Mastra stream, so token generation stops too.
-- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and a run that LiveKit later discards has already persisted a partial user message and a partial, never-spoken reply to the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history, or keep both by running turns read-only; see [preemptive generation with memory](#preemptive-generation-with-memory).
+- `preemptiveGeneration`: Starts the Mastra agent's reply while the user is still finishing, hiding time-to-first-token. The worker disables it by default: each preemptive attempt runs the Mastra agent on an interim transcript, and a run that LiveKit later discards has already persisted a partial user message and a partial, never-spoken reply to the thread. Re-enable it with `preemptiveGeneration: { enabled: true }` if latency matters more than exact thread history, or keep both by running turns read-only. See [preemptive generation with memory](#preemptive-generation-with-memory).
 
 See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns/) for all options.
 
@@ -296,7 +296,7 @@ export default createLiveKitWorker({
 })
 ```
 
-The same `options` field works on `MastraVoiceAgent` and `MastraLLM`; on the remote transport it's forwarded in the request body as `memory.options`.
+The same `options` field works on `MastraVoiceAgent` and `MastraLLM`. On the remote transport it's forwarded in the request body as `memory.options`.
 
 ### Speak while tools run
 
@@ -319,7 +319,7 @@ The phrase is spoken as part of the reply and recorded in the transcript.
 
 By default the worker generates each reply with a Mastra agent. To run multi-step logic per turn (for example classify intent, route, call tools in sequence, then compose a reply), generate replies with a Mastra [workflow](/docs/workflows/overview) instead. Set `workflow` in place of `agent`.
 
-LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. The workflow can't suspend or resume, and no conversation state carries between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
+LiveKit still owns the audio loop and calls into Mastra once per turn. The workflow runs to completion each turn. The workflow can't suspend or resume, and no conversation state carries between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
 
 ```typescript title="src/mastra/voice-worker.ts"
 import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
@@ -354,7 +354,7 @@ const generateResponse = createStep({
 
 - `replyStep`: Restricts spoken output to one step. Omit it to speak every step that writes to its `writer`.
 - `resultText`: A fallback that derives the reply from the final run result when no step streams text. Streaming through `writer` gives lower time-to-first-token, so prefer it.
-- `abortSignal`: Forward the step's `abortSignal` into `agent.stream()` so barge-in stops generation promptly. When the user interrupts, the worker cancels the run.
+- `abortSignal`: Forward the step's `abortSignal` into `agent.stream()` so barge-in stops generation right away. When the user interrupts, the worker cancels the run.
 - `generate`: For full control, pass a `generate` function instead. It can be any reply generator that turns a turn into a text stream.
 
 With a workflow, the worker doesn't persist turns automatically the way an agent's `stream()` does. Persist conversation history inside the workflow, or keep the LiveKit transcript as the source of truth and pass it in each turn.
@@ -415,7 +415,7 @@ Both paths share the same reply pipeline underneath; choose by who should own th
 Tools stay on the Mastra agent and execute on the server. LiveKit-side tools passed to the session are ignored. Tool activity reaches the worker through `toolFeedback` (spoken filler), `onToolCall` (fires as each tool call starts), and `onTurnComplete` (fires after each reply with the text, tool calls, and token usage). Agent-initiated hang-up takes a few lines: pair `onToolCall` with [`runEndCall()`](#runendcall).
 
 :::warning
-Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, run without `memory` and pass the full transcript each turn, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory).
+Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, run without `memory` and pass the full transcript each turn, or set `memory.options.readOnly` and persist committed turns yourself. See [preemptive generation with memory](#preemptive-generation-with-memory).
 :::
 
 `MastraLLM` also accepts an in-process Mastra `agent` instance, session ownership without a second deployment, or a custom `generate` function. The remote transport is available standalone as [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator), which also plugs into `createLiveKitWorker`'s `generate` option to run the batteries-included worker against a remote server.
@@ -494,7 +494,7 @@ await dispatchVoiceSession({
 // Add the phone participant to roomName through your existing LiveKit SIP code.
 ```
 
-Use a fresh room name for each recorded session and await dispatch before dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
+Use a fresh room name for each recorded session and await dispatch before dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. Because the existence check and room creation are separate requests, your application must prevent another process from creating the same room concurrently, and the option doesn't start recording in an existing room or capture earlier audio.
 
 For browser sessions, pass the same settings to the connection route:
 
@@ -514,7 +514,7 @@ With recording enabled, the route creates the room and dispatches the agent when
 
 The route also accepts a synchronous or asynchronous `recording` callback. It receives `{ body, context, roomName }`, including the resolved room name, so your server can choose settings for each session. Return `undefined` to skip recording for that request. Recording configuration isn't read directly from the request body.
 
-An existing recording room returns HTTP 409 before agent dispatch or token issuance. Other room creation and dispatch errors reject the operation; the route doesn't issue a token on failure. If dispatch fails after room creation, the room remains in LiveKit. Successful setup doesn't guarantee that the recording finishes or uploads successfully. Use LiveKit's [egress events](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/#webhook-events) to check completion and retrieve file details before making a recording available to users. To verify the setup, make a test call, end the room, and listen to the completed file under `calls/` in your bucket for audio from both participants.
+An existing recording room returns HTTP 409 before agent dispatch or token issuance. Other room creation and dispatch errors reject the operation, and the route doesn't issue a token on failure. If dispatch fails after room creation, the room remains in LiveKit, and successful setup doesn't guarantee that the recording finishes or uploads successfully. Use LiveKit's [egress events](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/#webhook-events) to check completion and retrieve file details before making a recording available to users. To verify the setup, make a test call, end the room, and listen to the completed file under `calls/` in your bucket for audio from both participants.
 
 #### Recording lifecycle and consent
 
@@ -522,15 +522,15 @@ Enabling `recording` starts recording during room creation, before a browser con
 
 `createConsentTool()` and `configuration.consentPolicy` don't control LiveKit egress. They don't delay, pause, or stop an automatic recording. If your application needs consent during the call before capturing audio, obtain it first and use LiveKit's explicit egress APIs to start recording in the existing room. A spoken greeting alone doesn't gate this feature.
 
-Recordings follow the LiveKit room lifecycle. Disconnecting only the agent doesn't necessarily end the room or finalize the file. Wait for a successful egress completion status and file results before marking a recording ready. Treat failed setup and abandoned rooms as application cleanup responsibilities.
+Recordings follow the LiveKit room lifecycle, and disconnecting only the agent doesn't necessarily end the room or finalize the file. Wait for a successful egress completion status and file results before marking a recording ready. Treat failed setup and abandoned rooms as application cleanup responsibilities.
 
-The audio file lives in the configured output storage, separately from Mastra memory, transcripts, and traces. Deleting a Mastra thread doesn't delete the recording. Your application manages storage access, retention, and download links for end users. Keep storage credentials in server configuration, including when choosing recording settings per session.
+The audio file lives in the configured output storage, separately from Mastra memory, transcripts, and traces, so deleting a Mastra thread doesn't delete the recording. Your application manages storage access, retention, and download links for end users. Keep storage credentials in server configuration, including when choosing recording settings per session.
 
 ### Review recordings in Studio
 
 Register `liveKitRecordingRoute()` to add **Review Audio** to a voice call's trace panel in Studio. The button opens an audio player for that call. Recording and trace storage must both be configured: the route reads the stored `voice call` span and passes its `roomName` to your server-side resolver. The browser supplies only the trace ID.
 
-The resolver returns `{ url, expiresAt? }`, or `undefined` when no file is available. Use a short-lived signed URL for private storage. The route doesn't persist playback URLs in traces, and Studio requests a fresh URL each time the review opens. Missing files and playback errors offer **Refresh recording** so you can retry after the upload finishes or a link expires.
+The resolver returns `{ url, expiresAt? }`, or `undefined` when no file is available. For private storage, use a short-lived signed URL, because the route doesn't persist playback URLs in traces and Studio requests a fresh URL each time the review opens. Missing files and playback errors offer **Refresh recording** so you can retry after the upload finishes or a link expires.
 
 For the S3 configuration above, use the same `calls/{room_name}.ogg` object key for recording and playback. Room names must remain unique across calls, including after a room has ended. Install the AWS SDK in your application:
 
@@ -658,7 +658,7 @@ Register [`liveKitRecordingRoute()`](#review-recordings-in-studio) on the server
 
 `@mastra/client-js@1.51.2` declares support for Zod 3 and 4, but its `@ai-sdk/ui-utils@1.2.11` dependency declares a Zod 3 peer dependency. This mismatch can cause strict npm installs with Zod 4 to fail. Use Zod `^3.25.76` with that SDK to satisfy both peer ranges. Server and worker consumers without the optional client SDK also support Zod 4.
 
-The `/client` entry point excludes LiveKit server and worker imports. Other integration entry points don't require `@mastra/client-js`. Installing `@mastra/livekit` still installs its package-level dependencies; the browser entry point only controls which code enters the browser bundle. Storage credentials and recording authorization remain on the server.
+The `/client` entry point excludes LiveKit server and worker imports. Other integration entry points don't require `@mastra/client-js`. Installing `@mastra/livekit` still installs its package-level dependencies. The browser entry point only controls which code enters the browser bundle. Storage credentials and recording authorization remain on the server.
 
 ### Turn metrics and playback completion
 
@@ -681,7 +681,7 @@ export default createLiveKitWorker({
 
 Observers run asynchronously and aren't awaited by the audio pipeline. Errors are logged. Keep their work small. Neither observer writes or reconciles memory.
 
-`onTurnMetrics` receives versioned records with `phase: 'generation'` or `phase: 'speech'`. Generation records contain a `turnId`, a unique `attemptId`, a terminal `outcome`, `durationMs`, optional `firstTextMs`, and tool timings. Attempts for the same user message share its turn ID. Tool durations run from the bridge receiving a tool call to receiving its result; remote durations include transport and aren't pure server execution times. A tool without a result has no duration.
+`onTurnMetrics` receives versioned records with `phase: 'generation'` or `phase: 'speech'`. Generation records contain a `turnId`, a unique `attemptId`, a terminal `outcome`, `durationMs`, optional `firstTextMs`, and tool timings. Attempts for the same user message share its turn ID. Tool durations run from the bridge receiving a tool call to receiving its result. Remote durations include transport and aren't pure server execution times. A tool without a result has no duration.
 
 Speech records also contain LiveKit's `speechId`. The bridge carries turn and attempt IDs in assistant message metadata so they can be joined after playback. Speech without a correlated assistant message, such as cancelled speech that produced no output, uses its speech ID as the turn ID and omits the attempt ID. Don't infer a correlation by matching event arrival order.
 
@@ -694,17 +694,17 @@ Speech records also contain LiveKit's `speechId`. The bridge carries turn and at
 
 Missing measurements are `undefined`, not zero. Local generation durations use a monotonic clock. LiveKit's speech timing values are converted to milliseconds. When observability is configured, these records appear as events in the existing `voice call` trace. Pipeline metric events retain LiveKit's speech ID when supplied.
 
-`onSpeechComplete` runs once when a speech handle finishes, or when the session closes with that speech pending. It supplies the speech metrics plus optional `playedText` and `transcriptSource`. Outcomes are `completed`, `interrupted`, `cancelled`, or `failed`. A completed speech lifecycle alone doesn't prove that audio was produced; check whether the relevant audio measurements are present.
+`onSpeechComplete` runs once when a speech handle finishes, or when the session closes with that speech pending. It supplies the speech metrics plus optional `playedText` and `transcriptSource`. Outcomes are `completed`, `interrupted`, `cancelled`, or `failed`. A completed speech lifecycle alone doesn't prove that audio was produced. Check whether the relevant audio measurements are present.
 
 The measurement source is `server-playout`. LiveKit's committed transcript can be partial or estimated, depending on the output's synchronization support. It doesn't prove that the remote browser or phone listener heard every word. `transcriptSource: 'unavailable'` means no committed assistant transcript was available.
 
-Keep using `onTurnComplete` for its existing generation contract. It can fire before speech playback finishes, with `interrupted: false`, even when the caller interrupts the audio later. Use `onSpeechComplete` for playback outcomes. Existing agent memory may already contain generated text; adding this hook doesn't change that persistence behavior.
+Keep using `onTurnComplete` for its existing generation contract. It can fire before speech playback finishes, with `interrupted: false`, even when the caller interrupts the audio later. Use `onSpeechComplete` for playback outcomes. Existing agent memory may already contain generated text, and adding this hook doesn't change that persistence behavior.
 
 For a session you own, call `observeVoiceSession(session, { onTurnMetrics, onSpeechComplete })` from `@mastra/livekit/worker` or `@mastra/livekit/plugin` before `session.start()`. Its return value detaches the observer and finalizes pending speech as cancelled. The worker attaches its observer automatically.
 
 ### Speech segment boundaries
 
-The built-in agent, remote, and workflow reply generators preserve text-segment and tool-step boundaries. Tool feedback is flushed after its text is queued, so an acknowledgment can reach text-to-speech while a tool is still running. A flush requests a segment boundary; it doesn't guarantee immediate audio from every speech provider.
+The built-in agent, remote, and workflow reply generators preserve text-segment and tool-step boundaries. Tool feedback is flushed after its text is queued, so an acknowledgment can reach text-to-speech while a tool is still running. A flush requests a segment boundary. It doesn't guarantee immediate audio from every speech provider.
 
 Custom generators can continue returning string streams. To emit an explicit boundary, return a `ReadableStream<VoiceReplyChunk>` and enqueue `VOICE_TEXT_FLUSH`, both exported from `@mastra/livekit/worker` and `@mastra/livekit/plugin`. Consumers that read a reply generator directly must distinguish strings from boundary objects. Never concatenate a boundary object into a transcript.
 
@@ -743,7 +743,7 @@ LiveKit's guidance on sizing, graceful shutdown, and hosting applies unchanged. 
 
 A LiveKit voice session involves three pieces:
 
-1. Your Mastra server mints a LiveKit access token and dispatches your agent into a room. The dispatch carries metadata such as the Mastra agent id, memory thread, and resource.
+1. Your Mastra server creates a LiveKit access token and dispatches your agent into a room. The dispatch carries metadata such as the Mastra agent id, memory thread, and resource.
 1. A LiveKit agent worker (a separate long-running process) receives the job and runs the audio pipeline. Audio flows between the browser and the worker over WebRTC and never passes through your Mastra HTTP server.
 1. Each time the user finishes a turn, the worker calls the Mastra agent's `stream()` with the new input and speaks the streamed text. When the user interrupts, LiveKit cancels the stream and Mastra stops generating.
 
@@ -758,13 +758,13 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 
 ## Upgrade to 0.5.0
 
-The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
+The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Note that updating a dependency range doesn't update an existing lockfile, so check the installed versions after installation.
 
 If you used `client.getLiveKitRecording(traceId)` in an earlier snapshot, switch to `getLiveKitRecording(client, traceId)` from `@mastra/livekit/client`. Import `LiveKitRecordingResponse` from the same entry point instead of `GetLiveKitRecordingResponse` from client-js.
 
 ### Authorize recording access
 
-Before upgrading an application that registers `liveKitRecordingRoute()`, add an `authorize({ traceId, context })` callback that checks the authenticated user's access to the requested trace. The callback is required even when `requiresAuth: false`; omitting it throws during route registration. Return `true` only to allow access, before trace lookup or playback URL resolution. See [Review recordings in Studio](#review-recordings-in-studio) for the setup example.
+Before upgrading an application that registers `liveKitRecordingRoute()`, add an `authorize({ traceId, context })` callback that checks the authenticated user's access to the requested trace. The callback is required even when `requiresAuth: false`. Omitting it throws during route registration. Return `true` only to allow access, before trace lookup or playback URL resolution. See [Review recordings in Studio](#review-recordings-in-studio) for the setup example.
 
 ### Install compatible packages
 
@@ -784,7 +784,7 @@ For a local prerelease archive, install it with the matching LiveKit packages:
 npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/agents-plugin-livekit@1.7.1 @livekit/agents-plugin-silero@1.7.1 @livekit/rtc-node@0.13.34 livekit-server-sdk@2.16.0
 ```
 
-Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
+Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`. RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
 
 Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Verify the installed dependency tree and initialize the worker's models:
 
@@ -818,7 +818,7 @@ The default still loads the Silero plugin during prewarm. The `'english'` and `'
 Mastra tools continue to run through the Mastra agent. If you also implement LiveKit tools or a custom LiveKit plugin, account for the changes since Agents 1.4:
 
 - `ToolContext` is a class. Use its accessors and `flatten()` instead of enumerating or mutating it as a plain object.
-- Named tool lists and duplicate-name checks are supported. Object shorthand with anonymous tools remains supported; converting every tool map isn't required.
+- Named tool lists and duplicate-name checks are supported. Object shorthand with anonymous tools remains supported. Converting every tool map isn't required.
 - Provider tools use subclasses of `ProviderTool` instead of the older `ProviderDefinedTool` API.
 
 See the [LiveKit tool API](https://github.com/livekit/agents-js/blob/main/agents/src/llm/tool_context.ts) for custom plugin migration details.
@@ -1110,7 +1110,7 @@ Starts the LiveKit worker CLI (`dev`, `start`, and `connect` subcommands) for a 
 
 ### `pipeAgentReplyToWriter()`
 
-Streams a Mastra agent's reply into a workflow step's `writer` on the workflow reply path. It forwards the agent's text deltas, so text-to-speech starts before the full reply is ready, and its tool-call chunks, so `toolFeedback` fires and `onTurnComplete` sees the tool list. Piping only `stream.textStream` silently drops tool calls. Pass the step's `abortSignal` to `agent.stream()` so barge-in stops generation promptly.
+Streams a Mastra agent's reply into a workflow step's `writer` on the workflow reply path. It forwards the agent's text deltas, so text-to-speech starts before the full reply is ready, and its tool-call chunks, so `toolFeedback` fires and `onTurnComplete` sees the tool list. Piping only `stream.textStream` silently drops tool calls. Pass the step's `abortSignal` to `agent.stream()` so barge-in stops generation right away.
 
 ```typescript title="src/mastra/workflows/phone-conversation.ts"
 import { pipeAgentReplyToWriter } from '@mastra/livekit'
@@ -1357,7 +1357,7 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
 />
 
 :::warning
-Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory). Stateless mode (no `memory`) works with preemptive generation.
+Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session, or set `memory.options.readOnly` and persist committed turns yourself. See [preemptive generation with memory](#preemptive-generation-with-memory). Stateless mode (no `memory`) works with preemptive generation.
 :::
 
 #### Tools run on the Mastra agent
@@ -1376,7 +1376,7 @@ When the user interrupts a reply:
 
 1. The plugin cancels the stream. The server aborts generation and persists nothing from that turn.
 1. LiveKit records the part the user actually heard in its chat context, flagged as interrupted.
-1. On the next turn, the plugin re-sends that heard-only fragment, ordered before the new user message, so the memory thread backfills to match the call. Messages carry LiveKit's message ids and the server deduplicates by id, so retries and re-sends stay idempotent.
+1. On the next turn, the plugin re-sends that heard-only fragment, ordered before the new user message, which backfills the memory thread to match the call. Messages carry LiveKit's message ids and the server deduplicates by id, so retries and re-sends stay idempotent.
 
 A user who hangs up immediately after interrupting leaves that final fragment unrecorded. When the transcript must capture it, reconcile immediately from the session event; the shared message id means the next turn's re-send upserts instead of duplicating:
 
@@ -1668,7 +1668,7 @@ With `createLiveKitWorker()`, set `configuration: { endCall: {} }` and the worke
 
 ### `liveKitConnectionRoute()`
 
-Returns an [API route](/docs/server/custom-api-routes) that mints a LiveKit access token with the voice agent dispatched into the room. Frontends call it to join a session.
+Returns an [API route](/docs/server/custom-api-routes) that creates a LiveKit access token with the voice agent dispatched into the room. Frontends call it to join a session.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

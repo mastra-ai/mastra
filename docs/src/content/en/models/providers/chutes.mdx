@@ -7,7 +7,7 @@ description: "Browse Chutes model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/chutes.svg" alt="Chutes logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Chutes
 
-Access 18 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
+Access 20 Chutes models through Mastra's model router. Authentication is handled automatically using the `CHUTES_API_KEY` environment variable.
 
 Learn more in the [Chutes documentation](https://llm.chutes.ai).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "chutes/Qwen/Qwen3.5-397B-A17B-TEE"
+  model: "chutes/Qwen/Qwen3.5-27B-TEE"
 });
 
 // Generate a response
@@ -74,24 +74,24 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 0.85,
+    "outputCost": 2.65
   },
   {
     "model": "chutes/deepseek-ai/DeepSeek-V4.1-Flash-1017",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 393216,
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "chutes/google/gemma-4-31B-turbo-TEE",
@@ -119,15 +119,15 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "chutes/moonshotai/Kimi-K2.7-Code",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.832,
+    "outputCost": 3.5
   },
   {
     "model": "chutes/moonshotai/Kimi-K3-TEE",
@@ -140,6 +140,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65535,
     "inputCost": 1.85,
     "outputCost": 9.5
+  },
+  {
+    "model": "chutes/Qwen/Qwen3.5-27B-TEE",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.2,
+    "outputCost": 1.75
   },
   {
     "model": "chutes/Qwen/Qwen3.5-397B-A17B-TEE",
@@ -170,12 +182,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "chutes/Qwen/Qwen3.8-27B-TEE",
@@ -191,27 +203,39 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "chutes/Qwen/Qwen3.8-Max-0902",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "chutes/Qwen/Qwen4-Max",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 1.5,
+    "outputCost": 4.5
   },
   {
     "model": "chutes/tencent/Hy4",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 0.525,
+    "outputCost": 1.5625
   },
   {
     "model": "chutes/zai-org/GLM-5.1-TEE",
@@ -230,12 +254,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2.45,
+    "outputCost": 7.7
   },
   {
     "model": "chutes/zai-org/GLM-5.2-TEE",
@@ -254,12 +278,12 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
-    "inputCost": null,
-    "outputCost": null
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.225,
+    "outputCost": 3.85
   }
 ]}
 />
@@ -278,7 +302,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://llm.chutes.ai/v1",
-    id: "chutes/Qwen/Qwen3.5-397B-A17B-TEE",
+    id: "chutes/Qwen/Qwen3.5-27B-TEE",
     apiKey: process.env.CHUTES_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -299,7 +323,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "chutes/zai-org/GLM-5.3"
-      : "chutes/Qwen/Qwen3.5-397B-A17B-TEE";
+      : "chutes/Qwen/Qwen3.5-27B-TEE";
   }
 });
 ```

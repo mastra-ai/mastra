@@ -400,6 +400,7 @@ function createClientToolModel() {
           toolCallId: 'parity-call-1',
           toolName: 'askClient',
           input: JSON.stringify({ question: 'colour?' }),
+          providerExecuted: false,
         },
       ],
       finishReason: 'tool-calls',

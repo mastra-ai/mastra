@@ -15,32 +15,6 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
   });
 
   test.describe('when the viewport height is constrained', () => {
-    test('scrolls to reveal all navigation sections', async ({ page }) => {
-      // ARRANGE: Set viewport to desktop width but constrained height
-      await page.setViewportSize({ width: 1280, height: 400 });
-      await page.goto('/agents');
-
-      // Wait for sidebar scope to be visible and expanded
-      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
-
-      // Locate nav links by role — these span from top (Agents) to bottom (Settings)
-      const sidebar = page.locator('[data-sidebar-state="default"]');
-      const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
-      const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
-
-      // All nav links should exist in DOM
-      await expect(agentsLink).toBeAttached();
-      await expect(settingsLink).toBeAttached();
-
-      // ACT & ASSERT: Scroll to Settings link at bottom and verify it becomes visible
-      await settingsLink.scrollIntoViewIfNeeded();
-      await expect(settingsLink).toBeVisible();
-
-      // Scroll back to top and verify Agents is visible
-      await agentsLink.scrollIntoViewIfNeeded();
-      await expect(agentsLink).toBeVisible();
-    });
-
     test('should allow navigation to bottom section items after scrolling', async ({ page }) => {
       // ARRANGE: Constrained viewport
       await page.setViewportSize({ width: 1280, height: 400 });

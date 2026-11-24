@@ -32,7 +32,6 @@ describe('IntakeSection gitlab', () => {
                   listedRepository('gitlab-link', 'acme/app', {
                     integrationId: 'gitlab',
                     branch: 'main',
-                    sandboxWorkdir: '~/app',
                   }),
                 ],
               },
@@ -46,7 +45,6 @@ describe('IntakeSection gitlab', () => {
       const githubSection = await screen.findByRole('region', { name: 'GitHub' });
       expect(await within(githubSection).findByText('No linked repositories yet')).toBeInTheDocument();
       expect(within(githubSection).queryByRole('button', { name: 'Add acme/app' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
       await openSourcePicker('GitLab projects');
       const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
       expect(within(gitlabProjects).getByRole('button', { name: 'Add acme/app' })).toBeInTheDocument();
@@ -75,8 +73,6 @@ describe('IntakeSection gitlab', () => {
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
-      await userEvent.click(await screen.findByLabelText('Board for acme/app'));
-      await userEvent.click(await screen.findByRole('option', { name: 'Work' }));
 
       await waitFor(() =>
         expect(savedBindings).toEqual([
@@ -84,7 +80,6 @@ describe('IntakeSection gitlab', () => {
             integrationId: 'gitlab',
             sourceId: 'gitlab-project:encoded',
             factoryProjectId: 'fp-1',
-            board: 'work',
           },
         ]),
       );

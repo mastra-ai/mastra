@@ -13,13 +13,6 @@
  * the harness's `done(contract)` deep equality, so nothing the harness checks is
  * dropped.
  *
- * The `steps` leg declares one difference, COR-1428: plain's `generate()` path
- * replays the assistant tool-call part into the next request without
- * `providerExecuted`, where the streaming path (plain's own `stream()`, and
- * durable/evented, which always stream internally) sends
- * `providerExecuted: false`. The declaration's `expect` adds exactly that flag,
- * so the helper's own staleness check fails the moment either side is fixed.
- *
  * One leg stays directly driven: `suspend`. `EngineHandle.generate()` has no
  * resume counterpart, so `resumeGenerate()` is not expressible — and its
  * signature genuinely differs (plain takes `resumeData` first, durable and
@@ -41,15 +34,7 @@ import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
-import type {
-  EngineDifference,
-  EngineObservation,
-  EngineParityScenario,
-  ModelScript,
-  ParityEngine,
-  ParityStreamOptions,
-  ParityTarget,
-} from '../parity';
+import type { EngineParityScenario, ModelScript, ParityEngine, ParityStreamOptions, ParityTarget } from '../parity';
 import { describeParity, expectParity, textOnlyTape, toolCallTape } from '../parity';
 
 const AGENT_ID = 't16-agent';
@@ -59,44 +44,6 @@ const MEMORY = { thread: 't16-thread', resource: 't16-resource' };
 const OBJECT_SCHEMA = z.object({ amount: z.number(), currency: z.string() });
 const PARSED_OBJECT = { amount: 42, currency: 'EUR' };
 const STEPS_COMMITS = 2;
-
-/**
- * COR-1428: plain resolves `generate()` through `doGenerate`, whose replayed
- * assistant tool-call parts carry no `providerExecuted`, while the streaming
- * path (plain's own `stream()`, and durable/evented, which always stream
- * internally) sets it to `false`.
- */
-const COR_1428_REASON =
-  "COR-1428: plain's generate() path replays assistant tool-call parts without `providerExecuted`, " +
-  'where the streaming path (plain’s own stream(), and durable/evented) sends `providerExecuted: false`';
-
-/**
- * Adds the flag plain's `generate()` path omits, on exactly the parts the
- * streaming path stamps: replayed assistant tool-call parts.
- */
-function withReplayedProviderExecuted(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    requests: plain.requests.map(request => ({
-      ...request,
-      prompt: (request.prompt as unknown as PromptMessage[]).map(message => {
-        if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
-        return {
-          ...message,
-          content: (message.content as Array<Record<string, unknown>>).map(part =>
-            // Plain's path keeps the key but leaves it `undefined`; the
-            // streaming path stamps `false`.
-            part.type === 'tool-call' && part.providerExecuted === undefined
-              ? { ...part, providerExecuted: false }
-              : part,
-          ),
-        };
-      }),
-    })) as unknown as EngineObservation['requests'],
-  };
-}
-
-const COR_1428: EngineDifference = { reason: COR_1428_REASON, expect: withReplayedProviderExecuted };
 
 type PromptPart = { type?: string; text?: string; toolName?: string; toolCallId?: string };
 type PromptMessage = { role: string; content: unknown };
@@ -173,6 +120,7 @@ function generateContent(step: ScriptStep, offset: number) {
     toolCallId: `call-${offset + index + 1}`,
     toolName: tool.name,
     input: JSON.stringify(tool.args ?? {}),
+    providerExecuted: false,
   }));
 }
 
@@ -419,7 +367,6 @@ describeParity('generate-api parity', target => {
       run: async handle => {
         await handle.generate('Go.', { memory: MEMORY, maxSteps: MAX_STEPS });
       },
-      differences: { durable: COR_1428, evented: COR_1428 },
     };
 
     const results = await expectParity(target, scenario);

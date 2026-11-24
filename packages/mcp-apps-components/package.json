@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp-apps-components",
-  "version": "0.1.0-alpha.2",
+  "version": "0.3.0-alpha.1",
   "description": "Prebuilt MCP Apps, ready to register as MCP server app resources",
   "license": "Apache-2.0",
   "type": "module",
@@ -25,10 +25,41 @@
         "default": "./dist/host.cjs"
       }
     },
+    "./dashboards": {
+      "import": {
+        "types": "./dist/dashboards.d.ts",
+        "default": "./dist/dashboards.js"
+      },
+      "require": {
+        "types": "./dist/dashboards.d.ts",
+        "default": "./dist/dashboards.cjs"
+      }
+    },
+    "./observability-explorer": {
+      "import": {
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.js"
+      },
+      "require": {
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.cjs"
+      }
+    },
+    "./trace-viewer": {
+      "import": {
+        "types": "./dist/trace-viewer.d.ts",
+        "default": "./dist/trace-viewer.js"
+      },
+      "require": {
+        "types": "./dist/trace-viewer.d.ts",
+        "default": "./dist/trace-viewer.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {
@@ -59,6 +90,7 @@
     "@mastra/mcp": "workspace:*",
     "@mastra/playground-ui": "workspace:*",
     "@mastra/react": "workspace:*",
+    "@mastra/schema-compat": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/ext-apps": "^2.0.3",

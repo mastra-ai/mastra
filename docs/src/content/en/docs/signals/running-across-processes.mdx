@@ -37,6 +37,8 @@ Choose a backend based on where the processes run.
 
 [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) elects one process as the socket broker and re-elects a new one if it exits. It doesn't work across machines.
 
+This table covers signal delivery and thread leases. Evented workflows and agents that run on several processes have stricter requirements, which `EventEmitterPubSub` and `UnixSocketPubSub` don't meet. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
+
 [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) delivers events across processes but doesn't implement leases. Mastra can't tell which instance owns a thread, so any instance receiving a signal can try to run it. Use it only when another layer guarantees one process per thread.
 
 ## Thread ownership and leases

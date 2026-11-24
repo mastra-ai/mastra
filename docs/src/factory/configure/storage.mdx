@@ -1,0 +1,113 @@
+---
+title: Storage | Configuration
+description: Configure Factory's database with Mastra platform, PostgreSQL, or libSQL and understand the requirements for other storage adapters.
+---
+
+# Storage
+
+Storage keeps your Factory configuration, work items, integrations, and agent sessions available across server restarts. New Factory projects use a PostgreSQL database provisioned through Mastra platform.
+
+You can choose where the database runs independently of [auth](/configure/auth) and [sandboxes](/configure/sandboxes).
+
+## Choose a provider
+
+Factory uses the `storage` option on [`MastraFactory`](/reference/mastra-factory-api#constructor-parameters). It requires a `FactoryStorage` adapter that supports both agent runtime data and Factory's application data.
+
+| Database | Adapter | Configuration |
+| - | - | - |
+| Mastra platform PostgreSQL | `PgFactoryStorage` from `@mastra/pg` | Generated `DATABASE_URL` |
+| Your own PostgreSQL | `PgFactoryStorage` from `@mastra/pg` | Your database connection string |
+| Local SQLite through libSQL | `LibSQLFactoryStorage` from `@mastra/libsql` | Local file URL |
+| Turso | `LibSQLFactoryStorage` from `@mastra/libsql` | Remote libSQL URL and auth token |
+
+Mastra supports [additional storage providers](https://mastra.ai/docs/storage). Factory currently provides PostgreSQL and libSQL adapters. To use another Mastra storage provider, implement a `FactoryStorage` adapter for Factory's application data.
+
+## Mastra platform
+
+The installer provisions a database and writes `DATABASE_URL` to `.env`. The generated server uses that connection for `PgFactoryStorage` and `PgVector`, which provides vector search for agent recall.
+
+Keep the generated storage configuration to use this default. The database can remain on Mastra platform while the Factory Server runs on your computer.
+
+## Configure your databases
+
+Migrate your data before switching databases. Preserve a database backup and the matching [credential encryption key](/reference/environment-variables#stored-credential-encryption).
+
+### PostgreSQL
+
+Set `DATABASE_URL` to your PostgreSQL connection string and restart Factory:
+
+```dotenv title=".env"
+DATABASE_URL=postgresql://user:password@database-host:5432/factory
+```
+
+The generated server already selects PostgreSQL when this variable is set. For explicit code configuration, create the following module. The generated project includes `@mastra/pg`.
+
+```typescript title="src/mastra/storage.ts"
+import { PgFactoryStorage, PgVector } from '@mastra/pg'
+
+const connectionString = process.env.DATABASE_URL
+if (!connectionString) throw new Error('Set DATABASE_URL before starting Factory')
+
+export const storage = new PgFactoryStorage({
+  id: 'factory-storage',
+  connectionString,
+})
+
+export const vector = new PgVector({
+  id: 'factory-vectors',
+  connectionString,
+})
+```
+
+In `src/mastra/index.ts`, replace the generated database-selection block with the import below. Replace the `databaseUrl`, `storage`, and `vector` definitions. Remove the missing-database URL check as part of this replacement.
+
+```typescript title="src/mastra/index.ts"
+import { storage, vector } from './storage'
+```
+
+Keep the existing `storage` and `vector` properties in the `new MastraFactory(...)` options. They now use the imported values. Preserve any retention or other database settings you've added to your project.
+
+### libSQL and Turso
+
+Use `LibSQLFactoryStorage` for a local database file or a remote Turso database. The generated project includes `@mastra/libsql`.
+
+Use the following module instead of the PostgreSQL module, with the same import in `src/mastra/index.ts`:
+
+```typescript title="src/mastra/storage.ts"
+import { resolve } from 'node:path'
+import { LibSQLFactoryStorage } from '@mastra/libsql'
+
+export const storage = new LibSQLFactoryStorage({
+  id: 'factory-storage',
+  url: process.env.LIBSQL_URL || `file:${resolve('factory.db')}`,
+  authToken: process.env.LIBSQL_AUTH_TOKEN,
+})
+
+export const vector = undefined
+```
+
+Without `LIBSQL_URL`, this creates `factory.db` in the directory where you start the server. Add the database and its journal files to `.gitignore` and preserve them across restarts. Leaving `vector` undefined uses Factory's default vector-store resolution.
+
+For Turso, set the database URL and token:
+
+```dotenv title=".env"
+LIBSQL_URL=libsql://your-database.turso.io
+LIBSQL_AUTH_TOKEN=your-turso-auth-token
+```
+
+Use these variables with the storage module and import shown above to connect Factory to Turso.
+
+## Other storage providers
+
+A Factory adapter connects a Mastra runtime store to the collection and transaction APIs required by `FactoryStorage`. Use `PgFactoryStorage` or `LibSQLFactoryStorage` as an example when adding another backend.
+
+See the [Mastra storage guide](https://mastra.ai/docs/storage) for runtime providers and the [Factory storage source](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/storage/factory-storage.ts) for the adapter contract.
+
+## Verify persistence
+
+1. Start Factory and open a Factory with an existing work item or session.
+1. Restart the server with the same database configuration.
+1. Confirm that the Factory, work item, and session history are still available.
+1. Check that saved model and integration connections remain usable.
+
+For unreadable credentials, see [Troubleshooting](/troubleshooting#stored-credentials-stop-working).

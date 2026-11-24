@@ -1,5 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntegrationContext } from '../base.js';
+import { githubIssueIntakeSelected } from './issue-intake.js';
 import {
   githubItemSources,
   githubRulesOptions,
@@ -69,6 +71,19 @@ export function createGithubIssueReconciler(
       }
     };
 
+    // A failed selection read skips discovery only; the cards already filed still reconcile.
+    const anyProjectSelects = async (repository: ReconcileRepository, projects: readonly { orgId: string }[]) => {
+      try {
+        const selected = await Promise.all(
+          projects.map(project => githubIssueIntakeSelected(options.intake, project.orgId, repository.fullName)),
+        );
+        return selected.includes(true);
+      } catch (error) {
+        recordFailure(repository, error);
+        return false;
+      }
+    };
+
     for (const repository of repositories) {
       summary.repositories += 1;
       const authorTrust = sweepTrustLookup(options.github, repository);
@@ -87,7 +102,8 @@ export function createGithubIssueReconciler(
         const carded = new Set<number>();
 
         for (const project of projects) {
-          const items = await options.storage.list({
+          await rules.loadBoards(project);
+          const items = await options.storage.listShared({
             orgId: project.orgId,
             factoryProjectId: project.factoryProjectId,
           });
@@ -95,7 +111,7 @@ export function createGithubIssueReconciler(
             const issueNumber = reconcilableIssueNumber(item, repository);
             if (!issueNumber) continue;
             carded.add(issueNumber);
-            if (workItemPhaseSemantics(options.boards, item)?.kind === 'terminal') continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(item), item)?.kind === 'terminal') continue;
             let list = itemsByNumber.get(issueNumber);
             if (!list) {
               list = [];
@@ -109,7 +125,7 @@ export function createGithubIssueReconciler(
         // ingress leaves no card for the sweeps above to repair. Only issues
         // filed after the repository was linked are replayed, so linking a
         // repository never backfills its existing backlog.
-        if (listOpenIssues) {
+        if (listOpenIssues && (await anyProjectSelects(repository, projects))) {
           const linkedAt = Math.min(...projects.map(project => project.projectRepository.createdAt.getTime()));
           const openIssues = await listOpenIssues({
             installationId: repository.installationId,
@@ -124,7 +140,7 @@ export function createGithubIssueReconciler(
                 factoryProjectId: project.factoryProjectId,
                 sources: uncarded.flatMap(issue => githubItemSources(repository.id, 'issue', issue.number)),
               });
-              const items = await options.storage.list({
+              const items = await options.storage.listShared({
                 orgId: project.orgId,
                 factoryProjectId: project.factoryProjectId,
               });

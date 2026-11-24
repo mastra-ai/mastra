@@ -29,6 +29,7 @@ overrides:
   '@mastra/server': link:../../packages/server
   '@mastra/slack': link:../../channels/slack
   '@mastra/evals': link:../../packages/evals
+  '@mastra/json-render': link:../../integrations/json-render
   '@mastra/auth-studio': link:../../auth/studio
   mastra: link:../../packages/cli
   proxy-addr: 2.0.8
@@ -40,7 +41,7 @@ overrides:
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  hono@<4.13.11: 4.13.11
+  hono@<4.13.18: 4.13.18
   ip-address@<10.7.4: 10.7.4
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
@@ -54,23 +55,21 @@ overrides:
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   jose@>=4.14.0 <6.2.12: 6.2.12
-  better-auth: ^1.7.7
+  better-auth: ^1.7.16
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.7: 4.6.7
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   shell-quote@<1.11.0: 1.11.0
   jsondiffpatch@<0.7.6: 0.7.6
-  '@hono/node-server@<1.19.15': 1.19.15
+  '@hono/node-server@<2.1.6': 2.1.6
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   nanoid@<5.1.16: 5.1.16
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
-
-packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
 
 patchedDependencies:
   body-parser@2.4.0:
@@ -87,6 +86,12 @@ importers:
       '@ai-sdk/provider':
         specifier: ^2.0.0
         version: 2.0.5
+      '@json-render/core':
+        specifier: ^0.22.0
+        version: 0.22.0(zod@4.6.7)
+      '@json-render/react':
+        specifier: ^0.22.0
+        version: 0.22.0(react@19.3.1)(zod@4.6.7)
       '@mastra/auth-auth0':
         specifier: link:../../auth/auth0
         version: link:../../auth/auth0
@@ -129,6 +134,9 @@ importers:
       '@mastra/evals':
         specifier: link:../../packages/evals
         version: link:../../packages/evals
+      '@mastra/json-render':
+        specifier: link:../../integrations/json-render
+        version: link:../../integrations/json-render
       '@mastra/libsql':
         specifier: link:../../stores/libsql
         version: link:../../stores/libsql
@@ -169,7 +177,7 @@ importers:
         specifier: npm:ai@^5.0.93
         version: ai@5.0.285(zod@4.6.7)
       better-auth:
-        specifier: ^1.7.7
+        specifier: ^1.7.16
         version: 1.7.16(@opentelemetry/api@1.9.0)(react@19.3.1)(vitest@4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.6)(msw@2.15.0(@types/node@26.6.6)(typescript@5.9.3))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)))
       fetch-to-node:
         specifier: ^2.1.0
@@ -486,7 +494,7 @@ packages:
     resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.11
+      hono: 4.13.18
 
   '@inquirer/ansi@2.0.10':
     resolution: {integrity: sha512-dwrc+1aqVZpHNkNDswXGtn1typ+Pxpo5FHZRyBw1le7onEJUkPUkYOY1FIFC1LvFMYUqqLuWBwElhAmencL7MQ==}
@@ -525,6 +533,16 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
+
+  '@json-render/core@0.22.0':
+    resolution: {integrity: sha512-BIfJ2V3bLYETetBu2KWoxxRPU5cSAf77dDTBgqaV54kEAfyHta1psPJgNk0fDcB3FCrnCZ5KO/X41VDkrNSYgw==}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@json-render/react@0.22.0':
+    resolution: {integrity: sha512-dUBSPn/OZGJGwYiVUVv6qk14AGvfIutKgw7EKJejof14Ft/UPKsoV7/SkF5xIbGIWcM/vk3U4UnNm3NgPnOSSQ==}
+    peerDependencies:
+      react: ^19.2.3
 
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
@@ -1093,8 +1111,8 @@ packages:
   headers-polyfill@5.0.1:
     resolution: {integrity: sha512-1TJ6Fih/b8h5TIcv+1+Hw0PDQWJTKDKzFZzcKOiW1wJza3XoAQlkCuXLbymPYB8+ZQyw8mHvdw560e8zVFIWyA==}
 
-  hono@4.13.11:
-    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.1:
@@ -1491,6 +1509,7 @@ packages:
 
   tldts-core@7.4.20:
     resolution: {integrity: sha512-C630TWXZCZmLq0F2bW4QqwnaaxCQ/svpAqvJwnC4JvgEM5ohhBnGsEzTLSOXcN+xjz+kEaHS5uoWIw2klnqd0A==}
+    deprecated: Partial release, see https://github.com/remusao/tldts/issues/2735. Use >=7.4.22.
 
   tldts@7.4.19:
     resolution: {integrity: sha512-48dH6aSpQnpbzDUc4vIQZ1VjB8tkK+e8c1yx05/SZK+rkssgjEOlxDd/yU8/a4vGYQ9vRgJr9dwMq9TJ0b3X2Q==}
@@ -1532,8 +1551,8 @@ packages:
   undici-types@8.9.0:
     resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   until-async@3.0.2:
@@ -1696,7 +1715,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@1.1.3':
@@ -1856,9 +1875,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@hono/node-server@2.1.6(hono@4.13.11)':
+  '@hono/node-server@2.1.6(hono@4.13.18)':
     dependencies:
-      hono: 4.13.11
+      hono: 4.13.18
 
   '@inquirer/ansi@2.0.10': {}
 
@@ -1889,9 +1908,20 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
+  '@json-render/core@0.22.0(zod@4.6.7)':
+    dependencies:
+      zod: 4.6.7
+
+  '@json-render/react@0.22.0(react@19.3.1)(zod@4.6.7)':
+    dependencies:
+      '@json-render/core': 0.22.0(zod@4.6.7)
+      react: 19.3.1
+    transitivePeerDependencies:
+      - zod
+
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.11)
+      '@hono/node-server': 2.1.6(hono@4.13.18)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -1901,7 +1931,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0
       express-rate-limit: 8.7.3(express@5.3.0)
-      hono: 4.13.11
+      hono: 4.13.18
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -2413,7 +2443,7 @@ snapshots:
       '@types/set-cookie-parser': 2.4.10
       set-cookie-parser: 3.2.2
 
-  hono@4.13.11: {}
+  hono@4.13.18: {}
 
   http-errors@2.0.1:
     dependencies:
@@ -2816,7 +2846,7 @@ snapshots:
 
   undici-types@8.9.0: {}
 
-  undici@8.12.2: {}
+  undici@8.12.4: {}
 
   until-async@3.0.2: {}
 

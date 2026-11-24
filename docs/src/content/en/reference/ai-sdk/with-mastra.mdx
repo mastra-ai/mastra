@@ -117,7 +117,8 @@ const { text } = await generateText({
                   {
                     name: 'readOnly',
                     type: 'boolean',
-                    description: 'Read-only mode - prevents saving new messages.',
+                    description:
+                      'Accepted for compatibility but not currently applied. When `lastMessages` is set, new messages are still saved.',
                     isOptional: true,
                   },
                 ],

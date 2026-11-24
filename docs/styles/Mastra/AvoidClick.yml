@@ -1,6 +1,6 @@
 extends: substitution
-message: "Use 'select' or 'open' instead of '%s' for accessibility."
-level: warning
+message: "Use '%s' or 'open' instead of '%s' for accessibility."
+level: error
 ignorecase: true
 swap:
   click: select

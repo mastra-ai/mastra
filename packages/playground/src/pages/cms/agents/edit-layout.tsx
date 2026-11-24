@@ -5,9 +5,14 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
+import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks/agents';
-import { Check, Download, GitPullRequest, Save, Rocket, Eye } from 'lucide-react';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -71,11 +76,11 @@ function EditFormContent({
     <Notice variant="info" title="This is a previous version" className="mb-4">
       <Notice.Message>You are seeing a specific version of the agent.</Notice.Message>
       <div className="flex items-center gap-2">
-        <Button icon={<Eye />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
+        <Button icon={<IconEyeOpen />} type="button" variant="default" size="sm" onClick={() => setSearchParams({})}>
           View latest version
         </Button>
         <Button
-          icon={<Rocket />}
+          icon={<IconRocket />}
           type="button"
           variant="default"
           size="sm"
@@ -270,11 +275,12 @@ function EditLayoutWrapper() {
               size="sm"
               onClick={() => void handleDownloadJson()}
               disabled={isSavingDraft || isSubmitting}
-              icon={<Download />}
+              icon={<IconArrowInbox />}
             >
               Download JSON
             </Button>
             <Button
+              icon={<IconPullRequest />}
               variant="primary"
               size="sm"
               disabled={!canOpenPr || isSavingDraft || isSubmitting}
@@ -287,7 +293,6 @@ function EditLayoutWrapper() {
                 });
               }}
             >
-              <GitPullRequest />
               Open PR
             </Button>
           </>
@@ -295,24 +300,16 @@ function EditLayoutWrapper() {
       ) : !isCodeAgentEditable ? null : (
         <>
           <Button
+            icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
             variant="ghost"
             size="sm"
             onClick={() => void handleSaveDraft()}
             disabled={!isDirty || isSavingDraft || isSubmitting}
           >
-            {isSavingDraft ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save />
-                Save
-              </>
-            )}
+            {isSavingDraft ? 'Saving...' : 'Save'}
           </Button>
           <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             size="sm"
             onClick={() => void handlePublishVersion()}
@@ -322,17 +319,7 @@ function EditLayoutWrapper() {
                 : !hasDraft || isSubmitting || isSavingDraft
             }
           >
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Publishing...
-              </>
-            ) : (
-              <>
-                <Check />
-                {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
-              </>
-            )}
+            {isSubmitting ? 'Publishing...' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
           </Button>
         </>
       )}
@@ -340,7 +327,7 @@ function EditLayoutWrapper() {
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">{agentId}</h1>
       {isNotFound ? (
         <>

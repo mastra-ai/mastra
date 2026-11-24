@@ -188,6 +188,7 @@ async function queryJson<T>(
 async function feedbackRowsWithWriteVersions(
   client: ClickHouseClient,
   feedbacks: BatchCreateFeedbackArgs['feedbacks'],
+  onConflict?: BatchCreateFeedbackArgs['onConflict'],
 ) {
   const identifiedFeedback = feedbacks.map(feedback => ({
     ...feedback,
@@ -204,23 +205,28 @@ async function feedbackRowsWithWriteVersions(
   );
   const versions = new Map(existingVersions.map(row => [row.feedbackId, BigInt(row.writeVersion)]));
 
-  return identifiedFeedback.map(feedback => {
+  // The existing unversioned merge engine cannot arbitrate concurrent writers.
+  // This read-before-insert protects sequential create retries without a migration.
+  return identifiedFeedback.flatMap(feedback => {
+    if (onConflict === 'ignore' && versions.has(feedback.feedbackId)) return [];
     const writeVersion = (versions.get(feedback.feedbackId) ?? 0n) + 1n;
     versions.set(feedback.feedbackId, writeVersion);
-    return { ...feedbackRecordToRow(feedback), writeVersion: writeVersion.toString() };
+    return [{ ...feedbackRecordToRow(feedback), writeVersion: writeVersion.toString() }];
   });
 }
 
 export async function createFeedback(client: ClickHouseClient, args: CreateFeedbackArgs): Promise<void> {
-  await batchCreateFeedback(client, { feedbacks: [args.feedback] });
+  await batchCreateFeedback(client, { feedbacks: [args.feedback], onConflict: args.onConflict });
 }
 
 export async function batchCreateFeedback(client: ClickHouseClient, args: BatchCreateFeedbackArgs): Promise<void> {
   if (args.feedbacks.length === 0) return;
 
+  const values = await feedbackRowsWithWriteVersions(client, args.feedbacks, args.onConflict);
+  if (values.length === 0) return;
   await client.insert({
     table: TABLE_FEEDBACK_EVENTS,
-    values: await feedbackRowsWithWriteVersions(client, args.feedbacks),
+    values,
     format: 'JSONEachRow',
     clickhouse_settings: CH_INSERT_SETTINGS,
   });

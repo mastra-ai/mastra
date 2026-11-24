@@ -10,8 +10,6 @@ import { ApiConfigProvider, createApiConfig } from '../api/config';
 import { createQueryClient } from '../query-client';
 import { captureInstallPrompt } from './lib/pwa';
 import { createAppRouter } from './router';
-import '@fontsource-variable/mona-sans/standard.css';
-import '@fontsource-variable/mona-sans/standard-italic.css';
 import './tailwind.css';
 
 // Chromium fires `beforeinstallprompt` once, early in the page load and often

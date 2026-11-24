@@ -21,7 +21,7 @@ import type {
 import { matchesView, receiptScope } from './attention-providers.js';
 
 interface ParkedSession {
-  item: Card;
+  item: Pick<Card, 'id' | 'title'>;
   role: string;
   sessionId: string;
   threadId: string;
@@ -35,7 +35,7 @@ interface ReceiptedParkedSession {
   receipt: FactoryAttentionReceiptRecord | undefined;
 }
 
-function parkedRunLabel(toolName: string): string {
+export function parkedRunLabel(toolName: string): string {
   return toolName === 'submit_plan' ? 'Plan waiting for review' : 'Agent is waiting for an answer';
 }
 
@@ -86,7 +86,7 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
       this.#liveSessions.parkedIn(scope.factoryProjectId).map(({ sessionId, run }) => [sessionId, run]),
     );
     if (runBySession.size === 0) return [];
-    const items = await this.#workItems.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+    const items = await this.#workItems.listShared({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
     const bySession = new Map<string, ParkedSession>();
     for (const item of items) {
       for (const [role, ref] of Object.entries(item.sessions)) {

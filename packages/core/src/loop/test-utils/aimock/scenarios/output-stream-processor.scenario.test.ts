@@ -9,6 +9,7 @@ import { createTool } from '../../../../tools';
 import {
   describeForAllEngines,
   isDurableEngineVariant,
+  runApprovalScenario,
   runLoopScenario,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
@@ -172,10 +173,9 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(await savedText(memory)).toBe('It was the Visa on file. — Acme Support');
   });
 
-  // Technical: COR-1414. Durable and evented save the processOutputResult rewrite but their
-  // returned text stays the raw model text. Pinned so this flips when the engines agree.
-  const wrapped = isDurableEngineVariant(engine);
-  (wrapped ? it.fails : it)('the returned answer carries the signature too (COR-1414)', async () => {
+  // Technical: processOutputResult runs after the last step-finish streamed. Durable engines
+  // must still return the rewritten text, not the text buffered from the stream. (COR-1414)
+  it('the returned answer carries the signature too (COR-1414)', async () => {
     const signReply: Processor = {
       id: 'signature',
       processOutputResult: ({ messages }) => {
@@ -194,6 +194,50 @@ describeForAllEngines('Support agent output stream processors', engine => {
       },
     });
     expect(await output.text).toBe('It was the Visa on file. — Acme Support');
+  });
+
+  // Technical: after a tool approval the resumed run's buffered text still includes the
+  // pre-approval narration. The processOutputResult rewrite must still be the returned text,
+  // as on the plain Agent. (COR-1414)
+  it('a refund approved mid-reply returns the signed answer', async () => {
+    const signReply: Processor = {
+      id: 'signature',
+      processOutputResult: ({ messages }) => {
+        const textPart = messages.at(-1)?.content.parts.findLast(p => p.type === 'text') as
+          | { text: string }
+          | undefined;
+        if (textPart) textPart.text += ' — Acme Support';
+        return messages;
+      },
+    };
+    const issueRefund = createTool({
+      id: 'issueRefund',
+      description: 'Refund an order.',
+      inputSchema: z.object({ orderId: z.string() }),
+      execute: async () => ({ refunded: true }),
+    });
+
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Please refund order #4821.',
+      tools: { issueRefund },
+      stopWhen: stepCountIs(5),
+      decision: () => true,
+      agentOutputProcessors: [signReply],
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            content: 'Let me refund that.',
+            toolCalls: [{ id: 'call_1', name: 'issueRefund', arguments: { orderId: '4821' } }],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your refund is on its way.' });
+      },
+    });
+
+    expect(await output.text).toBe('Your refund is on its way. — Acme Support');
   });
 
   // Technical: abort() from processOutputStream on the first text delta ends the run as a
@@ -577,7 +621,8 @@ describeForAllEngines('Support agent output stream processors', engine => {
       .join('');
     expect(streamed).not.toContain('4111');
     expect((chunks ?? []).some(c => c.type === 'error')).toBe(true);
-    expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('4111');
+    // The card's digit groups, since a bare '4111' can occur in a saved message's random UUID.
+    expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('4111 1111');
   });
 
   // Technical: after a processor crash the saved assistant message holds only the error, so
@@ -634,6 +679,40 @@ describeForAllEngines('Support agent output stream processors', engine => {
     const saved = await savedAssistant(memory);
     expect(saved.flatMap(m => m.content.parts.map(p => p.type))).toEqual(['tool-invocation', 'step-start', 'error']);
   });
+
+  // Technical: COR-1414. A redactor that only implements processOutputResult and throws must fail
+  // closed. Durable and evented log the error, finish with 'stop', and save and return the raw
+  // card. Pinned there until the engines agree on processOutputResult failures.
+  (isDurableEngineVariant(engine) ? it.fails : it)(
+    'a redactor crashing on the final answer never saves or returns the card number (COR-1414)',
+    async () => {
+      const memory = new MockMemory();
+      const crashOnResult: Processor = {
+        id: 'card-redactor',
+        processOutputResult: () => {
+          throw new Error('redactor crashed');
+        },
+      };
+
+      const { output, streamError } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: CUSTOMER_QUESTION,
+        memory,
+        ...THREAD,
+        expectStreamError: true,
+        outputProcessors: [crashOnResult],
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: CARD_REPLY });
+        },
+      });
+
+      const failure = streamError ?? output.error;
+      expect(JSON.stringify(failure) + String(failure)).toContain('redactor crashed');
+      expect(await output.text.catch(() => '')).not.toContain('4111');
+      expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('4111 1111');
+    },
+  );
 
   // Technical: processOutputStep abort({ retry: true, metadata }) must surface the reason,
   // metadata and processor id on the retried step-finish, emit one data-signal before the next

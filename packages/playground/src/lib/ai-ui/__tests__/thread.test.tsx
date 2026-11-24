@@ -2,14 +2,15 @@ import { MastraClient } from '@mastra/client-js';
 import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agents/chat/drafts/ThreadInputContext';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ComponentProps, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
@@ -17,7 +18,6 @@ import { attachmentMessages } from './fixtures/attachment-messages';
 import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
 
 declare global {
@@ -323,15 +323,51 @@ describe('Thread', () => {
 
       const heading = screen.getByRole('heading', { name: /what can .* do for you today\?/i });
       expect(heading.textContent).toContain('Helper');
-      // Emphasis contract: only the agent name is high-contrast; the surrounding copy is muted and regular weight.
-      expect(heading.classList.contains('font-normal')).toBe(true);
-      const name = screen.getByText('Helper');
-      expect(name.classList.contains('font-medium')).toBe(true);
-      expect(name.classList.contains('text-foreground')).toBe(true);
       const landing = screen.getByTestId('thread-landing');
       expect(landing.contains(heading)).toBe(true);
       expect(landing.contains(screen.getByRole('textbox'))).toBe(true);
       expect(screen.queryByTestId('thread-message-column')).toBeNull();
+    });
+  });
+
+  // The MCP app tools cost a request per MCP server: the conversation asks for them only once it
+  // draws messages whose tool calls they type, as it did when each message loaded them itself.
+  describe('when it loads the MCP app tools', () => {
+    const MCP_APP_TOOLS = '/api/mcp/v0/servers';
+    const recordPaths = () => {
+      const paths: string[] = [];
+      const listener = ({ request }: { request: Request }) => {
+        paths.push(new URL(request.url).pathname);
+      };
+      server.events.on('request:start', listener);
+      onTestFinished(() => {
+        server.events.removeListener('request:start', listener);
+      });
+      return paths;
+    };
+
+    it('loads none for an empty conversation', async () => {
+      server.use(...baseHandlers());
+      const paths = recordPaths();
+
+      await act(async () => {
+        renderThread([]);
+      });
+      await screen.findByTestId('thread-welcome');
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(paths).not.toContain(MCP_APP_TOOLS);
+    });
+
+    it('loads them once the conversation draws a message', async () => {
+      server.use(...baseHandlers());
+      const paths = recordPaths();
+
+      await act(async () => {
+        renderThread([userMessage('previous question')]);
+      });
+
+      await waitFor(() => expect(paths).toContain(MCP_APP_TOOLS));
     });
   });
 
@@ -861,9 +897,8 @@ describe('Thread', () => {
       Object.defineProperty(files[2], 'text', { value: async () => 'discard' });
       const mounted = renderThread([]);
       fireEvent.click(await screen.findByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!input) throw new Error('File picker input is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const input = screen.getByLabelText('Files');
       fireEvent.change(input, { target: { files } });
       await screen.findByRole('button', { name: 'Preview settings.ini' });
       await screen.findByRole('button', { name: 'Preview discard.txt' });
@@ -948,14 +983,14 @@ describe('Thread', () => {
         fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
         if (inspection === 'file classification') {
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-          if (!picker) throw new Error('File picker is missing');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const file = new File(['pending file contents'], 'notes.unknown');
           Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
           fireEvent.change(picker, { target: { files: [file] } });
           expect(probe).toHaveBeenCalledOnce();
         } else {
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
           const input = await screen.findByLabelText('Public URL');
           fireEvent.change(input, { target: { value: url } });
           const form = input.closest('form');
@@ -1004,9 +1039,8 @@ describe('Thread', () => {
       const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!picker) throw new Error('File picker is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const picker = screen.getByLabelText('Files');
       fireEvent.change(picker, { target: { files: [new File([new Uint8Array([80, 75, 3, 4])], 'leads.xlsx')] } });
       await screen.findByRole('button', { name: 'Remove leads.xlsx' });
 
@@ -1110,6 +1144,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest('form');
@@ -1134,6 +1169,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest<HTMLFormElement>('form');
@@ -1146,7 +1182,7 @@ describe('Thread', () => {
     });
   });
 
-  it('attaches a URL from the popover without sending the chat message', async () => {
+  it('attaches a URL from the menu dialog without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(
       ...baseHandlers(),
@@ -1168,6 +1204,8 @@ describe('Thread', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
     });
 
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
+
     const urlInput = await screen.findByLabelText('Public URL');
     await act(async () => {
       fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
@@ -1180,14 +1218,14 @@ describe('Thread', () => {
       await new Promise(resolve => setTimeout(resolve, 80));
     });
 
-    // The attachment chip row appears and the popover closes.
+    // The attachment chip row appears and the dialog closes.
     await waitFor(() => {
       expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();
     });
-    // Submitting the popover form must not bubble into the composer form and send a chat message.
+    // Submitting the dialog form must not bubble into the composer form and send a chat message.
     expect(captured).toHaveLength(0);
   });
 

@@ -11,7 +11,7 @@ const STORAGE_KEY = 'settings-navigation-test';
 
 function renderNavigation() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/preferences']}>
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/account']}>
       <SidebarProvider storageKey={STORAGE_KEY} mobileBreakpoint={0}>
         <Routes>
           <Route path="/factories/:factoryId/settings/:section" element={<SettingsNavigation />} />
@@ -40,9 +40,9 @@ describe('SettingsNavigation', () => {
       within(screen.getByRole('region', { name: group }))
         .getAllByRole('link')
         .map(link => link.textContent);
-    expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
-    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Tools', 'Behavior']);
-    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Work board', 'Manage Factory']);
+    expect(linksIn('Account')).toEqual(['My account', 'Connections']);
+    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Tools', 'Behavior']);
+    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Manage Factory', 'Debug']);
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });
@@ -56,6 +56,15 @@ describe('SettingsNavigation', () => {
     expect(screen.getByRole('link', { name: 'Repositories' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+
+  it.each(['preferences', 'theme', 'completion sound'])('finds My account by "%s"', async query => {
+    const user = userEvent.setup();
+    renderNavigation();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), query);
+
+    expect(screen.getByRole('link', { name: 'My account' })).toBeInTheDocument();
   });
 
   it('finds Environment under Manage Factory and navigates to its canonical destination', async () => {

@@ -3,8 +3,10 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
@@ -354,8 +356,8 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
       // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1, id: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1, id: -1 } },
       // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
       // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
       // cover thread_id-only and resourceId-only filters.
@@ -1460,7 +1462,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       let cursor = collection
         .find(query)
-        .sort({ [field]: sortOrder })
+        .sort({ [field]: sortOrder, id: sortOrder })
         .skip(offset);
       if (perPageInput !== false) {
         cursor = cursor.limit(perPage);
@@ -2834,7 +2836,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
       const { currentRecord } = input;
-      return await this.#rollOver(currentRecord, 'swapBufferedReflectionToActive', doc => {
+      // The id of the successor the latest `decide` planned; the rollover returns it only if that
+      // plan's conditional freeze (which matches the stored buffer) won.
+      const planned: { id?: string } = {};
+      const result = await this.#rollOver(currentRecord, 'swapBufferedReflectionToActive', doc => {
+        planned.id = undefined;
         const stored = this.parseOMDocument(doc);
         const bufferedReflection = stored.bufferedReflection || '';
         if (!bufferedReflection) {
@@ -2849,6 +2855,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
         // reflected line count.
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) return null;
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) return null;
 
         // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
         // Lines after reflectedLineCount were added after reflection started → kept as-is.
@@ -2865,8 +2874,9 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const tokenCount =
           input.tokenCount +
           Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+        planned.id = input.newRecordId ?? globalThis.crypto.randomUUID();
         return {
-          newId: input.newRecordId ?? globalThis.crypto.randomUUID(),
+          newId: planned.id,
           mode: 'equal' as const,
           reflection: newObservations,
           tokenCount,
@@ -2876,6 +2886,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           createdAt: new Date(),
         };
       });
+      return result.id === planned.id ? withBufferedReflectionVerified(result, currentRecord) : result;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -3027,9 +3038,12 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await this.#completeRollover(collection, doc, doc.pendingSuccessor);
     }
 
+    // A head fenced for rollover still counts here: between the fence and the successor insert,
+    // the key would otherwise show a single live document and be skipped, leaving an older legacy
+    // document live beside the successor once it lands.
     const keys = await collection
       .aggregate<{ _id: string }>([
-        { $match: { supersededBy: null } },
+        { $match: { $or: [{ supersededBy: null }, { pendingSuccessor: { $exists: true } }] } },
         { $group: { _id: '$lookupKey', live: { $sum: 1 } } },
         { $match: { live: { $gt: 1 } } },
       ])

@@ -25,7 +25,6 @@ import { Agent } from '../../agent';
 import type { ToolsInput } from '../../types';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
-import { storeRunsInV2 } from './storage-version';
 
 function fakeLogger() {
   return {
@@ -121,13 +120,11 @@ async function setup(options: {
     tools: options.tools,
   });
   // The tests count v1 snapshot writes.
-  const durableAgent = storeRunsInV2(
-    createDurableAgent({
-      agent: baseAgent,
-      shouldPersistSnapshot: options.shouldPersistSnapshot,
-    }),
-    false,
-  );
+  const durableAgent = createDurableAgent({
+    agent: baseAgent,
+    shouldPersistSnapshot: options.shouldPersistSnapshot,
+    storageVersion: 1,
+  });
   const logger = fakeLogger();
   const mastra = new Mastra({
     agents: { [options.agentId]: durableAgent as any },
@@ -236,8 +233,8 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
         recovery: 'auto',
       });
 
-      const offPolicy = (off.durableAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
-      const autoPolicy = (auto.durableAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
+      const offPolicy = off.durableAgent.getWorkflow().options.shouldPersistSnapshot!;
+      const autoPolicy = auto.durableAgent.getWorkflow().options.shouldPersistSnapshot!;
 
       expect(persistedStatuses(offPolicy)).toEqual(['paused', 'pending', 'suspended']);
       expect(persistedStatuses(autoPolicy)).toEqual(['paused', 'pending', 'running', 'suspended']);
@@ -500,7 +497,7 @@ describe('durable agent snapshot-persistence policy (issue #23915)', () => {
       // The pinned policy persists exactly the full active set — the user
       // predicate (which only allowed `suspended`) had no effect, and no
       // terminal status is persisted either.
-      const pinned = (eventedAgent as any).resolveShouldPersistSnapshot() as ShouldPersistSnapshotFn;
+      const pinned = eventedAgent.getWorkflow().options.shouldPersistSnapshot!;
       expect(persistedStatuses(pinned)).toEqual(['paused', 'pending', 'running', 'suspended']);
       expect(userPredicate({ workflowStatus: 'running', stepResults: {} })).toBe(false);
     });

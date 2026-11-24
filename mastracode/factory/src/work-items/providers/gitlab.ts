@@ -16,6 +16,8 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     'headBranch',
     'baseBranch',
     'requestedReviewers',
+    // A pull request closing several issues: the cards linked to it besides the one holding it.
+    'closesWorkItemIds',
   ],
   key: (source, metadata) => {
     if (source.type === 'pull-request') {
@@ -30,4 +32,6 @@ export const gitlabWorkItemAdapter = externalAdapter('gitlab', {
     return typeof metadata.gitlabIssueIid === 'number' ? `#${metadata.gitlabIssueIid}` : null;
   },
   state: mergedState,
+  // The project's full path, subgroups included: `acme/platform/api` from `acme/platform/api#3` or `…!7`.
+  repository: ({ key }) => (key ? (/^([^#!]+\/[^#!]+)[#!]\d+$/.exec(key)?.[1] ?? null) : null),
 });

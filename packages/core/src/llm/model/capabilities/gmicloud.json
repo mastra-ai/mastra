@@ -20,6 +20,7 @@
     "deepseek-ai/DeepSeek-V4-Flash",
     "deepseek-ai/DeepSeek-V4-Pro",
     "moonshotai/Kimi-K2.6",
+    "openai/gpt-5.5",
     "zai-org/GLM-5-FP8",
     "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
@@ -35,11 +36,17 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "anthropic/claude-sonnet-4.6": [
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "anthropic/claude-opus-4.6": [
       {
         "type": "budget_tokens",
         "min": 1024,
-        "max": 63999
+        "max": 127999
       }
     ],
     "anthropic/claude-opus-4.7": [
@@ -54,17 +61,11 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "anthropic/claude-opus-4.6": [
+    "anthropic/claude-sonnet-4.6": [
       {
         "type": "budget_tokens",
         "min": 1024,
-        "max": 127999
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "max": 63999
       }
     ],
     "zai-org/GLM-5.2-FP8": [

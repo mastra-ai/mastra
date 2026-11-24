@@ -68,14 +68,20 @@ function selectedKeys(rows: SpanQueryIdentity[], values: unknown[]): string {
     .join(' OR ');
 }
 
+function sortColumn(plan: TrustedSpanQueryPlan): string {
+  const column = `s."${plan.orderBy.field}"`;
+  return plan.orderBy.field === 'model' || plan.orderBy.field === 'provider' ? `${column} COLLATE "C"` : column;
+}
+
 function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   if (!plan.cursor) return 'TRUE';
   const cursor = plan.cursor;
   const { past: terms, level } = keysetSortBounds(
-    `s."${plan.orderBy.field}"`,
+    sortColumn(plan),
     plan.orderBy.direction,
     cursor.sortValue,
     values,
+    plan.orderBy.field === 'model' || plan.orderBy.field === 'provider',
   );
   const equal = [level];
   for (const key of identityFields) {
@@ -155,9 +161,9 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   const after = afterCursor(plan, values);
   values.push(plan.limit + 1);
   const text = `WITH ${ctes.join(', ')}
-  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
+  SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version', 'model', 'provider'].map(field => `s."${field}"`).join(', ')}
   FROM selected s WHERE ${after}
-  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityOrder}
+  ORDER BY ${sortColumn(plan)} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityOrder}
   LIMIT $${values.length}`;
   return { text, values };
 }
@@ -189,7 +195,7 @@ function toSpanQueryPayload(row: Record<string, unknown>): SpanQueryPayload {
   };
 }
 
-type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt' | 'model' | 'provider'> & {
+type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
   startedAt: Date;
   endedAt: Date;
   version: string;
@@ -215,6 +221,9 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
           ...row
         }) => ({
           ...row,
+          ...((plan.orderBy.field === 'model' || plan.orderBy.field === 'provider') && {
+            cursorSortValue: row[plan.orderBy.field],
+          }),
           ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
           ...(timeToFirstTokenSupported && { timeToFirstTokenMs }),
           ...(spanQueryOutcomeFieldsSupported && { outcome, stopReason }),
@@ -241,7 +250,7 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       // Stored previews, plus the payload only where its preview is NULL (a row written before the
       // preview columns existed), so new rows never read their payloads here. Model and provider
       // fall back to span attributes for rows written before their columns existed; that fallback
-      // is returned, never filtered on.
+      // is returned, never filtered or sorted on.
       const payloadRows = await tx.any<
         SpanQueryIdentity &
           Record<string, unknown> & {

@@ -238,8 +238,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * These run instead of LLM calls in processOutputStream to eliminate
    * per-chunk API costs and latency.
    */
+  private static readonly EMAIL_CONTINUATION = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/y;
+
   private static readonly PII_PATTERNS: Record<string, RegExp> = {
-    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    // The lookbehind keeps a long local-part run from being rescanned at every
+    // offset; EMAIL_CONTINUATION picks up an address that starts where one ended.
+    email: /(?<![a-zA-Z0-9._%+-])[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
     phone: /(?:\+?\d{1,3}[-.\ ]?)?\(?\d{3}\)?[-.\ ]?\d{3}[-.\ ]?\d{4}/g,
     'credit-card': /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
     ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
@@ -766,6 +770,19 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           start: match.index,
           end: match.index + match[0].length,
         });
+        if (type !== 'email') continue;
+        const continuation = PIIDetector.EMAIL_CONTINUATION;
+        continuation.lastIndex = pattern.lastIndex;
+        while ((match = continuation.exec(content)) !== null) {
+          detections.push({
+            type,
+            value: match[0],
+            confidence: 1.0,
+            start: match.index,
+            end: match.index + match[0].length,
+          });
+          pattern.lastIndex = continuation.lastIndex;
+        }
       }
     }
 
@@ -1018,10 +1035,12 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
-    let emitEnd = Math.min(
-      combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
-      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
-    );
+    // Walk back over the unfinished word, at most MAX_WORD_HOLD characters, instead of
+    // searching with /\S*$/, which is quadratic on long runs of non-whitespace.
+    const wordHoldStart = Math.max(0, combined.length - PIIDetector.MAX_WORD_HOLD);
+    let wordStart = combined.length;
+    while (wordStart > wordHoldStart && /\S/.test(combined[wordStart - 1]!)) wordStart--;
+    let emitEnd = Math.min(combined.length - PIIDetector.REGEX_CARRYOVER_SIZE, wordStart);
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;

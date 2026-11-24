@@ -62,11 +62,10 @@ describe('useLeavingNodes', () => {
     });
   });
 
-  it('glides, resizes and fades every node over one 700ms ease-in-out transition', () => {
+  it('glides, resizes and fades every node over the transition a leaving page waits out', () => {
     for (const property of ['transform', 'width', 'height', 'opacity']) {
       expect(css).toContain(`${property} var(--knowledge-graph-transition)`);
     }
-    expect(css).toContain('--knowledge-graph-transition: 700ms cubic-bezier(0.65, 0, 0.35, 1)');
-    expect(KNOWLEDGE_GRAPH_TRANSITION_MS).toBe(700);
+    expect(css).toContain(`--knowledge-graph-transition: ${KNOWLEDGE_GRAPH_TRANSITION_MS}ms `);
   });
 });

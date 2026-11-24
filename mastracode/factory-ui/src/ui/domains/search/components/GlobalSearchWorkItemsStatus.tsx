@@ -1,23 +1,9 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { RefreshCw } from 'lucide-react';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
-// Session titles come from board cards, so only a board failure downgrades them to branch names
-function failureMessage(boardFailed: boolean, intakeFailed: boolean): string {
-  if (!boardFailed) return 'Intake could not be loaded.';
-  if (!intakeFailed) return 'Board cards could not be loaded. Sessions still show, titled by branch.';
-  return 'Board cards and intake could not be loaded. Sessions still show, titled by branch.';
-}
-
-export function GlobalSearchWorkItemsStatus({
-  boardFailed,
-  intakeFailed,
-  onRetry,
-}: {
-  boardFailed: boolean;
-  intakeFailed: boolean;
-  onRetry: () => void;
-}) {
-  if (!boardFailed && !intakeFailed) return null;
+// Session titles come from board cards, so a board failure downgrades them to branch names.
+export function GlobalSearchWorkItemsStatus({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  if (!failed) return null;
 
   return (
     <div className="px-3 py-2">
@@ -25,11 +11,11 @@ export function GlobalSearchWorkItemsStatus({
         variant="warning"
         action={
           <Notice.Button onClick={onRetry}>
-            Retry <RefreshCw />
+            Retry <IconArrowRotateClockwise />
           </Notice.Button>
         }
       >
-        {failureMessage(boardFailed, intakeFailed)}
+        Board cards could not be loaded. Sessions still show, titled by branch.
       </Notice>
     </div>
   );

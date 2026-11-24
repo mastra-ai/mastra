@@ -301,6 +301,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       settingsPath: undefined,
       coAuthor: { name: 'mastracode' },
       subagents: [],
+      planApprovalStartsGoal: false,
     });
     expect(lifecycleMocks.resolveModelDefaults).toHaveBeenCalledWith(settings, []);
     expect(lifecycleMocks.runMC).toHaveBeenCalledWith(

@@ -26,7 +26,7 @@ export function JiraSourceRoutes({
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const unbound = factories.filter(factory => !bindings.some(binding => binding.factoryProjectId === factory.id));
-  const labelledWithBoard = bindings.filter(binding => binding.board !== null && !takesAllIssues(binding));
+  const labelled = bindings.filter(binding => !takesAllIssues(binding));
 
   const settle = (factoryProjectId: string | null, error?: unknown) =>
     setErrors(current => {
@@ -45,10 +45,8 @@ export function JiraSourceRoutes({
   const remove = useDeleteIntakeBindingMutation({ onSaved, onFailed });
   const add = useAddIntakeBindingMutation({ onSaved, onFailed });
 
-  const route = (factoryProjectId: string, change: { board?: string | null; labels?: string[] | null }) => {
-    const current = bindings.find(binding => binding.factoryProjectId === factoryProjectId);
-    save.mutate({ integrationId: 'jira', sourceId, factoryProjectId, board: current?.board ?? null, ...change });
-  };
+  const route = (factoryProjectId: string, labels: string[] | null) =>
+    save.mutate({ integrationId: 'jira', sourceId, factoryProjectId, labels });
 
   const unroute = (factoryProjectId: string) => remove.mutate({ integrationId: 'jira', sourceId, factoryProjectId });
 
@@ -60,11 +58,10 @@ export function JiraSourceRoutes({
           project={project}
           factory={factoryName(factories, binding.factoryProjectId)}
           binding={binding}
-          othersTakeLabels={labelledWithBoard.some(other => other.factoryProjectId !== binding.factoryProjectId)}
+          othersTakeLabels={labelled.some(other => other.factoryProjectId !== binding.factoryProjectId)}
           error={errors[binding.factoryProjectId]}
-          onBoardChange={board => route(binding.factoryProjectId, { board })}
-          onLabelsChange={labels => route(binding.factoryProjectId, { labels })}
-          onTakeAllIssues={() => route(binding.factoryProjectId, { labels: null })}
+          onLabelsChange={labels => route(binding.factoryProjectId, labels)}
+          onTakeAllIssues={() => route(binding.factoryProjectId, null)}
           onRemove={() => unroute(binding.factoryProjectId)}
         />
       ))}
@@ -75,9 +72,9 @@ export function JiraSourceRoutes({
           anotherTakesAll={bindings.some(takesAllIssues)}
           errors={errors}
           adding={add.isPending}
-          onAdd={({ factoryProjectId, board, labels }, onAdded) =>
+          onAdd={({ factoryProjectId, labels }, onAdded) =>
             add.mutate(
-              { integrationId: 'jira', sourceId, factoryProjectId, board, labels: labels.length > 0 ? labels : null },
+              { integrationId: 'jira', sourceId, factoryProjectId, labels: labels.length > 0 ? labels : null },
               { onSuccess: onAdded },
             )
           }

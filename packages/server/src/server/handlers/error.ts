@@ -58,6 +58,7 @@ const RUN_CLAIM_CONFLICT_CODES = new Set([
   'AGENT_RUN_ID_ALREADY_CLAIMED',
   'WORKFLOW_RUN_NOT_SUSPENDED',
   'AGENT_RESUME_RUN_NOT_SUSPENDED',
+  'AGENT_RESUME_ABORTED_RUN',
   'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
   'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
 ]);
@@ -192,7 +193,8 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  if (isSchemaValidationError(error)) {
+  // A Knowledge list cursor the store cannot decode is a bad request, not a store fault.
+  if (isSchemaValidationError(error) || (error instanceof Error && error.name === 'KnowledgeInvalidCursorError')) {
     throw new HTTPException(400, {
       message: error.message,
       stack: error.stack,

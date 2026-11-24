@@ -10,6 +10,8 @@ import {
   resolveClient,
   validateResourceId,
 } from './client.js';
+import { connectCodeMode } from './code-mode.js';
+import type { CodeModeOptions, ConnectCodeMode } from './code-mode.js';
 import { buildConnectPromptTool, CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
@@ -18,7 +20,7 @@ import {
   listConnectionsToolKey,
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { PROVIDERS } from './registry.js';
+import { PROVIDERS, registrationIntegrationIds } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
@@ -191,6 +193,23 @@ export interface ToolsResolver extends Promise<ResolvedToolsRecord> {
    * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
+  /**
+   * Exposes these tools through Code Mode: the agent writes one TypeScript
+   * program that calls them as `external_*` functions, instead of calling
+   * each tool in its own step. Returns per-request `tools` and `instructions`
+   * functions to pass to the agent. Tools that need the user's approval, and
+   * `request_connection`, stay direct agent tools because the agent loop
+   * pauses for them.
+   *
+   * ```ts
+   * const code = tools().codeMode({ sandbox })
+   * new Agent({
+   *   instructions: async ctx => ['You are helpful.', await code.instructions(ctx)],
+   *   tools: code.tools,
+   * })
+   * ```
+   */
+  codeMode(options?: CodeModeOptions): ConnectCodeMode;
 }
 
 /**
@@ -547,7 +566,7 @@ async function loadSnapshotInputs(
   }
 
   const { overrides, only } = state.normalizedProviders;
-  const checkedIn = new Set(PROVIDERS.map(registration => registration.integrationId));
+  const checkedIn = new Set(PROVIDERS.flatMap(registrationIntegrationIds));
   const needsCatalog = connections.some(
     connection =>
       connection.status === 'active' &&
@@ -857,6 +876,7 @@ export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
       },
       disconnect: (): Promise<void> => disconnectState(state),
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -980,6 +1000,7 @@ function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions |
         return closing;
       },
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -1044,6 +1065,7 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
       },
       disconnect: (): Promise<void> => base.disconnect(),
       with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -1172,9 +1194,24 @@ function buildRequests(
 ): NormalizedRequest[] {
   const { overrides, only } = providers;
   const registrations = new Map(PROVIDERS.map(registration => [registration.integrationId, registration]));
+  // Alias catalog ids (e.g. `gitlab-self-hosted`) resolve through their
+  // checked-in registration, so options must be set on that registration.
+  const aliasOwners = new Map(
+    PROVIDERS.flatMap(registration =>
+      (registration.aliasIntegrationIds ?? []).map(alias => [alias, registration.integrationId] as const),
+    ),
+  );
+  const misplaced = Object.keys(overrides).filter(integrationId => aliasOwners.has(integrationId));
+  if (misplaced.length > 0) {
+    const alias = misplaced[0]!;
+    const owner = aliasOwners.get(alias)!;
+    throw new MastraConnectConfigError(
+      `'${alias}' connections use the '${owner}' toolset; configure them under providers.${owner}.`,
+    );
+  }
   const catalogIds = new Set(catalog.map(integration => integration.id));
   for (const integration of catalog) {
-    if (!integration.capabilities.mcp) continue;
+    if (!integration.capabilities.mcp || aliasOwners.has(integration.id)) continue;
     registrations.set(integration.id, {
       integrationId: integration.id,
       envVar: connectionIdEnvVar(integration.id),
@@ -1248,7 +1285,7 @@ async function mapTools(
     const integrationId = request.registration.integrationId;
     let providerTools: ToolsInput | undefined;
     try {
-      const candidates = byIntegrationId.get(integrationId) ?? [];
+      const candidates = registrationIntegrationIds(request.registration).flatMap(id => byIntegrationId.get(id) ?? []);
       if (candidates.length === 0) continue;
       const resolution = resolveProviderConnection(
         {

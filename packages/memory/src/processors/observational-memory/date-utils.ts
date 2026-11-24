@@ -122,7 +122,8 @@ const YEAR = String.raw`(?:19|20|21)\d{2}(?!\d)`;
 const MERIDIEM = String.raw`(?:[AaPp]\.[Mm]\.|[AaPp][Mm]\b)`;
 const TIME = String.raw`(?:,?\s+(?:at\s+)?\d{1,2}:\d{2}(?:\s*${MERIDIEM})?|\s+at\s+\d{1,2}\s*${MERIDIEM})`;
 const QUALIFIER = String.raw`(?:(?:early|mid|late)[- ](?:to[- ](?:early|mid|late)[- ])?)`;
-const RANGE_SEP = String.raw`(?:\s*[–—]\s*|\s*-\s*|\s+(?:to|through|until)\s+)`;
+// En and em dash, escaped because rolldown's `charset: 'ascii'` can't rewrite `String.raw` text.
+const RANGE_SEP = String.raw`(?:\s*[\u2013\u2014]\s*|\s*-\s*|\s+(?:to|through|until)\s+)`;
 
 /**
  * Dates written into observation text that carry their own year, longest forms first:

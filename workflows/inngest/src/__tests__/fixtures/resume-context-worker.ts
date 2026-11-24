@@ -20,7 +20,7 @@ if (!dbUrl || !agentId || !outDir) {
   process.exit(1);
 }
 
-const { mastra, inngest } = buildResumeContextAgent({ dbUrl, agentId, inngestPort, outDir });
+const { mastra, inngest } = buildResumeContextAgent({ dbUrl, agentId, inngestPort, outDir, role: 'worker' });
 
 await connect({ mastra, inngest });
 console.log('[worker] ready');

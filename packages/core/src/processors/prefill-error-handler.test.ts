@@ -258,3 +258,54 @@ describe('PrefillErrorHandler', () => {
     expect(handler.name).toBe('Prefill Error Handler');
   });
 });
+
+// Anthropic refuses a trailing assistant turn under structured output on every Claude version,
+// including models before 4.6 that TrailingAssistantGuard skips. (#28635)
+describe('PrefillErrorHandler: Anthropic output-format prefill rejection', () => {
+  const OUTPUT_FORMAT_PREFILL_ERROR =
+    'Your API request included an `assistant` message in the final position, which would pre-fill the `assistant` response. When using output format, pre-filling the `assistant` response is not supported.';
+
+  function createAnthropicBadRequest(message: string, bodyMessage = message) {
+    return new APICallError({
+      message,
+      url: 'https://api.anthropic.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        type: 'error',
+        error: { type: 'invalid_request_error', message: bodyMessage },
+      }),
+      isRetryable: false,
+    });
+  }
+
+  it('retries with a continue reminder when Anthropic rejects the prefill under output format', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({ error: createAnthropicBadRequest(OUTPUT_FORMAT_PREFILL_ERROR) });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    const lastMessage = args.messageList.get.all.db().at(-1)!;
+    expect(lastMessage.role).toBe('signal');
+    expect(lastMessage.content.parts).toEqual([expect.objectContaining({ type: 'text', text: 'continue' })]);
+  });
+
+  it('retries when the output-format rejection is only in the response body', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({ error: createAnthropicBadRequest('Bad Request', OUTPUT_FORMAT_PREFILL_ERROR) });
+
+    await expect(handler.processAPIError(args)).resolves.toEqual({ retry: true });
+  });
+
+  it('does not retry an unrelated Anthropic 400', async () => {
+    const handler = new PrefillErrorHandler();
+    const args = makeArgs({
+      error: createAnthropicBadRequest('messages.1.content.0.text: text content blocks must be non-empty'),
+    });
+    const messageCountBefore = args.messageList.get.all.db().length;
+
+    await expect(handler.processAPIError(args)).resolves.toBeUndefined();
+    expect(args.messageList.get.all.db()).toHaveLength(messageCountBefore);
+  });
+});

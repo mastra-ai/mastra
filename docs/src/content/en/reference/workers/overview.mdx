@@ -40,7 +40,7 @@ Setting `MASTRA_WORKERS` to any value, including `"false"`, also makes `createWo
 
 The base URL of the API server, used by the orchestration worker to execute workflow steps remotely. Required when the orchestration worker runs in a separate process from the API.
 
-```
+```bash
 MASTRA_STEP_EXECUTION_URL=http://api:4111/api
 ```
 
@@ -48,7 +48,7 @@ Use HTTPS URLs in production. See [Security recommendations](/docs/auth/workers#
 
 The orchestration worker sends step execution requests to:
 
-```
+```text
 ${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
 ```
 
@@ -56,7 +56,7 @@ ${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
 
 A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/auth/workers).
 
-```
+```bash
 MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
 ```
 
@@ -75,7 +75,7 @@ Processes workflow events from the PubSub `workflows` topic. Requires a pull-cap
 Polls storage for due cron schedules and publishes a `workflow.start` event to the `workflows` topic for each fire. The orchestration worker runs default-engine workflows in-process and evented workflows step by step.
 
 - **Name**: `scheduler`
-- **Single instance only**: Run exactly one instance to avoid duplicate fires
+- **Multiple instances**: Instances that share storage claim each fire atomically, so only one instance claims each fire. The scheduler makes up to three publish attempts per fire (two retries), so a retry after a lost broker response can publish the same fire again. A fire whose publish attempts all fail isn't replayed automatically.
 
 ### BackgroundTaskWorker
 

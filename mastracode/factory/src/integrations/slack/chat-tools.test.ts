@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { createServer, get } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import { Mastra } from '@mastra/core';
@@ -41,9 +41,11 @@ const workspace = {
       { ts: '1700000100.000100', user: 'USAM', text: 'The staging deploy is failing on migrations' },
       { ts: '1700000050.000050', user: 'UALEX', text: 'Older: the STAGING deploy needs a rerun' },
     ],
-  } as Record<string, Array<Record<string, string>>>,
+  } as Record<string, Array<Record<string, unknown>>>,
 };
 
+const jpeg = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAB//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AZn//2Q==', 'base64');
+let fileBytes = jpeg;
 let calls: Array<{ method: string; args: Record<string, string> }> = [];
 let server: ReturnType<typeof createServer>;
 let apiUrl = '';
@@ -59,9 +61,14 @@ function answer(method: string, args: Record<string, string>): Record<string, un
   switch (method) {
     case 'auth.test':
       return { team_id: TEAM, user_id: 'UBOT', bot_id: 'BBOT', url: 'https://mastra.slack.com/' };
+    case 'conversations.replies': {
+      const messages = workspace.history[args.channel!] ?? [];
+      if (!args.ts || !messages.some(message => message.ts === args.ts)) return { messages: [] };
+      return { messages: messages.filter(message => message.ts === args.oldest && args.inclusive === 'true') };
+    }
     case 'conversations.history': {
       const channel = workspace.channels.find(c => c.id === args.channel);
-      if (!channel?.is_member) return { ok: false, error: 'not_in_channel' };
+      if (!channel?.is_member && args.channel !== 'D1') return { ok: false, error: 'not_in_channel' };
       // Newest first, at most 2 per page (Slack may return fewer than asked), so reads have to follow cursors.
       const all = workspace.history[args.channel!] ?? [];
       const start = Number(args.cursor || 0);
@@ -76,6 +83,13 @@ function answer(method: string, args: Record<string, string>): Record<string, un
       return { channel: args.channel, ts: '1800000000.000001', message: { text: args.text } };
     case 'conversations.open':
       return { channel: { id: `D-${args.users}` } };
+    case 'conversations.info': {
+      const id = args.channel!;
+      if (id.startsWith('D')) return { channel: { id, is_im: true } };
+      const channel = workspace.channels.find(c => c.id === id);
+      if (!channel || (channel.is_private && !channel.is_member)) return { ok: false, error: 'channel_not_found' };
+      return { channel: { ...channel, is_channel: true } };
+    }
     case 'conversations.list': {
       const { items, response_metadata } = page(workspace.channels, args.cursor);
       return { channels: items, response_metadata };
@@ -95,6 +109,12 @@ function answer(method: string, args: Record<string, string>): Record<string, un
 
 beforeAll(async () => {
   server = createServer((req, res) => {
+    if (req.url === '/api/files/wallpaper') {
+      calls.push({ method: 'file.download', args: { authorization: req.headers.authorization ?? '' } });
+      res.setHeader('content-type', 'image/jpeg');
+      res.end(fileBytes);
+      return;
+    }
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
@@ -113,16 +133,17 @@ afterAll(() => server.close());
 
 beforeEach(() => {
   calls = [];
+  fileBytes = jpeg;
 });
 
-type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any> };
+type Tool = { execute: (input: Record<string, unknown>, options: Record<string, unknown>) => Promise<any>; toModelOutput?: (output: any) => unknown };
 
 /**
  * A session linked to the Slack thread C1/171.1 and woken without a Slack
  * message (as web prompts, GitHub events and schedules are), so the tools find
  * their thread through the session's stored channel coordinates.
  */
-async function slackSession(settings?: Partial<SlackToolSettings>) {
+async function slackSession(settings?: Partial<SlackToolSettings>, externalThreadId = 'slack:C1:171.1') {
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, logger: false });
   const memory = await storage.getStore('memory');
@@ -133,10 +154,20 @@ async function slackSession(settings?: Partial<SlackToolSettings>) {
       title: 'session',
       createdAt: new Date(),
       updatedAt: new Date(),
-      metadata: { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' },
+      metadata: { channel_platform: 'slack', channel_externalThreadId: externalThreadId },
     },
   });
-  const adapter = createSlackAdapter({ botToken: 'xoxb-test', signingSecret: 'secret', apiUrl });
+  const adapter = createSlackAdapter({
+    botToken: 'xoxb-test', signingSecret: 'secret', apiUrl,
+    fileTransport: (url, _signal, headers) => {
+      if (String(url) !== 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg') {
+        throw new Error(`Unexpected attachment URL: ${url}`);
+      }
+      return new Promise((resolve, reject) => {
+        get(`${apiUrl}files/wallpaper`, { headers }, resolve).on('error', reject);
+      });
+    },
+  });
   const channels = new AgentControllerChannels({ adapters: { slack: { adapter } } });
   channels.__setController({ id: 'mastra-code', getMastra: () => mastra } as any);
   await channels.initialize(mastra);
@@ -179,6 +210,211 @@ const sent = (method: string) => calls.filter(c => c.method === method).map(c =>
 const wide = { channels: 'all', directMessages: 'anyone' } as const;
 
 describe('Slack tools on a Factory session, by default', () => {
+  it('downloads the original bytes of a private image in its channel without exposing the bot token', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: jpeg.length,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run, tool } = await slackSession();
+      const result = await run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      });
+      expect(Buffer.from(result.base64, 'base64')).toEqual(jpeg);
+      expect(tool('downloadSlackAttachment')!.toModelOutput?.(result)).toEqual({
+        type: 'content', value: [{ type: 'image-data', data: result.base64, mediaType: 'image/jpeg' }],
+      });
+      expect(result).toMatchObject({ name: 'midnight-9.jpg', mimeType: 'image/jpeg' });
+      expect(sent('file.download')).toEqual([{ authorization: 'Bearer xoxb-test' }]);
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C2:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('outside the channels');
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:DOTHER:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow("someone else's direct message");
+      (workspace.history.C1![0]!.files as Array<{ size: number }>)[0]!.size = 9 * 1024 * 1024;
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('exceeds 8 MiB');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects mislabeled image bytes before sending them to the model', async () => {
+    fileBytes = Buffer.from('not an image');
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: fileBytes.length,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Attachment bytes do not match the declared image format.');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects truncated PNG and altered WebP headers before model output', async () => {
+    const images = [
+      { mimeType: 'image/png', bytes: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) },
+      { mimeType: 'image/webp', bytes: Buffer.from('UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAA=', 'base64') },
+    ];
+    images[1]!.bytes[0] |= 0x80;
+    try {
+      const { run } = await slackSession();
+      for (const image of images) {
+        fileBytes = image.bytes;
+        workspace.history.C1![0]!.files = [{
+          id: 'F1', name: 'image', mimetype: image.mimeType, size: fileBytes.length,
+          url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+        }];
+        await expect(run('downloadSlackAttachment', {
+          threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+        })).rejects.toThrow('Attachment bytes do not match the declared image format.');
+      }
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects understated downloaded image size before model output', async () => {
+    fileBytes = Buffer.concat([jpeg.subarray(0, -2), Buffer.alloc(3_750_001 - jpeg.length), jpeg.subarray(-2)]);
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'large.jpg', mimetype: 'image/jpeg', size: jpeg.length,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('5 MB encoded model input limit');
+      expect(sent('file.download')).toHaveLength(1);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('accepts PNG and WebP bytes matching their declared formats', async () => {
+    const images = [
+      { mimeType: 'image/png', name: 'pixel.png', base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABAQAAAAA3bvkkAAAACklEQVQI12NoAAAAggCB3UNq9AAAAABJRU5ErkJggg==' },
+      { mimeType: 'image/webp', name: 'pixel.webp', base64: 'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAA=' },
+    ];
+    try {
+      const { run, tool } = await slackSession();
+      for (const image of images) {
+        fileBytes = Buffer.from(image.base64, 'base64');
+        workspace.history.C1![0]!.files = [{
+          id: 'F1', name: image.name, mimetype: image.mimeType, size: fileBytes.length,
+          url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+        }];
+        const result = await run('downloadSlackAttachment', {
+          threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+        });
+        expect(Buffer.from(result.base64, 'base64')).toEqual(fileBytes);
+        expect(tool('downloadSlackAttachment')!.toModelOutput?.(result)).toEqual({
+          type: 'content', value: [{ type: 'image-data', data: image.base64, mediaType: image.mimeType }],
+        });
+      }
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('inspects images from its own top-level DM without leaking access to another DM', async () => {
+    workspace.history.D1 = [{
+      ts: '1700000400.000400', user: 'USAM', text: 'Look at this', files: [{
+        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: jpeg.length,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+      }],
+    }];
+    try {
+      const { run } = await slackSession(undefined, 'slack:D1:');
+      const history = await run('fetchChannelMessages', { channelId: 'slack:D1', limit: 5, direction: 'backward' });
+      expect(history.messages[0].id).toBe('1700000400.000400');
+      const result = await run('downloadSlackAttachment', {
+        threadId: 'slack:D1:', messageId: '1700000400.000400', attachmentIndex: 0,
+      });
+      expect(Buffer.from(result.base64, 'base64')).toEqual(jpeg);
+      expect(sent('conversations.replies')[0]).toMatchObject({ channel: 'D1', ts: '1700000400.000400' });
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:DOTHER:', messageId: '1700000400.000400', attachmentIndex: 0,
+      })).rejects.toThrow("someone else's direct message");
+    } finally {
+      delete workspace.history.D1;
+    }
+  });
+
+  it('rejects images without a reported size before downloading', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg',
+      url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Attachment size is unavailable');
+      expect(sent('file.download')).toHaveLength(0);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('rejects image formats the model cannot inspect and oversized encoded images before downloading', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F1', name: 'diagram.svg', mimetype: 'image/svg+xml', size: 20,
+      url_private: 'https://files.slack.com/files-pri/T1-F1/diagram.svg',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Unsupported image format');
+      expect(sent('file.download')).toHaveLength(0);
+
+      workspace.history.C1![0]!.files = [{
+        id: 'F1', name: 'animated.gif', mimetype: 'image/gif', size: 20,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/animated.gif',
+      }];
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Unsupported image format');
+      expect(sent('file.download')).toHaveLength(0);
+
+      workspace.history.C1![0]!.files = [{
+        id: 'F1', name: 'midnight-9.jpg', mimetype: 'image/jpeg', size: 3_750_001,
+        url_private: 'https://files.slack.com/files-pri/T1-F1/midnight-9.jpg',
+      }];
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('5 MB encoded model input limit');
+      expect(sent('file.download')).toHaveLength(0);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
+  it('refuses non-image attachments before downloading or putting bytes in model context', async () => {
+    workspace.history.C1![0]!.files = [{
+      id: 'F2', name: 'report.pdf', mimetype: 'application/pdf', size: 20,
+      url_private: 'https://files.slack.com/files-pri/T1-F2/report.pdf',
+    }];
+    try {
+      const { run } = await slackSession();
+      await expect(run('downloadSlackAttachment', {
+        threadId: 'slack:C1:1700000300.000300', messageId: '1700000300.000300', attachmentIndex: 0,
+      })).rejects.toThrow('Only image attachments can be inspected');
+      expect(sent('file.download')).toHaveLength(0);
+    } finally {
+      delete workspace.history.C1![0]!.files;
+    }
+  });
+
   it('reads and posts in its own channel', async () => {
     const { run } = await slackSession();
 
@@ -194,7 +430,7 @@ describe('Slack tools on a Factory session, by default', () => {
     const { run } = await slackSession();
 
     await expect(run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' })).rejects.toThrow(
-      'outside the channels this session can use: slack:C1',
+      'Channels this conversation can use: slack:C1',
     );
     await expect(run('fetchThread', { threadId: 'slack:C2:1700000200.000200' })).rejects.toThrow('outside the channels');
     await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'Hi' })).rejects.toThrow('outside the channels');
@@ -215,7 +451,7 @@ describe('Slack tools on a Factory session, by default', () => {
     expect(read.messages).toHaveLength(1);
     await expect(
       duringSlackEvent(chat, () => run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' })),
-    ).rejects.toThrow('outside the channels this session can use');
+    ).rejects.toThrow('outside the channels this conversation can use');
   });
 
   it("can't send DMs, but can still look people up to mention them", async () => {
@@ -238,7 +474,7 @@ describe('Slack tools on a Factory session, with access granted', () => {
     expect(sent('chat.postMessage')).toEqual([expect.objectContaining({ channel: 'C2', text: 'On it.' })]);
 
     await expect(run('fetchChannelMessages', { channelId: 'slack:C4', limit: 5, direction: 'backward' })).rejects.toThrow(
-      'outside the channels this session can use: slack:C1, slack:C2',
+      'Channels this conversation can use: slack:C1, slack:C2',
     );
   });
 
@@ -249,10 +485,10 @@ describe('Slack tools on a Factory session, with access granted', () => {
     expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
 
     await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'Hi' })).rejects.toThrow(
-      '"slack:C2" is read only for this session: it can only post in its own channel, slack:C1.',
+      '"slack:C2" is read only for this conversation: it can only post in its own channel, slack:C1.',
     );
     await expect(run('postMessage', { threadId: 'slack:C2:1700000200.000200', message: 'Hi' })).rejects.toThrow(
-      'is read only for this session',
+      'is read only for this conversation',
     );
     await run('postMessage', { threadId: 'slack:C1:171.1', message: 'Read #eng, all green.' });
     await run('postChannelMessage', { channelId: 'slack:C1', message: 'Summary of #eng: all green.' });
@@ -267,7 +503,7 @@ describe('Slack tools on a Factory session, with access granted', () => {
 
     expect(tool('sendDirectMessage')).toBeDefined();
     expect(String((tool('fetchChannelMessages') as { description?: unknown }).description)).toContain(
-      'Channels this session can use: slack:C1.',
+      'Channels this conversation can use: slack:C1.',
     );
   });
 
@@ -292,7 +528,7 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
 
     // A woken run has nobody around to approve, so posting must not wait for one.
-    expect((tool('postChannelMessage') as { needsApproval?: unknown }).needsApproval).toBe(false);
+    expect((tool('postChannelMessage') as { requireApproval?: unknown }).requireApproval).toBeFalsy();
     await run('postChannelMessage', { channelId: 'slack:C2', message: 'Thanks, closing this out.' });
     expect(sent('chat.postMessage')).toEqual([
       expect.objectContaining({ channel: 'C2', text: 'Thanks, closing this out.' }),
@@ -309,7 +545,7 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
       "someone else's direct message",
     );
     await expect(run('fetchChannelMessages', { channelId: 'D-USAM', limit: 5 })).rejects.toThrow(
-      "someone else's direct message",
+      "isn't a full chat id",
     );
     // Bare ids and thread ids must be checked as the channel actually read.
     const search = await run('searchMessages', {
@@ -342,12 +578,12 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     expect(sent('chat.postMessage')).toEqual([]);
   });
 
-  it("can't read a channel the app isn't in: Slack refuses it", async () => {
+  it("can't read a private channel the app isn't in: Slack refuses it", async () => {
     const { run } = await slackSession(wide);
 
     await expect(
       run('fetchChannelMessages', { channelId: 'slack:C3', limit: 5, direction: 'backward' }),
-    ).rejects.toThrow(/not_in_channel/);
+    ).rejects.toThrow(/channel_not_found/);
   });
 
   it('finds channels and people by name across every page Slack returns', async () => {
@@ -416,13 +652,13 @@ describe('Slack tools on a Factory session, with every channel and DMs granted',
     const result = await run('searchMessages', { query: 'deploy', channelIds: ['slack:C3', 'slack:C1'] });
 
     expect(result.matches.map((m: { channelId: string }) => m.channelId)).toEqual(['slack:C1']);
-    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'not_in_channel' }]);
+    expect(result.errors).toEqual([{ channelId: 'slack:C3', error: 'channel_not_found' }]);
   });
 
   it('DMs anyone in the workspace', async () => {
     const { run } = await slackSession(wide);
 
-    await run('sendDirectMessage', { userId: 'USAM', text: 'Your deploy is green.' });
+    await run('sendDirectMessage', { userId: 'USAM', message: { markdown: 'Your deploy is green.' } });
 
     expect(sent('conversations.open')).toEqual([expect.objectContaining({ users: 'USAM' })]);
     expect(sent('chat.postMessage')).toEqual([

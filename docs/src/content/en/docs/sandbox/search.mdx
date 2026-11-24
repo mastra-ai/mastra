@@ -220,6 +220,31 @@ await workspace.index('/docs/api.md', apiDocContent, {
 
 Manual indexing works well for database records and API responses, or when you need to preprocess, chunk, or annotate content yourself.
 
+### Index application content
+
+A workspace needs a `filesystem`, `sandbox`, or `skills` provider even when your application reads content and passes it to `workspace.index()`. Without one, the `Workspace` constructor throws `Workspace requires at least a filesystem, sandbox, or skills`.
+
+Configuring a filesystem doesn't mean the agent should use it. By default, an agent with this workspace also gets file tools such as `mastra_workspace_read_file` and `mastra_workspace_write_file`. To expose only search, disable all workspace tools and re-enable the search tool:
+
+```typescript title="src/mastra/workspaces.ts"
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  bm25: true,
+  tools: {
+    enabled: false,
+    [WORKSPACE_TOOLS.SEARCH.SEARCH]: { enabled: true },
+  },
+})
+
+for (const document of documents) {
+  await workspace.index(document.id, document.content)
+}
+```
+
+Your application keeps calling `workspace.index()` directly. The tool settings only control what the agent can call.
+
 ### Keep files and the index in sync
 
 Filesystem and index mutations are independent. Writing, editing, or deleting a file doesn't update its indexed content, and `workspace.index()` doesn't read or change a file.

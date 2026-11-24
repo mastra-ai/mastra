@@ -2141,6 +2141,34 @@ describe('Stored Agents Handlers', () => {
       expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
     });
 
+    it('still reports success when unregistering the deleted agent workspace fails', async () => {
+      mockAgentsData.set('delete-test', {
+        id: 'delete-test',
+        name: 'To Be Deleted',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      const warn = vi.fn();
+      const removeWorkspace = vi.fn().mockRejectedValue(new Error('workspace registry unavailable'));
+      Object.assign(mockMastra, {
+        listWorkspaces: vi.fn().mockReturnValue({ 'inline-abc': { source: 'agent', agentId: 'delete-test' } }),
+        removeWorkspace,
+        getLogger: () => ({ warn }),
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'delete-test',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
+      expect(removeWorkspace).toHaveBeenCalledWith('inline-abc');
+      expect(mockAgentsData.has('delete-test')).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        'Failed to unregister workspace of deleted agent',
+        expect.objectContaining({ storedAgentId: 'delete-test' }),
+      );
+    });
+
     it('should throw 404 when agent does not exist', async () => {
       try {
         await DELETE_STORED_AGENT_ROUTE.handler({

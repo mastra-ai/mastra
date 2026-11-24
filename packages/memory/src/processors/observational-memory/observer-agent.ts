@@ -1394,7 +1394,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 }
 
 /** Truncate a string to maxLen characters, appending a note if truncated. */
-function maybeTruncate(str: string, maxLen?: number): string {
+function maybeTruncate(str: unknown, maxLen?: number): string {
+  if (typeof str !== 'string') return '';
   if (!maxLen || str.length <= maxLen) return str;
   const truncated = safeSlice(str, maxLen);
   const remaining = str.length - truncated.length;
@@ -2269,7 +2270,7 @@ export function extractCurrentTask(observations: string): string | null {
  *
  * This removes:
  * - Non-critical emojis (🟡 and 🟢, keeping only 🔴)
- * - Semantic tags [label, label]
+ * - Ephemeral observation anchor IDs ([O1], [O1-N1])
  * - Arrow indicators (->)
  * - Extra whitespace
  *
@@ -2281,11 +2282,6 @@ export function optimizeObservationsForContext(observations: string): string {
   // Remove 🟡 and 🟢 emojis (keep 🔴 for critical items)
   optimized = optimized.replace(/🟡\s*/g, '');
   optimized = optimized.replace(/🟢\s*/g, '');
-
-  // Remove semantic tags like [label, label] but keep collapsed markers like [72 items collapsed - ID: b1fa]
-  // and markdown link text like [label](url) — the trailing `(?!\()` lookahead keeps the label so the
-  // link survives intact instead of collapsing to a bare, unlabelled URL.
-  optimized = optimized.replace(/\[(?![\d\s]*items collapsed)[^\]]+\](?!\()/g, '');
 
   // Remove arrow indicators
   optimized = optimized.replace(/\s*->\s*/g, ' ');

@@ -145,6 +145,12 @@ export const mcp = new MCPClient<MCPServers>({
 })
 ```
 
+The command loads your client module with `tsx` and converts schemas with `json-schema-to-typescript-lite`. `@mastra/mcp` declares both as optional peer dependencies, so install them in your project first. Without them, the command exits before loading any module and prints the install command for npm, pnpm, Yarn, and Bun:
+
+```bash npm2yarn
+npm install --save-dev tsx@4 json-schema-to-typescript-lite@15
+```
+
 Set the environment variables and authentication credentials your module needs, then run this command from your project root:
 
 ```bash npm2yarn
@@ -558,6 +564,8 @@ Intended to be passed onto an Agent definition.
 
 App-only tools, whose `_meta.ui.visibility` omits `"model"`, are left out. `listToolsets()` and `listToolDefinitions()` leave them out too.
 
+Server names and tool names can both contain `_`, so two different pairs can produce the same key. For example, server `local` with tool `x_status` and server `local_x` with tool `status` both produce `local_x_status`. The tool from the server listed later in `servers` keeps the key, and the client logs a warning that names both pairs. Rename one of the servers to keep both tools.
+
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
 ```
@@ -583,12 +591,20 @@ When called without options, the method omits only `durations`; `tools`, `errors
 
 ### `listToolsets()`
 
-Returns an object mapping namespaced tool names (in the format `serverName.toolName`) to their tool implementations.
+Returns an object that maps each server name to that server's tools. Tools keep their raw names, without a server prefix.
 Intended to be passed at runtime into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
   toolsets: await mcp.listToolsets(),
+})
+```
+
+The agent combines toolsets by tool name. When two servers expose a tool with the same name, such as `search`, only the tool from the server listed later in `servers` reaches the model, and the agent logs a warning. To keep both tools, pass the prefixed tools from `listTools()` as a single toolset:
+
+```typescript
+const res = await agent.stream(prompt, {
+  toolsets: { mcp: await mcp.listTools() }, // docs_search, tickets_search
 })
 ```
 
@@ -811,7 +827,7 @@ export const mastra = new Mastra({
 
 This is useful for connecting external MCP servers that implement the MCP Apps extension or other features to Studio without wrapping them in a Mastra `MCPServer`.
 
-### `resources` Property
+### `resources` property
 
 The `MCPClient` instance has a `resources` property that provides access to resource-related operations.
 
@@ -963,7 +979,7 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `prompts` Property
+### `prompts` property
 
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
 
@@ -1049,7 +1065,7 @@ mcpClient.prompts.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `tools` Property
+### `tools` property
 
 The `MCPClient` instance has a `tools` property for subscribing to tool list change notifications. To fetch tools, use `listTools()` or `listToolsets()`.
 
@@ -1071,7 +1087,7 @@ await mcpClient.tools.onListChanged('myWeatherServer', async () => {
 })
 ```
 
-### `progress` Property
+### `progress` property
 
 The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
 
@@ -1115,7 +1131,7 @@ Notes:
 - When `enableProgressTracking` is true, tool calls include a `progressToken` so you can correlate updates to a specific run. Servers only send progress for requests that carry a token.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
 
-### `events` Property (experimental)
+### `events` property (experimental)
 
 The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
@@ -1482,7 +1498,7 @@ for await (const event of subscription) {
 }
 ```
 
-### `tasks` Property (experimental)
+### `tasks` property (experimental)
 
 Some tools take longer than one HTTP request can stay open. A server that implements the [MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.github.io/ext-tasks/specification/2026-07-28/tasks.html) can answer such a call with a task, and the client fetches the result later. Set `tasks` on a server to accept them:
 
@@ -1782,7 +1798,7 @@ try {
 }
 ```
 
-### Quick Token Provider
+### Quick token provider
 
 For testing or when you already have a valid access token:
 
@@ -1808,7 +1824,7 @@ const client = new MCPClient({
 })
 ```
 
-### Custom Token Storage
+### Custom token storage
 
 For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys. The backend only needs a key-value contract:
 
@@ -1854,7 +1870,7 @@ const provider = new MCPOAuthClientProvider({
 
 ## Examples
 
-### Static Tool Configuration
+### Static tool configuration
 
 For tools where you have a single connection to the MCP server for you entire app, use `listTools()` and pass the tools to your agent:
 
@@ -2041,7 +2057,9 @@ With hooks disabled, your application is responsible for closing MCP connections
 
 For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
-The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
+The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` for requests that no tool call sends, such as `listTools()` and the connection handshake it opens. When a tool call opens the connection, either because a tool rebuilt with `toolsFromDefinitions()` or `toolFromDefinition()` connects on its first execution or because the call reconnects, the handshake receives that call's `requestContext`. Streams the connection keeps open afterward, such as the server-to-client event stream, keep using that same `requestContext`, and so do the client's replies to server requests on them, such as an answer to an input request. A request your own code starts from a server log or notification on those streams gets `null`.
+
+A server that authenticates every request therefore needs a credential for discovery as well as for tool calls. The following example forwards the user's cookie when a tool call provides a `requestContext`, and sends the app's own token when there's none, as in `listTools()`. Any request without a `requestContext` gets that token, so have the server limit it to discovery, for example listing tools but not calling them.
 
 When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
@@ -2052,10 +2070,15 @@ const mcpClient = new MCPClient({
       url: new URL('https://api.example.com/mcp'),
       fetch: async (url, init, requestContext) => {
         const headers = new Headers(init?.headers)
-        // Forward auth cookie from the incoming request
-        const cookie = requestContext?.get('cookie')
-        if (cookie) {
-          headers.set('cookie', cookie)
+        if (requestContext) {
+          // A tool call: forward the auth cookie from the incoming request
+          const cookie = requestContext.get('cookie')
+          if (cookie) {
+            headers.set('cookie', cookie)
+          }
+        } else {
+          // No requestContext, as in listTools(): a token the server only accepts for discovery
+          headers.set('authorization', `Bearer ${process.env.MCP_DISCOVERY_TOKEN}`)
         }
         return fetch(url, { ...init, headers })
       },
@@ -2077,9 +2100,11 @@ await agent.generate('Hello!', {
 })
 ```
 
+If the server accepts only per-user credentials, skip `listTools()` at startup. Build the catalog with [`listToolDefinitions()`](#listtooldefinitions) from a client that has a credential of its own, for example in a build step with a static `requestInit` header, and store it. At runtime, rebuild the tools with [`toolsFromDefinitions()`](#toolsfromdefinitions). Each rebuilt tool opens the connection on its first call, so the handshake carries that call's `requestContext`.
+
 ## Handling auth failures inside custom fetch
 
-A custom `fetch` shouldn't `throw` when authentication is unavailable. Every MCP request is a `POST`, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. The only long-lived request is the `subscriptions/listen` `POST` the client opens for `resources.subscribe()`, and it's retried after a failure, so an unauthenticated stream can loop. Wait for the token, then forward the request:
+A custom `fetch` shouldn't `throw` when authentication is unavailable. JSON-RPC requests such as `tools/call` are `POST`s, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. On a 2025-11-25 server, the client also sends a `GET` with no body after the handshake to open the server-to-client event stream, so check `init.method` rather than assuming a `POST` body. Long-lived streams are reopened after a failure: the `subscriptions/listen` `POST` the client opens for `resources.subscribe()` and the `GET` event stream if it drops. An unauthenticated `subscriptions/listen` stream can loop. Wait for the token, then forward the request:
 
 ```typescript
 async function waitForToken(timeoutMs = 5000): Promise<string | null> {

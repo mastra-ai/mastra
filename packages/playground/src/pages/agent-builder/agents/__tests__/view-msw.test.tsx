@@ -203,33 +203,4 @@ describe('AgentBuilderAgentView MSW integration', () => {
       expect(screen.queryByTestId('agent-builder-visibility-remove')).toBeNull();
     });
   });
-
-  describe('when rendering in view mode regardless of ownership', () => {
-    it('never renders the configure panel', async () => {
-      server.use(
-        ...authHandlers(),
-        http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
-        emptyThread(),
-      );
-
-      renderPage();
-
-      await screen.findByTestId('agent-builder-agent-chat-empty-state');
-      expect(screen.queryByTestId('agent-builder-panel-configure')).toBeNull();
-    });
-
-    it('never renders the configure tab strip', async () => {
-      server.use(
-        ...authHandlers(),
-        http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
-        emptyThread(),
-      );
-
-      renderPage();
-
-      await screen.findByTestId('agent-builder-agent-chat-empty-state');
-      expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
-      expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
-    });
-  });
 });

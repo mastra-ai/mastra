@@ -341,6 +341,21 @@ describe('Background Tasks handlers', () => {
       const { done } = await reader.read();
       expect(done).toBe(true);
     });
+
+    it('returns an empty stream that is already closed when the client left before the stream started', async () => {
+      const noTasksMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const result = (await BACKGROUND_TASK_STREAM_ROUTE.handler({
+        mastra: noTasksMastra,
+        abortSignal: abortController.signal,
+        requestContext: new RequestContext(),
+      } as any)) as ReadableStream;
+
+      const { done } = await result.getReader().read();
+      expect(done).toBe(true);
+    });
   });
 
   describe('resource scoping', () => {

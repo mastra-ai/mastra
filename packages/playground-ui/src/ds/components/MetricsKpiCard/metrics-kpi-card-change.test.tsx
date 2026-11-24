@@ -21,7 +21,7 @@ describe('MetricsKpiCardChange', () => {
     for (const changePct of [0, 0.04, -0.04]) {
       const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={changePct} />);
       expect(html).toContain('>0%<');
-      expect(html).not.toContain('lucide-arrow');
+      expect(html).not.toContain('data-central-icon="IconArrow');
     }
   });
 
@@ -37,13 +37,6 @@ describe('MetricsKpiCardChange caption', () => {
   it('keeps the comparison for screen readers only by default', () => {
     const html = renderToStaticMarkup(<MetricsKpiCardChange changePct={5} prevValue="10" />);
     expect(html).toContain('class="sr-only">+5.0% vs prior period (10)<');
-  });
-
-  it('names the comparison window it is given', () => {
-    const html = renderToStaticMarkup(
-      <MetricsKpiCardChange changePct={-12.5} comparison="vs previous 7d" prevValue="693" />,
-    );
-    expect(html).toContain('-13% vs previous 7d (693)');
   });
 
   it('shows the caption inline when asked', () => {

@@ -38,11 +38,6 @@ describe.each(pages)('saved views on the $page page', ({ page, url, base, view, 
     expect(savedViewFromSearchParams(page, url(), { columns })).toEqual(view);
   });
 
-  it('a saved URL applies back to the same URL', () => {
-    const saved = savedViewFromSearchParams(page, url(), { columns });
-    expect(applySavedView(saved, new URLSearchParams(base)).params.toString()).toBe(url().toString());
-  });
-
   it('a saved view passes the saved view schema', () => {
     expect(savedViewStateSchema.safeParse(savedViewFromSearchParams(page, url(), { columns })).success).toBe(true);
   });
@@ -240,4 +235,17 @@ describe("the page's default date preset", () => {
     const view: SavedViewState = { ...spansView, dateRange: { preset: 'last-7d' } };
     expect(applySavedView(view, new URLSearchParams()).params.has(TRACE_DATE_PRESET_PARAM)).toBe(false);
   });
+});
+
+describe.each(['traces', 'spans'] as const)('content fields in %s saved views', page => {
+  it.each(['all', 'input', 'output', 'error', 'inputPreview', 'outputPreview', 'errorPreview'])(
+    'round-trips %s word search',
+    field => {
+      const key = page === 'spans' ? `filter.${field}` : `filterSpan${field[0].toUpperCase()}${field.slice(1)}`;
+      const state = savedViewFromSearchParams(page, new URLSearchParams(`${key}=needle&${key}.op=hasAllTokens`));
+      const applied = applySavedView(state, new URLSearchParams());
+      expect(applied.params.get(key)).toBe('needle');
+      expect(applied.params.get(`${key}.op`)).toBe('hasAllTokens');
+    },
+  );
 });

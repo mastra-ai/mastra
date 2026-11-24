@@ -1,0 +1,41 @@
+{
+  "attachment": ["qwen/qwen3.5-397b-a17b", "qwen/qwen3.6-35b-a3b-eu", "qwen/qwen3.8-27b"],
+  "temperature": [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3.5-397b-a17b",
+    "qwen/qwen3.6-35b-a3b-eu",
+    "qwen/qwen3.8-27b"
+  ],
+  "structuredOutput": ["openai/gpt-oss-20b", "qwen/qwen3.6-35b-a3b-eu", "qwen/qwen3.8-27b"],
+  "reasoning": {
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen/qwen3.6-35b-a3b-eu": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen/qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ]
+  }
+}

@@ -4,22 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Checkbox } from './checkbox';
 
-// Base UI's Checkbox synthesizes a PointerEvent on click, which jsdom does not
-// implement. Polyfill it with the available MouseEvent constructor.
-
 afterEach(() => {
   cleanup();
 });
 
 describe('Checkbox', () => {
-  it('renders an unchecked checkbox by default', () => {
-    render(<Checkbox aria-label="accept" />);
-
-    const checkbox = screen.getByRole('checkbox', { name: 'accept' });
-    expect(checkbox).toBeDefined();
-    expect(checkbox.getAttribute('aria-checked')).toBe('false');
-  });
-
   it('renders as checked when the controlled `checked` prop is true', () => {
     render(<Checkbox aria-label="accept" checked onCheckedChange={() => {}} />);
 

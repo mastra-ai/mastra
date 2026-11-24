@@ -33,6 +33,11 @@ const inputVariants = cva(
     // type="search": drop WebKit's native clear button so the DS owns the search chrome.
     // Compose an <InputGroup> with an InputGroupButton to add a clear control.
     '[&::-webkit-search-cancel-button]:appearance-none',
+    // type="time": swap the browser's picker icon (Chromium only, and it opens Chromium's
+    // picker) for the DS clock, drawn as a background so it shows in every browser.
+    '[&::-webkit-calendar-picker-indicator]:hidden',
+    '[&[type=time]]:bg-(image:--time-field-icon) [&[type=time]]:bg-size-[0.875rem] [&[type=time]]:bg-no-repeat',
+    '[&[type=time]]:bg-position-[right_0.5rem_center] [&[type=time]]:pr-6',
   ),
   {
     variants: {

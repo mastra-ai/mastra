@@ -20,6 +20,7 @@ import { Workspace } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/registry.js';
+import { autoStartingBoards } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -126,7 +127,7 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
   const boards = createBoardRegistry();
   const dispatcher = new FactoryDecisionDispatcher({
     controller,
-    isAutoRunEnabled: async () => true,
+    boards: autoStartingBoards(),
     transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards }),
     storage,
     ownerId: 'worker-1',
@@ -148,8 +149,7 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
       workItemId: item.id,
-      ingress: { identity: `github:delivery-${deliveries}`, triggerType: 'github.issueCommentCreated' },
-      configVersion: 'rules-v1',
+      ingress: { identity: `github:delivery-${deliveries}` },
       expectedRevision: card!.revision,
       actor: { type: 'github', login: 'contributor', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },

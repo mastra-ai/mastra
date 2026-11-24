@@ -17,6 +17,11 @@ export function clearRunLeaseFence(runId: string, fence: () => Promise<void>): v
   if (fences.get(runId) === fence) fences.delete(runId);
 }
 
+/** Drop every registered check. Tests only: a worker that runs files without isolation reuses run ids. */
+export function __resetRunLeaseFencesForTests(): void {
+  fences.clear();
+}
+
 /** Throws when the run no longer holds its thread lease. */
 export async function verifyRunLease(runId: string | undefined): Promise<void> {
   if (runId) await fences.get(runId)?.();
@@ -54,6 +59,11 @@ export function whenRunStepsSettle(owner: object | undefined, callback: () => vo
   const entry = owner ? runningSteps.get(owner) : undefined;
   if (entry) entry.onSettled.push(callback);
   else callback();
+}
+
+/** Whether a step of the run this object owns is running right now. */
+export function hasRunningRunStep(owner: object | undefined): boolean {
+  return !!owner && runningSteps.has(owner);
 }
 
 /**

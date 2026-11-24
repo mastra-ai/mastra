@@ -1,5 +1,5 @@
-import type { PlatformApiClient} from '../platform/api-client.js';
-import { PlatformApiError } from '../platform/api-client.js';
+import type { ConnectClient } from '@mastra/connect';
+import { MastraConnectError } from '@mastra/connect';
 
 export const GITLAB_PROJECTS_PAGE_SIZE = 100;
 export const GITLAB_ISSUES_PAGE_SIZE = 30;
@@ -179,8 +179,15 @@ export interface GitLabApiClientConfig {
 }
 
 export interface PlatformGitLabApiClientConfig {
-  client: PlatformApiClient;
+  /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
+  client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
+  /**
+   * Confirms the proxy still reaches the instance this client is for: before a
+   * request that changes GitLab state, and after a read before its data is
+   * used. Throwing stops the write or discards the read.
+   */
+  confirmInstance?: () => Promise<void>;
 }
 
 export class GitLabApiClient {
@@ -638,13 +645,25 @@ export class GitLabApiClient {
     });
 
     if (this.#platform) {
-      const proxyPath = `/v2/connections/${encodeURIComponent(this.#platform.connectionId)}/proxy${apiPath}${suffix}`;
+      if (method !== 'GET') await this.#platform.confirmInstance?.();
+      let data: unknown;
       try {
-        return await this.#platform.client.request<T>(method, proxyPath, options.body);
+        data = await this.#platform.client.proxy(this.#platform.connectionId, {
+          method,
+          path: `${apiPath}${suffix}`,
+          body: options.body,
+        });
       } catch (error) {
-        if (error instanceof PlatformApiError) throw new GitLabApiError(error.message, error.status);
+        if (error instanceof MastraConnectError && error.status !== undefined) {
+          throw new GitLabApiError(error.detail ?? error.message, error.status);
+        }
+        // A binding reports a connection that needs reconnecting as an error with an HTTP status.
+        const status = (error as { status?: unknown } | null)?.status;
+        if (error instanceof Error && typeof status === 'number') throw new GitLabApiError(error.message, status);
         throw new GitLabApiError(error instanceof Error ? error.message : String(error), null);
       }
+      if (method === 'GET') await this.#platform.confirmInstance?.();
+      return (data ?? undefined) as T;
     }
 
     const direct = this.#direct!;

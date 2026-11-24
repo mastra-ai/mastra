@@ -5,11 +5,12 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, PlusIcon, XIcon } from 'lucide-react';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
-
 import { MCPServerCombobox } from '../mcp-server-combobox';
 import type { MCPClientFormValues } from './use-mcp-client-form';
 import { SectionHeader } from '@/domains/cms';
@@ -201,13 +202,13 @@ export function MCPClientFormSidebar({
                           aria-label="Remove variable"
                           onClick={() => removeEnvVar(index)}
                         >
-                          <XIcon />
+                          <IconCrossMedium />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<PlusIcon />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<IconPlusMedium />}>
                       Add variable
                     </Button>
                   )}
@@ -231,43 +232,34 @@ export function MCPClientFormSidebar({
                     : undefined;
 
               return tooltipContent ? (
-                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full" tooltip={tooltipContent}>
-                  {isTryingConnect ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Connecting...
-                    </>
-                  ) : (
-                    'Try to connect'
-                  )}
+                <Button
+                  icon={isTryingConnect ? <Spinner /> : undefined}
+                  onClick={onTryConnect}
+                  disabled={isDisabled}
+                  className="w-full"
+                  tooltip={tooltipContent}
+                >
+                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
                 </Button>
               ) : (
-                <Button onClick={onTryConnect} disabled={isDisabled} className="w-full">
-                  {isTryingConnect ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Connecting...
-                    </>
-                  ) : (
-                    'Try to connect'
-                  )}
+                <Button
+                  icon={isTryingConnect ? <Spinner /> : undefined}
+                  onClick={onTryConnect}
+                  disabled={isDisabled}
+                  className="w-full"
+                >
+                  {isTryingConnect ? 'Connecting...' : 'Try to connect'}
                 </Button>
               );
             })()}
-          <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
-            {isSubmitting ? (
-              <>
-                <Spinner className="h-4 w-4" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Icon>
-                  <Check />
-                </Icon>
-                {submitLabel}
-              </>
-            )}
+          <Button
+            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
+            variant="primary"
+            onClick={onPublish}
+            disabled={isSubmitting}
+            className="w-full"
+          >
+            {isSubmitting ? 'Creating...' : submitLabel}
           </Button>
         </div>
       )}

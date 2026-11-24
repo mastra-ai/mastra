@@ -36,8 +36,12 @@ const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
-/** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
-const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)\s*(?:[*xX]|>=?\s*0(?:\.0)*(?:\.0)*)\s*(?:$|\|\|)/;
+/**
+ * A range admitting any published version: `*`, `x`, `>=0`, and any union containing one.
+ * The leading `\s` alternative already absorbs padding; an extra `\s*` there kept the
+ * pattern quadratic on long whitespace runs.
+ */
+const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)(?:[*xX]|>=?\s*0(?:\.0)*)\s*(?:$|\|\|)/;
 
 /**
  * Constraints declared by the source app, plus the packages some resolution field pins.
@@ -302,11 +306,16 @@ export abstract class Bundler extends MastraBase implements IBundler {
 
   /**
    * The CLI bundles a generated wrapper when the project has file-based agents. The
-   * wrapper only re-exports `mastra`, so option extraction can't find the
-   * `new Mastra({...})` call there and must read the user's entry instead.
+   * wrapper only re-exports `mastra`, so anything that reads or rewrites the
+   * `new Mastra({...})` call must use the user's entry instead.
    */
   setConfigEntryFile(entryFile: string | undefined): void {
     this.configEntryFile = entryFile;
+  }
+
+  /** The file holding `new Mastra({...})`, or `mastraEntryFile` when no separate one was set. */
+  protected getConfigEntryFile(mastraEntryFile: string): string {
+    return this.configEntryFile ?? mastraEntryFile;
   }
 
   async loadEnvVars(): Promise<Map<string, string>> {
@@ -386,7 +395,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
     } as const;
 
     try {
-      const bundlerOptions = await getBundlerOptions(this.configEntryFile ?? mastraEntryFile, outputDirectory);
+      const bundlerOptions = await getBundlerOptions(this.getConfigEntryFile(mastraEntryFile), outputDirectory);
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {
@@ -405,6 +414,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         projectRoot: outputDirectory,
         platform: this.platform,
+        configEntryFile: this.getConfigEntryFile(mastraFile),
       },
       this.logger,
     );
@@ -514,6 +524,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
         externalsPreset: externals === true || !!externalsPreset,
         explicitExternals: Array.isArray(externals) ? externals : [],
         alias,
+        configEntryFile: this.getConfigEntryFile(mastraEntryFile),
       },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths, projectRoot);
@@ -664,6 +675,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
           projectRoot: entryProjectRoot,
           platform: this.platform,
           bundlerOptions: internalBundlerOptions,
+          configEntryFile: this.getConfigEntryFile(mastraEntryFile),
         },
         this.logger,
       );
@@ -815,7 +827,7 @@ export const tools = [${toolsExports.join(', ')}]`,
       this.logger.info('Bundling Mastra done');
 
       this.logger.info('Copying public files');
-      await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+      await this.copyPublic(dirname(this.getConfigEntryFile(mastraEntryFile)), outputDirectory);
       this.logger.info('Done copying public files');
 
       // For Software Factory projects, write a deterministic deployment marker

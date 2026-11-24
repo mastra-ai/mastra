@@ -98,7 +98,7 @@ const storage = new D1Store({
 })
 ```
 
-### Wrangler Configuration
+### Wrangler configuration
 
 Add the D1 database binding to your `wrangler.toml`:
 
@@ -162,7 +162,7 @@ Or in `wrangler.jsonc`:
 
 ## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -232,10 +232,10 @@ export default {
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Transactions & Consistency
+### Transactions & consistency
 
 Cloudflare D1 provides transactional guarantees for single-row operations. Multiple operations can be executed as a single, all-or-nothing unit of work.
 
-### Table Creation & Migrations
+### Table creation & migrations
 
 Tables are created automatically when storage is initialized (and can be isolated per environment using the `tablePrefix` option), but advanced schema changes require manual migration and careful planning. Examples include adding columns or changing data types and indexes to avoid data loss.

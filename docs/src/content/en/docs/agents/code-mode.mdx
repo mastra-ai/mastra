@@ -135,6 +135,10 @@ const agent = new Agent({
 
 The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
 
+## Connected tools
+
+To orchestrate the tools of providers connected in Mastra Platform, use [`tools().codeMode()`](/reference/connect/tools#code-mode) from `@mastra/connect`. It builds the code tool and instructions from the current connections on each request, and keeps tools that need approval as direct agent tools.
+
 ## Remote sandboxes
 
 By default, code mode uses a transport that writes the program to the host filesystem and runs `node` against it. That works for `LocalSandbox`, which shares the host, but not for remote sandboxes that run in their own micro-VM (such as [E2B](/integrations/sandboxes/e2b)), where the host paths don't exist.

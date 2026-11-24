@@ -44,6 +44,10 @@ export class LoginModeSelectorComponent extends Box {
           ? [`${prefix}${label}`, theme.fg('muted', `    ${mode.description}`)]
           : [`${prefix}${label}`];
       },
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.handleInput('\r');
+      },
     });
     this.addChild(this.list);
 

@@ -7,13 +7,13 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
-import { Search } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
@@ -56,7 +56,7 @@ function MobileNavbar() {
         onClick={openNavigationCommand}
         className="shrink-0"
       >
-        <Search />
+        <IconMagnifyingGlass />
       </Button>
     </header>
   );

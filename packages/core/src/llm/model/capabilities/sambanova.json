@@ -1,23 +1,18 @@
 {
-  "attachment": ["gemma-4-31B-it"],
-  "temperature": [
-    "DeepSeek-V3.1",
-    "DeepSeek-V3.2",
-    "Meta-Llama-3.3-70B-Instruct",
-    "MiniMax-M3",
-    "gemma-4-31B-it",
-    "gpt-oss-120b"
-  ],
-  "structuredOutput": ["DeepSeek-V3.2", "gemma-4-31B-it", "gpt-oss-120b"],
+  "attachment": ["MiniMax-M3.1-Flash", "gemma-4-31B-it"],
+  "temperature": ["GLM-5.3", "MiniMax-M3.1-Flash", "gemma-4-31B-it", "gpt-oss-120b"],
+  "structuredOutput": ["GLM-5.3", "MiniMax-M3.1-Flash", "gemma-4-31B-it", "gpt-oss-120b"],
   "reasoning": {
-    "MiniMax-M3": [
+    "GLM-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "DeepSeek-V3.2": [
+    "MiniMax-M3.1-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gemma-4-31B-it": [
@@ -29,11 +24,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "DeepSeek-V3.1": [
-      {
-        "type": "toggle"
       }
     ]
   }

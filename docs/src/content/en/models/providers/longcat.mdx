@@ -58,10 +58,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "longcat/LongCat-2.5-Preview",
+    "model": "longcat/LongCat-2.5",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
@@ -106,7 +106,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "longcat/LongCat-2.5-Preview"
+      ? "longcat/LongCat-2.5"
       : "longcat/LongCat-2.0";
   }
 });

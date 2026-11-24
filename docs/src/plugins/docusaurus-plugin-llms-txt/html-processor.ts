@@ -25,6 +25,14 @@ import {
   isPropertiesTable,
   handlePropertiesTable,
 } from './component-handlers'
+import {
+  isOpenApiTabs,
+  handleOpenApiTabs,
+  isOpenApiDetails,
+  handleOpenApiDetails,
+  containsSchemaItems,
+  convertChildren,
+} from './openapi-handlers'
 import { extractMetadata, selectContent, removeUnwantedElements, type PageMetadata } from './content-extractor'
 import type { ResolvedOptions } from './options'
 import { defaultHandlers, type State } from 'hast-util-to-mdast'
@@ -47,6 +55,14 @@ function handleDiv(state: State, node: Element): BlockContent | Array<BlockConte
   // Check if this is an admonition
   if (isAdmonition(node)) {
     return handleAdmonition(state, node)
+  }
+
+  // OpenAPI theme markup on generated API pages
+  if (isOpenApiTabs(node)) {
+    return handleOpenApiTabs(state, node)
+  }
+  if (containsSchemaItems(node)) {
+    return convertChildren(state, node)
   }
 
   // Check if this is a tabs container
@@ -92,6 +108,10 @@ function handleList(state: State, node: Element): BlockContent | Array<BlockCont
     return handleCardGridItems(state, node)
   }
 
+  if (containsSchemaItems(node)) {
+    return convertChildren(state, node)
+  }
+
   return defaultHandlers.ul(state, node)
 }
 
@@ -102,6 +122,9 @@ function handleDetailsElement(
   state: State,
   node: Element,
 ): BlockContent | Array<BlockContent | DefinitionContent> | undefined {
+  if (isOpenApiDetails(node)) {
+    return handleOpenApiDetails(state, node)
+  }
   if (isDetails(node)) {
     return handleDetails(state, node)
   }
@@ -270,6 +293,8 @@ const CLEANUP_PATTERNS = {
   escapedAngleBrackets: /^\s*\\<[^>]+>\s*$/gm,
   // Collapse multiple consecutive blank lines into one blank line
   multipleBlankLines: /\n{3,}/g,
+  // Move a trailing space out of bold text (remark encodes it as "&#x20;" inside the delimiters)
+  boldTrailingSpace: /&#x20;\*\*/g,
   // Remove trailing whitespace from lines
   trailingWhitespace: /[ \t]+$/gm,
   // Match consecutive links with the same URL (cards render title and description as separate links)
@@ -285,6 +310,7 @@ function cleanupMarkdown(markdown: string): string {
     .replace(CLEANUP_PATTERNS.escapedEquals, '')
     .replace(CLEANUP_PATTERNS.emptyObjects, '')
     .replace(CLEANUP_PATTERNS.htmlComments, '')
+    .replace(CLEANUP_PATTERNS.boldTrailingSpace, '** ')
     .replace(CLEANUP_PATTERNS.escapedAngleBrackets, match => match.trim())
 
   // Merge consecutive links with the same URL (from card components)
