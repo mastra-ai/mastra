@@ -25,7 +25,7 @@
     "tools/get-footer-comment.ts": "a1bf6440b820a259fc19292e0c315d41c83c043365f38c76f7d3f0960371b9cc",
     "tools/get-inline-comment.ts": "752476477b55bb9cf6cba4b310261bb4efb48ef8bccd752b0ceb9e4966135ab2",
     "tools/get-page-property.ts": "663f0717341fefcf2de96095306ba137b24bc0a2b9f679a5330e36cf04f57102",
-    "tools/get-page.ts": "41030aefebb46acba3be68b8e0897c8bbf4b5680fd3ec53defcbbd7222f3d443",
+    "tools/get-page.ts": "4d05de9b43a5ee65ca6e506d4bed89b5d8ead6fdaea2bd19c868f9d9a15c8f1d",
     "tools/get-space.ts": "aceb6e3d77596ac84b21c9b09fb2f2f88e8c686dc6c26ab5839c0406629b6dd7",
     "tools/list-attachments.ts": "97f30b6ca0a4f408e421c17f71f6f854ab4e8c73007e0ec654793da9e89d126a",
     "tools/list-blog-posts-for-label.ts": "9b70d36572d1ae7b120416e7a7d0ca80ca680b025357a67be9b880c636f62f40",

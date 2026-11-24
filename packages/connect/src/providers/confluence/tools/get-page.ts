@@ -4,17 +4,20 @@ import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-function stripNulls(value: unknown): unknown {
+function stripNulls(value: unknown, path = ''): unknown {
+  if (path === 'properties.results.value') {
+    return value;
+  }
   if (value === null) {
     return undefined;
   }
   if (Array.isArray(value)) {
-    return value.map(stripNulls);
+    return value.map(item => stripNulls(item, path));
   }
-  if (typeof value === 'object' && value !== null) {
+  if (typeof value === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
-      result[key] = stripNulls(val);
+      result[key] = stripNulls(val, path ? `${path}.${key}` : key);
     }
     return result;
   }

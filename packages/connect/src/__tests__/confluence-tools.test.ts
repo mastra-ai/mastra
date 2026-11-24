@@ -464,6 +464,33 @@ describe('generated Confluence tools', () => {
       expect(new URLSearchParams(requests[0]!.target.split('?')[1]).get('include-properties')).toBe('true');
       expect(result.properties?.results).toEqual([{ id: 'p1', key: 'reviewed', value: { by: 'ada', at: 3 } }]);
     });
+
+    it.each([
+      ['a null value', null],
+      ['nulls nested in objects and arrays', { owner: null, reviewers: ['ada', null], meta: { due: null, tags: [] } }],
+    ])('returns page properties holding %s as stored', async (_shape, value) => {
+      answer = () => ({
+        status: 200,
+        body: {
+          id: '7',
+          title: 'Runbook',
+          // Confluence sends null for a root page's parent; the page itself still drops it.
+          parentId: null,
+          properties: { results: [{ id: 'p1', key: 'review', value }], meta: { cursor: null }, _links: {} },
+        },
+      });
+
+      const result = (await run('confluence_get_page', { id: '7', includeProperties: true })) as Record<
+        string,
+        unknown
+      > & {
+        properties?: { results?: Array<{ key: string; value?: unknown }>; meta?: Record<string, unknown> };
+      };
+
+      expect(result.properties?.results).toEqual([{ id: 'p1', key: 'review', value }]);
+      expect(result).not.toHaveProperty('parentId', null);
+      expect(result.properties?.meta).not.toHaveProperty('cursor', null);
+    });
   });
 
   describe('updating drafts', () => {

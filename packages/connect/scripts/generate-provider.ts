@@ -1827,7 +1827,36 @@ const CONFLUENCE_FIXES: Readonly<Record<string, (action: ExtractedAction) => Ext
     ]),
   'get-attachment': action => keepPropertyValues(action, 'PropertySchema'),
   'get-footer-comment': action => keepPropertyValues(action, 'PropertySchema'),
-  'get-page': action => keepPropertyValues(action, 'PropertyResultSchema'),
+  'get-page': action =>
+    rewriteModuleStatements(keepPropertyValues(action, 'PropertyResultSchema'), [
+      {
+        // A content property value is caller JSON, so its nulls are data; only
+        // the page's own nullable fields should become undefined.
+        pattern:
+          /function stripNulls\(value: unknown\): unknown \{\s*if \(value === null\) \{\s*return undefined;\s*\}\s*if \(Array\.isArray\(value\)\) \{\s*return value\.map\(stripNulls\);\s*\}\s*if \(typeof value === 'object' && value !== null\) \{\s*const result: Record<string, unknown> = \{\};\s*for \(const \[key, val\] of Object\.entries\(value\)\) \{\s*result\[key\] = stripNulls\(val\);\s*\}\s*return result;\s*\}\s*return value;\s*\}/,
+        replacement: `function stripNulls(value: unknown, path = ''): unknown {
+  if (path === 'properties.results.value') {
+    return value;
+  }
+  if (value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => stripNulls(item, path));
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      result[key] = stripNulls(val, path ? \`\${path}.\${key}\` : key);
+    }
+    return result;
+  }
+  return value;
+}`,
+        count: 1,
+        what: 'content property value nulls',
+      },
+    ]),
   'delete-page-property': action =>
     rewriteModuleStatements(action, [
       {
