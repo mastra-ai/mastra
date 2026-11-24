@@ -449,6 +449,42 @@ export function createKnowledgeImportersStorageTests(createFixture: () => Promis
         expect(await importers.getNodeByPage('page-b')).toBeNull();
       });
 
+      it('walks the cursor in UTF-8 byte order, past source IDs outside the Basic Multilingual Plane', async () => {
+        // UTF-16 puts U+10000 (a surrogate pair, 0xD800…) before U+E000; UTF-8 bytes put it after.
+        const bmp = '\uE000';
+        const astral = '\u{10000}';
+        await importers.saveNode(
+          node(astral, 'page-astral', { unsettled: true, links: [{ sourceId: 't', rel: null }] }),
+        );
+        await importers.saveNode(node(bmp, 'page-bmp', { unsettled: true, links: [{ sourceId: 't', rel: null }] }));
+        const walk = async (list: (after?: string) => Promise<{ items: string[]; next: string | null }>) => {
+          const seen: string[] = [];
+          let after: string | undefined;
+          for (let i = 0; i < 4; i++) {
+            const page = await list(after);
+            seen.push(...page.items);
+            if (!page.next) break;
+            after = page.next;
+          }
+          return seen;
+        };
+        const ids = (page: { items: { sourceId: string }[]; next: string | null }) => ({
+          items: page.items.map(n => n.sourceId),
+          next: page.next,
+        });
+        expect(await walk(async after => ids(await importers.listNodes('b1', { after, limit: 1 })))).toEqual([
+          bmp,
+          astral,
+        ]);
+        expect(
+          await walk(async after => ids(await importers.listNodes('b1', { after, limit: 1, unsettled: true }))),
+        ).toEqual([bmp, astral]);
+        expect(await walk(after => importers.listLinkingNodes('b1', ['t'], { after, limit: 1 }))).toEqual([
+          bmp,
+          astral,
+        ]);
+      });
+
       it('pages through only the unsettled nodes, in byte order, and drops one once it is saved settled', async () => {
         for (const id of ['a', 'b', 'c', 'd', 'e']) {
           await importers.saveNode(node(id, `page-${id}`, { unsettled: id !== 'c' }));

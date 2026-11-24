@@ -39,12 +39,17 @@ import type {
 export const REMOVED_PARENT_BODY = 'Removed from the source. Kept because pages are still nested under it.';
 export const REMOVED_FOLDER_BODY = 'Removed from the source. Kept because another importer writes under it.';
 export const REMOVED_ADOPTED_BODY = 'Removed from the source. Kept because the page was here before the import.';
+const REMOVED_BODIES = new Set([REMOVED_PARENT_BODY, REMOVED_FOLDER_BODY, REMOVED_ADOPTED_BODY]);
 /** Heads the note that keeps the body a page had before an importer took it over. */
 export const ORIGINAL_BODY_NOTE = 'The body this page had before an importer took it over:\n\n';
 /** Every heading a kept-body note has been written with, newest first; removal recognizes them all. */
 const ORIGINAL_BODY_NOTE_HEADINGS = [ORIGINAL_BODY_NOTE, 'Written by hand before an importer took over this page:\n\n'];
-/** One per page, so the removal that gives the body back can find it. */
-const originalBodyNoteId = (pageId: string) => `knowledge-import-original:${pageId}`;
+/**
+ * Kept-body notes on a page have ids starting with this. Each takeover writes a new one and removes
+ * the earlier, so removal finds the body from the latest takeover. Notes written before takeovers
+ * had their own id used the prefix alone.
+ */
+const originalBodyNotePrefix = (pageId: string) => `knowledge-import-original:${pageId}`;
 
 /** Embedding work for after commit. */
 export type KnowledgeImportEmbedJob = { kind: 'index'; pageId: string } | { kind: 'remove'; pageId: string };
@@ -427,6 +432,33 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    * refreshed for the old page's refs. Keep that refresh: the sink's own removal does the same, and
    * a page deleted without going through `removePage` would otherwise leave stale index rows.
    */
+  /** A page's live kept-body notes, oldest first. */
+  const keptBodyNotes = async (pageId: string) => {
+    const prefix = originalBodyNotePrefix(pageId);
+    const kept = [];
+    let cursor: string | undefined;
+    do {
+      const out = await storage.listNotes({ pageId, read: 'all', ...(cursor ? { cursor } : {}) });
+      kept.push(...out.notes.filter(note => note.id === prefix || note.id.startsWith(`${prefix}:`)));
+      cursor = out.nextCursor;
+    } while (cursor);
+    return kept;
+  };
+  /** Saves the body a page has as it is taken over, in place of any earlier takeover's. */
+  const keepBody = async (pageId: string, body: string) => {
+    for (const earlier of await keptBodyNotes(pageId)) {
+      await storage.removeNote({ id: earlier.id, deletedBy: provenance.author, provenance });
+    }
+    await storage.addNote({
+      id: `${originalBodyNotePrefix(pageId)}:${randomUUID()}`,
+      pageId,
+      text: ORIGINAL_BODY_NOTE + body,
+      stampScopeIds: [scope.id],
+      mentions: [],
+      provenance,
+    });
+  };
+
   const forget = async (node: KnowledgeImporterNodeRecord) => {
     const old = await storage.getPage({ id: node.pageId, read: 'all' });
     await importers.markLinkingNodesUnsettled(binding.id, [node.sourceId]);
@@ -622,19 +654,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       const imported = await release(fresh.id);
       renamed = fields.name !== fresh.name;
       // Saved whatever this op sends: a later upsert, not this one, may be what replaces the body.
-      if (fresh.body && !imported) {
-        const id = originalBodyNoteId(fresh.id);
-        if (!(await storage.getNote({ id, read: 'all', includeDeleted: true }))) {
-          await storage.addNote({
-            id,
-            pageId: fresh.id,
-            text: ORIGINAL_BODY_NOTE + fresh.body,
-            stampScopeIds: [scope.id],
-            mentions: [],
-            provenance,
-          });
-        }
-      }
+      if (fresh.body && !imported) await keepBody(fresh.id, fresh.body);
       page = await storage.updatePage({ id: fresh.id, expectedVersion: fresh.version, ...fields, provenance });
       change = 'updated';
       adopted = true;
@@ -650,6 +670,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     } else {
       const current = await owned(existing.pageId, item.sourceId);
       page = current.page;
+      // An item sent again after its removal takes the page over again: the body it has now, which
+      // someone may have edited since, is the one its next removal gives back.
+      if (existing.stub && existing.adopted && page.body && !REMOVED_BODIES.has(page.body)) {
+        await keepBody(page.id, page.body);
+      }
       // A page a person moved out of the target stays where they put it.
       if (!current.outside && page.parentId !== destination.page.id) {
         // A page can't move under its own subtree.
@@ -752,9 +777,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           if (children > 0 || node.adopted || folder) {
             if (node.stub) return;
             // A page it took over gets its earlier body back, as the note kept it.
-            const note = node.adopted
-              ? await storage.getNote({ id: originalBodyNoteId(current.page.id), read: 'all' })
-              : null;
+            const note = node.adopted ? (await keptBodyNotes(current.page.id)).at(-1) : undefined;
             const heading = ORIGINAL_BODY_NOTE_HEADINGS.find(h => note?.text.startsWith(h));
             const original = heading ? note!.text.slice(heading.length) : note?.text;
             const page = await storage.updatePage({
@@ -782,6 +805,12 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
               deletedBy: provenance.author,
             });
             await importers.deleteNode(binding.id, sourceId);
+            // Its linkers drop the link when settling reaches them, wherever the saved cursor is.
+            if ((await importers.listLinkingNodes(binding.id, [sourceId], { limit: 1 })).items.length > 0) {
+              await importers.markLinkingNodesUnsettled(binding.id, [sourceId]);
+              await importers.setState(binding.id, { [KNOWLEDGE_IMPORT_SETTLE_RESTART_KEY]: randomUUID() });
+              deferredLinkers = true;
+            }
             await syncLinks(async () => {
               await syncKnowledgePageBodyLinks(storage, deleted);
               await refreshKnowledgeLinksTo(storage, [deleted]);

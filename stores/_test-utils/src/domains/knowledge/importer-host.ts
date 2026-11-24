@@ -1393,8 +1393,10 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
 
     it('gives back a kept body whose note was written with the earlier heading', async () => {
       const { knowledge, run, page } = setup();
-      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'mine' });
+      // Taken over with no body, so the takeover keeps no note; the note an earlier version kept is added after.
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: '' });
       const p1 = await page('notion/p1');
+      await run([{ op: 'declare', item: { sourceId: 'p1', title: 'P1' } }]);
       const storage = await knowledge.getStorage();
       await storage.addNote({
         id: `knowledge-import-original:${p1!.id}`,
@@ -1408,6 +1410,60 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion/p1'))?.body).toBe('body of p1');
       await run([{ op: 'remove', sourceId: 'p1' }]);
       expect((await page('notion/p1'))?.body).toBe('mine');
+    });
+
+    for (const again of ['another binding', 'the same binding id'] as const) {
+      it(`a second takeover by ${again} after retirement keeps the body the page has then, not the first one`, async () => {
+        const first = setup();
+        await first.knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human original' });
+        const p1 = await first.page('notion/p1');
+        await first.run([upsert({ sourceId: 'p1' })]);
+        await first.run([{ op: 'remove', sourceId: 'p1' }]);
+        expect((await first.page('notion/p1'))?.body).toBe('Human original');
+        await createKnowledgeImporterHost(first.knowledge, {
+          bindings: [{ id: 'b1', importer: 'notes', target: 'docs:acme#notion', settings: {}, credentials: {} }],
+        }).retireBinding('b1');
+        await first.knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human later' });
+
+        const id = again === 'another binding' ? 'b9' : 'b1';
+        const second = setup([{ id, target: 'docs:acme#notion' }]);
+        expect(await second.run([upsert({ sourceId: 'p1' })], id)).toMatchObject({
+          counts: { updated: 1, refused: 0 },
+        });
+        await second.run([upsert({ sourceId: 'p1', body: 'imported again' })], id);
+        expect(await second.run([{ op: 'remove', sourceId: 'p1' }], id)).toMatchObject({ counts: { stubbed: 1 } });
+        expect(await second.page('notion/p1')).toMatchObject({ id: p1!.id, body: 'Human later' });
+        // The page keeps one kept-body note: the earlier one is gone.
+        const storage = await second.knowledge.getStorage();
+        const kept = (await storage.listNotes({ pageId: p1!.id, read: 'all' })).notes.filter(n =>
+          n.text.startsWith('The body this page had before an importer took it over:'),
+        );
+        expect(kept.map(n => n.text)).toEqual([
+          'The body this page had before an importer took it over:\n\nHuman later',
+        ]);
+      });
+    }
+
+    it('an item the source sends again after removing it keeps the body the page has then', async () => {
+      const { knowledge, run, page } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human original' });
+      await run([upsert({ sourceId: 'p1' })]);
+      await run([{ op: 'remove', sourceId: 'p1' }]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'Human later' });
+      await run([upsert({ sourceId: 'p1', body: 'back again' })]);
+      expect((await page('notion/p1'))?.body).toBe('back again');
+      await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect((await page('notion/p1'))?.body).toBe('Human later');
+    });
+
+    it('drops a generated link to an item the source removed on the next empty run', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'z-target' }), upsert({ sourceId: 'a-link', links: [{ sourceId: 'z-target' }] })]);
+      expect((await page('notion/a-link'))?.body).toBe('body of a-link\n\nLinks:\n- [[docs:acme#notion/z-target]]');
+      expect(await run([{ op: 'remove', sourceId: 'z-target' }])).toMatchObject({ counts: { removed: 1 } });
+      expect(await page('notion/z-target')).toBeNull();
+      expect(await run([])).toMatchObject({ outcome: 'succeeded', counts: { refused: 0 } });
+      expect((await page('notion/a-link'))?.body).toBe('body of a-link');
     });
 
     it("keeps its item page as a stub when the source removes it while it is another binding's empty folder", async () => {

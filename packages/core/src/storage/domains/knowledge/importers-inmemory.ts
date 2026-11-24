@@ -38,7 +38,21 @@ const empty = (): State => ({
 });
 
 const key = (...parts: (string | number)[]) => JSON.stringify(parts);
-const byteOrder = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/**
+ * UTF-8 byte order, the order PostgreSQL's `COLLATE "C"` and SQLite's BINARY give. Code point order
+ * is the same thing; JavaScript's `<` compares UTF-16 code units, which puts characters above U+FFFF
+ * (surrogate pairs) before U+E000–U+FFFF.
+ */
+const byteOrder = (a: string, b: string) => {
+  for (let i = 0, j = 0; i < a.length && j < b.length;) {
+    const x = a.codePointAt(i)!;
+    const y = b.codePointAt(j)!;
+    if (x !== y) return x < y ? -1 : 1;
+    i += x > 0xffff ? 2 : 1;
+    j += y > 0xffff ? 2 : 1;
+  }
+  return a.length === b.length ? 0 : a.length < b.length ? -1 : 1;
+};
 
 function addCounts(into: Record<string, number>, add: Record<string, number>): Record<string, number> {
   const out = { ...into };
@@ -242,7 +256,7 @@ export class InMemoryKnowledgeImportersStorage extends KnowledgeImportersStorage
       .filter(
         n =>
           n.bindingId === bindingId &&
-          (options.after === undefined || n.sourceId > options.after) &&
+          (options.after === undefined || byteOrder(n.sourceId, options.after) > 0) &&
           (!options.unsettled || n.unsettled),
       )
       .sort((a, b) => byteOrder(a.sourceId, b.sourceId));
