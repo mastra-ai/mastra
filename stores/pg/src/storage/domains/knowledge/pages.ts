@@ -1490,7 +1490,6 @@ export class PgKnowledgePages implements KnowledgePageStore {
     }));
   }
 
-  /** Read just the visible notes' link targets, in the same page and note order as the explorer walk. */
   async listGraphNoteMentions(input: {
     pageIds: string[];
     read: KnowledgeReadScope;

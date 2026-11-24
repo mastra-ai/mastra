@@ -290,7 +290,6 @@ export const DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS: KnowledgePageGraphLimits = {
   maxOutsidePages: 50,
 };
 
-/** Maximum targets from one visible note in the overview. The full note is available in the page view. */
 const MAX_GRAPH_MENTIONS_PER_NOTE = 100;
 
 export interface KnowledgePageGraphEdge {
@@ -343,7 +342,7 @@ async function* graphLevelChildren(
   level: Array<string | null>,
   read: KnowledgeReadScope,
   byId: ReadonlyMap<string, KnowledgePage>,
-  maxPages: number,
+  pagesLeft: () => number,
   scopeBudget: { remaining: number },
 ) {
   const parents = level.flatMap(id => (id === null ? [] : [byId.get(id)!]));
@@ -355,9 +354,8 @@ async function* graphLevelChildren(
       yield { parentId, children: scopes, truncated };
     }
     if (parent && (!pageCounts || pageCounts[parent.id])) {
-      // The caller adds each batch to byId before resuming. One lookahead distinguishes a full graph from a truncated one.
-      const remaining = Math.max(0, maxPages - byId.size);
-      const { items, truncated } = await boundedList(remaining + 1, async (cursor, limit) => {
+      // One past the budget tells a subtree that fits exactly from a truncated one.
+      const { items, truncated } = await boundedList(Math.max(0, pagesLeft()) + 1, async (cursor, limit) => {
         const { pages, nextCursor } = await store.listChildPages({ parentId: parent.id, read, cursor, limit });
         return { items: pages, nextCursor };
       });
@@ -395,33 +393,29 @@ async function graphNotes(
   read: KnowledgeReadScope,
   limit: number,
 ): Promise<GraphNotes> {
-  const notes: GraphNotes['notes'] = [];
-  if (!pages.length) return { notes, truncated: false };
-  let truncated = false;
-  const project = ({ pageId, mentions }: GraphNotes['notes'][number]) => {
-    if (mentions.length <= MAX_GRAPH_MENTIONS_PER_NOTE) return { pageId, mentions };
-    truncated = true;
-    return { pageId, mentions: mentions.slice(0, MAX_GRAPH_MENTIONS_PER_NOTE) };
-  };
+  if (!pages.length) return { notes: [], truncated: false };
   if (store.listGraphNoteMentions) {
-    const batch = await store.listGraphNoteMentions({
+    return store.listGraphNoteMentions({
       pageIds: pages.map(page => page.id),
       read,
       limit,
       maxMentionsPerNote: MAX_GRAPH_MENTIONS_PER_NOTE,
     });
-    const projected = batch.notes.map(project);
-    return { notes: projected, truncated: truncated || batch.truncated };
   }
+  const notes: GraphNotes['notes'] = [];
+  let truncated = false;
   const counts = await countInBatches(pages, ids => store.countNotes({ pageIds: ids, read }));
   for (const page of pages) {
     if (counts && !counts[page.id]) continue;
     if (notes.length >= limit) return { notes, truncated: true };
     const batch = await boundedList(limit - notes.length, async (cursor, pageLimit) => {
       const listed = await store.listNotes({ pageId: page.id, read, cursor, limit: pageLimit });
-      return { items: listed.notes.map(project), nextCursor: listed.nextCursor };
+      return { items: listed.notes, nextCursor: listed.nextCursor };
     });
-    for (const note of batch.items) notes.push(note);
+    for (const { pageId, mentions } of batch.items) {
+      truncated ||= mentions.length > MAX_GRAPH_MENTIONS_PER_NOTE;
+      notes.push({ pageId, mentions: mentions.slice(0, MAX_GRAPH_MENTIONS_PER_NOTE) });
+    }
     truncated ||= batch.truncated;
   }
   return { notes, truncated };
@@ -471,10 +465,11 @@ export async function readKnowledgePageGraph(
   // the parents that have children, so a tree of mostly leaf pages costs a few calls per level.
   const treeParent = new Map<string, string>();
   const scopeBudget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
+  const pagesLeft = () => limits.maxPages - pages.length;
   walk: while (queue.length) {
     const level = queue;
     queue = [];
-    for await (const batch of graphLevelChildren(store, level, read, byId, limits.maxPages, scopeBudget)) {
+    for await (const batch of graphLevelChildren(store, level, read, byId, pagesLeft, scopeBudget)) {
       truncated ||= batch.truncated;
       for (const child of batch.children) {
         if (byId.has(child.id)) continue;

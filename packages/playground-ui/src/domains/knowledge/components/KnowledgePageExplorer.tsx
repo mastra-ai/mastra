@@ -1289,8 +1289,9 @@ export function KnowledgePageExplorer({
 
   const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
-  const loadingCanvas =
-    graphShown && !pageOverGraph && !overview && graphError === undefined && graphPages.length === 0;
+  const canvasOpen = graphShown && !pageOverGraph;
+  const loadingCanvas = canvasOpen && !overview && graphError === undefined && graphPages.length === 0;
+  const graphDrawn = canvasOpen && !loadingCanvas;
   const rootLevelFailed = lazy.failed.has(KNOWLEDGE_TREE_ROOT) && !lazy.loaded.has(KNOWLEDGE_TREE_ROOT);
   const floatingToolbar = fullBleedGraph && graphShown && !showPage;
   const toolbar = useMeasuredAutoHeight();
@@ -1543,7 +1544,7 @@ export function KnowledgePageExplorer({
               data-testid="knowledge-graph-container"
             >
               {loadingCanvas ? <KnowledgeGraphLoader className="absolute inset-0" /> : null}
-              {graphShown && !pageOverGraph && !loadingCanvas ? (
+              {graphDrawn ? (
                 <div className="absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
                   <ButtonsGroup
                     orientation="vertical"
@@ -1587,7 +1588,7 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown && !pageOverGraph && !loadingCanvas ? (
+              {graphDrawn ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}

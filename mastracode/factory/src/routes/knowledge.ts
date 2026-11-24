@@ -77,6 +77,10 @@ function boundedLimit(value: string | undefined, max: number): number | undefine
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= max ? parsed : null;
 }
 
+function isOverReadBudget(error: unknown): boolean {
+  return error instanceof Error && 'status' in error && error.status === 422;
+}
+
 /**
  * The ids of a change this caller may see, or null when they may see none of it. Events carry ids only, so
  * readability is checked against the store now: a page moved out of reach is withheld, but the scope it
@@ -235,7 +239,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               ...(maxPages ? { limits: { maxPages } } : {}),
             });
           } catch (error) {
-            if (error instanceof Error && 'status' in error && error.status === 422) {
+            if (isOverReadBudget(error)) {
               return c.json(
                 { error: 'query_too_expensive', message: 'This project’s Knowledge is too large to read at once.' },
                 422,
