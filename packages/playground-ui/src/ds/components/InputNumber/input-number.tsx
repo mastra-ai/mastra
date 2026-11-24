@@ -8,6 +8,7 @@ import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { Icon } from '@/ds/icons/Icon';
 import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
+import { textFieldWidthStyle } from '@/ds/primitives/form-element';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
@@ -16,7 +17,14 @@ type InputNumberProps = Omit<NumberFieldPrimitive.Root.Props, 'className'> & {
 };
 
 function InputNumber({ className, ...props }: InputNumberProps) {
-  return <NumberFieldPrimitive.Root data-slot="input-number" className={cn('w-full', className)} {...props} />;
+  return (
+    <NumberFieldPrimitive.Root
+      data-slot="input-number"
+      // The root owns the width, so a group inside it fills it.
+      className={cn(textFieldWidthStyle, '*:[--text-field-width:100%]', className)}
+      {...props}
+    />
+  );
 }
 
 type InputNumberGroupProps = Omit<NumberFieldPrimitive.Group.Props, 'className'> & {

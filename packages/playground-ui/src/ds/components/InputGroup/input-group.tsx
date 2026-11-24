@@ -14,6 +14,7 @@ import {
   deprecatedErrorAria,
   fieldErrorRimWithin,
   inputSurfaceAndFocusWithinStyle,
+  textFieldWidthStyle,
 } from '@/ds/primitives/form-element';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
@@ -87,6 +88,7 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       data-size={resolved}
       className={cn(
         inputGroupClassName,
+        textFieldWidthStyle,
         controlHeight[resolved],
         controlSpacing[resolved],
         controlIconState,

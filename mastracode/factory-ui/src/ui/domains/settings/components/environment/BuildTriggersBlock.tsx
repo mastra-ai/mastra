@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsControl, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentBuildTriggers } from '../../../workspaces/services/environment';
 import { CommittedInput } from './CommittedInput';
@@ -222,7 +222,7 @@ function ScheduleRows({
               <Txt as="span" variant="caption" tone="muted">
                 Cron
               </Txt>
-              <span className="w-48">
+              <SettingsControl>
                 <CommittedInput
                   label="Build schedule cron"
                   value={cron}
@@ -236,7 +236,7 @@ function ScheduleRows({
                     return onCommit(next);
                   }}
                 />
-              </span>
+              </SettingsControl>
               <Txt as="span" variant="caption" tone="muted">
                 {timezone}
               </Txt>
