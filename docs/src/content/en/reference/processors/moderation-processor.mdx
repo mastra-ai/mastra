@@ -146,14 +146,16 @@ const processor = new ModerationProcessor({
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
-    description: 'Processes input messages to moderate content before sending to LLM',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
+    description:
+      'Processes input messages to moderate content before sending to LLM. `requestContext` is passed to the moderation agent, including when it resolves a dynamic model.',
     isOptional: false,
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
-    description: 'Processes streaming output parts to moderate content during streaming',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; writer?: unknown; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
+    description:
+      'Processes streaming output parts to moderate content during streaming. `writer` emits buffered text when `bufferSize` is greater than 0, and `requestContext` is passed to the moderation agent.',
     isOptional: false,
   },
 ]}
