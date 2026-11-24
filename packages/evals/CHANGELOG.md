@@ -1,5 +1,27 @@
 # @mastra/evals
 
+## 1.10.12-alpha.3
+
+### Patch Changes
+
+- Fixed the completeness scorer for text in non-Latin scripts such as Japanese, Chinese, Russian, and Arabic. The scorer ignored this text, so an unrelated answer scored 1 and a correct answer with a number in it scored 0. It now compares the words of every script. Scores for text in Latin letters do not change. ([#31254](https://github.com/mastra-ai/mastra/pull/31254))
+
+- Fixed the textual difference scorer so `changes` counts moved words. Texts that differ only in word order reported `changes: 0`, and texts with some moved words reported too few. ([#31165](https://github.com/mastra-ai/mastra/pull/31165))
+
+- Fixed the tone scorer so every sentence counts toward the stability score. A last sentence with no final punctuation was skipped, and line breaks did not separate sentences, so a reply that turned negative at the end could still get a high score. A one- or two-word ending with no final punctuation, such as `Thanks`, has a lower weight. ([#31162](https://github.com/mastra-ai/mastra/pull/31162))
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+
+## 1.10.12-alpha.2
+
+### Patch Changes
+
+- Fixed the content similarity scorer so that whitespace counts when `ignoreWhitespace` is `false`. Before, the option had no effect, and texts that differed only in whitespace always scored 1. The option is now `true` whenever it is not set, so only scorers that set it to `false` get different scores. ([#31167](https://github.com/mastra-ai/mastra/pull/31167))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+
 ## 1.10.12-alpha.1
 
 ### Patch Changes

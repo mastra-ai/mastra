@@ -230,6 +230,10 @@ describe('parseDateSpan', () => {
     ['Dec 27 – Jan 3, 2025', '2024-12-27', '2025-01-03'],
     ['Dec – Jan 2025', '2024-12-01', '2025-01-31'],
     ['Dec 27, 2024 – Jan 3', '2024-12-27', '2025-01-03'],
+    // Em dashes separate ranges like en dashes do.
+    ['August 13—27, 2024', '2024-08-13', '2024-08-27'],
+    ['June—July 2022', '2022-06-01', '2022-07-31'],
+    ['Dec 27, 2024 — Jan 3', '2024-12-27', '2025-01-03'],
   ])('parses "%s" as %s to %s', (text, start, end) => {
     expect(span(text)).toEqual([start, end]);
   });
@@ -243,6 +247,11 @@ describe('parseDateSpan', () => {
     'Mar 5 - Mar 1, 2025',
     'next week',
     '',
+    // Only hyphens, en dashes and em dashes separate a range; look-alikes and escape text don't.
+    'June \u2012 July 2022',
+    'June \u2015 July 2022',
+    'June \u2212 July 2022',
+    'August 13 \\u2013 27, 2024',
   ])('returns null for "%s", which has no known year or is not a real date', text => {
     expect(parseDateSpan(text)).toBeNull();
   });

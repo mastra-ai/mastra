@@ -1,5 +1,12 @@
 # @mastra/auth-supabase
 
+## 1.2.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#30531](https://github.com/mastra-ai/mastra/pull/30531))
+  - Updated dependency [`@supabase/supabase-js@^2.119.0` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.119.0) (from `^2.118.0`, in `dependencies`)
+
 ## 1.2.2-alpha.0
 
 ### Patch Changes

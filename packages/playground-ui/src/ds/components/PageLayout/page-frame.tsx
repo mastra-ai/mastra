@@ -42,7 +42,7 @@ export function PageFrame({
         </div>
       )}
       <main className="flex min-h-0 flex-1 flex-col">
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1" mask={false}>
           <ScrollAreaViewport
             className={fixed ? 'p-0' : 'p-4'}
             contentClassName={

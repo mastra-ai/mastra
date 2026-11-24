@@ -15,16 +15,13 @@
  * error — see workflows/evented/storage-capability-gate.test.ts.
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import type { PubSub } from '../../../events';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
+import { sharedBroker } from '../../../mastra/test-utils/shared-broker';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { MockStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
@@ -188,8 +185,7 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
   it.each(['sync', 'async'] as const)(
     'keeps streaming with a warning when shared storage reports no fencing (%s)',
     async probe => {
-      const directory = await mkdtemp(join(tmpdir(), 'fence-'));
-      const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+      const pubsub = sharedBroker({ leases: true }).connect();
       const storage = new MockStore();
       const workflows: WorkflowsStorage = storage.stores.workflows;
       const capability = vi.spyOn(workflows, 'supportsRunFencing');
@@ -215,14 +211,12 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
       } finally {
         await mastra?.shutdown();
         await pubsub.close();
-        await rm(directory, { recursive: true, force: true });
       }
     },
   );
 
   it('keeps streaming with a private agent transport on a shared evented host', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'mixed-'));
-    const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+    const pubsub = sharedBroker({ leases: true }).connect();
     const agent = createEventedAgent({
       agent: new Agent({
         id: 'private-bus',
@@ -245,7 +239,6 @@ describe('EventedAgent on storage without atomic concurrent updates', () => {
     } finally {
       await mastra?.shutdown();
       await pubsub.close();
-      await rm(directory, { recursive: true, force: true });
     }
   });
 

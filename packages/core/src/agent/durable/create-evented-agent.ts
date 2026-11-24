@@ -105,6 +105,12 @@ export interface CreateEventedAgentOptions<
  * death: over the same storage, a fresh process can resume in-flight runs via
  * `recover(runId)` / `recoverActiveRuns()`.
  *
+ * In one process it runs on any pubsub, including the default one. Running its
+ * steps on several processes needs a pubsub that redelivers unacknowledged
+ * events and a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ *
  * @param options - Configuration options
  * @returns An EventedAgent instance (register it on a `Mastra` host before use)
  *

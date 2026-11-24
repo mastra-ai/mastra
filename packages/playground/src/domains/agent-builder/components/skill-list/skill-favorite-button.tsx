@@ -46,6 +46,7 @@ export const SkillFavoriteButton = ({
 
   return (
     <Button
+      icon={<IconStar className={isFavorited ? 'fill-current' : undefined} />}
       type="button"
       variant="default"
       size={size}
@@ -66,7 +67,6 @@ export const SkillFavoriteButton = ({
         className,
       )}
     >
-      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && (
         <Txt as="span" variant="label" className="whitespace-nowrap">
           {hasCount ? (

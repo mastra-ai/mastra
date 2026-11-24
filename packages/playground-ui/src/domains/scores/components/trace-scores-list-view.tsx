@@ -30,7 +30,7 @@ export function TraceScoresListView({
   if (isLoading) {
     return (
       <div className="flex justify-center py-3">
-        <Spinner size="md" variant="pulse" className="text-placeholder" />
+        <Spinner size="md" variant="pulse" className="text-subtle-foreground" />
       </div>
     );
   }

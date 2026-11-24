@@ -1,0 +1,33 @@
+{
+  "targets": [
+    {
+      "name": "mastracode",
+      "source": "docs/src/mastra-code",
+      "repo": "mastra-ai/mastracode-website",
+      "branch": "main",
+      "dest": "src/docs"
+    },
+    {
+      "name": "agent-builder-docs",
+      "source": "docs/src/agent-builder/docs",
+      "repo": "mastra-ai/agent-builder-docs",
+      "branch": "main",
+      "dest": "src/docs"
+    },
+    {
+      "name": "agent-builder-reference",
+      "source": "docs/src/agent-builder/reference",
+      "repo": "mastra-ai/agent-builder-docs",
+      "branch": "main",
+      "dest": "src/reference",
+      "routeBasePath": "/reference"
+    },
+    {
+      "name": "factory",
+      "source": "docs/src/factory",
+      "repo": "mastra-ai/softwarefactory-docs",
+      "branch": "main",
+      "dest": "src/docs"
+    }
+  ]
+}

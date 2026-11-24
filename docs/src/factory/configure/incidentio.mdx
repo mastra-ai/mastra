@@ -1,0 +1,62 @@
+---
+title: incident.io | Configuration
+description: Connect incident.io accounts and route outstanding follow-ups to a Factory board.
+---
+
+# incident.io
+
+incident.io supplies outstanding follow-ups to Factory boards. The server can also import incidents as an intake source, and each selected source becomes its own work item so agents can work each remediation task. The **Work Intake** picker currently lists follow-up sources only.
+
+Platform-backed servers use their Platform connection. Servers with their own API key can use the [self-managed configuration](#use-your-own-api-key).
+
+## Connect an account
+
+You need a running [Factory](/) and a linked target repository. You also need an incident.io API key for the account you want to connect.
+
+1. Open **Settings → Work Intake**.
+1. Under **incident.io follow-ups**, select **Connect incident.io**.
+1. Enter the account's API key in the dialog and submit.
+1. Confirm the section lists the connected account name.
+
+Select **Connect another** to add more accounts. The picker lists follow-up sources from every connected account.
+
+If the **incident.io follow-ups** section doesn't appear in **Work Intake**, the server doesn't offer Platform-backed incident.io connections. The server operator can configure an [API key](#use-your-own-api-key) instead.
+
+## Select and route sources
+
+In **Work Intake**, enable **Sync incident.io follow-ups** and select the follow-up sources you want to follow. Selections are shared: they feed every member's board.
+
+On each selected source's row, choose a destination Factory. A source with **Not routed** selected isn't picked up. The Factory's board rules determine which board receives the card.
+
+| Setting | Scope | Expected result |
+| - | - | - |
+| Account connection | Connected accounts | Lists follow-up sources from every connected account. |
+| Sync and source selection | Organization | Factory imports outstanding follow-ups from the selected sources. |
+| Source routing | Organization | Each selected source has a destination Factory with the intended codebase. |
+
+Choose a Factory linked to the repository where the source's follow-ups should be implemented. Confirm the destination before changing shared routing for teammates.
+
+## Verify intake
+
+1. Create one outstanding follow-up in a selected, routed source.
+1. Return to the destination Factory's **Work** board.
+1. Match the follow-up's title and source link.
+1. Select **Investigate** and inspect the session's understanding of the task.
+
+Give synchronization time to run. Planning, implementation, and review then follow the [Work workflow](/using/work-and-approvals). Completing a card marks the follow-up as completed in incident.io, and canceling a card marks it as not doing. Comments aren't synchronized in either direction.
+
+A reconciliation worker refreshes the status and metadata of imported follow-ups every five minutes by default, without needing an open browser. The [event delivery variables](/reference/environment-variables#event-delivery) adjust or disable it.
+
+If follow-ups don't appear in Factory, read [Troubleshooting](/troubleshooting#intake-is-empty).
+
+## Use your own API key
+
+For a self-managed connection, create an API key in the incident.io dashboard with permission to read incidents and follow-ups and to update follow-up statuses.
+
+Set the key on the Factory Server and restart it:
+
+```dotenv title=".env"
+INCIDENT_IO_API_KEY=your-incident-io-api-key
+```
+
+The generated entry uses this explicit integration when the key is present, taking precedence over a Platform connection. The key is deployment-global: every member reads incident.io through the same account, and there is no per-user authorization step. Source selection and routing still happen in **Work Intake**. Instead of connected accounts, the section reports the configured API key.

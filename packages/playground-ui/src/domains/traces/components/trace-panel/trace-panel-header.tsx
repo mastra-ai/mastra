@@ -141,11 +141,11 @@ export function TracePanelDatasetButton({ onSaveAsDatasetItem }: TracePanelDatas
   const { traceId, rootSpan } = useTracePanel();
   return (
     <Button
+      icon={<IconFloppyDisk1 />}
       size="sm"
       tooltip="Add the full trace to a dataset"
       onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
     >
-      <IconFloppyDisk1 />
       Add to dataset
     </Button>
   );
@@ -160,8 +160,13 @@ export interface TracePanelScoreButtonProps {
 export function TracePanelScoreButton({ onClick }: TracePanelScoreButtonProps) {
   const { rootSpan, setScoring } = useTracePanel();
   return (
-    <Button variant="primary" size="sm" onClick={onClick ?? (() => setScoring(true))} disabled={!rootSpan}>
-      <IconGauge />
+    <Button
+      icon={<IconGauge />}
+      variant="primary"
+      size="sm"
+      onClick={onClick ?? (() => setScoring(true))}
+      disabled={!rootSpan}
+    >
       Score trace
     </Button>
   );

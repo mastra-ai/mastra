@@ -309,6 +309,18 @@ function hasDurableExecution(agent: Agent): boolean {
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
 
+function usesDurableEngine(agent: Agent): boolean | undefined {
+  const native = agent as unknown as { __hasDurableExecution?: () => boolean };
+  return typeof native.__hasDurableExecution === 'function' ? native.__hasDurableExecution() : undefined;
+}
+
+/** A forwarding proxy can expose the wrapped agent's hook without implementing it itself. */
+function ownsRunStreamHook(agent: Agent): boolean {
+  const key = '__subscribeToRunStream';
+  const prototype: object | null = Object.getPrototypeOf(agent);
+  return Object.hasOwn(agent, key) || (prototype !== null && key in prototype);
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
@@ -3204,16 +3216,22 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      // Inngest forwards unknown methods to its wrapped agent, but publishes on its own bus.
+      // Only use the fence when the observed agent implements the hook. Older core wrappers
+      // predate the engine check and are identified by their durable wrapper shape.
+      const fencedAgent =
+        ownsRunStreamHook(agent) && (usesDurableEngine(agent) ?? durableAgent)
+          ? (agent as unknown as DurableAgentLike)
+          : undefined;
       // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
-      // A durable agent subscribes for us so the client never sees what an
-      // execution that lost the run still publishes. Agents without it, such as
-      // those from an older @mastra/core, are observed through the topic directly.
+      // Agents without the hook, such as those from an older @mastra/core, are observed
+      // through the topic directly.
       const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
-        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+        if (typeof fencedAgent?.__subscribeToRunStream === 'function') {
+          return fencedAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
         if (offset === undefined) {
           return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));

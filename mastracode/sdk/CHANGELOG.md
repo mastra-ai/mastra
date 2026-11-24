@@ -1,5 +1,52 @@
 # @mastra/code-sdk
 
+## 1.21.0-alpha.9
+
+### Patch Changes
+
+- `submit_plan` now reads the plan file when the run suspends, so approval cards always render the plan. The tool ships as a filesystem-free builtin that only knows the plan file path and expects the host to fill in the plan, and nothing did, so the card fell back to re-reading the file later through the session workspace. That broke whenever the sandbox was recreated, the plans directory moved, or the file was edited after submission — the card showed "The plan could not be loaded from <path>" with Approve disabled, and a later read could show a different plan than the one reviewed. ([#30227](https://github.com/mastra-ai/mastra/pull/30227))
+
+  Submitting a path outside the plans directory now fails immediately with the location to write instead of parking an unrenderable card. The submitted path must resolve to a markdown file directly inside the session's plans directory, relative to the session workspace root:
+
+  - **Mastra Code sessions, including the TUI:** the plans directory is `.mastracode/plans`, or `plansDir` when one is configured. Submit `.mastracode/plans/add-dark-mode.md`.
+  - **Factory sessions:** the plans directory is `.artifacts/plans`. With one repository in the sandbox the workspace root is that checkout; with several it holds one directory per repository. In both layouts submit `.artifacts/plans/issue-5.md` at the root, not a repository-prefixed `mastra/.artifacts/plans/issue-5.md`.
+
+  The builtin used to accept any path it was given and leave the card to re-read it later. Now the path is checked before suspending, and the error names the directory to write in. In a Factory session:
+
+  ```ts
+  // before: any path parked, and the card re-read it afterwards
+  submit_plan({ path: 'mastra/.artifacts/plans/issue-5.md' });
+
+  // after: the path must resolve directly inside the plans directory
+  submit_plan({ path: '.artifacts/plans/issue-5.md' });
+  ```
+
+  `approvePlanFile` now accepts the reviewed plan text and archives that, instead of re-reading the file, so the archived plan is the one the user approved.
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`441e238`](https://github.com/mastra-ai/mastra/commit/441e2389a99d52475f44c7b05c1823166cef6cd0), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`76164d0`](https://github.com/mastra-ai/mastra/commit/76164d0e1c52ee650efef574d2951faf614e79ae), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+  - @mastra/memory@1.41.3-alpha.4
+  - @mastra/client-js@1.62.0-alpha.8
+  - @mastra/libsql@1.32.0-alpha.2
+  - @mastra/pg@1.38.0-alpha.3
+  - @mastra/mcp@2.11.0-alpha.1
+
+## 1.21.0-alpha.8
+
+### Minor Changes
+
+- Added a Codex Fast preference for OpenAI subscription sign-in. Set `providerOptions: { mastracode: { codexServiceTier: 'fast' } }` on a request, or select a supported Codex model with `:fast` (for example, `openai/gpt-6.2-sol:fast`). The suffix is local and the preference never applies to API-key authentication. `:fast` requests Fast only on models that have a Fast tier (GPT-6.2 Sol and Astra, GPT-6.1 Sol and Terra, GPT-6 Astra, Sol and Luna, GPT-5.6, GPT-5.6 Sol, GPT-5.5 and GPT-5.4); on other models it has no effect. `withCodexFastModels()` adds these Fast entries to a model list. ([#30882](https://github.com/mastra-ai/mastra/pull/30882))
+
+### Patch Changes
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/memory@1.41.3-alpha.3
+  - @mastra/libsql@1.32.0-alpha.1
+  - @mastra/pg@1.37.1-alpha.2
+  - @mastra/client-js@1.61.2-alpha.7
+  - @mastra/mcp@2.11.0-alpha.1
+
 ## 1.21.0-alpha.7
 
 ### Patch Changes
