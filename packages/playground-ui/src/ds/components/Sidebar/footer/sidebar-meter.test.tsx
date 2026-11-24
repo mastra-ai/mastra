@@ -13,6 +13,15 @@ describe('SidebarMeter', () => {
     expect(container.querySelector('[data-slot="sidebar-meter"]')?.getAttribute('data-tone')).toBe('warning');
   });
 
+  it.each([
+    ['neutral', 'bg-nested'],
+    ['warning', 'bg-badge-amber-subtle'],
+    ['danger', 'bg-badge-red-subtle'],
+  ] as const)('fills the %s card with %s', (tone, surface) => {
+    const { container } = render(<SidebarMeter label="Credits" value="$4" status="Status" tone={tone} />);
+    expect(container.querySelector('[data-slot="sidebar-meter"]')?.classList.contains(surface)).toBe(true);
+  });
+
   it('folds the label away and covers the card with the link when collapsed', () => {
     render(
       <SidebarMeter
