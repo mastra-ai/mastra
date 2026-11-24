@@ -1422,15 +1422,21 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }
 
   /** Read just the visible notes' link targets, in the same page and note order as the explorer walk. */
-  async listGraphNoteMentions(input: { pageIds: string[]; read: KnowledgeReadScope; limit: number }) {
+  async listGraphNoteMentions(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    limit: number;
+    maxMentionsPerNote: number;
+  }) {
     const params = new Params();
     const filter = new ReadFilter(input.read, params, this.#pages);
     const ids = params.add(input.pageIds);
     const take = params.add(input.limit + 1);
+    const mentionTake = params.add(input.maxMentionsPerNote + 1);
     const rows = await this.#rows(
       this.#client,
       `SELECT picked."pageId",
-         ARRAY(SELECT mn."pageId" FROM ${this.#mentions} mn WHERE mn."noteId" = picked."id" ORDER BY mn."pageId") AS mentions
+         ARRAY(SELECT mn."pageId" FROM ${this.#mentions} mn WHERE mn."noteId" = picked."id" ORDER BY mn."pageId" LIMIT ${mentionTake}) AS mentions
        FROM (
          SELECT n."id", n."pageId", n."createdAt", requested.position
          FROM unnest(${ids}::text[]) WITH ORDINALITY requested(id, position)
@@ -1445,12 +1451,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
        ) picked ORDER BY picked.position, picked."createdAt", picked."id"`,
       params.values,
     );
-    return {
-      notes: rows
-        .slice(0, input.limit)
-        .map(row => ({ pageId: String(row.pageId), mentions: row.mentions as string[] })),
-      truncated: rows.length > input.limit,
-    };
+    let truncated = rows.length > input.limit;
+    const notes = rows.slice(0, input.limit).map(row => {
+      const mentions = row.mentions as string[];
+      if (mentions.length > input.maxMentionsPerNote) truncated = true;
+      return { pageId: String(row.pageId), mentions: mentions.slice(0, input.maxMentionsPerNote) };
+    });
+    return { notes, truncated };
   }
 
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {

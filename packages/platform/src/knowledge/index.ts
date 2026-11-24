@@ -202,10 +202,11 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
   async readPageGraph(
     input: Parameters<typeof readKnowledgePageGraph>[1],
   ): Promise<KnowledgePageGraph | null | undefined> {
-    // Hosts can request larger custom graphs locally. The service enforces its HTTP route budgets.
+    // Only a missing operation falls back to remote primitives. Oversized requests must respect the hosted budget.
     const { limits } = input;
-    if ((limits?.maxPages ?? 0) > 500 || (limits?.maxNotes ?? 0) > 5000 || (limits?.maxOutsidePages ?? 0) > 50)
-      return undefined;
+    if ((limits?.maxPages ?? 0) > 500 || (limits?.maxNotes ?? 0) > 5000 || (limits?.maxOutsidePages ?? 0) > 50) {
+      throw new RangeError('Hosted Knowledge graphs support up to 500 pages, 5000 notes, and 50 outside pages');
+    }
     let result: unknown;
     try {
       result = await this.request('readPageGraph', input);

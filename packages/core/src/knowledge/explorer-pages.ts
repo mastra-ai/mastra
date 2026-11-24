@@ -36,22 +36,39 @@ function scopeVisible(page: KnowledgePage, read: KnowledgeReadScope): boolean {
   return page.isScope && knowledgeScopeReadable(page, read);
 }
 
+/** Read at most the row budget. A broken continuation cannot keep a graph or tree request alive. */
+async function boundedList<T>(
+  budget: number,
+  list: (cursor: string | undefined, limit: number) => Promise<{ items: T[]; nextCursor?: string }>,
+): Promise<{ items: T[]; truncated: boolean }> {
+  const items: T[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  while (items.length < budget) {
+    const limit = Math.min(MAX_KNOWLEDGE_PAGE_LIST_LIMIT, budget - items.length);
+    const batch = await list(cursor, limit);
+    if (batch.nextCursor && seen.has(batch.nextCursor)) return { items, truncated: true };
+    items.push(...batch.items.slice(0, limit));
+    if (batch.items.length > limit) return { items, truncated: true };
+    if (!batch.nextCursor) return { items, truncated: false };
+    if (!batch.items.length) break;
+    cursor = batch.nextCursor;
+    seen.add(cursor);
+  }
+  return { items, truncated: true };
+}
+
 async function allChildScopes(
   store: KnowledgePageStore,
   parentId: string | null,
   budget: { remaining: number },
 ): Promise<{ scopes: KnowledgePage[]; truncated: boolean }> {
-  const scopes: KnowledgePage[] = [];
-  let cursor: string | undefined;
-  do {
-    if (budget.remaining <= 0) return { scopes, truncated: true };
-    const limit = Math.min(MAX_KNOWLEDGE_PAGE_LIST_LIMIT, budget.remaining);
-    const result = await store.listChildScopes({ parentId, cursor, limit });
-    budget.remaining -= result.pages.length;
-    scopes.push(...result.pages);
-    cursor = result.nextCursor;
-  } while (cursor);
-  return { scopes, truncated: false };
+  const { items, truncated } = await boundedList(budget.remaining, async (cursor, limit) => {
+    const { pages, nextCursor } = await store.listChildScopes({ parentId, cursor, limit });
+    return { items: pages, nextCursor };
+  });
+  budget.remaining -= items.length;
+  return { scopes: items, truncated };
 }
 
 /**
@@ -267,13 +284,14 @@ export interface KnowledgePageGraphLimits {
   maxOutsidePages: number;
 }
 
-const NOTE_BATCH = 100;
-
 export const DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS: KnowledgePageGraphLimits = {
   maxPages: 200,
   maxNotes: 5000,
   maxOutsidePages: 50,
 };
+
+/** Maximum targets from one visible note in the overview. The full note is available in the page view. */
+const MAX_GRAPH_MENTIONS_PER_NOTE = 100;
 
 export interface KnowledgePageGraphEdge {
   source: string;
@@ -320,84 +338,113 @@ async function countInBatches(
  * parents (scope pages only sit under scopes), then child pages, listed only for parents the level's
  * one count says have some. `null` lists the root scopes.
  */
-async function graphLevelChildren(
+async function* graphLevelChildren(
   store: KnowledgePageStore,
   level: Array<string | null>,
   read: KnowledgeReadScope,
-  byId: Map<string, KnowledgePage>,
-): Promise<{ byParent: KnowledgePage[][]; truncated: boolean }> {
-  let truncated = false;
+  byId: ReadonlyMap<string, KnowledgePage>,
+  maxPages: number,
+  scopeBudget: { remaining: number },
+) {
   const parents = level.flatMap(id => (id === null ? [] : [byId.get(id)!]));
   const pageCounts = await countInBatches(parents, ids => store.countChildPages({ parentIds: ids, read }));
-  const byParent: KnowledgePage[][] = [];
   for (const parentId of level) {
     const parent = parentId === null ? null : byId.get(parentId)!;
-    const children: KnowledgePage[] = [];
     if (!parent || parent.isScope) {
-      const scopes = await visibleChildScopes(store, parentId, read, { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN });
-      truncated ||= scopes.truncated;
-      children.push(...scopes.scopes);
+      const { scopes, truncated } = await visibleChildScopes(store, parentId, read, scopeBudget);
+      yield { parentId, children: scopes, truncated };
     }
     if (parent && (!pageCounts || pageCounts[parent.id])) {
-      let cursor: string | undefined;
-      do {
-        const result = await store.listChildPages({ parentId: parent.id, read, cursor });
-        children.push(...result.pages);
-        cursor = result.nextCursor;
-      } while (cursor);
+      // The caller adds each batch to byId before resuming. One lookahead distinguishes a full graph from a truncated one.
+      const remaining = Math.max(0, maxPages - byId.size);
+      const { items, truncated } = await boundedList(remaining + 1, async (cursor, limit) => {
+        const { pages, nextCursor } = await store.listChildPages({ parentId: parent.id, read, cursor, limit });
+        return { items: pages, nextCursor };
+      });
+      yield { parentId, children: items, truncated };
     }
-    byParent.push(children);
   }
-  return { byParent, truncated };
 }
 
-type GraphInput = { read: KnowledgeReadScope; rootId?: string | null; limits?: Partial<KnowledgePageGraphLimits> };
+export type KnowledgePageGraphInput = {
+  read: KnowledgeReadScope;
+  rootId?: string | null;
+  limits?: Partial<KnowledgePageGraphLimits>;
+};
 type GraphNotes = { notes: Pick<KnowledgeNote, 'pageId' | 'mentions'>[]; truncated: boolean };
 
 /** Optional bulk reads. Local stores and older hosted services can use the paginated primitives. */
-interface GraphStore extends KnowledgePageStore {
+export interface KnowledgePageGraphStore extends KnowledgePageStore {
   /** undefined means the service lacks this operation. null means the root was not found. */
-  readPageGraph?(input: GraphInput): Promise<KnowledgePageGraph | null | undefined>;
-  listGraphNoteMentions?(input: { pageIds: string[]; read: KnowledgeReadScope; limit: number }): Promise<GraphNotes>;
+  readPageGraph?(input: KnowledgePageGraphInput): Promise<KnowledgePageGraph | null | undefined>;
+  /** Apply visibility before limiting mentions. Return truncated if either limit omits results. */
+  listGraphNoteMentions?(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    limit: number;
+    maxMentionsPerNote: number;
+  }): Promise<GraphNotes>;
 }
 
 async function graphNotes(
-  store: GraphStore,
+  store: KnowledgePageGraphStore,
   pages: KnowledgePage[],
   read: KnowledgeReadScope,
   limit: number,
 ): Promise<GraphNotes> {
   const notes: GraphNotes['notes'] = [];
   if (!pages.length) return { notes, truncated: false };
-  if (store.listGraphNoteMentions && Number.isSafeInteger(limit) && limit >= 0) {
-    return store.listGraphNoteMentions({ pageIds: pages.map(page => page.id), read, limit });
+  let truncated = false;
+  const project = ({ pageId, mentions }: GraphNotes['notes'][number]) => {
+    if (mentions.length <= MAX_GRAPH_MENTIONS_PER_NOTE) return { pageId, mentions };
+    truncated = true;
+    return { pageId, mentions: mentions.slice(0, MAX_GRAPH_MENTIONS_PER_NOTE) };
+  };
+  if (store.listGraphNoteMentions) {
+    const batch = await store.listGraphNoteMentions({
+      pageIds: pages.map(page => page.id),
+      read,
+      limit,
+      maxMentionsPerNote: MAX_GRAPH_MENTIONS_PER_NOTE,
+    });
+    const notes = batch.notes.map(project);
+    return { notes, truncated: truncated || batch.truncated };
   }
   const counts = await countInBatches(pages, ids => store.countNotes({ pageIds: ids, read }));
   for (const page of pages) {
     if (counts && !counts[page.id]) continue;
-    let cursor: string | undefined;
-    do {
-      const remaining = limit - notes.length;
-      if (remaining <= 0) return { notes, truncated: true };
-      const batch = await store.listNotes({ pageId: page.id, read, cursor, limit: Math.min(NOTE_BATCH, remaining) });
-      for (const { pageId, mentions } of batch.notes) notes.push({ pageId, mentions });
-      cursor = batch.nextCursor;
-    } while (cursor);
+    if (notes.length >= limit) return { notes, truncated: true };
+    const batch = await boundedList(limit - notes.length, async (cursor, limit) => {
+      const { notes, nextCursor } = await store.listNotes({ pageId: page.id, read, cursor, limit });
+      return { items: notes.map(project), nextCursor };
+    });
+    for (const note of batch.items) notes.push(note);
+    truncated ||= batch.truncated;
   }
-  return { notes, truncated: false };
+  return { notes, truncated };
 }
 
 /**
  * A bounded graph: pages breadth-first under `rootId` (or every root scope `read` reaches), parent
  * edges between them, and mention edges from their readable notes.
  */
-export async function readKnowledgePageGraph(store: GraphStore, input: GraphInput): Promise<KnowledgePageGraph | null> {
+export async function readKnowledgePageGraph(
+  store: KnowledgePageGraphStore,
+  input: KnowledgePageGraphInput,
+): Promise<KnowledgePageGraph | null> {
+  const limits = {
+    maxPages: input.limits?.maxPages ?? DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS.maxPages,
+    maxNotes: input.limits?.maxNotes ?? DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS.maxNotes,
+    maxOutsidePages: input.limits?.maxOutsidePages ?? DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS.maxOutsidePages,
+  };
+  if (Object.values(limits).some(limit => !Number.isSafeInteger(limit) || limit < 0)) {
+    throw new RangeError('Knowledge graph limits must be non-negative safe integers');
+  }
   if (store.readPageGraph) {
-    const graph = await store.readPageGraph(input);
+    const graph = await store.readPageGraph({ ...input, limits });
     if (graph !== undefined) return graph;
   }
   const { read } = input;
-  const limits = { ...DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS, ...input.limits };
   const rootId = input.rootId ?? null;
   const pages: KnowledgePage[] = [];
   const byId = new Map<string, KnowledgePage>();
@@ -420,20 +467,20 @@ export async function readKnowledgePageGraph(store: GraphStore, input: GraphInpu
   // The walk goes a level at a time: one child-page count for the whole level, then a listing only for
   // the parents that have children, so a tree of mostly leaf pages costs a few calls per level.
   const treeParent = new Map<string, string>();
+  const scopeBudget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
   walk: while (queue.length) {
     const level = queue;
     queue = [];
-    const children = await graphLevelChildren(store, level, read, byId);
-    truncated ||= children.truncated;
-    for (const [i, parentId] of level.entries()) {
-      for (const child of children.byParent[i]!) {
+    for await (const batch of graphLevelChildren(store, level, read, byId, limits.maxPages, scopeBudget)) {
+      truncated ||= batch.truncated;
+      for (const child of batch.children) {
         if (byId.has(child.id)) continue;
         if (pages.length >= limits.maxPages) {
           truncated = true;
           break walk;
         }
         add(child);
-        if (parentId !== null) treeParent.set(child.id, parentId);
+        if (batch.parentId !== null) treeParent.set(child.id, batch.parentId);
         queue.push(child.id);
       }
     }
@@ -482,18 +529,21 @@ export async function readKnowledgePageGraph(store: GraphStore, input: GraphInpu
   const pinnedIds: string[] = [];
   const ids = pages.map(page => page.id);
   for (let start = 0; start < ids.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
-    let cursor: string | undefined;
-    do {
-      const result = await store.listPins({
+    const pageIds = ids.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
+    // A page has at most one pin of kind 'page'.
+    const batch = await boundedList(pageIds.length, async (cursor, limit) => {
+      const { pins, nextCursor } = await store.listPins({
         audience: 'all',
         read,
         kind: 'page',
-        pageIds: ids.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT),
+        pageIds,
         cursor,
+        limit,
       });
-      pinnedIds.push(...result.pins.map(pin => pin.pageId));
-      cursor = result.nextCursor;
-    } while (cursor);
+      return { items: pins.map(pin => pin.pageId), nextCursor };
+    });
+    pinnedIds.push(...batch.items);
+    truncated ||= batch.truncated;
   }
 
   return { pages, outsideIds, edges, pinnedIds, truncated };

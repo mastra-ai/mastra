@@ -66,10 +66,24 @@ it.each([{ pages: [], edges: [], outsideIds: [], pinnedIds: [], truncated: false
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch).toHaveBeenCalledWith(
       'http://localhost/v1/knowledge/kn_1/operations/readPageGraph',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ input: graphInput }) }),
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          input: { ...graphInput, limits: { maxPages: 200, maxNotes: 5000, maxOutsidePages: 50 } },
+        }),
+      }),
     );
   },
 );
+
+it('rejects an oversized hosted graph before issuing remote storage calls', async () => {
+  const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Unexpected remote read'));
+  onTestFinished(() => fetch.mockRestore());
+  await expect(
+    readKnowledgePageGraph(await hostedGraphStore(), { ...graphInput, limits: { maxPages: 501 } }),
+  ).rejects.toThrow(RangeError);
+  expect(fetch).not.toHaveBeenCalled();
+});
 
 it('falls back to the scoped page reader when an older instance lacks the graph operation', async () => {
   const fetch = vi
@@ -88,6 +102,7 @@ it('falls back to the scoped page reader when an older instance lacks the graph 
 it.each([
   [404, 'Instance not found'],
   [403, 'Forbidden'],
+  [422, 'Knowledge graph exceeded its read budget'],
 ] as const)('propagates a hosted %i graph error without retrying through primitives', async (status, detail) => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(Response.json({ detail }, { status }));
   onTestFinished(() => fetch.mockRestore());

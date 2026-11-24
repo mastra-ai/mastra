@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { KnowledgeReadScope } from '../../storage';
 import { KnowledgeUnsupportedCapabilityError } from '../../storage';
@@ -343,6 +343,81 @@ describe('readKnowledgePageGraph', () => {
     expect(graph?.pages.length).toBeLessThanOrEqual(3 + (graph?.outsideIds.length ?? 0));
     expect(graph?.truncated).toBe(true);
     expect(await readKnowledgePageGraph(store, { read: supportOnly, rootId: roadmap.id })).toBeNull();
+  });
+
+  it('reads only enough of a wide folder to establish that the graph is truncated', async () => {
+    const { store, billing } = await seed();
+    for (let i = 0; i < 120; i++) await store.createPage({ parentId: billing.id, name: `Item ${i}`, provenance: host });
+    const children = vi.spyOn(store, 'listChildPages');
+    const graph = await readKnowledgePageGraph(store, {
+      read: 'all',
+      rootId: billing.id,
+      limits: { maxPages: 3, maxOutsidePages: 0 },
+    });
+    expect(graph?.pages).toHaveLength(3);
+    expect(graph?.truncated).toBe(true);
+    expect(children).toHaveBeenCalledTimes(1);
+    expect(children.mock.calls[0]?.[0].limit).toBe(3);
+  });
+
+  it('reports a partial graph when a single note mentions more than 100 pages', async () => {
+    const { store, handbook, globex } = await seed();
+    const targets = [];
+    for (let i = 0; i < 101; i++) {
+      targets.push((await store.createPage({ parentId: handbook.id, name: `Target ${i}`, provenance: host })).id);
+    }
+    await store.addNote({
+      pageId: handbook.id,
+      text: 'Index',
+      stampScopeIds: [globex.id],
+      mentions: targets,
+      provenance: host,
+    });
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: handbook.id });
+    expect(graph?.pages).toHaveLength(102);
+    expect(graph?.edges.filter(edge => edge.kind === 'mention')).toHaveLength(100);
+    expect(graph?.truncated).toBe(true);
+    expect((await store.listNotes({ pageId: handbook.id, read: 'all' })).notes[0]?.mentions).toHaveLength(101);
+  });
+
+  it('ends an incomplete scan if a store supplies a cursor without any rows', async () => {
+    const { store } = await seed();
+    const scopes = vi
+      .spyOn(store, 'listChildScopes')
+      .mockResolvedValueOnce({ pages: [], nextCursor: 'continue' })
+      .mockRejectedValue(new Error('Read past a stalled page'));
+    const graph = await readKnowledgePageGraph(store, { read: 'all' });
+    expect(graph).toMatchObject({ pages: [], truncated: true });
+    expect(scopes).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at a repeated child cursor and keeps each page once', async () => {
+    const { store, refunds, policy } = await seed();
+    const repeated = { pages: [policy], nextCursor: 'stuck' };
+    const children = vi
+      .spyOn(store, 'listChildPages')
+      .mockResolvedValueOnce(repeated)
+      .mockResolvedValueOnce(repeated)
+      .mockRejectedValue(new Error('Read past a repeated cursor'));
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: refunds.id });
+    expect(graph?.pages.filter(page => page.id === policy.id)).toHaveLength(1);
+    expect(graph?.truncated).toBe(true);
+    expect(children).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports complete when the whole subtree fits the limit exactly', async () => {
+    const { store, handbook } = await seed();
+    await store.createPage({ parentId: handbook.id, name: 'Appendix', provenance: host });
+    const graph = await readKnowledgePageGraph(store, { read: 'all', rootId: handbook.id, limits: { maxPages: 2 } });
+    expect(names(graph?.pages ?? [])).toEqual(['Globex handbook', 'Appendix']);
+    expect(graph?.truncated).toBe(false);
+  });
+
+  it.each([Infinity, -1, 1.5])('rejects an invalid page budget of %s before storage', async maxPages => {
+    const store = new InMemoryKnowledgePageStore();
+    const scopes = vi.spyOn(store, 'listChildScopes');
+    await expect(readKnowledgePageGraph(store, { read: 'all', limits: { maxPages } })).rejects.toThrow(RangeError);
+    expect(scopes).not.toHaveBeenCalled();
   });
 
   it('reads a 300-page tree in a bounded number of store calls, batched by level', async () => {

@@ -111,7 +111,7 @@ describe('PgKnowledgePages (schema 4)', () => {
     await add(second.id, [hidden.id]);
     await add(second.id, []);
     await add(second.id, [first.id]);
-    const input = { pageIds: [second.id, first.id], read: readOf('team:graph') };
+    const input = { pageIds: [second.id, first.id], read: readOf('team:graph'), maxMentionsPerNote: 100 };
     expect(await store.listGraphNoteMentions({ ...input, limit: 2 })).toEqual({
       notes: [
         { pageId: second.id, mentions: [] },
@@ -125,6 +125,34 @@ describe('PgKnowledgePages (schema 4)', () => {
         { pageId: second.id, mentions: [first.id] },
         { pageId: first.id, mentions: [second.id] },
       ],
+      truncated: false,
+    });
+  });
+
+  it('limits mention targets per visible note and reports whether any targets were omitted', async () => {
+    const { scope } = await store.materializeScope({
+      address: 'team:many-mentions',
+      declaration: 'team:$id',
+      name: 'Team',
+      provenance,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Source', provenance });
+    const other = await store.createPage({ parentId: scope.id, name: 'Target', provenance });
+    await store.addNote({
+      pageId: page.id,
+      text: 'See also',
+      stampScopeIds: [scope.id],
+      mentions: [scope.id, other.id],
+      provenance,
+    });
+    const input = { pageIds: [page.id], read: readOf('team:many-mentions'), limit: 1 };
+    const targets = [scope.id, other.id].sort();
+    expect(await store.listGraphNoteMentions({ ...input, maxMentionsPerNote: 1 })).toEqual({
+      notes: [{ pageId: page.id, mentions: targets.slice(0, 1) }],
+      truncated: true,
+    });
+    expect(await store.listGraphNoteMentions({ ...input, maxMentionsPerNote: 2 })).toEqual({
+      notes: [{ pageId: page.id, mentions: targets }],
       truncated: false,
     });
   });
