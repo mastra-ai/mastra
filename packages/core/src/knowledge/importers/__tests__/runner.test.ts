@@ -318,6 +318,47 @@ describe('runKnowledgeImport', () => {
     expect(ran).toBe(false);
   });
 
+  it('finishes the run failed with importer_error when setup throws, and rethrows the original error', async () => {
+    const throwing = {
+      '~standard': {
+        version: 1 as const,
+        vendor: 'test',
+        jsonSchema: { input: () => ({ type: 'object' }), output: () => ({ type: 'object' }) },
+        validate: () => {
+          throw new Error('validator blew up');
+        },
+      },
+    };
+    class Strict extends KnowledgeImporter({ id: 'cal', label: 'Calendar', settings: throwing }) {
+      async import() {}
+    }
+    const host = new RecordingHost();
+    await expect(runKnowledgeImport({ importers: [Strict], host, bindingId: 'b1' })).rejects.toThrow(
+      'validator blew up',
+    );
+    expect(host.finish).toMatchObject({ outcome: 'failed', backlog: false, error: { code: 'importer_error' } });
+
+    // A finish that fails doesn't replace the importer's own error.
+    const down = new RecordingHost();
+    down.finishFailures = [new KnowledgeImporterHostConflictError('run_not_active', 'gone')];
+    await expect(runKnowledgeImport({ importers: [Strict], host: down, bindingId: 'b1' })).rejects.toThrow(
+      'validator blew up',
+    );
+
+    class Broken extends KnowledgeImporter({ id: 'cal', label: 'Calendar' }) {
+      constructor(b: never) {
+        super(b);
+        throw new Error('constructor blew up');
+      }
+      async import() {}
+    }
+    const other = new RecordingHost();
+    await expect(runKnowledgeImport({ importers: [Broken], host: other, bindingId: 'b1' })).rejects.toThrow(
+      'constructor blew up',
+    );
+    expect(other.finish).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' } });
+  });
+
   it('settles a flush whose outcome stayed unknown before finishing, so lastSeq is never stale', async () => {
     const host = new RecordingHost();
     // Committed, then every retry fails: the runner can't tell whether seq 1 landed.

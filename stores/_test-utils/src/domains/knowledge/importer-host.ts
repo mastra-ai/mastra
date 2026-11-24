@@ -539,6 +539,37 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(await storage.listPageBodyLinkSources({ toPageIds: [(await page('notion/p1'))!.id] })).toContain(p2!.id);
     });
 
+    it('ends the run when the settings check throws, so the next run is not skipped', async () => {
+      let blowUp = true;
+      class Strict extends KnowledgeImporter({
+        id: 'strict',
+        label: 'Strict',
+        settings: {
+          '~standard': {
+            version: 1 as const,
+            vendor: 'test',
+            jsonSchema: { input: () => ({ type: 'object' }), output: () => ({ type: 'object' }) },
+            validate: (value: unknown) => {
+              if (blowUp) throw new Error('validator blew up');
+              return { value };
+            },
+          },
+        },
+      }) {
+        async import(ctx: KnowledgeImporterContext<unknown, never>) {
+          await ctx.items.upsert({ sourceId: 'p1', title: 'P1', body: 'body of p1' });
+        }
+      }
+      const knowledge = new Knowledge({
+        scopes: { 'docs:$orgId': {} },
+        storage: fixture.storage,
+        importers: [new Strict({ id: 's1', target: 'docs:acme#strict' })],
+      });
+      await expect(knowledge.importers!.run('s1')).rejects.toThrow('validator blew up');
+      blowUp = false;
+      expect(await knowledge.importers!.run('s1')).toMatchObject({ outcome: 'succeeded', counts: { created: 1 } });
+    });
+
     it('keeps updating an imported page a person moved out of the target, where they put it', async () => {
       const { knowledge, run, page } = setup();
       await run([

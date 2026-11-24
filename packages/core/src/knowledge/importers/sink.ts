@@ -404,7 +404,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    * Drops the node of a hand-deleted page, so its item is written again as new. Pages that linked to
    * it still name its old path: this binding's linking items are marked unsettled so a settle slice
    * renders their links section from wherever the item lands, and Knowledge's own link index is
-   * refreshed for the old page's refs.
+   * refreshed for the old page's refs. Keep that refresh: the sink's own removal does the same, and
+   * a page deleted without going through `removePage` would otherwise leave stale index rows.
    */
   const forgetDeleted = async (node: KnowledgeImporterNodeRecord) => {
     const old = await storage.getPage({ id: node.pageId, read: 'all' });

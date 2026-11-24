@@ -365,6 +365,7 @@ export class TransactionClient implements TxClient {
       await this.drain().catch(() => undefined);
       // Not bounded by the deadline: it takes no locks, and it keeps the caller's own error.
       await this.#enqueue(() => this.client.query(`ROLLBACK TO SAVEPOINT ${name}`));
+      await this.#enqueue(() => this.client.query(`RELEASE SAVEPOINT ${name}`));
       throw error;
     }
   }

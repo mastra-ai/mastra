@@ -179,7 +179,7 @@ if ('outcome' in result) {
 }
 ```
 
-The first run prints `succeeded` with every article counted as `created`. Run it again with nothing changed in the help desk and every count is `0`: the saved cursor means no article is read again. An item your importer does send again without changes is counted as `unchanged` and its page isn't rewritten.
+The first run prints `succeeded` with every article counted as `created`. Run it again with nothing changed in the help desk and every count is `0`: the saved cursor means no article is read again. An item your importer does send again without changes is counted as `unchanged` and its page isn't rewritten. When someone has edited an imported page in Knowledge, the source still wins: the next time your importer sends that item, its fields replace the edit and the item is counted as `updated`.
 
 Knowledge doesn't schedule runs. Call `run()` from your own scheduler, such as a cron job or a scheduled workflow. Only one run of a binding goes at a time. A second call while one is going returns `skipped`.
 

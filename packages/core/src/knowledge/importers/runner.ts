@@ -256,6 +256,9 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     if (error instanceof KnowledgeImporterCredentialsError) {
       return finish({ outcome: 'failed', backlog: false, error: { code: 'credential_missing' } });
     }
+    // The run is started: end it, or the binding's next run is skipped until it is reclaimed. The
+    // caller still gets the importer's own error, whatever the finish does.
+    await finish({ outcome: 'failed', backlog: false, error: { code: 'importer_error' } }).catch(() => {});
     throw error;
   }
 

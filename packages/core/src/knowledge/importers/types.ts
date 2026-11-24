@@ -22,7 +22,10 @@ export interface KnowledgeImportDeclaration {
   fallbackParent?: string;
 }
 
-/** One item with its content. A re-upsert with nothing changed writes nothing. */
+/**
+ * One item with its content. A re-upsert whose title, description and body match the page writes
+ * nothing; otherwise the item's fields replace the page's, including edits someone made in Knowledge.
+ */
 export interface KnowledgeImportItem extends KnowledgeImportDeclaration {
   description?: string;
   body: string;
