@@ -290,6 +290,8 @@ async function buildScenarioAgent({
   // An external engine's worker resolves agents from the host's Mastra, so register there.
   if (engineHost && engine === engineHost.engine) {
     const hostMastra = engineHost.getMastra();
+    // Apply each scenario's server policy to the actual worker, clearing the previous scenario's policy.
+    hostMastra.setServer(server ?? {});
     // Remote-engine scenarios execute against the host, including their real exporters.
     const instance = observability?.getDefaultInstance();
     const exporter = instance?.getExporters()[0];
