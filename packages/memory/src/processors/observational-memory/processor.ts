@@ -17,6 +17,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
+import { detachSealMetadata } from './detach-seal-metadata';
 import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
@@ -252,6 +253,21 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       rotateResponseMessageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
+    if (state.__omInputFailed) {
+      const gatewayMemoryManaged = await isGatewayMemoryManaged(model);
+      state[GATEWAY_STATE_KEY] = gatewayMemoryManaged;
+      if (gatewayMemoryManaged) {
+        const context = this.engine.getThreadContext(requestContext, messageList);
+        if (context) {
+          const messagesToSave = [...messageList.get.input.db(), ...messageList.get.response.db()];
+          if (messagesToSave.length > 0) {
+            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+          }
+        }
+        state.__omInputFailed = false;
+      }
+      return messageList;
+    }
 
     omDebug(
       `[OM:processInputStep:ENTER] step=${stepNumber}, hasMastraMemory=${!!requestContext?.get('MastraMemory')}, hasMemoryInfo=${!!messageList?.serialize()?.memoryInfo?.threadId}`,
@@ -308,33 +324,107 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         ? (safeCaptureJson(messageList.serialize()) as ReturnType<MessageList['serialize']>)
         : null;
 
-      // ── Read-only path: load existing context, skip observation lifecycle ──
-      if (readOnly) {
-        const ctx = await loadMemoryContextMessages({
-          memory: this.memory,
-          messageList,
-          threadId,
-          resourceId,
-          runState,
-        });
-        // Recall guidance is useful even with no record; null preserves read-only behavior.
-        const systemMessages = await this.engine.buildContextSystemMessages({
-          threadId,
-          resourceId,
-          record: ctx.omRecord,
-          unobservedContextBlocks: ctx.otherThreadsContext,
-        });
+      // A failed observation may have pruned messages or sealed a response before throwing.
+      // Restore pre-step message-list state when continuing without OM.
+      const preStepMessages =
+        this.engine.config.observation.failurePolicy === 'continue' ? messageList.serialize() : undefined;
+      // serialize() preserves nested references. Detach the fields OM seals in place without
+      // structuredClone(), which cannot copy provider functions carried in message parts.
+      if (preStepMessages) {
+        preStepMessages.messages = preStepMessages.messages.map(detachSealMetadata);
+      }
+      let previousRecord: ObservationalMemoryRecord | undefined;
+      let loadedContextMessages: MastraDBMessage[] | undefined;
+      let unobservedContextBlocks: string | undefined;
+      let sealWriteFailed = false;
+      const continueWithoutObservation = async (error: unknown) => {
+        const err = error instanceof Error ? error : new Error(String(error));
+        if (sealWriteFailed || this.engine.config.observation.failurePolicy !== 'continue' || abortSignal?.aborted) {
+          const failedTurn = this.turn;
+          await failedTurn?.end().catch(() => {});
+          if (this.turn === failedTurn) this.turn = undefined;
+          state.__omTurn = undefined;
+          if (typeof abort === 'function') {
+            // Name the abort's reason (e.g. a lost thread lease): the tripwire replaces the run's abort chunk.
+            const abortReason: unknown = abortSignal?.reason;
+            const abortMessage = abortSignal?.aborted
+              ? abortReason instanceof Error && abortReason.name !== 'AbortError'
+                ? `Agent execution was aborted: ${abortReason.message}`
+                : 'Agent execution was aborted'
+              : `Encountered error during memory observation: ${err.message}`;
+            abort(abortMessage, { metadata: getOmFailureMetadata(error, 'abort') });
+          }
+          throw err;
+        }
 
-        injectObservationContextMessages({
-          messageList,
-          systemMessages,
-          continuationMessage: ctx.continuationMessage,
-          hasObservations: Boolean(ctx.omRecord?.activeObservations),
-          threadId,
-          resourceId,
-        });
-
+        this.turn = undefined;
+        state.__omTurn = undefined;
+        state.__omInputFailed = true;
+        messageList.deserialize(preStepMessages!);
+        for (const message of loadedContextMessages ?? []) {
+          messageList.add(message, 'memory');
+        }
+        const logMessage = `Observational memory input failed; continuing without observation (threadId=${threadId}, resourceId=${resourceId}): ${err.message}`;
+        if (args.agent) {
+          args.agent.__getLogger().warn(logMessage, err);
+        } else if (args.loggerVNext) {
+          args.loggerVNext.error(logMessage, { error: err.stack ?? err.message, threadId, resourceId });
+        } else {
+          console.error(logMessage, err);
+        }
+        try {
+          const systemMessages = await this.engine.buildContextSystemMessages({
+            threadId,
+            resourceId,
+            record: previousRecord,
+            unobservedContextBlocks,
+          });
+          injectObservationContextMessages({
+            messageList,
+            systemMessages,
+            continuationMessage: undefined,
+            hasObservations: Boolean(previousRecord?.activeObservations),
+            threadId,
+            resourceId,
+          });
+        } catch (contextError) {
+          args.agent
+            ?.__getLogger()
+            .warn('Observational memory could not restore prior context after input failure', contextError);
+        }
         return messageList;
+      };
+
+      // Read-only memory still supplies prompt context, but must never start a turn or write output.
+      if (readOnly) {
+        try {
+          const ctx = await loadMemoryContextMessages({
+            memory: this.memory,
+            messageList,
+            threadId,
+            resourceId,
+            runState,
+          });
+          previousRecord = ctx.omRecord ?? undefined;
+          unobservedContextBlocks = ctx.otherThreadsContext;
+          const systemMessages = await this.engine.buildContextSystemMessages({
+            threadId,
+            resourceId,
+            record: ctx.omRecord,
+            unobservedContextBlocks: ctx.otherThreadsContext,
+          });
+          injectObservationContextMessages({
+            messageList,
+            systemMessages,
+            continuationMessage: ctx.continuationMessage,
+            hasObservations: Boolean(ctx.omRecord?.activeObservations),
+            threadId,
+            resourceId,
+          });
+          return messageList;
+        } catch (error) {
+          return continueWithoutObservation(error);
+        }
       }
 
       // ── Create turn on first step (or when state is reset) ──
@@ -343,220 +433,226 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // processOutputResult. In production, getInputProcessors() and
       // getOutputProcessors() each call createOMProcessor(), producing two
       // different instances that share only the processorStates map.
-      const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
-      if (activeTurn && activeTurn.messageList !== messageList) {
-        // Durable runs may deserialize a fresh MessageList between loop iterations. End the
-        // old turn first so any messages tracked on that list are flushed before OM moves on.
-        await activeTurn.end().catch(() => {});
-        if (this.turn === activeTurn) {
-          this.turn = undefined;
-        }
-        state.__omTurn = undefined;
-      }
-
-      // A turn can be sealed before the loop reaches its next step — for example when a
-      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
-      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
-      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
-      if (activeTurn?.ended || this.turn?.ended) {
-        if (this.turn?.ended) {
-          this.turn = undefined;
-        }
-        state.__omTurn = undefined;
-      }
-
-      let responseMessageId = messageId;
-      if (!this.turn || !state.__omTurn) {
-        // End previous turn if state was reset mid-flow
-        if (this.turn && !state.__omTurn) {
-          await this.turn.end().catch(() => {});
-        }
-        this.turn = this.engine.beginTurn({
-          abortSignal,
-          threadId,
-          resourceId,
-          messageList,
-          agent: args.agent,
-          observabilityContext: getOmObservabilityContext(args),
-          hooks: {
-            onBufferChunkSealed: rotateResponseMessageId,
-            onSyncObservationComplete: rotateResponseMessageId,
-          },
-        });
-        this.turn.writer = writer;
-        this.turn.sendSignal = args.sendSignal;
-        this.turn.sendStateSignal = args.sendStateSignal;
-        this.turn.agent = args.agent;
-        this.turn.requestContext = requestContext;
-        await this.turn.start(this.memory, runState);
-        if (stepNumber > 0) {
-          // A background result may have landed in storage after the durable snapshot was saved.
-          // Reconcile those response messages before the unread-part scan; the snapshot's part
-          // keys represent what was seen.
-          if (this.memory?.getPersistedMessages) {
-            const responseIds = messageList.getPersisted.response.db().map(message => message.id);
-            const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
-            const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
-            for (const stored of storedMessages) {
-              const snapshot = snapshotMessages.get(stored.id);
-              if (!snapshot) continue;
-              const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
-              const storedHasNewResult = stored.content.parts.some(part => {
-                if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
-                const previous = snapshotTools.find(
-                  candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
-                );
-                if (!previous || previous.toolInvocation.state !== 'result') return true;
-                const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
-                  | { status?: string }
-                  | undefined;
-                const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
-                return (
-                  previousTask?.status === 'running' &&
-                  (storedTask?.status === 'completed' || storedTask?.status === 'failed')
-                );
-              });
-              if (storedHasNewResult) {
-                this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
-                messageList.add(stored, 'memory');
-              }
-            }
-          }
-        }
-        // A run recovered by another worker can continue a response message that the dead
-        // worker already observed. That worker rotated the id in memory, but the rotation was
-        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
-        // observedMessageIds alone misses responses observed before an activation or a reflection,
-        // neither of which keeps their ids. What survives is on the message itself: buffering
-        // persists OM's seal before the Observer runs, and sync observation persists its end
-        // marker on the observed message before it may reflect.
-        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
-        // the message would otherwise look unobserved if this worker also dies.
-        const observedIds = this.turn.record.observedMessageIds;
-        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
-        const responseSealed =
-          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
-        const responseObserved =
-          responseSealed ||
-          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
-          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
-        if (messageId && responseObserved) {
-          if (response && !responseSealed) {
-            // Persist first, and fail the step rather than continue: without the stored seal, a later
-            // reflection erases the only evidence, and the next recovery would merge into this message.
-            await this.engine.persistMessageSeal(response);
-            this.engine.sealMessagesForBuffering([response]);
-          }
-          responseMessageId = rotateResponseMessageId?.() ?? messageId;
-        }
-        if (stepNumber === 0 && this.temporalMarkers) {
-          await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
-        }
-        state.__omTurn = this.turn;
-      }
-
-      this.turn.addHooks({
-        onBufferChunkSealed: rotateResponseMessageId,
-        onSyncObservationComplete: rotateResponseMessageId,
-      });
-
-      const observabilityContext = getOmObservabilityContext(args);
-      state.__omObservabilityContext = observabilityContext;
-      this.turn.observabilityContext = observabilityContext;
-      this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = responseMessageId;
-
-      // ── Run step preparation (activation, threshold, observation, filtering) ──
-      {
-        const step = this.turn.step(stepNumber);
-        let ctx;
-        try {
-          ctx = await step.prepare();
-        } catch (error) {
-          // Map observation errors through abort (processor-specific concern)
-          const err = error instanceof Error ? error : new Error(String(error));
-          // Name the abort's reason (e.g. a lost thread lease): the tripwire replaces the run's abort chunk.
-          const abortReason: unknown = abortSignal?.reason;
-          const abortMessage = abortSignal?.aborted
-            ? abortReason instanceof Error && abortReason.name !== 'AbortError'
-              ? `Agent execution was aborted: ${abortReason.message}`
-              : 'Agent execution was aborted'
-            : `Encountered error during memory observation: ${err.message}`;
-          // A tripwire skips output processors, so end the turn here to save the user message and
-          // finished steps. The step that failed never reached the model, so nothing blocked is saved.
-          const failedTurn = this.turn;
-          await failedTurn.end().catch(() => {});
-          if (this.turn === failedTurn) {
+      try {
+        const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+        if (activeTurn && activeTurn.messageList !== messageList) {
+          // Durable runs may deserialize a fresh MessageList between loop iterations. End the
+          // old turn first so any messages tracked on that list are flushed before OM moves on.
+          await activeTurn.end().catch(() => {});
+          if (this.turn === activeTurn) {
             this.turn = undefined;
           }
           state.__omTurn = undefined;
-          if (typeof abort === 'function') {
-            abort(abortMessage, { metadata: getOmFailureMetadata(error, 'abort') });
+        }
+
+        // A turn can be sealed before the loop reaches its next step — for example when a
+        // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+        // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+        // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+        if (activeTurn?.ended || this.turn?.ended) {
+          if (this.turn?.ended) {
+            this.turn = undefined;
           }
-          throw err;
+          state.__omTurn = undefined;
         }
 
-        // Inject system messages (one per cache-stable chunk) + continuation
-        injectObservationContextMessages({
-          messageList,
-          systemMessages: ctx.systemMessage,
-          continuationMessage: this.turn.context.continuation,
-          hasObservations: Boolean(this.turn.record.activeObservations),
-          threadId,
-          resourceId,
-        });
-
-        // ── Progress emission (processor-specific) ──────────
-        const turnRecord = this.turn.record;
-        await this.engine.emitProgress({
-          record: turnRecord,
-          stepNumber,
-          pendingTokens: ctx.status.pendingTokens,
-          threshold: ctx.status.threshold,
-          effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: turnRecord.observationTokenCount ?? 0,
-          writer,
-          threadId,
-          resourceId,
-        });
-
-        // ── Token persistence (processor-specific) ──────────
-        // prepare() already counted the current unobserved window and resource context.
-        const finalTotalPending = ctx.status.pendingTokens;
-        try {
-          await runOMCommit(
-            this.engine.buffering.getLockKey(threadId, resourceId),
-            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
-            { abortSignal },
-          );
-          this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
-        } catch {
-          // Token persistence is intentionally non-fatal for streaming UX.
-        }
-
-        // ── Repro capture (processor-specific) ──────────────
-        if (reproCaptureEnabled) {
-          writeProcessInputStepReproCapture({
+        let responseMessageId = messageId;
+        if (!this.turn || !state.__omTurn) {
+          // End previous turn if state was reset mid-flow
+          if (this.turn && !state.__omTurn) {
+            await this.turn.end().catch(() => {});
+          }
+          this.turn = this.engine.beginTurn({
+            abortSignal,
             threadId,
             resourceId,
-            stepNumber,
-            args,
-            preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
-            preMessages: preMessagesSnapshot!,
-            preBufferedChunks: [],
-            preContextTokenCount: 0,
-            preSerializedMessageList: preSerializedMessageList!,
-            postBufferedChunks: [],
-            postContextTokenCount: finalTotalPending,
             messageList,
-            details: {},
-            observerExchange: ctx.observerExchange,
+            agent: args.agent,
+            observabilityContext: getOmObservabilityContext(args),
+            hooks: {
+              onBufferChunkSealed: rotateResponseMessageId,
+              onSyncObservationComplete: rotateResponseMessageId,
+            },
           });
+          this.turn.writer = writer;
+          this.turn.sendSignal = args.sendSignal;
+          this.turn.sendStateSignal = args.sendStateSignal;
+          this.turn.agent = args.agent;
+          this.turn.requestContext = requestContext;
+          await this.turn.start(this.memory, runState);
+          if (this.engine.config.scope === 'resource') {
+            unobservedContextBlocks = this.turn.context.otherThreadsContext;
+          }
+          // Only the continue policy restores loaded history after a failure; abort-policy turns throw
+          // before using it, so skip the copy for them.
+          if (this.engine.config.observation.failurePolicy === 'continue') {
+            loadedContextMessages = this.turn.context.messages
+              .filter(message => message.role !== 'system')
+              .map(detachSealMetadata);
+          }
+          if (stepNumber > 0) {
+            // A background result may have landed in storage after the durable snapshot was saved.
+            // Reconcile those response messages before the unread-part scan; the snapshot's part
+            // keys represent what was seen.
+            if (this.memory?.getPersistedMessages) {
+              const responseIds = messageList.getPersisted.response.db().map(message => message.id);
+              const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
+              const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
+              for (const stored of storedMessages) {
+                const snapshot = snapshotMessages.get(stored.id);
+                if (!snapshot) continue;
+                const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
+                const storedHasNewResult = stored.content.parts.some(part => {
+                  if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
+                  const previous = snapshotTools.find(
+                    candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+                  );
+                  if (!previous || previous.toolInvocation.state !== 'result') return true;
+                  const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
+                    | { status?: string }
+                    | undefined;
+                  const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+                  return (
+                    previousTask?.status === 'running' &&
+                    (storedTask?.status === 'completed' || storedTask?.status === 'failed')
+                  );
+                });
+                if (storedHasNewResult) {
+                  this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
+                  messageList.add(stored, 'memory');
+                  // The completed result is now authoritative. Keep it in the rollback snapshot
+                  // so a later OM failure cannot discard work persisted by another worker.
+                  if (preStepMessages) {
+                    const reconciled = messageList.serialize().messages.find(message => message.id === stored.id);
+                    if (reconciled) {
+                      preStepMessages.messages = preStepMessages.messages.map(message =>
+                        message.id === stored.id ? detachSealMetadata(reconciled) : message,
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // A run recovered by another worker can continue a response message that the dead
+          // worker already observed. That worker rotated the id in memory, but the rotation was
+          // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+          // observedMessageIds alone misses responses observed before an activation or a reflection,
+          // neither of which keeps their ids. What survives is on the message itself: buffering
+          // persists OM's seal before the Observer runs, and sync observation persists its end
+          // marker on the observed message before it may reflect.
+          // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+          // the message would otherwise look unobserved if this worker also dies.
+          const observedIds = this.turn.record.observedMessageIds;
+          const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+          const responseSealed =
+            (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+          const responseObserved =
+            responseSealed ||
+            (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+            (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+          if (messageId && responseObserved) {
+            if (response && !responseSealed) {
+              // Persist the seal before rotation so a later reflection cannot erase the only
+              // evidence of the observed boundary. If that write fails, generation under the
+              // still-active observed response ID is unsafe, so fail rather than continue.
+              try {
+                await this.engine.persistMessageSeal(response);
+              } catch (error) {
+                sealWriteFailed = true;
+                throw error;
+              }
+              this.engine.sealMessagesForBuffering([response]);
+            }
+            responseMessageId = rotateResponseMessageId?.() ?? messageId;
+          }
+          if (stepNumber === 0 && this.temporalMarkers) {
+            await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
+          }
+          state.__omTurn = this.turn;
         }
-      }
 
-      return messageList;
+        this.turn.addHooks({
+          onBufferChunkSealed: rotateResponseMessageId,
+          onSyncObservationComplete: rotateResponseMessageId,
+        });
+
+        const observabilityContext = getOmObservabilityContext(args);
+        state.__omObservabilityContext = observabilityContext;
+        this.turn.observabilityContext = observabilityContext;
+        this.turn.actorModelContext = actorModelContext;
+        this.turn.responseMessageId = responseMessageId;
+
+        // ── Run step preparation (activation, threshold, observation, filtering) ──
+        {
+          previousRecord = { ...this.turn.record };
+          const step = this.turn.step(stepNumber);
+          const ctx = await step.prepare();
+
+          // Inject system messages (one per cache-stable chunk) + continuation
+          injectObservationContextMessages({
+            messageList,
+            systemMessages: ctx.systemMessage,
+            continuationMessage: this.turn.context.continuation,
+            hasObservations: Boolean(this.turn.record.activeObservations),
+            threadId,
+            resourceId,
+          });
+
+          // ── Progress emission (processor-specific) ──────────
+          const turnRecord = this.turn.record;
+          await this.engine.emitProgress({
+            record: turnRecord,
+            stepNumber,
+            pendingTokens: ctx.status.pendingTokens,
+            threshold: ctx.status.threshold,
+            effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
+            currentObservationTokens: turnRecord.observationTokenCount ?? 0,
+            writer,
+            threadId,
+            resourceId,
+          });
+
+          // ── Token persistence (processor-specific) ──────────
+          // prepare() already counted the current unobserved window and resource context.
+          const finalTotalPending = ctx.status.pendingTokens;
+          try {
+            await runOMCommit(
+              this.engine.buffering.getLockKey(threadId, resourceId),
+              () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+              { abortSignal },
+            );
+            this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
+          } catch {
+            // Token persistence is intentionally non-fatal for streaming UX.
+          }
+
+          // ── Repro capture (processor-specific) ──────────────
+          if (reproCaptureEnabled) {
+            writeProcessInputStepReproCapture({
+              threadId,
+              resourceId,
+              stepNumber,
+              args,
+              preRecord: preRecordSnapshot!,
+              postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
+              preMessages: preMessagesSnapshot!,
+              preBufferedChunks: [],
+              preContextTokenCount: 0,
+              preSerializedMessageList: preSerializedMessageList!,
+              postBufferedChunks: [],
+              postContextTokenCount: finalTotalPending,
+              messageList,
+              details: {},
+              observerExchange: ctx.observerExchange,
+            });
+          }
+        }
+
+        return messageList;
+      } catch (error) {
+        return continueWithoutObservation(error);
+      }
     });
   }
 
@@ -587,6 +683,20 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
         const persistenceMessageList = messageList.cloneForPersistence();
+        if (state.__omInputFailed) {
+          try {
+            const messagesToSave = [
+              ...persistenceMessageList.get.input.db(),
+              ...persistenceMessageList.get.response.db(),
+            ];
+            if (messagesToSave.length > 0) {
+              await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            }
+          } finally {
+            state.__omInputFailed = undefined;
+          }
+          return messageList;
+        }
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
@@ -629,7 +739,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
 
     if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
     // Gateway-served memory means the gateway owns the prompt and its compaction.
-    if (state[GATEWAY_STATE_KEY]) return;
+    if (state[GATEWAY_STATE_KEY] || state.__omInputFailed) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
     if (classifyProviderError(error) !== 'context_overflow') return;

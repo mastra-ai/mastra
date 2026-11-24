@@ -84,7 +84,11 @@ async function runStepOnStorage(
   storage: InMemoryMemory,
   override?: { observedMessageIds: unknown },
   prepare?: (om: ObservationalMemory, recordId: string) => Promise<void>,
-  options: { response?: 'sealed' | 'end-marker'; stored?: boolean } = {},
+  options: {
+    response?: 'sealed' | 'end-marker';
+    stored?: boolean;
+    reconciliation?: { snapshot: MastraDBMessage; completed: MastraDBMessage };
+  } = {},
 ) {
   const model = new MockLanguageModelV2({
     doGenerate: async () => ({
@@ -100,7 +104,7 @@ async function runStepOnStorage(
     storage,
     scope: 'thread',
     model: model as any,
-    observation: { messageTokens: 500_000 },
+    observation: { messageTokens: 500_000, failurePolicy: options.reconciliation ? 'continue' : 'abort' },
     reflection: { observationTokens: 500_000 },
   });
 
@@ -114,9 +118,17 @@ async function runStepOnStorage(
     });
   }
 
-  const processor = new ObservationalMemoryProcessor(om, memoryProvider);
+  if (options.reconciliation) {
+    vi.spyOn(om, 'buildContextSystemMessages').mockRejectedValueOnce(new Error('context build interrupted'));
+  }
+  const provider = options.reconciliation
+    ? { ...memoryProvider, getPersistedMessages: async () => [options.reconciliation!.completed] }
+    : memoryProvider;
+  const processor = new ObservationalMemoryProcessor(om, provider);
   const messageList = new MessageList({ threadId, resourceId });
-  if (options.stored) {
+  if (options.reconciliation) {
+    messageList.add(options.reconciliation.snapshot, 'response');
+  } else if (options.stored) {
     // Recover from what the dead worker persisted.
     const { messages } = await storage.listMessages({ threadId });
     messageList.add(messages, 'memory');
@@ -140,12 +152,14 @@ async function runStepOnStorage(
     retryCount: 0,
     messageId: responseId,
     rotateResponseMessageId,
-    abort: (() => {
-      throw new Error('aborted');
+    // Input failures go through the observation failure policy (abort by default), which
+    // trips the run with the error's message.
+    abort: ((message: string) => {
+      throw new Error(message);
     }) as any,
   } as any);
 
-  return { rotateResponseMessageId };
+  return { rotateResponseMessageId, messageList };
 }
 
 describe('recovered OM turn with a non-array observedMessageIds', () => {
@@ -323,5 +337,30 @@ describe('recovered OM turn whose response was observed by the dead worker', () 
     await storage.createReflectionGeneration({ currentRecord: current, reflection: '- greeting', tokenCount: 2 });
     const afterReflection = await runStepOnStorage(storage, undefined, undefined, { stored: true });
     expect(afterReflection.rotateResponseMessageId).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a completed background tool result when a later input context build fails', async () => {
+    const storage = await createStorage();
+    const snapshot = message(responseId, 'assistant', '', '2025-01-01T08:00:01.000Z');
+    snapshot.content.parts = [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'lookup-1', toolName: 'lookup', args: {} },
+      },
+    ];
+    const completed = message(responseId, 'assistant', '', '2025-01-01T08:00:01.000Z');
+    completed.content.parts = [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'lookup-1', toolName: 'lookup', args: {}, result: 'SHIPPED' },
+      },
+    ];
+    await storage.saveMessages({ messages: [completed] });
+    const { messageList } = await runStepOnStorage(storage, undefined, undefined, {
+      reconciliation: { snapshot, completed },
+    });
+    expect(messageList.get.all.db().find(item => item.id === responseId)?.content.parts).toMatchObject([
+      { toolInvocation: { state: 'result', result: 'SHIPPED' } },
+    ]);
   });
 });
