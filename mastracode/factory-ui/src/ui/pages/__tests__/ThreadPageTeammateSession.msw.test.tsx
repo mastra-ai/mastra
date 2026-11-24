@@ -224,7 +224,8 @@ describe("a teammate's Factory session", () => {
   });
 
   describe('when a teammate tries to change its model', () => {
-    const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
+    const lockedReason =
+      'Only Ward Peeters or an organization admin can change this session’s model or thinking level.';
 
     it('shows the model picker disabled with its thinking level, who can change it, and whose credential it runs on', async () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
@@ -280,6 +281,47 @@ describe("a teammate's Factory session", () => {
       });
 
       expect(await screen.findByRole('button', { name: 'Session model' })).toBeInTheDocument();
+    });
+  });
+
+  describe('when an organization admin changes its model', () => {
+    it('lists the Factory credentials the session runs on and switches it, even with no credentials of their own', async () => {
+      const orgModel = (id: string, modelName: string): ModelCatalogEntry => ({
+        id,
+        provider: 'openai',
+        modelName,
+        hasApiKey: true,
+        credentialLabel: 'OpenAI API key',
+        credentialHolder: 'organization',
+      });
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+          if (new URL(request.url).searchParams.get('scope') === 'user') return HttpResponse.json({ models: [] });
+          return HttpResponse.json({
+            modelScope: 'factory',
+            defaultModelId: null,
+            models: [orgModel('openai/gpt-4o-mini', 'gpt-4o-mini'), orgModel('openai/gpt-5', 'gpt-5')],
+          });
+        }),
+      );
+      openWardSessionAs('user-admin', {
+        session: { ...wardSession, capabilities: { recreateSandbox: false, takeOwnership: true, switchModel: true } },
+      });
+      const modelSwitches: unknown[] = [];
+      server.use(
+        http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+
+      const picker = await screen.findByRole('button', { name: 'Session model' });
+      await waitFor(() => expect(picker).toBeEnabled());
+      await user.click(picker);
+      await user.click(await screen.findByRole('option', { name: /GPT-5/ }));
+
+      await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5' }]));
     });
   });
 
