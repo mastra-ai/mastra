@@ -58,14 +58,14 @@ The `.run()` method returns a result in the following shape:
 The scorer extracts and analyzes several types of elements:
 
 - Nouns: Key objects, concepts, and entities
-- Verbs: Actions and states (converted to infinitive form)
+- Verbs: Actions and states (converted to infinitive form, English only)
 - Topics: Main subjects and themes
 - Terms: Individual substantial words
 
 The extraction process includes:
 
 - Normalization of text (removing diacritics, converting to lowercase)
-- Handling of word boundaries
+- Handling of word boundaries in any script, including scripts written without spaces such as Japanese, Chinese, and Thai
 - Special handling of short words (3 characters or less)
 - Deduplication of elements
 
