@@ -1953,6 +1953,33 @@ export class EventedRun<
     this.serializedStepGraph = params.serializedStepGraph;
   }
 
+  private openWorkflowTracing({
+    input,
+    tracingContext,
+    requestContext,
+  }: {
+    input: TInput | undefined;
+    tracingContext?: TracingContext;
+    requestContext: RequestContext;
+  }) {
+    const span = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      outcome: null,
+      name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
+      input,
+      metadata: { resourceId: this.resourceId, runId: this.runId },
+      tracingPolicy: this.tracingPolicy,
+      tracingContext,
+      requestContext,
+      mastra: this.mastra,
+    });
+    this.workflowRunSpan = span;
+    return span;
+  }
+
   private completeWorkflowTracing(
     span: TracingContext['currentSpan'],
     completion: Parameters<typeof completeWorkflowSpan>[1],
@@ -2071,21 +2098,7 @@ export class EventedRun<
     // carry the non-serializable AISpan. Create the WORKFLOW_RUN span here and
     // hold it on Mastra keyed by runId; the event processor nests each step's
     // spans under it (see `WorkflowEventProcessor.resolveRunTracingContext`).
-    const workflowSpan = getOrCreateSpan({
-      type: SpanType.WORKFLOW_RUN,
-      outcome: null,
-      name: `workflow run: '${this.workflowId}'`,
-      entityType: EntityType.WORKFLOW_RUN,
-      entityId: this.workflowId,
-      entityName: this.workflowId,
-      input: inputDataToUse,
-      metadata: { resourceId: this.resourceId, runId: this.runId },
-      tracingPolicy: this.tracingPolicy,
-      tracingContext,
-      requestContext,
-      mastra: this.mastra,
-    });
-    this.workflowRunSpan = workflowSpan;
+    const workflowSpan = this.openWorkflowTracing({ input: inputDataToUse, tracingContext, requestContext });
     if (workflowSpan) {
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
@@ -2191,12 +2204,14 @@ export class EventedRun<
     initialState,
     requestContext,
     perStep,
+    tracingContext,
     actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
     initialState?: TState;
     perStep?: boolean;
+    tracingContext?: TracingContext;
     actor?: ActorSignal;
   }): Promise<{ runId: string }> {
     // Add validation checks
@@ -2225,6 +2240,18 @@ export class EventedRun<
       state: initialStateToUse as Record<string, any>,
     });
 
+    if (!this.mastra?.pubsub) {
+      throw new Error('Mastra instance with pubsub is required for workflow execution');
+    }
+
+    // Steps nest under a span held in this process, so open one only where steps run.
+    // A process that only dispatches may be gone before the run ends and leave it open.
+    // An internal workflow gets none: user code its steps call would nest under a hidden span.
+    const workflowSpan =
+      !this.isInternalWorkflow && this.mastra.__hasLocalWorkflowExecution()
+        ? this.openWorkflowTracing({ input: inputDataToUse, tracingContext, requestContext })
+        : undefined;
+
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2240,22 +2267,25 @@ export class EventedRun<
       suspendedPaths: {},
       resumeLabels: {},
       waitingPaths: {},
+      tracingContext: getWorkflowResumeTracingContext(workflowSpan),
       timestamp: Date.now(),
     };
-    if (!this.mastra?.pubsub) {
-      throw new Error('Mastra instance with pubsub is required for workflow execution');
+
+    try {
+      await this.runStorage.writeSnapshot(
+        this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+        this.resourceId,
+      );
+    } catch (error) {
+      this.completeWorkflowTracing(workflowSpan, {
+        error: { ...executionFailureTermination(error), error: getErrorFromUnknown(error) },
+      });
+      throw error;
     }
 
-    await this.runStorage.writeSnapshot(
-      this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-      this.resourceId,
-    );
-
-    // Dispatch-only callers do not own execution spans; the worker may run in
-    // another process, so no local span or tracing registry entry is created here.
-    // execute() still waits for the worker's finish event in the background so the
+    // execute() ends the run span. It waits for the worker's finish event in the background so the
     // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
     let markDispatched!: () => void;
     let isDispatched = false;
@@ -2281,7 +2311,12 @@ export class EventedRun<
         abortController: this.abortController,
         perStep,
         storageVersion: this.storageVersion,
+        workflowSpan,
         onDispatched: markDispatched,
+      })
+      .then(result => {
+        if (result.status !== 'suspended') this.cleanup?.();
+        return result;
       })
       .catch(async error => {
         if (!isDispatched) await this.#failUndispatchedRun(error);
