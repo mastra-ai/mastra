@@ -82,7 +82,7 @@ import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
-import { runOutsideRunFenceScope } from '../storage/run-fencing';
+import { isRunFenceConflictError, runOutsideRunFenceScope } from '../storage/run-fencing';
 import type { RunFence, RunOwnershipRecord } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType, WorkflowRun } from '../storage/types';
@@ -5031,6 +5031,14 @@ export class Mastra<
     try {
       await run.restart();
     } catch (error) {
+      // Another process took the run over while this restart drove it; that process finishes it.
+      if (isRunFenceConflictError(error)) {
+        this.#logger.debug('Stopped restarting workflow run another process took over', {
+          workflow: workflow.id,
+          runId,
+        });
+        return;
+      }
       if (!(error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED')) {
         throw error;
       }

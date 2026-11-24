@@ -11,6 +11,7 @@ import { createObservabilityContext, getWorkflowResumeTracingContext } from '../
 import { withSpanErrorAttempt } from '../observability/context-storage';
 import { getSpanErrorOrigin, setSpanErrorOrigin } from '../observability/error-count';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
+import { isRunFenceConflictError } from '../storage/run-fencing';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
@@ -578,6 +579,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         );
         return { ok: true, result };
       } catch (e) {
+        // Storage refused a save from the step body (a nested run's): another process owns the run,
+        // so neither a retry nor a failed step result may follow.
+        if (isRunFenceConflictError(e)) throw e;
         const isNonRetryable = e instanceof MastraNonRetryableError;
 
         if (isNonRetryable || i === params.retries) {

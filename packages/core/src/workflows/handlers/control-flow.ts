@@ -6,6 +6,7 @@ import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '..
 import type { PubSub } from '../../events/pubsub';
 import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
+import { isRunFenceConflictError } from '../../storage/run-fencing';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
@@ -1268,7 +1269,12 @@ export async function executeForeach(
           });
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));
-          engine.getLogger()?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          // A refused checkpoint means another process took the run over; its claim logged that.
+          if (!isRunFenceConflictError(err)) {
+            engine
+              .getLogger()
+              ?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          }
           checkpointClosed = true;
         }
       }
