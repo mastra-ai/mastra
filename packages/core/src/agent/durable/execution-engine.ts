@@ -1027,7 +1027,14 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   ): { sharedExecution: boolean; usesRunPubSub: boolean } {
     const engine = this.resolveWorkflowEngine(workflowEngine, logger);
     const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
-    if (sharedTransport && this.mastra) warnUnsupportedEventedSetup(this.mastra);
+    if (sharedTransport && this.mastra) {
+      const mastra = this.mastra;
+      // The store resolves asynchronously and this path is sync. The warning never gates the run.
+      void Promise.resolve(mastra.getStorage()?.getStore('workflows'))
+        .catch(() => undefined)
+        .then(store => warnUnsupportedEventedSetup(mastra, store))
+        .catch(() => {});
+    }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
       this.#warnedUnfencedSharedExecution = true;

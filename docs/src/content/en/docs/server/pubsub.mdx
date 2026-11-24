@@ -116,7 +116,7 @@ export const mastra = new Mastra({
 Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#execution-engine) and agents created with [`createEventedAgent()`](/docs/harness/durable-agents#fire-and-forget-with-createeventedagent) advance a run one event at a time. Any worker can take the next event, which lets several processes share one run. That only holds when the deployment has both of the following:
 
 - **A PubSub backend that redelivers unacknowledged events**: When a worker stops in the middle of a step, the backend gives the step's event to another worker.
-- **A storage adapter with workflow step guards**: The backend can deliver the same event more than once, and the step guard lets only one delivery run the step.
+- **A storage adapter with workflow step guards**: The backend can deliver the same event more than once, and the step guard keeps a later delivery from saving the step's result a second time. A step can still run more than once, so [make steps with side effects idempotent](/docs/workflows/overview#restarting-active-workflow-runs).
 
 The backends that redeliver are marked **Yes** in the [Choosing a backend](#choosing-a-backend) table. A backend's reference page says whether redelivery can be turned off. The storage adapters with workflow step guards are `@mastra/pg` and `@mastra/libsql`. With `@mastra/libsql`, see [evented agent worker takeover](/reference/pubsub/redis-streams#evented-agent-worker-takeover) for the database setups that work across machines.
 
@@ -130,7 +130,7 @@ The backends that redeliver are marked **Yes** in the [Choosing a backend](#choo
 Mastra logs a warning the first time an evented run is created in a setup that can't support several processes:
 
 - The PubSub backend delivers to other processes and doesn't redeliver unacknowledged events.
-- An evented workflow runs on a PubSub backend that redelivers unacknowledged events, and the storage adapter has no workflow step guards.
+- The PubSub backend redelivers unacknowledged events and the storage adapter has no workflow step guards.
 
 The default `EventEmitterPubSub` doesn't trigger the warning, because its events never leave the process. `UnixSocketPubSub` triggers it even when one process uses the socket, because Mastra can't tell how many processes share it.
 
@@ -151,7 +151,7 @@ export class MyBrokerPubSub extends PubSub {
 
 Return `true` from `redeliversUnacked` only when the broker redelivers an abandoned event to another consumer of the same group, and only after 30 seconds or more. If your implementation delivers only inside the publishing process, return `false` from `deliversAcrossProcesses` instead. See the [`PubSub` properties](/reference/pubsub/base#properties).
 
-To silence the warning for a setup that one process uses, set the `MASTRA_DISABLE_EVENTED_SETUP_WARNING` environment variable to `true`.
+To disable the warning for a setup that one process uses, set the `MASTRA_DISABLE_EVENTED_SETUP_WARNING` environment variable to `true`.
 
 ## Resumable streams
 

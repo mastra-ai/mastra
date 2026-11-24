@@ -15,10 +15,7 @@ const warnedHosts = new WeakSet<Mastra>();
  * It judges the setup, not how many processes use it: Mastra can't count them.
  * A pubsub that stays inside the process is left alone, since no other process
  * can take part in its runs. `MASTRA_DISABLE_EVENTED_SETUP_WARNING=true`
- * silences it for a shared transport used by one process.
- *
- * Pass no store for evented agents: on a store without step guards their step
- * events stay in the process that runs them.
+ * disables it for a shared transport used by one process.
  *
  * The message names no supported pubsub or store. The docs page it links to is
  * the one place that lists them.

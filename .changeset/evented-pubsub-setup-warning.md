@@ -7,9 +7,9 @@ Added a warning for evented workflows and evented agents that run on a setup tha
 Running evented execution on more than one process needs a pubsub that redelivers unacknowledged events and a workflows store with step guards. Mastra now logs a warning the first time an evented run is created when:
 
 - the pubsub delivers to other processes but doesn't redeliver a stopped worker's events, as with `UnixSocketPubSub`
-- an evented workflow runs on a pubsub that redelivers events, and the workflows store has no step guards
+- the pubsub redelivers events and the workflows store has no step guards
 
-The default `EventEmitterPubSub` doesn't warn. It delivers inside one process, which is how evented workflows and agents run locally and in tests. Set `MASTRA_DISABLE_EVENTED_SETUP_WARNING=true` to silence the warning.
+The default `EventEmitterPubSub` doesn't warn. It delivers inside one process, which is how evented workflows and agents run locally and in tests. Set `MASTRA_DISABLE_EVENTED_SETUP_WARNING=true` to disable the warning.
 
 **New `PubSub.deliversAcrossProcesses` property**
 
