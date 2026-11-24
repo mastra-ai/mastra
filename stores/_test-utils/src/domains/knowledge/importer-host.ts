@@ -499,6 +499,41 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       );
     });
 
+    it('keeps the hand-written body when a declare takes the page over and a later upsert writes it', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p0' })]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'Human', body: 'mine' });
+      const human = await page('notion/p1');
+      const storage = await knowledge.getStorage();
+
+      expect(await run([{ op: 'declare', item: { sourceId: 'p1', title: 'P1' } }])).toMatchObject({
+        counts: { updated: 1, refused: 0 },
+      });
+      // Saved at the takeover itself, before any op sends a body.
+      expect((await storage.listNotes({ pageId: human!.id, read: 'all' })).notes.map(n => n.text)).toEqual([
+        'Written by hand before an importer took over this page:\n\nmine',
+      ]);
+
+      await run([upsert({ sourceId: 'p1', body: 'imported' })]);
+      expect((await page('notion/p1'))?.body).toBe('imported');
+
+      expect(await run([{ op: 'remove', sourceId: 'p1' }])).toMatchObject({ counts: { stubbed: 1, refused: 0 } });
+      expect(await page('notion/p1')).toMatchObject({ id: human!.id, body: 'mine' });
+    });
+
+    it('keeps the hand-written body when the takeover sends that same body', async () => {
+      const { knowledge, run, page } = setup();
+      await run([upsert({ sourceId: 'p0' })]);
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'Human', body: 'mine' });
+      const human = await page('notion/p1');
+
+      await run([upsert({ sourceId: 'p1', body: 'mine' })]);
+      await run([upsert({ sourceId: 'p1', body: 'imported' })]);
+
+      expect(await run([{ op: 'remove', sourceId: 'p1' }])).toMatchObject({ counts: { stubbed: 1, refused: 0 } });
+      expect(await page('notion/p1')).toMatchObject({ id: human!.id, body: 'mine' });
+    });
+
     it('takes over a hand-written page while its item waits for its parent, and keeps its body through the move', async () => {
       const { knowledge, run, page } = setup();
       await run([upsert({ sourceId: 'p0' })]);

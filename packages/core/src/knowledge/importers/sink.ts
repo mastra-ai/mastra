@@ -606,7 +606,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         throw new KnowledgeImportRefusalError('occupied');
       }
       renamed = fields.name !== fresh.name;
-      if (fresh.body && fields.body !== undefined && fields.body !== fresh.body) {
+      // Saved whatever this op sends: a later upsert, not this one, may be what replaces the body.
+      if (fresh.body) {
         const id = originalBodyNoteId(fresh.id);
         if (!(await storage.getNote({ id, read: 'all', includeDeleted: true }))) {
           await storage.addNote({
