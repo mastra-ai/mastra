@@ -66,6 +66,8 @@ export class FactoryRuleRejectedError extends Error {
   constructor(
     readonly code: FactoryRuleRejectionCode,
     reason: string,
+    /** Every retry would replay this same refusal, so only a person can move the work on. */
+    readonly settled = false,
   ) {
     super(`${code}: ${reason}`);
     this.name = 'FactoryRuleRejectedError';

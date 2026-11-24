@@ -116,6 +116,36 @@ describe('AgentController OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 
+  it('says a memory failure stopped the run, and a later abort is plain again', async () => {
+    const { session } = await createSession();
+    const ends: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      if (event.type === 'agent_end') ends.push(event);
+    });
+
+    session.run.ensureAbortController();
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield {
+          type: 'data-om-observation-failed',
+          data: { cycleId: 'c1', operationType: 'observation', error: 'insufficient_quota', durationMs: 5 },
+        };
+      })(),
+    });
+
+    session.run.ensureAbortController();
+    await (session as any).processStream({
+      fullStream: (async function* () {
+        yield { type: 'abort', payload: {} };
+      })(),
+    });
+
+    expect(ends).toEqual([
+      { type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' },
+      { type: 'agent_end', reason: 'aborted' },
+    ]);
+  });
+
   it('continues the stream after an observer model buffering failure under continue policy', async () => {
     const { session } = await createSession();
     const events: AgentControllerEvent[] = [];

@@ -21,6 +21,7 @@ type ObservedAgentFrame =
           isContinued?: boolean;
         };
         messages?: AgentFinishEventData['messages'];
+        stopCause?: AgentFinishEventData['stopCause'];
       };
     };
 
@@ -64,6 +65,7 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
           output: raw === undefined ? data.output : { ...data.output, usage: { ...data.output.usage, raw } },
           stepResult: data.stepResult,
           ...(data.messages ? { messages: data.messages } : {}),
+          ...(data.stopCause ? { stopCause: data.stopCause } : {}),
         },
       };
       return data.stepResult?.reason === 'abort' ? [abort, finish] : [finish];

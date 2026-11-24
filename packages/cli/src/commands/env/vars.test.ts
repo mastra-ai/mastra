@@ -21,9 +21,12 @@ vi.mock('./resolve-project.js', () => ({
 
 const mockFetchEnvironmentList = vi.fn();
 
+const mockUpdateEnvironmentVars = vi.fn();
+
 vi.mock('./platform-api.js', async importOriginal => ({
   ...(await importOriginal<typeof import('./platform-api.js')>()),
   fetchEnvironmentList: mockFetchEnvironmentList,
+  updateEnvironmentVars: mockUpdateEnvironmentVars,
 }));
 
 const mockGetServerProjectEnv = vi.fn();
@@ -299,5 +302,208 @@ describe('envVarsPullAction', () => {
     expect(content).not.toContain('bad-key=');
     expect(content).toContain('# Skipped unsafe key');
     spy.mockRestore();
+  });
+});
+
+describe('envVarsSetAction', () => {
+  beforeEach(() => {
+    mockUpdateEnvironmentVars.mockResolvedValue(environment({}));
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: {} })] });
+  });
+
+  async function runSet(
+    envArg: string | undefined,
+    varArgs: string[],
+    options: { project?: string; secret?: boolean; config?: boolean } = {},
+  ) {
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      const { envVarsSetAction } = await import('./vars.js');
+      await envVarsSetAction(envArg, varArgs, options);
+      return spy.mock.calls.map(c => String(c[0])).join('\n');
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  it('sends the stored vars back with new values merged in and flags every var in the command', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { OPENAI_API_KEY: '__mastra_secret__', LOG_LEVEL: 'info' } })],
+    });
+
+    const output = await runSet('my-app', ['STRIPE_KEY=sk-new', 'WEBHOOK_SECRET=whsec-new'], { secret: true });
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      // The placeholder tells the platform to keep the stored secret.
+      envVars: {
+        OPENAI_API_KEY: '__mastra_secret__',
+        LOG_LEVEL: 'info',
+        STRIPE_KEY: 'sk-new',
+        WEBHOOK_SECRET: 'whsec-new',
+      },
+      envVarMeta: { STRIPE_KEY: { secret: true }, WEBHOOK_SECRET: { secret: true } },
+    });
+    expect(output).toContain('set STRIPE_KEY, WEBHOOK_SECRET; secret: STRIPE_KEY, WEBHOOK_SECRET');
+    expect(output).not.toContain('sk-new');
+    expect(output).not.toContain('whsec-new');
+    expect(output).not.toContain('__mastra_secret__');
+  });
+
+  it('marks every var in the command as config with --config', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { LOG_LEVEL: 'info' } })] });
+
+    await runSet('my-app', ['LOG_LEVEL=debug', 'FEATURE_X=on'], { config: true });
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { LOG_LEVEL: 'debug', FEATURE_X: 'on' },
+      envVarMeta: { LOG_LEVEL: { secret: false }, FEATURE_X: { secret: false } },
+    });
+  });
+
+  it('sends no kind flags without --secret or --config, so stored kinds stay', async () => {
+    await runSet('my-app', ['A=1']);
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { A: '1' },
+    });
+  });
+
+  it('treats a lone KEY=VALUE as a var, not an environment name', async () => {
+    await runSet('API_KEY=abc', []);
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { API_KEY: 'abc' },
+    });
+  });
+
+  it('keeps __proto__ as a variable instead of setting the prototype', async () => {
+    await runSet('my-app', ['__proto__=1'], { secret: true });
+
+    const sent = mockUpdateEnvironmentVars.mock.calls[0]![4];
+    expect(Object.keys(sent.envVars)).toEqual(['__proto__']);
+    expect(Object.keys(sent.envVarMeta)).toEqual(['__proto__']);
+    expect(JSON.parse(JSON.stringify(sent))).toEqual(
+      JSON.parse('{"envVars":{"__proto__":"1"},"envVarMeta":{"__proto__":{"secret":true}}}'),
+    );
+  });
+
+  it('changes only the kind for bare names, including one in the environment slot', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { DATABASE_URL: 'x', REDIS_URL: 'y' } })],
+    });
+
+    await runSet('DATABASE_URL', ['REDIS_URL'], { secret: true });
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVarMeta: { DATABASE_URL: { secret: true }, REDIS_URL: { secret: true } },
+    });
+  });
+
+  it('needs an environment when a bare name lands in its slot and the project has several', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [
+        environment({ envVars: { DATABASE_URL: 'x' } }),
+        environment({ id: 'env-2', slug: 'staging', name: 'Staging' }),
+      ],
+    });
+
+    await expect(runSet('DATABASE_URL', [], { secret: true })).rejects.toThrow('Multiple environments found');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('requires a new value to turn a write-only secret into config', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({
+      environments: [environment({ envVars: { LOG_LEVEL: '__mastra_secret__' } })],
+    });
+
+    const error = await runSet(undefined, ['LOG_LEVEL'], { config: true }).catch(e => e as Error);
+    expect(error.message).toBe(
+      "The variable in argument 1 is a write-only secret, so its value can't be kept as config. Re-enter it as KEY=VALUE with --config.",
+    );
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+
+    await runSet(undefined, ['LOG_LEVEL=debug'], { config: true });
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { LOG_LEVEL: 'debug' },
+      envVarMeta: { LOG_LEVEL: { secret: false } },
+    });
+  });
+
+  it('rejects bare names that are not set without echoing them', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ environments: [environment({ envVars: { A: '1' } })] });
+
+    const error = await runSet(undefined, ['A', 'ghp_abc123'], { secret: true }).catch(e => e as Error);
+    expect(error.message).toBe('The variable in argument 2 is not set on my-app. Pass it as KEY=VALUE.');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('rejects a bare name without a kind flag, without echoing it', async () => {
+    const error = await runSet('my-app', ['ghp_abc123']).catch(e => e as Error);
+    expect(error.message).toBe('Expected KEY=VALUE for variable argument 1. A bare name needs --secret or --config.');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('rejects --secret and --config together', async () => {
+    const error = await runSet(undefined, ['A=1'], { secret: true, config: true }).catch(e => e as Error);
+    expect(error.message).toBe('Pass either --secret or --config, not both. Set mixed kinds with separate commands.');
+    expect(mockFetchEnvironmentList).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed arguments without echoing them', async () => {
+    const cases: [string[], string][] = [
+      [['sk-live-abc123'], 'Expected KEY=VALUE for variable argument 1'],
+      [['bad-key=s3cret'], 'Invalid variable name in argument 1'],
+      [['sk-abc/def=='], 'Invalid variable name in argument 1'],
+      [['A=1', 'API_KEY: sk-live-abc123'], 'Expected KEY=VALUE for variable argument 2'],
+    ];
+    for (const [args, message] of cases) {
+      const error = await runSet('my-app', args).catch(e => e as Error);
+      expect(error.message).toContain(message);
+      expect(error.message).not.toMatch(/abc|s3cret/);
+    }
+    const bareError = await runSet('my-app', ['sk-live-abc123'], { secret: true }).catch(e => e as Error);
+    expect(bareError.message).toBe('Invalid variable name in argument 1');
+  });
+
+  it('does not echo an unknown environment argument, which may be a pasted value', async () => {
+    const error = await runSet('sk-live-abc123', ['A=1']).catch((e: Error) => e);
+    expect(error.message).toContain('Expected KEY=VALUE for variable argument 1');
+    expect(error.message).not.toContain('abc123');
+  });
+
+  it('refuses to send the placeholder as a value without echoing the name', async () => {
+    const error = await runSet(undefined, ['API_KEY=__mastra_secret__']).catch((e: Error) => e);
+    expect(error.message).toBe('Argument 1 has a reserved placeholder value. Pass the real value.');
+  });
+
+  it('requires something to set', async () => {
+    await expect(runSet(undefined, [])).rejects.toThrow('Nothing to set');
+    await expect(runSet('my-app', [], { secret: true })).rejects.toThrow('Nothing to set');
+  });
+
+  it('refuses legacy projects whose runtime reads the project settings', async () => {
+    mockFetchEnvironmentList.mockResolvedValue({ envVarsAuthority: 'project', environments: [environment({})] });
+
+    await expect(runSet(undefined, ['A=1'])).rejects.toThrow('legacy project settings');
+    expect(mockUpdateEnvironmentVars).not.toHaveBeenCalled();
+  });
+
+  it('parses boolean kind flags placed after the variables', async () => {
+    const { Command } = await import('commander');
+    const { registerEnvVarsCommands } = await import('./vars.js');
+    const program = new Command('env');
+    registerEnvVarsCommands(program);
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    try {
+      await program.parseAsync(['vars', 'set', 'my-app', 'A=1', 'B=2', '--secret'], { from: 'user' });
+      await vi.waitFor(() => expect(mockUpdateEnvironmentVars).toHaveBeenCalled());
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(mockUpdateEnvironmentVars).toHaveBeenCalledWith('tok', 'org-1', 'proj-1', 'env-1', {
+      envVars: { A: '1', B: '2' },
+      envVarMeta: { A: { secret: true }, B: { secret: true } },
+    });
   });
 });

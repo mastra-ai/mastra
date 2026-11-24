@@ -42,6 +42,16 @@ Pick the highest rung that fits; each step down needs a reason:
 - Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-body-sm` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 - Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
 
+## Page frames: PageLayout variant
+
+Every page renders inside one `PageLayout`, and its `variant` sets the width, gutter, scrolling and way back. Pick the variant by what the page is for:
+
+- **`variant="form"`**: a create or edit form. A 640px column under a title and optional back link (`backHref` + `backLabel`), with no breadcrumbs. `aside` adds a live preview.
+- **`variant="settings"`**: a settings page someone browses to and changes in place. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
+- **`variant="page"`**: everything else (lists, dashboards, detail pages, explorers). Full width, up to 1536px. Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph, dataset panels).
+
+Each variant accepts only its own props, so a wrong combination doesn't compile. Never center a `max-w-*` column on a page yourself: the `playground-ui/no-page-width` lint rule flags it.
+
 ## Settings pages: SettingsRow vs SettingsItem
 
 Settings cards (`@mastra/playground-ui/new/settings`) hold two kinds of rows. Pick by what the row is, not by how it looks:

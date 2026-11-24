@@ -32,7 +32,7 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
 import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
@@ -72,6 +72,11 @@ import {
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
+
 /**
  * Interface for the Agent methods needed during durable preparation.
  * This provides proper typing for the public Agent methods we call.
@@ -109,6 +114,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -667,6 +673,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,

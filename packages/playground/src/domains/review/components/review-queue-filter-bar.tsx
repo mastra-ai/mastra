@@ -1,21 +1,21 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
-import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
-import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
-import { useMemo } from 'react';
-import type { ReviewListStatus } from './dataset-review';
-import { getExperimentDisplayName } from '@/domains/experiments/utils/experiment-display-name';
 import {
   filterBarItem,
   getFilterBarItemValue,
   targetFromItems,
   targetToItems,
   useTargetFilterFields,
-} from '@/domains/shared/hooks/use-target-filter-fields';
-import type { TargetFilterValue } from '@/domains/shared/hooks/use-target-filter-fields';
+} from '@mastra/playground-ui/domains/datasets';
+import type { TargetFilterValue } from '@mastra/playground-ui/domains/datasets';
+import { getExperimentDisplayName } from '@mastra/playground-ui/domains/experiments/utils/experiment-display-name';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { hueAccentColor } from '@mastra/playground-ui/utils/colors';
+import { useMemo } from 'react';
+import type { ReviewListStatus } from './dataset-review';
 
 export const EXPERIMENT_FIELD_ID = 'experiment';
 export const STATUS_FIELD_ID = 'status';
