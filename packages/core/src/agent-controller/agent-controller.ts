@@ -1330,12 +1330,15 @@ export class AgentController<TState = {}> {
             : result.threads.filter(thread => thread.metadata?.forkedSubagent !== true)
         ).map(thread => ({ ...thread, title: thread.title ?? undefined }));
       },
+      getStorageById: ({ threadId }) => this.queryThreadById({ threadId }),
       getById: async ({ threadId }) => {
         const memory = await getConfiguredMemory();
-        const thread =
-          memory && typeof memory.getThreadById === 'function'
-            ? await memory.getThreadById({ threadId })
-            : await this.queryThreadById({ threadId });
+        const callerThread =
+          memory && typeof memory.getThreadById === 'function' ? await memory.getThreadById({ threadId }) : undefined;
+        // A per-caller memory only holds that caller's rows; controller rows
+        // (the session's own thread, a clone's source) live in controller
+        // storage, so fall back to it rather than reporting the thread missing.
+        const thread = callerThread ?? (await this.queryThreadById({ threadId }));
         return thread ? { ...thread, title: thread.title ?? undefined } : null;
       },
       listMessages: async ({ threadId, limit }) => {
@@ -1392,10 +1395,18 @@ export class AgentController<TState = {}> {
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
-      saveThread: ({ thread }) => this.persistThreadRow(session, thread),
+      saveThread: ({ thread }) => this.persistThreadRow(session, thread, undefined, getConfiguredMemory),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
+        this.cloneThreadRow({
+          session,
+          sourceThreadId,
+          resourceId,
+          title,
+          metadata,
+          requestContext,
+          resolveSessionMemory: getConfiguredMemory,
+        }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1407,6 +1418,8 @@ export class AgentController<TState = {}> {
     session: Session<TState> | undefined,
     thread: AgentControllerThread,
     requestContext?: RequestContext,
+    resolveSessionMemory?: () => Promise<MastraMemory | undefined>,
+    mirrorToStorage = false,
   ): Promise<void> {
     assertNoReservedThreadBranchMetadata(thread.metadata);
     const persistedThread = {
@@ -1418,9 +1431,11 @@ export class AgentController<TState = {}> {
       metadata: thread.metadata,
     };
     if (this.config.memory) {
-      const memory = session
-        ? await this.resolveMemory(session)
-        : await this.resolveMemoryForRequestContext(requestContext ?? new RequestContext());
+      const memory = resolveSessionMemory
+        ? await resolveSessionMemory()
+        : session
+          ? await this.resolveMemory(session)
+          : await this.resolveMemoryForRequestContext(requestContext ?? new RequestContext());
       if (memory) {
         const existing = await memory.getThreadById({ threadId: persistedThread.id });
         if (existing) {
@@ -1432,9 +1447,26 @@ export class AgentController<TState = {}> {
         } else {
           await memory.saveThread({ thread: persistedThread });
         }
+        // A per-user memory may live in a different store than the controller's
+        // thread rows, so the caller-side write does not make the row visible to
+        // controller-side reads. Mirror it into controller storage when asked.
+        if (mirrorToStorage) await this.saveThreadRowToStorage(persistedThread);
       }
       return;
     }
+    if (!this.#resolveStorage()) return;
+    await this.saveThreadRowToStorage(persistedThread);
+  }
+
+  /** Write a thread row into the controller's own memory storage (no configured-memory path). */
+  private async saveThreadRowToStorage(persistedThread: {
+    id: string;
+    resourceId: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     assertRawControllerThreadAvailable({
@@ -1483,6 +1515,7 @@ export class AgentController<TState = {}> {
     title,
     metadata,
     requestContext,
+    resolveSessionMemory,
   }: {
     session: Session<TState>;
     sourceThreadId: string;
@@ -1491,6 +1524,7 @@ export class AgentController<TState = {}> {
     title?: string;
     metadata?: Record<string, unknown>;
     requestContext?: RequestContext;
+    resolveSessionMemory?: () => Promise<MastraMemory | undefined>;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
     const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
@@ -1524,7 +1558,7 @@ export class AgentController<TState = {}> {
     // thread rows; mirror the row so getById, listing, and ownership checks see it.
     if (callerMemory) {
       try {
-        await this.persistThreadRow(session, cloned);
+        await this.persistThreadRow(session, cloned, undefined, () => Promise.resolve(callerMemory), true);
       } catch (error) {
         // Without the controller row the clone is unreachable; remove it rather than orphan it.
         await callerMemory.deleteThread(cloned.id).catch(() => {});
@@ -1540,13 +1574,15 @@ export class AgentController<TState = {}> {
   ): Promise<unknown> {
     if (!this.config.memory && !this.#resolveStorage()) return undefined;
     try {
-      const memory = this.config.memory ? await this.resolveMemory(session) : await this.getMemoryStorage();
-      const thread = this.config.memory
-        ? await memory?.getThreadById({ threadId })
-        : assertRawControllerThreadAvailable({
+      // Settings are controller state, so read the controller's own row rather
+      // than a per-caller memory that may hold its own copy of the thread.
+      const memoryStorage = this.#resolveStorage() ? await this.getMemoryStorage() : undefined;
+      const thread = memoryStorage
+        ? assertRawControllerThreadAvailable({
             threadId,
-            threads: (await (memory as MemoryStorage).listThreads({ perPage: false })).threads,
-          });
+            threads: (await memoryStorage.listThreads({ perPage: false })).threads,
+          })
+        : await (this.config.memory ? await this.resolveMemory(session) : undefined)?.getThreadById({ threadId });
       const metadata = thread?.metadata as Record<string, unknown> | undefined;
       return metadata?.[key];
     } catch {

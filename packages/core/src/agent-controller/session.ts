@@ -376,6 +376,12 @@ export interface ThreadDataStore {
   }): Promise<AgentControllerThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
+  /**
+   * Fetch a thread row from the controller's own storage, bypassing a
+   * per-caller memory. Used to hydrate session metadata, which is controller
+   * state rather than something a caller's memory copy owns.
+   */
+  getStorageById?(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
   listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
   /** The first user message for each given thread id. */
@@ -837,7 +843,13 @@ export class SessionThread {
    * `Thread not found: <id>` when the thread is absent or owned by someone else.
    */
   async #requireOwnedThread({ threadId }: { threadId: string }): Promise<AgentControllerThread> {
-    const thread = await this.#store?.getById({ threadId });
+    // Ownership is a controller-storage fact, so read the controller row: a
+    // per-caller memory resolution here would spend the factory on a lookup
+    // that cannot see rows the caller's memory does not own.
+    // Prefer the controller row (a free lookup) so a caller-memory resolution is
+    // only spent when the row genuinely lives in that caller's memory.
+    const store = this.#store;
+    const thread = (await store?.getStorageById?.({ threadId })) ?? (await store?.getById({ threadId }));
     if (!thread || thread.resourceId !== this.#getResourceId()) {
       throw new Error(`Thread not found: ${threadId}`);
     }
@@ -1390,7 +1402,7 @@ export class SessionThread {
     if (!preserveTokenUsageOnFailure) session.resetTokenUsage();
 
     try {
-      const thread = await store.getById({ threadId });
+      const thread = await (store.getStorageById?.({ threadId }) ?? store.getById({ threadId }));
       if (!this.#isCurrentBinding(threadId, bindingGeneration)) return;
 
       const previousModeId = session.mode.get();
@@ -1458,7 +1470,9 @@ export class SessionThread {
       const currentModeId = session.mode.get();
       const persistedModelId = await migratePersistedModelSelection({
         getMetadata: async () =>
-          ((await store.getById({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
+          ((await (store.getStorageById?.({ threadId }) ?? store.getById({ threadId })))?.metadata as
+            | Record<string, unknown>
+            | undefined) ?? {},
         modeId: currentModeId,
         onResolved: async (modelId, metadata) => {
           if (!this.#isCurrentBinding(threadId, bindingGeneration)) return;

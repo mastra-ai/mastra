@@ -2825,7 +2825,7 @@ ${workingMemory}`;
       const usage =
         this.vector && config.semanticRecall && !skipVectors
           ? await this.writeMessageVectors({
-              items: updatedMessages.map(message => ({ message })),
+              items: persistedMessages.map(message => ({ message })),
               config,
               embeddedMessages,
             })
