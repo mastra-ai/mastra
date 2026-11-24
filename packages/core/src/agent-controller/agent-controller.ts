@@ -559,7 +559,7 @@ export class AgentController<TState = {}> {
         }),
       generateId: () => this.generateId(),
       resolveTransitionModeId: modeId => this.resolveTransitionModeId(session, modeId),
-      saveSystemReminder: input => this.saveSystemReminder(input),
+      saveSystemReminder: input => this.saveSystemReminder(session, input),
     });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
@@ -1389,10 +1389,10 @@ export class AgentController<TState = {}> {
         return firstUserMessages;
       },
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue(session, { threadId, key }),
-      setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue(session, { threadId, key, value }),
-      deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue(session, { threadId, key }),
+      setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
+      deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
-      saveThread: ({ thread }) => this.persistThreadRow(thread),
+      saveThread: ({ thread }) => this.persistThreadRow(session, thread),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
         this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
@@ -1501,7 +1501,17 @@ export class AgentController<TState = {}> {
       );
     }
 
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    if (!this.config.memory) {
+      const threads = (await memory.listThreads({ perPage: false })).threads;
+      assertRawControllerThreadAvailable({ threadId: sourceThreadId, threads });
+      if (newThreadId) {
+        const destination = assertRawControllerThreadAvailable({ threadId: newThreadId, threads });
+        if (destination) {
+          throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with the requested ID already exists.');
+        }
+      }
+    }
+    const result = await memory.cloneThread({ sourceThreadId, newThreadId, resourceId, title, metadata });
     const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -1514,7 +1524,7 @@ export class AgentController<TState = {}> {
     // thread rows; mirror the row so getById, listing, and ownership checks see it.
     if (callerMemory) {
       try {
-        await this.persistThreadRow(cloned);
+        await this.persistThreadRow(session, cloned);
       } catch (error) {
         // Without the controller row the clone is unreachable; remove it rather than orphan it.
         await callerMemory.deleteThread(cloned.id).catch(() => {});
