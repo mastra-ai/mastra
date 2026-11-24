@@ -1437,7 +1437,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const rows = await this.#rows(
       this.#client,
       `WITH RECURSIVE walk(position, remaining, "noteIds") AS (
-         SELECT 0, ${take}::int, ARRAY[]::text[]
+         SELECT 0, ${take}::bigint, ARRAY[]::text[]
          UNION ALL
          SELECT w.position + 1, w.remaining - cardinality(page."noteIds"), page."noteIds"
          FROM walk w
