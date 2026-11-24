@@ -726,6 +726,13 @@ const result = await agent.sendNotificationSignal(
                 type: 'object',
                 parameters: [
                   {
+                    name: 'behavior',
+                    type: "'wake' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description:
+                      'What to do when the notification signal reaches an idle thread. Defaults to `wake`. `persist` is stored on the record, so a deferred or summarized delivery also persists without waking the thread. A summary covering several records persists only when every record asked to persist.',
+                  },
+                  {
                     name: 'streamOptions',
                     type: 'AgentExecutionOptions',
                     isOptional: true,
