@@ -255,6 +255,22 @@ function getPartCacheEntry(part: CacheablePart, key: string): TokenEstimateCache
   return getCacheEntry(getPartMastraMetadata(part)?.tokenEstimate, key);
 }
 
+/**
+ * Parts this process gave a new stored (v9) count. A part loaded from storage with its count is never in here,
+ * so a message holding one of these parts has a count storage does not have yet.
+ */
+const partsWithUnsavedCount = new WeakSet<object>();
+
+/** Whether `part` gained a stored count in this process that has not been handed to a save yet. */
+export function hasUnsavedTokenEstimate(part: unknown): boolean {
+  return typeof part === 'object' && part !== null && partsWithUnsavedCount.has(part);
+}
+
+/** Note that `part`'s count is on its way to storage, so later steps do not save it again. */
+export function markTokenEstimateSaved(part: unknown): void {
+  if (typeof part === 'object' && part !== null) partsWithUnsavedCount.delete(part);
+}
+
 function setPartCacheEntry(part: CacheablePart, key: string, entry: TokenEstimateCacheEntry): void {
   const mastraMetadata = ensurePartMastraMetadata(part);
   mastraMetadata.tokenEstimate = mergeCacheEntry(mastraMetadata.tokenEstimate, key, entry);
@@ -1335,6 +1351,7 @@ export class TokenCounter {
     const tokens = this.countString(getPayload());
     const entry = { v: V9_TOKEN_ESTIMATE_VERSION, source: V9_TOKEN_ESTIMATE_SOURCE, key, tokens };
     setPartCacheEntry(part, key, entry);
+    partsWithUnsavedCount.add(part);
     return tokens;
   }
 

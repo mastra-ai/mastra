@@ -24,7 +24,7 @@ import { loadMemoryContextMessages } from './observation-turn/load-memory-contex
 import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
-import { resaveCountedMessagesFor, withMessagesMarkedForResave } from './resave-counted-messages';
+import { idsMarkedForResave, resaveCountedMessagesFor, withMessagesMarkedForResave } from './resave-counted-messages';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 import type { ObservationModelContext } from './types';
@@ -234,7 +234,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       await activeTurn.end(terminalList);
     } catch (error) {
       if (unsavedMessages.length > 0) {
-        await this.engine.persistMessages(unsavedMessages, activeTurn.threadId, activeTurn.resourceId).catch(() => {});
+        await this.engine
+          .persistMessages(
+            unsavedMessages,
+            activeTurn.threadId,
+            activeTurn.resourceId,
+            idsMarkedForResave(terminalList),
+          )
+          .catch(() => {});
       }
       throw error;
     }
@@ -627,7 +634,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           const newInput = persistenceMessageList.get.input.db();
           const messagesToSave = withMessagesMarkedForResave(persistenceMessageList, [...newInput, ...newOutput]);
           if (messagesToSave.length > 0 && context.threadId) {
-            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            await this.engine.persistMessages(
+              messagesToSave,
+              context.threadId,
+              context.resourceId,
+              idsMarkedForResave(persistenceMessageList),
+            );
           }
         }
 

@@ -198,4 +198,50 @@ describe('trusted token counts across requests', () => {
       expect(trustedEntries(part).map(entry => (entry as { tokens: number }).tokens)).toEqual([1]);
     }
   });
+
+  // Most stored history in a thread OM has buffered is sealed (metadata.mastra.sealed). Sealed messages are
+  // normally skipped on save because buffering already stored them, but the counts OM adds to them must still
+  // be written, or every later request counts that history again.
+  it('counts added to sealed stored history are saved, so the next request does not recount it', async () => {
+    mock.on({ endpoint: 'chat', userMessage: 'First follow-up' }, { content: 'Ok.' });
+    mock.on({ endpoint: 'chat', userMessage: 'Second follow-up' }, { content: 'Ok.' });
+    const store = new InMemoryStore();
+    const sealedText = (n: number) => `Sealed history ${n}. ${'Buffered words from an earlier session. '.repeat(30)}`;
+    const sealed = [0, 1, 2, 3].map(n => ({
+      id: `sealed-${n}`,
+      threadId: THREAD,
+      resourceId: RESOURCE,
+      role: (n % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, n)),
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: sealedText(n) }],
+        metadata: { mastra: { sealed: true } },
+      },
+    }));
+    // Written straight to storage, as history from before stored counts existed: no counts on any part.
+    const memoryStore = (await store.getStore('memory'))!;
+    await memoryStore.saveThread({
+      thread: { id: THREAD, resourceId: RESOURCE, title: '', createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memoryStore.saveMessages({ messages: sealed });
+
+    const first = createAgent(store);
+    await first.agent.generate('First follow-up', { memory: { thread: THREAD, resource: RESOURCE } });
+
+    const { messages } = await first.memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+    for (const n of [0, 1, 2, 3]) {
+      const part = (messages.find(message => message.id === `sealed-${n}`)!.content.parts as StoredPart[])[0]!;
+      expect(trustedEntries(part)).toHaveLength(1);
+    }
+
+    const counted: string[] = [];
+    const original = TokenCounter.prototype.countString;
+    vi.spyOn(TokenCounter.prototype, 'countString').mockImplementation(function (this: TokenCounter, text: string) {
+      counted.push(text);
+      return original.call(this, text);
+    });
+    await createAgent(store).agent.generate('Second follow-up', { memory: { thread: THREAD, resource: RESOURCE } });
+    for (const n of [0, 1, 2, 3]) expect(counted).not.toContain(sealedText(n));
+  });
 });

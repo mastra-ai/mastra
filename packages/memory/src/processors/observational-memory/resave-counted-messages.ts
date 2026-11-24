@@ -1,14 +1,12 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 
-function tokenEstimateOf(part: unknown): unknown {
-  return (part as { providerMetadata?: { mastra?: { tokenEstimate?: unknown } } } | undefined)?.providerMetadata?.mastra
-    ?.tokenEstimate;
-}
+import { hasUnsavedTokenEstimate, markTokenEstimateSaved } from './token-counter';
 
 /**
- * Watch the stored history of `threadId` in `messageList` while OM counts it, so the counts can be saved with
- * the messages. Call the returned function once the counting is done: every message whose parts gained a token
- * estimate is marked for resave, and the normal save writes it back whole.
+ * Mark the stored history of `threadId` in `messageList` that OM gave new token counts, so the counts are saved
+ * with the messages. Call the returned function once the counting is done: every message holding a part that
+ * gained a count in this process is marked for resave, and the normal save writes it back whole. Counts made
+ * before this is called (while the turn loaded history) are caught too.
  *
  * Only messages of `threadId` are marked. A message recalled from another thread of the resource is counted but
  * never written, because saving it would bump that thread's `updatedAt` and reorder the recent-thread list.
@@ -18,16 +16,13 @@ function tokenEstimateOf(part: unknown): unknown {
 export function resaveCountedMessagesFor(messageList: MessageList, threadId: string): () => void {
   if (typeof (messageList as Partial<MessageList>).markForResave !== 'function') return () => {};
 
-  const before = new Map<MastraDBMessage, unknown[]>();
-  for (const message of messageList.get.remembered.db()) {
-    if (message.threadId !== threadId) continue;
-    before.set(message, (message.content?.parts ?? []).map(tokenEstimateOf));
-  }
-
   return () => {
-    for (const [message, estimates] of before) {
+    for (const message of messageList.get.remembered.db()) {
+      if (message.threadId !== threadId) continue;
       const parts = message.content?.parts ?? [];
-      if (parts.some((part, index) => tokenEstimateOf(part) !== estimates[index])) messageList.markForResave(message);
+      if (!parts.some(hasUnsavedTokenEstimate)) continue;
+      messageList.markForResave(message);
+      parts.forEach(markTokenEstimateSaved);
     }
   };
 }
@@ -37,6 +32,11 @@ export function messagesMarkedForResave(messageList: MessageList): MastraDBMessa
   return typeof (messageList as Partial<MessageList>).getMessagesToResave === 'function'
     ? messageList.getMessagesToResave()
     : [];
+}
+
+/** Ids of the stored messages marked for resave in `messageList`. */
+export function idsMarkedForResave(messageList: MessageList): Set<string> {
+  return new Set(messagesMarkedForResave(messageList).map(message => message.id));
 }
 
 /** `messages` with the messages marked for resave added, each message once. */

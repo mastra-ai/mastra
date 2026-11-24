@@ -2213,14 +2213,18 @@ export class ObservationalMemory {
    * to detect already-persisted messages, avoiding redundant DB operations.
    *
    * Messages with observation markers are always saved (upserted) even if sealed,
-   * because the markers need to be persisted to storage.
+   * because the markers need to be persisted to storage. A sealed message in `resaveIds` gained token
+   * counts after it was stored: only those counts are copied onto the stored copy, see
+   * {@link persistTokenEstimatesOntoStored}.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    resaveIds?: ReadonlySet<string>,
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
+    const sealedWithNewCounts: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
       const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
       if (isSealed) {
@@ -2228,11 +2232,15 @@ export class ObservationalMemory {
         // now have observation markers (need to upsert the markers to storage).
         if (findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
+        } else if (resaveIds?.has(msg.id)) {
+          sealedWithNewCounts.push(msg);
         }
       } else {
         filteredMessages.push(msg);
       }
     }
+
+    await this.persistTokenEstimatesOntoStored(sealedWithNewCounts);
 
     if (filteredMessages.length > 0) {
       await this.messageHistory.persistMessages({
@@ -2241,6 +2249,45 @@ export class ObservationalMemory {
         resourceId,
       });
     }
+  }
+
+  /**
+   * Copy the token counts of `messages` onto their stored copies. A sealed message's stored copy can hold
+   * parts the in-memory one lacks (buffering markers written straight to storage), so it is patched
+   * instead of saved whole. Each count goes to the first stored part whose content matches the counted
+   * part, so a part that changed in storage keeps no count and is counted again on read.
+   */
+  private async persistTokenEstimatesOntoStored(messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+    type Part = MastraDBMessage['content']['parts'][number] & { providerMetadata?: Record<string, any> };
+    const contentOf = (part: Part) =>
+      JSON.stringify({ ...part, providerMetadata: undefined, metadata: undefined, createdAt: undefined });
+    const live = new Map(messages.map(message => [message.id, message]));
+    const { messages: stored } = await this.storage.listMessagesById({ messageIds: [...live.keys()] });
+    const updates: { id: string; content: MastraDBMessage['content'] }[] = [];
+    for (const row of stored) {
+      const counts = new Map<string, unknown[]>();
+      for (const part of (live.get(row.id)?.content.parts ?? []) as Part[]) {
+        const tokenEstimate = part.providerMetadata?.mastra?.tokenEstimate;
+        if (!tokenEstimate) continue;
+        const key = contentOf(part);
+        counts.set(key, [...(counts.get(key) ?? []), tokenEstimate]);
+      }
+      if (counts.size === 0) continue;
+      let changed = false;
+      const parts = (row.content.parts as Part[]).map(part => {
+        const tokenEstimate = counts.get(contentOf(part))?.shift();
+        if (!tokenEstimate) return part;
+        changed = true;
+        const providerMetadata = part.providerMetadata ?? {};
+        return {
+          ...part,
+          providerMetadata: { ...providerMetadata, mastra: { ...providerMetadata.mastra, tokenEstimate } },
+        };
+      });
+      if (changed) updates.push({ id: row.id, content: { ...row.content, parts } as MastraDBMessage['content'] });
+    }
+    if (updates.length > 0) await this.storage.updateMessages({ messages: updates });
   }
 
   /**

@@ -14,9 +14,10 @@ const message = (id: string, threadId: string, text: string, counted = false): M
     createdAt: new Date(Date.UTC(2026, 10, 1, 0, 0, id.length)),
     content: { format: 2, parts: [{ type: 'text', text }] },
   };
-  // A message loaded from storage that already carries its count.
-  if (counted) new TokenCounter().countMessages([built]);
-  return built;
+  if (!counted) return built;
+  // A message loaded from storage that already carries its count: counted, then read back as new objects.
+  new TokenCounter().countMessages([built]);
+  return { ...JSON.parse(JSON.stringify(built)), createdAt: built.createdAt };
 };
 
 function history() {
