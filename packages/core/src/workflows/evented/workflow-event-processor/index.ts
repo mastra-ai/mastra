@@ -15,11 +15,11 @@ import { currentRunFenceScope } from '../../../agent/durable/run-fence-scope';
 import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { EventProcessor } from '../../../events/processor';
 import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
+import { reachesOtherProcesses } from '../../../events/reach';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
@@ -5193,7 +5193,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
-    if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
+    if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
     if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) return this.#handleDelivery(event);
     try {
