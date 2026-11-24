@@ -2,7 +2,6 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import type { ComponentPropsWithoutRef } from 'react';
 
-import { LoaderFill } from '../LoaderFill/loader-fill';
 import { cn } from '@/lib/utils';
 
 import './spinner.css';
@@ -31,7 +30,7 @@ export type SpinnerSize = NonNullable<SpinnerVariantsProps['size']>;
 
 export type SpinnerProps = Omit<ComponentPropsWithoutRef<'svg'>, 'color' | 'size' | 'fill'> &
   SpinnerVariantsProps & {
-    /** @deprecated Pages and panels load with `<BrandLoader fill />`; a spinner is for buttons, rows and inputs. */
+    /** Center the spinner in the full height of its parent — the parent must have a definite height. */
     fill?: boolean;
   };
 
@@ -69,7 +68,13 @@ function Spinner({
     </svg>
   );
 
-  if (fill) return <LoaderFill>{svg}</LoaderFill>;
+  if (fill) {
+    return (
+      <div data-slot="spinner-fill" className="flex h-full items-center-safe justify-center-safe">
+        {svg}
+      </div>
+    );
+  }
 
   return svg;
 }

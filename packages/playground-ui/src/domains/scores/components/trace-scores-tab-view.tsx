@@ -1,10 +1,10 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { useState } from 'react';
-import { BrandLoader } from '@/ds/components/BrandLoader';
 import { DataList } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
 import { Metadata } from '@/ds/components/Metadata';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
+import { Spinner } from '@/ds/components/Spinner';
 import { getShortId } from '@/ds/components/Text';
 import { Txt } from '@/ds/components/Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
@@ -31,7 +31,11 @@ export function TraceScoresTabView({
   onPageChange,
 }: TraceScoresTabViewProps) {
   if (isLoading) {
-    return <BrandLoader fill size="sm" />;
+    return (
+      <div className="flex justify-center py-6">
+        <Spinner size="md" variant="pulse" className="text-subtle-foreground" />
+      </div>
+    );
   }
 
   const scores = scoresData?.scores ?? [];

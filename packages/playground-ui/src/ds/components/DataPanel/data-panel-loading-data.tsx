@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { BrandLoader } from '@/ds/components/BrandLoader';
-import { LoaderFill } from '@/ds/components/LoaderFill';
+import { Spinner } from '@/ds/components/Spinner';
 
 export interface DataPanelLoadingDataProps {
   children?: ReactNode;
@@ -8,8 +7,8 @@ export interface DataPanelLoadingDataProps {
 
 export function DataPanelLoadingData({ children }: DataPanelLoadingDataProps) {
   return (
-    <LoaderFill className="px-3 py-4 text-caption text-subtle-foreground">
-      <BrandLoader size="sm" /> {children ?? 'Loading...'}
-    </LoaderFill>
+    <div className="flex min-h-32 items-center justify-center gap-2 px-3 py-4 text-caption text-subtle-foreground">
+      <Spinner size="sm" variant="pulse" className="text-subtle-foreground" /> {children ?? 'Loading...'}
+    </div>
   );
 }

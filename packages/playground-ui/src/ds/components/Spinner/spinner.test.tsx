@@ -47,6 +47,20 @@ describe('Spinner', () => {
     expect(spinner.classList.contains('size-8')).toBe(true);
   });
 
+  it('does not add a fill wrapper by default', () => {
+    render(<Spinner />);
+
+    expect(document.querySelector('[data-slot="spinner-fill"]')).toBeNull();
+  });
+
+  it('centers itself in a full-height wrapper when fill is set', () => {
+    render(<Spinner fill />);
+
+    const wrapper = document.querySelector('[data-slot="spinner-fill"]');
+    expect(wrapper?.className).toContain('h-full');
+    expect(wrapper?.contains(screen.getByRole('status', { name: 'Loading' }))).toBe(true);
+  });
+
   it('merges a caller className with its own', () => {
     render(<Spinner aria-label="Saving" className="size-3" />);
 

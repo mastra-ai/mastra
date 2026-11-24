@@ -1,15 +1,18 @@
 import { useId } from 'react';
 
-import { LoaderFill } from '../LoaderFill/loader-fill';
 import { cn } from '@/lib/utils';
 
 import './brand-loader.css';
 
 export type BrandLoaderProps = {
   className?: string;
-  /** Defaults to `lg` with `fill`, for pages. Panels and dialogs use `sm`. */
+  /** Defaults to `lg` with `fill`. */
   size?: 'sm' | 'md' | 'lg';
-  /** Center the loader in its page or panel, or in the window with `screen`. See `LoaderFill`. */
+  /**
+   * For a whole page that hasn't shown yet: centers the loader in the page's area, or in the window with `screen`.
+   * Directly inside `PageLayout` it centers on the whole page, where the route's loader sits.
+   * Anything inside a page that already shows keeps its own loading state.
+   */
   fill?: boolean | 'screen';
   'aria-label'?: string;
 };
@@ -78,9 +81,16 @@ function BrandLoader({
     </div>
   );
 
-  if (fill) return <LoaderFill area={fill === 'screen' ? 'screen' : 'parent'}>{loader}</LoaderFill>;
+  if (!fill) return loader;
 
-  return loader;
+  return (
+    <div
+      data-slot="brand-loader-fill"
+      className={cn('flex w-full items-center justify-center', fill === 'screen' ? 'h-dvh' : 'h-full flex-1')}
+    >
+      {loader}
+    </div>
+  );
 }
 
 export { BrandLoader };

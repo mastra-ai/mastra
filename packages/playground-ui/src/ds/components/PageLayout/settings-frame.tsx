@@ -50,7 +50,7 @@ export function SettingsFrame({
         )}
         <div
           data-slot="settings-layout-content"
-          className="grid min-w-0 content-start gap-7 has-[>:is([data-slot=empty-state-fill],[data-slot=loader-fill]):only-child]:content-stretch"
+          className="grid min-w-0 content-start gap-7 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch"
         >
           {children}
         </div>

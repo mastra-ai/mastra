@@ -1,4 +1,3 @@
-import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
@@ -93,7 +92,11 @@ export function WorkspaceFileViewer({
         </Txt>
       ) : null}
 
-      {isLoading ? <BrandLoader fill size="sm" /> : null}
+      {isLoading ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <Spinner size="sm" />
+        </div>
+      ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
           <Txt variant="caption" className="text-destructive-foreground">

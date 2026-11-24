@@ -237,24 +237,15 @@ async function expectLoaderInPageCenter({ canvasElement }: { canvasElement: HTML
 }
 
 export const PageLoading: Story = {
-  args: {
-    header: pageHeader,
-    actionRow: <Input placeholder="Filter resources" className="max-w-120" />,
-    children: <BrandLoader fill />,
-  },
+  args: { children: <BrandLoader fill /> },
   parameters: {
     docs: {
       description: {
         story:
-          "A page's loader centers on the whole page whatever sits above the body, so it takes over from the route's loader without a jump.",
+          "A page that hasn't shown yet centers its loader on the whole page, header included, so it takes over from the route's loader without a jump.",
       },
     },
   },
-  play: expectLoaderInPageCenter,
-};
-
-export const PageRouteLoading: Story = {
-  args: { breadcrumbs: undefined, headerActions: undefined, children: <BrandLoader fill /> },
   play: expectLoaderInPageCenter,
 };
 

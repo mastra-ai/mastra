@@ -65,7 +65,7 @@ A row that only shows a value, status or per-item actions is a `SettingsItem`, a
 
 - Look overrides on DS components: `bg-*`, text color or size, border color, `rounded-*`, `shadow-*`, or padding via `className`
 - A new component that duplicates an existing `ds/` or `domains/` component
-- A hand-centered page or panel loader (`flex h-full items-center justify-center` around it, or a bare one), or a `Spinner` as one: use `<BrandLoader fill />` for a page, `fill="screen"` for the window, `size="sm"` in a panel or dialog, and `LoaderFill` when text sits beside it. `Spinner` is for buttons, rows and inputs
+- A hand-centered full-page loader, or a `Spinner` as one: a page that hasn't shown yet loads with `<BrandLoader fill />`, the window with `fill="screen"`. Dialogs, panels, cards and anything else inside a page that already shows keep `Spinner` or a skeleton
 - A `SettingsRow` per list entry or read-only value (versions, members, keys), or a `SettingsItem` wrapping a control that changes a setting: see "Settings pages" above
 - `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
 - Token names that don't exist in `theme.css` (guessed from memory)

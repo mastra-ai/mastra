@@ -7,7 +7,6 @@ import { ComposerAttachment as ComposerAttachmentPreview } from '@/domains/chat/
 import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
 
 import type { AttachmentPreviewProps } from '@/domains/chat/attachments/use-attachment-preview';
-import { BrandLoader } from '@/ds/components/BrandLoader';
 import { Spinner } from '@/ds/components/Spinner';
 import { fileToBase64, isBrowserFetchableUrl } from '@/utils/file';
 
@@ -44,7 +43,7 @@ const ComposerPdfAttachment = ({
   return (
     <div className="flex size-full items-center justify-center">
       {state.isLoading ? (
-        <BrandLoader fill size="sm" />
+        <Spinner />
       ) : (
         <PdfEntry data={state.text} url={attachment.isUrl ? attachment.name : undefined} {...previewProps} />
       )}

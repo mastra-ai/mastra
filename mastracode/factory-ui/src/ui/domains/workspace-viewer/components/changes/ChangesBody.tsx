@@ -1,4 +1,4 @@
-import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { lazy, Suspense } from 'react';
 import type { Ref } from 'react';
@@ -12,7 +12,11 @@ import type { StackedDiffsHandle } from './diffs/StackedDiffs';
 
 const StackedDiffs = lazy(() => import('./diffs/StackedDiffs').then(({ StackedDiffs }) => ({ default: StackedDiffs })));
 
-const centeredSpinner = <BrandLoader fill size="sm" />;
+const centeredSpinner = (
+  <div className="flex min-h-0 flex-1 items-center justify-center">
+    <Spinner size="sm" />
+  </div>
+);
 
 interface ChangesBodyProps {
   workspacePath: string;

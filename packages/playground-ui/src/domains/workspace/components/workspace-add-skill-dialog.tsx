@@ -7,7 +7,6 @@ import {
 import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { BrandLoader } from '@/ds/components/BrandLoader';
 import {
   Dialog,
   DialogAction,
@@ -25,6 +24,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
+import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
@@ -220,13 +220,15 @@ export function WorkspaceAddSkillDialog({
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport
                   className={
-                    isLoadingPopular || isSearching || displaySkills.length === 0
+                    !isLoadingPopular && !isSearching && displaySkills.length === 0
                       ? 'flex flex-col [&>div]:flex [&>div]:flex-1 [&>div]:flex-col'
                       : undefined
                   }
                 >
                   {isLoadingPopular || isSearching ? (
-                    <BrandLoader fill size="sm" />
+                    <div className="flex items-center justify-center py-5">
+                      <Spinner className="text-muted-foreground" />
+                    </div>
                   ) : displaySkills.length === 0 ? (
                     <EmptyState
                       className="flex-1"
@@ -336,7 +338,9 @@ export function WorkspaceAddSkillDialog({
                     </div>
 
                     {isLoadingPreview ? (
-                      <BrandLoader fill size="sm" />
+                      <div className="flex flex-1 items-center justify-center">
+                        <Spinner className="text-muted-foreground" />
+                      </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
                         <div className="p-4">

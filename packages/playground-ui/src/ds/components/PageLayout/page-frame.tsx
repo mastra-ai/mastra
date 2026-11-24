@@ -13,14 +13,14 @@ export interface PageFrameProps {
 }
 
 const scrollBodyWithHeader =
-  'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=loader-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=loader-fill]))]:basis-0';
+  'flex h-full min-h-min flex-col [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:grow [&>:last-child:is([data-slot=empty-state-fill],[data-slot=spinner-fill],.h-full,:has(>[data-slot=empty-state-fill]),:has(>[data-slot=spinner-fill]))]:basis-0';
 
-// A loader that is the page's own content centers on the whole frame, header included: where a route's loader sits
-// before the frame mounts. The scroll area around it steps aside as the containing block.
+// A page's `BrandLoader` centers on the whole frame, header included: where the route's loader sat before the frame
+// mounted. The scroll area around it steps aside as the containing block.
 const pageLoader =
-  '*:data-[slot=loader-fill]:pointer-events-none *:data-[slot=loader-fill]:absolute *:data-[slot=loader-fill]:inset-0';
+  '*:data-[slot=brand-loader-fill]:pointer-events-none *:data-[slot=brand-loader-fill]:absolute *:data-[slot=brand-loader-fill]:inset-0';
 const aroundPageLoader =
-  'has-[>*>*>[data-slot=loader-fill],>*>*>[data-slot=page-layout-fixed]>[data-slot=loader-fill]]:static!';
+  'has-[>*>*>[data-slot=brand-loader-fill],>*>*>[data-slot=page-layout-fixed]>[data-slot=brand-loader-fill]]:static!';
 
 /** The frame every page variant renders into: the header bar, the action row and the scrolling body. */
 export function PageFrame({
