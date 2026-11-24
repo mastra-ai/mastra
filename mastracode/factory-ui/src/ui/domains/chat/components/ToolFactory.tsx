@@ -54,6 +54,7 @@ function askUserOptions(value: unknown): AskUserOption[] | undefined {
     const normalized: AskUserOption = { label };
     const description = stringValue(optionValue?.description);
     if (description) normalized.description = description;
+    if (optionValue?.recommended === true) normalized.recommended = true;
     return [normalized];
   });
 

@@ -784,21 +784,6 @@ export interface EngineDifference {
   expect?: (plain: EngineObservation) => EngineObservation;
 }
 
-export const FAILED_STEP_WARNINGS_DIFFERENCE: EngineDifference = {
-  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
-  expect: plain => {
-    const expected = structuredClone(plain);
-    for (const turn of expected.turns) {
-      turn.chunkTypes.forEach((type, index) => {
-        if (type !== 'step-finish') return;
-        const payload = turn.chunkPayloads[index] as { stepResult?: { reason?: unknown; warnings?: unknown } };
-        if (payload.stepResult?.reason === 'error') delete payload.stepResult.warnings;
-      });
-    }
-    return expected;
-  },
-};
-
 export interface EngineHandle {
   engine: ParityEngine;
   /** The plain Agent this engine wraps (or runs, for `plain`). */
