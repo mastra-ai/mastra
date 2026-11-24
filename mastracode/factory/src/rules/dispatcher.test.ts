@@ -3412,7 +3412,7 @@ describe('FactoryDecisionDispatcher', () => {
     it('resumes, rather than restarting the prompt, when sending the continuation failed', async () => {
       const { session, dispatcher, lost, lostAt } = await lostBuild('lost-build-send-fails', Date.now() - 60_000);
       const send = session.sendSignal.getMockImplementation()!;
-      session.sendSignal.mockImplementationOnce(() => Promise.reject(new Error('signal bus down')));
+      session.sendSignal.mockImplementationOnce(() => ({ accepted: Promise.reject(new Error('signal bus down')) }));
       session.sendSignal.mockImplementation(send);
 
       await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
@@ -8643,6 +8643,41 @@ describe('custom-board deferred targets', () => {
       }),
     ]);
     expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'work', stages: ['intake'] });
+  });
+
+  it("files no new card when the host's board engine refuses its placement", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'refused-new-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:refused-new-placement',
+      skipRules: true,
+    });
+    const placements: FactoryCardPlacement[] = [];
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async placement => {
+        placements.push(placement);
+        return 'skipped';
+      },
+    };
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine).runOnce();
+
+    expect(placements).toEqual([
+      expect.objectContaining({ item: expect.objectContaining({ stages: ['planning'] }), targetStage: 'planning' }),
+    ]);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([]);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({
+        idempotencyKey: 'refused-new-placement',
+        lastError: expect.stringContaining('The board engine refused to file the card on work.'),
+      }),
+    ]);
   });
 
   it('places a pull request card its project keeps on the retired Review board where it sits', async () => {

@@ -313,11 +313,14 @@ export async function takeOverInterruptedSessionRuns(
         if (!recorded) return;
       }
     }
+    // Re-read after the audit writes, which can take a while: a run another replica opened on
+    // this thread meanwhile must stay on the ledger. Only the lost entries are swapped out.
+    const current = await listSessionOpenRuns(session);
     const now = Date.now();
     await session.thread.setSetting({
       key: FACTORY_OPEN_RUNS_SETTING,
       value: [
-        ...runs.filter(run => !lost.includes(run)),
+        ...current.filter(run => !kickoffIds.includes(run.kickoffId)),
         { ...lost[0]!, kickoffId: resumeKickoffId, ownerId, heartbeatAt: now, startedAt: now },
       ],
     });

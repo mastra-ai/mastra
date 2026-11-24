@@ -10,6 +10,7 @@ import {
   listSessionOpenRuns,
   observeSessionRunEnd,
   recordSessionRunStart,
+  takeOverInterruptedSessionRuns,
 } from './run-audit.js';
 import type { RunEndCaptureSession } from './run-audit.js';
 
@@ -94,6 +95,34 @@ describe('Factory run lifecycle audit', () => {
     expect(isOpenRunLiveElsewhere(entry, 'worker-1', now)).toBe(false);
     expect(isOpenRunLiveElsewhere(entry, 'worker-2', now + FACTORY_OPEN_RUN_STALE_MS)).toBe(false);
     expect(isOpenRunLiveElsewhere({ ...entry, heartbeatAt: undefined }, 'worker-2', now)).toBe(false);
+  });
+
+  it('keeps a run another replica opened while a lost run was being taken over', async () => {
+    const { session, settings } = makeSession();
+    const lost = { ...OPEN_RUN, ownerId: 'lost-worker', heartbeatAt: 1 };
+    const opened = { ...OPEN_RUN, kickoffId: 'kickoff-2', bindingId: 'binding-2', ownerId: 'worker-3', heartbeatAt: 2 };
+    settings[FACTORY_OPEN_RUNS_SETTING] = [lost];
+    // The other replica writes the ledger while this one records the lost run's end.
+    const audit = {
+      record: async () => {
+        settings[FACTORY_OPEN_RUNS_SETTING] = [lost, opened];
+        return {} as never;
+      },
+    };
+
+    await expect(
+      takeOverInterruptedSessionRuns(session, {
+        audit,
+        kickoffIds: ['kickoff-1'],
+        resumeKickoffId: 'kickoff-1:resume:2',
+        ownerId: 'worker-2',
+      }),
+    ).resolves.toBe(true);
+
+    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([
+      opened,
+      expect.objectContaining({ kickoffId: 'kickoff-1:resume:2', ownerId: 'worker-2' }),
+    ]);
   });
 
   it('renews the heartbeat of an open run and keeps ownership out of the audit record', async () => {

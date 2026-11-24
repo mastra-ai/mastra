@@ -2272,15 +2272,16 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (skipRules) {
-      // Creation already filed the card at `stage`. An existing card — one a
-      // reconcile pass files again, say — is placed there the same way, through
-      // a cross-board relocation, so no phase rule runs for it and no transition
-      // is recorded.
+      // Creation already filed the card at `stage`; the engine still answers for it, and the
+      // default engine finds it where it belongs. An existing card — one a reconcile pass files
+      // again, say — is placed there the same way, through a cross-board relocation, so no phase
+      // rule runs for it and no transition is recorded.
       // Another decision of the same delivery (a pull request attaching to this card, say) can
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
-      let item: Card | null = result.created ? null : result.item;
+      let item: Card | null = result.item;
+      let outcome: Awaited<ReturnType<FactoryBoardEngine['requestPlacement']>> = 'skipped';
       for (let attempt = 0; item && attempt < 3; attempt += 1) {
-        const outcome = await this.#boardEngine.requestPlacement({
+        outcome = await this.#boardEngine.requestPlacement({
           workItems: this.#storage,
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
@@ -2291,6 +2292,11 @@ export class FactoryDecisionDispatcher {
         if (outcome !== 'skipped') break;
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
         item = fresh && fresh.revision !== item.revision ? fresh : null;
+      }
+      // A card this decision created and the engine would not file is not left filed.
+      if (result.created && outcome === 'skipped') {
+        await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
+        throw new FactoryRuleRejectedError('forbidden', `The board engine refused to file the card on ${board}.`);
       }
       await filed();
       return;
