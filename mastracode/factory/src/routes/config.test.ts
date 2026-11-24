@@ -1545,11 +1545,11 @@ describe('default model routes with a tenant', () => {
 
     const nullBody = await putDefault(buildApp(userA), null);
     expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await nullBody.json()).toEqual({ error: 'Invalid modelId' });
 
     const oversized = await putDefault(buildApp(userA), { modelId: `openai/${'m'.repeat(250)}` });
     expect(oversized.status).toBe(400);
-    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await oversized.json()).toEqual({ error: 'Invalid modelId' });
 
     const searchText = await putDefault(buildApp(userA), { modelId: 'sonnet 5.5' });
     expect(searchText.status).toBe(400);

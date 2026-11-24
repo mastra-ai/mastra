@@ -10,11 +10,6 @@ const modelFallbackReasonSchema = z.enum(['pool-exhausted', 'persistent-outage']
 
 export type ModelFallbackReason = z.infer<typeof modelFallbackReasonSchema>;
 
-/** @deprecated Parse the whole part with {@link parseModelFallbackPart}. */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
-  return modelFallbackReasonSchema.safeParse(value).success;
-}
-
 const REASON_CLAUSE: Record<ModelFallbackReason, (model: string) => string> = {
   'pool-exhausted': model => `${model} failed`,
   'persistent-outage': model => `${model} keeps failing`,

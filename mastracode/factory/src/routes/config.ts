@@ -1712,7 +1712,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const parsed = z.object({ modelId: modelIdSchema }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
+          if (!parsed.success) return c.json({ error: 'Invalid modelId' }, 400);
           const { modelId } = parsed.data;
           try {
             await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });

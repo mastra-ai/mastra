@@ -493,7 +493,7 @@ export function resolveRequestThinkingLevel(
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
 
-export const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
+const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
 
 export function setHostModelRoute(
   requestContext: RequestContext,
