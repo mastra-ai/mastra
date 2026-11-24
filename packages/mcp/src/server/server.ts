@@ -69,9 +69,10 @@ import type {
   Tool as MCPTool,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
+import { RESOURCES_DIRECTORY_READ_METHOD, SKILLS_EXTENSION_ID } from '@modelcontextprotocol/server/ext/skills';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
-import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../shared/events';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
@@ -98,6 +99,8 @@ import {
   toToolExecutionContext,
 } from './request';
 import type { ContinuationEnvelope } from './request';
+import { buildSkillCatalog, registerSkillHandlers, skillFileContents } from './skills';
+import type { MCPServerSkills, SkillCatalog } from './skills';
 import { BackgroundTaskMCPTaskStore } from './tasks/background-store';
 import { resolveTasksConfig, SelectingMCPTaskStore } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
@@ -272,7 +275,15 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * `toModelOutput` (`modelOutput`), and rewrite it before it is sent (`transform`).
    */
   toolResult?: MCPServerToolResultOptions;
+  /**
+   * Agent Skills served over the MCP Skills extension (SEP-2640): `skills/list`, `skills/get`,
+   * `resources/directory/read`, and each file as a `skill://` resource.
+   */
+  skills?: MCPServerSkills;
 }
+
+/** Catalogs by `skills` config, so servers built per request from one config hash its files once. */
+const skillCatalogs = new WeakMap<MCPServerSkills, Promise<SkillCatalog>>();
 
 export interface MCPServerHTTPOptions {
   url: URL;
@@ -380,6 +391,7 @@ export class MCPServer extends MCPServerBase {
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
   private readonly appsRequireClientSupport: boolean;
+  private readonly skillsConfig?: MCPServerSkills;
   /** 2025-era instances serving a request that carries an apps session id (see `withAppsSession`). */
   private readonly legacyAppClients = new WeakSet<Server>();
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
@@ -418,6 +430,7 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
     this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
+    this.skillsConfig = config.skills;
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -760,12 +773,15 @@ export class MCPServer extends MCPServerBase {
       // itself is gated per request by the caller's `_meta` log-level opt-in.
       logging: {},
     };
-    if (this.resourceOptions || this.appResourceList.length > 0) {
+    if (this.resourceOptions || this.skillsConfig || this.appResourceList.length > 0) {
       capabilities.resources = { subscribe: true, listChanged: true };
+    }
+    if (this.skillsConfig) {
+      capabilities.extensions = { ...capabilities.extensions, [SKILLS_EXTENSION_ID]: { directoryRead: true } };
     }
     if (this.promptOptions) capabilities.prompts = { listChanged: true };
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
-      capabilities.extensions = { [UI_EXTENSION_ID]: {} };
+      capabilities.extensions = { ...capabilities.extensions, [UI_EXTENSION_ID]: {} };
     }
     if (this.eventRegistry.size > 0) {
       capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
@@ -782,7 +798,7 @@ export class MCPServer extends MCPServerBase {
     const { [UI_EXTENSION_ID]: _ui, ...otherExtensions } = extensions ?? {};
     return {
       ...rest,
-      ...(this.resourceOptions && resources ? { resources } : {}),
+      ...((this.resourceOptions || this.skillsConfig) && resources ? { resources } : {}),
       ...(Object.keys(otherExtensions).length > 0 ? { extensions: otherExtensions } : {}),
     };
   }
@@ -831,6 +847,14 @@ export class MCPServer extends MCPServerBase {
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
+    if (this.skillsConfig) {
+      registerSkillHandlers(server, {
+        config: this.skillsConfig,
+        catalog: () => this.skillCatalog(),
+        trace: (instance, method, params, ctx, fn) =>
+          this.traceCustomRequest(instance, method, params, ctx, () => fn()),
+      });
+    }
     if (this.eventRegistry.size > 0) {
       registerEventHandlers(server, {
         registry: this.eventRegistry,
@@ -2100,20 +2124,35 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  /** The `skills` catalog, built on first use and shared by every server built from the same config. */
+  private skillCatalog(): Promise<SkillCatalog> {
+    const config = this.skillsConfig!;
+    let catalog = skillCatalogs.get(config);
+    if (!catalog) {
+      catalog = buildSkillCatalog(config, message => this.logger.warn(message));
+      skillCatalogs.set(config, catalog);
+      // A failed build is retried on the next request.
+      catalog.catch(() => skillCatalogs.delete(config));
+    }
+    return catalog;
+  }
+
   private registerResourceHandlers(server: Server): void {
     const options = this.resourceOptions;
     const hasAppResources = this.appResourceList.length > 0;
-    if (!options && !hasAppResources) return;
+    const hasSkills = this.skillsConfig !== undefined;
+    if (!options && !hasAppResources && !hasSkills) return;
 
     // Without app access a server holding only apps answers as one without resources.
     const appResourcesFor = (ctx: ServerContext): Resource[] => {
       if (this.servesApps(server, ctx)) return this.appResourceList;
-      if (!options) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
+      if (!options && !hasSkills) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
       return [];
     };
 
     const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...appResourcesFor(ctx),
+      ...(hasSkills ? (await this.skillCatalog()).listed : []),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
@@ -2145,6 +2184,17 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
+      if (hasSkills && uri.startsWith('skill://')) {
+        const catalog = await this.skillCatalog();
+        const file = catalog.files.get(uri);
+        if (file) return { contents: [skillFileContents(uri, file)] };
+        if (catalog.dirs.has(uri)) {
+          throw new ProtocolError(
+            ProtocolErrorCode.InvalidParams,
+            `${uri} is a directory; use ${RESOURCES_DIRECTORY_READ_METHOD}`,
+          );
+        }
+      }
       const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
