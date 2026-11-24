@@ -13,6 +13,7 @@ import {
   ghAll,
   goodRunFor,
   nextBisectStep,
+  needsStandIns,
   prForCommit,
   standIns,
   verdictFor,
@@ -283,6 +284,15 @@ test('an unmapped person who opened the PR is named, and whoever merged it is ta
   });
   assert.match(nobody, /by @daneatmastra\./);
   assert.doesNotMatch(nobody, /<!here>/);
+});
+
+test('stand-ins are looked up for bot PRs and unmapped authors only', () => {
+  const users = { tony: 'U1' };
+  assert.equal(needsStandIns({ author: 'mastra-platform[bot]', bot: true }, users), true);
+  assert.equal(needsStandIns({ author: 'daneatmastra', bot: false }, users), true);
+  assert.equal(needsStandIns({ author: 'tony', bot: false }, users), false);
+  assert.equal(needsStandIns({ author: null, bot: false }, users), false);
+  assert.equal(needsStandIns(null, users), false);
 });
 
 test('a mapped person who opened the PR is tagged alone', () => {

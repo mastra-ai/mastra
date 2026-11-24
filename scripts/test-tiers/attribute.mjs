@@ -144,6 +144,12 @@ export function prForCommit(pulls, subject) {
   return m ? { number: Number(m[2]), title: m[1], author: null, bot: false } : null;
 }
 
+/**
+ * Whether to look up who else answers for a culprit PR: a bot opened it, or a person missing from
+ * the Slack map did (Dane's `daneatmastra` is a GitHub User, so mapping it would silence this).
+ */
+export const needsStandIns = (pr, slackUsers) => Boolean(pr?.author && (pr.bot || !slackUsers[pr.author]));
+
 const isBot = user => !user?.login || user.type === 'Bot' || user.login.endsWith('[bot]');
 
 const PR_COMMITS_LIMIT = 250;
@@ -382,7 +388,7 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     if (r.culprit in prs) continue;
     const subject = git('log', '-1', '--format=%s', r.culprit);
     const pr = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
-    if (pr?.bot || (pr?.author && !users[pr.author])) {
+    if (needsStandIns(pr, users)) {
       const lookup = (what, fn, unknown) => {
         try {
           return fn();
