@@ -473,6 +473,14 @@ async function decisionByKey(storage: WorkItemsStorage, idempotencyKey: string) 
 }
 
 /** Open runs a dispatcher recorded on the shared ledger. */
+/**
+ * Lets a dispatch reach `reached` without moving the fake clock. Storage I/O (a Postgres round
+ * trip) happens outside fake time, so one `advanceTimersByTimeAsync(0)` can return before it lands.
+ */
+async function untilFakeClockSettles(reached: () => unknown): Promise<void> {
+  await vi.waitFor(reached, { interval: 0, timeout: 5_000 });
+}
+
 async function seedOpenRuns(seed: { openRuns: OpenRunsStorage }, runs: Array<Record<string, unknown>>) {
   for (const run of runs) await seed.openRuns.open(factoryOpenRunSchema.parse(run));
 }
@@ -3906,12 +3914,14 @@ describe('FactoryDecisionDispatcher', () => {
         });
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
-        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         const startedAt = Date.now();
-        expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([
-          expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
-        ]);
+        // The run is recorded open after its kickoff is delivered.
+        await untilFakeClockSettles(async () =>
+          expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([
+            expect.objectContaining({ bindingId: binding.id, ownerId: 'worker-1', heartbeatAt: startedAt }),
+          ]),
+        );
 
         // A remote replica reading the ledger during the run must keep seeing a fresh claim.
         // The heartbeat interval is armed and its ledger write lands through
@@ -4041,8 +4051,7 @@ describe('FactoryDecisionDispatcher', () => {
         const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-end');
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
-        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         await session.thread.setSetting({
           key: FACTORY_RUN_ENDS_SETTING,
           value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
@@ -4063,7 +4072,7 @@ describe('FactoryDecisionDispatcher', () => {
         const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-error');
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         await session.thread.setSetting({
           key: FACTORY_RUN_ENDS_SETTING,
           value: [{ kickoffId, reason: 'error', endedAt: Date.now() }],
@@ -4089,7 +4098,7 @@ describe('FactoryDecisionDispatcher', () => {
         const { storage, openRuns, session, dispatcher, kickoffId, openRunOf } = await remoteRun('remote-live');
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         await openRuns.open(openRunOf(kickoffId));
         for (let beat = 0; beat < 3; beat += 1) {
           await openRuns.heartbeat(kickoffId, 'worker-2', openRunOf(kickoffId).heartbeatAt);
@@ -4119,7 +4128,7 @@ describe('FactoryDecisionDispatcher', () => {
           await remoteRun('remote-end-between-reads');
 
         const dispatch = dispatcher.runOnce();
-        await vi.advanceTimersByTimeAsync(0);
+        await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
         await openRuns.open(openRunOf(kickoffId));
         // The other worker finishes right after the dispatcher's ledger read: it records the end,
         // then drops the run from the ledger.
@@ -4191,8 +4200,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
       await dispatch;
@@ -4256,8 +4264,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       // Two heartbeats elapse; the run is slow, not stalled.
       await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs * 2);
@@ -4325,8 +4332,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
 
       const dispatch = dispatcher.runOnce();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      await untilFakeClockSettles(() => expect(session.sendSignal).toHaveBeenCalledTimes(1));
 
       await vi.advanceTimersByTimeAsync(heartbeat * 3);
       await dispatch;
