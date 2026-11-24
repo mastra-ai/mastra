@@ -9,19 +9,36 @@ function row(sessionId: string, userId: string, originSessionId: string | null =
   return { sessionId, orgId: 'org-1', userId, originSessionId } as SourceControlSession;
 }
 
-/** Sessions by id, each bound to a card whose `work` role was started by `initiatedBy` (if any). */
-function world(rows: SourceControlSession[], runs: Record<string, { initiatedBy?: string }> = {}) {
+/**
+ * Sessions by id, each bound to a card whose `work` role was started by `initiatedBy` (if any).
+ * `roleSession` names the session the card's role ref points at now, when the role was restarted.
+ */
+function world(
+  rows: SourceControlSession[],
+  runs: Record<string, { initiatedBy?: string; roleSession?: string }> = {},
+) {
   const bySession = new Map(rows.map(session => [session.sessionId, session]));
   return {
     sessions: { getBySessionId: async (sessionId: string) => bySession.get(sessionId) ?? null },
     workItems: {
       listRunBindingsForSession: async ({ sessionId }: { orgId: string; sessionId: string }) =>
-        runs[sessionId] ? [{ orgId: 'org-1', workItemId: `card-${sessionId}`, role: 'work' }] : [],
+        runs[sessionId] ? [{ orgId: 'org-1', workItemId: `card-${sessionId}`, role: 'work', sessionId }] : [],
       get: async ({ id }: { orgId: string; id: string }) => {
-        const run = runs[id.replace(/^card-/, '')];
-        return run
-          ? { sessions: { work: { sessionId: 'x', branch: 'b', threadId: 't', startedBy: FACTORY, ...run } } }
-          : null;
+        const sessionId = id.replace(/^card-/, '');
+        const run = runs[sessionId];
+        if (!run) return null;
+        const { roleSession = sessionId, initiatedBy } = run;
+        return {
+          sessions: {
+            work: {
+              sessionId: roleSession,
+              branch: 'b',
+              threadId: 't',
+              startedBy: FACTORY,
+              ...(initiatedBy ? { initiatedBy } : {}),
+            },
+          },
+        };
       },
     } as never,
   };
@@ -42,6 +59,14 @@ describe('resolveAttributionUserId', () => {
     // A personal Factory's run is owned by its creator, who still did not start it.
     const personal = row('personal-run', 'creator-1');
     expect(await resolve('creator-1', personal, world([personal], { 'personal-run': {} }))).toBe(FACTORY);
+  });
+
+  it('never credits the person who restarted a role to the run it replaced', async () => {
+    const replaced = row('run', FACTORY);
+    const side = row('side', FACTORY, 'run');
+    const restarted = world([replaced, side], { run: { initiatedBy: 'person-2', roleSession: 'run-2' } });
+    expect(await resolve(FACTORY, replaced, restarted)).toBe(FACTORY);
+    expect(await resolve(FACTORY, side, restarted)).toBe(FACTORY);
   });
 
   it('keeps the credit of a person working in a session they do not own', async () => {

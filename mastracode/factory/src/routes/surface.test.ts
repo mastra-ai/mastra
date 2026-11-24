@@ -672,6 +672,27 @@ describe('prepareFactoryRuleBinding', () => {
         });
       });
 
+      it('never credits whoever restarted a phase to the run it replaced', async () => {
+        const seed = await seedFactoryScope();
+        const replaced = await phaseRunOf(seed, 'requester-1');
+        const rerun = await sessionOf(seed, 'requester-2');
+        await seed.seeded.workItems.prepareRunStart({
+          orgId: 'org-1',
+          userId: 'requester-2',
+          factoryProjectId: seed.project.id,
+          workItem: { id: replaced.workItemId, input: { board: 'work', title: 'Broken login', stages: ['triage'] } },
+          role: 'triage',
+          session: { sessionId: rerun.sessionId, branch: rerun.branch, threadId: rerun.sessionId },
+          resourceId: rerun.sessionId,
+          kickoffKey: 'kickoff-2',
+          kickoffMessage: null,
+          initiatedBy: 'requester-2',
+        });
+
+        const call = await initiatorOf(seed, `agent:${replaced.id}`);
+        expect(call).not.toHaveProperty('initiatedBy');
+      });
+
       it('credits nobody when an earlier phase run nobody started moves the card', async () => {
         const seed = await seedFactoryScope();
         const binding = await phaseRunOf(seed);

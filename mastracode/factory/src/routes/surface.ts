@@ -397,8 +397,10 @@ async function runInitiator(args: {
   if (!binding) return undefined;
   const card =
     binding.workItemId === item.id ? item : await workItems?.get?.({ orgId: project.orgId, id: binding.workItemId });
-  const initiatedBy = card?.sessions[binding.role]?.initiatedBy;
-  return isHumanActorId(initiatedBy) ? initiatedBy : undefined;
+  const roleSession = card?.sessions[binding.role];
+  // A restarted role replaces its ref, and whoever restarted it did not ask for the moving run.
+  if (roleSession?.sessionId !== binding.sessionId) return undefined;
+  return isHumanActorId(roleSession.initiatedBy) ? roleSession.initiatedBy : undefined;
 }
 
 /**

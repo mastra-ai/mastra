@@ -42,7 +42,9 @@ export async function resolveAttributionUserId({
     ).at(-1);
     if (!binding) return undefined;
     const item = await workItems.get({ orgId: binding.orgId, id: binding.workItemId });
-    return item?.sessions[binding.role]?.initiatedBy ?? factory;
+    // A restarted role replaces its ref; the person who restarted it did not start this session.
+    const ref = item?.sessions[binding.role];
+    return (ref?.sessionId === binding.sessionId ? ref.initiatedBy : undefined) ?? factory;
   };
 
   const own = await runCredit(session);
