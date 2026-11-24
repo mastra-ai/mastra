@@ -56,6 +56,7 @@ export function SessionNavRow({
   from,
   onPinChange,
   onDelete,
+  onRename,
   onRegenerateTitle,
   onAnswerApproval,
   answeringApproval,
@@ -96,6 +97,7 @@ export function SessionNavRow({
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
+  onRename?: () => void;
   onRegenerateTitle?: () => void;
   /** Set while a followed card's phase session waits on an approval this viewer may give. */
   onAnswerApproval?: (decision: 'approve' | 'decline') => void;
@@ -182,7 +184,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-icon-xs shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-subtle-foreground size-icon-xs shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -197,6 +199,7 @@ export function SessionNavRow({
     pinned,
     onPinChange,
     onDelete,
+    onRename,
     onRegenerateTitle,
     regeneratingTitle,
     onAnswerApproval,

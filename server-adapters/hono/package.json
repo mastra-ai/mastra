@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.7.27",
+  "version": "1.7.28-alpha.7",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
     "@hono/node-ws": "^1.3.1",
     "@mastra/server": "workspace:*",
     "fetch-to-node": "^2.1.0",
-    "ws": "^8.22.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@ai-sdk/openai": "^2.0.139",
@@ -59,14 +59,15 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.85.1-0 <2.0.0-0",
     "hono": "^4.13.5"
   },
   "engines": {
     "node": ">=22.13.0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

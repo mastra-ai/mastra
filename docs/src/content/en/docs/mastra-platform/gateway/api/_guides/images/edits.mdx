@@ -1,0 +1,16 @@
+Compatible with the OpenAI Images API. Editing needs a model that supports image edits, such as `qwen/qwen-image-2.1-turbo`. The [Images API limits](/docs/mastra-platform/gateway/api/images) also apply to edits.
+
+Pass the source image as a PNG, JPEG, or WebP `data:` URL, or as an HTTP(S) URL:
+
+```bash
+curl https://gateway-api.mastra.ai/v1/images/edits \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen/qwen-image-2.1-turbo",
+    "prompt": "Add a full moon to the sky",
+    "image": "https://example.com/lighthouse.png"
+  }'
+```
+
+You're billed only for images that are delivered. If a provider fails before returning an image, Gateway retries another eligible route.

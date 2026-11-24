@@ -14,7 +14,7 @@ export function SignalsErrorState({
   onClear?: () => void;
 }) {
   return (
-    <section className="m-4 rounded-lg border border-border bg-background p-6 lg:m-6" role="alert">
+    <section className="m-4 rounded-lg bg-nested p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
         <IconExclamationTriangle
           aria-hidden="true"

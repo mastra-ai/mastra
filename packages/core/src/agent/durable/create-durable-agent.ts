@@ -30,7 +30,7 @@ import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { Agent } from '../agent';
 
 import { DurableAgent } from './durable-agent';
-import type { DurableAgentConfig } from './durable-agent';
+import type { DurableAgentConfig } from './types';
 
 /**
  * Options for createDurableAgent factory function.
@@ -196,7 +196,7 @@ export function isDurableAgent(obj: any): obj is DurableAgent {
 export const isLocalDurableAgent = isDurableAgent;
 
 // Re-export types for convenience
-export type { DurableAgentConfig, DurableAgentStreamOptions, DurableAgentStreamResult } from './durable-agent';
+export type { DurableAgentConfig, DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 
 // Backwards compatibility type aliases
 export type LocalDurableAgent<

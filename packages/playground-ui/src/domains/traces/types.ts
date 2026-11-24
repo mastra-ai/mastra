@@ -1,8 +1,11 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { LightSpanRecord } from '@mastra/react/hooks/traces';
+import type { LightSpanRecord, TraceSpansData } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 
 export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
+
+/** A span of a whole trace with its payload, as `getTrace` returns it (the light record plus input, output, attributes…). */
+export type TraceSpanRecord = TraceSpansData['spans'][number];
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.

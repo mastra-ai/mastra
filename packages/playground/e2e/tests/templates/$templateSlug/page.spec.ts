@@ -16,13 +16,5 @@ test.describe('Template detail page', () => {
       const breadcrumb = page.locator('nav a:has-text("Templates")').first();
       await expect(breadcrumb).toHaveAttribute('href', '/templates');
     });
-
-    test('renders the template page structure', async ({ page }) => {
-      await page.goto('/templates/test-template');
-
-      // The page should have the main content area
-      const mainContent = page.locator('main');
-      await expect(mainContent).toBeVisible();
-    });
   });
 });

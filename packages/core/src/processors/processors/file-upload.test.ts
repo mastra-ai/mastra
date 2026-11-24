@@ -42,6 +42,7 @@ describe('buildUploadPath', () => {
     ['shared', 'shared'],
     ['../../etc', 'etc'],
     ['support ticket #42', 'support_ticket_42'],
+    ['Résumé Ålborg Zoë', 'Resume_Alborg_Zoe'],
     ['..', 'shared'],
     ['日本語', 'shared'],
     ['', 'shared'],

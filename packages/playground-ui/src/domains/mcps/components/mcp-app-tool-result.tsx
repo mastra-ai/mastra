@@ -65,7 +65,7 @@ export function McpAppToolResult({
 
   if (isLoading || !html) {
     return (
-      <Txt as="p" variant="body" tone="muted" className="rounded-md border border-border bg-background p-4">
+      <Txt as="p" variant="body" tone="muted" className="rounded-md bg-nested p-4">
         Loading MCP App UI…
       </Txt>
     );

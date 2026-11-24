@@ -1,5 +1,5 @@
+import { buildDefaultExperimentName, createNameSuffix } from '@mastra/playground-ui/domains/datasets';
 import { useState } from 'react';
-import { buildDefaultExperimentName, createNameSuffix } from '../../utils/default-names';
 
 /**
  * The experiment's name: empty until the user types one. Meanwhile the target's name plus a short id

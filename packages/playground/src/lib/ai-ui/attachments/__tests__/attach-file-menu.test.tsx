@@ -1,10 +1,10 @@
 import { Composer } from '@mastra/playground-ui/components/Composer';
+import { AttachFileMenu } from '@mastra/playground-ui/domains/agents/chat/attachments/attach-file-menu';
+import { ComposerAttachments } from '@mastra/playground-ui/domains/agents/chat/attachments/attachment';
+
+import { ComposerAttachmentsProvider } from '@mastra/playground-ui/domains/agents/chat/attachments/composer-attachments';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
-import { AttachFileMenu } from '../attach-file-menu';
-import { ComposerAttachments } from '../attachment';
-import { ComposerAttachmentsProvider } from '../composer-attachments';
 
 // The native picker is the only browser boundary; the real provider classifies the files.
 const pickLocalFiles = async (files: File[]) => {

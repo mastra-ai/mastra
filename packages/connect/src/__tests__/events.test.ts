@@ -4,10 +4,9 @@ import type { AddressInfo } from 'node:net';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ConnectClient } from '../connect-client.js';
 import { MastraConnectError } from '../errors.js';
-import { EventsClient, parseServerSentEvents, resolveEventsUrl } from '../events.js';
-import type { EventCursor, EventStreamGap, EventsClientOptions, TopicEvent } from '../events.js';
+import { ConnectEvents, EventsClient, parseServerSentEvents, resolveEventsUrl } from '../events.js';
+import type { ConnectEventsOptions, EventCursor, EventStreamGap, EventsClientOptions, TopicEvent } from '../events.js';
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 
@@ -520,10 +519,6 @@ describe('EventsClient.subscribe', () => {
     for (const eventsUrl of ['not a url', 'ftp://user:secret@events.test']) {
       expect(() => client(eventsUrl)).toThrow(/Invalid events service URL/);
       expect(() => client(eventsUrl)).not.toThrow(/secret/);
-      expect(
-        () => new ConnectClient({ accessToken: 'tok', projectId: 'proj_1', eventsUrl }),
-        'ConnectClient validates the events URL at construction',
-      ).toThrow(/Invalid events service URL/);
     }
   });
 });
@@ -1057,8 +1052,18 @@ describe('EventsClient.subscribe gaps and planned closes', () => {
   });
 });
 
-describe('EventsClient.connectEvents', () => {
-  it('maps connect topic fields and parses the payload', async () => {
+function connectEvents(url: string, overrides: ConnectEventsOptions = {}) {
+  return new ConnectEvents({
+    accessToken: 'tok_secret',
+    projectId: 'proj_1',
+    eventsUrl: url,
+    reconnectDelayMs: 5,
+    ...overrides,
+  });
+}
+
+describe('ConnectEvents', () => {
+  it('reads the connect topic, maps its fields and parses the payload', async () => {
     const s = await server([
       (_req, res) => {
         startStream(res);
@@ -1083,10 +1088,13 @@ describe('EventsClient.connectEvents', () => {
         );
       },
     ]);
-    const subscription = client(s.url).connectEvents();
-    const events = await take(subscription, 2);
+    const events = connectEvents(s.url);
+    const delivered = await take(events, 2);
     expect(s.requests[0]!.url).toBe('/v1/projects/proj_1/topics/connect');
-    expect(events).toEqual([
+    expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_secret');
+    await expect(events.ready).resolves.toBe('10');
+    expect(events.cursor).toBe('12');
+    expect(delivered).toEqual([
       {
         id: '11',
         timestamp: 1_700_000_000_000,
@@ -1110,10 +1118,8 @@ describe('EventsClient.connectEvents', () => {
       },
     ]);
   });
-});
 
-describe('ConnectClient.events', () => {
-  it('shares the client credentials, project and events URL', async () => {
+  it('falls back to the environment for credentials, project and events URL', async () => {
     const s = await server([
       (_req, res) => {
         startStream(res);
@@ -1121,49 +1127,175 @@ describe('ConnectClient.events', () => {
         res.write(event('11', {}));
       },
     ]);
-    const connect = new ConnectClient({ accessToken: 'tok_shared', projectId: 'proj_9', eventsUrl: s.url });
-    expect(connect.events).toBe(connect.events);
-    expect(connect.events.eventsUrl).toBe(s.url);
-    await take(connect.events.subscribe('connect'), 1);
-    expect(s.requests[0]!.url).toBe('/v1/projects/proj_9/topics/connect');
-    expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_shared');
-  });
-
-  it('keeps the identity the client resolved at construction when the environment changes', async () => {
-    const s = await server([
-      (_req, res) => {
-        startStream(res);
-        res.write(ready('10'));
-        res.write(event('11', {}));
-      },
-    ]);
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-a');
-    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_a');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'tok_env');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
     vi.stubEnv('MASTRA_EVENTS_API_URL', s.url);
-    const connect = new ConnectClient();
-
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'token-b');
-    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_b');
-    vi.stubEnv('MASTRA_EVENTS_API_URL', 'http://127.0.0.1:1');
-    await take(connect.events.subscribe('connect'), 1);
-
-    expect(connect.events.eventsUrl).toBe(s.url);
-    expect(s.requests[0]!.url).toBe('/v1/projects/proj_a/topics/connect');
-    expect(s.requests[0]!.headers.authorization).toBe('Bearer token-a');
+    const events = new ConnectEvents();
+    // Resolved at construction: later environment changes don't apply.
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_other');
+    await take(events, 1);
+    expect(s.requests[0]!.url).toBe('/v1/projects/proj_env/topics/connect');
+    expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_env');
   });
 
-  it('does not apply the client timeout to the event stream', async () => {
+  it('validates its options at construction', () => {
+    expect(() => new ConnectEvents({ accessToken: 'tok' })).toThrow(
+      expect.objectContaining({ code: 'missing_project_id' }),
+    );
+    expect(() => connectEvents('http://events.test', { after: 'nope' })).toThrow(
+      expect.objectContaining({ code: 'invalid_options' }),
+    );
+    expect(() => connectEvents('http://events.test', { idleTimeoutMs: 0 })).toThrow(
+      expect.objectContaining({ code: 'invalid_options' }),
+    );
+    expect(() => connectEvents('ftp://events.test')).toThrow(expect.objectContaining({ code: 'invalid_options' }));
+  });
+
+  it('loads the stored cursor and saves each event once the consumer asks for the next', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('20'));
+        res.write(event('21', {}, 100));
+        res.write(event('22', {}, 200));
+      },
+    ]);
+    const { saved, load, store } = memoryStore({ eventId: '20', timestamp: 50 });
+    const seen: string[] = [];
+    for await (const e of connectEvents(s.url, { cursorStore: store })) {
+      // The event being handled is not saved yet.
+      expect(saved.map(c => c.eventId)).not.toContain(e.id);
+      seen.push(e.id);
+      if (seen.length === 2) break;
+    }
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(s.requests[0]!.headers['last-event-id']).toBe('20');
+    // 22 was broken out on, so it is delivered again on restart.
+    expect(saved).toEqual([{ eventId: '21', timestamp: 100 }]);
+  });
+
+  it('reports gaps to onGap, with or without the gap argument', async () => {
+    const gapStream = (_req: IncomingMessage, res: ServerResponse) => {
+      startStream(res);
+      res.write(ready('90'));
+      res.write(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+      res.write(event('91', {}));
+    };
+    const withArg = await server([gapStream]);
+    const gaps: EventStreamGap[] = [];
+    const order: string[] = [];
+    const events = connectEvents(withArg.url, {
+      after: '5',
+      onGap: async gap => {
+        gaps.push(gap);
+        order.push('gap');
+      },
+    });
+    for (const e of await take(events, 1)) order.push(e.id);
+    expect(gaps).toEqual([{ reason: 'trimmed', after: '5', resumedAfter: '90' }]);
+    expect(order).toEqual(['gap', '91']);
+
+    const withoutArg = await server([gapStream]);
+    const resync = vi.fn();
+    const { saved, store } = memoryStore();
+    const delivered = await take(
+      connectEvents(withoutArg.url, { after: '5', cursorStore: store, onGap: () => resync() }),
+      1,
+    );
+    expect(resync).toHaveBeenCalledTimes(1);
+    expect(delivered.map(e => e.id)).toEqual(['91']);
+    expect(saved).toEqual([{ eventId: '90' }]);
+  });
+
+  it('close() ends a pending iteration cleanly', async () => {
+    let serverSawClose!: () => void;
+    const closedByClient = new Promise<void>(resolve => (serverSawClose = resolve));
+    const s = await server([
+      (req, res) => {
+        req.on('close', () => serverSawClose());
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
+    const events = connectEvents(s.url);
+    const seen: string[] = [];
+    for await (const e of events) {
+      seen.push(e.id);
+      // Close while the iterator waits for an event that never comes.
+      setTimeout(() => events.close(), 10);
+    }
+    expect(seen).toEqual(['11']);
+    await closedByClient;
+  });
+
+  it('close() before iteration ends iteration without connecting', async () => {
+    const s = await server([(_req, res) => startStream(res)]);
+    const { load, store } = memoryStore();
+    const events = connectEvents(s.url, { cursorStore: store });
+    events.close();
+    await expect(take(events, 1)).resolves.toEqual([]);
+    await expect(events.ready).rejects.toBeInstanceOf(MastraConnectError);
+    expect(load).not.toHaveBeenCalled();
+    expect(s.requests).toHaveLength(0);
+  });
+
+  it('ends cleanly when the signal aborts, and does not start on an aborted signal', async () => {
     const s = await server([
       (_req, res) => {
         startStream(res);
         res.write(ready('10'));
-        setTimeout(() => res.write(event('11', {})), 100);
+        res.write(event('11', {}));
       },
     ]);
-    const connect = new ConnectClient({ accessToken: 'tok', projectId: 'proj_9', eventsUrl: s.url, timeoutMs: 20 });
-    const events = await take(connect.events.subscribe('connect'), 1);
-    expect(events.map(e => e.id)).toEqual(['11']);
+    const controller = new AbortController();
+    const seen: string[] = [];
+    for await (const e of connectEvents(s.url, { signal: controller.signal })) {
+      seen.push(e.id);
+      setTimeout(() => controller.abort(), 10);
+    }
+    expect(seen).toEqual(['11']);
     expect(s.requests).toHaveLength(1);
+
+    const aborted = connectEvents(s.url, { signal: AbortSignal.abort() });
+    await expect(take(aborted, 1)).resolves.toEqual([]);
+    expect(s.requests).toHaveLength(1);
+  });
+
+  it('throws on a second iteration, sequential or concurrent', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
+    const sequential = connectEvents(s.url);
+    await take(sequential, 1);
+    expect(() => sequential[Symbol.asyncIterator]()).toThrow(
+      expect.objectContaining({ name: 'MastraConnectError', code: 'invalid_options' }),
+    );
+    await expect(take(sequential, 1)).rejects.toThrow(/can only be iterated once/);
+
+    const concurrent = connectEvents(s.url);
+    const first = take(concurrent, 1);
+    await expect(take(concurrent, 1)).rejects.toBeInstanceOf(MastraConnectError);
+    await expect(first).resolves.toHaveLength(1);
+  });
+
+  it('ends with the platform error on 401, 403 and 404', async () => {
+    for (const status of [401, 403, 404]) {
+      const s = await server([
+        (_req, res) => {
+          res.writeHead(status);
+          res.end();
+        },
+      ]);
+      const error = await failure(take(connectEvents(s.url), 1));
+      expect(error.code).toBe(status === 404 ? 'platform_error' : 'unauthorized');
+      expect(error.status).toBe(status);
+      expect(s.requests).toHaveLength(1);
+    }
   });
 });
 

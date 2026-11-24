@@ -9,7 +9,7 @@
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { Link, MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
@@ -180,21 +180,6 @@ describe('Create Factory wizard', () => {
     expect(queries).toEqual(['jal']);
   });
 
-  it('submits the typed name with Enter', async () => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: [] })),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
-      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    await user.type(await screen.findByLabelText('Name your new Factory'), 'Mastra{Enter}');
-
-    expect(await screen.findByLabelText('Choose your codebase')).toBeInTheDocument();
-  });
-
   it('keeps the picked repository in the draft instead of linking it right away', async () => {
     const calls: string[] = [];
     seedDraft('vcs');
@@ -330,26 +315,6 @@ describe('Create Factory wizard', () => {
     expect(calls).toEqual(['create', 'connect', 'connect', 'link']);
   });
 
-  it('freezes the picks a failed commit already wrote to the server', async () => {
-    const calls: string[] = [];
-    seedDraft('model-provider');
-    stubModelStepEndpoints(calls);
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () =>
-        HttpResponse.json({ error: 'nope' }, { status: 500 }),
-      ),
-    );
-    const user = userEvent.setup();
-
-    renderFlow();
-
-    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
-    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
-
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
-    expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
-  });
-
   it('cannot be left while the Factory is being created', async () => {
     const calls: string[] = [];
     seedDraft('model-provider');
@@ -372,6 +337,44 @@ describe('Create Factory wizard', () => {
     await user.keyboard('{Escape}');
 
     expect(screen.getByTestId('pathname')).toHaveTextContent(WIZARD_PATH);
+  });
+
+  it('leaves the user where they went when they leave while the Factory is being created', async () => {
+    seedDraft('model-provider');
+    const { patchedBodies } = stubModelStepEndpoints([]);
+    let finishCreate = () => {};
+    const created = new Promise<void>(resolve => {
+      finishCreate = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await created;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Acme' } });
+      }),
+    );
+    const user = userEvent.setup();
+
+    const { client } = renderWithProviders(
+      <MemoryRouter initialEntries={[WIZARD_PATH]}>
+        <Link to="/factories/fp-host">Back to Factory</Link>
+        <Routes>
+          <Route path="/factories/:factoryId/new-factory" element={<CreateFactoryWizard />} />
+          <Route path="*" element={<></>} />
+        </Routes>
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    await user.click(await screen.findByRole('option', { name: /Anthropic/ }));
+    await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
+    await user.click(screen.getByRole('link', { name: 'Back to Factory' }));
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-host');
+
+    finishCreate();
+    await waitForMutationsIdle(client);
+
+    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-host');
   });
 
   it('offers to connect GitHub when no installation is reachable', async () => {

@@ -4,29 +4,39 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
+import {
+  DeleteExperimentDialog,
+  ExperimentHeaderActions,
+  ExperimentKpis,
+  ExperimentResultsSection,
+} from '@mastra/playground-ui/domains/experiments';
+import { ExperimentResultsBulkActions } from '@mastra/playground-ui/domains/experiments/components/experiment-results-bulk-actions';
+import { ExperimentRunProgress } from '@mastra/playground-ui/domains/experiments/components/experiment-run-progress';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
-import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
+import {
+  useDatasetExperiment,
+  useDatasetExperimentResults,
+  useDatasetMutations,
+  useExperiment,
+  useScoresByExperimentId,
+} from '@mastra/react/hooks/datasets';
+import { useExperimentMetrics, useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
-import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
-import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis';
-import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
-import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
-import { ExperimentRunProgress } from '@/domains/experiments/components/experiment-run-progress';
-import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
+import { RerunExperimentButton } from '@/domains/experiments/components/rerun-experiment-button';
+import { ExperimentRouteItemPanelProvider } from '@/domains/experiments/context/experiment-route-item-panel-provider';
 import {
   ExperimentCrumb,
   ExperimentCrumbItemCount,
   ExperimentCrumbStatusIcon,
 } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+import { useRenameExperiment } from '@/domains/experiments/hooks/use-rename-experiment';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -35,7 +45,7 @@ const EMPTY_RESULTS: never[] = [];
 
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Experiment</h1>
       <div />
       <div className="flex h-full items-center justify-center">{children}</div>
@@ -52,6 +62,7 @@ function ExperimentPage() {
   ];
   const navigate = useNavigate();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { deleteExperiment } = useDatasetMutations();
   // Servers without the trace-query API don't expose feedback either.
   const traceQuery = useTraceQueryAvailable();
 
@@ -96,6 +107,21 @@ function ExperimentPage() {
     supportsMetrics,
     queryOptions: { enabled: Boolean(experimentId) && supportsMetrics && isSettled },
   });
+
+  // Shared by the KPIs, the results and the item panel.
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experimentId ?? '',
+    experimentStatus: experiment?.status,
+    queryOptions: { enabled: Boolean(experimentId) && isSettled },
+  });
+  // Usage polling gives up after a few empty reads, so wait until the run is known to be over.
+  const { data: usageByExperimentId, isLoading: isUsageLoading } = useExperimentsItemUsage({
+    experiments: experimentId && isSettled ? [{ id: experimentId, status: experiment?.status }] : [],
+    supportsMetrics,
+  });
+  const usage = experimentId ? usageByExperimentId[experimentId] : undefined;
+
+  const renameHandlerFor = useRenameExperiment();
 
   const selection = useExperimentResultsSelection({
     datasetId,
@@ -160,7 +186,7 @@ function ExperimentPage() {
   if (!datasetId || !experiment) return notFound;
 
   return (
-    <ExperimentItemPanelProvider
+    <ExperimentRouteItemPanelProvider
       experimentId={experimentId}
       datasetId={datasetId}
       experimentStatus={experiment.status}
@@ -170,20 +196,38 @@ function ExperimentPage() {
     >
       <div className="h-full">
         <PageLayout
+          variant="page"
           breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
           headerActions={
-            <ExperimentHeaderActions experiment={experiment} onDeleteClick={() => setDeleteDialogOpen(true)} />
+            <ExperimentHeaderActions
+              experiment={experiment}
+              rerunSlot={<RerunExperimentButton experiment={experiment} />}
+              onRename={renameHandlerFor(experiment)}
+              onDeleteClick={() => setDeleteDialogOpen(true)}
+            />
           }
         >
           <h1 className="sr-only">{experimentId}</h1>
           {isSettled ? (
             <div className="grid content-start gap-4">
-              <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+              <ExperimentKpis
+                experiment={experiment}
+                metrics={experimentMetrics}
+                scoresByItemId={scoresByItemId}
+                usage={usage?.summary}
+                isUsageLoading={isUsageLoading}
+              />
               <div className="grid content-start gap-1">
-                <ExperimentResultsBulkActions selection={selection} />
+                <ExperimentResultsBulkActions
+                  selectedResults={selection.selectedResults}
+                  onClearSelection={selection.clearSelection}
+                  onRequestReview={selection.flagSelectedForReview}
+                  isRequestingReview={selection.isFlagging}
+                  onAddTag={selection.addTagToSelected}
+                  isTagging={selection.isTagging}
+                  tagVocabulary={selection.tagVocabulary}
+                />
                 <ExperimentResultsSection
-                  experimentId={experimentId}
-                  experimentStatus={experiment.status}
                   results={results ?? []}
                   isLoading={resultsLoading}
                   setEndOfListElement={setEndOfListElement}
@@ -193,6 +237,8 @@ function ExperimentPage() {
                   onToggleSelect={selection.toggleSelect}
                   onToggleSelectAll={selection.toggleSelectAll}
                   supportsMetrics={supportsMetrics}
+                  scoresByItemId={scoresByItemId}
+                  usageByTraceId={usage?.traces}
                 />
               </div>
             </div>
@@ -202,17 +248,20 @@ function ExperimentPage() {
         </PageLayout>
 
         {/* Item detail in the route side panel (drawer on mobile); the `items/:itemId` child route only carries the selected item. */}
-        <ExperimentItemSidePanel withQueryTrace={traceQuery.enabled} withFeedback={traceQuery.enabled} />
+        <ExperimentItemSidePanel withFeedback={traceQuery.enabled} />
 
         <DeleteExperimentDialog
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
           experimentId={experimentId}
           experimentName={experiment.name ?? undefined}
+          onDelete={async () => {
+            await deleteExperiment.mutateAsync(experimentId);
+          }}
           onSuccess={() => navigate('/experiments')}
         />
       </div>
-    </ExperimentItemPanelProvider>
+    </ExperimentRouteItemPanelProvider>
   );
 }
 

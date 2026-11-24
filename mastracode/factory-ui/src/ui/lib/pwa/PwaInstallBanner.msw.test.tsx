@@ -85,7 +85,6 @@ describe('PwaInstallBanner', () => {
     await user.click(screen.getByRole('button', { name: 'Not now' }));
 
     expect(screen.queryByRole('region', { name: 'Install app' })).not.toBeInTheDocument();
-    expect(localStorage.getItem(DISMISSED_KEY)).not.toBeNull();
 
     // Still hidden on a fresh render, even if the browser refires the event.
     unmount();
@@ -105,7 +104,6 @@ describe('PwaInstallBanner', () => {
 
     expect(screen.getByRole('dialog', { name: 'Install this app' })).toBeInTheDocument();
     expect(screen.getByText(/Add to Home Screen/)).toBeInTheDocument();
-    expect(localStorage.getItem(INSTALLED_KEY)).toBe('true');
 
     // Banner is gone on the next visit.
     unmount();

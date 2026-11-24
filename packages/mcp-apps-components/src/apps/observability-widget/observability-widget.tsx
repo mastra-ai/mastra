@@ -98,13 +98,20 @@ function Widget({
 }) {
   const { env } = opened;
   const [state, setState] = useState<WidgetState>({});
-  const configureButton = useConfigure(app, widget, opened.datePreset, opened.customRange, opened.filters);
-  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters);
+  const configureButton = useConfigure(
+    app,
+    widget,
+    opened.datePreset,
+    opened.customRange,
+    opened.filters,
+    opened.project,
+  );
+  const pinButton = usePin(app, widget, opened.datePreset, opened.customRange, opened.filters, opened.project);
   const first = planWidget(prepared, env, state);
-  const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.projectId);
+  const discovered = useToolResults(app, first.status === 'ready' ? first.discover : [], opened.project);
   // Planned again with the discover answers so far; both lists go out in the same render.
   const plan = planWidget(prepared, env, state, discovered.results);
-  const sent = useToolResults(app, plan.status === 'ready' ? plan.requests : [], opened.projectId);
+  const sent = useToolResults(app, plan.status === 'ready' ? plan.requests : [], opened.project);
   return (
     <StatelessWidget
       prepared={prepared}
@@ -137,7 +144,7 @@ function Widget({
  */
 function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
   // A host that passes a project draws the project's widgets; without one, the org's.
-  const scope: DashboardScope = opened.projectId ? 'project' : 'org';
+  const scope: DashboardScope = opened.project ? 'project' : 'org';
   const rows = opened.dashboard.rows
     .map(row => row.widgets.map(widget => ({ widget, prepared: prepareWidget(widget, REGISTRY, scope) })))
     .map(cells => cells.filter(cell => cell.prepared.ok !== 'hidden'))
@@ -174,8 +181,9 @@ function OpenedDashboard({ app, opened }: { app: App; opened: ReadyOpened }) {
 /**
  * Draws the dashboard the opening tool returned (`ui/notifications/tool-result`), over the window its
  * `datePreset` names and under its `defaults.filters`, unless the host's view
- * (`OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY`) sets them. Every read goes through the server's app-only
- * `queryObservability` tool, so the server decides where the data comes from.
+ * (`OBSERVABILITY_WIDGET_VIEW_CONTEXT_KEY`) sets them, for the host's project, else the result's `project`. Every
+ * read goes through the server's app-only `queryObservability` tool, so the server decides where the
+ * data comes from.
  */
 export function ObservabilityWidget() {
   // A preset window ends when the dashboard opens, and again each time the host's view changes.

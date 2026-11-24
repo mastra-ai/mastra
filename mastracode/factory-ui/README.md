@@ -60,6 +60,8 @@ Slack sessions use the same automatic title generation as web sessions, includin
 
 Owners can choose **Regenerate title** from a web or Slack session's sidebar menu to name it from its stored conversation. Regeneration uses the existing title model and does not start a workspace. Automatic naming failures leave the conversation usable; an explicit regeneration reports its error.
 
+Owners can also choose **Rename** from the same menu to type a title. A typed title is kept: automatic naming leaves it alone until the owner chooses **Regenerate title**. A session with no conversation yet cannot be renamed.
+
 ## Settings
 
 The sidebar footer shows your profile picture (or an initial) and name, and links straight to settings, opening **Preferences**. **Preferences** holds the theme control (system, light, or dark appearance); **My account** shows your profile and holds **Log out**.
