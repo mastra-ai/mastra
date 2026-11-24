@@ -53,7 +53,7 @@ const responseSchema = z.object({
   error: z.string().optional(),
 });
 const configSchema = z.object({ compatibility_date: z.string(), compatibility_flags: z.array(z.string()) });
-const buildConfigSchema = z.object({ minify: z.boolean(), upload_source_maps: z.boolean() });
+const buildConfigSchema = z.object({ minify: z.boolean(), upload_source_maps: z.boolean().optional() });
 
 describe('CloudflareDeployer default config in workerd', () => {
   const llm = new LLMock({ port: 0 });
@@ -134,14 +134,16 @@ describe('CloudflareDeployer default config in workerd', () => {
     }
   });
 
-  it('minifies and uploads source maps by default, and lets the user turn either off in both generated configurations', async () => {
+  // Leaving upload_source_maps unset keeps Wrangler's lenient default: it uploads the maps it can resolve.
+  // Setting it to true would make Wrangler fail the deploy on any map it can't resolve.
+  it('minifies by default, leaves source map uploads to Wrangler, and passes user overrides through in both generated configurations', async () => {
     const configs = [join(mastraDir, 'output', 'wrangler.json'), join(projectDir, 'wrangler.jsonc')];
     const read = async (configPath: string) =>
       buildConfigSchema.parse(JSON.parse((await readFile(configPath, 'utf8')).replace(/\/\*.*?\*\//, '')));
 
     await new CloudflareDeployer({ name: 'defaults' }).writeFiles(mastraDir);
     for (const configPath of configs) {
-      expect(await read(configPath)).toEqual({ minify: true, upload_source_maps: true });
+      expect(await read(configPath)).toEqual({ minify: true });
     }
 
     await new CloudflareDeployer({ name: 'opt-out', minify: false, upload_source_maps: false }).writeFiles(mastraDir);

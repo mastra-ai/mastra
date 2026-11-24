@@ -78,11 +78,11 @@ After running `mastra build`, the deployer generates a `wrangler.jsonc` file con
 
 ## Minification and source maps
 
-The generated `wrangler.jsonc` sets `minify: true` and `upload_source_maps: true`. Wrangler minifies the Worker when it bundles it for deployment, which cuts the upload size about in half. A Worker keeps its own source code in memory, so a smaller bundle also leaves more of the Worker memory limit for your agents.
+The generated `wrangler.jsonc` sets `minify: true`. Wrangler minifies the Worker when it bundles it for deployment, which cuts the upload size about in half. A Worker keeps its own source code in memory, so a smaller bundle also leaves more of the Worker memory limit for your agents.
 
 Wrangler keeps function and class names when it minifies (`keep_names` defaults to `true`), so code that reads `constructor.name` or an error's `name` keeps working. Leave `keep_names` on.
 
-Stack traces from a minified Worker point at positions in the minified file. With `upload_source_maps: true`, Cloudflare maps the stack traces of uncaught exceptions in [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and real-time logs back to the files that `mastra build` wrote to `.mastra/output`. Errors that Mastra catches and logs, such as a failing route handler, appear as log messages and aren't mapped. The `stack` property your code reads at runtime isn't mapped either. Source maps don't count toward the Worker size limit and don't affect startup time.
+Stack traces from a minified Worker point at positions in the minified file. Wrangler uploads source maps by default, skipping any it can't resolve, and Cloudflare uses them to map the stack traces of uncaught exceptions in [Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/) and real-time logs back to the files that `mastra build` wrote to `.mastra/output`. Errors that Mastra catches and logs, such as a failing route handler, appear as log messages and aren't mapped. The `stack` property your code reads at runtime isn't mapped either. Source maps don't count toward the Worker size limit and don't affect startup time.
 
 To map stack traces all the way back to your own files in `src/`, also turn on source maps for the Mastra build:
 
@@ -100,7 +100,7 @@ export const mastra = new Mastra({
 })
 ```
 
-To turn either setting off, pass it to the constructor:
+To turn off minification or source map uploads, pass the setting to the constructor:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
