@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { AgentMemoryBranches } from '../agent-memory-branches';
 import {
   branchHistoryFromChild,
   branchHistoryOfRoot,
@@ -14,7 +15,6 @@ import {
   noBranches,
   SOURCE_THREAD_ID,
 } from './fixtures/thread-branches';
-import { AgentMemoryBranches } from '../agent-memory-branches';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 

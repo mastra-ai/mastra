@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { AgentChatFeaturesProvider, useAgentThreadInput } from '@mastra/playground-ui/domains/agents/chat';
 import type { AgentChatThreadInput } from '@mastra/playground-ui/domains/agents/chat';
@@ -12,10 +13,9 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useSpeechRecognition } from '@mastra/react';
-import { useBranchThread, useThreadBranches } from '@mastra/react/hooks/memory';
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
+import { useBranchThread, useThreadBranches } from '@mastra/react/hooks/memory';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import { toast } from 'sonner';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';

@@ -10,7 +10,6 @@ import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surf
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { AgentMemoryBranches } from './agent-memory-branches';
 import {
   useMemoryConfig,
   useMemorySearch,
@@ -19,6 +18,7 @@ import {
   useThread,
 } from '@mastra/react/hooks/memory';
 import { useCallback } from 'react';
+import { AgentMemoryBranches } from './agent-memory-branches';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';

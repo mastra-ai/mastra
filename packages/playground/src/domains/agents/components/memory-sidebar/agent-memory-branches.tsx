@@ -1,7 +1,6 @@
-import { GitFork } from 'lucide-react';
-
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useThreadBranches } from '@mastra/react/hooks/memory';
+import { GitFork } from 'lucide-react';
 
 interface AgentMemoryBranchesProps {
   agentId: string;
@@ -30,7 +29,7 @@ export function AgentMemoryBranches({ agentId, threadId }: AgentMemoryBranchesPr
             href={paths.agentThreadLink(agentId, parentThread.id)}
             className="text-neutral3 text-ui-sm hover:text-neutral5 flex items-center gap-1"
           >
-            <GitFork className="h-3 w-3" aria-hidden />
+            <GitFork className="size-icon-xs" aria-hidden />
             Branched from {parentThread.title ?? parentThread.id}
           </Link>
         </div>
