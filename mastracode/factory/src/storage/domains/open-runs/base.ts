@@ -251,6 +251,17 @@ export class OpenRunsStorage extends FactoryStorageDomain {
    * is client-writable, so only entries naming `threadId` are copied, and none with a heartbeat
    * later than `now`.
    */
+  /** Of `kickoffIds`, those the ledger has held: a run row in any state, or a legacy import. */
+  async known(kickoffIds: readonly string[]): Promise<Set<string>> {
+    if (kickoffIds.length === 0) return new Set();
+    const filter = { kickoff_id: { in: [...kickoffIds] } };
+    const [runs, imports] = await Promise.all([
+      this.#db.findMany<{ kickoff_id: string }>('factory_open_runs', filter),
+      this.#db.findMany<{ kickoff_id: string }>('factory_open_run_imports', filter),
+    ]);
+    return new Set([...runs, ...imports].map(row => row.kickoff_id));
+  }
+
   async importLegacy(threadId: string, runs: readonly FactoryOpenRun[], now = Date.now()): Promise<void> {
     const candidates = runs.filter(
       run => run.threadId === threadId && (run.heartbeatAt === undefined || run.heartbeatAt <= now),

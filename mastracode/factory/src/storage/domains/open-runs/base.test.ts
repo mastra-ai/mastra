@@ -99,6 +99,20 @@ describe('OpenRunsStorage', () => {
     await expect(openRuns.listByThread('thread-1')).resolves.toEqual([open]);
   });
 
+  it('knows a kickoff it opened, ended or imported, and no other', async () => {
+    const { openRuns } = await createFactoryStorageForTests();
+    await openRuns.open(openRun('kickoff-open'));
+    await openRuns.open(openRun('kickoff-closed'));
+    await openRuns.end('kickoff-closed', { reason: 'complete', endedAt: 1 });
+    await openRuns.close(openRun('kickoff-closed'), 1);
+    await openRuns.importLegacy('thread-1', [openRun('kickoff-imported', { heartbeatAt: 1 })], 100);
+
+    await expect(
+      openRuns.known(['kickoff-open', 'kickoff-closed', 'kickoff-imported', 'kickoff-unknown']),
+    ).resolves.toEqual(new Set(['kickoff-open', 'kickoff-closed', 'kickoff-imported']));
+    await expect(openRuns.known([])).resolves.toEqual(new Set());
+  });
+
   it('copies only legacy runs naming the thread read, and none with a heartbeat from the future', async () => {
     const { openRuns } = await createFactoryStorageForTests();
     const elsewhere = openRun('kickoff-elsewhere', { threadId: 'thread-2' });

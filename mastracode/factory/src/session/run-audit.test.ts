@@ -168,6 +168,33 @@ describe('Factory run lifecycle audit', () => {
       await expect(ledger()).resolves.toEqual([]);
     });
 
+    it('keeps a copied run that ended closed when the setting is given a fresh heartbeat for it', async () => {
+      const { session, settings, openRuns } = await setup();
+      settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
+      await listSessionOpenRuns(session, openRuns);
+      await openRuns.end('kickoff-1', { reason: 'complete', endedAt: 1 });
+      await openRuns.close(OPEN_RUN, 1);
+
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, ownerId: 'forged', heartbeatAt: Date.now() }];
+
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([]);
+    });
+
+    it('reads a copied run from the ledger alone once its old owner heartbeats in the setting again', async () => {
+      const { session, settings, openRuns, emit, events, ledger } = await setup();
+      const copied = { ...OPEN_RUN, ownerId: 'old-release', heartbeatAt: 1 };
+      settings[FACTORY_OPEN_RUNS_SETTING] = [copied];
+      await listSessionOpenRuns(session, openRuns);
+
+      settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...copied, heartbeatAt: Date.now() }];
+
+      await expect(listSessionOpenRuns(session, openRuns)).resolves.toEqual([copied]);
+      emit('complete');
+      await waitForSessionRunAudit(session);
+      expect((await events()).map(event => event.metadata.kickoffId)).toEqual(['kickoff-1']);
+      await expect(ledger()).resolves.toEqual([]);
+    });
+
     it('still counts entries written before ownership was recorded as stale', async () => {
       const { session, settings, openRuns } = await setup();
       settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];

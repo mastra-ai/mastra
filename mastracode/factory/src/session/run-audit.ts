@@ -22,7 +22,7 @@ export type { FactoryOpenRun };
  */
 export type OpenRunLedger = Pick<
   OpenRunsStorage,
-  'listByThread' | 'get' | 'open' | 'heartbeat' | 'end' | 'close' | 'importLegacy'
+  'listByThread' | 'get' | 'open' | 'heartbeat' | 'end' | 'close' | 'importLegacy' | 'known'
 >;
 
 /** A heartbeat older than this means the owner is gone; nothing renews it once the run's dispatcher dies. */
@@ -159,9 +159,9 @@ const legacyOpenRunsSchema = z.array(factoryOpenRunSchema);
  * Runs that a release before the storage ledger keeps in `threadId`'s `factoryOpenRuns` setting.
  * During a rolling deploy that release still owns, heartbeats and ends them there, so a live entry
  * is read in place (never copied or removed: its owner would lose track of it). An entry whose
- * owner is gone is copied to the ledger once. The setting is client-writable: only entries naming
- * this thread count, a heartbeat further in the future than clock skew explains is ignored, and a
- * nearer one reads as now.
+ * owner is gone is copied to the ledger once, and from then on only the ledger counts for it. The
+ * setting is client-writable: only entries naming this thread count, a heartbeat further in the
+ * future than clock skew explains is ignored, and a nearer one reads as now.
  */
 async function legacyOpenRunsOn(
   openRuns: OpenRunLedger,
@@ -182,7 +182,11 @@ async function legacyOpenRunsOn(
     entries.filter(run => !isLive(run)),
     now,
   );
-  return entries.filter(isLive);
+  // Once a kickoff is on the ledger, the ledger alone says whether it runs: a heartbeat written into
+  // the setting after that (by a client, or an owner already taken for gone) cannot reopen it.
+  const live = entries.filter(isLive);
+  const known = await openRuns.known(live.map(run => run.kickoffId));
+  return live.filter(run => !known.has(run.kickoffId));
 }
 
 /** The runs on `threadId`'s ledger, after copying legacy runs whose owner is gone. */
@@ -202,9 +206,7 @@ async function openRunsOn(
   readLegacy: () => Promise<unknown>,
 ): Promise<FactoryOpenRun[]> {
   const live = await legacyOpenRunsOn(openRuns, threadId, readLegacy);
-  const legacy = new Set(live.map(run => run.kickoffId));
-  // A live legacy entry carries its owner's latest heartbeat, fresher than any stale copy of it.
-  return [...(await openRuns.listByThread(threadId)).filter(run => !legacy.has(run.kickoffId)), ...live];
+  return [...(await openRuns.listByThread(threadId)), ...live];
 }
 
 /** The open runs of the thread the session is on. */
