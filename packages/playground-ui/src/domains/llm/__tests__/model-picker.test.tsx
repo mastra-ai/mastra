@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ModelPicker } from '../model-picker';
 import type { ModelPickerProps } from '../model-picker';
 import type { ModelPickerProvider } from '../model-picker-types';
+import '@/test/inert-resize-observer';
 
 const anthropic: ModelPickerProvider = {
   id: 'anthropic',
@@ -53,20 +54,10 @@ const optionNames = (list: HTMLElement) =>
 describe('ModelPicker', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView ??= () => {};
-    // cmdk measures its list.
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
   });
 
   afterEach(() => {
     cleanup();
-    vi.unstubAllGlobals();
   });
 
   it('given trigger children, names the trigger by them rather than by the model', () => {
@@ -123,14 +114,14 @@ describe('ModelPicker', () => {
     expect(screen.getByRole('listbox')).toBeTruthy();
   });
 
-  it('given a reset, offers it and closes the picker once it runs', () => {
+  it('given a reset, offers it and closes the picker once it runs', async () => {
     const onClick = vi.fn();
     const list = openPicker([anthropic], { reset: { label: 'Reset to your default', onClick } });
 
     fireEvent.click(within(list).getByRole('option', { name: 'Reset to your default' }));
 
     expect(onClick).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   });
 
   it('given no reset, offers none even when another model than the default is picked', () => {
@@ -180,14 +171,14 @@ describe('ModelPicker', () => {
     ]);
   });
 
-  it('given a search and a provider filter, starts fresh the next time it opens', () => {
+  it('given a search and a provider filter, starts fresh the next time it opens', async () => {
     openPicker([anthropic, openai]);
     fireEvent.change(screen.getByPlaceholderText('Search models'), { target: { value: 'gpt' } });
     fireEvent.click(
       within(screen.getByRole('group', { name: 'Filter by provider' })).getByRole('button', { name: 'OpenAI' }),
     );
     fireEvent.keyDown(screen.getByPlaceholderText('Search models'), { key: 'Escape' });
-    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
 
     const list = reopen();
 

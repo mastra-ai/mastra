@@ -6,6 +6,7 @@ import { ModelPicker } from '../../../domains/llm/model-picker';
 import type { ModelPickerProvider } from '../../../domains/llm/model-picker-types';
 import { ComposerAttachMenu } from './composer-attach-menu';
 import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import '@/test/inert-resize-observer';
 
 const PHONE_QUERY = '(max-width: 639px)';
 
@@ -17,15 +18,6 @@ const providers: ModelPickerProvider[] = [
 describe('composer sheets on phones', () => {
   beforeEach(() => {
     Element.prototype.scrollIntoView ??= () => {};
-    // cmdk measures its list.
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
     vi.spyOn(window, 'matchMedia').mockImplementation(
       query =>
         ({
@@ -44,7 +36,6 @@ describe('composer sheets on phones', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
   });
 
   it('opens the model picker as a drawer and closes it once a model is picked', async () => {
