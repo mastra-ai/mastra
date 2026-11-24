@@ -1038,7 +1038,7 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
     name: 'fallback',
     type: 'boolean',
     description:
-      'Set to `false` to skip the remaining fallback models for this call. The run then reports the original error, as if the failing model were the last one in the list. Leave it unset to keep trying fallback models.',
+      'Set to `false` to skip the remaining fallback models for this call. The run then reports the original error, as if the failing model were the last one in the list. Leave it unset to keep trying fallback models. Processors after one that returns `retry: true` are skipped, so they cannot veto.',
     isOptional: true,
   },
 ]}

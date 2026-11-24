@@ -1,3 +1,4 @@
+import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
@@ -35,6 +36,33 @@ describe('agent error surfaces', () => {
             { type: 'error' as const, error },
           ]),
         }),
+      });
+    }
+
+    /** Streams one text part, then the connection drops: the stream itself throws. */
+    function createPartialThenDroppedModel(errorMessage: string) {
+      const error = new Error(errorMessage);
+      return new MockLanguageModelV2({
+        doStream: async () => {
+          const pending: LanguageModelV2StreamPart[] = [
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'partial answer' },
+            { type: 'text-end', id: 'text-1' },
+          ];
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream<LanguageModelV2StreamPart>({
+              pull(controller) {
+                const next = pending.shift();
+                if (next) controller.enqueue(next);
+                else controller.error(error);
+              },
+            }),
+          };
+        },
       });
     }
 
@@ -126,6 +154,43 @@ describe('agent error surfaces', () => {
       const carrier = messages.find(message => (message.content?.parts ?? []).some(part => part.type === 'error'))!;
       expect(carrier.role).toBe('assistant');
       expect(carrier.content.parts.map(part => part.type)).toEqual(['text', 'error']);
+    });
+
+    it('keeps partial parts and the error part on one record when a processor rotates the id and vetoes the fallback', async () => {
+      const mockMemory = new MockMemory();
+
+      const agent = new Agent({
+        id: 'rotating-veto-agent',
+        name: 'Rotating Veto Agent',
+        instructions: 'test',
+        model: [
+          { model: createPartialThenDroppedModel('stream broke'), maxRetries: 0 },
+          { model: createPartialThenDroppedModel('fallback ran'), maxRetries: 0 },
+        ],
+        memory: mockMemory,
+        errorProcessors: [
+          {
+            id: 'rotate-then-veto',
+            processAPIError: async ({ rotateResponseMessageId }) => {
+              rotateResponseMessageId();
+              return { retry: false, fallback: false };
+            },
+          },
+        ],
+      });
+
+      const result = await agent.stream('tell me something', {
+        memory: { thread: 'thread-rotate-veto', resource: 'resource-rotate-veto' },
+      });
+      await result.consumeStream();
+
+      const messages = await recallAll(mockMemory, 'thread-rotate-veto', 'resource-rotate-veto');
+
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(messages[1].content.parts.map(part => part.type)).toEqual(['text', 'error']);
+      expect(errorPartsIn(messages)).toEqual([
+        { type: 'error', error: { name: 'Error', message: 'stream broke' }, createdAt: expect.any(Number) },
+      ]);
     });
   });
   describe('error handling consistency', () => {
@@ -1081,8 +1146,6 @@ describe('agent error surfaces', () => {
       expect(fullStreamError).toBe(primary.error);
       expect(onErrorError).toBe(primary.error);
       expect(result.error).toBe(primary.error);
-      expect(result.error).toMatchObject({ statusCode: 429, responseBody: primary.error.responseBody });
-      expect(result.error).toHaveProperty('cause', primary.error.cause);
     });
 
     it('ends on the original error when a veto meets a retry the budget no longer allows', async () => {
