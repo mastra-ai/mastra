@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Agent, MessageList } from '@mastra/core/agent';
@@ -3418,6 +3419,59 @@ describe('Agent Routes Authorization', () => {
         ]);
       },
     );
+
+    it.each([
+      ['native default', 'default', false],
+      ['native evented', 'evented', false],
+      ['durable wrapper', 'default', true],
+      ['evented wrapper', 'evented', true],
+    ] as const)('fences a CommonJS %s when observing from the ESM server', async (_, executionEngine, wrapped) => {
+      const require = createRequire(import.meta.url);
+      const { Agent: CommonJSAgent } = require('@mastra/core/agent') as typeof import('@mastra/core/agent');
+      const { createDurableAgent, createEventedAgent } =
+        require('@mastra/core/agent/durable') as typeof import('@mastra/core/agent/durable');
+      const id = 'cross-copy-agent';
+      const inner = new CommonJSAgent({
+        id,
+        name: id,
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        ...(wrapped ? {} : { durable: { executionEngine } }),
+      });
+      const createWrapper = executionEngine === 'default' ? createDurableAgent : createEventedAgent;
+      const agent = wrapped ? createWrapper({ agent: inner }) : inner;
+      expect(agent).not.toBeInstanceOf(Agent);
+      mastra = new Mastra({ agents: { [id]: agent }, storage, logger: false });
+      vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+
+      const runId = crypto.randomUUID();
+      const pubsub = agent.__getStreamBus(true)!.pubsub;
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await pubsub.publish(topic, {
+        runId,
+        type: AgentStreamEventTypes.OWNERSHIP_CLAIMED,
+        generation: 2,
+        data: {},
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 1, data: {} } as any);
+      await pubsub.publish(topic, {
+        runId,
+        type: 'chunk',
+        generation: 2,
+        data: { type: 'text-delta', payload: { text: 'recovered' } },
+      } as any);
+      await pubsub.publish(topic, { runId, type: 'finish', generation: 2, data: {} } as any);
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: id,
+        runId,
+      } as any)) as ReadableStream<any>;
+      expect((await collectWithDeadline(stream)).map(event => event.payload?.text ?? event.type)).toEqual([
+        'recovered',
+        'finish',
+      ]);
+    });
 
     describe.each(['default', 'evented'] as const)('native Agent on the %s execution engine', executionEngine => {
       let nativeAgent: Agent<any, any, any, any>;
