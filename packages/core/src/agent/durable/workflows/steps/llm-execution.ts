@@ -136,6 +136,7 @@ class DurableChunkPublishError extends Error {
 const durableLLMInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
+  agentVersionId: z.string().optional(),
   agentName: z.string().optional(),
   messageListState: z.any(), // SerializedMessageListState
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
