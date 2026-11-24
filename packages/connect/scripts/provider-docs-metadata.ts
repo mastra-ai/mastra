@@ -113,7 +113,7 @@ export const TOOL_PROVIDERS: Record<string, ToolProviderDocs> = {
     category: 'Other providers',
     summary:
       'read files, versions, components, and styles, render images, manage comments and dev resources, and read and update variables',
-    note: "Figma only lets Enterprise organizations use the variable tools. On other plans, Figma refuses those calls. Node ids work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
+    note: "Figma only lets Enterprise organizations use the variable tools. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.",
     emit: true,
   },
   fireflies: {
