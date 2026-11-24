@@ -2755,14 +2755,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               logger?.error('Error in LLM execution', failure);
             }
           };
-          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
-          if (isTerminalAttempt) {
-            logTerminalFailure();
-          }
-
-          // A call that already ran up to a runtime suspend() would run that work again in
-          // a retried or failed-over attempt, so the attempt ends here and the foreach
-          // raises the suspension instead.
           const deferTerminalError = () =>
             runState.setState({
               hasErrored: true,
@@ -2778,7 +2770,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 reason: 'error',
               },
             });
-          if (isLastModel || eagerCoordinator?.hasSuspendedHandback) {
+
+          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
+          // A call that already ran up to a runtime suspend() would run that work again in
+          // a retried or failed-over attempt, so the attempt ends here and the foreach
+          // raises the suspension instead.
+          if (isTerminalAttempt) {
+            logTerminalFailure();
             // Defer enqueueing the error chunk — processAPIError handlers may intercept it
             // and signal a retry instead.
             deferTerminalError();
@@ -3061,11 +3059,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bailFromExecution(bailReason);
       }
 
-      // The failed attempt's materialization id, captured before processAPIError
-      // can rotate the active response id. This attempt's partial output was
-      // stored under this id, so a terminal error part has to land on that same
-      // record instead of a fresh one.
-      const attemptMessageId = currentMessageId;
+      // The id this attempt streamed under. processAPIError may have rotated the
+      // active response id since, but the attempt's partial output was stored
+      // under this id, so a terminal error part has to land on that same record.
+      const attemptMessageId = transcriptStep.messageId;
 
       // Handle processAPIError for API rejections
       // This covers two cases:

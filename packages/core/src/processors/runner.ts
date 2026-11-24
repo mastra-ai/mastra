@@ -2842,6 +2842,7 @@ export class ProcessorRunner {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
     let fallbackVetoed = false;
+    const verdict = (retry: boolean): ProcessAPIErrorResult => ({ retry, ...(fallbackVetoed && { fallback: false }) });
 
     const allProcessors: ProcessorOrWorkflow[] = [
       ...this.inputProcessors,
@@ -2941,11 +2942,9 @@ export class ProcessorRunner {
         const systemMessagesAfter = messageList.getAllSystemMessages();
         const output: Record<string, unknown> = {
           retry: result?.retry ?? false,
-          ...(result?.fallback === false ? { fallback: false } : {}),
+          ...(result?.fallback === false && { fallback: false }),
         };
-        if (result?.fallback === false) {
-          fallbackVetoed = true;
-        }
+        if (result?.fallback === false) fallbackVetoed = true;
 
         if (!areProcessorMessageArraysEqual(processableMessages, messagesAfter)) {
           output.messages = messagesAfter;
@@ -2964,9 +2963,7 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
 
-        if (result?.retry) {
-          return fallbackVetoed ? { retry: true, fallback: false } : { retry: true };
-        }
+        if (result?.retry) return verdict(true);
       } catch (processorError) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2996,7 +2993,7 @@ export class ProcessorRunner {
       }
     }
 
-    return fallbackVetoed ? { retry: false, fallback: false } : { retry: false };
+    return verdict(false);
   }
 
   static applyMessagesToMessageList(
