@@ -1329,6 +1329,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'other/figma',
+          label: 'Figma',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/figma?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/fireflies',
           label: 'Fireflies.ai',
           customProps: {
