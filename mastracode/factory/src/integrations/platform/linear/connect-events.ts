@@ -107,11 +107,14 @@ export async function handleLinearConnectEvent(
   const projects = await deps.projects.listAll();
   const owner = connectionOwner(workspace.resourceId, projects);
   if (owner.kind === 'unknown_project') {
-    logPlatformWarn('Platform Linear event names a connection scoped to a Factory project this deployment lacks; skipped.', {
-      connectionId: event.connectionId,
-      eventId: event.id,
-      resourceId: workspace.resourceId,
-    });
+    logPlatformWarn(
+      'Platform Linear event names a connection scoped to a Factory project this deployment lacks; skipped.',
+      {
+        connectionId: event.connectionId,
+        eventId: event.id,
+        resourceId: workspace.resourceId,
+      },
+    );
     return 'unknown_connection';
   }
   const failures: string[] = [];

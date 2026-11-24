@@ -331,7 +331,10 @@ describe('handleLinearConnectEvent', () => {
 
   it('throws when a project cannot take the update, so the worker retries, and still updates the others', async () => {
     // Two of org A's projects track the issue (another org's identifier-only card is never matched).
-    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'], 'org-a:project-a2': ['linear:ENG-42'] });
+    const { deps, ingested } = stubDeps({
+      'org-a:project-a': ['linear:ENG-42'],
+      'org-a:project-a2': ['linear:ENG-42'],
+    });
     deps.projects.listAll.mockResolvedValue([projectA, { id: 'project-a2', orgId: 'org-a' }]);
     deps.ingest.mockImplementationOnce(async () => {
       throw new Error('storage unavailable');
