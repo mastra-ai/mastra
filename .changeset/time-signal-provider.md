@@ -14,4 +14,4 @@ const agent = new Agent({
 })
 ```
 
-The clock is read at each model step and a new snapshot is added only when the interval (15 minutes by default) moves on, aligned to wall-clock boundaries by default. No timers run and idle threads are never woken. Each snapshot stays in the context, so a long run at `'minute'` carries one `<current-time>` message per minute it spans. Requires agent memory.
+The clock is read at each model step and a new snapshot is added only when the interval (15 minutes by default) moves on, aligned to wall-clock boundaries by default. No timers run and idle threads are never woken. Each snapshot stays in the context, so a long run at `'minute'` carries one `<current-time>` message per minute it spans. Requires agent memory. One agent can carry providers for several time zones; two for the same zone throw when the agent is created.

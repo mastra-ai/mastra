@@ -68,13 +68,13 @@ describe('TimeSignalProvider', () => {
   });
 
   it('has a stable id and one stable time-lane processor', () => {
-    const provider = new TimeSignalProvider();
+    const provider = new TimeSignalProvider({ timeZone: 'UTC' });
     expect(provider.id).toBe('time-signals');
     const processors = provider.getInputProcessors();
     expect(processors).toHaveLength(1);
     expect(provider.getInputProcessors()[0]).toBe(processors[0]);
     // Tracking is read under stateId; it must equal the emitted lane id.
-    expect(processorOf(provider).stateId).toBe('current-time');
+    expect(processorOf(provider).stateId).toBe('current-time:UTC');
   });
 
   it('defaults to a 15-minute interval aligned to the quarter hour', async () => {
@@ -96,7 +96,7 @@ describe('TimeSignalProvider', () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:30Z'));
     const result = await lane(new TimeSignalProvider({ interval: 'minute', timeZone: 'America/Los_Angeles' })).step();
     expect(result).toMatchObject({
-      id: 'current-time',
+      id: 'current-time:America/Los_Angeles',
       tagName: 'current-time',
       mode: 'snapshot',
       cacheKey: 'time:2026-11-24T00:15-08:00',
@@ -317,6 +317,55 @@ describe('TimeSignalProvider on an agent', () => {
     vi.setSystemTime(new Date('2026-11-24T08:15:30Z'));
     await agent.generate('second', target);
     expect(await timeRows(memory)).toEqual(['Tuesday, November 24, 2026 at 8:15 AM UTC']);
+  });
+
+  it('keeps one lane per time zone when an agent has providers for two zones', async () => {
+    const memory = new MockMemory();
+    const model = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text: 'done' }],
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+      }),
+    });
+    const agent = new Agent({
+      id: 'two-zones',
+      name: 'two-zones',
+      instructions: 'You know the time.',
+      model,
+      memory,
+      signals: [new TimeSignalProvider({ timeZone: 'UTC' }), new TimeSignalProvider({ timeZone: 'America/New_York' })],
+    });
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+    const target = { memory: { resource: 'resource-1', thread: { id: 'thread-1' } }, maxSteps: 1 };
+
+    await agent.generate('first', target);
+    vi.setSystemTime(new Date('2026-11-24T08:20:00Z'));
+    await agent.generate('second', target);
+    vi.setSystemTime(new Date('2026-11-24T08:29:59Z'));
+    await agent.generate('third', target);
+
+    // One snapshot per zone for the 08:15 bucket; the later runs in that bucket add nothing.
+    expect(await timeRows(memory)).toEqual([
+      'Tuesday, November 24, 2026 at 8:15 AM UTC',
+      'Tuesday, November 24, 2026 at 3:15 AM EST',
+    ]);
+  });
+
+  it('rejects a second provider for the same time zone on one agent', () => {
+    const create = () =>
+      new Agent({
+        id: 'twice',
+        name: 'twice',
+        instructions: 'You know the time.',
+        model: new MockLanguageModelV2(),
+        signals: [
+          new TimeSignalProvider({ timeZone: 'UTC', interval: 'minute' }),
+          new TimeSignalProvider({ timeZone: 'Etc/UTC', interval: 'hour' }),
+        ],
+      });
+    expect(create).toThrow('Agent "twice" has two TimeSignalProviders for the time zone UTC');
   });
 
   it('needs memory: an agent without it fails like any state lane', async () => {

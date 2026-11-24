@@ -1,3 +1,4 @@
+import type { Agent } from '../agent/agent';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult, InputProcessorOrWorkflow } from '../processors';
 
 import { SignalProvider } from './signal-provider';
@@ -7,7 +8,7 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DEFAULT_INTERVAL_MS = 15 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
-const TIME_STATE_ID = 'current-time';
+const TIME_TAG = 'current-time';
 
 /** Formats the time shown to the model. */
 export type TimeSignalFormatter = (date: Date, options: { timeZone: string; locale: string }) => string;
@@ -119,11 +120,12 @@ function pad(value: number): string {
  */
 class TimeStateProcessor {
   readonly id = 'time-state';
-  // The runner reads tracking under `stateId`; it must match the emitted lane id.
-  readonly stateId = TIME_STATE_ID;
+  // The runner reads tracking under `stateId`; it must match the emitted lane id. One lane per
+  // time zone keeps providers for different zones on one agent from overwriting each other.
+  readonly stateId: string;
 
   readonly #intervalMs: number;
-  readonly #timeZone: string;
+  readonly timeZone: string;
   readonly #locale: string;
   readonly #align: boolean;
   readonly #format: TimeSignalFormatter;
@@ -131,7 +133,8 @@ class TimeStateProcessor {
   constructor(options: TimeSignalProviderOptions = {}) {
     this.#align = options.align ?? true;
     this.#intervalMs = resolveInterval(options.interval, this.#align);
-    this.#timeZone = resolveTimeZone(options.timeZone);
+    this.timeZone = resolveTimeZone(options.timeZone);
+    this.stateId = `${TIME_TAG}:${this.timeZone}`;
     this.#locale = options.locale ?? 'en-US';
     const format = options.format;
     this.#format =
@@ -151,7 +154,7 @@ class TimeStateProcessor {
       // Key the bucket by its local wall-clock start, so buckets align to boundaries in any
       // offset. A day bucket is just the local date, so it holds across DST changes. Shorter
       // buckets add the UTC offset, so the two passes of a repeated fall-back hour differ.
-      const clock = localClock(now, this.#timeZone);
+      const clock = localClock(now, this.timeZone);
       if (this.#intervalMs === DAY_MS) {
         cacheKey = `time:${clock.date}`;
       } else {
@@ -166,13 +169,13 @@ class TimeStateProcessor {
     }
 
     return {
-      id: TIME_STATE_ID,
-      tagName: TIME_STATE_ID,
+      id: this.stateId,
+      tagName: TIME_TAG,
       mode: 'snapshot',
       cacheKey,
-      contents: this.#format(now, { timeZone: this.#timeZone, locale: this.#locale }),
-      attributes: { timeZone: this.#timeZone },
-      value: { iso: now.toISOString(), timeZone: this.#timeZone, interval: this.#intervalMs },
+      contents: this.#format(now, { timeZone: this.timeZone, locale: this.#locale }),
+      attributes: { timeZone: this.timeZone },
+      value: { iso: now.toISOString(), timeZone: this.timeZone, interval: this.#intervalMs },
     };
   }
 }
@@ -202,6 +205,26 @@ export class TimeSignalProvider extends SignalProvider<'time-signals'> {
   constructor(options: TimeSignalProviderOptions = {}) {
     super();
     this.#processor = new TimeStateProcessor(options);
+  }
+
+  /** The resolved IANA time zone this provider reports. */
+  get timeZone(): string {
+    return this.#processor.timeZone;
+  }
+
+  connect(agent: Agent<any, any, any, any>): void {
+    // Two providers for one zone would share a lane and keep overwriting each other's snapshot.
+    const clash = agent
+      .listSignalProviders()
+      .some(
+        provider => provider !== this && provider instanceof TimeSignalProvider && provider.timeZone === this.timeZone,
+      );
+    if (clash) {
+      throw new Error(
+        `Agent "${agent.id}" has two TimeSignalProviders for the time zone ${this.timeZone}. Use one provider per time zone.`,
+      );
+    }
+    super.connect(agent);
   }
 
   getInputProcessors(): InputProcessorOrWorkflow[] {
