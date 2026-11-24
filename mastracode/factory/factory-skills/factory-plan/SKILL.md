@@ -53,7 +53,12 @@ Write the full plan into the conversation, structured as:
 - **Assumptions** — every recorded design decision and understanding correction from the run.
 - **Open questions** — only the decisions that genuinely need a human.
 
-The plan must be executable by someone with no access to this conversation beyond this message. Write it to `.artifacts/plans/issue-<number>.md` at the workspace root — never inside a repository checkout — and include the same plan in the conversation.
+The plan must be executable by someone with no access to this conversation beyond this message. Write it to `.artifacts/plans/issue-<number>.md` relative to the **session workspace root** — the directory the workspace tools call the project root — and include the same plan in the conversation. `submit_plan` resolves the path you submit against that same workspace root and accepts only a `.md` file directly inside its `.artifacts/plans/`, so the two must agree:
+
+- **One repository in this sandbox** (the usual case): the workspace root _is_ that repository's checkout, so the file lands at `<checkout>/.artifacts/plans/issue-<number>.md`.
+- **Several repositories**: the workspace root holds one directory per repository, so the file lands at the root's `.artifacts/plans/issue-<number>.md`, _beside_ the checkouts and never inside one — `mastra/.artifacts/plans/issue-<number>.md` is rejected.
+
+Either way, submit the same relative path you wrote. If `submit_plan` rejects the path, it names the directory it accepts in the error; write the plan there rather than retrying the same path.
 
 ## Phase 4: Submit the Plan
 

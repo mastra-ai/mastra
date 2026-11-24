@@ -11,7 +11,7 @@ import type { FactoryUserSession } from '../../../workspaces/services/user-sessi
 import { SubmitPlanCard } from '../SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';
-/** A path an agent can submit from inside a repo checkout: the file route can never serve it. */
+/** A path an agent can submit from inside a repo checkout: served from that checkout's `.artifacts` root. */
 const REPO_PREFIXED_PLAN_PATH = 'mastra/.artifacts/plans/issue-5.md';
 const WORKSPACE = 'sc-session-1';
 const PLAN_MARKDOWN = '# Ship dark mode\n\n## Steps\n\n1. Add the toggle';
@@ -44,15 +44,15 @@ const userSession = {
   updatedAt: '2026-08-19T10:00:00.000Z',
 } satisfies FactoryUserSession;
 
-function workspaceFile(params: URLSearchParams): WorkspaceFile {
+function workspaceFile(params: URLSearchParams, content = PLAN_MARKDOWN): WorkspaceFile {
   return {
     workspacePath: params.get('workspacePath') ?? '',
     path: params.get('path') ?? '',
     name: 'add-dark-mode.md',
-    size: PLAN_MARKDOWN.length,
+    size: content.length,
     updatedAt: '2026-08-19T10:05:00.000Z',
     contentType: 'text',
-    content: PLAN_MARKDOWN,
+    content,
   };
 }
 
@@ -62,25 +62,26 @@ function stubUserSession() {
   );
 }
 
-/** Records plan-file reads; responds with the plan markdown unless `fail` is set. */
-function stubPlanFile({ fail = false }: { fail?: boolean } = {}) {
+/** Records plan-file reads; responds with `content` unless `fail` is set. */
+function stubPlanFile({ fail = false, content = PLAN_MARKDOWN }: { fail?: boolean; content?: string } = {}) {
   const requests: URLSearchParams[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/workspace/file`, ({ request }) => {
       const params = new URL(request.url).searchParams;
       requests.push(params);
       if (fail) return HttpResponse.json({ error: 'Session workspace is not available' }, { status: 403 });
-      return HttpResponse.json(workspaceFile(params));
+      return HttpResponse.json(workspaceFile(params, content));
     }),
   );
   return requests;
 }
 
 /** Stubs the rendered-list route so absolute paths can be normalized against `rootPath`. */
-function stubRenderedList(rootPath: string) {
+function stubRenderedList(rootPath: string, { fail = false }: { fail?: boolean } = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, ({ request }) => {
       const params = new URL(request.url).searchParams;
+      if (fail) return HttpResponse.json({ error: 'Session workspace is not available' }, { status: 403 });
       return HttpResponse.json({
         workspacePath: params.get('workspacePath') ?? '',
         root: params.get('root') ?? '.artifacts',
@@ -304,13 +305,55 @@ describe('SubmitPlanCard', () => {
       });
     });
 
-    it('still reports an unloadable repo-prefixed path when the submission carried no plan', async () => {
+    it('fetches a repo-prefixed path from that checkout when the submission carried no plan', async () => {
       stubUserSession();
-      const requests = stubPlanFile();
+      stubRenderedList('/mastra/.artifacts');
+      const requests = stubPlanFile({ content: PLAN_MARKDOWN });
+      const onRespond = vi.fn();
+      const user = userEvent.setup();
+      renderCard({ input: { toolId: 'submit_plan', path: REPO_PREFIXED_PLAN_PATH }, onRespond });
+
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('path')).toBe(REPO_PREFIXED_PLAN_PATH);
+
+      await user.click(screen.getByRole('button', { name: 'Approve the plan and build it' }));
+
+      expect(onRespond).toHaveBeenCalledWith({
+        action: 'approved',
+        path: REPO_PREFIXED_PLAN_PATH,
+        title: 'Ship dark mode',
+        plan: '## Steps\n\n1. Add the toggle',
+      });
+    });
+
+    it('waits for the checkout listing before deciding a repo-prefixed path is loadable', async () => {
+      stubUserSession();
+      stubRenderedList('/mastra/.artifacts');
+      stubPlanFile();
       renderCard({ input: { toolId: 'submit_plan', path: REPO_PREFIXED_PLAN_PATH }, onRespond: () => {} });
 
+      // The absolute path has to be normalized against the server's checkout
+      // root first, so the card shows progress rather than an unloadable note
+      // and never offers an approval with no body.
+      expect(screen.getByLabelText('Loading plan')).toBeInTheDocument();
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+    });
+
+    it('keeps Approve disabled for a repo-prefixed path when the checkout file read fails', async () => {
+      stubUserSession();
+      stubRenderedList('/mastra/.artifacts');
+      const requests = stubPlanFile({ fail: true });
+      renderCard({ input: { toolId: 'submit_plan', path: REPO_PREFIXED_PLAN_PATH }, onRespond: () => {} });
+
+      // Resolving the checkout root and reading the file both have to settle
+      // before the card can say the plan is unloadable.
+      expect(screen.getByLabelText('Loading plan')).toBeInTheDocument();
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
-      expect(requests).toHaveLength(0);
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('path')).toBe(REPO_PREFIXED_PLAN_PATH);
       expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
