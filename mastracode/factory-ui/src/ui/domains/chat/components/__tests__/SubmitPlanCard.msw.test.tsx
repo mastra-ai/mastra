@@ -358,6 +358,8 @@ describe('SubmitPlanCard', () => {
       );
       const requests = stubPlanFile();
       renderCard({ input: { toolId: 'submit_plan', path: ABSOLUTE_CHECKOUT_PLAN_PATH }, onRespond: () => {} });
+      // Assert only once the card is blocked on the held listing, not while the session is still loading.
+      await waitFor(() => expect(listing.requests.length).toBeGreaterThan(0));
 
       // The absolute path cannot be turned into a workspace-relative one until
       // the server names that checkout's `.artifacts` root, so the card shows
