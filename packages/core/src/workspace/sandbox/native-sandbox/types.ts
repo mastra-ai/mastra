@@ -40,7 +40,8 @@ export interface NativeSandboxConfig {
    * workspace or a `readWritePaths` entry. Applied after every write grant so
    * it always wins — including when the same directory is also mounted
    * read-write elsewhere. Mounted filesystems with `readOnly: true` are added
-   * here automatically.
+   * here automatically. Ignored when a custom `bwrapArgs` or user-written
+   * `seatbeltProfilePath` replaces the generated policy.
    */
   denyWritePaths?: string[];
 

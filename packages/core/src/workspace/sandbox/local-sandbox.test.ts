@@ -2181,6 +2181,30 @@ describe('LocalSandbox', () => {
       await seatbeltSandbox._destroy();
     });
 
+    it('should reject a readOnly mount whose source cannot be resolved instead of denying writes to the symlink only', async () => {
+      if (os.platform() !== 'darwin') return;
+
+      const seatbeltSandbox = new LocalSandbox({ workingDirectory: mountDir, isolation: 'seatbelt' });
+      await seatbeltSandbox._start();
+
+      const missingSource = path.join(mountDir, 'seatbelt-missing-ro-source');
+      const result = await seatbeltSandbox.mount(makeMockLocalFs(missingSource, { readOnly: true }), '/missing-ro');
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('could not be resolved');
+      expect(seatbeltSandbox.mounts.get('/missing-ro')?.state).toBe('error');
+      // The dangling symlink is removed, so nothing can later write through it.
+      await expect(fs.lstat(path.join(mountDir, 'missing-ro'))).rejects.toMatchObject({ code: 'ENOENT' });
+      const isoConfig = (await seatbeltSandbox.getInfo()).metadata?.isolationConfig as { denyWritePaths?: string[] };
+      expect(isoConfig.denyWritePaths ?? []).not.toContain(path.join(mountDir, 'missing-ro'));
+
+      // A read-write mount of a missing source keeps its best-effort behavior.
+      const rwResult = await seatbeltSandbox.mount(makeMockLocalFs(missingSource), '/missing-rw');
+      expect(rwResult.success).toBe(true);
+
+      await seatbeltSandbox._destroy();
+    });
+
     it('should route a readOnly filesystem mount to denyWritePaths instead of readWritePaths', async () => {
       if (os.platform() !== 'darwin') return;
 

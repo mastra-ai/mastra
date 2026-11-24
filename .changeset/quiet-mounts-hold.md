@@ -2,8 +2,16 @@
 '@mastra/core': patch
 ---
 
-Fixed read-only filesystems mounted into a natively isolated `LocalSandbox` being writable from shell commands.
+Fixed read-only filesystems mounted into a natively isolated `LocalSandbox` being writable from shell commands. Commands can now read a `readOnly: true` `LocalFilesystem` mount but can't write to it under `seatbelt` or `bwrap` isolation. Mounting a read-only filesystem whose source doesn't exist now fails instead of leaving the mount writable.
 
-`LocalSandbox.mount()` added every mount target to the isolation read-write allowlist regardless of the filesystem's `readOnly` flag, so a `readOnly: true` `LocalFilesystem` was read-only for file tools but writable via `execute_command` under `seatbelt` or `bwrap`. Read-only mounts are now write-denied at the OS level while remaining readable.
+Added `nativeSandbox.denyWritePaths` to block writes to specific paths, including paths inside the workspace or a `readWritePaths` entry:
 
-Added `nativeSandbox.denyWritePaths`: paths that commands can read but never write, applied after every write grant so it also covers paths nested inside the workspace or `readWritePaths`. Read-only mounts use it automatically (including when a path is re-mounted with a different `readOnly` flag); it can also be set directly. Because the field is part of the isolation config, generated seatbelt profiles are regenerated once after upgrading.
+```ts
+const sandbox = new LocalSandbox({
+  workingDirectory: '/path/to/workspace',
+  isolation: 'seatbelt',
+  nativeSandbox: { denyWritePaths: ['/path/to/workspace/config'] },
+});
+```
+
+A custom `seatbeltProfilePath` file or `bwrapArgs` replaces the generated policy and must deny these writes itself.

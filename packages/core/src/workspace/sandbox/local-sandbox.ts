@@ -733,7 +733,10 @@ export class LocalSandbox extends MastraSandbox<string> {
       });
       this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
       this._activeMountPaths.add(mountPath);
-      this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
+      const isolationError = this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
+      if (isolationError) {
+        return this.failMountIsolation(filesystem, mountPath, config, isolationError);
+      }
       return { success: true, mountPath };
     } else if (existingMount === 'foreign') {
       // Something is already mounted/symlinked here but we didn't create it — refuse to touch it
@@ -805,7 +808,10 @@ export class LocalSandbox extends MastraSandbox<string> {
     await this.writeMarkerFile(mountPath, hostPath);
 
     // Dynamically add host path to isolation allowlist
-    this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
+    const isolationError = this.addMountPathToIsolation(mountPath, hostPath, filesystem.readOnly === true);
+    if (isolationError) {
+      return this.failMountIsolation(filesystem, mountPath, config, isolationError);
+    }
 
     this.logger.debug('Mounted', { mountPath, hostPath });
     return { success: true, mountPath };
@@ -975,8 +981,11 @@ export class LocalSandbox extends MastraSandbox<string> {
    * `--bind` a symlink (it fails with "Unable to mount source on destination"),
    * so we store the canonical path (`realpath`) of the mount point — the same
    * directory the symlink refers to.
+   *
+   * Returns an error when a read-only mount can't be resolved: a write denial on
+   * the unresolved symlink wouldn't cover the directory writes actually land in.
    */
-  private addMountPathToIsolation(mountPath: string, hostPath: string, readOnly: boolean): void {
+  private addMountPathToIsolation(mountPath: string, hostPath: string, readOnly: boolean): string | undefined {
     if (this.isolation === 'none') return;
 
     const normMount = normalizeMountPath(mountPath);
@@ -995,6 +1004,9 @@ export class LocalSandbox extends MastraSandbox<string> {
     try {
       isolationPath = realpathSync(hostPath);
     } catch {
+      if (readOnly) {
+        return `Cannot mount read-only filesystem at ${hostPath}: its source could not be resolved, so writes to it can't be denied to sandboxed commands.`;
+      }
       // Symlink not visible yet or race; keep literal path for best-effort allowlist
       this.logger.warn('Could not resolve mount path for isolation; using unresolved path', { hostPath });
     }
@@ -1013,6 +1025,19 @@ export class LocalSandbox extends MastraSandbox<string> {
       this._mountIsolationRefCount.set(key, (this._mountIsolationRefCount.get(key) ?? 0) + 1);
     }
     this._mountPathToIsolationPath.set(normMount, { path: isolationPath, list });
+  }
+
+  /** Undo a mount whose isolation couldn't be applied and record it as failed. */
+  private async failMountIsolation(
+    filesystem: WorkspaceFilesystem,
+    mountPath: string,
+    config: FilesystemMountConfig,
+    error: string,
+  ): Promise<MountResult> {
+    this.logger.error('Could not apply mount isolation', { mountPath, error });
+    await this.unmount(mountPath);
+    this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
+    return { success: false, mountPath, error };
   }
 
   /**
