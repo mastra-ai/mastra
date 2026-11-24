@@ -475,21 +475,123 @@ export const supportAgent = new Agent({
 })
 ```
 
-Runs on that adapter get a `render_card` tool whose description lists the available components. The agent passes a flat spec of `{ root, elements }`, where the root element is a `Card`:
+Runs on that adapter get a `render_card` tool whose description lists the available components. The tool call itself isn't rendered as a tool card.
+
+### Enable with Mastra Connect
+
+When Slack chat runs through [Mastra Connect](/integrations/channels/slack#agent-chat), set `generativeUI` in the Slack provider options instead of on the agent. `channels()` forwards `providerOptions` to [`SlackProvider`](/reference/channels/slack-provider), which accepts the same option:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { channels } from '@mastra/connect'
+import { supportAgent } from './agents/support-agent'
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  channels: await channels({
+    providers: { slack: { providerOptions: { generativeUI: true } } },
+  }),
+  bundler: { dynamicPackages: ['@json-render/chat'] },
+})
+```
+
+### Card components
+
+| Component | Props | Children |
+| - | - | - |
+| `Card` | `title?`, `subtitle?`, `imageUrl?` | Yes |
+| `Section` | None | Yes |
+| `Text` | `content`, `style?` (`plain`, `bold`, or `muted`) | No |
+| `Fields` | None | Yes |
+| `Field` | `label`, `value` | No |
+| `Table` | `headers`, `rows`, `align?`, `caption?` | No |
+| `Chart` | `title`, `chart`: `{ type: 'pie', segments }` or `{ type: 'bar' \| 'line' \| 'area', categories, series }` | No |
+| `Divider` | None | No |
+| `Image` | `url`, `alt` | No |
+| `Actions` | None | Yes |
+| `LinkButton` | `label`, `url` | No |
+
+`Text` content is Slack mrkdwn: write links as `<url|label>`, and don't use `#` headings or markdown tables. Image URLs, including `Card` `imageUrl`, must be public HTTPS images that Slack can fetch. `LinkButton` URLs must be absolute and unique within the card.
+
+### Card spec
+
+The agent passes `render_card` a flat spec of `{ root, elements }`. Every element, at any depth, is a key in `elements`. `children` lists the IDs of child elements, never the elements themselves. The root element must be a `Card`:
 
 ```json
 {
   "root": "card",
   "elements": {
-    "card": { "type": "Card", "props": { "title": "Deploy status" }, "children": ["fields"] },
+    "card": {
+      "type": "Card",
+      "props": { "title": "Deploy status", "subtitle": "production" },
+      "children": ["summary", "fields", "divider", "actions"]
+    },
+    "summary": { "type": "Text", "props": { "content": "Deploy finished in *4m 12s*." } },
     "fields": { "type": "Fields", "children": ["env", "version"] },
-    "env": { "type": "Field", "props": { "label": "Environment", "value": "beta" } },
-    "version": { "type": "Field", "props": { "label": "Version", "value": "1.8.1" } }
+    "env": { "type": "Field", "props": { "label": "Environment", "value": "production" } },
+    "version": { "type": "Field", "props": { "label": "Version", "value": "1.8.1" } },
+    "divider": { "type": "Divider" },
+    "actions": { "type": "Actions", "children": ["logs"] },
+    "logs": {
+      "type": "LinkButton",
+      "props": { "label": "View logs", "url": "https://example.com/deploys/42" }
+    }
   }
 }
 ```
 
-The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the platform's limits (on Slack, one table and 100 rows per card), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. The tool call itself isn't rendered as a tool card. Interactive buttons aren't available yet. Cards can link out with `LinkButton`.
+Models often nest element objects inside a parent instead of listing them in `elements`. A `children` ID with no matching key in `elements` fails with an issue such as `missing element "section"`.
+
+The tool returns `{ ok: true, messageId }` once the card is posted. When the spec is invalid or exceeds the [Slack limits](#slack-card-limits), it returns `{ ok: false, issues }` without posting, so the agent can fix the spec and call it again. When Slack rejects the post, it returns `{ ok: false, error }`.
+
+### Agent instructions
+
+A generic prompt such as `'You are a helpful support assistant.'` usually produces only a basic table or chart. Name the components the agent should use and when to use them. When `render_card` returns issues, agents also tend to simplify the card by dropping images or fields instead of fixing the spec, so tell the agent to keep every component:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: `You are a support assistant for an internal deploy service.
+
+Use render_card for status updates and reports. Start each card with a Card that has a title.
+- Use Fields and Field for key facts such as environment, version, and owner.
+- Use a Table for lists of items and a Chart for trends over time.
+- Use an Image only when you have a public HTTPS image URL.
+- Put links to dashboards or logs in LinkButton elements inside Actions.
+
+If render_card returns issues, fix the spec and call it again. Keep every component you planned, including images and fields. Don't remove content to make the card pass.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: { adapter: createSlackAdapter(), generativeUI: true },
+    },
+  },
+})
+```
+
+### How cards look in Slack
+
+`@chat-adapter/slack` renders a `Card` as a header block and a context block, followed by the blocks for its children. It doesn't use Slack's [card block](https://docs.slack.dev/reference/block-kit/blocks/card-block), so the card has no visible container or border around it.
+
+### Slack card limits
+
+`render_card` checks these limits before posting. The Slack adapter would otherwise turn an oversized chart or table into plain text.
+
+| Element | Limit per card |
+| - | - |
+| Table | 1 table, up to 100 rows, 20 columns, and 10,000 characters of cell text |
+| Fields | 10 `Field` elements per `Fields` group |
+| Chart | 2 charts, each with up to 20 points and 12 series. Titles and axis labels up to 50 characters. Category and series names up to 20 characters and unique |
+
+### Not supported yet
+
+- Interactive `Button` elements. Cards can only link out with `LinkButton`.
+- Streaming cards. A card is posted once, after the agent calls `render_card`.
+- Adapters other than Slack. `generativeUI` is ignored on them.
 
 ## Custom typing status
 
