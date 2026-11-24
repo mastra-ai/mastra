@@ -4,8 +4,10 @@ import { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { PostgresStore } from '@mastra/pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
@@ -45,6 +47,51 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     await mock?.stop();
     mock = undefined;
     delete process.env.MASTRA_EVENTED_EXECUTION;
+  });
+
+  it('retains live request context in a native evented input-step processor', async () => {
+    if (!mock) throw new Error('AIMock server is not running');
+    const pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: `aimock-${randomUUID()}`, blockMs: 200 });
+    pubsubs.push(pubsub);
+    mock.on({ endpoint: 'chat' }, { content: 'Processed on the owning worker.' });
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+    const getState = () => 'live-controller-state';
+    const requestContext = new RequestContext([['controller', { getState }]]);
+    const observed: string[] = [];
+    const agent = new Agent({
+      id: 'live-context',
+      name: 'Live context',
+      instructions: 'Reply to the user.',
+      model: openai(SCENARIO_MODEL_ID),
+      durable: { executionEngine: 'evented' },
+      inputProcessors: [
+        {
+          id: 'read-live-context',
+          processInputStep: async ({ requestContext }) => {
+            const controller = requestContext?.get('controller') as { getState(): string };
+            observed.push(controller.getState());
+          },
+        },
+      ],
+    });
+    const schemaName = `live_context_${randomUUID().replaceAll('-', '')}`;
+    const storage = new PostgresStore({
+      id: schemaName,
+      schemaName,
+      connectionString:
+        process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres',
+    });
+    try {
+      const mastra = new Mastra({ agents: { agent }, logger: false, storage, pubsub });
+      const output = await mastra.getAgent('agent').stream('Read the live state.', { requestContext });
+      await output.consumeStream();
+      expect(observed).toEqual(['live-controller-state']);
+      expect(await output.text).toBe('Processed on the owning worker.');
+    } finally {
+      await pubsub.close();
+      await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await storage.close();
+    }
   });
 
   it('round-trips a tool result containing Date/Map/Error across the evented pubsub', async () => {

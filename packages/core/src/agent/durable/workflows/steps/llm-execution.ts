@@ -300,7 +300,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: withStepLifetime(async (params: LLMExecutionParams, stepLifetime) => {
-      const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
+      const { inputData, mastra, tracingContext, abortSignal } = params;
       const ownership = getExecutionOwnershipGuard(params);
 
       // Access pubsub via symbol
@@ -309,6 +309,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const typedInput = inputData as DurableAgenticWorkflowInput & z.infer<typeof durableLLMInputSchema>;
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
+      const requestContext =
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.requestContext ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 

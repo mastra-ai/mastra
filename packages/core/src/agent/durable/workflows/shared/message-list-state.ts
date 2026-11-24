@@ -255,10 +255,12 @@ function runTranscriptRefs(params: RunParams) {
 
 /** The run's memory: the live instance in this process, else re-resolved from the agent. */
 async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMemory | undefined> {
-  const memory = run.runId ? getRunRegistryEntry(run.runId, params.mastra)?.memory : undefined;
-  if (memory || !params.mastra || !run.agentId) return memory;
+  const entry = run.runId ? getRunRegistryEntry(run.runId, params.mastra) : undefined;
+  if (entry?.memory || !params.mastra || !run.agentId) return entry?.memory;
   const agent = params.mastra.getAgentById(run.agentId);
-  return agent.getMemory({ requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext) });
+  return agent.getMemory({
+    requestContext: entry?.requestContext ?? restoreRequestContext(run.requestContextEntries, params.requestContext),
+  });
 }
 
 /** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
