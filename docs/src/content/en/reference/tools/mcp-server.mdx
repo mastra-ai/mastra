@@ -1761,6 +1761,66 @@ A client that doesn't declare the extension sees the server as if it had no apps
 
 The declaration is read on every request. Clients on the 2026-07-28 protocol send it with each request. Clients on older protocol versions declare it once, at `initialize`. Over stateless HTTP, the server answers that `initialize` with an `Mcp-Session-Id`, and the client sends it back on every later request. That id only marks the client as one that renders apps: the server keeps no record of it, and it grants no access. A client that doesn't declare the extension gets no session id, and the rest of its stateless traffic is unchanged.
 
+## Agent skills (`skills`)
+
+The `skills` option serves [Agent Skills](https://agentskills.io) over the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview) (`io.modelcontextprotocol/skills`). Clients that support it, such as VS Code and ChatGPT, list your skills, show their descriptions to the model, and load a skill's files when the task needs them.
+
+Each folder holding a `SKILL.md` is one skill, named after the folder. Its files are served as `skill://` resources:
+
+```typescript
+import { MCPServer, readSkillFiles } from '@mastra/mcp'
+
+const server = new MCPServer({
+  id: 'docs-server',
+  name: 'Docs Server',
+  version: '1.0.0',
+  tools: {},
+  skills: { files: await readSkillFiles('./skills') },
+})
+```
+
+With a `./skills/git-workflow/SKILL.md` and a `./skills/git-workflow/references/REFERENCE.md`, the server serves `skill://git-workflow/SKILL.md` and `skill://git-workflow/references/REFERENCE.md`.
+
+`readSkillFiles()` reads a folder on disk and skips symbolic links. It needs Node.js. On runtimes without a filesystem, such as Cloudflare Workers, pass the files as an object: `{ 'git-workflow/SKILL.md': '---\nname: git-workflow\n...' }`. A value can be a string or a `Uint8Array`.
+
+The server answers `skills/list`, `skills/get`, and `resources/directory/read`, and lists each skill's `SKILL.md` in `resources/list`. Each listed skill carries the size and SHA-256 digest of every file, so clients can check what they read. Clients without the extension can still read the files with `resources/read`.
+
+A `SKILL.md` must start with frontmatter that has a `name` matching its folder and a `description`. A skill that fails these checks is skipped, with a warning in the server log.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'files',
+    type: 'Record<string, string | Uint8Array>',
+    isOptional: false,
+    description:
+      "Skill files keyed by `/`-separated path relative to the skills root. Files outside a skill folder aren't served.",
+  },
+  {
+    name: 'prefix',
+    type: 'string',
+    isOptional: true,
+    description:
+      "Path served before every skill. With `prefix: 'acme'`, a skill is served at `skill://acme/<skill>/SKILL.md`.",
+  },
+  {
+    name: 'pageSize',
+    type: 'number',
+    isOptional: true,
+    description: 'Entries per page of `skills/list` and `resources/directory/read`. Defaults to `100`.',
+  },
+  {
+    name: 'cacheHint',
+    type: "{ ttlMs: number; cacheScope: 'public' | 'private' }",
+    isOptional: true,
+    description:
+      "How long clients may cache listings and directory reads. Defaults to `{ ttlMs: 0, cacheScope: 'private' }`.",
+  },
+]}
+/>
+
+To read skills from a server, use the [`MCPClient` `skills` property](/reference/tools/mcp-client#skills-property).
+
 ## Events (experimental)
 
 :::warning

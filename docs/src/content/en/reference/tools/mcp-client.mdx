@@ -979,6 +979,30 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 })
 ```
 
+### `skills` property
+
+Reads [Agent Skills](https://agentskills.io) that servers serve over the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview). Every file is checked against the size and SHA-256 digest the server listed for it. A file that isn't listed, or doesn't match, throws an error whose `cause` is a `SkillVerificationError`.
+
+```typescript
+const skills = await mcp.skills.list()
+const [skill] = skills.docsServer
+
+// SKILL.md, with its parsed frontmatter and the markdown after it
+const manifest = await mcp.skills.read('docsServer', skill)
+console.log(manifest.frontmatter.description, manifest.body)
+
+// Another file of the skill, by its path relative to the skill
+const reference = await mcp.skills.read('docsServer', skill, 'references/REFERENCE.md')
+console.log(reference.text)
+```
+
+- `list()`: The skills of every configured server, keyed by server name. A server without the extension lists none.
+- `get(serverName, uri)`: One skill by the URI of its `SKILL.md`, such as `skill://git-workflow/SKILL.md`.
+- `read(serverName, skill, ref?)`: Reads and verifies one file. `ref` is a path relative to the skill, or an absolute `skill://` URI. Without it, reads the skill's `SKILL.md`. Returns `{ uri, mimeType, bytes, text, verified, frontmatter, body }`. `frontmatter` and `body` are set only for `SKILL.md`.
+- `readDirectory(serverName, uri)`: The files and folders directly inside a skill folder, such as `skill://git-workflow/references`. The server must support directory reads.
+
+The client only reads skills. Deciding which skills an agent uses, and asking a user before loading one, is up to your application.
+
 ### `prompts` property
 
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
