@@ -7,13 +7,14 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceAsItemDialog } from '../trace-as-item-dialog';
+import type { TraceAsItemDialogProps } from '../trace-as-item-dialog';
 import {
   datasetItem,
   datasetsList,
   trajectoryWithoutToolCalls,
   trajectoryWithToolCalls,
 } from './fixtures/add-trace-mocks';
-import { createTraceDetails } from './fixtures/trace-as-item';
+import { createAgentRunInput, createTraceDetails } from './fixtures/trace-as-item';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -33,22 +34,12 @@ vi.mock('@/ds/components/CodeEditor', () => ({
 
 afterEach(() => cleanup());
 
-function setupHandlers({
-  trajectory,
-  trajectoryArrives,
-}: {
-  trajectory: Trajectory;
-  trajectoryArrives?: Promise<void>;
-}) {
+function setupHandlers() {
   const posted = vi.fn<(body: unknown) => void>();
 
   server.use(
     http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasetsList)),
     http.get(`${BASE_URL}/api/datasets/dataset-1`, () => HttpResponse.json(datasetsList.datasets[0])),
-    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, async () => {
-      await trajectoryArrives;
-      return HttpResponse.json(trajectory);
-    }),
     http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
       posted(await request.json());
       return HttpResponse.json(datasetItem);
@@ -58,24 +49,27 @@ function setupHandlers({
   return { posted };
 }
 
-function renderDialog(input: unknown, output: unknown) {
+type TraceData = Pick<TraceAsItemDialogProps, 'rootSpan' | 'trajectory' | 'isLoading'>;
+
+const traceData = (input: unknown, output: unknown, trajectory: Trajectory): TraceData => ({
+  rootSpan: createTraceDetails(input, output),
+  trajectory,
+});
+
+function renderDialog(data: TraceData) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-
-  return render(
+  const dialog = (props: TraceData) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <TraceAsItemDialog
-          rootSpanId="span-1"
-          traceId="trace-1"
-          traceDetails={createTraceDetails(input, output)}
-          isOpen
-          onClose={vi.fn()}
-        />
+        <TraceAsItemDialog {...props} traceId="trace-1" isOpen onClose={vi.fn()} />
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
   );
+
+  const view = render(dialog(data));
+  return { rerender: (next: TraceData) => view.rerender(dialog(next)) };
 }
 
 const editor = (name: string) => screen.findByRole<HTMLTextAreaElement>('textbox', { name });
@@ -97,13 +91,13 @@ const pickDataset = async (name: string) => {
 describe('TraceAsItemDialog', () => {
   describe('when trace input and output contain circular references', () => {
     it('prepares JSON-safe dataset fields instead of crashing', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
+      setupHandlers();
       const input: Record<string, unknown> = { prompt: 'hello' };
       const output: Record<string, unknown> = { answer: 'world' };
       input.self = input;
       output.self = output;
 
-      renderDialog(input, output);
+      renderDialog(traceData(input, output, trajectoryWithoutToolCalls));
 
       expect((await editor('Input')).value).toContain('"self": "[Circular]"');
       expect((await editor('Ground truth')).value).toContain('"self": "[Circular]"');
@@ -112,16 +106,16 @@ describe('TraceAsItemDialog', () => {
 
   describe('when the trace input and output are plain strings', () => {
     it('prefills the editors with the raw text', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', 'hi there');
+      setupHandlers();
+      renderDialog(traceData('hello', 'hi there', trajectoryWithoutToolCalls));
 
       expect((await editor('Input')).value).toBe('hello');
       expect((await editor('Ground truth')).value).toBe('hi there');
     });
 
     it('saves the text as string input and ground truth', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', 'hi there');
+      const { posted } = setupHandlers();
+      renderDialog(traceData('hello', 'hi there', trajectoryWithoutToolCalls));
 
       await pickDataset('Dataset 1');
       next();
@@ -135,8 +129,8 @@ describe('TraceAsItemDialog', () => {
 
   describe('when the trace output is a string that reads as JSON', () => {
     it('saves it back as a string', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', '42');
+      const { posted } = setupHandlers();
+      renderDialog(traceData('hello', '42', trajectoryWithoutToolCalls));
 
       await pickDataset('Dataset 1');
       next();
@@ -148,30 +142,43 @@ describe('TraceAsItemDialog', () => {
     });
   });
 
-  describe('when the trajectory is still loading', () => {
-    it('opens the dialog only once the trajectory has arrived, prefilled from it', async () => {
-      let arrive = () => {};
-      const trajectoryArrives = new Promise<void>(resolve => {
-        arrive = resolve;
-      });
-      setupHandlers({ trajectory: trajectoryWithToolCalls, trajectoryArrives });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
+  describe('when the trace data is still loading', () => {
+    it('opens the dialog only once the data has arrived, prefilled from it', async () => {
+      setupHandlers();
+      const { rerender } = renderDialog({ isLoading: true });
 
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(screen.queryByRole('dialog')).toBeNull();
 
-      arrive();
+      rerender(traceData({ city: 'Seattle' }, { answer: 'rainy' }, trajectoryWithToolCalls));
       await screen.findByRole('dialog', { name: 'Input and ground truth' });
+      expect((await editor('Input')).value).toContain('Seattle');
       await pickDataset('Dataset 1');
       next();
       expect((await editor('Tool mocks JSON')).value).toContain('getWeather');
     });
   });
 
+  describe('when the root span is an agent run that wrapped its messages', () => {
+    it('saves the messages as the input, without the wrapper', async () => {
+      const { posted } = setupHandlers();
+      const { input, messages } = createAgentRunInput();
+      renderDialog(traceData(input, 'hi there', trajectoryWithoutToolCalls));
+
+      await pickDataset('Dataset 1');
+      next();
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).toMatchObject({ input: messages });
+    });
+  });
+
   describe('when the trace recorded tool calls', () => {
     it('saves the item to the picked dataset with mocks and trajectory taken from the trace', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithToolCalls });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
+      const { posted } = setupHandlers();
+      renderDialog(traceData({ city: 'Seattle' }, { answer: 'rainy' }, trajectoryWithToolCalls));
 
       await pickDataset('Dataset 1');
       next();
@@ -203,8 +210,8 @@ describe('TraceAsItemDialog', () => {
 
   describe('when the trace recorded no tool calls', () => {
     it('leaves tool mocks empty and still expects the trajectory', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
+      setupHandlers();
+      renderDialog(traceData({ city: 'Seattle' }, { answer: 'rainy' }, trajectoryWithoutToolCalls));
 
       await pickDataset('Dataset 1');
       next();

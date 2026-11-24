@@ -1,23 +1,22 @@
 'use client';
 
-import type { TrajectoryStep } from '@mastra/core/evals';
+import type { Trajectory, TrajectoryStep } from '@mastra/core/evals';
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { useMastraClient } from '@mastra/react';
-import { useSpanDetail } from '@mastra/react/hooks/traces';
-import { useQuery } from '@tanstack/react-query';
 import { AddDatasetItemDialog } from '@/domains/datasets';
 import type { AddDatasetItemDialogProps, TrajectoryExpectation } from '@/domains/datasets';
 import type { SpanRecord } from '@/domains/traces/types';
 
 type ExpectedStep = NonNullable<TrajectoryExpectation['steps']>[number];
 
-type TraceAsItemDialogProps = {
-  /** Full span record — if provided, used directly (no fetch). */
-  traceDetails?: SpanRecord;
-  /** Root span ID for lazy-loading when traceDetails is not available. */
-  rootSpanId?: string | null;
+export type TraceAsItemDialogProps = {
   traceId?: string;
+  /** The trace's root span: its input and output prefill the item (see `useTraceAsItemData`). */
+  rootSpan?: SpanRecord;
+  /** The trace's trajectory: its steps prefill the expected trajectory and tool mocks. */
+  trajectory?: Pick<Trajectory, 'steps'>;
+  /** While true the dialog stays closed, so its form is seeded once everything has arrived. */
+  isLoading?: boolean;
   isOpen: boolean;
   onClose: () => void;
   renderCreateDatasetDialog?: AddDatasetItemDialogProps['renderCreateDatasetDialog'];
@@ -62,47 +61,32 @@ function toExpectedStep(step: TrajectoryStep): ExpectedStep {
   return expected;
 }
 
+/**
+ * Saves a trace as a dataset item, prefilled from its root span and trajectory. It reads nothing
+ * itself: the host loads the trace (`useTraceAsItemData`) and the dialog saves through the Mastra
+ * client in context, so the trace and the dataset can come from different servers.
+ */
 export function TraceAsItemDialog({
-  traceDetails: externalTraceDetails,
-  rootSpanId,
   traceId,
+  rootSpan,
+  trajectory,
+  isLoading = false,
   isOpen,
   onClose,
   renderCreateDatasetDialog,
 }: TraceAsItemDialogProps) {
-  const client = useMastraClient();
-
-  // Lazy-load the root span details when dialog opens and no traceDetails provided
-  const spanTraceId = !externalTraceDetails && isOpen ? traceId : null;
-  const spanId = !externalTraceDetails && isOpen ? rootSpanId : null;
-  const { data: lazySpanDetail, isLoading: isSpanLoading } = useSpanDetail({
-    traceId: spanTraceId,
-    spanId,
-    queryOptions: { enabled: Boolean(spanTraceId) && Boolean(spanId) },
-  });
-
-  const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
-
-  const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
-    queryKey: ['trace-trajectory', traceId],
-    queryFn: () => client.getTraceTrajectory(traceId ?? ''),
-    enabled: isOpen && Boolean(traceId),
-  });
-
-  // The dialog seeds its form when it opens, so it opens once everything the form is seeded from has arrived.
-  const isReady = !isSpanLoading && !isTrajectoryLoading;
   const steps = trajectory?.steps ?? [];
   // Derive item-level tool mocks from the recorded tool calls in the trajectory
   const toolMocks = collectToolMocks(steps);
 
   return (
     <AddDatasetItemDialog
-      open={isOpen && isReady}
+      open={isOpen && !isLoading}
       onOpenChange={open => {
         if (!open) onClose();
       }}
-      initialInput={getInitialInput(traceDetails)}
-      initialGroundTruth={traceDetails?.output != null ? toEditorText(traceDetails.output) : ''}
+      initialInput={getInitialInput(rootSpan)}
+      initialGroundTruth={rootSpan?.output != null ? toEditorText(rootSpan.output) : ''}
       initialToolMocks={toolMocks.length > 0 ? safeStringify(toolMocks, 2) : undefined}
       initialTrajectory={steps.length > 0 ? { steps: steps.map(toExpectedStep), ordering: 'relaxed' } : undefined}
       source={traceId ? { type: 'trace', referenceId: traceId } : undefined}
