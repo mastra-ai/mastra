@@ -31,7 +31,9 @@ For short-lived, request-scoped calls where the client stays connected, a regula
 
 ## Quickstart
 
-Set `durable.executionEngine` to `'default'` on an agent to run it with checkpoints in the current process. Register it with a `Mastra` instance that has persistent storage so checkpoints survive a restart:
+This example uses `@mastra/libsql` for persistent storage and requires an `OPENAI_API_KEY` for the model. Install `@mastra/libsql` in your Mastra project before continuing.
+
+In `src/mastra/index.ts`, set `durable.executionEngine` to `'default'` to run the agent in the current process. Register it with persistent storage and enable automatic recovery so it can continue from a saved checkpoint after a restart:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -51,6 +53,12 @@ export const mastra = new Mastra({
   storage: new LibSQLStore({ id: 'research-storage', url: 'file:./research.db' }),
   recovery: { durableAgents: 'auto' },
 })
+```
+
+From your application code, import the configured `mastra` instance and start a run. This example assumes the calling file is under `src/`:
+
+```typescript
+import { mastra } from './mastra'
 
 const output = await mastra
   .getAgent('researcher')
@@ -121,9 +129,9 @@ Choose the engine based on where the agent should run:
 
 | Native agent setting | Wrapper equivalent | Where it runs |
 | - | - | - |
-| `durable.executionEngine: 'default'` | `createDurableAgent()` | In the caller's process. |
-| `durable.executionEngine: 'evented'` | `createEventedAgent()` | On Mastra workers. Running across processes requires a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
-| No native setting | `createInngestAgent()` | On Inngest, with its own retries and monitoring dashboard. |
+| `durable.executionEngine: 'default'` | `createDurableAgent()` from `@mastra/core/agent/durable` | In the caller's process. Consume the stream directly. |
+| `durable.executionEngine: 'evented'` | `createEventedAgent()` from `@mastra/core/agent/durable` | On Mastra workers. Follow the run through PubSub. Running across processes requires a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
+| No native setting | `createInngestAgent()` from `@mastra/inngest` | On Inngest, with step memoization, retries, and a monitoring dashboard. |
 
 To set a default for registered native agents, use `durable.executionEngine` on [Mastra](/reference/core/mastra-class). An explicit agent setting overrides it. The choice is fixed at registration or first execution. Wrapper factories select their own engine without changing the wrapped agent's selection.
 
@@ -181,7 +189,7 @@ await mastraClient.createStoredAgent({
 })
 ```
 
-`durable` also accepts `{ cleanupTimeoutMs }`. Cache and pubsub are inherited from the server's `Mastra` instance. Existing stored agents with `durable: true` now load with resumable streams but without durable execution or checkpoint recovery. To retain durable execution, define a code agent wrapped with `createDurableAgent({ agent })` and pass `maxSteps` and snapshot persistence options to the factory.
+`durable` also accepts `{ cleanupTimeoutMs }`. Stored agents inherit the server's replay cache and PubSub transport. Use a [code-defined agent](/docs/harness/durable-agents#quickstart) to select a checkpointing engine and configure `maxSteps` or snapshot persistence per agent. For existing code that uses a wrapper, pass those options to `createDurableAgent()` instead.
 
 ### Inngest-powered with `createInngestAgent()`
 
@@ -300,11 +308,11 @@ Background tasks have their own execution lease, stored on each task record, sep
 
 ## Cleanup
 
-The wrapper's `stream()` handle and the `observe()` handle return a `cleanup` function that tears the run down: it unsubscribes from PubSub, removes the run from the internal registry, and deletes the run's cached events so nobody can replay it afterward.
+Call `cleanup()` from the process that started the run to release its resources and clear its cached stream events. Wrapper `stream()` and `observe()` handles expose `cleanup()`. On native durable stream output, use the optional `cleanup()` method on [`AgentStreamOutput`](/reference/agents/durable-agent#native-agent-execution).
 
 When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off. The cache's own TTL and eviction still apply.
 
-Call `cleanup()` from the process that started the run. To stop watching a run from `observe()`, use `detach()` or leave the loop instead.
+To stop watching a run from `observe()` without clearing it, call `detach()` or leave the loop.
 
 ## Tool approval
 
@@ -411,7 +419,9 @@ for (const run of recovered) {
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-`recoverAllDurableAgents()` returns counts and schedules eligible ownership re-checks itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed. A timed-out attempt returns `status: 'skipped'` with `reason: 'recovery-timeout'` and a future `retryAt`. If you call `recoverActiveRuns()` directly, schedule the re-check yourself. `mastra.recoverAllDurableAgents()` schedules it automatically. Only the `skipped` count includes this attempt; the `recovered`, `succeeded`, and `failed` counts exclude it even if it settles later.
+`recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skip carries a `retryAt` when another process still owns the run or the recovery attempt times out. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
+
+If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules eligible re-checks for you. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
 
 Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 

@@ -22,7 +22,12 @@ Resumable streams don't make the run itself durable. Reconnecting isn't crash re
 | Plain agent with `durable: false` | Off, including registered agents |
 | Explicit `createDurableAgent()` wrapper | Always published; pass `cache: false` to the factory to disable the replay cache, not transport history |
 
-By default, a registered agent publishes run frames on `mastra.pubsub` and caches them in `mastra.serverCache`. For the plain loop and the default durable engine, transport precedence is `Agent.durable.pubsub`, then `Agent.pubsub`, then `mastra.pubsub`. Replay cache precedence is `Agent.durable.cache`, then `mastra.serverCache`, then an in-memory cache. Evented steps publish on `mastra.pubsub` and use `mastra.serverCache` for a shared replay log. See [PubSub](/docs/server/pubsub#resumable-streams) for cross-process setup.
+Mastra resolves the stream transport and replay cache separately:
+
+- **Transport:** For the plain loop and the default durable engine, Mastra uses the first configured option: the agent's `durable.pubsub`, the agent's top-level `pubsub`, or `mastra.pubsub`. Evented steps publish on `mastra.pubsub` so workers can publish to the same stream.
+- **Replay cache:** Mastra uses the agent's `durable.cache`, then `mastra.serverCache`, then an in-memory cache. Evented runs use the shared Mastra cache when replay caching is enabled. If the transport is already a `CachingPubSub`, Mastra reuses its cache. Set `durable.cache: false` to skip adding a replay cache without changing the transport or its retained history.
+
+For deployments with more than one process, see [PubSub setup for resumable streams](/docs/server/pubsub#resumable-streams).
 
 ## Configure streams
 
@@ -52,7 +57,9 @@ export const supportAgent = new Agent({
 
 `durable: true` turns streams on with these defaults, including for standalone agents.
 
-To checkpoint execution as well as publish run frames, set `durable.executionEngine` to `'default'` or `'evented'` on the agent, or inherit the setting from `Mastra`. Without an engine setting, `durable: true` only enables stream publication. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for the storage and recovery settings.
+To checkpoint execution as well as publish run frames, set `durable.executionEngine` to `'default'` or `'evented'` on the agent, or inherit the setting from `Mastra`. Without an engine setting, `durable: true` only enables stream publication.
+
+To recover in-flight runs after a crash, use persistent workflow storage and set `recovery: { durableAgents: 'auto' }` on Mastra. For manual recovery on the default engine, configure `shouldPersistSnapshot` to include `running` snapshots and call `recoverActiveRuns()`. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for the persistence rules.
 
 Configure the wrapper's stream cache and transport through the factory's `cache`, `pubsub`, `shouldCache`, and `cleanupTimeoutMs` options.
 
