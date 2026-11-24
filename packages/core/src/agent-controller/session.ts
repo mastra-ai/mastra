@@ -4865,7 +4865,8 @@ export class Session<TState = unknown> {
       const release = (agent as { releaseParkedRun?: (runId: string) => Promise<boolean> }).releaseParkedRun;
       if (typeof release !== 'function') continue;
       try {
-        if (await release.call(agent, runId)) return;
+        // Every agent is asked: each holds its own state for the run, and one that holds none resolves false.
+        await release.call(agent, runId);
       } catch (error) {
         // One agent's failure must not keep the others from releasing the run.
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });

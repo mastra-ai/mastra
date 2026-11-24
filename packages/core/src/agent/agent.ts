@@ -14294,6 +14294,8 @@ export class Agent<
     // streamCleanup) from both the auto-cleanup timer and the explicit
     // cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
+    // The held release must not keep the output alive: no closure in this method captures `output` (or the stream holding it).
+    let outputRef: WeakRef<MastraModelOutput<TOutput>> | undefined;
     const cleanupOwnedRegistryState = () => {
       // A warm resume reuses the registry entry but replaces its execution fence.
       if (registryEntry.executionFence !== executionFence) return;
@@ -14320,7 +14322,10 @@ export class Agent<
       release: () =>
         runEachStep(
           [
-            () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+            () => {
+              const live = outputRef?.deref();
+              if (live) agentThreadStreamRuntime.closeRunContinuation(live, this.getPubSub());
+            },
             () => streamCleanup?.(),
             cleanupOwnedRegistryState,
           ],
@@ -14339,7 +14344,7 @@ export class Agent<
       if (settlement !== 'superseded' && this.executionEngine.shouldReportRecoveryFailure(error)) {
         await this.#reportRecoveryFailure(runId, error, executionFence.generation);
       }
-      // Its release reads the stream's output, which is set up only below.
+      // Its release skips the output's continuation: the stream is set up only below.
       this.#releaseRunHold(runId, { segment: runCleanup });
       releaseLocalRecovery();
       throw error;
@@ -14347,7 +14352,7 @@ export class Agent<
 
     // 4. Register the reconstructed state and recovered stream only after
     //    claiming the run.
-    const { stream, threadRegistration } = await this.#setupRecoveredStream({
+    const { stream: recoveredStream, threadRegistration } = await this.#setupRecoveredStream({
       runId,
       workflowInput,
       requestContext,
@@ -14359,13 +14364,20 @@ export class Agent<
       scheduleAutoCleanup,
       executionFence,
     }).catch(error => {
-      // The setup rolled back what it registered; its release reads an output that never existed.
+      // The setup rolled back what it registered; no output exists for its release to close.
       this.#releaseRunHold(runId, { segment: runCleanup });
       releaseLocalRecovery();
       throw error;
     });
-    const { output, cleanup: createdStreamCleanup, ready } = stream;
+    const {
+      output,
+      cleanup: createdStreamCleanup,
+      ready,
+      waitForEventDelivery,
+      detach: detachStream,
+    } = recoveredStream;
     streamCleanup = createdStreamCleanup;
+    outputRef = new WeakRef(output);
     this.#holdParkedOutput(runId, runCleanup, output);
     const recoveryPubsub = this.fenceRunPubSub(executionFence, abortController);
 
@@ -14405,9 +14417,9 @@ export class Agent<
             // Same contract as resume(): close on the persisted suspension,
             // after flushing and delivering already-published events.
             await this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub.flush();
-            await stream.waitForEventDelivery();
+            await waitForEventDelivery();
             executionFence.throwIfLost();
-            stream.detach();
+            detachStream();
           }
           // Snapshot cleanup runs for every non-suspended terminal (success or
           // failed) so storage stays bounded — mirrors the start()/resume()
@@ -14480,7 +14492,7 @@ export class Agent<
     return {
       output,
       get fullStream() {
-        return output.fullStream as ReadableStream<any>;
+        return outputRef!.deref()!.fullStream as ReadableStream<any>;
       },
       runId,
       threadId,
@@ -15065,6 +15077,8 @@ export class Agent<
     // streamCleanup) from both the auto-cleanup timer and the explicit
     // cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
+    // The held release must not keep the output alive: no closure in this method captures `output` itself.
+    let outputRef: WeakRef<MastraModelOutput<TOutput>> | undefined;
 
     // Stream segments and generate registry entries have distinct release guards.
     // Neither may tear down state registered by a newer execution.
@@ -15089,7 +15103,10 @@ export class Agent<
       release: () =>
         runEachStep(
           [
-            () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+            () => {
+              const live = outputRef?.deref();
+              if (live) agentThreadStreamRuntime.closeRunContinuation(live, this.getPubSub());
+            },
             () => streamCleanup?.(),
             releaseRunState,
           ],
@@ -15166,6 +15183,7 @@ export class Agent<
       messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
+    outputRef = new WeakRef(output);
     this.#holdParkedOutput(runId, runCleanup, output);
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -15250,7 +15268,9 @@ export class Agent<
     // background. Tearing down the reader first would drop it, leaving the
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
-      if (methodType === 'generate' || runCleanup.done || output.status !== 'running') return performCleanup();
+      if (methodType === 'generate' || runCleanup.done || outputRef?.deref()?.status !== 'running') {
+        return performCleanup();
+      }
       void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub.flush())
         .then(() => waitForEventDelivery())
@@ -15274,7 +15294,7 @@ export class Agent<
     return {
       output,
       get fullStream() {
-        return output.fullStream as ReadableStream<any>;
+        return outputRef!.deref()!.fullStream as ReadableStream<any>;
       },
       runId,
       threadId,
@@ -15872,6 +15892,8 @@ export class Agent<
     // closure can unsubscribe the pubsub reader (via streamCleanup) from both
     // the auto-cleanup timer and the explicit cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
+    // The held release must not keep the output alive: no closure in this method captures `output` itself.
+    let outputRef: WeakRef<MastraModelOutput<TOutput>> | undefined;
     // Set when a concurrent resume ran the run first: the topic is that resume's.
     let lostResumeRace = false;
 
@@ -15887,7 +15909,10 @@ export class Agent<
       release: () =>
         runEachStep(
           [
-            () => agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub()),
+            () => {
+              const live = outputRef?.deref();
+              if (live) agentThreadStreamRuntime.closeRunContinuation(live, this.getPubSub());
+            },
             () => streamCleanup?.(),
             () => {
               if (!this.#releaseSegment(runId, segment, entry)) return;
@@ -16046,6 +16071,7 @@ export class Agent<
       messageListFollowsStream: () => !this.executionEngine.executesStepsLocally,
     });
     streamCleanup = createdStreamCleanup;
+    outputRef = new WeakRef(output);
     this.#holdParkedOutput(runId, runCleanup, output);
 
     // Wait for subscription to be ready, then resume workflow
@@ -16200,7 +16226,7 @@ export class Agent<
     return {
       output,
       get fullStream() {
-        return output.fullStream as ReadableStream<any>;
+        return outputRef!.deref()!.fullStream as ReadableStream<any>;
       },
       runId,
       threadId: memoryInfo?.threadId,

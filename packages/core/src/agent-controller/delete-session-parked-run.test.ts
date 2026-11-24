@@ -171,6 +171,23 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     expect(runs).toHaveLength(0);
   });
 
+  it('asks every agent to release the parked run, not just the first that held it', async () => {
+    const { agent, controller } = await setup();
+    const session = await park(controller, 0);
+    const other = { releaseParkedRun: vi.fn().mockResolvedValue(true) };
+    const machinery = (session as any).machinery;
+    const settle = session.runEngine.settleSuspendedToolCallsAsDenied.bind(session.runEngine);
+    vi.spyOn(session.runEngine, 'settleSuspendedToolCallsAsDenied').mockImplementation(async (...args: any[]) => {
+      await (settle as any)(...args);
+      vi.spyOn(machinery, 'getAgent').mockReturnValue(other);
+      machinery.getAgents = () => [other, agent];
+    });
+    await controller.deleteSession({ sessionId: 's-0' });
+
+    expect(other.releaseParkedRun).toHaveBeenCalledTimes(1);
+    expect(agent.runRegistry.size).toBe(0);
+  });
+
   it.each([1, 2] as const)(
     'keeps the snapshot of a run a resume took over before the session was deleted (storage v%i)',
     async storageVersion => {

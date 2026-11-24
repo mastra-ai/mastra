@@ -565,6 +565,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Track subscription state
   let isSubscribed = false;
   let cancelled = false;
+  // The output, until this reader's teardown: closures kept past it (cleanup, detach, waitForEventDelivery) must not keep it alive.
+  let liveOutput: MastraModelOutput<OUTPUT> | undefined;
   // Set once the stream reaches ANY terminal state (FINISH/ERROR/ABORT, a
   // closeOnSuspend suspend, idle termination, or cleanup). `cancelled` alone is
   // insufficient: `safeClose()` leaves `controller` set and only `cleanup()`
@@ -907,6 +909,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         }
 
         case AgentStreamEventTypes.FINISH: {
+          const output = liveOutput!;
           clearIdleTimer();
           if (!onTerminalEvent) await onChunkDelivery;
           if (!controller || terminated) return;
@@ -1346,6 +1349,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       });
     }
     controller = null;
+    liveOutput = undefined;
   };
 
   // Observer-only teardown: end this consumer's stream and unsubscribe. Closing
@@ -1400,6 +1404,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       },
     }),
   );
+  liveOutput = output;
 
   // Fail only this reader, without publishing to the run's topic, which other
   // executions and their followers share. Waits for events already delivered.
