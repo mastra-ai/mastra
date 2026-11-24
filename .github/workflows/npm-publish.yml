@@ -72,7 +72,7 @@ jobs:
       - name: Guard - only the open release branch publishes
         run: node .github/scripts/release-guards.mjs branch --ref "$GITHUB_REF_NAME"
 
-      - name: Guard - checks on the release branch head are green
+      - name: Guard - checks on the release branch head (or the code under its version commit) are green
         run: node .github/scripts/release-guards.mjs checks --sha "$GITHUB_SHA"
         env:
           GITHUB_TOKEN: ${{ github.token }}

@@ -13,7 +13,10 @@ const REPO = 'mastra-ai/mastra';
 // One HTTP server standing in for both the GitHub REST API (under /repos/) and
 // the npm registry: version GETs, dist-tag reads, and the dist-tag PUT that
 // `npm dist-tag add` sends.
-async function startServer(t, { published = [], latest = {}, statuses = [], checkRuns = [], publishRuns = {} } = {}) {
+async function startServer(
+  t,
+  { published = [], latest = {}, statuses = [], checkRuns = [], checkRunsBySha = {}, publishRuns = {} } = {},
+) {
   const versions = new Set(published);
   const state = { distTagPuts: [], latest: { ...latest } };
   const server = createServer((req, res) => {
@@ -32,7 +35,7 @@ async function startServer(t, { published = [], latest = {}, statuses = [], chec
         return json(200, { statuses });
       }
       if ((match = url.pathname.match(`^/repos/${REPO}/commits/([0-9a-f]+)/check-runs$`))) {
-        return json(200, { check_runs: paged(checkRuns) });
+        return json(200, { check_runs: paged(checkRunsBySha[match[1]] ?? checkRuns) });
       }
       if (url.pathname === `/repos/${REPO}/actions/workflows/npm-publish.yml/runs`) {
         return json(200, { workflow_runs: paged(publishRuns[url.searchParams.get('head_sha')] ?? []) });
@@ -241,6 +244,35 @@ test('checks: allows green checks and ignores npm-publish runs on the same commi
   const result = await run(repo.cwd, green, ['checks', '--sha', sha]);
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /All 2 check run\(s\) and 1 status\(es\)/);
+});
+
+test('checks: a version-only head is judged by the checks on the code commit below it', async t => {
+  const server = await startServer(t);
+  const repo = makeRepo(t, server.url);
+  const versionSha = repo.head();
+  const codeSha = repo.git('rev-parse', 'HEAD^');
+  const green = { name: 'test (core)', status: 'completed', conclusion: 'success', check_suite: { id: 1 } };
+  const red = { ...green, conclusion: 'failure' };
+
+  // The version commit skipped CI; only the code commit has checks.
+  const passing = await startServer(t, { checkRunsBySha: { [codeSha]: [green] } });
+  let result = await run(repo.cwd, passing, ['checks', '--sha', versionSha]);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, new RegExp(`checking the code commit ${codeSha}`));
+
+  const failing = await startServer(t, { checkRunsBySha: { [codeSha]: [red], [versionSha]: [green] } });
+  result = await run(repo.cwd, failing, ['checks', '--sha', versionSha]);
+  assert.equal(result.status, 1, result.output);
+  assert.match(result.output, /check test \(core\): failure/);
+
+  // A commit that changes code is judged by its own checks.
+  repo.write('packages/a/index.js', 'export const a = 3;\n');
+  repo.git('commit', '-qam', 'fix: a');
+  const fixSha = repo.head();
+  const own = await startServer(t, { checkRunsBySha: { [fixSha]: [red], [versionSha]: [green] } });
+  result = await run(repo.cwd, own, ['checks', '--sha', fixSha]);
+  assert.equal(result.status, 1, result.output);
+  assert.doesNotMatch(result.output, /checking the code commit/);
 });
 
 test('alpha: refuses stable when a version at HEAD is not on npm', async t => {

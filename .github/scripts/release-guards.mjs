@@ -8,7 +8,9 @@
 //     The ref is `release/*` and the only `release/*` branch on the remote.
 //   node release-guards.mjs checks --sha <sha>
 //     Every commit status and check run on <sha> succeeded, ignoring runs of
-//     npm-publish.yml itself (this job, earlier publish attempts).
+//     npm-publish.yml itself (this job, earlier publish attempts). A <sha> that
+//     only changes versions (Dane's [skip ci] version commit) is judged by the
+//     checks on its parent.
 //   node release-guards.mjs alpha --sha <sha> [--registry <url>]
 //     Finds the alpha commit stable builds on: <sha> while it still holds
 //     .changeset/pre.json, otherwise its parent (a rerun after the stable
@@ -127,15 +129,30 @@ function stableHead({ sha, ref, remote }) {
 
 const publishRuns = sha => githubAll(`/actions/workflows/${PUBLISH_WORKFLOW}/runs?head_sha=${sha}`, 'workflow_runs');
 
+// Dane's version commits are pushed with [skip ci]: the suite that gates one ran on the code
+// commit below it, which the version commit only adds versions and changelogs to.
+function testedCommit(sha) {
+  const parents = git('rev-list', '--parents', '-n', '1', sha).split(' ').slice(1);
+  if (parents.length !== 1) return sha;
+  const files = changedFiles(parents[0], sha);
+  const versionOnly = files.length > 0 && files.every(file => VERSION_FILES.some(pattern => pattern.test(file)));
+  return versionOnly ? parents[0] : sha;
+}
+
 async function checkChecks({ sha }) {
   if (!sha) throw new Error('--sha is required');
+  const head = git('rev-parse', sha);
+  const tested = testedCommit(head);
+  if (tested !== head) console.log(`${head} only changes versions; checking the code commit ${tested} below it.`);
   const failures = [];
-  const { statuses = [] } = await github(`/commits/${sha}/status`);
+  const { statuses = [] } = await github(`/commits/${tested}/status`);
   for (const s of statuses) if (s.state !== 'success') failures.push(`status ${s.context}: ${s.state}`);
 
   // This job is itself a check run on <sha>, as is any earlier publish attempt.
-  const ownSuites = new Set((await publishRuns(sha)).map(run => run.check_suite_id));
-  const runs = (await githubAll(`/commits/${sha}/check-runs?filter=latest`, 'check_runs')).filter(
+  const ownSuites = new Set(
+    [...(await publishRuns(head)), ...(tested === head ? [] : await publishRuns(tested))].map(run => run.check_suite_id),
+  );
+  const runs = (await githubAll(`/commits/${tested}/check-runs?filter=latest`, 'check_runs')).filter(
     run => !ownSuites.has(run.check_suite?.id),
   );
   if (runs.length === 0 && statuses.length === 0) failures.push('no checks have run on this commit');
@@ -146,9 +163,9 @@ async function checkChecks({ sha }) {
     }
   }
   if (failures.length > 0) {
-    throw new Refusal(`Checks on ${sha} are not green, so no alpha is published:\n  ${failures.join('\n  ')}`);
+    throw new Refusal(`Checks on ${tested} are not green, so no alpha is published:\n  ${failures.join('\n  ')}`);
   }
-  console.log(`All ${runs.length} check run(s) and ${statuses.length} status(es) on ${sha} passed.`);
+  console.log(`All ${runs.length} check run(s) and ${statuses.length} status(es) on ${tested} passed.`);
 }
 
 // Non-private workspace packages, as { name, version }, read at `sha` (or the
