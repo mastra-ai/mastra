@@ -297,10 +297,17 @@ Creates or updates the page at `path` (keys joined by `/`, such as `guides/insta
 #### `removePage()`
 
 ```typescript oxfmt:false
-removePage(input: { scope: string; path: string; author?: string }): Promise<KnowledgePage | null>
+removePage(input: {
+  scope: string
+  path: string
+  author?: string
+  expected?: { id: string; version: number }
+}): Promise<KnowledgePage | null>
 ```
 
 Removes the page at `path` and resolves to it, or to `null` when no page is there. Throws `"<scope>#<path>" has child pages; remove them first.` for a page with children, and `"<scope>#<path>" is declared in config; change the scope's pages to remove it.` for a template page. Throws without retrying when another write changed the page first.
+
+Pass `expected`, the page's `id` and `version` as you read it, to remove only that page. If the page at `path` is a different page or another version, or nothing is there, the call throws `KnowledgeConflictError` and removes nothing. The same applies when another write changes or removes the page during the call.
 
 #### `movePage()`
 

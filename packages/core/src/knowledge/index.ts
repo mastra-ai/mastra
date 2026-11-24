@@ -296,7 +296,8 @@ export class Knowledge extends MastraBase {
    * Deletes the page at `scope#path`; `null` when there is none. Refuses a page with child pages
    * and a page declared in config. Host-only, like {@link Knowledge.upsertPage}. Not retried: a
    * concurrent write to the same page between the read and the delete throws, so remove from one
-   * sync worker or retry the call.
+   * sync worker or retry the call. Pass `expected` to delete only the page you read, at the version
+   * you read: anything else at the path throws `KnowledgeConflictError` and nothing is deleted.
    *
    * @experimental
    */
