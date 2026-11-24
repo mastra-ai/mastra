@@ -555,7 +555,7 @@ async function manageGithubPollInterval(ctx: SlashCommandContext): Promise<void>
       ctx.showError('GitHub polling interval must be at least 10 seconds.');
       return;
     }
-    interval = Math.round(seconds * 1000);
+    interval = Math.round(seconds) * 1000;
   }
   if (!interval) return;
 

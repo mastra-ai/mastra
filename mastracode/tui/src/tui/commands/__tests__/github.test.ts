@@ -629,6 +629,23 @@ describe('handleGithubCommand', () => {
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
   });
 
+  it('saves a custom GitHub poll interval in whole seconds', async () => {
+    const { ctx } = createContext();
+    const settings = { signals: { experimentalGithubSignals: true, githubPollIntervalMs: 45_000 } };
+    mocks.loadSettings.mockReturnValue(settings);
+    mocks.askModalQuestion
+      .mockResolvedValueOnce('Poll interval')
+      .mockResolvedValueOnce('Custom')
+      .mockResolvedValueOnce('60.9');
+
+    await handleGithubCommand(ctx, []);
+
+    expect(settings.signals.githubPollIntervalMs).toBe(61_000);
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      'GitHub polling interval set to 1m 1s. Restart MastraCode for this to take effect.',
+    );
+  });
+
   it('unsubscribes the only current subscription without prompting', async () => {
     const { ctx, unsubscribeThreadFromPR } = createContext();
     mockThreadSubscriptions(ctx, [{ owner: 'mastra-ai', repo: 'mastra', number: 17447 }]);
