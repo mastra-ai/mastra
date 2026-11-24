@@ -62,6 +62,7 @@ function setupRegistry({
 
 afterEach(() => {
   globalRunRegistry.delete('run-1');
+  vi.unstubAllEnvs();
 });
 
 describe('createDurableBackgroundTaskCheckStep', () => {
@@ -166,6 +167,8 @@ describe('createDurableBackgroundTaskCheckStep', () => {
   });
 
   it('waits with 1s default when no waitTimeoutMs is configured (retryCount=0)', async () => {
+    // The wait this asserts is shorter in core's unit tests (src/utils/test-waits.ts).
+    vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
     const { waitForNextTask, getInitData } = setupRegistry({});
     const step = createDurableBackgroundTaskCheckStep();
 
