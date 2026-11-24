@@ -60,8 +60,8 @@ tester.run('date-locale', plugin.rules['date-locale'], {
   invalid: [
     {
       name: 'flags a pinned locale on dates',
-      code: "d.toLocaleDateString('en-US'); d.toLocaleTimeString(['en-GB']); d.toLocaleString('en-US', { month: 'short' }); new Date().toLocaleString('en-US');",
-      errors: errors(4),
+      code: "d.toLocaleDateString('en-US'); d.toLocaleTimeString(['en-GB']); d.toLocaleString('en-US', { month: 'short' }); new Date().toLocaleString('en-US'); d.toLocaleString('en-US', { fractionalSecondDigits: 3 });",
+      errors: errors(5),
     },
     {
       name: 'flags a pinned locale on Intl.DateTimeFormat',
