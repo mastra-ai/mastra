@@ -643,7 +643,7 @@ function ReadOnlyConfigWithDiff({
             currentVars={variablesDiff.currentValue as Record<string, unknown> | undefined}
           />
         ) : (
-          <ReadOnlyVariables variables={variables} />
+          <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
         )}
       </TabContent>
 
