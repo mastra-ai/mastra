@@ -105,7 +105,7 @@ describe('createInngestAgent factory function', () => {
   });
 
   it.each(
-    (['durable', 'evented'] as const).flatMap(executionEngine =>
+    (['default', 'evented'] as const).flatMap(executionEngine =>
       [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
     ),
   )(
@@ -135,8 +135,7 @@ describe('createInngestAgent factory function', () => {
       expect(agent.getPubSub()).toBe(registered.pubsub);
       expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
       expect(wrapped.pubsub).not.toBe(registered.pubsub);
-      // Inngest has no core strategy accessor. Its Proxy must remain on the legacy compatibility path.
-      expect(Reflect.get(wrapped, '__getExecutionEngineStrategy')).toBeUndefined();
+      // Inngest's Proxy must remain on the legacy compatibility path.
       expect(isDurableAgentLike(wrapped)).toBe(true);
       host.addAgent(agent);
       expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);

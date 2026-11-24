@@ -37,52 +37,37 @@ html.light [data-composer-tone='orange'] {
   --composer-radius: calc(var(--composer-line-height) / 2);
 }
 
-/* Shadows only, never a border: a second edge shows as a double line. Layer counts match so states transition. */
+/* Shadows only, never a border: a second edge shows as a double line. Same drop as a menu, since text scrolls under it. */
 .composer-box {
-  --composer-rim: color-mix(in oklab, var(--placeholder) 32%, transparent);
-  --composer-rim-hover: color-mix(in oklab, var(--placeholder) 42%, transparent);
-  --composer-rim-focus: color-mix(in oklab, var(--placeholder) 52%, transparent);
-  --composer-drop:
-    0 1px 1px oklch(0% 0 0deg / 24%), 0 2px 4px -1px oklch(0% 0 0deg / 20%), 0 8px 16px -4px oklch(0% 0 0deg / 24%),
-    0 20px 40px -12px oklch(0% 0 0deg / 32%);
-  --composer-drop-lifted:
-    0 1px 1px oklch(0% 0 0deg / 26%), 0 3px 6px -1px oklch(0% 0 0deg / 22%), 0 12px 24px -6px oklch(0% 0 0deg / 28%),
-    0 28px 56px -16px oklch(0% 0 0deg / 40%);
+  --composer-rim: var(--overlay-rim);
+  --composer-rim-active: var(--border-strong);
   --scroll-area-scrollbar-inset: calc(var(--composer-radius) * 0.7);
 
   background-color: var(--muted);
   box-shadow:
     0 0 0 1px var(--composer-rim),
-    var(--composer-drop);
+    var(--elevation-overlay);
   transition: box-shadow var(--duration-normal) var(--ease-out-custom);
 }
 
 @media (hover: hover) {
   .composer-box:hover {
-    box-shadow:
-      0 0 0 1px var(--composer-rim-hover),
-      var(--composer-drop-lifted);
+    --composer-rim: var(--composer-rim-active);
   }
 }
 
 .composer-box:focus-within {
-  box-shadow:
-    0 0 0 1px var(--composer-rim-focus),
-    var(--composer-drop-lifted);
+  --composer-rim: var(--composer-rim-active);
 }
 
 html.light .composer-box {
-  --composer-rim: color-mix(in oklab, var(--border-strong) 32%, transparent);
-  --composer-rim-hover: color-mix(in oklab, var(--border-strong) 46%, transparent);
-  --composer-rim-focus: color-mix(in oklab, var(--border-strong) 58%, transparent);
-  --composer-drop:
-    0 1px 1px oklch(0% 0 0deg / 3%), 0 2px 4px -1px oklch(0% 0 0deg / 4%), 0 8px 16px -4px oklch(0% 0 0deg / 5%),
-    0 20px 40px -12px oklch(0% 0 0deg / 8%);
-  --composer-drop-lifted:
-    0 1px 1px oklch(0% 0 0deg / 4%), 0 3px 6px -1px oklch(0% 0 0deg / 5%), 0 12px 24px -6px oklch(0% 0 0deg / 7%),
-    0 28px 56px -16px oklch(0% 0 0deg / 12%);
+  --composer-rim-active: var(--overlay-rim);
 
   background-color: var(--card);
+}
+
+html.light .composer-box:not(:hover, :focus-within) {
+  --composer-rim: var(--surface-rim);
 }
 
 .composer-box::before {

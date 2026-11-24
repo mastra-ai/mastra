@@ -17,21 +17,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
     "deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -39,11 +24,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
       }
     ],
     "qwen3.8-max": [
@@ -73,6 +53,26 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
       }
     ]
   }

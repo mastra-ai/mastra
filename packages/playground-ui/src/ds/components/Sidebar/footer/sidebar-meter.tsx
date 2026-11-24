@@ -12,41 +12,29 @@ import './sidebar-meter.css';
 
 export type SidebarMeterTone = 'neutral' | 'warning' | 'danger';
 
-const NOISE =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")";
-
 const BLOOM_HEIGHT = 100;
 const BLOOM_HOLD_Y = 60;
 const BLOOM_HOLD_X = 22.5;
-const GRAIN_OPACITY = 0.18;
-const GRAIN_SIZE = 110;
 
 const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1];
 
+/** The neutral card is its plain fill; a bloom marks a card that needs attention. */
 const TONES = {
-  neutral: { colorVar: '--foreground', peak: 0.08, grain: true, text: 'text-muted-foreground' },
-  warning: {
-    colorVar: '--warning-indicator',
-    peak: 0.16,
-    grain: false,
-    text: 'text-warning-foreground',
-  },
-  danger: {
-    colorVar: '--destructive-indicator',
-    peak: 0.16,
-    grain: false,
-    text: 'text-destructive-foreground',
-  },
+  neutral: { bloom: undefined, text: 'text-muted-foreground' },
+  warning: { bloom: '--warning-indicator', text: 'text-warning-foreground' },
+  danger: { bloom: '--destructive-indicator', text: 'text-destructive-foreground' },
 };
+
+const BLOOM_PEAK = 0.16;
 
 function cubicFalloff(position: number) {
   const inverse = 1 - position;
   return inverse * inverse * inverse;
 }
 
-function easedBloom(colorVar: string, peak: number) {
+function easedBloom(colorVar: string) {
   const stops = FALLOFF_RAMP.map(position => {
-    const alpha = (peak * cubicFalloff(position) * 100).toFixed(2);
+    const alpha = (BLOOM_PEAK * cubicFalloff(position) * 100).toFixed(2);
     return `color-mix(in oklch, var(${colorVar}) ${alpha}%, transparent) ${(position * 100).toFixed(0)}%`;
   });
   return `linear-gradient(to right, ${stops.join(', ')})`;
@@ -62,8 +50,7 @@ function easedMask(direction: string, hold: number) {
 
 const BLOOM_MASK = `${easedMask('to bottom', BLOOM_HOLD_Y)}, ${easedMask('to right', BLOOM_HOLD_X)}`;
 
-function Bloom({ tone }: { tone: SidebarMeterTone }) {
-  const current = TONES[tone];
+function Bloom({ colorVar }: { colorVar: string }) {
   return (
     <span
       aria-hidden
@@ -71,24 +58,11 @@ function Bloom({ tone }: { tone: SidebarMeterTone }) {
       className="pointer-events-none absolute inset-x-0 top-0 -z-10"
       style={{
         height: BLOOM_HEIGHT,
-        backgroundImage: easedBloom(current.colorVar, current.peak),
+        backgroundImage: easedBloom(colorVar),
         maskImage: BLOOM_MASK,
         maskComposite: 'intersect',
       }}
-    >
-      {current.grain ? (
-        <span
-          aria-hidden
-          className="absolute inset-0"
-          style={{
-            backgroundImage: NOISE,
-            backgroundRepeat: 'repeat',
-            backgroundSize: `${GRAIN_SIZE}px ${GRAIN_SIZE}px`,
-            opacity: GRAIN_OPACITY,
-          }}
-        />
-      ) : null}
-    </span>
+    />
   );
 }
 
@@ -168,13 +142,13 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       aria-busy={loading || undefined}
       className={cn(
-        'relative isolate flex flex-col overflow-hidden rounded-lg border border-border bg-background px-2.25 py-2.5',
+        'relative isolate flex flex-col overflow-hidden rounded-lg bg-nested px-2.25 py-2.5',
         href && surfaceStateLayerStyle,
         className,
       )}
       {...props}
     >
-      <Bloom tone={tone} />
+      {current.bloom ? <Bloom colorVar={current.bloom} /> : null}
       {href && !loading ? (
         <Link
           href={href}

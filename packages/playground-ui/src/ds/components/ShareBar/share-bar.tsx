@@ -146,7 +146,7 @@ function ShareBarHeader({
     { label: valueLabel, width: valueWidth },
   ];
   return (
-    <div aria-hidden className="flex items-center justify-end gap-3 pt-3 pb-0.5 text-column text-placeholder">
+    <div aria-hidden className="flex items-center justify-end gap-3 pt-3 pb-0.5 text-column text-muted-foreground">
       {cells.map(cell => (
         <span key={cell.label} className={cn('shrink-0 text-right whitespace-nowrap', cell.width)}>
           {cell.label}

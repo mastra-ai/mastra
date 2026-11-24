@@ -132,17 +132,17 @@ describe('MainCard', () => {
   const classes = mainCardClasses();
 
   it('frames the content only from lg, where the sidebar sits beside it', () => {
-    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:p-px', 'lg:shadow-raised']));
+    expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:border', 'border-surface-rim']));
   });
 
-  it('is flat below lg: no rounding, rim padding or elevation outside the lg variant', () => {
-    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|p-|shadow)/.test(className));
+  it('keeps the mobile frame flat', () => {
+    const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|border$|shadow)/.test(className));
     expect(frameClasses).toEqual([]);
   });
 
   it('drops the frame when edge to edge', () => {
     const frameClasses = mainCardClasses({ edgeToEdge: true }).filter(className =>
-      /^(lg:)?(rounded|p-|shadow)/.test(className),
+      /^(lg:)?(rounded|border$|shadow)/.test(className),
     );
     expect(frameClasses).toEqual([]);
   });

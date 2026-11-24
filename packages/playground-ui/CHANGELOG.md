@@ -1,5 +1,76 @@
 # @mastra/playground-ui
 
+## 71.0.0-alpha.10
+
+### Minor Changes
+
+- Reworked the neutral colors in both themes. Supporting text is easier to read, and cards, menus and dialogs share one fill. Fields are the card color on the page and a light tint inside cards and dialogs. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+  Added color roles, so a class says what it paints:
+
+  - `text-subtle-foreground` for counts, timestamps and hints. `text-placeholder` is now only for input placeholders and disabled labels.
+  - `bg-nested` for a box inside a card, `bg-row` for table rows, `border-separator` for lines between rows.
+  - `text-icon` and `text-muted-icon` for the icon beside a label.
+
+  ```tsx
+  // Before
+  <div className="rounded-lg border border-border bg-background">…</div>
+  <span className="text-placeholder">12 runs</span>
+
+  // After
+  <div className="rounded-lg bg-nested">…</div>
+  <span className="text-subtle-foreground">12 runs</span>
+  ```
+
+  Removed the `--elevation-lip`, `--inset-highlight` and `--field-rim-on-surface` variables.
+
+### Patch Changes
+
+- Pan in both directions with two-finger scrolling on the Knowledge graph in Studio and Factory. Pinch or use the zoom controls to change magnification. ([#31224](https://github.com/mastra-ai/mastra/pull/31224))
+
+- Fixed the missing right border on Studio's agent side panel (threads and editor). ([#31209](https://github.com/mastra-ai/mastra/pull/31209))
+
+- Let Factory’s Knowledge graph fill its canvas behind floating controls and pan from the edges with a trackpad. Use the Workflow canvas background in Knowledge and preserve the rounded app frame around the full-width graph. ([#31210](https://github.com/mastra-ai/mastra/pull/31210))
+
+- Headless Connect in Studio now uses the Nango host returned with the connect session, so connecting accounts works against a self-hosted Nango. Without a host it keeps using Nango Cloud. The host must use HTTPS (plain HTTP is allowed for localhost). ([#31187](https://github.com/mastra-ai/mastra/pull/31187))
+
+- Fixed provider logos on the Agents list being almost invisible in dark mode. ([#31178](https://github.com/mastra-ai/mastra/pull/31178))
+
+- Fixed the missing shadow on the page card. It used the removed `--elevation-lip` variable. ([#31236](https://github.com/mastra-ai/mastra/pull/31236))
+
+- Fixed key symbols in shortcut hints looking smaller than the letters beside them. ⌘, ↵, ⌫, arrows and the other key symbols now match the letters' height in `Kbd`, `CommandShortcut`, `DropdownMenu.Shortcut`, `ContextMenu.Shortcut` and `Sidebar.SearchTrigger`, the same on every operating system. The gaps between keys are balanced too, and `⌘K` and `⌘ K` look the same. Screen readers announce the keys by name ("Command K"). No changes needed where shortcuts are rendered. ([#31216](https://github.com/mastra-ai/mastra/pull/31216))
+
+- `useChatSend()` now returns the same function for as long as the chat is mounted. Components can keep it, or list it as a dependency: it no longer changes on every streamed chunk, and it always sends with the chat's current agent and settings. ([#31138](https://github.com/mastra-ai/mastra/pull/31138))
+
+- Show an animated Knowledge graph while Factory and Studio load. Show a still illustration when reduced motion is enabled. ([#31207](https://github.com/mastra-ai/mastra/pull/31207))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+  - @mastra/memory@1.41.3-alpha.3
+  - @mastra/client-js@1.61.2-alpha.7
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/react@1.16.0-alpha.7
+
+## 71.0.0-alpha.9
+
+### Minor Changes
+
+- Dashboard chart widgets with several views, such as Latency, Agent runs and Token usage on the Metrics page, now list them as pill tabs under the title instead of a dropdown in the title, matching the Breakdown table. Tabs sit on the left of the toolbar with the legend on the right; views that don't fit fold into a "+N" menu. Tab names drop the words views share, so "Agent latency", "Workflow latency" and "Tool latency" read "Agent", "Workflow" and "Tool". Multi-view widgets can now be renamed from their title. Widgets with an expand link keep a single title and no tabs. Custom widget kinds built on `useViewMenu` get the tabs through `heading.toolbar`. ([#31181](https://github.com/mastra-ai/mastra/pull/31181))
+
+### Patch Changes
+
+- Metrics cards now wait for all their requests before reporting a failure. The "Resources and threads" and breakdown cards used to show "Couldn't load this data" as soon as one of their requests failed, even while another was still running. Retry re-sends only the requests that failed, so a request that failed later left the card stuck until a second click. Cards now report the failure once every request behind them has settled, and one Retry recovers them. A request that fails after that click is the next click's job. ([#28982](https://github.com/mastra-ai/mastra/pull/28982))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`c736a22`](https://github.com/mastra-ai/mastra/commit/c736a22be04a3960793a86d9fff2cbc6ad8c2227), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/ai-sdk@1.12.1-alpha.0
+  - @mastra/client-js@1.61.2-alpha.6
+  - @mastra/core@1.86.0-alpha.6
+  - @mastra/json-render@0.2.0-alpha.1
+  - @mastra/memory@1.41.3-alpha.2
+  - @mastra/react@1.16.0-alpha.6
+
 ## 71.0.0-alpha.8
 
 ### Patch Changes

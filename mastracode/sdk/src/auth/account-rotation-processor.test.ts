@@ -1133,6 +1133,22 @@ describe('model-route fallback parts', () => {
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
+  it('does not hop on a Codex Fast rejection when the route uses the canonical ID', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-6.2-sol:fast',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-6.2-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+  });
+
   it('returns retry false when no route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({

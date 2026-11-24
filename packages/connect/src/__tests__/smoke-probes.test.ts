@@ -170,6 +170,20 @@ describe('smoke probes', () => {
       });
     });
 
+    it('sends every report to the property it names', async () => {
+      answer = providerRejection;
+
+      await runGoogleAnalyticsScenario();
+
+      const reports = requests.filter(request => request.target.includes(':'));
+      expect(reports.map(request => `${request.method} ${request.target}`).sort()).toEqual([
+        'POST /v1beta/properties/0:batchRunReports',
+        'POST /v1beta/properties/0:runPivotReport',
+        'POST /v1beta/properties/0:runRealtimeReport',
+        'POST /v1beta/properties/0:runReport',
+      ]);
+    });
+
     it('fails the universal metadata read when Google rejects it', async () => {
       answer = providerRejection;
 

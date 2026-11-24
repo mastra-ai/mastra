@@ -181,6 +181,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       # Same decision as Detect code changes. When only git could decide (stacked PRs, very
       # large PRs, API errors), build anyway: a wasted build beats a missing one.
       - name: Check for code changes
@@ -437,6 +443,12 @@ jobs:
         timeout-minutes: 20
         with:
           ref: ${{ needs.changes.outputs.head_sha }}
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
