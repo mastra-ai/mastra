@@ -7,6 +7,7 @@ import { Command } from 'commander';
 import { PosthogAnalytics, setAnalytics } from 'mastra/dist/analytics/index.js';
 
 import { create } from './create.js';
+import { isProjectRegion, PROJECT_REGIONS } from './platform.js';
 import { redactError } from './utils/redact.js';
 import { versionTagForAnalytics } from './utils/versions.js';
 
@@ -41,7 +42,7 @@ program
   )
   .option('--no-platform', 'Skip Mastra platform provisioning and scaffold the self-hosted template')
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
-  .option('--region <region>', 'Platform project region (eu or us); defaults to us')
+  .option('--region <region>', `Platform project region (${PROJECT_REGIONS.join(', ')}); defaults to us`)
   .option(
     '--tag <dist-tag>',
     'Pin the Mastra packages to the versions published under this npm dist-tag (e.g. latest, alpha)',
@@ -49,7 +50,7 @@ program
   .version(pkg.version, '-v, --version')
   .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
     const region = args.region ? String(args.region) : undefined;
-    const validRegion = region === 'eu' || region === 'us' ? region : undefined;
+    const validRegion = region !== undefined && isProjectRegion(region) ? region : undefined;
     const versionTag = args.tag?.trim() || undefined;
     const analyticsVersionTag = versionTagForAnalytics(versionTag);
     // Values that must never reach analytics if a failure message echoes them.

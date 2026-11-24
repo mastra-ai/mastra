@@ -418,22 +418,26 @@ describe('environment resolution', () => {
     selectMock.mockReset().mockResolvedValue('eu');
   });
 
-  it('prompts for a region when the requested environment must be created', async () => {
-    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'preview', false)).resolves.toEqual({
+  it.each(['production', 'staging', 'preview'])('uses default placement without a region prompt for %s', async name => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', name, false)).resolves.toEqual({
       existing: false,
-      name: 'preview',
-      type: 'preview',
-      region: 'eu',
+      name,
+      type: name,
     });
 
-    expect(selectMock).toHaveBeenCalledWith({
-      message: 'Select a deployment region',
-      initialValue: 'us',
-      options: [
-        { value: 'us', label: 'United States' },
-        { value: 'eu', label: 'Europe' },
-      ],
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('does not relocate an existing environment when a different region is requested', async () => {
+    const environment = { id: 'env-1', name: 'production', type: 'production', region: 'ams' };
+    fetchEnvironmentsMock.mockResolvedValue([environment]);
+
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', false, 'iad')).resolves.toEqual({
+      existing: true,
+      environment,
     });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
   });
 
   it('uses an explicitly requested region without prompting', async () => {

@@ -1,6 +1,11 @@
 import { MASTRA_PLATFORM_API_URL, authHeaders, extractApiErrorDetail, platformFetch } from 'mastra/internal/auth';
 
-export type ProjectRegion = 'eu' | 'us';
+export const PROJECT_REGIONS = ['us', 'eu', 'pdx', 'iad', 'sfo', 'ams'] as const;
+export type ProjectRegion = (typeof PROJECT_REGIONS)[number];
+
+export function isProjectRegion(region: string): region is ProjectRegion {
+  return PROJECT_REGIONS.some(value => value === region);
+}
 
 export interface PlatformProject {
   id: string;

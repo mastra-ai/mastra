@@ -1058,24 +1058,6 @@ export async function resolveNonFactoryTarget(input: {
   return choice;
 }
 
-async function promptDeployRegion(): Promise<string> {
-  const selectedRegion = await p.select({
-    message: 'Select a deployment region',
-    initialValue: 'us',
-    options: [
-      { value: 'us', label: 'United States' },
-      { value: 'eu', label: 'Europe' },
-    ],
-  });
-
-  if (p.isCancel(selectedRegion)) {
-    p.cancel('Deploy cancelled.');
-    process.exit(0);
-  }
-
-  return selectedRegion;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
@@ -1120,12 +1102,7 @@ export async function resolveEnvironment(
     }
   }
 
-  let region = requestedRegion;
-  if (!region && !autoAccept) {
-    region = await promptDeployRegion();
-  }
-
-  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
+  return { existing: false, name: envName, type: envType, ...(requestedRegion ? { region: requestedRegion } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1573,9 +1550,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   let projectId: string;
   let projectName: string;
   let projectSlug: string;
-  // Region for a newly created environment. A new Factory project asks for
-  // it once and reuses the answer for both the project and the environment.
-  let requestedRegion = opts.region;
+  // Only the explicit flag sets placement for new projects and environments.
+  const requestedRegion = opts.region;
 
   if (resolution.existing) {
     projectId = resolution.projectId;
@@ -1605,10 +1581,6 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         p.cancel('Deploy cancelled.');
         process.exit(0);
       }
-    }
-
-    if (isFactoryProject && !requestedRegion && !autoAccept) {
-      requestedRegion = await promptDeployRegion();
     }
 
     // Create the project
