@@ -77,9 +77,7 @@ function StudioThreadFeatures({
     requestContext,
   });
   const { mutateAsync: branchThread, isPending: isBranching } = useBranchThread({ requestContext });
-  const canBranch = Boolean(
-    props.agentId && props.threadId && props.threadId !== 'new' && branchLineage?.isSupported,
-  );
+  const canBranch = Boolean(props.agentId && props.threadId && props.threadId !== 'new' && branchLineage?.isSupported);
   const branchMarkers = buildBranchForkMarkers(branchLineage);
 
   // Only persisted messages have UUID ids; the chat accumulator renders
@@ -106,9 +104,7 @@ function StudioThreadFeatures({
       <BranchFromMessageAction
         disabled={isBranching}
         onBranch={() => {
-          handleBranchFromMessage(message.id).catch(() =>
-            toast.error('Failed to branch thread'),
-          );
+          handleBranchFromMessage(message.id).catch(() => toast.error('Failed to branch thread'));
         }}
       />
     ) : null;
@@ -118,11 +114,7 @@ function StudioThreadFeatures({
     const markers = branchMarkers.get(message.id);
     if (!markers?.length) return null;
     return markers.map(marker => (
-      <BranchForkMarker
-        key={`${marker.kind}-${marker.targetThreadId}`}
-        marker={marker}
-        agentId={props.agentId!}
-      />
+      <BranchForkMarker key={`${marker.kind}-${marker.targetThreadId}`} marker={marker} agentId={props.agentId!} />
     ));
   };
 
