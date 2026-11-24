@@ -180,6 +180,32 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     ),
     'rate_limited',
   ],
+  [
+    'Gemini free-tier per-day quota on 429 with a short retry hint',
+    apiError(
+      429,
+      'You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 50, model: gemini-2.5-pro\nPlease retry in 34.88s.',
+      JSON.stringify({
+        error: {
+          code: 429,
+          status: 'RESOURCE_EXHAUSTED',
+          details: [
+            {
+              '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
+              violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '50' }],
+            },
+            { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '34s' },
+          ],
+        },
+      }),
+    ),
+    'quota',
+  ],
+  [
+    'usage cap whose retry hint is a week away',
+    { name: 'AI_APICallError', message: 'Usage limit reached. Please retry in 10080 minutes.' },
+    'quota',
+  ],
   ['402', apiError(402, 'Payment Required'), 'quota'],
   [
     'message-only insufficient balance',
