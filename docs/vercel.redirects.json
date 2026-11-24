@@ -1,6 +1,96 @@
 {
   "redirects": [
     {
+      "source": "/learn",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/what-is-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/run-your-first-agent",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/learn/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-an-agent",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/create-a-tool",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-with-ai",
+      "destination": "/reference/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/learn/fetch-live-data",
+      "destination": "/docs/agents/tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/connect-to-mcp",
+      "destination": "/docs/connections/mcp",
+      "permanent": true
+    },
+    {
+      "source": "/learn/build-a-workflow",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-vs-workflows",
+      "destination": "/docs/workflows/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/agents-in-workflows",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/learn/how-memory-works",
+      "destination": "/docs/memory/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/observational-memory",
+      "destination": "/docs/memory/observational-memory",
+      "permanent": true
+    },
+    {
+      "source": "/learn/guardrails-with-processors",
+      "destination": "/docs/agents/guardrails",
+      "permanent": true
+    },
+    {
+      "source": "/learn/deploy-to-mastra-platform",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/learn/chat-with-agent-in-slack",
+      "destination": "/integrations/channels/slack",
+      "permanent": true
+    },
+    {
+      "source": "/learn/:path*",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections",
       "destination": "/docs/mastra-platform/connect",
       "permanent": false

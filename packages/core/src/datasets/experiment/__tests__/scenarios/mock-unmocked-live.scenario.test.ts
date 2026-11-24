@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recordingTool, runToolMockScenario } from './scenario-helpers';
+import { EXPERIMENT_PATHS, recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
  * BDD scenario: tools without a mock still run live; mocking is opt-in per tool.
@@ -9,11 +9,12 @@ import { recordingTool, runToolMockScenario } from './scenario-helpers';
  * Then getWeather is served from the mock, lookupOrder executes live, the item
  *      passes, and the report records the live call.
  */
-describe('Tool mock scenario: unmocked tools run live', () => {
+describe.each(EXPERIMENT_PATHS)('Tool mock scenario: unmocked tools run live (%s)', path => {
   it('serves the mocked tool and runs the unmocked tool live; item passes', async () => {
     const liveLog: string[] = [];
 
     const { summary, item } = await runToolMockScenario({
+      path,
       tools: {
         getWeather: recordingTool('getWeather', liveLog),
         lookupOrder: recordingTool('lookupOrder', liveLog),
@@ -46,6 +47,7 @@ describe('Tool mock scenario: unmocked tools run live', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { lookupOrder: recordingTool('lookupOrder', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'lookupOrder', args: { id: 'A-1' } }] }, { text: 'done' }],
       // no toolMocks
@@ -54,6 +56,6 @@ describe('Tool mock scenario: unmocked tools run live', () => {
     expect(item.error).toBeNull();
     expect(liveLog).toEqual(['lookupOrder']);
     // Mock-free runs behave exactly as before: no report attached.
-    expect(item.toolMockReport).toBeUndefined();
+    expect(item.toolMockReport).toBeNull();
   });
 });

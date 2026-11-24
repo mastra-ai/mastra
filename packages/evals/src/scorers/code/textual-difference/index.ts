@@ -15,29 +15,42 @@ function calculateRatio(input: string, output: string): number {
   }
 
   // Use character-level LCS for more accurate matching (similar to SequenceMatcher)
-  const matches = longestCommonSubsequence(input, output);
+  const matches = longestCommonSubsequence(input.split(''), output.split(''));
   const total = input.length + output.length;
 
   return total > 0 ? (2.0 * matches) / total : 0.0;
 }
 
 /**
- * Finds the length of the longest common subsequence between two strings
+ * Finds the length of the longest common subsequence between two lists of characters or words
  * Only the previous row of the DP table is needed, so memory stays linear
  */
-function longestCommonSubsequence(str1: string, str2: string): number {
-  let previous = new Uint32Array(str2.length + 1);
-  let current = new Uint32Array(str2.length + 1);
+function longestCommonSubsequence(first: string[], second: string[]): number {
+  // Each distinct item gets a number, because numbers compare faster than strings
+  const codes = new Map<string, number>();
+  const encode = (items: string[]) =>
+    new Uint32Array(
+      items.map(item => {
+        const code = codes.get(item) ?? codes.size;
+        codes.set(item, code);
+        return code;
+      }),
+    );
+  const firstCodes = encode(first);
+  const secondCodes = encode(second);
 
-  for (let i = 1; i <= str1.length; i++) {
-    const char = str1[i - 1];
-    for (let j = 1; j <= str2.length; j++) {
-      current[j] = char === str2[j - 1] ? previous[j - 1]! + 1 : Math.max(previous[j]!, current[j - 1]!);
+  let previous = new Uint32Array(secondCodes.length + 1);
+  let current = new Uint32Array(secondCodes.length + 1);
+
+  for (let i = 1; i <= firstCodes.length; i++) {
+    const code = firstCodes[i - 1];
+    for (let j = 1; j <= secondCodes.length; j++) {
+      current[j] = code === secondCodes[j - 1] ? previous[j - 1]! + 1 : Math.max(previous[j]!, current[j - 1]!);
     }
     [previous, current] = [current, previous];
   }
 
-  return previous[str2.length]!;
+  return previous[secondCodes.length]!;
 }
 
 /**
@@ -77,31 +90,11 @@ function countChanges(input: string, output: string): number {
 
   // Use LCS approach: changes = total - 2 * matches
   // But for word-level, we want to count replacements as single changes
-  const matchingWords = findCommonWords(inputWords, outputWords);
+  const matchingWords = longestCommonSubsequence(inputWords, outputWords);
   const maxLength = Math.max(inputWords.length, outputWords.length);
   const changes = maxLength - matchingWords;
 
   return changes;
-}
-
-/**
- * Finds the number of common words between two arrays using a greedy matching approach
- */
-function findCommonWords(arr1: string[], arr2: string[]): number {
-  let matches = 0;
-  const used = new Set<number>();
-
-  for (let i = 0; i < arr1.length; i++) {
-    for (let j = 0; j < arr2.length; j++) {
-      if (!used.has(j) && arr1[i] === arr2[j]) {
-        matches++;
-        used.add(j);
-        break;
-      }
-    }
-  }
-
-  return matches;
 }
 
 export function createTextualDifferenceScorer() {

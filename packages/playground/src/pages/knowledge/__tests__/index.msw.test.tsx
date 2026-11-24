@@ -183,6 +183,22 @@ describe('Knowledge page', () => {
     });
   });
 
+  describe('when a trackpad pinch reaches a zoom limit', () => {
+    it.each([
+      { button: 'Zoom out', deltaY: 4000, limit: 0.1 },
+      { button: 'Zoom in', deltaY: -4000, limit: 2 },
+    ])('disables $button', async ({ button, deltaY, limit }) => {
+      const { pane, position } = await renderGestureCanvas();
+      const control = screen.getByRole('button', { name: button });
+      expect(control.hasAttribute('disabled')).toBe(false);
+
+      fireEvent.wheel(pane, { ctrlKey: true, deltaY });
+
+      await waitFor(() => expect(position().zoom).toBe(limit));
+      expect(control.hasAttribute('disabled')).toBe(true);
+    });
+  });
+
   describe('when the server sends grants between scopes', () => {
     it('draws a grant line naming the role, from a placeholder for the unwritten principal', async () => {
       withInstance(knowledgeGraphWithGrants);

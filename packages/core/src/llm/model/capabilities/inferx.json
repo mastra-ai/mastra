@@ -35,12 +35,12 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4-flash": [
+    "Qwen3.6-27B-FP8": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen3.6-27B-FP8": [
+    "deepseek-v4-flash": [
       {
         "type": "toggle"
       }
