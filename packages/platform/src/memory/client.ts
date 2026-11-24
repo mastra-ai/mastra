@@ -1,3 +1,4 @@
+import { addAbortListener } from 'node:events';
 import type { PlatformAccessToken } from '@mastra/platform-workspace';
 
 export interface PlatformMemoryClientOptions {
@@ -385,19 +386,35 @@ export class PlatformMemoryClient {
     for (const [key, value] of Object.entries(init.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
-    const token = typeof this.opts.accessToken === 'function' ? await this.opts.accessToken() : this.opts.accessToken;
+    const deadline = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
+    const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
+    signal.throwIfAborted();
+
+    const getToken = this.opts.accessToken;
+    let token = getToken;
+    if (typeof getToken === 'function') {
+      let listener: ReturnType<typeof addAbortListener> | undefined;
+      const aborted = new Promise<never>((_, reject) => {
+        listener = addAbortListener(signal, () => reject(signal.reason));
+      });
+      try {
+        token = await Promise.race([aborted, new Promise<string>(resolve => resolve(getToken.call(this.opts)))]);
+      } finally {
+        listener?.[Symbol.dispose]();
+      }
+      signal.throwIfAborted();
+    }
     const headers: Record<string, string> = { authorization: `Bearer ${token}` };
     if (this.opts.actingUserId) headers['x-acting-user-id'] = this.opts.actingUserId;
     if (this.opts.projectId) headers['x-mastra-project-id'] = this.opts.projectId;
     if (this.opts.environmentId) headers['x-mastra-environment-id'] = this.opts.environmentId;
     if (init.body !== undefined) headers['content-type'] = 'application/json';
 
-    const deadline = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const res = await this.opts.fetch(url, {
       method,
       headers,
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
+      signal,
     });
     if (!res.ok) throw new PlatformMemoryApiError(res.status, await res.text().catch(() => ''));
     if (res.status === 204) return undefined as T;

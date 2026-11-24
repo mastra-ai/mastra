@@ -1,3 +1,5 @@
+import { addAbortListener } from 'node:events';
+
 /** A Platform access token, or a function that returns a fresh one for each request. */
 export type PlatformAccessToken = string | (() => string | Promise<string>);
 
@@ -175,8 +177,25 @@ export class PlatformClient {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
 
+    // Long-running routes (exec) supply their own signal instead of the default timeout.
+    const signal = options.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
+    signal.throwIfAborted();
+
     const headers = new Headers(options.headers);
-    const token = typeof this.accessToken === 'function' ? await this.accessToken() : this.accessToken;
+    const getToken = this.accessToken;
+    let token = getToken;
+    if (typeof getToken === 'function') {
+      let listener: ReturnType<typeof addAbortListener> | undefined;
+      const aborted = new Promise<never>((_, reject) => {
+        listener = addAbortListener(signal, () => reject(signal.reason));
+      });
+      try {
+        token = await Promise.race([aborted, new Promise<string>(resolve => resolve(getToken.call(this)))]);
+      } finally {
+        listener?.[Symbol.dispose]();
+      }
+      signal.throwIfAborted();
+    }
     headers.set('authorization', `Bearer ${token}`);
     if (this.actingUserId) headers.set('x-acting-user-id', this.actingUserId);
     // Advisory correlation headers — the proxy folds them into its log lines
@@ -188,9 +207,6 @@ export class PlatformClient {
 
     // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
     const { query: _query, ...fetchOptions } = options;
-    // Apply a default timeout only when the caller didn't already supply an
-    // AbortSignal — long-running routes (exec) provide their own longer signal.
-    const signal = fetchOptions.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
     const response = await this.fetch(url, { ...fetchOptions, headers, signal });
     if (!response.ok) {
       throw new PlatformApiError(response.status, await response.text());
