@@ -1882,7 +1882,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         setSandboxUser: async ({ sessionId, userId }) => {
           const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, current => {
             if (current.sandbox_actor_set && (current.sandbox_user_id ?? null) === userId) return null;
-            if (current.sandbox_actor_set || current.sandbox_id || current.materialized_at) {
+            if (current.sandbox_user_id || current.sandbox_id || current.materialized_at) {
               throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
             }
             return { sandbox_user_id: userId, sandbox_actor_set: true, updated_at: new Date() };

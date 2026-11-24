@@ -63,6 +63,7 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import { sandboxHostMayUseCredentialVault } from './sandbox/vault-host.js';
 import {
   assertVaultSandboxCaller,
   bindSandboxOwner,
@@ -78,6 +79,7 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
+import { isFactoryPrincipalId } from './storage/domains/projects/base.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
@@ -1205,16 +1207,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // (the first thing that would start or use the VM) refuses unless the mode
     // is known to be token.
     const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
+    const mayUseCredentialVault = sandboxHostMayUseCredentialVault(sandboxConfig.provider);
     const credentialCaller = (callerId: string | undefined) =>
-      callerId === session.userId ? sessionSandboxUser(session) : callerId;
+      callerId === session.userId && isFactoryPrincipalId(session.userId) ? sessionSandboxUser(session) : callerId;
     const ownsVault = (callerId: string | undefined) =>
       (credentialCaller(callerId) !== undefined &&
         credentialCaller(callerId) === sandboxOwner(vaultSandbox, sessionSandboxUser(session))) ||
-      !('vault' in vaultSandbox);
+      (!mayUseCredentialVault && !('vault' in vaultSandbox));
     const vaultCaller = (callerId: string | undefined) => ({
       ownerId: sessionSandboxUser(session),
       callerId: credentialCaller(callerId),
       sessionId: session.sessionId,
+      mayUseCredentialVault,
     });
     if (!ownsVault(userId)) {
       // Refuse here only once the mode is known to be vault; an unknown mode

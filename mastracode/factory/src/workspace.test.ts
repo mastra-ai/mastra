@@ -1266,7 +1266,10 @@ describe('GitHub session workspace preparation', () => {
       input: { path },
       context: {
         requestContext: {
-          controller: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
+          get: (key: string) =>
+            key === 'controller'
+              ? { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } }
+              : requestContext.get(key),
         },
       },
     });
@@ -2986,6 +2989,31 @@ describe('GitHub session workspace preparation', () => {
         expect(mocks.createSandbox.mock.results[0]!.value.start).not.toHaveBeenCalled();
       });
 
+      it.each(['eager', 'lazy'] as const)(
+        'refuses a non-owner custom sandbox without a vault field (%s start)',
+        async sandboxStart => {
+          mocks.vault = 'absent';
+          const github = fakeGithubIntegration();
+          const resolver = createWorkspaceFactory({
+            sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+            github: github as any,
+            sandboxStart,
+          });
+          addProject();
+          addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+          const viewed = await resolver({
+            requestContext: createGithubRequestContext('project-1', 'session-a', member),
+          });
+          await new Promise(resolve => setTimeout(resolve, 0));
+          const sandbox = mocks.createSandbox.mock.results[0]!.value;
+          expect(sandbox.start).not.toHaveBeenCalled();
+          await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+          expect(sandbox.start).not.toHaveBeenCalled();
+          expect(await toolCall(viewed, owner)).toBeUndefined();
+        },
+      );
+
       it('opens a vault session for its owner', async () => {
         mocks.vault = true;
         const { workspace } = await createLocalFactory();
@@ -3046,6 +3074,19 @@ describe('GitHub session workspace preparation', () => {
           expect(sandbox.exec).not.toHaveBeenCalled();
         },
       );
+
+      it('does not delegate a transferred card session owner to the previous human starter', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org', sandboxUserId: 'owner-1' });
+        const opened = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        row.userId = 'member-2';
+        await expect(toolCall(opened, member)).rejects.toThrow(notAvailable);
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+      });
 
       it("gives the new owner a sandbox of their own once a takeover releases the old owner's", async () => {
         mocks.vault = true;

@@ -572,7 +572,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const session = this.sessionsRows.find(row => row.sessionId === sessionId);
       if (!session) throw new Error(`Factory session ${sessionId} not found`);
       if (session.sandboxUserId === userId) return session;
-      if (session.sandboxUserId !== undefined || session.sandboxId || session.materializedAt) {
+      if (session.sandboxUserId || session.sandboxId || session.materializedAt) {
         throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
       }
       const updated = { ...session, sandboxUserId: userId, updatedAt: new Date() };

@@ -46,7 +46,29 @@ describe.each(['libsql', 'inmemory'] as const)('sandbox credential attribution (
     return { store, session };
   }
 
-  it.each(['starter-1', null])('keeps the first card actor immutable, including automation (%s)', async userId => {
+  it('lets an explicit human approval claim an unattributed session before any VM exists', async () => {
+    const { store, session } = await setup();
+    await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: null });
+    await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: 'approver-1' });
+    expect((await store.sessions.getBySessionId(session.sessionId))?.sandboxUserId).toBe('approver-1');
+  });
+
+  it.each(['sandbox', 'materialized'] as const)('never reattributes automation after %s', async state => {
+    const { store, session } = await setup();
+    await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: null });
+    if (state === 'sandbox') {
+      await store.sessions.setSandbox({ id: session.id, sandboxId: 'automation-vm', sandboxWorkdir: '/workspace' });
+    } else {
+      await store.sessions.markMaterialized({ id: session.id });
+    }
+    await expect(store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: 'approver-1' })).rejects.toThrow(
+      'cannot change',
+    );
+    expect((await store.sessions.getBySessionId(session.sessionId))?.sandboxUserId).toBeNull();
+  });
+
+  it('keeps an authenticated human actor immutable', async () => {
+    const userId = 'starter-1';
     const { store, session } = await setup();
     await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId });
     await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId });

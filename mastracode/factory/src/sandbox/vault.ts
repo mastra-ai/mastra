@@ -1,4 +1,5 @@
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import { sandboxHostMayUseCredentialVault } from './vault-host.js';
 
 /** Card sessions delegate only to their durably recorded human starter. */
 export function sessionSandboxUser(session: { userId?: string; sandboxUserId?: string | null }): string | undefined {
@@ -84,9 +85,19 @@ export async function assertVaultSandboxCaller(
     ownerId,
     callerId,
     sessionId,
-  }: { ownerId: string | null | undefined; callerId: string | undefined; sessionId: string },
+    mayUseCredentialVault = sandboxHostMayUseCredentialVault((sandbox as { provider?: string }).provider ?? 'custom'),
+  }: {
+    ownerId: string | null | undefined;
+    callerId: string | undefined;
+    sessionId: string;
+    mayUseCredentialVault?: boolean;
+  },
 ): Promise<void> {
-  if (!('vault' in sandbox) || (callerId !== undefined && callerId === sandboxOwner(sandbox, ownerId))) return;
+  if (
+    (!mayUseCredentialVault && !('vault' in sandbox)) ||
+    (callerId !== undefined && callerId === sandboxOwner(sandbox, ownerId))
+  )
+    return;
   const reporting = sandbox as VaultReportingSandbox;
   if (reporting.vault === undefined && typeof reporting.refreshVault === 'function') {
     try {
