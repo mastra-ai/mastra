@@ -12,10 +12,9 @@
     "MiniMax-M3.1-Flash-Preview"
   ],
   "reasoning": {
-    "MiniMax-M3.1-Flash-Preview": [
+    "MiniMax-M3": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "MiniMax-M3.1-Flash": [
@@ -24,9 +23,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "MiniMax-M3": [
+    "MiniMax-M3.1-Flash-Preview": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

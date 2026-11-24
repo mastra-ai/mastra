@@ -73,28 +73,19 @@
     "accounts/fireworks/routers/qwen-max-latest"
   ],
   "reasoning": {
-    "accounts/fireworks/routers/qwen-max-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": [
+    "accounts/fireworks/routers/kimi-k3-fast": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-5p3-spot": [
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/glm-latest": [
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -106,13 +97,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/kimi-k3-fast": [
+    "accounts/fireworks/routers/deepseek-flash-latest": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/minimax-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "accounts/fireworks/routers/deepseek-v4p1-flash-spot": [
@@ -130,16 +127,43 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/minimax-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
+    "accounts/fireworks/routers/kimi-latest": [
       {
         "type": "toggle"
       },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/qwen-max-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-fast": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/kimi-k3-spot": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-spot": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -154,7 +178,7 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/deepseek-flash-latest": [
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": [
       {
         "type": "toggle"
       },
@@ -163,34 +187,25 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-5p3-fast": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-latest": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-k3-spot": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
+    "accounts/fireworks/models/qwen3p8-max": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/models/kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/minimax-m3p1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "accounts/fireworks/models/muse-spark-open": [
@@ -208,16 +223,7 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/deepseek-v4p1-flash-1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/kimi-k3": [
+    "accounts/fireworks/models/ember-1": [
       {
         "type": "toggle"
       },
@@ -226,25 +232,13 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/minimax-m3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "accounts/fireworks/models/minimax-m3p1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "accounts/fireworks/models/glm-5p3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/qwen3p8-max": [
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
@@ -259,16 +253,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/ember-1": [
-      {
-        "type": "toggle"
-      },
+    "accounts/fireworks/models/minimax-m3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "accounts/fireworks/models/glm-5p3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]

@@ -43,7 +43,7 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "grok-4.7": [
+    "grok-4.20-multi-agent-0309": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
@@ -55,7 +55,7 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "grok-4.20-multi-agent-0309": [
+    "grok-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]

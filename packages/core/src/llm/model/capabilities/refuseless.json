@@ -21,6 +21,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "deepseek-v4.1-flash-abliterated": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-v4.1-flash-fast": [
       {
         "type": "effort",
@@ -37,12 +43,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash-abliterated": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ]
   }

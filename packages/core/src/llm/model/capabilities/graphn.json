@@ -11,7 +11,16 @@
   ],
   "structuredOutput": ["qwen3-80b", "qwen3-vl", "qwen3.8-27b"],
   "reasoning": {
-    "qwen3-vl": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma-4-e4b": [
       {
         "type": "toggle"
       }
@@ -22,9 +31,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemma-4-e4b": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.8-27b": [
@@ -36,19 +46,9 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "qwen3-vl": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }
