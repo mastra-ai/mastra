@@ -3728,7 +3728,8 @@ Notes:
 
     cloned.threadId = newThreadId;
     cloned.resourceId = newResourceId;
-    // New IDs reorder timestamp ties, so the clone cannot reuse any source tuple boundary.
+    // New IDs reorder timestamp ties. Remapped observed IDs, not the source time/cursor, define the clone's boundary.
+    cloned.lastObservedAt = undefined;
     if (cloned.metadata?.observationHistory) {
       delete cloned.metadata.observationHistory;
     }

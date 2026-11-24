@@ -82,6 +82,34 @@ async function finishCatchUp(om: NonNullable<Awaited<Memory['omEngine']>>) {
 }
 
 describe('bounded initial observation history', () => {
+  it('observes an unread timestamp tie in a clone without re-observing the source prefix', async () => {
+    const { om, rows, store, open, model } = await setup('thread', false, true, 100_000);
+    const record = (await om.getRecord(threadId, resourceId))!;
+    await store.commitActiveObservations({
+      id: record.id,
+      observations: 'The first fact was observed.',
+      tokenCount: 8,
+      lastObservedAt: timestamp,
+      observedMessageIds: [rows[0]!.id],
+      observationHistory: { after: { createdAt: timestamp.toISOString(), id: rows[0]!.id } },
+      expectedActiveObservations: record.activeObservations,
+    });
+    const memory = open();
+    const { thread } = await memory.cloneThread({ sourceThreadId: threadId });
+    const cloned = (await memory.omEngine)!;
+    const observer = vi.spyOn(model, 'doStream');
+    const result = await cloned.observe({ threadId: thread.id, resourceId, force: true });
+    expect(result.observed).toBe(true);
+    const prompt = JSON.stringify(observer.mock.calls[0]![0].prompt);
+    expect(prompt).toContain('Fact 1.');
+    expect(prompt).not.toContain('Fact 0.');
+    const copied = (await memory.recall({ threadId: thread.id, resourceId, perPage: false })).messages;
+    const unread = copied.find(row =>
+      row.content.parts.some(part => part.type === 'text' && part.text.startsWith('Fact 1.')),
+    )!;
+    expect(result.record.observedMessageIds).toContain(unread.id);
+  });
+
   it('drops a source tuple cutoff when cloning tied excluded and retained messages', async () => {
     const { om, rows, open } = await setup('thread', false, false);
     const retained = await om.loadUnobservedMessages({ threadId, resourceId });

@@ -9,6 +9,44 @@ import { MemoryLibSQL } from './index';
 const createdAt = new Date('2026-01-01T00:00:00Z');
 
 describe('bounded observational history in LibSQL', () => {
+  it.each(['asc', 'desc'] as const)('preserves %s timestamp/id order across exclusive cursor pages', async order => {
+    const client = createClient({ url: ':memory:' });
+    const store = new MemoryLibSQL({ client });
+    try {
+      await store.init();
+      await store.saveThread({
+        thread: { id: 'paged', title: 'Paged', resourceId: 'resource', createdAt, updatedAt: createdAt },
+      });
+      const ids = Array.from({ length: 85 }, (_, i) => `row-${String(i).padStart(3, '0')}`);
+      await store.saveMessages({
+        messages: ids.map((id, i) => ({
+          id,
+          threadId: 'paged',
+          resourceId: 'resource',
+          role: 'user',
+          createdAt: new Date(createdAt.getTime() + Math.floor(i / 2)),
+          content: { format: 2, parts: [{ type: 'text', text: id }] },
+        })),
+      });
+      const expected = order === 'desc' ? [...ids].reverse() : ids;
+      let cursor: { id: string; createdAt: string } | undefined;
+      for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
+        const page = await store.listObservationHistory({
+          threadId: 'paged',
+          order,
+          limit: 40,
+          ...(order === 'desc' ? { before: cursor } : { after: cursor }),
+        });
+        expect(page.messages.map(row => row.id)).toEqual(expected.slice(pageIndex * 40, (pageIndex + 1) * 40));
+        expect(page.hasMore).toBe(pageIndex < 2);
+        const last = page.messages.at(-1)!;
+        cursor = { id: last.id, createdAt: last.createdAt.toISOString() };
+      }
+    } finally {
+      client.close();
+    }
+  });
+
   it('normalizes legacy string-content rows into observable text parts', async () => {
     const client = createClient({ url: ':memory:' });
     const store = new MemoryLibSQL({ client });
