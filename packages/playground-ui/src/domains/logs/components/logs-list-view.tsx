@@ -217,7 +217,7 @@ export function LogsListView({
       </Txt>
     );
     return (
-      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3">
+      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col px-1 pb-1">
         {isOldestFirst && loadingOlder}
         <LogsDataList
           columns={STREAM_COLUMNS}
