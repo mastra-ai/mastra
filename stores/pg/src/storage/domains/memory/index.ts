@@ -2649,9 +2649,11 @@ export class MemoryPG extends MemoryStorage {
     observations: string,
     tokenCount: number,
     newRecordId: string | undefined,
+    snapshotMetadata?: Record<string, unknown>,
   ): Promise<ObservationalMemoryRecord> {
     const id = newRecordId ?? crypto.randomUUID();
     const nowStr = new Date().toISOString();
+    // The caller's staged metadata (the durable observation cursor) is newer than the stored copy.
     const inserted = await t.one(
       `INSERT INTO ${tableName} (
         id, "lookupKey", scope, "resourceId", "threadId",
@@ -2667,10 +2669,24 @@ export class MemoryPG extends MemoryStorage {
         'reflection', config, "generationCount" + 1, "lastObservedAt", "lastObservedAtZ", $4, $5,
         "pendingMessageTokens", "totalTokensObserved", $3, "bufferedObservationChunks",
         false, false, "isBufferingObservation", false, "lastBufferedAtTokens", "lastBufferedAtTime",
-        "observedTimezone", metadata, NULL, $6, $7, $8, $9
+        "observedTimezone",
+        CASE WHEN $11::jsonb IS NULL THEN metadata ELSE COALESCE(metadata, '{}'::jsonb) || $11::jsonb END,
+        NULL, $6, $7, $8, $9
       FROM ${tableName} WHERE id = $10
       RETURNING *`,
-      [id, observations, Math.round(tokenCount), nowStr, nowStr, nowStr, nowStr, nowStr, nowStr, storedId],
+      [
+        id,
+        observations,
+        Math.round(tokenCount),
+        nowStr,
+        nowStr,
+        nowStr,
+        nowStr,
+        nowStr,
+        nowStr,
+        storedId,
+        snapshotMetadata ? JSON.stringify(snapshotMetadata) : null,
+      ],
     );
 
     // Retire the stored record: chunks moved, liveness marker set (never cleared).
@@ -3121,7 +3137,15 @@ export class MemoryPG extends MemoryStorage {
           });
           // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
           if (!plan) return stored;
-          return this.#rollOverOMRow(t, tableName, stored.id, plan.observations, plan.tokenCount, input.newRecordId);
+          return this.#rollOverOMRow(
+            t,
+            tableName,
+            stored.id,
+            plan.observations,
+            plan.tokenCount,
+            input.newRecordId,
+            currentRecord.metadata,
+          );
         },
         'createReflectionGeneration',
       );

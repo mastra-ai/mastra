@@ -2027,6 +2027,7 @@ export class MemoryLibSQL extends MemoryStorage {
     observations: string,
     tokenCount: number,
     newRecordId: string | undefined,
+    snapshotMetadata?: Record<string, unknown>,
   ): Promise<ObservationalMemoryRecord | typeof OM_CAS_CONFLICT> {
     const stored = storedRow.record;
     const id = newRecordId ?? crypto.randomUUID();
@@ -2057,7 +2058,8 @@ export class MemoryLibSQL extends MemoryStorage {
       lastBufferedAtTokens: stored.lastBufferedAtTokens,
       lastBufferedAtTime: stored.lastBufferedAtTime,
       config: stored.config,
-      metadata: stored.metadata,
+      // The caller's staged metadata (the durable observation cursor) is newer than the stored copy.
+      metadata: snapshotMetadata ? { ...(stored.metadata ?? {}), ...snapshotMetadata } : stored.metadata,
       observedTimezone: stored.observedTimezone,
       supersededBy: null,
     };
@@ -2461,7 +2463,13 @@ export class MemoryLibSQL extends MemoryStorage {
           });
           // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
           if (!plan) return stored;
-          return this.#rollOverObservationalMemory(row, plan.observations, plan.tokenCount, input.newRecordId);
+          return this.#rollOverObservationalMemory(
+            row,
+            plan.observations,
+            plan.tokenCount,
+            input.newRecordId,
+            currentRecord.metadata,
+          );
         },
         'createReflectionGeneration',
       );

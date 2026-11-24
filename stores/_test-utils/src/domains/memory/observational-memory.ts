@@ -1052,6 +1052,30 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(newRecord.scope).toBe(input.scope);
       });
 
+      it("carries the caller's staged metadata over the stored metadata into the new generation", async () => {
+        const input = createSampleOMInput();
+        const initial = await memoryStorage.initializeObservationalMemory(input);
+        await memoryStorage.updateActiveObservations({
+          id: initial.id,
+          observations: 'Initial observations',
+          tokenCount: 100,
+          lastObservedAt: new Date(),
+        });
+        const current = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        const staged = { cursor: { lastObservedAt: '2026-01-01T00:00:00.000Z', messageIds: ['observed'] } };
+
+        const newRecord = await memoryStorage.createReflectionGeneration({
+          currentRecord: { ...current!, metadata: { ...(current!.metadata ?? {}), ...staged } },
+          reflection: 'Condensed reflection',
+          tokenCount: 50,
+        });
+
+        expect(newRecord.metadata).toMatchObject(staged);
+        const stored = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(stored!.id).toBe(newRecord.id);
+        expect(stored!.metadata).toMatchObject(staged);
+      });
+
       it('should carry over lastObservedAt from current record', async () => {
         const input = createSampleOMInput();
         const initial = await memoryStorage.initializeObservationalMemory(input);

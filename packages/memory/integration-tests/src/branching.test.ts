@@ -65,10 +65,18 @@ describe('shared-history branch Observational Memory integration', () => {
         config: {},
       });
       const cursorTime = new Date(baseTime.getTime() + 1);
+      // Observation commits the cursor time; reflection then stages the observed IDs on its snapshot.
+      await store.updateActiveObservations({
+        id: record.id,
+        observations: 'observations',
+        tokenCount: 1,
+        lastObservedAt: cursorTime,
+        observedMessageIds: ['observed'],
+      });
+      const observed = (await store.getObservationalMemory('root', resourceId))!;
       await store.createReflectionGeneration({
         currentRecord: {
-          ...record,
-          lastObservedAt: cursorTime,
+          ...observed,
           metadata: {
             __mastra_observation_cursor: {
               lastObservedAt: cursorTime.toISOString(),
