@@ -2909,10 +2909,12 @@ ${formattedMessages}
       if (unobservedParts.length > 0 && unobservedParts.length < totalParts) {
         const tokensBefore = retentionCounter ? retentionCounter.countMessage(msg) : 0;
         msg.content.parts = unobservedParts;
-        if (retentionCounter && !idsToRemove.has(msg.id)) {
+        if (retentionCounter) {
           const delta = retentionCounter.countMessage(msg) - tokensBefore;
-          remainingTokens += delta;
           tokensById.set(msg.id, (tokensById.get(msg.id) ?? 0) + delta);
+          if (!idsToRemove.has(msg.id)) {
+            remainingTokens += delta;
+          }
         }
         continue;
       }

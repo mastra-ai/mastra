@@ -143,7 +143,42 @@ describe('getObservedMessageIdsForCleanup retention floor', () => {
     expect(withBackoff).toBeGreaterThan(20);
   });
 
-  it('matches when every message is removable and the floor backs off in the restore pass', async () => {
+  it.each([false, true])('restores removed messages after later trims (duplicate ID: %s)', async duplicateId => {
+    const base = makeMessages(duplicateId ? 4 : 2, seededRandom(1), 0);
+    const text = (n: number) => ({ type: 'text' as const, text: 'retained '.repeat(n) });
+    base[0]!.content.parts = [text(200)];
+    const partial = (message: MastraDBMessage) => {
+      message.content.parts = [text(400), { type: 'data-om-observation-end', data: { cycleId: 'trim' } }, text(1)];
+    };
+    if (duplicateId) {
+      base[1]!.content.parts = [text(5)];
+      base[2]!.id = base[1]!.id;
+      partial(base[2]!);
+    }
+    partial(base[base.length - 1]!);
+    const counter = new TokenCounter();
+    const retentionFloor = Math.floor(counter.countMessage(base[0]!) / 2);
+    const expectedMessages = structuredClone(base);
+    const observedIds = base.map(m => m.id);
+    const expected = referenceRemovedIds(expectedMessages, observedIds, retentionFloor);
+    expect(expected).toEqual([]);
+    const actual = await createOm().getObservedMessageIdsForCleanup({
+      threadId: THREAD_ID,
+      resourceId: RESOURCE_ID,
+      messages: base,
+      observedMessageIds: observedIds,
+      retentionFloor,
+    });
+    expect(actual).toEqual(expected);
+    expect(actual).not.toContain(base[0]!.id);
+    expect(counter.countMessages(base.filter(m => !actual.includes(m.id)))).toBeGreaterThanOrEqual(retentionFloor);
+    expect(counter.countMessages(base.filter(m => !actual.includes(m.id)))).toEqual(
+      counter.countMessages(expectedMessages.filter(m => !expected.includes(m.id))),
+    );
+    expect(base.map(m => m.content.parts)).toEqual(expectedMessages.map(m => m.content.parts));
+  });
+
+  it('matches when every message is removable and the floor limits removal', async () => {
     const om = createOm();
     const random = seededRandom(99);
     const base = makeMessages(40, random, 0);
