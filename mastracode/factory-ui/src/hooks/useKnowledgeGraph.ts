@@ -1,13 +1,17 @@
 /** React Query hooks for a Factory project's Knowledge page. */
 
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
-import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  knowledgePollInterval,
+  useKnowledgeChangeFeed,
+} from '@mastra/playground-ui/domains/knowledge/hooks/useKnowledgeChangeFeed';
+import type { KnowledgeChangeFeed } from '@mastra/playground-ui/domains/knowledge/hooks/useKnowledgeChangeFeed';
+import { keepPreviousData, skipToken, useQueries, useQuery } from '@tanstack/react-query';
 import type { QueryKey } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useDocumentVisible } from '../ui/lib/hooks/useDocumentVisible';
 import {
   fetchKnowledgeActivity,
   fetchKnowledgeGraph,
@@ -19,15 +23,6 @@ import {
 import { RequestError } from '../ui/domains/factory/services/request';
 
 const MIN_SEARCH_LENGTH = 2;
-const POLL_MS = 5_000;
-/**
- * While the change stream is open it announces writes made through this server process. Writes from another
- * Factory replica are not on it, so a slow poll still catches those.
- */
-const LIVE_POLL_MS = 60_000;
-const RETRY_MS = 3_000;
-/** Writes arrive in bursts (a page and its notes); one refetch covers the burst. */
-const BURST_MS = 150;
 
 const isTerminalReadError = (error: unknown) =>
   error instanceof RequestError && (error.status === 404 || error.status === 422);
@@ -40,7 +35,7 @@ const isTerminalReadError = (error: unknown) =>
 export function knowledgeRefetchInterval(error: unknown, paused: boolean, live = false): number | false {
   if (isTerminalReadError(error)) return false;
   if (paused) return false;
-  return live ? LIVE_POLL_MS : POLL_MS;
+  return knowledgePollInterval(live);
 }
 
 function isProjectKnowledgeQuery(key: QueryKey, factoryProjectId: string): boolean {
@@ -49,65 +44,22 @@ function isProjectKnowledgeQuery(key: QueryKey, factoryProjectId: string): boole
   );
 }
 
-/**
- * Follows the project's Knowledge change stream while the tab is visible and refetches the project's
- * Knowledge queries when a write lands. Returns whether the stream is open; when it is not (an older server,
- * a dropped connection) the queries keep polling.
- */
+/** Follows the project's Knowledge change stream and refreshes its open Knowledge queries when a write lands. */
 export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): boolean {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  // A hidden tab must not hold a stream: browsers cap HTTP/1.1 connections per host.
-  const visible = useDocumentVisible();
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    if (!visible || !factoryProjectId) return;
-    const abort = new AbortController();
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let burst: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () =>
-      void queryClient.invalidateQueries({
-        predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId),
-      });
-
-    const connect = () => {
-      streamKnowledgeChanges(
-        baseUrl,
-        factoryProjectId,
-        {
-          onChange: () => {
-            clearTimeout(burst);
-            burst = setTimeout(refresh, BURST_MS);
-          },
-          onConnected: () => {
-            setConnected(true);
-            // Whatever landed while no stream was open was never announced.
-            refresh();
-          },
-        },
-        abort.signal,
-      )
-        .then(() => false)
-        .catch((error: unknown) => error instanceof RequestError && error.status >= 400 && error.status < 500)
-        .then(fatal => {
-          if (abort.signal.aborted) return;
-          setConnected(false);
-          // A signed-out member or a missing route never heals by retrying; polling carries on.
-          if (!fatal) retry = setTimeout(connect, RETRY_MS);
-        });
-    };
-    connect();
-
-    return () => {
-      abort.abort();
-      clearTimeout(retry);
-      clearTimeout(burst);
-      setConnected(false);
-    };
-  }, [baseUrl, factoryProjectId, queryClient, visible]);
-
-  return connected;
+  const feed = useMemo<KnowledgeChangeFeed | undefined>(
+    () =>
+      factoryProjectId
+        ? {
+            follow: (signal, handlers) => streamKnowledgeChanges(baseUrl, factoryProjectId, handlers, signal),
+            // A signed-out member or a missing route never heals by retrying.
+            isFinal: error => error instanceof RequestError && error.status >= 400 && error.status < 500,
+            queries: { predicate: query => isProjectKnowledgeQuery(query.queryKey, factoryProjectId) },
+          }
+        : undefined,
+    [baseUrl, factoryProjectId],
+  );
+  return useKnowledgeChangeFeed(feed);
 }
 
 export function useKnowledgeGraph(factoryProjectId: string | undefined, paused = false, live = false) {

@@ -10,26 +10,10 @@ import type {
 } from '@mastra/client-js';
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { useMastraClient } from '@mastra/react';
-import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { keepPreviousData, skipToken, useQueries, useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 const MIN_SEARCH_LENGTH = 2;
-
-/**
- * Agents write Knowledge while Studio is open. The page follows the server's change stream; when it
- * can't (an older server, or the stream dropped) the open queries poll at this interval instead.
- */
-const POLL_MS = 5_000;
-/**
- * The stream carries writes made in the server process Studio is connected to. Behind a load balancer,
- * writes on another replica are not on it, so a slow poll still catches those.
- */
-const LIVE_POLL_MS = 60_000;
-const RECONNECT_MS = 5_000;
-/** A burst of writes (a page and its notes) refetches once. */
-const REFRESH_DEBOUNCE_MS = 150;
-
-const pollUnless = (live: boolean) => (live ? LIVE_POLL_MS : POLL_MS);
 
 /** A server without the stream (501), or a caller it refuses, gives the same answer on every retry. */
 const isFinal = (error: unknown) =>
@@ -37,73 +21,25 @@ const isFinal = (error: unknown) =>
 
 const retryUnlessFinal = (failures: number, error: unknown) => !isFinal(error) && failures < 2;
 
-function sleep(ms: number, signal: AbortSignal) {
-  return new Promise<void>(resolve => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
-  });
-}
-
-function onVisibilityChange(notify: () => void) {
-  document.addEventListener('visibilitychange', notify);
-  return () => document.removeEventListener('visibilitychange', notify);
-}
-const pageVisible = () => document.visibilityState !== 'hidden';
-
-/**
- * Follows the instance's change stream and refetches the open Knowledge queries when a change arrives.
- * Returns whether the stream is connected, so the queries poll only while it isn't.
- *
- * The stream holds an HTTP connection open, and a browser allows about six per host over HTTP/1.1. With
- * Studio's own reload stream, every open tab held two, so a few tabs left a new tab's requests queued
- * forever. A hidden tab closes its stream, and reconnects and refetches when it is shown again.
- */
+/** Follows the instance's change stream and refreshes its open Knowledge queries when a change arrives. */
 export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boolean {
   const client = useMastraClient();
-  const queryClient = useQueryClient();
-  const [live, setLive] = useState(false);
-  const visible = useSyncExternalStore(onVisibilityChange, pageVisible, () => true);
-  // Only the first connection of the page can skip the catch-up refetch.
-  const connectedBefore = useRef(false);
-  useEffect(() => {
-    if (!knowledgeKey || !visible) return;
-    const abort = new AbortController();
-    let debounce: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(
-        () => void queryClient.invalidateQueries({ queryKey: ['knowledge', knowledgeKey] }),
-        REFRESH_DEBOUNCE_MS,
-      );
-    };
-    void (async () => {
-      while (!abort.signal.aborted) {
-        try {
-          const reader = (await client.getKnowledge(knowledgeKey).events({ signal: abort.signal })).getReader();
-          // Writes may have landed while the stream was down or the tab was hidden.
-          if (connectedBefore.current) refresh();
-          connectedBefore.current = true;
-          setLive(true);
-          while (!(await reader.read()).done) refresh();
-        } catch (error) {
-          // Falls back to polling: for good when the server can't stream, otherwise until it reconnects.
-          if (isFinal(error)) {
-            setLive(false);
-            return;
+  const feed = useMemo<KnowledgeChangeFeed | undefined>(
+    () =>
+      knowledgeKey
+        ? {
+            follow: async (signal, { onConnected, onChange }) => {
+              const reader = (await client.getKnowledge(knowledgeKey).events({ signal })).getReader();
+              onConnected();
+              while (!(await reader.read()).done) onChange();
+            },
+            isFinal,
+            queries: { queryKey: ['knowledge', knowledgeKey] },
           }
-        }
-        if (abort.signal.aborted) return;
-        setLive(false);
-        await sleep(RECONNECT_MS, abort.signal);
-      }
-    })();
-    return () => {
-      abort.abort();
-      clearTimeout(debounce);
-      setLive(false);
-    };
-  }, [client, queryClient, knowledgeKey, visible]);
-  return live;
+        : undefined,
+    [client, knowledgeKey],
+  );
+  return useKnowledgeChangeFeed(feed);
 }
 
 export function useKnowledgeInstances() {
@@ -122,7 +58,7 @@ export function useKnowledgePageGraph(knowledgeKey: string | undefined, live: bo
     queryFn: knowledgeKey ? () => client.getKnowledge(knowledgeKey).graph() : skipToken,
     retry: retryUnlessFinal,
     refetchInterval: ({ state }) =>
-      state.error instanceof MastraClientError && state.error.status === 422 ? false : pollUnless(live),
+      state.error instanceof MastraClientError && state.error.status === 422 ? false : knowledgePollInterval(live),
   });
 }
 
@@ -140,7 +76,7 @@ export function useKnowledgePage(
         ? async (): Promise<KnowledgePageResponse> => client.getKnowledge(knowledgeKey).page(pageId, { noteCursor })
         : skipToken,
     // Only the first notes chunk polls; later chunks are fetched once as the user loads them.
-    refetchInterval: noteCursor ? false : pollUnless(live),
+    refetchInterval: noteCursor ? false : knowledgePollInterval(live),
   });
 }
 
@@ -174,7 +110,7 @@ export function useKnowledgeTreeLevels(
             client.getKnowledge(knowledgeKey).tree({ parentId: request.parentId ?? undefined, cursor: request.cursor })
         : skipToken,
       // A level's first chunk polls, so new children appear in the tree and the page's child list.
-      refetchInterval: request.cursor ? false : pollUnless(live),
+      refetchInterval: request.cursor ? false : knowledgePollInterval(live),
     })),
   });
 }
@@ -201,7 +137,7 @@ export function useKnowledgeLinkCounts(knowledgeKey: string | undefined, live: b
     // The graph loads more pages as the person explores; keep the counts already known meanwhile.
     placeholderData: keepPreviousData,
     retry: retryUnlessFinal,
-    refetchInterval: pollUnless(live),
+    refetchInterval: knowledgePollInterval(live),
   });
 }
 
@@ -226,7 +162,7 @@ export function useKnowledgeActivity(knowledgeKey: string | undefined, live: boo
     queryFn: knowledgeKey
       ? async (): Promise<KnowledgeActivityResponse> => client.getKnowledge(knowledgeKey).activity({ pageId })
       : skipToken,
-    refetchInterval: pollUnless(live),
+    refetchInterval: knowledgePollInterval(live),
   });
 }
 
