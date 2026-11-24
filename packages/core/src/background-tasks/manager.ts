@@ -1478,7 +1478,8 @@ export class BackgroundTaskManager {
     // the worker crashed mid-run). A dispatch declined cleanly during shutdown
     // leaves the task `pending`, so the worker that picks up the redelivery
     // still gets the full retry budget.
-    const retryCount = task.status === 'running' ? deliveryAttempt - 1 : task.retryCount;
+    // Never lower the stored count: crash recovery may already have spent retries this message's delivery count doesn't know about.
+    const retryCount = task.status === 'running' ? Math.max(task.retryCount, deliveryAttempt - 1) : task.retryCount;
     // Claim execution ownership with an expiring lease. The compare-and-set on
     // the previously observed owner/lease fences concurrent dispatchers: when
     // two workers race for the same pending task, only the first claim wins and
