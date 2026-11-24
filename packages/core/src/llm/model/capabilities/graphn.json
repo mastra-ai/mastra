@@ -20,20 +20,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen3-vl": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gemma-4-e4b": [
       {
         "type": "toggle"
@@ -49,6 +35,20 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen3-vl": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -20,10 +20,9 @@ function absoluteUrl(value: string, siteUrl: string): string | undefined {
   }
 }
 
-/** Every docs page except the `/learn` course is also served as Markdown at its URL plus `.md`. */
-function markdownUrl(url: string): string | undefined {
+/** Every docs page is also served as Markdown at its URL plus `.md`. */
+function markdownUrl(url: string): string {
   const { origin, pathname } = new URL(url)
-  if (pathname === '/learn' || pathname.startsWith('/learn/')) return undefined
   return `${origin}${pathname.replace(/\/$/, '') || '/index'}.md`
 }
 
@@ -34,12 +33,11 @@ export function mapHit(hit: DocsRecord, siteUrl: string): SearchResult | undefin
   const title = hit.hierarchy?.lvl1?.trim() || levels[0] || ''
   // Records for a page title or heading have no content; their heading path is the best summary.
   const excerpt = (hit.content ?? '').replace(/\s+/g, ' ').trim() || levels.join(' > ')
-  const markdown = markdownUrl(url)
   return {
     title,
     heading: levels.at(-1) ?? title,
     url,
-    ...(markdown && { markdownUrl: markdown }),
+    markdownUrl: markdownUrl(url),
     excerpt: [...excerpt].slice(0, LIMITS.excerpt).join(''),
   }
 }

@@ -15,13 +15,7 @@ import {
   distinctIdsTotalsFixture,
   traceAggregateCapabilities,
 } from '../../metrics/components/__tests__/fixtures/trace-aggregate';
-import {
-  openViewMenu,
-  pickView,
-  seedMetrics,
-  serveCapabilities,
-  serveTraceAggregate,
-} from '../../metrics/components/__tests__/metrics-msw';
+import { seedMetrics, serveCapabilities, serveTraceAggregate } from '../../metrics/components/__tests__/metrics-msw';
 import type { TraceAggregateRequest } from '../../metrics/components/__tests__/metrics-msw';
 import { ChartCard } from '../../metrics/components/chart-card';
 import { MetricsProvider, useMetrics } from '../../metrics/hooks/use-metrics';
@@ -40,7 +34,7 @@ import type {
   DashboardAlertTarget,
   DashboardExpand,
 } from '../widget-kind';
-import { metricsWidget, modelsWidget as models } from './equality-harness';
+import { metricsWidget, modelsWidget as models, pickIn } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { IconPin } from '@/ds/icons/central/IconPin';
@@ -90,7 +84,7 @@ const unfilteredFailsKind = defineWidgetKind({
   },
 });
 
-/** A kind built on the shared controls: its view menu and its action button. */
+/** A kind built on the shared controls: its view tabs and its action button. */
 const controlsKind = defineWidgetKind({
   kind: 'controls',
   optionsSchema: z.object({}),
@@ -187,6 +181,18 @@ function renderDashboard(
     ),
   );
 }
+
+/** The tabs under a card's title, folded or not: jsdom lays nothing out, so all but the open one fold into "+N". */
+/** Opens a view from a card's tabs once they show. */
+const pickTab = async (root: HTMLElement, view: string) => {
+  await within(root).findAllByRole('tab', { hidden: true });
+  pickIn(root, view);
+};
+
+const tabNames = (root: HTMLElement = document.body) =>
+  within(root)
+    .queryAllByRole('tab', { hidden: true })
+    .map(t => t.textContent);
 
 const cell = (container: HTMLElement, id: string) => {
   const found = container.querySelector<HTMLElement>(`[data-widget-id="${id}"]`);
@@ -398,11 +404,12 @@ describe('DashboardRenderer', () => {
         ),
         { kinds: [controlsKind] },
       );
-      expect(await openViewMenu('Agents')).toEqual(['Agents', 'View 2']);
+      await screen.findByRole('tab', { name: 'Agents' });
+      expect(tabNames()).toEqual(['Agents', 'View 2']);
     });
 
-    it('titles a single view with the widget title, and several with the open view, switched from the menu', async () => {
-      renderDashboard(
+    it('titles the card with the widget title, with several views as tabs under it', async () => {
+      const { container } = renderDashboard(
         definition(
           controls({ id: 'one', title: 'Runs' }),
           controls({
@@ -416,11 +423,14 @@ describe('DashboardRenderer', () => {
         ),
         { kinds: [controlsKind] },
       );
-      expect(screen.getByText('Runs', { selector: 'h2, h3, span, div' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: 'Runs' })).toBeNull();
-      await pickView('Agents', 'Tools');
-      expect(screen.getByRole('button', { name: 'Tools' })).toBeDefined();
-      expect(screen.getByText('Tools', { selector: 'p' })).toBeDefined();
+      expect(tabNames(cell(container, 'one'))).toEqual([]);
+      expect(within(cell(container, 'two')).getByText('Latency')).toBeDefined();
+      expect(tabNames(cell(container, 'two'))).toEqual(['Agents', 'Tools']);
+      await pickTab(cell(container, 'two'), 'Tools');
+      expect(await screen.findByText('Tools', { selector: 'p' })).toBeDefined();
+      expect(within(cell(container, 'two')).getByRole('tab', { name: 'Tools' }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
     });
 
     it('offers errors in Logs only when the target keeps to errors', () => {
@@ -460,13 +470,13 @@ describe('DashboardRenderer', () => {
       LinkComponent: RouterLink,
     };
 
-    it("gives the card an expand action linking to the host's page, with its plain title in place of its views menu", async () => {
+    it("gives the card an expand action linking to the host's page, with its plain title and no view tabs", async () => {
       const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand });
       const card = cell(container, 'token-usage');
       const link = await within(card).findByRole('link', { name: 'Expand Token usage' });
       expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
       expect(within(card).getByRole('heading', { name: 'Token usage' }).contains(link)).toBe(false);
-      expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
+      expect(tabNames(card)).toEqual([]);
     });
 
     it('names the card and its action after the first view when the widget title is blank', async () => {
@@ -488,10 +498,10 @@ describe('DashboardRenderer', () => {
       expect(link.getAttribute('href')).toBe('/app/query?metric=scores');
     });
 
-    it('keeps the views menu on a card the host has nowhere to send', async () => {
+    it('keeps the view tabs on a card the host has nowhere to send', async () => {
       const { container } = renderDashboard(definition(agentRunsWidget), { expand });
       const card = cell(container, 'agent-runs');
-      expect(await within(card).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(await within(card).findByRole('tab', { name: 'Agent runs' })).toBeDefined();
       expect(within(card).queryByRole('link')).toBeNull();
     });
   });
@@ -567,7 +577,7 @@ describe('DashboardRenderer', () => {
 
     it('shows no handle without them', async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
-      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(await within(cell(container, 'agent-runs')).findByRole('tab', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /^Move / })).toBeNull();
     });
   });
@@ -733,7 +743,7 @@ describe('DashboardRenderer', () => {
 
     it('shows no pin buttons for a host that does not pin', async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
-      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(await within(cell(container, 'agent-runs')).findByRole('tab', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('button', { name: /pin/i })).toBeNull();
     });
   });
@@ -764,11 +774,11 @@ describe('DashboardRenderer', () => {
       expect(lastTarget(spy).view).toMatchObject({ queries: widget.views[0].queries });
     });
 
-    it('follows the view picked from the menu', async () => {
+    it('follows the view picked from the tabs', async () => {
       const { alert, spy } = hosting();
       const widget = metricsWidget('agent-runs');
       const { container } = renderDashboard(definition(widget), { alert });
-      await pickView('Agent runs', 'Failure rate');
+      await pickTab(cell(container, 'agent-runs'), 'Failure rate');
       expect(
         await within(cell(container, 'agent-runs')).findByRole('link', { name: 'Create alert from Failure rate' }),
       ).toBeDefined();
@@ -801,7 +811,7 @@ describe('DashboardRenderer', () => {
     it("shows no button on a card the host can't alert on", async () => {
       const { alert } = hosting(() => undefined);
       const { container } = renderDashboard(definition(metricsWidget('agent-runs')), { alert });
-      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(await within(cell(container, 'agent-runs')).findByRole('tab', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('button', { name: alertLabel })).toBeNull();
       expect(screen.queryByRole('link', { name: alertLabel })).toBeNull();
     });
@@ -943,7 +953,7 @@ describe('DashboardRenderer', () => {
 
     it('shows no alert buttons for a host that passes none', async () => {
       const { container } = renderDashboard(definition(metricsWidget('agent-runs'), kpisWidget));
-      expect(await within(cell(container, 'agent-runs')).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(await within(cell(container, 'agent-runs')).findByRole('tab', { name: 'Agent runs' })).toBeDefined();
       expect(screen.queryByRole('link', { name: alertLabel })).toBeNull();
       expect(screen.queryByRole('button', { name: alertLabel })).toBeNull();
     });
@@ -982,7 +992,7 @@ describe('DashboardRenderer', () => {
         const { container } = renderDashboard(definition(agentRunsWidget), { alert });
         await openMenu(cell(container, 'agent-runs'));
         expect(labels(lastTarget(spy))).toEqual(['Completed', 'Failed']);
-        await pickView('Agent runs', 'Failure rate');
+        await pickTab(cell(container, 'agent-runs'), 'Failure rate');
         await waitFor(() =>
           expect(labels(lastTarget(spy))).toEqual([
             'Failed runs: runs (error, failed)',

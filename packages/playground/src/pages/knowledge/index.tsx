@@ -3,6 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { KnowledgeGraphLoader } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraphLoader';
 import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
@@ -30,7 +31,7 @@ const crumbs = [navCrumb('/knowledge')];
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
       <h1 className="sr-only">Knowledge</h1>
       {children}
     </PageLayout>
@@ -185,7 +186,7 @@ export default function KnowledgePage() {
           </select>
         ) : null}
         {!knowledgeKey || graph.isPending ? (
-          <p className="text-ui-md p-4 text-muted-foreground">Loading knowledge…</p>
+          <KnowledgeGraphLoader />
         ) : !graph.data ? (
           <EmptyState
             tone="error"

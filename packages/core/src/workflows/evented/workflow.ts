@@ -35,20 +35,15 @@ import { executionFailureTermination } from '../../observability/execution-outco
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   ProcessorRunner,
   ProcessorState,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  createProcessorSendSignal,
-} from '../../processors';
-import {
-  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
   endOutputStreamSpanAtStepEnd,
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../../processors/runner';
 import type { ProcessorLateSignalSink } from '../../processors/send-signal';
-import { PROCESSOR_LATE_SIGNAL_SINK } from '../../processors/send-signal';
+import { PROCESSOR_LATE_SIGNAL_SINK, createProcessorSendSignal } from '../../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -62,6 +57,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors/step-schema';
 import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -109,6 +105,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
+import { warnUnsupportedEventedSetup } from './setup-warning';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -1715,6 +1712,16 @@ function createStepFromProcessor<TProcessorId extends string>(
   >;
 }
 
+/**
+ * Builds a workflow on the evented execution engine: each step is an event on
+ * the Mastra host's pubsub, so any worker can run the next one.
+ *
+ * In one process it runs on any pubsub, including the default one. Running it
+ * on several processes needs a pubsub that redelivers unacknowledged events and
+ * a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ */
 export function createWorkflow<
   TWorkflowId extends string = string,
   TInputSchema extends PublicSchema<any> = PublicSchema<any>,
@@ -1845,6 +1852,10 @@ export class EventedWorkflow<
         details: { workflowId: this.id, storage: storageName },
       });
     }
+
+    // Internal workflows are left out: they run where they were registered, except an evented
+    // agent's loop, which the agent's execution engine checks.
+    if (!this.isInternal) warnUnsupportedEventedSetup(this.mastra, workflowsStore);
 
     const open = async () => {
       const cachedRun = this.liveRun(runIdToUse);

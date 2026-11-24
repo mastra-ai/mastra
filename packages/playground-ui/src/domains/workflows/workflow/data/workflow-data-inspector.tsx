@@ -65,7 +65,7 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}
-            className="min-w-0 rounded-lg bg-background p-3"
+            className="min-w-0 rounded-lg bg-nested p-3"
           />
         )}
       </div>

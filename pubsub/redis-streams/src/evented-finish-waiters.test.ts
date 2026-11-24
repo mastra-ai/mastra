@@ -141,6 +141,95 @@ describe('many evented runs in flight at once', () => {
   }
 });
 
+// A web process dispatches with startAsync(); a worker process with its own
+// Mastra runs the steps. The completion hooks belong to the caller: they must
+// run there, once, from the serialized finish event, and never on the worker.
+describe('startAsync() hooks with workers on another instance', () => {
+  const errorMessage = (error: unknown) =>
+    typeof error === 'object' && error !== null && 'message' in error ? String(error.message) : String(error);
+
+  function makeHookedWorkflow(id: string, hooks: string[], outcome: 'success' | 'failed') {
+    return createWorkflow({
+      id,
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.string() }),
+      options: {
+        onStart: () => {
+          hooks.push('start');
+        },
+        onFinish: result => {
+          hooks.push(`finish:${result.status}`);
+        },
+        onError: result => {
+          hooks.push(`error:${errorMessage(result.error)}`);
+        },
+      },
+    })
+      .then(
+        createStep({
+          id: 'job',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.string() }),
+          execute: async () => {
+            if (outcome === 'failed') throw new Error('job crashed');
+            return { ok: 'done' };
+          },
+        }),
+      )
+      .commit();
+  }
+
+  it.each([
+    ['success', ['start', 'finish:success']],
+    ['failed', ['start', 'finish:failed', 'error:job crashed']],
+  ] as const)(
+    'runs the %s hooks once, on the caller that started the run',
+    { timeout: 30_000 },
+    async (outcome, expectedHooks) => {
+      const id = `cross-instance-hooks-${outcome}-${randomUUID()}`;
+      const storage = new InMemoryStore();
+      const callerHooks: string[] = [];
+      const workerHooks: string[] = [];
+      const workerPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: id, blockMs: 50 });
+      const callerPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: id, blockMs: 50 });
+      const worker = new Mastra({
+        logger: false,
+        storage,
+        pubsub: workerPubsub,
+        workflows: { workflow: makeHookedWorkflow(id, workerHooks, outcome) },
+      });
+      const caller = new Mastra({
+        logger: false,
+        storage,
+        pubsub: callerPubsub,
+        workflows: { workflow: makeHookedWorkflow(id, callerHooks, outcome) },
+      });
+      cleanups.push(
+        () => callerPubsub.close(),
+        () => workerPubsub.close(),
+        () => worker.stopWorkers(),
+      );
+      await worker.startWorkers();
+
+      const wf = caller.getWorkflow('workflow');
+      const run = await wf.createRun();
+      await run.startAsync({ inputData: {} });
+
+      let status: string | undefined;
+      for (const deadline = Date.now() + 15_000; Date.now() < deadline; await sleep(20)) {
+        status = (await wf.getWorkflowRunById(run.runId))?.status;
+        if (status === outcome) break;
+      }
+      expect(status).toBe(outcome);
+      // Count both instances so a hook that lands on the worker fails the worker assertion below.
+      await waitFor(() => callerHooks.length + workerHooks.length >= expectedHooks.length, 10_000, 'hooks');
+      await sleep(500);
+      expect(workerHooks).toEqual([]);
+      expect(callerHooks).toEqual(expectedHooks);
+    },
+  );
+});
+
 function captureErrors() {
   const errors: unknown[][] = [];
   const logger = {

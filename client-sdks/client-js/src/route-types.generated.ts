@@ -21819,6 +21819,12 @@ export type PostDatasetsDatasetIdExperiments_Body = {
     | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
+  /** Per-item timeout in milliseconds */
+  itemTimeout?: number | undefined;
+  /** Retries per item after a failed attempt (tool-mock and abort errors are never retried) */
+  maxRetries?: number | undefined;
+  /** Start the experiment as a durable evented workflow instead of in this process. Its events go on the Mastra pubsub, so it only runs where something handles them. Only serializable options are allowed. */
+  durable?: boolean | undefined;
   /** Caller-provided provenance claims for the experiment execution */
   provenance?:
     | {

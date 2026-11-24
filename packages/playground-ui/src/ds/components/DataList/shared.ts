@@ -12,7 +12,7 @@ export const dataListRowOuterStyles = [
   // The row surface is a `before` pseudo at `-z-2`, under the hover layer
   // (`after`, `-z-1`) and the row content. The row element itself stays
   // transparent so tones (error, info) tint on top of both.
-  "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-background before:content-['']",
+  "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-row before:content-['']",
 ] as const;
 
 /**
@@ -21,7 +21,7 @@ export const dataListRowOuterStyles = [
  * mirror the tone of the interactive row nested inside it.
  *
  * Hover lights an `after` layer between the row surface and its content, and
- * switches instantly. Rows are sunken wells (`--background`) inside
+ * switches instantly. Rows are sunken wells (`--row`) inside
  * the card panel, whose material also shows through the 1px gaps between them,
  * so a resting tone steps to `--surface-panel` — the opaque twin of a `--fill`
  * rung over the well — rather than to `--card`, which would make a selected row

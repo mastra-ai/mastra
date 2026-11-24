@@ -17,7 +17,7 @@ Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get
 
 :::warning
 
-These tools can place real trades with real money. Require approval for trading tools with `requireApproval` so a person confirms each order before it runs. See [MCP providers](/reference/connect/tools#mcp-providers).
+These tools can place real trades with real money. The example below requires approval for every Robinhood tool so a person confirms each call before it runs. To let reads run without approval, list only the trading tools by key in `requireApproval`. See [MCP providers](/reference/connect/tools#mcp-providers).
 
 :::
 
@@ -44,7 +44,7 @@ export const robinhoodMcpAgent = new Agent({
   name: 'Robinhood agent',
   instructions: 'You help people read account and market data and place trades in Robinhood.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
-  tools: tools({ providers: ['robinhood-mcp'] }),
+  tools: tools({ providers: ['robinhood-mcp'], requireApproval: true }),
 })
 ```
 

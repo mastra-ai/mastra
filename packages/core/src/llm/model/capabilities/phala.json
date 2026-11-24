@@ -49,28 +49,14 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
+    "google/gemma-4-31b-it": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "z-ai/glm-5.3-flash": [
+    "qwen/qwen3.6-35b-a3b": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "qwen/qwen3.5-27b": [
@@ -95,23 +81,15 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.6-35b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek/deepseek-v4.1-flash-1017": [
-      {
-        "type": "toggle"
-      },
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek/deepseek-v3.2": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-flash-0731": [
@@ -123,9 +101,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v3.2": [
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k3": [
@@ -140,6 +122,24 @@
     "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

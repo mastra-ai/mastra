@@ -2,10 +2,11 @@ import { execFile } from 'child_process'
 import fs from 'fs/promises'
 import path from 'path'
 import { promisify } from 'util'
-import { toPosix } from '../content'
+import { toPosix, walkMdx } from '../content'
 import { finding } from '../finding'
 import { slugifyRuleName } from '../rules'
 import type { Check, CheckResult, Finding, Severity } from '../types'
+import { manifestPath } from './external-docs'
 import { isFormattedFile } from './format'
 
 const execFileAsync = promisify(execFile)
@@ -55,13 +56,37 @@ export function valeFindings(rootDir: string, output: Record<string, ValeAlert[]
   return findings
 }
 
+/**
+ * `.mdx` files in the docs directories synced to external sites (`.github/docs-sync.json`), relative to `rootDir`.
+ * They live outside the content sections, so `ctx.files` never includes them. Manifest problems are reported by the
+ * external-docs check, so an unreadable manifest here just means no extra files.
+ */
+export async function syncedMdxFiles(rootDir: string): Promise<string[]> {
+  let targets: unknown
+  try {
+    targets = JSON.parse(await fs.readFile(manifestPath(rootDir), 'utf-8')).targets
+  } catch {
+    return []
+  }
+  if (!Array.isArray(targets)) return []
+  const sources = targets
+    .map(target => target?.source)
+    .filter((source): source is string => typeof source === 'string' && /^docs\/src\/[^.]/.test(source))
+  const files = await Promise.all([...new Set(sources)].map(source => walkMdx(path.join(rootDir, '..', source))))
+  return [...new Set(files.flat().map(file => toPosix(path.relative(rootDir, file))))].sort()
+}
+
 export const valeCheck: Check = {
   name: 'vale',
   categories: ['prose'],
   scope: 'files',
   async run(ctx): Promise<CheckResult> {
     // Vale covers the same sections as remark and the formatter; generated model pages are excluded.
-    const files = ctx.files.filter(isFormattedFile).map(file => file.path)
+    // Unscoped runs also cover synced external docs, which `.vale.ini` lints alongside the content sections.
+    const files = [
+      ...ctx.files.filter(isFormattedFile).map(file => file.path),
+      ...(ctx.scoped ? [] : await syncedMdxFiles(ctx.rootDir)),
+    ]
     if (files.length === 0) return { findings: [] }
 
     // A missing or broken Vale binary is an error, not a skip, so a run without Vale never looks green.

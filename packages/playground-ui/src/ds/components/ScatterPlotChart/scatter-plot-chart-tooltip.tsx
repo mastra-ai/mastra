@@ -40,7 +40,7 @@ export function ScatterPlotChartTooltip({
           {String(label)}
         </Txt>
       )}
-      <div className="grid gap-1 text-placeholder">
+      <div className="grid gap-1 text-subtle-foreground">
         <p>
           <span className="text-muted-foreground">X:</span>{' '}
           <span className="font-mono">{formatX ? formatX(xValue, point) : String(xValue)}</span>
