@@ -120,7 +120,7 @@ Branch methods throw a `MastraError` with one of these IDs:
 - `BRANCH_INVALID_REQUEST`: Input, pagination, or an operation's branch scope is invalid.
 - `BRANCH_NOT_FOUND`: The source, branch point, or authorized lineage isn't available.
 - `BRANCH_LINEAGE_CORRUPT`: Persisted lineage is malformed, cyclic, or inconsistent.
-- `BRANCH_MUTATION_CONFLICT`: Concurrent state changed, a generated destination collided repeatedly, or a mutation would invalidate lineage.
+- `BRANCH_MUTATION_CONFLICT`: Concurrent state changed, generated destinations kept colliding, or a mutation would invalidate lineage.
 
 The authenticated server evaluates access to the selected thread and every ancestor at read time. An inaccessible ancestor is reported as `BRANCH_NOT_FOUND` so lineage isn't disclosed.
 
