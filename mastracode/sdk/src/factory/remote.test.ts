@@ -104,6 +104,16 @@ describe('RemoteSession', () => {
     expect(session.identity.getResourceId()).toBe('res-1');
   });
 
+  it('reports branching as unavailable instead of an empty branch history', async () => {
+    const { session } = await connected();
+    const unavailable = /Thread branching is not available when connected to a Factory session/;
+
+    await expect(session.thread.branch({ branchPointMessageId: 'm1' })).rejects.toThrow(unavailable);
+    await expect(session.thread.getParent()).rejects.toThrow(unavailable);
+    await expect(session.thread.getBranchInfo()).rejects.toThrow(unavailable);
+    await expect(session.thread.listBranches({ perPage: false })).rejects.toThrow(unavailable);
+  });
+
   it('mirrors stream events and forwards them to listeners', async () => {
     const { session, emit } = await connected();
     const listener = vi.fn();

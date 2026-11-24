@@ -41,12 +41,22 @@ async function mockMemory(storage: InMemoryStore, extra: Record<string, unknown>
   return Object.assign(memory, rest);
 }
 
-async function saveThread(storage: InMemoryStore, id: string, resourceId = 'controller-resource') {
+async function saveThread(
+  storage: InMemoryStore,
+  id: string,
+  resourceId = 'controller-resource',
+  metadata: Record<string, unknown> = {},
+) {
   const memoryStore = await storage.getStore('memory');
   await memoryStore.saveThread({
-    thread: { id, resourceId, title: `Thread ${id}`, createdAt: now, updatedAt: now, metadata: {} },
+    thread: { id, resourceId, title: `Thread ${id}`, createdAt: now, updatedAt: now, metadata },
   });
 }
+
+/** A thread row carrying ready shared-history lineage, as AgentController writes it after a branch is created. */
+const READY_BRANCH_METADATA = {
+  __mastra_thread_branch: { state: 'ready', parentThreadId: 'source-thread-id' },
+};
 
 describe('AgentController thread branching', () => {
   it('branches via configured memory, binds the session to the branch, and returns fork metadata', async () => {
@@ -200,6 +210,63 @@ describe('AgentController thread branching', () => {
     expect(children.total).toBe(1);
     expect(children.branches[0]?.thread.id).toBe('child-thread-id');
     expect(children.branches[0]?.branch.branchPointMessageId).toBe('fork-message-id');
+  });
+
+  it('reads messages and switches to an owned branch thread when controller storage refuses branch rows', async () => {
+    const storage = new InMemoryStore();
+    const memoryFactory = vi.fn().mockResolvedValue(await mockMemory(storage, { getById: undefined }));
+    const controller = createController({ memory: memoryFactory, storage });
+
+    await controller.init();
+    await saveThread(storage, 'source-thread-id');
+    // The branch row lives only behind memory: controller storage refuses it as a
+    // raw-fallback branch row, which used to abort the ownership read outright.
+    await saveThread(storage, 'branch-thread-id', 'controller-resource', READY_BRANCH_METADATA);
+    const memory = await storage.getStore('memory');
+    await memory.saveMessages({
+      messages: [
+        {
+          id: 'branch-message-id',
+          threadId: 'branch-thread-id',
+          resourceId: 'controller-resource',
+          role: 'user',
+          createdAt: now,
+          content: { format: 2, parts: [{ type: 'text', text: 'hello from the branch' }] },
+        } as never,
+      ],
+    });
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    await expect(session.thread.listMessages({ threadId: 'branch-thread-id' })).resolves.toHaveLength(1);
+    await expect(session.thread.switch({ threadId: 'branch-thread-id' })).resolves.toBeUndefined();
+    expect(session.thread.getId()).toBe('branch-thread-id');
+  });
+
+  it('still rejects a branch thread owned by another resource', async () => {
+    const storage = new InMemoryStore();
+    const memoryFactory = vi.fn().mockResolvedValue(await mockMemory(storage, { getById: undefined }));
+    const controller = createController({ memory: memoryFactory, storage });
+
+    await controller.init();
+    await saveThread(storage, 'foreign-branch-thread-id', 'someone-else', READY_BRANCH_METADATA);
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    await expect(session.thread.listMessages({ threadId: 'foreign-branch-thread-id' })).rejects.toThrow(
+      'Thread not found: foreign-branch-thread-id',
+    );
+  });
+
+  it('keeps reporting BRANCHING_UNSUPPORTED when neither controller storage nor memory serves the branch row', async () => {
+    const storage = new InMemoryStore();
+    const controller = createController({ storage });
+
+    await controller.init();
+    await saveThread(storage, 'orphan-branch-thread-id', 'controller-resource', READY_BRANCH_METADATA);
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    await expect(session.thread.listMessages({ threadId: 'orphan-branch-thread-id' })).rejects.toMatchObject({
+      id: 'BRANCHING_UNSUPPORTED',
+    });
   });
 
   it('returns empty lineage reads when branching is unsupported', async () => {

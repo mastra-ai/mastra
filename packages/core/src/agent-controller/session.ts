@@ -579,6 +579,16 @@ async function withThreadOwnershipMutex<T>(threadId: string, operation: () => Pr
   }
 }
 
+/**
+ * True when controller storage refused a row because it belongs to a
+ * shared-history branch (`assertRawControllerThreadAvailable` in
+ * agent-controller.ts only understands ordinary rows). Such a row can still be
+ * served by the caller's memory, so ownership reads treat this as "ask memory".
+ */
+function isBranchingUnsupportedError(error: unknown): error is MastraError {
+  return error instanceof MastraError && error.id === 'BRANCHING_UNSUPPORTED';
+}
+
 export class SessionThread {
   /** The active thread id, or null when the session is not bound to a thread. */
   #threadId: string | null = null;
@@ -725,8 +735,7 @@ export class SessionThread {
         type: 'model_changed',
         modelId,
         thinkingLevel: (session.state.get() as Record<string, unknown>).thinkingLevel as
-          | AgentControllerThinkingLevel
-          | undefined,
+          AgentControllerThinkingLevel | undefined,
       });
     }
   }
@@ -868,12 +877,34 @@ export class SessionThread {
     // that cannot see rows the caller's memory does not own.
     // Prefer the controller row (a free lookup) so a caller-memory resolution is
     // only spent when the row genuinely lives in that caller's memory.
-    const store = this.#store;
-    const thread = (await store?.getStorageById?.({ threadId })) ?? (await store?.getById({ threadId }));
+    const thread = await this.#loadThreadRow({ threadId });
     if (!thread || thread.resourceId !== this.#getResourceId()) {
       throw new Error(`Thread not found: ${threadId}`);
     }
     return thread;
+  }
+
+  /**
+   * Read a thread row for ownership/metadata checks. Controller storage is the
+   * cheap, authoritative lookup, but it refuses rows that carry shared-history
+   * branch lineage — those are only readable through the caller's memory, which
+   * is where branched threads live. When neither layer serves the row the
+   * controller-storage refusal is reported, so unsupported configurations still
+   * fail loudly instead of looking like a missing thread.
+   */
+  async #loadThreadRow({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    const store = this.#store;
+    if (!store) return null;
+    try {
+      const stored = await store.getStorageById?.({ threadId });
+      if (stored) return stored;
+    } catch (error) {
+      if (!isBranchingUnsupportedError(error)) throw error;
+      const fromMemory = (await store.getById({ threadId })) ?? null;
+      if (!fromMemory) throw error;
+      return fromMemory;
+    }
+    return (await store.getById({ threadId })) ?? null;
   }
 
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
@@ -1542,7 +1573,7 @@ export class SessionThread {
     if (!preserveTokenUsageOnFailure) session.resetTokenUsage();
 
     try {
-      const thread = await (store.getStorageById?.({ threadId }) ?? store.getById({ threadId }));
+      const thread = await this.#loadThreadRow({ threadId });
       if (!this.#isCurrentBinding(threadId, bindingGeneration)) return;
 
       const previousModeId = session.mode.get();
@@ -1610,9 +1641,7 @@ export class SessionThread {
       const currentModeId = session.mode.get();
       const persistedModelId = await migratePersistedModelSelection({
         getMetadata: async () =>
-          ((await (store.getStorageById?.({ threadId }) ?? store.getById({ threadId })))?.metadata as
-            | Record<string, unknown>
-            | undefined) ?? {},
+          ((await this.#loadThreadRow({ threadId }))?.metadata as Record<string, unknown> | undefined) ?? {},
         modeId: currentModeId,
         onResolved: async (modelId, metadata) => {
           if (!this.#isCurrentBinding(threadId, bindingGeneration)) return;
@@ -1650,8 +1679,7 @@ export class SessionThread {
           type: 'model_changed',
           modelId,
           thinkingLevel: (session.state.get() as Record<string, unknown>).thinkingLevel as
-            | AgentControllerThinkingLevel
-            | undefined,
+            AgentControllerThinkingLevel | undefined,
         });
       }
 
@@ -1901,8 +1929,7 @@ export class SessionStream {
   cleanup(): void {
     const { sessionId, runId } = this.getSessionRun();
     const origin = this.#subscription?.__getCurrentRunRequestContext?.()?.get('controller') as
-      | AgentControllerRequestContext
-      | undefined;
+      AgentControllerRequestContext | undefined;
     // The subscription exposes the original execution context, not this listener's
     // reconstructed context. Fence stale readers against a newer action on the thread.
     if (runId && this.#subscription?.activeRunId() === runId && origin?.session.id === sessionId) {

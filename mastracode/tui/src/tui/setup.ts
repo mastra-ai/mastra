@@ -422,7 +422,7 @@ export function setupAutocomplete(state: TUIState): void {
   const slashCommands: SlashCommand[] = [
     { name: 'new', description: 'Start a new thread' },
     { name: 'clone', description: 'Clone the current thread' },
-    { name: 'branch', description: 'Branch the current thread from this point' },
+    { name: 'branch', description: 'Branch the current thread from its latest message' },
     { name: 'parent', description: 'Switch to the parent thread of a branch' },
     { name: 'branches', description: 'List and switch to branches of this thread' },
     { name: 'thread', description: 'Show current thread info' },

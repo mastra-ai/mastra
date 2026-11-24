@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { AgentControllerEvent as ClientEvent, AgentControllerModeInfo } from '@mastra/client-js';
 import type {
-  AgentControllerBranch,
   AgentControllerDisplayState,
   AgentControllerEvent,
   AgentControllerEventListener,
@@ -12,7 +11,6 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { defaultDisplayState } from '@mastra/core/agent-controller';
-import type { PaginationInfo } from '@mastra/core/storage';
 
 import type { FactoryAddress } from './client.js';
 import { createFactoryClient, FACTORY_CONTROLLER_ID } from './client.js';
@@ -75,6 +73,8 @@ function toThread(
  * Only the surface the TUI drives is implemented. Anything else resolves to a
  * no-op so local-only features (thread locks, grants) degrade instead of crash.
  */
+const FACTORY_BRANCHING_UNAVAILABLE = 'Thread branching is not available when connected to a Factory session';
+
 export class RemoteSession {
   readonly #remote: RemoteHandle;
   readonly #sessionId: string;
@@ -159,8 +159,7 @@ export class RemoteSession {
    */
   #adoptLocalUserId(e: Record<string, any>): void {
     const message = e.message as
-      | { id?: string; role?: string; content?: { metadata?: { signal?: { type?: string } } } }
-      | undefined;
+      { id?: string; role?: string; content?: { metadata?: { signal?: { type?: string } } } } | undefined;
     const isUser =
       message?.role === 'user' || (message?.role === 'signal' && message.content?.metadata?.signal?.type === 'user');
     if (!message?.id || !isUser) return;
@@ -262,18 +261,20 @@ export class RemoteSession {
         if (this.#threadId) await remote().renameThread(this.#threadId, title);
       },
       // Thread branching exists only in local sessions; a Factory session has no branch endpoints.
+      // Every branch surface reports the missing capability rather than an empty
+      // history, which would read as "this thread has no branches".
       branch: async (): Promise<never> => {
-        throw new Error('Thread branching is not available when connected to a Factory session');
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
       },
-      getParent: async () => null,
-      getBranchInfo: async () => null,
-      listBranches: async (): Promise<PaginationInfo & { branches: AgentControllerBranch[] }> => ({
-        branches: [],
-        total: 0,
-        page: 1,
-        perPage: false,
-        hasMore: false,
-      }),
+      getParent: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
+      getBranchInfo: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
+      listBranches: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
       delete: async ({ threadId }: { threadId: string }) => {
         await remote().deleteThread(threadId);
         if (this.#threadId === threadId) this.#threadId = null;

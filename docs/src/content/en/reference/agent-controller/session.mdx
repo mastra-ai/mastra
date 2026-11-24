@@ -444,7 +444,8 @@ const branch = await session.thread.branch({
 
 Returns: `Promise<AgentControllerBranch>`, an object with `thread` and `branch`. The `branch` field holds the fork metadata `{ parentThreadId, branchPointMessageId, branchPointCreatedAt, branchCreatedAt }`.
 
-Branching requires a memory implementation with `supportsThreadBranching`. Other configurations throw `BRANCHING_UNSUPPORTED`.
+Branching requires a memory implementation with `supportsThreadBranching`. Creating a branch throws
+`BRANCHING_UNSUPPORTED` otherwise; the lineage accessors below return `null` or an empty list instead.
 
 ### `session.thread.getParent({ threadId? })`
 
@@ -477,6 +478,7 @@ const info = await session.thread.getBranchInfo()
 Returns: `Promise<AgentControllerBranch['branch'] | null>`
 
 ### `session.thread.switch({ threadId, emitEvent?, requestContext? })`
+
 Switch to an owned stored thread and hydrate its mode, model, and observational memory settings. Pass `requestContext` when memory is a function that reads the signed-in user.
 
 Switching away cancels a running local execution only when this session initiated it. A session listening to another session's run detaches without cancelling that run. This follows the current action's initiator, not ownership of the thread. Parked tool prompts remain available for later resume.
