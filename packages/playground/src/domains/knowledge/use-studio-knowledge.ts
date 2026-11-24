@@ -121,7 +121,8 @@ export function useKnowledgePageGraph(knowledgeKey: string | undefined, live: bo
     queryKey: ['knowledge', knowledgeKey, 'graph'],
     queryFn: knowledgeKey ? () => client.getKnowledge(knowledgeKey).graph() : skipToken,
     retry: retryUnlessFinal,
-    refetchInterval: ({ state }) => (isFinal(state.error) ? false : pollUnless(live)),
+    refetchInterval: ({ state }) =>
+      state.error instanceof MastraClientError && state.error.status === 422 ? false : pollUnless(live),
   });
 }
 
