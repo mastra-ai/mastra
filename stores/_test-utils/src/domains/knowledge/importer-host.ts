@@ -1136,6 +1136,49 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(q2?.body).not.toContain('[[docs:acme#notion/a1/linear/q1]]');
     });
 
+    it("repairs another binding's linking pages that sort before its saved settle cursor", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion/a1/linear' },
+      ]);
+      await run([upsert({ sourceId: 'a0' }), upsert({ sourceId: 'a1' })]);
+      const host = knowledge.importers!.host;
+      const first = await host.startRun('b2');
+      if (first.status !== 'started') throw new Error('not started');
+      const children = Array.from({ length: 60 }, (_, i) =>
+        upsert({ sourceId: `c${String(i).padStart(2, '0')}`, parent: 'p' }),
+      );
+      await flushOnce(host, first.runId, first.generation, 1, [
+        upsert({ sourceId: 'q1' }),
+        upsert({ sourceId: 'a-link', links: [{ sourceId: 'q1' }] }),
+        ...children,
+      ]);
+      // The parent arrives and settles 50; the run ends with its settle cursor saved at c49.
+      expect(await flushOnce(host, first.runId, first.generation, 2, [upsert({ sourceId: 'p' })])).toMatchObject({
+        pending: true,
+      });
+      await host.finishRun({
+        runId: first.runId,
+        generation: first.generation,
+        outcome: 'succeeded',
+        backlog: false,
+        lastSeq: 2,
+      });
+      // b1 moves a1, and b2's folder with it; a-link sorts before b2's saved cursor.
+      expect(await run([upsert({ sourceId: 'a1', parent: 'a0' })])).toMatchObject({ counts: { moved: 1 } });
+      expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false });
+      expect((await page('notion/a0/a1/linear/a-link'))?.body).toContain('[[docs:acme#notion/a0/a1/linear/q1]]');
+      expect((await page('notion/a0/a1/linear/p/c59'))?.parentId).toBe((await page('notion/a0/a1/linear/p'))!.id);
+      const storage = await knowledge.getStorage();
+      expect((await storage.importers!.listNodes('b2', { unsettled: true })).items).toEqual([]);
+      // Nothing left: the next run settles nothing.
+      expect(await run([], 'b2')).toMatchObject({
+        outcome: 'succeeded',
+        chain: false,
+        counts: { moved: 0, updated: 0 },
+      });
+    });
+
     it('gives back a kept body whose note was written with the earlier heading', async () => {
       const { knowledge, run, page } = setup();
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/p1', name: 'P1', body: 'mine' });
@@ -1153,6 +1196,49 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion/p1'))?.body).toBe('body of p1');
       await run([{ op: 'remove', sourceId: 'p1' }]);
       expect((await page('notion/p1'))?.body).toBe('mine');
+    });
+
+    it("keeps its item page as a stub when the source removes it while it is another binding's empty folder", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion/x' },
+      ]);
+      await run([upsert({ sourceId: 'x' })]);
+      await run([upsert({ sourceId: 'q1' })], 'b2');
+      await run([{ op: 'remove', sourceId: 'q1' }], 'b2');
+      const x = await page('notion/x');
+      await knowledge.addNote({ scope: 'docs:acme', path: 'notion/x', text: 'Owner: support team' });
+      expect(await run([{ op: 'remove', sourceId: 'x' }])).toMatchObject({
+        counts: { removed: 0, stubbed: 1, refused: 0 },
+      });
+      expect(await page('notion/x')).toMatchObject({
+        id: x!.id,
+        body: 'Removed from the source. Kept because another importer writes under it.',
+      });
+      const storage = await knowledge.getStorage();
+      expect((await storage.listNotes({ pageId: x!.id, read: 'all' })).notes.map(n => n.text)).toContain(
+        'Owner: support team',
+      );
+      expect(await storage.importers!.getBinding('b2')).toMatchObject({ anchorPageId: x!.id });
+      // b2 keeps the same folder.
+      expect(await run([upsert({ sourceId: 'q2' })], 'b2')).toMatchObject({ counts: { created: 1, refused: 0 } });
+      expect((await page('notion/x/q2'))?.parentId).toBe(x!.id);
+    });
+
+    it("keeps its item page as an ordinary stub when it is another binding's folder with pages under it", async () => {
+      const { run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion/x' },
+      ]);
+      await run([upsert({ sourceId: 'x' })]);
+      await run([upsert({ sourceId: 'q1' })], 'b2');
+      const x = await page('notion/x');
+      expect(await run([{ op: 'remove', sourceId: 'x' }])).toMatchObject({ counts: { removed: 0, stubbed: 1 } });
+      expect(await page('notion/x')).toMatchObject({
+        id: x!.id,
+        body: 'Removed from the source. Kept because pages are still nested under it.',
+      });
+      expect(await page('notion/x/q1')).toBeTruthy();
     });
 
     it('removes its own items with a removal-only flush after its folder was deleted', async () => {

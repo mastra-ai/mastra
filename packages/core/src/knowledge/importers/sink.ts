@@ -35,6 +35,7 @@ import type {
 
 /** The body a page keeps when its item is gone at the source but pages are still nested under it. */
 export const REMOVED_PARENT_BODY = 'Removed from the source. Kept because pages are still nested under it.';
+export const REMOVED_FOLDER_BODY = 'Removed from the source. Kept because another importer writes under it.';
 export const REMOVED_ADOPTED_BODY = 'Removed from the source. Kept because the page was here before the import.';
 /** Heads the note that keeps the body a page had before an importer took it over. */
 export const ORIGINAL_BODY_NOTE = 'The body this page had before an importer took it over:\n\n';
@@ -579,7 +580,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     let adopted = existing?.adopted ?? false;
 
     // A page someone else wrote at the item's path is taken over: it keeps its id and children, and
-    // the item's fields replace its own. A hand-written body is kept in a note on the page, and comes
+    // the item's fields replace its own. The page's earlier body is kept in a note on the page, and comes
     // back when the source removes the item. A page another binding imported is taken too, and that
     // binding stops tracking it; its next import writes the item again where it belongs. Only the
     // page found at the path is locked; when the path is empty, the unique key on (parent, key)
@@ -718,10 +719,14 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           await storage.lockSubtree(current.page.id);
           const children =
             (await storage.countChildPages({ parentIds: [current.page.id], read: 'all' }))[current.page.id] ?? 0;
-          // A page the binding took over is never deleted, even as a leaf.
-          if (children > 0 || node.adopted) {
+          // A page the binding took over is never deleted, even as a leaf, and neither is a page that
+          // is another binding's folder: that binding keeps writing under it.
+          const folder = (await importers.listBindings()).some(
+            other => other.id !== binding.id && other.anchorPageId === current.page.id,
+          );
+          if (children > 0 || node.adopted || folder) {
             if (node.stub) return;
-            // A page it took over gets its hand-written body back, as the note kept it.
+            // A page it took over gets its earlier body back, as the note kept it.
             const note = node.adopted
               ? await storage.getNote({ id: originalBodyNoteId(current.page.id), read: 'all' })
               : null;
@@ -730,7 +735,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
             const page = await storage.updatePage({
               id: current.page.id,
               expectedVersion: current.page.version,
-              body: original || (children > 0 ? REMOVED_PARENT_BODY : REMOVED_ADOPTED_BODY),
+              body:
+                original || (children > 0 ? REMOVED_PARENT_BODY : folder ? REMOVED_FOLDER_BODY : REMOVED_ADOPTED_BODY),
               provenance,
             });
             await importers.saveNode({ ...node, stub: true });
@@ -813,6 +819,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     let examined = 0;
     let moves = 0;
     let settled = 0;
+    const visited = new Set<string>();
     for (;;) {
       const page = await importers.listNodes(binding.id, {
         unsettled: true,
@@ -825,6 +832,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         }
         examined++;
         after = node.sourceId;
+        visited.add(node.sourceId);
         const embeds: KnowledgeImportEmbedJob[] = [];
         try {
           const outcome = await storage.transaction(() => settleNode(node.sourceId, embeds, moves < budget.moves));
@@ -836,9 +844,18 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         }
       }
       if (!page.next) {
+        // Linker repairs this slice deferred may sit anywhere, even on nodes it already visited.
         if (deferredLinkers) {
           const behind = await importers.listNodes(binding.id, { unsettled: true, limit: 1 });
           if (behind.items.length > 0) return { pending: true, cursor: null, settled };
+        }
+        // A pass that started from a saved cursor hasn't seen the nodes before it, and another
+        // binding's move may have queued some there. Nodes this slice visited and couldn't settle
+        // (waiting on a parent) don't count: if any other node is unsettled, one of the first
+        // `visited.size + 1` is.
+        else if (budget.after) {
+          const first = await importers.listNodes(binding.id, { unsettled: true, limit: visited.size + 1 });
+          if (first.items.some(node => !visited.has(node.sourceId))) return { pending: true, cursor: null, settled };
         }
         return { pending: false, cursor: null, settled };
       }
