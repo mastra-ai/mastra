@@ -13,6 +13,7 @@ import type {
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
+  KnowledgePageActivityInput,
   KnowledgePageActivityEvent,
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
@@ -173,6 +174,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     createdAt TEXT NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kactivity_page ON "${T.activity}" (pageId, id DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_kactivity_created ON "${T.activity}" (createdAt DESC, id DESC)`,
   // Outgoing body `[[links]]` per page; an unresolved link keeps its ref with a null target.
   `CREATE TABLE IF NOT EXISTS "${T.links}" (
     fromPageId TEXT NOT NULL,
@@ -1473,16 +1475,18 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const cursor = decodeCursor(input.cursor, 1);
+    // Dated mode orders by (createdAt, id) and uses a two-part cursor; the undated id order and
+    // one-part cursor stay as they were.
+    const dated = input.since !== undefined || input.until !== undefined || input.before !== undefined;
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
+    const cursor = decodeCursor(input.cursor, dated ? 2 : 1);
     const readable = pageReadable('p', input.read);
     const noteVisible = noteReadable('n', input.read);
     const args: InValue[] = [...readable.args];
@@ -1495,17 +1499,34 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND e.pageId = ?`;
       args.push(input.pageId);
     }
-    if (cursor) {
+    if (input.since !== undefined) {
+      filters += ` AND e.createdAt >= ?`;
+      args.push(input.since.toISOString());
+    }
+    if (input.until !== undefined) {
+      filters += ` AND e.createdAt < ?`;
+      args.push(input.until.toISOString());
+    }
+    const position = input.before
+      ? [input.before.createdAt.toISOString(), input.before.id]
+      : dated && cursor
+        ? cursor
+        : undefined;
+    if (position) {
+      filters += ` AND (e.createdAt < ? OR (e.createdAt = ? AND e.id < ?))`;
+      args.push(position[0]!, position[0]!, position[1]!);
+    } else if (!dated && cursor) {
       filters += ` AND e.id < ?`;
       args.push(cursor[0]!);
     }
     args.push(...noteVisible.args, limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY e.id DESC LIMIT ?`,
+      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
       args,
     );
     const page = rows.slice(0, limit);
+    const last = page[page.length - 1];
     return {
       events: page.map(row => ({
         id: String(row.id),
@@ -1516,7 +1537,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         provenance: provenance(row.provenance),
         createdAt: new Date(String(row.createdAt)),
       })),
-      ...(rows.length > limit ? { nextCursor: encodeCursor([String(page[page.length - 1]!.id)]) } : {}),
+      ...(rows.length > limit && last
+        ? { nextCursor: encodeCursor(dated ? [String(last.createdAt), String(last.id)] : [String(last.id)]) }
+        : {}),
     };
   }
 

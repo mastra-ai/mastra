@@ -1,13 +1,18 @@
-import { describe, expect, it, vi } from 'vitest';
+import assert from 'node:assert/strict';
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
+import { InMemoryStore } from '@mastra/core/storage';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
-import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
+import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { resolveDeploymentModelProviders } from './config.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: {
@@ -89,6 +94,83 @@ const boards = createTriageWorkRegistry();
 const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
+  it.each(['factory', 'hybrid'] as const)(
+    'blocks a direct Anthropic PR review in %s scope after its org key is removed, then starts it on Gateway',
+    async modelScope => {
+      vi.stubEnv('MASTRA_GATEWAY_API_KEY', 'test-deployment-key');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const directModelId = 'anthropic/claude-opus-5.5';
+      const gatewayModelId = `mastra/${directModelId}`;
+      const { seeded, sourceControl, project, projectRepository } = await seedFactoryWithRepository({
+        modelScope,
+        defaultModelId: directModelId,
+      });
+      const org = { orgId: project.orgId };
+      await seeded.credentials.setCredential(org, 'anthropic', { type: 'api_key', key: 'test-org-key' });
+      await seeded.credentials.removeCredential(org, 'anthropic');
+      const { item } = await seeded.workItems.upsert({
+        ...org,
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          board: 'work',
+          title: 'Review PR #49',
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: '49' },
+          stages: ['pr-review'],
+          sessions: {},
+          metadata: { repository: 'mastra-ai/mastra', githubPullRequestNumber: 49 },
+        },
+      });
+      const controller = new AgentController({
+        id: 'code',
+        storage: new InMemoryStore(),
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            agent: new Agent({
+              id: 'review',
+              name: 'Review',
+              instructions: 'Review pull requests.',
+              model: directModelId,
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      const coordinator = new FactoryStartCoordinator(controller, seeded.workItems, undefined, sourceControl);
+      const startReview = () =>
+        prepareFactoryRuleBinding(
+          sourceControl,
+          coordinator,
+          seeded.projects,
+          boards,
+          { ...bindingInput(project.id, ['pr-review'], { role: 'review' }), item },
+          undefined,
+          {
+            workItems: seeded.workItems,
+            modelCredentials: seeded.credentials,
+            customProviders: seeded.customProviders,
+            deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+          },
+        );
+
+      await expect(startReview()).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+      await expect(
+        sourceControl.sessions.listByProjectRepository({ projectRepositoryId: projectRepository.id }),
+      ).resolves.toEqual([]);
+
+      await seeded.projects.update({ ...org, id: project.id, input: { defaultModelId: gatewayModelId } });
+      await startReview();
+
+      const updated = await seeded.workItems.get({ ...org, id: item.id });
+      const sessionId = updated?.sessions.review?.sessionId;
+      assert(sessionId, 'Expected a review session on the card');
+      const session = await controller.getSession(sessionId);
+      expect(session?.model.get()).toBe(gatewayModelId);
+    },
+  );
+
   it("starts the run on the factory's default model", async () => {
     const { seeded, project, github } = await seedFactoryWithRepository({
       defaultModelId: 'anthropic/claude-opus-5',

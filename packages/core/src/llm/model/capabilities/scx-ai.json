@@ -53,21 +53,6 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "DeepSeek-V4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
@@ -80,7 +65,31 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "DeepSeek-V4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "DeepSeek-V4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "DeepSeek-V4-flash": [
       {
         "type": "toggle"
       },
@@ -95,7 +104,7 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "DeepSeek-V4.1-flash-1017": [
+    "DeepSeek-V4-pro": [
       {
         "type": "toggle"
       },
@@ -110,16 +119,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "DeepSeek-V4-flash": [
-      {
-        "type": "toggle"
-      },
+    "GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

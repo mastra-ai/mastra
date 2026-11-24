@@ -8,6 +8,8 @@ Run the official 2026-07-28 HTTP smoke, the 2026-07-28 stdio opening exchange an
 pnpm --filter ./packages/mcp test:conformance
 ```
 
+The command runs `src/conformance/launch.mjs` on plain Node. It checks that `tsx` resolves, then runs the runner and its stdio fixture through `tsx`. `tsx` is a development dependency of this package, so `pnpm install` at the repository root provides it. If it is missing, the launcher exits before any scenario starts and prints the install command. The runner is a repository script and isn't part of the published package.
+
 The command deliberately runs the official `tools-list` scenario rather than the full server suite. The full suite requires fixture APIs that `MCPServer` does not advertise, including completions and the deprecated sampling/roots behavior that `@mastra/mcp` 2.x removes. Omitting those optional capabilities is not a conformance failure.
 
 ## 2026-07-28 coverage matrix
