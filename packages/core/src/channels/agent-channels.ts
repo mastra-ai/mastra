@@ -2441,7 +2441,8 @@ export class AgentChannels {
    * normally in cards/hidden modes.
    *
    * When the run's stream ends, an empty status is sent to clear any status
-   * this run set, so runs that end without posting a message (e.g. terminated
+   * left on the thread — set by this run or by a channel handler before it
+   * dispatched — so runs that end without posting a message (e.g. terminated
    * by `stopWhen` on a tool call, or aborted) don't leave a stale status
    * pinned to the thread.
    */
@@ -2461,7 +2462,6 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
-    let statusSent = false;
 
     try {
       for await (const chunk of stream) {
@@ -2485,7 +2485,6 @@ export class AgentChannels {
           }
           if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
             currentTypingStatus = result;
-            statusSent = true;
             chatThread.startTyping(result).catch(e => {
               this.log('debug', 'Typing indicator failed (best-effort)', {
                 platform,
@@ -2507,12 +2506,15 @@ export class AgentChannels {
       // End of the run's stream (the session queue closed on the terminal
       // step-finish / error / abort, or the driver stopped consuming). Slack's
       // `assistant.threads.setStatus` only auto-clears on `chat.postMessage`,
-      // so a run that set a status but never posted a message would leave it
+      // so a status left by a run that never posted a message would stay
       // pinned on the thread indefinitely. Send an empty status to clear it —
-      // a no-op when a post already cleared it. Skip the clear while the
-      // streaming gate is active: the in-flight streaming post clears the
-      // status when it completes.
-      if (statusSent && !typingGate.active) {
+      // a no-op when a post already cleared it. Clear even when this run's
+      // stream set no status itself: a channel handler may have set one before
+      // dispatching (e.g. an early "is thinking..." acknowledgement), and a
+      // custom `typingStatus` that ignores every chunk of the run would never
+      // replace it. Skip the clear while the streaming gate is active: the
+      // in-flight streaming post clears the status when it completes.
+      if (typingStatusFn && !typingGate.active) {
         chatThread.startTyping('').catch(e => {
           this.log('debug', 'Typing clear failed (best-effort)', { platform, threadId: chatThread.id, error: e });
         });
