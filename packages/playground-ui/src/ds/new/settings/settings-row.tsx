@@ -44,8 +44,9 @@ const sideHeadingClassName =
  */
 const sideControlClassName = cn(
   'flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:shrink-0 sm:self-stretch',
-  'sm:has-[>[data-slot=input-number]]:w-55 sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55',
-  'sm:[&>:is(:not([data-slot]),[data-slot=field])>:is(input:not([aria-hidden]),[data-slot=input-group]),&>:is([data-slot=combobox-input],[data-slot=combobox-chips])]:w-55',
+  'sm:has-[>input:not([aria-hidden]),>[data-slot=input-group]]:min-w-55',
+  'sm:[&>:is([data-slot=input-number].w-full,[data-slot=combobox-input],[data-slot=combobox-chips])]:w-55',
+  'sm:[&>:is(:not([data-slot]),[data-slot=field])>:is(input,[data-slot=input-group],[data-slot=input-number],[data-slot=combobox-input],[data-slot=combobox-chips]).w-full]:w-55',
 );
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
