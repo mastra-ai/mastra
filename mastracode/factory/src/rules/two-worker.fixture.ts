@@ -1,6 +1,7 @@
 /**
  * A Factory session whose thread lives in a file, so two worker processes see the same thread:
- * its settings (the open-run ledger and run ends) and the ids of the messages that landed on it.
+ * its settings (the run ends) and the ids of the messages that landed on it. The open-run ledger
+ * lives in the shared Factory storage.
  * Everything else the dispatcher asks of a session is answered the way an idle session would.
  */
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';

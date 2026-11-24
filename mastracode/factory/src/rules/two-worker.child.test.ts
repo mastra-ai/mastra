@@ -5,11 +5,11 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, it } from 'vitest';
 
 import { autoStartingBoards, createLifecycleTestRegistry } from '../boards/test-utils.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd } from '../session/run-audit.js';
+import { observeSessionRunEnd } from '../session/run-audit.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
-import { createFileSession, readThread, TWO_WORKER_DIR_ENV } from './two-worker.fixture.js';
+import { createFileSession, TWO_WORKER_DIR_ENV } from './two-worker.fixture.js';
 
 /**
  * Worker A of `dispatcher.two-worker.test.ts`, run in its own process. It attaches the session's
@@ -33,7 +33,7 @@ describe.skipIf(!dir)('two-worker test, worker A', () => {
     });
 
     const { session, controller } = createFileSession(dir!, { runsFinish: false });
-    observeSessionRunEnd(session as never, { audit: seed.audit });
+    observeSessionRunEnd(session as never, { audit: seed.audit, openRuns: seed.openRuns });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       boards: autoStartingBoards(),
@@ -44,13 +44,13 @@ describe.skipIf(!dir)('two-worker test, worker A', () => {
       }),
       storage: seed.workItems,
       audit: seed.audit,
+      openRuns: seed.openRuns,
       ownerId: 'worker-a',
     });
     void dispatcher.runOnce();
 
     for (;;) {
-      const ledger = readThread(dir!).settings[FACTORY_OPEN_RUNS_SETTING];
-      if (Array.isArray(ledger) && ledger.length > 0) break;
+      if ((await seed.openRuns.listByThread('thread-1')).length > 0) break;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     writeFileSync(join(dir!, 'worker-a.ready'), '');

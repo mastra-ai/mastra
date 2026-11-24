@@ -9,7 +9,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { autoStartingBoards, commitDecisions, createLifecycleTestRegistry } from '../boards/test-utils.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
+import { observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
@@ -166,7 +166,7 @@ describe('two Factory workers sharing storage', () => {
       // Past the decision's lease and the run's heartbeat window: nothing renews either once A is gone.
       vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 120_000 });
       const workerB = createFileSession(dir, { runsFinish: true });
-      observeSessionRunEnd(workerB.session as never, { audit: seed.audit });
+      observeSessionRunEnd(workerB.session as never, { audit: seed.audit, openRuns: seed.openRuns });
       const dispatcher = new FactoryDecisionDispatcher({
         controller: workerB.controller as never,
         boards: autoStartingBoards(),
@@ -177,6 +177,7 @@ describe('two Factory workers sharing storage', () => {
         }),
         storage: seed.workItems,
         audit: seed.audit,
+        openRuns: seed.openRuns,
         ownerId: 'worker-b',
       });
       await dispatcher.runOnce(new Date());
@@ -201,7 +202,7 @@ describe('two Factory workers sharing storage', () => {
           [workerB.sent[0]!.id, 'complete'],
         ]),
       );
-      expect(readThread(dir).settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+      await expect(seed.openRuns.listByThread('thread-1')).resolves.toEqual([]);
       // The session reopens on B with the VM A started: its handle outlived A.
       await expect(sourceControl.sessions.getBySessionId('session-1')).resolves.toMatchObject({
         sandboxId: 'vm-started-by-worker-a',
