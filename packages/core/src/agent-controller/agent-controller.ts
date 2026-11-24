@@ -134,6 +134,15 @@ function assertRawControllerThreadAvailable({
  * never collide with an unscoped one or with a different resource/scope split
  * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
  */
+/**
+ * True when controller storage refused a row because it carries shared-history
+ * branch lineage. Checked by id rather than `instanceof MastraError` so it holds
+ * when core is bundled more than once.
+ */
+function isBranchingUnsupportedError(error: unknown): boolean {
+  return (error as { id?: unknown } | null)?.id === 'BRANCHING_UNSUPPORTED';
+}
+
 function sessionRegistryKey(resourceId: string, scope?: string): string {
   return JSON.stringify([resourceId, scope ?? null]);
 }
@@ -1333,10 +1342,11 @@ export class AgentController<TState = {}> {
       getStorageById: ({ threadId }) => this.queryThreadById({ threadId }),
       getById: async ({ threadId }) => {
         // Thread rows are controller state and persistThreadRow always writes
-        // them to controller storage when it exists, so read them there. The
-        // configured memory resolves the host's memory factory, which can need a
-        // caller the run hasn't bound, so it is asked only when the controller
-        // has no storage or storage refuses a shared-history branch row.
+        // them to controller storage when it exists, so read them there, as
+        // main does; a miss is a miss. The configured memory resolves the host's
+        // memory factory, which can need a caller the run hasn't bound (createSession
+        // probes a not-yet-created thread id), so it is asked only when the
+        // controller has no storage or storage refuses a shared-history branch row.
         const readFromMemory = async () => {
           const memory = await getConfiguredMemory();
           return memory && typeof memory.getThreadById === 'function'
@@ -1348,7 +1358,7 @@ export class AgentController<TState = {}> {
           try {
             thread = await this.queryThreadById({ threadId });
           } catch (error) {
-            if ((error as { id?: unknown } | null)?.id !== 'BRANCHING_UNSUPPORTED') throw error;
+            if (!isBranchingUnsupportedError(error)) throw error;
             thread = await readFromMemory();
             if (!thread) throw error;
           }
