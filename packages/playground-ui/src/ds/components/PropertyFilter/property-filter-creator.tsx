@@ -20,6 +20,7 @@ import {
   menuItemButtonClass,
   menuItemTrailingIconClass,
 } from '@/ds/primitives/menu-item';
+import { MenuScrollArea, menuScrollPopupClass } from '@/ds/primitives/menu-scroll-area';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -175,7 +176,7 @@ export function PropertyFilterCreator({
       <PopoverContent
         align="start"
         sideOffset={MENU_SIDE_OFFSET}
-        className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
+        className={cn('w-64', selectedField ? 'p-3' : 'p-0')}
         initialFocus={false}
         finalFocus={() => {
           if (skipCloseFocusRef.current) {
@@ -204,7 +205,7 @@ export function PropertyFilterCreator({
           {!selectedField && (
             <div
               role="menu"
-              className="max-h-[80dvh] overflow-auto"
+              className={cn(menuScrollPopupClass, 'max-h-[80dvh]')}
               onKeyDown={e => {
                 if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
                 const buttons = Array.from(
@@ -222,7 +223,7 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              <>
+              <MenuScrollArea viewportRender={<div tabIndex={-1} />}>
                 {visibleFields.length > 0 ? (
                   visibleFields.map(f => {
                     const used = singleUseFieldIds.has(f.id);
@@ -275,7 +276,7 @@ export function PropertyFilterCreator({
                 ) : (
                   <div className={menuEmptyClass}>No matching property.</div>
                 )}
-              </>
+              </MenuScrollArea>
             </div>
           )}
 

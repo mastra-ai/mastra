@@ -72,7 +72,8 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
           <PreviewCardPrimitive.Popup
             ref={ref}
             className={cn(
-              'w-auto max-w-100 origin-[var(--transform-origin)] rounded-xl px-3 py-2.5 text-caption text-foreground',
+              // `scrollbar-inset-xl`: a flush (`p-0`) card's ScrollArea reaches the corners.
+              'w-auto max-w-100 origin-[var(--transform-origin)] rounded-xl px-3 py-2.5 text-caption text-foreground scrollbar-inset-xl',
               overlaySurfaceStyle,
               'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',

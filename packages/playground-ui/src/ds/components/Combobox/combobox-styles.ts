@@ -118,7 +118,7 @@ export const comboboxStyles = {
   // `empty:p-0` — Empty renders outside the List, so an empty List must not leave its padding behind.
   list: 'p-1 empty:p-0',
 
-  /** Scroll container around the List. */
+  /** @deprecated Scrolls natively, so a rounded popup clips the scrollbar. Wrap the List in a `ScrollArea`. */
   listScroller: 'max-h-dropdown overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from './hover-card';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 
 const meta: Meta<typeof HoverCard> = {
   title: 'Elements/HoverCard',
@@ -52,6 +53,24 @@ export const BottomNoArrow: Story = {
       <HoverCardTrigger className="cursor-help text-body text-foreground underline">Open below</HoverCardTrigger>
       <HoverCardContent side="bottom" showArrow={false}>
         Positioned below the trigger, without an arrow.
+      </HoverCardContent>
+    </HoverCard>
+  ),
+};
+
+/** Long content scrolls inside the card; the scrollbar stays clear of the rounded corners. */
+export const LongContent: Story = {
+  render: () => (
+    <HoverCard>
+      <HoverCardTrigger className="cursor-help text-body text-foreground underline">Long reason</HoverCardTrigger>
+      <HoverCardContent side="right" align="start" className="max-w-100 p-0">
+        <ScrollArea maxHeight="20rem">
+          <div className="grid gap-2 px-3 py-2.5">
+            {Array.from({ length: 20 }, (_, i) => (
+              <p key={i}>Reason {i + 1}: the answer names its source and stays on the question that was asked.</p>
+            ))}
+          </div>
+        </ScrollArea>
       </HoverCardContent>
     </HoverCard>
   ),

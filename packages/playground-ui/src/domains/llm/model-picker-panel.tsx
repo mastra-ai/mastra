@@ -19,6 +19,7 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/ds/components/Command';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
@@ -142,107 +143,120 @@ export function ModelPickerPanel({
         className={cn('bg-card', sheet && 'mx-2 w-auto rounded-2xl **:[[cmdk-input]]:h-11 **:[[cmdk-item]]:min-h-11')}
       >
         {/* Search floats over the list, which scrolls up beneath it. */}
-        <div
+        <ScrollArea
+          maxHeight={sheet ? 'calc(45dvh + 6.5rem)' : '24rem'}
+          mask={false}
           className={cn(
-            'min-h-0 overflow-y-auto overscroll-contain',
-            sheet ? 'max-h-[calc(45dvh+6.5rem)]' : 'max-h-96',
-            'scroll-pb-1',
+            'flex min-h-0 flex-col',
+            // Above the sticky search, which would cover the top of the thumb.
+            '[&>[data-slot=scroll-area-scrollbar]]:z-20',
+            sheet ? 'scrollbar-inset-2xl' : 'scrollbar-inset-xl',
           )}
-          // Keeps a row scrolled into view by the arrow keys clear of the search, and inset like the rest.
-          style={{ scrollPaddingTop: (searchBar.height ?? 0) + 4 }}
-          onScroll={event => setScrolled(event.currentTarget.scrollTop > 0)}
         >
-          <div
-            ref={searchBar.ref}
-            data-scrolled={scrolled || undefined}
-            className={cn(
-              'sticky top-0 z-10 bg-card',
-              'after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-card after:to-transparent after:opacity-0 after:transition-opacity after:duration-fast',
-              'data-scrolled:after:opacity-100',
-            )}
+          <ScrollAreaViewport
+            className="min-h-0 scroll-pb-1 overscroll-y-contain"
+            render={
+              <div
+                // The search and the filters are the tab stops; the arrow keys scroll the list.
+                tabIndex={-1}
+                // Keeps a row scrolled into view by the arrow keys clear of the search, and inset like the rest.
+                style={{ scrollPaddingTop: (searchBar.height ?? 0) + 4 }}
+                onScroll={event => setScrolled(event.currentTarget.scrollTop > 0)}
+              />
+            }
           >
-            <CommandInput
-              placeholder="Search models"
-              value={query}
-              onValueChange={setQuery}
-              wrapperClassName={cn('border-b-0', addProvider && 'pr-1')}
-              rightSlot={
-                addProvider ? (
-                  <Button
-                    onKeyDown={keepKeysFromList}
-                    variant="ghost"
-                    size="icon-sm"
-                    className={cn('shrink-0', sheet && 'size-11')}
-                    aria-label={addProvider.label}
-                    tooltip={addProvider.label}
-                    render={addProvider.render}
-                    onClick={onAddProvider}
-                  >
-                    <IconPlusMedium aria-hidden />
-                  </Button>
-                ) : undefined
-              }
-            />
-            {filtering ? (
-              <div onKeyDown={keepKeysFromList}>
-                <ModelPickerProviderFilter
-                  providers={usable}
-                  value={providerFilter}
-                  onChange={filterTo}
-                  moreCount={others.length}
-                  browsingMore={browsingMore}
-                  onBrowseMore={() => {
-                    setProviderFilter(undefined);
-                    setBrowsingMore(true);
-                  }}
-                  renderProviderIcon={renderProviderIcon}
-                  sheet={sheet}
-                />
-              </div>
-            ) : null}
-          </div>
-          <CommandList className="max-h-none overflow-visible">
-            <CommandEmpty>No matching model.</CommandEmpty>
-            {deferredQuery ? (
-              <CommandGroup>
-                {matches.slice(0, MAX_SEARCH_RESULTS).map(({ provider, model }) => renderOption(provider, model))}
-                {matches.length > MAX_SEARCH_RESULTS ? (
-                  <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
-                    Refine the search to see more.
-                  </Txt>
-                ) : null}
-              </CommandGroup>
-            ) : browsingMore ? (
-              <CommandGroup heading="Not connected">
-                {others.map(provider => (
-                  <ModelPickerProviderOption
-                    key={provider.id}
-                    provider={provider}
-                    onSelect={() => filterTo(provider.id)}
+            <div
+              ref={searchBar.ref}
+              data-scrolled={scrolled || undefined}
+              className={cn(
+                'sticky top-0 z-10 bg-card',
+                'after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-card after:to-transparent after:opacity-0 after:transition-opacity after:duration-fast',
+                'data-scrolled:after:opacity-100',
+              )}
+            >
+              <CommandInput
+                placeholder="Search models"
+                value={query}
+                onValueChange={setQuery}
+                wrapperClassName={cn('border-b-0', addProvider && 'pr-1')}
+                rightSlot={
+                  addProvider ? (
+                    <Button
+                      onKeyDown={keepKeysFromList}
+                      variant="ghost"
+                      size="icon-sm"
+                      className={cn('shrink-0', sheet && 'size-11')}
+                      aria-label={addProvider.label}
+                      tooltip={addProvider.label}
+                      render={addProvider.render}
+                      onClick={onAddProvider}
+                    >
+                      <IconPlusMedium aria-hidden />
+                    </Button>
+                  ) : undefined
+                }
+              />
+              {filtering ? (
+                <div onKeyDown={keepKeysFromList}>
+                  <ModelPickerProviderFilter
+                    providers={usable}
+                    value={providerFilter}
+                    onChange={filterTo}
+                    moreCount={others.length}
+                    browsingMore={browsingMore}
+                    onBrowseMore={() => {
+                      setProviderFilter(undefined);
+                      setBrowsingMore(true);
+                    }}
                     renderProviderIcon={renderProviderIcon}
+                    sheet={sheet}
                   />
-                ))}
-              </CommandGroup>
-            ) : (
-              shownProviders.map(provider => (
-                <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
-                  {provider.models.toSorted(byReleaseDate).map(model => renderOption(provider, model))}
-                </CommandGroup>
-              ))
-            )}
-            {reset && !deferredQuery && !browsingMore ? (
-              <>
-                <CommandSeparator />
+                </div>
+              ) : null}
+            </div>
+            <CommandList className="max-h-none overflow-visible">
+              <CommandEmpty>No matching model.</CommandEmpty>
+              {deferredQuery ? (
                 <CommandGroup>
-                  <CommandItem value="action:reset" keywords={['reset', 'default', 'model']} onSelect={reset.onClick}>
-                    <IconArrowRotateCounterClockwise aria-hidden />
-                    <span>{reset.label}</span>
-                  </CommandItem>
+                  {matches.slice(0, MAX_SEARCH_RESULTS).map(({ provider, model }) => renderOption(provider, model))}
+                  {matches.length > MAX_SEARCH_RESULTS ? (
+                    <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
+                      Refine the search to see more.
+                    </Txt>
+                  ) : null}
                 </CommandGroup>
-              </>
-            ) : null}
-          </CommandList>
-        </div>
+              ) : browsingMore ? (
+                <CommandGroup heading="Not connected">
+                  {others.map(provider => (
+                    <ModelPickerProviderOption
+                      key={provider.id}
+                      provider={provider}
+                      onSelect={() => filterTo(provider.id)}
+                      renderProviderIcon={renderProviderIcon}
+                    />
+                  ))}
+                </CommandGroup>
+              ) : (
+                shownProviders.map(provider => (
+                  <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
+                    {provider.models.toSorted(byReleaseDate).map(model => renderOption(provider, model))}
+                  </CommandGroup>
+                ))
+              )}
+              {reset && !deferredQuery && !browsingMore ? (
+                <>
+                  <CommandSeparator />
+                  <CommandGroup>
+                    <CommandItem value="action:reset" keywords={['reset', 'default', 'model']} onSelect={reset.onClick}>
+                      <IconArrowRotateCounterClockwise aria-hidden />
+                      <span>{reset.label}</span>
+                    </CommandItem>
+                  </CommandGroup>
+                </>
+              ) : null}
+            </CommandList>
+          </ScrollAreaViewport>
+        </ScrollArea>
       </Command>
       {settings ? <div className={cn('p-3', sheet && 'px-4')}>{settings}</div> : null}
     </>

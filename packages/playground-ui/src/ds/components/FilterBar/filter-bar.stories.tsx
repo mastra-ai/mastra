@@ -122,6 +122,21 @@ export const Default: Story = {
   render: () => <Demo />,
 };
 
+const MANY_FIELDS: FilterBarField[] = Array.from({ length: 24 }, (_, i) => ({
+  id: `attribute${i + 1}`,
+  label: `Attribute ${i + 1}`,
+  icon: IconHashtag,
+  operators: ['is', 'is-not', 'in'],
+  suggestions: Array.from({ length: 24 }, (_, n) => ({ value: `value-${n + 1}` })),
+}));
+
+/** Long field and value lists scroll inside the popup; the scrollbar stays clear of the rounded corners. */
+export const ManyFields: Story = {
+  render: () => (
+    <Demo fields={MANY_FIELDS} initial={[{ id: '1', fieldId: 'attribute1', operatorId: 'in', value: ['value-1'] }]} />
+  ),
+};
+
 export const WithPrefilledFilters: Story = {
   render: () => (
     <Demo

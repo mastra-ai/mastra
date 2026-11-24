@@ -76,6 +76,35 @@ export const Creator: Story = {
   },
 };
 
+const MANY_FIELDS: PropertyFilterField[] = [
+  ...FIELDS,
+  {
+    id: 'model',
+    label: 'Model',
+    kind: 'pick-multi',
+    searchable: false,
+    options: Array.from({ length: 40 }, (_, i) => ({ label: `model-${i + 1}`, value: `model-${i + 1}` })),
+    emptyText: 'No models.',
+  },
+  ...Array.from(
+    { length: 34 },
+    (_, i): PropertyFilterField => ({
+      id: `attribute${i + 1}`,
+      label: `Attribute ${i + 1}`,
+      kind: 'text',
+    }),
+  ),
+];
+
+/** Long property and value lists scroll inside their popups; the scrollbars stay clear of the rounded corners. */
+export const CreatorManyFields: Story = {
+  name: 'Creator — many properties',
+  render: () => {
+    const { tokens, setTokens } = useTokens();
+    return <PropertyFilterCreator fields={MANY_FIELDS} tokens={tokens} onTokensChange={setTokens} />;
+  },
+};
+
 export const CreatorLoadingOptions: Story = {
   name: 'Creator — loading pick-multi options',
   render: () => {

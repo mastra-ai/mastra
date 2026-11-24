@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
@@ -229,24 +229,28 @@ export function ToolsPage() {
                     Add tools
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="max-h-72 w-80 overflow-y-auto p-0 pt-4">
-                  {unselectedOptions.map(tool => (
-                    <button
-                      key={tool.value}
-                      type="button"
-                      onClick={() => handleAddTool(tool.value)}
-                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
-                    >
-                      <Txt as="span" tone="ink">
-                        {tool.label}
-                      </Txt>
-                      {tool.description && (
-                        <Txt as="span" variant="meta" tone="muted">
-                          {tool.description}
-                        </Txt>
-                      )}
-                    </button>
-                  ))}
+                <PopoverContent align="end" className="w-80 overflow-hidden p-0">
+                  <ScrollArea maxHeight="18rem">
+                    <ScrollAreaViewport className="scroll-py-8" contentClassName="pt-4" render={<div tabIndex={-1} />}>
+                      {unselectedOptions.map(tool => (
+                        <button
+                          key={tool.value}
+                          type="button"
+                          onClick={() => handleAddTool(tool.value)}
+                          className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
+                        >
+                          <Txt as="span" tone="ink">
+                            {tool.label}
+                          </Txt>
+                          {tool.description && (
+                            <Txt as="span" variant="meta" tone="muted">
+                              {tool.description}
+                            </Txt>
+                          )}
+                        </button>
+                      ))}
+                    </ScrollAreaViewport>
+                  </ScrollArea>
                 </PopoverContent>
               </Popover>
             )}

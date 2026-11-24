@@ -4,6 +4,7 @@ import { Spinner } from '@/ds/components/Spinner/spinner';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { menuEmptyClass, menuItemButtonClass, menuItemCheckClass, menuSearchClasses } from '@/ds/primitives/menu-item';
+import { MenuScrollArea, menuScrollPopupClass } from '@/ds/primitives/menu-scroll-area';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
@@ -60,7 +61,7 @@ export type PickMultiPanelProps = {
  */
 export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps) {
   const [query, setQuery] = useState('');
-  const listClassName = 'max-h-[80dvh] overflow-auto p-1';
+  const listClassName = cn(menuScrollPopupClass, 'max-h-[80dvh]');
 
   const filteredOptions = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -113,7 +114,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
         <div className={cn(menuEmptyClass, 'm-1')}>{field.emptyText ?? 'No option found.'}</div>
       ) : field.multi ? (
         <div className={listClassName}>
-          <>
+          <MenuScrollArea viewportRender={<div tabIndex={-1} />}>
             {filteredOptions.map(option => {
               const checked = selectedValues.includes(option.value);
               return (
@@ -131,11 +132,11 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
                 />
               );
             })}
-          </>
+          </MenuScrollArea>
         </div>
       ) : (
         <div role="radiogroup" className={listClassName}>
-          <>
+          <MenuScrollArea viewportRender={<div tabIndex={-1} />}>
             {filteredOptions.map(option => (
               <PickMultiItem
                 key={option.value}
@@ -153,7 +154,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
                 onClick={() => onChange(field.id, 'Any')}
               />
             )}
-          </>
+          </MenuScrollArea>
         </div>
       )}
     </>

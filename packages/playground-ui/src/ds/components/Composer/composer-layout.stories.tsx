@@ -55,9 +55,24 @@ interface LayoutStoryProps {
   status?: boolean;
   /** Only Anthropic is connected, so the picker drops its provider filter and group heading. */
   singleProvider?: boolean;
+  /** Enough models to scroll the picker. */
+  longList?: boolean;
 }
 
-const LayoutStory = ({ reconnecting = false, status = false, singleProvider = false }: LayoutStoryProps) => {
+const manyModels: ModelPickerProvider[] = providers.map(provider => ({
+  ...provider,
+  models: [
+    ...provider.models,
+    ...Array.from({ length: 12 }, (_, index) => ({ id: `${provider.id}-preview-${index + 1}` })),
+  ],
+}));
+
+const LayoutStory = ({
+  reconnecting = false,
+  status = false,
+  singleProvider = false,
+  longList = false,
+}: LayoutStoryProps) => {
   const [model, setModel] = useState<ModelPickerValue>({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
   const [thinking, setThinking] = useState('high');
 
@@ -80,7 +95,7 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
               </ComposerActionsStart>
               <ComposerActionsEnd>
                 <ModelPicker
-                  providers={singleProvider ? providers.slice(0, 1) : providers}
+                  providers={longList ? manyModels : singleProvider ? providers.slice(0, 1) : providers}
                   value={model}
                   onValueChange={setModel}
                   defaultModel={{ provider: 'anthropic', model: 'claude-sonnet-4-6' }}
@@ -161,3 +176,5 @@ export const WithStatus: Story = { args: { status: true } };
 export const Reconnecting: Story = { args: { status: true, reconnecting: true } };
 
 export const SingleProvider: Story = { args: { singleProvider: true } };
+
+export const LongModelList: Story = { args: { longList: true } };

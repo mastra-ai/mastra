@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner/spinner';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
@@ -31,7 +32,7 @@ export function FilterBarOptionLabel({ option }: { option: FilterBarOption }) {
 
 /**
  * List/status/empty rows for a `ComboboxPrimitive.Root`, laid out like the DS
- * `Combobox` popup (scroller around the list). Items come
+ * `Combobox` popup (ScrollArea around the list). Items come
  * from the root's `items`; highlight and keyboard navigation are owned by Base UI.
  */
 export function FilterBarOptionList<T>({
@@ -60,47 +61,49 @@ export function FilterBarOptionList<T>({
         </ComboboxPrimitive.Status>
       )}
       <ComboboxPrimitive.Empty className={comboboxStyles.empty}>{idle ? emptyText : null}</ComboboxPrimitive.Empty>
-      <div className={cn(comboboxStyles.listScroller, 'max-h-[min(var(--spacing-dropdown),60dvh)]')}>
-        <ComboboxPrimitive.List
-          aria-label={ariaLabel}
-          aria-multiselectable={multiselectable}
-          className={comboboxStyles.list}
-        >
-          {(option: T) => {
-            const selected = isSelected?.(option) ?? false;
-            return (
-              <ComboboxPrimitive.Item
-                key={getKey(option)}
-                value={option}
-                data-selected={selected || undefined}
-                className={cn(comboboxStyles.item, 'min-w-0')}
-              >
-                {/* The row's rung, which the wrapper would otherwise hide from a leading icon. */}
-                <span
-                  className={cn(
-                    'flex min-w-0 flex-1 items-center gap-1.5 truncate',
-                    iconSizeClasses.md,
-                    '[&>svg]:shrink-0',
-                  )}
+      <ScrollArea maxHeight="min(var(--spacing-dropdown), 60dvh)">
+        <ScrollAreaViewport className="scroll-py-8" render={<div tabIndex={-1} />}>
+          <ComboboxPrimitive.List
+            aria-label={ariaLabel}
+            aria-multiselectable={multiselectable}
+            className={comboboxStyles.list}
+          >
+            {(option: T) => {
+              const selected = isSelected?.(option) ?? false;
+              return (
+                <ComboboxPrimitive.Item
+                  key={getKey(option)}
+                  value={option}
+                  data-selected={selected || undefined}
+                  className={cn(comboboxStyles.item, 'min-w-0')}
                 >
-                  {renderOption(option)}
-                </span>
-                <span className={comboboxStyles.itemRightSlot}>
-                  <span className={comboboxStyles.checkContainer}>
-                    {isSelected ? (
-                      selected && <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
-                    ) : (
-                      <ComboboxPrimitive.ItemIndicator>
-                        <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
-                      </ComboboxPrimitive.ItemIndicator>
+                  {/* The row's rung, which the wrapper would otherwise hide from a leading icon. */}
+                  <span
+                    className={cn(
+                      'flex min-w-0 flex-1 items-center gap-1.5 truncate',
+                      iconSizeClasses.md,
+                      '[&>svg]:shrink-0',
                     )}
+                  >
+                    {renderOption(option)}
                   </span>
-                </span>
-              </ComboboxPrimitive.Item>
-            );
-          }}
-        </ComboboxPrimitive.List>
-      </div>
+                  <span className={comboboxStyles.itemRightSlot}>
+                    <span className={comboboxStyles.checkContainer}>
+                      {isSelected ? (
+                        selected && <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
+                      ) : (
+                        <ComboboxPrimitive.ItemIndicator>
+                          <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
+                        </ComboboxPrimitive.ItemIndicator>
+                      )}
+                    </span>
+                  </span>
+                </ComboboxPrimitive.Item>
+              );
+            }}
+          </ComboboxPrimitive.List>
+        </ScrollAreaViewport>
+      </ScrollArea>
     </>
   );
 }

@@ -3,6 +3,7 @@ import { Fragment } from 'react';
 import { DataList } from '@/ds/components/DataList';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
@@ -101,8 +102,12 @@ function TraceScoreLine({ score, onSelect }: { score: ClientScoreRowData; onSele
             >
               <IconCircleInfo />
             </HoverCardTrigger>
-            <HoverCardContent side="left" align="start" className="max-h-80 max-w-100 overflow-y-auto">
-              <MarkdownRenderer>{reason}</MarkdownRenderer>
+            <HoverCardContent side="left" align="start" className="max-w-100 p-0">
+              <ScrollArea maxHeight="20rem">
+                <div className="px-3 py-2.5">
+                  <MarkdownRenderer>{reason}</MarkdownRenderer>
+                </div>
+              </ScrollArea>
             </HoverCardContent>
           </HoverCard>
         )}
