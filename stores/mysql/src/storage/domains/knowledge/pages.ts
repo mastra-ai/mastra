@@ -624,7 +624,8 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
               [parentId, template.key],
             )
           )[0];
-          if (!existing && (await this.#templateRemoved(tx, parentId, template.key))) continue;
+          // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+          if (await this.#templateRemoved(tx, parentId, template.key)) continue;
           const id = existing
             ? String(existing.id)
             : (

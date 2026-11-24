@@ -316,19 +316,11 @@ export async function removeKnowledgePage(
   const expectedVersion = expectedVersionOf(input, page);
   const template = await host.runtime.templatePageRef(page);
   if (template) throw new Error(`"${template}" is declared in config; change the scope's pages to remove it.`);
-  let deleted: KnowledgePage;
-  try {
-    deleted = await storage.deletePage({
-      id: page.id,
-      expectedVersion,
-      deletedBy: input.author ?? 'host',
-    });
-  } catch (error) {
-    if ((error as Error | undefined)?.name === 'KnowledgePageHasChildrenError') {
-      throw new Error(`"${input.scope}#${input.path}" has child pages; remove them first.`);
-    }
-    throw error;
-  }
+  const deleted = await withRemovalErrors(
+    input,
+    `"${input.scope}#${input.path}" has child pages; remove them first.`,
+    storage.deletePage({ id: page.id, expectedVersion, deletedBy: input.author ?? 'host' }),
+  );
   await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
   await updateKnowledgeLinks(host.warn, async () => {
     await syncKnowledgePageBodyLinks(storage, deleted);
@@ -353,7 +345,8 @@ export async function removeKnowledgeTemplatePage(
   const expectedVersion = expectedVersionOf(input, page);
   const template = await host.runtime.templatePageRef(page);
   if (!template) throw new Error(`"${input.scope}#${input.path}" is not declared in config; use removePage.`);
-  const removed = await withChildrenMessage(
+  const removed = await withRemovalErrors(
+    input,
     `"${template}" has child pages; remove them first.`,
     storage.removeTemplatePage({ id: page.id, expectedVersion, provenance: provenanceOf(input) }),
   );
@@ -376,7 +369,8 @@ export async function removeKnowledgeScope(
   const [scope] = await storage.getScopesByAddress([input.scope]);
   if (!scope) return expectedGone(input);
   const expectedVersion = expectedVersionOf(input, scope);
-  const removed = await withChildrenMessage(
+  const removed = await withRemovalErrors(
+    input,
     `"${input.scope}" still has pages or child scopes; remove them first.`,
     storage.removeScope({ id: scope.id, expectedVersion, provenance: provenanceOf(input) }),
   );
@@ -430,11 +424,21 @@ function provenanceOf(input: { author?: string }): KnowledgeProvenance {
   return { author: input.author ?? 'host' };
 }
 
-async function withChildrenMessage<T>(message: string, operation: Promise<T>): Promise<T> {
+/**
+ * Store refusals in a removal's own words: children left behind, and, when the caller named what it
+ * read, a page removed by someone else after Core's lookup, which is a lost race like any other.
+ */
+async function withRemovalErrors<T>(
+  input: { expected?: { id: string } },
+  childrenMessage: string,
+  operation: Promise<T>,
+): Promise<T> {
   try {
     return await operation;
   } catch (error) {
-    if ((error as Error | undefined)?.name === 'KnowledgePageHasChildrenError') throw new Error(message);
+    const name = (error as Error | undefined)?.name;
+    if (name === 'KnowledgePageHasChildrenError') throw new Error(childrenMessage);
+    if (name === 'KnowledgeNotFoundError' && input.expected) throw new KnowledgeConflictError(input.expected.id);
     throw error;
   }
 }

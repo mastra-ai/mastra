@@ -657,7 +657,8 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `SELECT * FROM ${this.#pages} WHERE "parentId" = $1 AND "key" = $2 AND "deletedAt" IS NULL`,
         [parent.id, template.key],
       );
-      if (rows[0] === undefined && (await this.#templateRemoved(db, parent.id, template.key))) continue;
+      // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+      if (await this.#templateRemoved(db, parent.id, template.key)) continue;
       const page =
         rows[0] === undefined
           ? await this.#insertPage(db, {

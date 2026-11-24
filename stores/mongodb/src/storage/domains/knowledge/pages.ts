@@ -625,7 +625,8 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         { parentId: parent.id, key: template.key, ...live },
         { ...noProjection, session },
       );
-      if (!existing && (await this.#templateRemoved(session, parent.id, template.key))) continue;
+      // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+      if (await this.#templateRemoved(session, parent.id, template.key)) continue;
       const page = existing
         ? toPage(existing)
         : await this.#insertPage(session, {

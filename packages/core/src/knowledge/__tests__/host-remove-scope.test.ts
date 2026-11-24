@@ -132,6 +132,50 @@ describe('Knowledge host scope removal', () => {
     expect(after.deletedAt).toBeFalsy();
   });
 
+  it('reports a conflict when another writer removes the page or scope just before the store write', async () => {
+    const { knowledge } = setup();
+    const pages = await knowledge.getStorage();
+    const { page: notes } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });
+    const [scope] = await pages.getScopesByAddress(['docs:acme']);
+    const faq = (await pages.getPageByPath({ scopeId: scope!.id, path: ['start', 'faq'], read: 'all' }))!;
+    const conflict = expect.objectContaining({ name: 'KnowledgeConflictError' });
+
+    const deletePage = pages.deletePage.bind(pages);
+    pages.deletePage = async input => {
+      await deletePage({ id: input.id, expectedVersion: input.expectedVersion, deletedBy: 'other' });
+      return deletePage(input);
+    };
+    await expect(
+      knowledge.removePage({ scope: 'docs:acme', path: 'notes', expected: { id: notes.id, version: notes.version } }),
+    ).rejects.toThrow(conflict);
+    pages.deletePage = deletePage;
+
+    const removeTemplatePage = pages.removeTemplatePage.bind(pages);
+    pages.removeTemplatePage = async input => {
+      await removeTemplatePage({ ...input, provenance: { author: 'other' } });
+      return removeTemplatePage(input);
+    };
+    await expect(
+      knowledge.removeTemplatePage({
+        scope: 'docs:acme',
+        path: 'start/faq',
+        expected: { id: faq.id, version: faq.version },
+      }),
+    ).rejects.toThrow(conflict);
+    pages.removeTemplatePage = removeTemplatePage;
+
+    await knowledge.removeTemplatePage({ scope: 'docs:acme', path: 'start' });
+    const [current] = await pages.getScopesByAddress(['docs:acme']);
+    const removeScope = pages.removeScope.bind(pages);
+    pages.removeScope = async input => {
+      await removeScope({ ...input, provenance: { author: 'other' } });
+      return removeScope(input);
+    };
+    await expect(
+      knowledge.removeScope({ scope: 'docs:acme', expected: { id: current!.id, version: current!.version } }),
+    ).rejects.toThrow(conflict);
+  });
+
   it('refuses to remove a template page that changed or was replaced since the caller read it', async () => {
     const { knowledge } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'notes', name: 'Notes' });

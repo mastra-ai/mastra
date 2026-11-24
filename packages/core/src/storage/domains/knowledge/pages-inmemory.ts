@@ -263,7 +263,8 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       const problem = knowledgePageKeyProblem(template.key);
       if (problem) throw new Error(problem);
       let page = this.#childByKey(parentId, template.key);
-      if (!page && this.#templateRemoved(parentId, template.key)) continue;
+      // A removed template stays removed with everything declared under it, even when an ordinary page now holds its key.
+      if (this.#templateRemoved(parentId, template.key)) continue;
       if (!page) {
         page = this.#newPage({
           scopeId,
@@ -289,7 +290,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     if (scope?.deletedAt) throw new KnowledgeScopeRemovedError(input.address);
     if (scope) {
       if (scope.parentId === null && input.parentId != null) {
-        if (!this.#page(input.parentId).isScope) {
+        if (!this.#livePage(input.parentId).isScope) {
           throw new Error(`Knowledge scope ${input.address} must be placed under a scope page`);
         }
         if (input.parentId === scope.id || this.#subtree(scope).some(entry => entry.page.id === input.parentId)) {
@@ -305,7 +306,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       }
     } else {
       const parentId = input.parentId ?? null;
-      if (parentId !== null && !this.#page(parentId).isScope) {
+      if (parentId !== null && !this.#livePage(parentId).isScope) {
         throw new Error(`Knowledge scope ${input.address} must be placed under a scope page`);
       }
       scope = this.#newPage({

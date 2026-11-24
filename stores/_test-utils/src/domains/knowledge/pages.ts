@@ -250,6 +250,36 @@ export function createKnowledgePageStoreTests(
         expect(await liveByKey(acct.id, 'overview')).toEqual([]);
       });
 
+      it('keeps nested removed templates removed when an ordinary page reuses the removed ancestor key', async () => {
+        const nested = [{ key: 'start', name: 'Start', pages: [{ key: 'faq', name: 'FAQ' }] }];
+        const { scope: acct } = await account(nested);
+        const start = (await store.getPageByPath({ scopeId: acct.id, path: ['start'], read: 'all' }))!;
+        const faq = (await store.getPageByPath({ scopeId: acct.id, path: ['start', 'faq'], read: 'all' }))!;
+        await store.removeTemplatePage({ id: faq.id, expectedVersion: faq.version, provenance: host });
+        const current = (await store.getPage({ id: start.id, read: 'all' }))!;
+        await store.removeTemplatePage({ id: start.id, expectedVersion: current.version, provenance: host });
+        const ordinary = await page(acct.id, 'My start', { key: 'start' });
+        await account(nested);
+        expect(ids(await liveByKey(acct.id, 'start'))).toEqual([ordinary.id]);
+        expect(await liveByKey(ordinary.id, 'faq')).toEqual([]);
+      });
+
+      it('refuses to create a scope under a removed parent scope', async () => {
+        const acme = await scope('org:acme', ORG);
+        await store.removeScope({ id: acme.id, expectedVersion: acme.version, provenance: host });
+        await rejectsNamed(
+          store.materializeScope({
+            address: 'team:acme:eng',
+            declaration: TEAM,
+            name: 'Eng',
+            parentId: acme.id,
+            provenance: host,
+          }),
+          'KnowledgeNotFoundError',
+        );
+        expect(await store.getScopesByAddress(['team:acme:eng'])).toEqual([]);
+      });
+
       it('still creates a template whose key only an ordinary deleted page used', async () => {
         const { scope: acct } = await account([]);
         const ordinary = await page(acct.id, 'Old overview', { key: 'overview' });

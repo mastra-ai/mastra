@@ -5,6 +5,7 @@
 '@mastra/mysql': minor
 '@mastra/mongodb': minor
 '@mastra/platform': patch
+'@mastra/playground-ui': patch
 ---
 
 Knowledge can now remove a page declared in config, remove an empty scope, and restore a removed scope. These are host-only (`knowledge.removeTemplatePage`, `knowledge.removeScope`, `knowledge.restoreScope`); agent tools still can't remove declared pages.
@@ -37,3 +38,5 @@ Removal is serialized against creating, moving or merging pages into the same pa
 On MongoDB these three operations need transactions (a replica set or sharded cluster). On a standalone server they refuse with an error and write nothing, instead of falling back to unprotected sequential writes.
 
 `PlatformKnowledge` doesn't offer these: on Mastra platform, an instance's owners remove and restore scopes from the Knowledge MCP, so calling them from an app rejects as unsupported.
+
+Studio's page activity list labels the new events: template page removed, scope removed and scope restored.
