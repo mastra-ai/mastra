@@ -104,7 +104,7 @@ for await (const chunk of stream) {
     "model": "google/gemini-3.1-flash-lite-image",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 65536,
@@ -323,7 +323,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 1048576,
+    "contextWindow": 131072,
     "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
@@ -335,7 +335,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": 1048576,
+    "contextWindow": 131072,
     "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null

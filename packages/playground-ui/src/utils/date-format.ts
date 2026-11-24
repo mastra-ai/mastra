@@ -48,6 +48,16 @@ const PRESET_OPTIONS = {
     fractionalSecondDigits: 3,
   },
   timePrecise: { hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 },
+  logLine: {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 2,
+    // oxlint-disable-next-line playground-ui/date-locale -- log lines keep one clock and width, so they line up
+    hourCycle: 'h23',
+  },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type FormatterKey = keyof typeof PRESET_OPTIONS;
@@ -79,7 +89,7 @@ function getFormatter(key: FormatterKey, locale?: string, timeZone?: string) {
   let formatter = formatters.get(cacheKey);
   if (!formatter) {
     const options: Intl.DateTimeFormatOptions = { ...PRESET_OPTIONS[key], timeZone };
-    if (options.hour) options.hour = clockOf(locale).hour;
+    if (options.hour === 'numeric') options.hour = clockOf(locale).hour;
     formatter = new Intl.DateTimeFormat(locale, options);
     formatters.set(cacheKey, formatter);
   }
@@ -205,6 +215,33 @@ export function formatDateRange(start: DateInput, end: DateInput, options: Omit<
   return getFormatter('date-year', options.locale, options.timeZone)
     .formatRange(from, to)
     .replace(/\u2009/g, ' ');
+}
+
+export interface LogLineTimestampParts {
+  day: string;
+  time: string;
+  fraction: string;
+}
+
+export function formatLogLineTimestamp(
+  value: DateInput,
+  { locale, timeZone }: { locale?: string; timeZone?: string } = {},
+): LogLineTimestampParts | undefined {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const parts = getFormatter('logLine', locale, timeZone).formatToParts(date);
+  const timeStart = parts.findIndex(part => part.type === 'hour');
+  const fractionStart = parts.findIndex(part => part.type === 'fractionalSecond');
+  const join = (from: number, to: number) =>
+    parts
+      .slice(from, to)
+      .map(part => part.value)
+      .join('');
+  return {
+    day: join(0, timeStart).trim().replace(/,$/, ''),
+    time: join(timeStart, fractionStart - 1),
+    fraction: join(fractionStart - 1, parts.length),
+  };
 }
 
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */

@@ -231,9 +231,7 @@ export class ObservationStep {
         const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
         const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
         messageList.removeByIds(sealedOutput.map(msg => msg.id));
-        for (const msg of sealedOutput) {
-          messageList.add(msg, 'memory');
-        }
+        if (sealedOutput.length) messageList.add(sealedOutput, 'memory');
       }
 
       if (!deferred) {
@@ -306,9 +304,7 @@ export class ObservationStep {
           .map(msg => msg.id);
         inFlightIds = [...new Set(unreadIds)];
         if (messagesToSave.length > 0) {
-          for (const msg of messagesToSave) {
-            messageList.add(msg, 'memory');
-          }
+          messageList.add(messagesToSave, 'memory');
           try {
             await om.persistMessages(messagesToSave, threadId, resourceId);
           } catch (error) {
