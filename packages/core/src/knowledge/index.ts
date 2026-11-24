@@ -185,10 +185,23 @@ export class Knowledge extends MastraBase {
   }
 
   /**
+   * Reads the store's scope declarations into the ones {@link scopeGrants}, {@link scopeDeclaration}
+   * and {@link scopeLabel} use, reusing a read from the last 30 seconds. Call it before those when
+   * nothing else async ran first, e.g. at the start of a browsing request. Checks nothing and grants
+   * nothing.
+   *
+   * @experimental
+   */
+  async resolveScopeDeclarations(): Promise<void> {
+    await this.#runtime.resolve();
+  }
+
+  /**
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
    * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
    * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
-   * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
+   * declarations as last resolved, not storage (see {@link Knowledge.resolveScopeDeclarations}). For
+   * browsing UIs that draw access between scopes.
    *
    * @experimental
    */
@@ -510,7 +523,8 @@ export class Knowledge extends MastraBase {
   /**
    * The declaration a scope page was created from, by its `declaration` key (template children
    * included, e.g. `account:$orgId:$accountId/internal`), for display. Access rules are left out;
-   * use `explainAccess` for those. `undefined` for an unknown key.
+   * use `explainAccess` for those. `undefined` for an unknown key. Reads the declarations as last
+   * resolved, not storage; see {@link Knowledge.resolveScopeDeclarations}.
    */
   scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined {
     const compiled = this.#runtime.compiled.declarations.get(key);
@@ -535,6 +549,7 @@ export class Knowledge extends MastraBase {
    * declaration's `$params` filled in from the address's decoded values: `'$orgId policy'` on
    * `policy:$orgId` gives `'acme policy'` for `policy:acme`. A concrete address's own `displayLabel`
    * wins over its pattern's. `undefined` when the address matches no declaration or has no label.
+   * Reads the declarations as last resolved, like {@link Knowledge.scopeDeclaration}.
    */
   scopeLabel(address: string): string | undefined {
     const match = this.#runtime.compiled.match(address);
