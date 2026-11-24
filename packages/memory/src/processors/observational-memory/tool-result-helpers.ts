@@ -7,63 +7,13 @@ const ENCRYPTED_CONTENT_REDACTION_THRESHOLD = 256;
 
 export const DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS = 5_000;
 
-function isObjectLike(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-/**
- * Thrown by {@link sanitizeToolResultValue} when the value holds something the walk would serialize differently
- * from `JSON.stringify` (a `toJSON()`, a boxed primitive, a class instance), so the caller serializes it natively.
- */
-const NEEDS_NATIVE_JSON = Symbol('needs-native-json');
-
-/** An array or plain object with no `toJSON()`: walking its own entries gives what `JSON.stringify` writes. */
-function isPlainJsonContainer(value: object): boolean {
-  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') return false;
-  if (Array.isArray(value)) return true;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> = new WeakMap()): unknown {
-  if (!isObjectLike(value)) {
-    return value;
-  }
-
-  if (seen.has(value)) {
-    return seen.get(value);
-  }
-
-  if (!isPlainJsonContainer(value)) {
-    throw NEEDS_NATIVE_JSON;
-  }
-
-  if (Array.isArray(value)) {
-    const sanitizedArray: unknown[] = [];
-    seen.set(value, sanitizedArray);
-    for (const item of value) {
-      sanitizedArray.push(sanitizeToolResultValue(item, seen));
-    }
-    return sanitizedArray;
-  }
-
-  const sanitizedObject: Record<string, unknown> = {};
-  seen.set(value, sanitizedObject);
-
-  for (const [key, entry] of Object.entries(value)) {
-    if (
-      key === ENCRYPTED_CONTENT_KEY &&
-      typeof entry === 'string' &&
-      entry.length > ENCRYPTED_CONTENT_REDACTION_THRESHOLD
-    ) {
-      sanitizedObject[key] = `[stripped encryptedContent: ${entry.length} characters]`;
-      continue;
-    }
-
-    sanitizedObject[key] = sanitizeToolResultValue(entry, seen);
-  }
-
-  return sanitizedObject;
+/** Redacts long `encryptedContent` strings: opaque provider data that would otherwise dominate the count. */
+function redactEncryptedContent(key: string, value: unknown): unknown {
+  return key === ENCRYPTED_CONTENT_KEY &&
+    typeof value === 'string' &&
+    value.length > ENCRYPTED_CONTENT_REDACTION_THRESHOLD
+    ? `[stripped encryptedContent: ${value.length} characters]`
+    : value;
 }
 
 /**
@@ -86,33 +36,25 @@ export function toolErrorTextToString(errorText: unknown): string {
   return errorText == null ? '' : stringifyToolResult(errorText);
 }
 
+/**
+ * Serializes with `JSON.stringify` itself, the serializer storage uses, so a count of this text describes what
+ * storage holds and a reload reads back (`toJSON()`, boxed primitives, class instances, array indices).
+ */
 function stringifyToolResult(value: unknown): string {
   if (typeof value === 'string') {
     return value;
   }
 
-  let sanitized: unknown;
+  let json: string | undefined;
   try {
-    sanitized = sanitizeToolResultValue(value);
-  } catch (error) {
-    if (error !== NEEDS_NATIVE_JSON) throw error;
-    // Count what storage holds and a reload reads back: the value as JSON.stringify writes it.
-    let json: string | undefined;
-    try {
-      json = JSON.stringify(value);
-    } catch {
-      return String(value);
-    }
-    if (json === undefined) return '';
-    const stored: unknown = JSON.parse(json);
-    if (typeof stored === 'string') return stored;
-    sanitized = sanitizeToolResultValue(stored);
-  }
-  try {
-    return JSON.stringify(sanitized, null, 2);
+    json = JSON.stringify(value, redactEncryptedContent, 2);
   } catch {
-    return String(sanitized);
+    // Cycles and BigInt: storage cannot write these either.
+    return String(value);
   }
+  if (json === undefined) return '';
+  // A value that serializes to a string (a boxed string, a toJSON() returning one) reloads as that raw string.
+  return json.startsWith('"') ? (JSON.parse(json) as string) : json;
 }
 
 export function resolveToolResultValue(

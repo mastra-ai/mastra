@@ -188,6 +188,27 @@ describe('Observational Memory token counts for stored history', () => {
       'a nested Map and typed array',
       () => ({ body: report, index: new Map([['a', 1]]), bytes: new Uint8Array([1, 2]) }),
     ],
+    // JSON.stringify reads an array by index; a custom iterator must not change what is counted.
+    [
+      'an array with a custom iterator',
+      () =>
+        Object.assign([report, report], {
+          *[Symbol.iterator]() {
+            yield 'short';
+          },
+        }),
+    ],
+    [
+      'an array subclass with a custom iterator',
+      () => {
+        class Pages extends Array<string> {
+          *[Symbol.iterator]() {
+            yield 'short';
+          }
+        }
+        return { pages: Pages.from([report, report]) };
+      },
+    ],
   ];
   it.each([
     ...serializers.map(([name, make]) => [`whose toJSON() ${name}`, make] as const),
