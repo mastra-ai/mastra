@@ -2213,9 +2213,10 @@ export class ObservationalMemory {
    * to detect already-persisted messages, avoiding redundant DB operations.
    *
    * Messages with observation markers are always saved (upserted) even if sealed,
-   * because the markers need to be persisted to storage. A sealed message in `resaveIds` gained token
-   * counts after it was stored: only those counts are copied onto the stored copy, see
-   * {@link persistTokenEstimatesOntoStored}.
+   * because the markers need to be persisted to storage. A stored message in `resaveIds` gained token
+   * counts after it was stored, whether or not it is sealed: only those counts are copied onto the stored
+   * copy, see {@link persistTokenEstimatesOntoStored}. Ids in `resaveIds` must not be this turn's own
+   * input or output, which are saved whole.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
@@ -2224,16 +2225,20 @@ export class ObservationalMemory {
     resaveIds?: ReadonlySet<string>,
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
-    const sealedWithNewCounts: MastraDBMessage[] = [];
+    const storedWithNewCounts: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
+      // A stored message that only gained counts is patched, sealed or not: its stored copy can hold
+      // markers written after this copy was loaded, which a whole save would overwrite.
+      if (resaveIds?.has(msg.id)) {
+        storedWithNewCounts.push(msg);
+        continue;
+      }
       const isSealed = !!(msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed;
       if (isSealed) {
         // Sealed messages were already persisted by buffer(). Only re-save if they
         // now have observation markers (need to upsert the markers to storage).
         if (findLastCompletedObservationBoundary(msg) !== -1) {
           filteredMessages.push(msg);
-        } else if (resaveIds?.has(msg.id)) {
-          sealedWithNewCounts.push(msg);
         }
       } else {
         filteredMessages.push(msg);
@@ -2250,15 +2255,15 @@ export class ObservationalMemory {
 
     // A missed count write only costs a recount on the next request, so it must never fail the save.
     try {
-      await this.persistTokenEstimatesOntoStored(sealedWithNewCounts);
+      await this.persistTokenEstimatesOntoStored(storedWithNewCounts);
     } catch (error) {
-      omError('[OM] Failed to save token counts for sealed messages', error);
+      omError('[OM] Failed to save token counts for stored messages', error);
     }
   }
 
   /**
-   * Copy the token counts of `messages` onto their stored copies. A sealed message's stored copy can hold
-   * parts the in-memory one lacks (buffering markers written straight to storage), so it is patched
+   * Copy the token counts of `messages` onto their stored copies. A stored copy can hold
+   * parts the in-memory one lacks (markers written straight to storage), so it is patched
    * instead of saved whole. Each count goes to the first stored part whose content matches the counted
    * part, so a part that changed in storage keeps no count and is counted again on read.
    */

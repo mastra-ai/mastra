@@ -237,7 +237,12 @@ export class ObservationTurn {
     // Stored messages whose token counts changed go back with them.
     const unsavedMessages = withMessagesMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]);
     if (unsavedMessages.length > 0) {
-      await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId, idsMarkedForResave(messageList));
+      await this.om.persistMessages(
+        unsavedMessages,
+        this.threadId,
+        this.resourceId,
+        idsMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]),
+      );
     }
 
     // When the agent goes idle, start buffering any unobserved messages in the background.

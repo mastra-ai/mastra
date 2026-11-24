@@ -871,7 +871,7 @@ OM decides when to observe from local token estimates, not from the provider's u
 
 OM caches estimates in message metadata so threshold checks don't recount the same content:
 
-- Per-part estimates are stored on `part.providerMetadata.mastra.tokenEstimate` and saved with the message. A later request reuses one only when its content hash matches the part, so an edited part is counted again and a wrong or forged count is ignored. Counts for history that has none are saved once, for the current thread only.
+- Per-part estimates are stored on `part.providerMetadata.mastra.tokenEstimate` and saved with the message. A later request reuses one only when its content hash matches the part, so a count that no longer matches the part's content is ignored and the part is counted again. The hash shows a count is current, not who wrote it: a caller-supplied count whose hash matches the content is used. Counts for history that has none are saved once, for the current thread only.
 - Messages with string-only content (no parts) use a message-level cache.
 - Message and conversation overhead is recalculated every pass. Only payload estimates are cached.
 - `data-*`, `reasoning` and `step-start` parts are skipped and not cached.

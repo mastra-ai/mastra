@@ -225,10 +225,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     if (!activeTurn || activeTurn.ended) return;
 
     const terminalList = messageList ?? activeTurn.messageList;
-    const unsavedMessages = withMessagesMarkedForResave(terminalList, [
-      ...terminalList.get.input.db(),
-      ...terminalList.get.response.db(),
-    ]);
+    const ownMessages = [...terminalList.get.input.db(), ...terminalList.get.response.db()];
+    const unsavedMessages = withMessagesMarkedForResave(terminalList, ownMessages);
 
     try {
       await activeTurn.end(terminalList);
@@ -239,7 +237,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             unsavedMessages,
             activeTurn.threadId,
             activeTurn.resourceId,
-            idsMarkedForResave(terminalList),
+            idsMarkedForResave(terminalList, ownMessages),
           )
           .catch(() => {});
       }
@@ -632,13 +630,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // messages so the final assistant text from the resumed turn is not lost.
           const newOutput = persistenceMessageList.get.response.db();
           const newInput = persistenceMessageList.get.input.db();
-          const messagesToSave = withMessagesMarkedForResave(persistenceMessageList, [...newInput, ...newOutput]);
+          const ownMessages = [...newInput, ...newOutput];
+          const messagesToSave = withMessagesMarkedForResave(persistenceMessageList, ownMessages);
           if (messagesToSave.length > 0 && context.threadId) {
             await this.engine.persistMessages(
               messagesToSave,
               context.threadId,
               context.resourceId,
-              idsMarkedForResave(persistenceMessageList),
+              idsMarkedForResave(persistenceMessageList, ownMessages),
             );
           }
         }

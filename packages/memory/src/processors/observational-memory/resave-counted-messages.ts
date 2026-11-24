@@ -34,9 +34,17 @@ export function messagesMarkedForResave(messageList: MessageList): MastraDBMessa
     : [];
 }
 
-/** Ids of the stored messages marked for resave in `messageList`. */
-export function idsMarkedForResave(messageList: MessageList): Set<string> {
-  return new Set(messagesMarkedForResave(messageList).map(message => message.id));
+/**
+ * Ids of the stored messages marked for resave in `messageList` that are not in `ownMessages` (the turn's
+ * own input and output). Those are saved whole; the rest only gained counts and are patched onto storage.
+ */
+export function idsMarkedForResave(messageList: MessageList, ownMessages: MastraDBMessage[] = []): Set<string> {
+  const own = new Set(ownMessages.map(message => message.id));
+  return new Set(
+    messagesMarkedForResave(messageList)
+      .map(message => message.id)
+      .filter(id => !own.has(id)),
+  );
 }
 
 /** `messages` with the messages marked for resave added, each message once. */

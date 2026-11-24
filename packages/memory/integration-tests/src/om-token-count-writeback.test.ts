@@ -296,7 +296,64 @@ describe('Observational Memory token counts for stored history', () => {
     expect(textPart).toMatchObject({ type: 'text', text: 'OK.' });
     expect(trustedEntries(textPart)).toHaveLength(1);
   });
-  it('saves the counts with the messages through the normal save, not a separate storage write', async () => {
+  // A marker OM writes to a stored message while the turn runs must survive the counts saved at the end of it.
+  it.each([true, false])(
+    'keeps a marker written during the turn when counts are saved for a stored message (sealed: %s)',
+    async sealed => {
+      const { storage, memory } = open(join(dbDir, `marker-during-turn-${sealed}.db`));
+      const threadId = randomUUID();
+      const id = `${threadId}-history`;
+      await memory.saveThread({
+        thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+      });
+      await memory.saveMessages({
+        messages: [
+          {
+            id,
+            threadId,
+            resourceId: RESOURCE,
+            role: 'user',
+            createdAt: new Date(0),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Uncounted history. '.repeat(40) }],
+              metadata: { mastra: { sealed } },
+            },
+          },
+        ],
+      });
+      const memoryStore = (await storage.getStore('memory'))!;
+      // The turn loads the message and counts it...
+      const [live] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+      new TokenCounter().countMessage(live!);
+      // ...then a marker lands on the stored copy, which the loaded copy does not have.
+      const [fresh] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+      await memoryStore.updateMessages({
+        messages: [
+          {
+            id,
+            content: {
+              ...fresh!.content,
+              parts: [
+                ...fresh!.content.parts,
+                { type: 'data-om-buffering-start', data: { cycleId: 'during-turn' } } as any,
+              ],
+            },
+          },
+        ],
+      });
+
+      // The end of the turn saves the counts it made.
+      const om = (await memory.omEngine)!;
+      await om.persistMessages([live!], threadId, RESOURCE, new Set([id]));
+
+      const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
+      expect(saved!.content.parts.some(part => part.type === 'data-om-buffering-start')).toBe(true);
+      expect(trustedEntries(saved!.content.parts[0])).toHaveLength(1);
+    },
+  );
+
+  it('patches the counts onto stored history instead of saving it whole', async () => {
     const { storage, memory, agent } = open(join(dbDir, 'normal-save.db'));
     const threadId = randomUUID();
     await memory.saveThread({
@@ -331,12 +388,10 @@ describe('Observational Memory token counts for stored history', () => {
     await turn.consumeStream();
     expect(await turn.text).toBe('OK.');
 
-    // The history went back through saveMessages, carrying its counts...
-    const resaved = saved.flat().filter(message => ids.includes(message.id));
-    expect(resaved.map(message => message.id).sort()).toEqual([...ids].sort());
-    expect(resaved.every(message => trustedEntries(message.content.parts[0]).length === 1)).toBe(true);
-    // ...and nothing wrote those counts with a separate updateMessages call.
-    expect(updatedIds.filter(id => ids.includes(id))).toEqual([]);
+    // The history is not saved whole, which could overwrite markers written since it was loaded...
+    expect(saved.flat().filter(message => ids.includes(message.id))).toEqual([]);
+    // ...its counts are patched onto the stored copies.
+    expect([...new Set(updatedIds.filter(id => ids.includes(id)))].sort()).toEqual([...ids].sort());
     const rows = (await memory.recall({ threadId, resourceId: RESOURCE, perPage: false })).messages.filter(m =>
       ids.includes(m.id),
     );
