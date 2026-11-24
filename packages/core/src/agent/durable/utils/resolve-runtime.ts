@@ -201,6 +201,25 @@ function assertToolsetToolsAvailable(
 }
 
 /**
+ * The background-task manager and agent config a run dispatches with, resolved
+ * the same way as in preparation.ts. Only the process that started the run has
+ * them on its registry entry, so a worker rebuilding the run restores them here;
+ * without them every background-eligible tool runs inline (#31090).
+ */
+function resolveBackgroundTasks(
+  mastra: Mastra,
+  agent: { getBackgroundTasksConfig?: () => RunRegistryEntry['backgroundTasksConfig'] },
+  execOptions: SerializableDurableOptions | undefined,
+): Pick<RunRegistryEntry, 'backgroundTaskManager' | 'backgroundTasksConfig'> {
+  const dispatchDisabled =
+    execOptions?.disableBackgroundTasks || execOptions?.backgroundTaskPolicy?.allowToolDispatch === false;
+  return {
+    backgroundTaskManager: dispatchDisabled ? undefined : mastra.backgroundTaskManager,
+    backgroundTasksConfig: agent.getBackgroundTasksConfig?.(),
+  };
+}
+
+/**
  * Resolve all runtime dependencies needed for durable step execution.
  *
  * This function reconstructs the non-serializable state needed to execute
@@ -266,6 +285,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
+  let backgroundTasks: ReturnType<typeof resolveBackgroundTasks> | undefined;
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -282,6 +302,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // request-scoped tools / workspace / memory / processors resolve with
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries, options.requestContext);
+      backgroundTasks = resolveBackgroundTasks(mastra, agent, input.options);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -291,6 +312,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
         clientTools: input.options?.clientTools as ToolsInput | undefined,
+        backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
+        backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
       });
       assertToolsetToolsAvailable(tools, input.options?.toolsetToolNames, agentId, runId);
 
@@ -373,6 +396,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       errorProcessors,
       processorStates,
       agent: rebuiltAgent,
+      ...backgroundTasks,
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -487,6 +511,7 @@ export async function rebuildRunToolsFromMastra(options: {
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
+    const backgroundTasks = resolveBackgroundTasks(mastra, agent, execOptions);
 
     const tools = await agent.getToolsForExecution({
       runId,
@@ -496,6 +521,8 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
+      backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
 
     // A hydrated entry means the caller's process still holds the toolset tools
@@ -536,6 +563,7 @@ export async function rebuildRunToolsFromMastra(options: {
       memory,
       saveQueueManager,
       agent: processorAgent,
+      ...backgroundTasks,
       ...rebuiltProcessors,
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
     };
@@ -565,6 +593,8 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
       existing.agent ??= processorAgent;
+      existing.backgroundTaskManager ??= backgroundTasks.backgroundTaskManager;
+      existing.backgroundTasksConfig ??= backgroundTasks.backgroundTasksConfig;
     } else {
       existing = patch as RunRegistryEntry;
       setRunRegistryEntry(runId, existing, mastra as Mastra | undefined);
