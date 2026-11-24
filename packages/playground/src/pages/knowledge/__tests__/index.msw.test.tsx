@@ -175,6 +175,36 @@ describe('Knowledge page', () => {
     }
   });
 
+  it('keeps the last graph and says it could not refresh when a later read is refused', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      let requests = 0;
+      withInstance();
+      server.use(
+        http.get(`${api}/main/graph`, () => {
+          requests++;
+          return requests === 1
+            ? HttpResponse.json(knowledgeGraph)
+            : HttpResponse.json({ error: 'Reduce the graph limits' }, { status: 422 });
+        }),
+        http.get(`${api}/main/link-counts`, () =>
+          HttpResponse.json({ counts: {} } satisfies KnowledgeLinkCountsResponse),
+        ),
+      );
+      renderPage('/knowledge?view=graph');
+      await screen.findAllByTestId('knowledge-page-node');
+      await waitFor(async () => {
+        await act(() => vi.advanceTimersByTimeAsync(5_000));
+        expect(requests).toBe(2);
+      });
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/^Couldn’t refresh the graph\. .*Reduce the graph limits/);
+      expect(screen.getAllByTestId('knowledge-page-node').length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   describe('when the instance has pages', () => {
     it('shows the root of the tree while the graph is still loading', async () => {
       withInstance();
