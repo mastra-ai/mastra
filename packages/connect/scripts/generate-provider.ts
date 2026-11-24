@@ -16,8 +16,18 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { Node, Project, SyntaxKind } from 'ts-morph';
@@ -28,10 +38,11 @@ import {
   assertProviderEnvVarAvailable,
   calculateFileChecksums,
   currentTemplateSha,
+  listHandwrittenFiles,
   providerConnectionEnvVar,
   providerDir,
   providerRegistrationName,
-  providersDir,
+  readManifestIn,
   templatePath,
   validateProviderId,
 } from './provider-utils.js';
@@ -1181,13 +1192,320 @@ function acceptGitLabProjectIdOrPath(action: ExtractedAction): ExtractedAction {
 }
 
 /**
- * The proxy replays PUT and DELETE after a transient 5xx, so a GitLab write the
- * first attempt already applied could run again: deleting a branch recreated
- * by someone else meanwhile, committing a file change twice, or undoing a
- * concurrent group setting. GitLab writes get exactly one attempt; reads keep
+ * The proxy replays PUT and DELETE after a transient 5xx, so a write the first
+ * attempt already applied could run again: deleting a GitLab branch recreated by
+ * someone else meanwhile, committing a file change twice, or reapplying a Zendesk
+ * ticket update over a concurrent one. Writes get exactly one attempt; reads keep
  * the template's retries.
  */
-function attemptGitLabWritesOnce(action: ExtractedAction): ExtractedAction {
+/** Rewrites expected in the exec body; a different count means the template changed. */
+function rewriteExecBody(action: ExtractedAction, rewrites: readonly StatementRewrite[]): ExtractedAction {
+  let execBody = action.execBody;
+  for (const { pattern, replacement, count, what } of rewrites) {
+    const global = new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`);
+    if ((execBody.match(global)?.length ?? 0) !== count) {
+      throw new Error(
+        `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+      );
+    }
+    execBody = execBody.replace(global, replacement);
+  }
+  return { ...action, execBody };
+}
+
+/** Zendesk sends `null` for the cursor on the edge pages; the templates reject null. */
+const ZENDESK_NULL_CURSORS: StatementRewrite = {
+  pattern: /(after_cursor|before_cursor): z\.string\(\)\.optional\(\)/,
+  replacement: '$1: z.string().nullish()',
+  count: 0,
+  what: 'nullable cursors',
+};
+
+/** Asks for cursor pages even when the caller gives no page size; Zendesk only sends cursors then. */
+const ZENDESK_ALWAYS_CURSOR_PAGES: StatementRewrite = {
+  pattern: /if \(input\.per_page !== undefined\) \{\s*params\['page\[size\]'\] = input\.per_page;\s*\}/,
+  replacement: "params['page[size]'] = input.per_page ?? 100;",
+  count: 1,
+  what: 'cursor pages',
+};
+
+/** A next cursor only while Zendesk says more results remain. */
+function zendeskNextCursor(source: string, pattern: RegExp): StatementRewrite {
+  return {
+    pattern,
+    replacement: `...(${source}.meta?.has_more && ${source}.meta.after_cursor && { next_cursor: ${source}.meta.after_cursor })`,
+    count: 1,
+    what: 'next cursor',
+  };
+}
+
+interface ProviderActionFixes {
+  statements?: readonly StatementRewrite[];
+  exec?: readonly StatementRewrite[];
+}
+
+/**
+ * Corrections to the Zendesk templates, each found reviewing the toolset:
+ * - Cursor pagination answers `null` cursors at either end, which the
+ *   templates reject, and a cursor is only a continuation while `has_more`.
+ * - Multi-select custom fields hold arrays of option tags, and `null` clears a
+ *   field; the update template rejected both, and rejected the ticket Zendesk
+ *   returned after the update had already been applied.
+ * - Help Center content tag ids are strings, so article reads failed.
+ * - Setting a user's organization replaces all their memberships.
+ * - Comments and macros fall back to offset pages unless `page[size]` is
+ *   sent, and the templates only read cursors, so the default listing never
+ *   offered a next page; macros never read the cursor Zendesk answered with.
+ * - A section or category article listing ignored the requested locale.
+ * - get_ticket fetched the requested sideloads and dropped them, and rejected
+ *   a ticket with no group.
+ * - An unscoped search mixed users and organizations into the ticket counts
+ *   and pages; the search is now limited to tickets, and a ticket it cannot
+ *   read is an error rather than silently missing from a counted page.
+ * Drop an entry once the upstream template is fixed.
+ */
+const ZENDESK_FIXES: Readonly<Record<string, ProviderActionFixes>> = {
+  'get-article': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 2,
+        what: 'string content tag ids',
+      },
+    ],
+  },
+  'get-ticket-comments': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor !== undefined && \{\s*next_cursor: responseData\.meta\.after_cursor\s*\}\)/,
+      ),
+    ],
+  },
+  'get-ticket': {
+    statements: [
+      {
+        pattern: /group_id: z\.number\(\)\.optional\(\)/,
+        replacement: 'group_id: z.number().nullish()',
+        count: 2,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /^(export const \w+OutputSchema = z\.object\(\{[\s\S]*?)(\s*\}\);)$/,
+        replacement:
+          "$1,\n    sideloads: z.record(z.string(), z.unknown()).optional().describe('Records Zendesk sideloaded for `include`, keyed by sideload name, such as users or groups.')$2",
+        count: 1,
+        what: 'sideloads output',
+      },
+    ],
+    exec: [
+      {
+        pattern: /\.\.\.\(rawTicket\.group_id !== undefined && /,
+        replacement: '...(rawTicket.group_id != null && ',
+        count: 1,
+        what: 'ticket without a group',
+      },
+      {
+        pattern: /(const rawTicket = ProviderTicketSchema\.parse\(response\.data\.ticket\);)/,
+        replacement: '$1\nconst { ticket: _ticket, ...sideloads } = response.data;',
+        count: 1,
+        what: 'sideloads',
+      },
+      {
+        pattern: /(\.\.\.\(rawTicket\.tags !== undefined && \{ tags: rawTicket\.tags \}\))/,
+        replacement: '$1,\n...(input.include && Object.keys(sideloads).length > 0 && { sideloads })',
+        count: 1,
+        what: 'sideloads',
+      },
+    ],
+  },
+  'list-articles': {
+    statements: [
+      {
+        pattern: /content_tag_ids: z\.array\(z\.number\(\)\)/,
+        replacement: 'content_tag_ids: z.array(z.string())',
+        count: 1,
+        what: 'string content tag ids',
+      },
+    ],
+    exec: [
+      {
+        pattern:
+          /`\/api\/v2\/help_center\/(sections|categories)\/\$\{encodeURIComponent\(input\.(section_id|category_id)\)\}\/articles`/,
+        replacement:
+          "`/api/v2/help_center/${input.locale !== undefined ? `${encodeURIComponent(input.locale)}/` : ''}$1/${encodeURIComponent(input.$2)}/articles`",
+        count: 2,
+        what: 'locale for section and category listings',
+      },
+    ],
+  },
+  'list-macros': {
+    statements: [
+      {
+        // Zendesk only cursor-pages alphabetical and date sorts, and every
+        // macro listing is cursor-paged so the caller can continue it.
+        pattern:
+          /\.enum\(\['alphabetical', 'created_at', 'updated_at', 'usage_1h', 'usage_24h', 'usage_7d', 'usage_30d'\]\)/,
+        replacement: ".enum(['alphabetical', 'created_at', 'updated_at'])",
+        count: 1,
+        what: 'cursor-compatible sorts',
+      },
+      {
+        pattern: /(const ProviderResponseSchema = z\.object\(\{\s*macros: z\.array\(ProviderMacroSchema\),)/,
+        replacement:
+          '$1\n    meta: z.object({ has_more: z.boolean().optional(), after_cursor: z.string().nullish() }).optional(),',
+        count: 1,
+        what: 'cursor metadata',
+      },
+      {
+        pattern: /^function extractCursorFromUrl\([\s\S]*\}$/,
+        replacement: '',
+        count: 1,
+        what: 'unused offset cursor parsing',
+      },
+    ],
+    exec: [
+      ZENDESK_ALWAYS_CURSOR_PAGES,
+      {
+        // Cursor pages take one `sort` value (`-` for descending) instead of
+        // sort_by/sort_order. Zendesk's defaults: alphabetical, ascending for
+        // alphabetical and descending for the date sorts.
+        pattern:
+          /if \(input\.sort_by !== undefined\) \{\s*params\['sort_by'\] = input\.sort_by;\s*\}\s*if \(input\.sort_order !== undefined\) \{\s*params\['sort_order'\] = input\.sort_order;\s*\}/,
+        replacement: `if (input.sort_by !== undefined || input.sort_order !== undefined) {
+        const sortBy = input.sort_by ?? 'alphabetical';
+        const sortOrder = input.sort_order ?? (sortBy === 'alphabetical' ? 'asc' : 'desc');
+        params['sort'] = \`\${sortOrder === 'desc' ? '-' : ''}\${sortBy}\`;
+      }`,
+        count: 1,
+        what: 'cursor sort parameter',
+      },
+      {
+        pattern: /const next_cursor = extractCursorFromUrl\(providerData\.next_page\);/,
+        replacement:
+          'const next_cursor = providerData.meta?.has_more && providerData.meta.after_cursor ? providerData.meta.after_cursor : undefined;',
+        count: 1,
+        what: 'next cursor',
+      },
+    ],
+  },
+  'search-tickets': {
+    statements: [
+      {
+        pattern:
+          /query: z\s*\.string\(\)\s*\.describe\(\s*'Zendesk search query\. Should include "type:ticket" and any additional filters like status, tags, dates\. Example: "type:ticket status:open"'\s*\)/,
+        replacement:
+          "query: z.string().min(1).refine(query => !/(^|\\s)-?type:(?!ticket(\\s|$))/i.test(query.replace(/\"[^\"]*(\"|$)/g, ' ')), 'Only tickets can be searched; remove the other type: filter.').describe('Zendesk search query; results are limited to tickets. Add filters like status, tags, and dates. Example: \"status:open tags:vip\"')",
+        count: 1,
+        what: 'ticket-only query',
+      },
+    ],
+    exec: [
+      {
+        pattern: /query: input\.query,/,
+        replacement:
+          'query: /(^|\\s)type:ticket(\\s|$)/i.test(input.query.replace(/"[^"]*("|$)/g, \' \')) ? input.query : `type:ticket ${input.query}`,',
+        count: 1,
+        what: 'ticket-only query',
+      },
+      {
+        pattern:
+          /const parsed = TicketSchema\.safeParse\(result\);\s*if \(parsed\.success\) \{\s*tickets\.push\(parsed\.data\);\s*\}/,
+        replacement: 'tickets.push(TicketSchema.parse(result));',
+        count: 1,
+        what: 'unreadable tickets',
+      },
+    ],
+  },
+  'list-groups': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'responseData',
+        /\.\.\.\(responseData\.meta\?\.after_cursor != null && \{ next_cursor: responseData\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-tickets': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 1 }],
+    exec: [
+      zendeskNextCursor(
+        'data',
+        /\.\.\.\(data\.meta\?\.after_cursor != null && \{ next_cursor: data\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'list-users': {
+    statements: [
+      { ...ZENDESK_NULL_CURSORS, count: 2 },
+      {
+        pattern: /(next|prev): z\.string\(\)\.optional\(\)/,
+        replacement: '$1: z.string().nullish()',
+        count: 2,
+        what: 'nullable page links',
+      },
+    ],
+  },
+  'list-views': {
+    statements: [{ ...ZENDESK_NULL_CURSORS, count: 2 }],
+    exec: [
+      zendeskNextCursor(
+        'parsed',
+        /\.\.\.\(parsed\.meta\?\.after_cursor !== undefined && \{ next_cursor: parsed\.meta\.after_cursor \}\)/,
+      ),
+    ],
+  },
+  'update-ticket': {
+    statements: [
+      {
+        pattern:
+          /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\)\]\)\.describe\('The value to set for the custom field\.'\)/,
+        replacement:
+          "value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).describe('The value to set for the custom field: an array of option tags for a multi-select field, or null to clear it.')",
+        count: 1,
+        what: 'custom field input values',
+      },
+      {
+        pattern: /value: z\.union\(\[z\.string\(\), z\.number\(\), z\.boolean\(\), z\.null\(\)\]\)\.optional\(\)/,
+        replacement: 'value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string()), z.null()]).optional()',
+        count: 1,
+        what: 'custom field values',
+      },
+    ],
+    exec: [
+      {
+        pattern: /value: string \| number \| boolean \}/,
+        replacement: 'value: string | number | boolean | string[] | null }',
+        count: 1,
+        what: 'custom field payload type',
+      },
+    ],
+  },
+  'update-user': {
+    statements: [
+      {
+        pattern: /organizationId: z\.number\(\)\.optional\(\)\.describe\("The ID of the user's organization\."\)/,
+        replacement:
+          'organizationId: z.number().optional().describe("The ID of the organization to make the user\'s only organization. Removes the user from every other organization they belong to.")',
+        count: 1,
+        what: 'organization description',
+      },
+    ],
+  },
+};
+
+function adaptZendeskAction(action: ExtractedAction): ExtractedAction {
+  const fixes = ZENDESK_FIXES[action.candidate.actionSlug];
+  let adapted = attemptWritesOnce(action);
+  if (fixes?.statements) adapted = rewriteModuleStatements(adapted, fixes.statements);
+  if (fixes?.exec) adapted = rewriteExecBody(adapted, fixes.exec);
+  return { ...adapted, moduleStatements: adapted.moduleStatements.filter(statement => statement.trim() !== '') };
+}
+
+function attemptWritesOnce(action: ExtractedAction): ExtractedAction {
   if (/platformProxy\.get\(/.test(action.execBody)) return action;
   return { ...action, execBody: action.execBody.replace(/retries: \d+/g, 'retries: 1') };
 }
@@ -1258,7 +1576,7 @@ function paginateGitLabList(action: ExtractedAction): ExtractedAction {
 
 function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
   const slug = action.candidate.actionSlug;
-  let adapted = attemptGitLabWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
+  let adapted = attemptWritesOnce(acceptGitLabProjectIdOrPath(encodeGitLabPathSegments(action)));
   const schemaFixes = [...(GITLAB_RESPONSE_SCHEMA_FIXES[slug] ?? []), ...(GITLAB_INPUT_FIXES[slug] ?? [])];
   if (schemaFixes.length > 0) adapted = rewriteModuleStatements(adapted, schemaFixes);
   const updateIdentifiers = GITLAB_UPDATE_IDENTIFIERS[slug];
@@ -1322,6 +1640,9 @@ function adaptGitLabAction(action: ExtractedAction): ExtractedAction {
 function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
   if (action.candidate.providerId === 'gitlab') {
     return adaptGitLabAction(action);
+  }
+  if (action.candidate.providerId === 'zendesk') {
+    return adaptZendeskAction(action);
   }
   if (action.candidate.providerId === 'openai' && action.candidate.actionSlug === 'create-image') {
     return adaptOpenAICreateImage(action);
@@ -1638,15 +1959,195 @@ ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
 `;
 }
 
-function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: TemplatePin): string {
-  const imports = actions
-    .map(action => `import { ${action.toolFactoryName} } from './tools/${action.candidate.actionSlug}.js';`)
+/**
+ * Hand-written files (tools for endpoints no template covers, and their
+ * helpers) survive regeneration; every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
+/**
+ * Finds the hand-written files in an installed provider and the tools among
+ * them, so regeneration keeps both. Every hand-written `tools/<slug>.ts` is
+ * registered alongside the generated tools, except `_`-prefixed helpers.
+ */
+export function planHandwrittenTools(
+  outputDir: string,
+  localId: string,
+  generated: readonly ToolRegistration[],
+): { handwrittenFiles: string[]; handwrittenTools: ToolRegistration[] } {
+  const manifest = readManifestIn(outputDir);
+  if (!manifest && Object.keys(calculateFileChecksums(outputDir)).length > 0) {
+    // Without a manifest every file looks generated, so regenerating would
+    // delete the hand-written ones.
+    throw new Error(
+      `${localId} has no readable .manifest.json, so its hand-written files cannot be told apart from generated ones. Restore the manifest, or remove the provider before regenerating it.`,
+    );
+  }
+  const handwrittenFiles = listHandwrittenFiles(outputDir, manifest);
+  const keys = new Map(generated.map(tool => [tool.key, tool.slug]));
+  const factories = new Map(generated.map(tool => [tool.factoryName, tool.slug]));
+  const project = new Project({ skipAddingFilesFromTsConfig: true });
+  const handwrittenTools = handwrittenFiles.flatMap(file => {
+    const slug = /^tools\/([^/_][^/]*)\.ts$/.exec(file)?.[1];
+    if (!slug) return [];
+    const tool = { slug, key: `${localId.replace(/-/g, '_')}_${toSnake(slug)}`, factoryName: `${toCamel(slug)}Tool` };
+    const clash = keys.get(tool.key) ?? factories.get(tool.factoryName);
+    if (clash !== undefined) {
+      throw new Error(
+        `Hand-written ${localId}/${file} collides with tool '${clash}' (key ${tool.key}, factory ${tool.factoryName}); rename or remove it.`,
+      );
+    }
+    const source = project.addSourceFileAtPath(resolve(outputDir, file));
+    project.resolveSourceFileDependencies();
+    const exported = source.getExportedDeclarations().get(tool.factoryName) ?? [];
+    if (
+      !exported.some(declaration => Node.isFunctionDeclaration(declaration) || Node.isVariableDeclaration(declaration))
+    ) {
+      throw new Error(`Hand-written ${localId}/${file} must export ${tool.factoryName}.`);
+    }
+    keys.set(tool.key, slug);
+    factories.set(tool.factoryName, slug);
+    return [tool];
+  });
+  return { handwrittenFiles, handwrittenTools };
+}
+
+export interface GeneratedTool extends ToolRegistration {
+  /** The emitted module for the tool, before formatting. */
+  source: string;
+}
+
+/**
+ * Replaces a provider directory with freshly generated files, keeping the
+ * hand-written files and tools found in it. The new directory is built aside
+ * and swapped in, so a failure leaves the installed provider in place.
+ */
+export async function writeProvider({
+  outputDir,
+  providerId,
+  localId,
+  templateSha,
+  pin,
+  tools,
+  skippedActions,
+}: {
+  outputDir: string;
+  providerId: string;
+  localId: string;
+  templateSha: string;
+  pin: TemplatePin;
+  tools: readonly GeneratedTool[];
+  skippedActions: ProviderManifest['skippedActions'];
+}): Promise<{ toolCount: number }> {
+  const { handwrittenFiles, handwrittenTools } = planHandwrittenTools(outputDir, localId, tools);
+  const temporaryDir = resolve(dirname(outputDir), `.${localId}.generate-${process.pid}`);
+  rmSync(temporaryDir, { recursive: true, force: true });
+  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
+
+  try {
+    for (const tool of tools) {
+      writeFileSync(resolve(temporaryDir, 'tools', `${tool.slug}.ts`), tool.source);
+    }
+    const registrations = [
+      ...tools.map(({ slug, key, factoryName }) => ({ slug, key, factoryName })),
+      ...handwrittenTools,
+    ];
+    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, registrations, pin));
+    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
+    await formatGeneratedFiles(temporaryDir);
+    const generatedFiles = calculateFileChecksums(temporaryDir);
+    for (const file of handwrittenFiles) {
+      mkdirSync(dirname(resolve(temporaryDir, file)), { recursive: true });
+      copyFileSync(resolve(outputDir, file), resolve(temporaryDir, file));
+    }
+
+    const manifest: ProviderManifest = {
+      providerId,
+      localId,
+      templateSha,
+      templateRepo: pin.repo,
+      generatedAt: new Date().toISOString(),
+      toolCount: registrations.length,
+      skippedActions,
+      files: generatedFiles,
+      ...(handwrittenFiles.length > 0 ? { handwrittenFiles } : {}),
+    };
+    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+
+    // A file added while this ran would be deleted with the old directory.
+    // Without a readable manifest every file there is someone else's.
+    const latest = readManifestIn(outputDir);
+    const current = latest ? listHandwrittenFiles(outputDir, latest) : Object.keys(calculateFileChecksums(outputDir));
+    const added = current.filter(file => !handwrittenFiles.includes(file));
+    if (added.length > 0) {
+      throw new Error(
+        `${localId} gained hand-written files while it was being regenerated (${added.join(', ')}); run it again.`,
+      );
+    }
+
+    publishProvider(temporaryDir, outputDir, localId);
+  } catch (error) {
+    rmSync(temporaryDir, { recursive: true, force: true });
+    throw error;
+  }
+  return { toolCount: handwrittenTools.length + tools.length };
+}
+
+/**
+ * Swaps the built directory in for the installed one. The installed provider
+ * is moved aside rather than deleted, so a failed swap can put it back: it
+ * holds hand-written files that may not be committed anywhere else.
+ */
+function publishProvider(temporaryDir: string, outputDir: string, localId: string): void {
+  if (!existsSync(outputDir)) {
+    renameSync(temporaryDir, outputDir);
+    return;
+  }
+  const backupRoot = mkdtempSync(resolve(dirname(outputDir), `.${localId}.backup-`));
+  const backupDir = resolve(backupRoot, localId);
+  try {
+    renameSync(outputDir, backupDir);
+  } catch (error) {
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  try {
+    renameSync(temporaryDir, outputDir);
+  } catch (error) {
+    try {
+      rmSync(outputDir, { recursive: true, force: true });
+      renameSync(backupDir, outputDir);
+    } catch (restoreError) {
+      throw new Error(
+        `Publishing ${localId} failed and the previous provider could not be restored; it is kept at ${backupDir}.`,
+        { cause: new AggregateError([error, restoreError]) },
+      );
+    }
+    rmSync(backupRoot, { recursive: true, force: true });
+    throw error;
+  }
+  rmSync(backupRoot, { recursive: true, force: true });
+}
+
+export interface ToolRegistration {
+  slug: string;
+  key: string;
+  factoryName: string;
+}
+
+function emitToolsFile(integrationId: string, registrations: ToolRegistration[], pin: TemplatePin): string {
+  // Ordered by module path, as the import-order lint rule expects.
+  const modulePath = (registration: ToolRegistration) => `./tools/${registration.slug}.js`;
+  const sorted = [...registrations].sort((left, right) =>
+    modulePath(left) < modulePath(right) ? -1 : modulePath(left) > modulePath(right) ? 1 : 0,
+  );
+  const imports = sorted
+    .map(registration => `import { ${registration.factoryName} } from '${modulePath(registration)}';`)
     .join('\n');
   // Keys are quoted because a leading-digit local ID (e.g. '1password')
   // produces tool keys that are not valid bare identifiers; prettier strips
   // the quotes again wherever they are unnecessary.
-  const toolEntries = actions
-    .map(action => `    '${action.candidate.toolKey}': ${action.toolFactoryName}(platformProxy),`)
+  const toolEntries = sorted
+    .map(registration => `    '${registration.key}': ${registration.factoryName}(platformProxy),`)
     .join('\n');
 
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
@@ -1761,42 +2262,25 @@ export async function generateProvider({
     throw new Error(`No usable actions found for '${providerId}'. ${reasons}`);
   }
 
-  const outputDir = providerDir(localId);
-  const temporaryDir = resolve(providersDir, `.${localId}.generate-${process.pid}`);
-  rmSync(temporaryDir, { recursive: true, force: true });
-  mkdirSync(resolve(temporaryDir, 'tools'), { recursive: true });
-
-  try {
-    for (const action of extracted) {
-      writeFileSync(resolve(temporaryDir, 'tools', `${action.candidate.actionSlug}.ts`), emitActionFile(action, pin));
-    }
-    writeFileSync(resolve(temporaryDir, 'tools.ts'), emitToolsFile(localId, extracted, pin));
-    writeFileSync(resolve(temporaryDir, 'index.ts'), emitIndexFile(localId, pin));
-    await formatGeneratedFiles(temporaryDir);
-
-    const manifest: ProviderManifest = {
-      providerId,
-      localId,
-      templateSha,
-      templateRepo: pin.repo,
-      generatedAt: new Date().toISOString(),
-      toolCount: extracted.length,
-      skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
-      files: calculateFileChecksums(temporaryDir),
-    };
-    writeFileSync(resolve(temporaryDir, '.manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-
-    rmSync(outputDir, { recursive: true, force: true });
-    renameSync(temporaryDir, outputDir);
-  } catch (error) {
-    rmSync(temporaryDir, { recursive: true, force: true });
-    throw error;
-  }
+  const { toolCount } = await writeProvider({
+    outputDir: providerDir(localId),
+    providerId,
+    localId,
+    templateSha,
+    pin,
+    tools: extracted.map(action => ({
+      slug: action.candidate.actionSlug,
+      key: action.candidate.toolKey,
+      factoryName: action.toolFactoryName,
+      source: emitActionFile(action, pin),
+    })),
+    skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
+  });
 
   return {
     providerId,
     localId,
-    toolCount: extracted.length,
+    toolCount,
     skippedActions: skipped.map(action => ({ action: action.candidate.actionSlug, reason: action.reason })),
   };
 }
