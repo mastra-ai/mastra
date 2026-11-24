@@ -374,13 +374,32 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion/a~2Fb~3Ac'))?.version).toBe(first!.version);
     });
 
-    it('refuses every op when an unowned page already sits at the target, and never adopts it', async () => {
+    it('takes over a page someone wrote at the target as its folder, keeping its body and children', async () => {
       const { knowledge, run, page } = setup();
       await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion', name: 'Mine', body: 'human' });
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'notion/notes', name: 'Notes', body: 'kept' });
+      const folder = await page('notion');
+      const receipt = await run([upsert({ sourceId: 'p1' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 1, refused: 0 } });
+      expect(await page('notion')).toMatchObject({ id: folder!.id, name: 'Mine', body: 'human' });
+      expect((await page('notion/notes'))?.body).toBe('kept');
+      expect((await page('notion/p1'))?.body).toBe('body of p1');
+      const again = await run([upsert({ sourceId: 'p2' })]);
+      expect(again).toMatchObject({ counts: { created: 1, refused: 0 } });
+    });
+
+    it("refuses every op when another binding's page sits at the target, and never takes it over", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
+      await run([upsert({ sourceId: 'notion' })], 'b2');
+      // A human moves b2's imported page to where b1's target goes.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/notion', parent: '' });
       const receipt = await run([upsert({ sourceId: 'p1' })]);
       expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 0, refused: 1 } });
       expect(await page('notion/p1')).toBeNull();
-      expect((await page('notion'))?.body).toBe('human');
+      expect((await page('notion'))?.body).toBe('body of notion');
     });
 
     it("takes over a page someone else wrote at an item's path, keeping its id, and lands the rest of the flush", async () => {

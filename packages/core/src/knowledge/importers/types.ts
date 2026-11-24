@@ -43,7 +43,7 @@ export type KnowledgeImporterState = Record<string, string>;
 
 /** Why the sink refused one op. The rest of the flush still commits. */
 export type KnowledgeImportRefusalReason =
-  /** Another binding's page is at the path, or a page the binding doesn't own is at its target. */
+  /** Another binding's page is at the path or at the binding's target. */
   | 'occupied'
   /** The mapped page was moved out of the binding's subtree, deleted, or belongs to another binding. */
   | 'conflict'

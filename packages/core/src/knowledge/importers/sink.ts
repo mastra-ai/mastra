@@ -294,9 +294,17 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         await tx.lockPages([scope.id, ...before.map(page => page.id)]);
         const locked = await chain();
         if (locked.length !== before.length || locked.some((page, i) => page.id !== before[i]!.id)) continue;
-        if (locked.length === target.path.length) return 'occupied' as const;
-        // Containers along the way are ordinary pages; only the last key is the binding's own.
+        // A page someone wrote at the target becomes the binding's folder, its body and children
+        // kept. Another binding's anchor or page is never taken. The chain is locked, so the page
+        // can't move, be renamed or be removed until commit.
         let parent: KnowledgePage = locked.at(-1) ?? scope;
+        if (locked.length === target.path.length) {
+          const anchors = (await importers.listBindings()).filter(b => b.id !== binding.id && b.anchorPageId);
+          if (anchors.some(b => b.anchorPageId === parent.id) || (await importers.getNodeByPage(parent.id))) {
+            return 'occupied' as const;
+          }
+        }
+        // Containers along the way are ordinary pages; only the last key is the binding's own.
         for (let depth = locked.length + 1; depth <= target.path.length; depth++) {
           const key = target.path[depth - 1]!;
           parent = await tx.createPage({ parentId: parent.id, key, name: key, provenance });
