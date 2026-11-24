@@ -36,8 +36,12 @@ const PACKAGE_NAME_PATTERN = /^(?:@[A-Za-z0-9._-]+\/)?[A-Za-z0-9._-]+$/;
 const TARBALL_SUFFIX_PATTERN = /\.(?:tgz|tar\.gz|tar)$/i;
 /** npm reads a value starting like this as a path, whatever follows. A bare `~` is a semver range. */
 const FILE_SPEC_PREFIX_PATTERN = /^(?:\.|~[/\\]|[/\\]|[A-Za-z]:[/\\])/;
-/** A range admitting any published version: `*`, `x`, `>=0`, and any union containing one. */
-const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)\s*(?:[*xX]|>=?\s*0(?:\.0)*(?:\.0)*)\s*(?:$|\|\|)/;
+/**
+ * A range admitting any published version: `*`, `x`, `>=0`, and any union containing one.
+ * The leading `\s` alternative already absorbs padding; an extra `\s*` there kept the
+ * pattern quadratic on long whitespace runs.
+ */
+const UNBOUNDED_RANGE_PATTERN = /(?:^|\|\||\s)(?:[*xX]|>=?\s*0(?:\.0)*)\s*(?:$|\|\|)/;
 
 /**
  * Constraints declared by the source app, plus the packages some resolution field pins.

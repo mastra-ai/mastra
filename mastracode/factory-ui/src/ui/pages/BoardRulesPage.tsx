@@ -1,8 +1,7 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
@@ -12,8 +11,6 @@ import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfig
 import { BoardRules } from '../domains/boardRules/components/BoardRules';
 import { IntakeTesterDialog } from '../domains/intake/IntakeTesterDialog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
-
-const COLUMN = 'w-full';
 
 /** Every rule of a board, one lane per trigger: what it takes when an item arrives and where its cards move. */
 export function BoardRulesPage() {
@@ -39,27 +36,23 @@ export function BoardRulesPage() {
 
   return (
     <PageLayout
-      variant="narrow"
+      variant="settings"
       header={
-        <div className={cn(COLUMN, 'pb-8')}>
+        <>
           <PageHeader>
             <PageHeader.Title>Rules</PageHeader.Title>
             <PageHeader.Description>
-              What happens to work items and pull requests on this board. In each lane the first matching rule wins.
-              Only Work item opened and Pull request opened create work items; every other lane only sees work items
-              already on this board, so a rule there can safely take every card.
+              What happens to issues and pull requests on this board. In each lane the first matching rule wins.
             </PageHeader.Description>
           </PageHeader>
           <div className="mt-3">
-            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an item" />
+            <IntakeTesterDialog factoryProjectId={factory.id} label="Test an issue or pull request" />
           </div>
-        </div>
+        </>
       }
       {...slots}
     >
-      <div className={COLUMN}>
-        <BoardRules factoryId={factory.id} boardId={boardId} />
-      </div>
+      <BoardRules factoryId={factory.id} boardId={boardId} />
     </PageLayout>
   );
 }

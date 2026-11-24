@@ -112,7 +112,7 @@ function SignalProgressList({ progress }: { progress?: TraceIntelligenceProgress
         const label = signalLabel(catalog, signalName);
         const isReady = catalogEntry ? catalogEntry.status === 'ready' : progress.availableSignals.includes(signalName);
         return (
-          <li className="rounded-md border border-border bg-background px-3 py-2" key={signalName}>
+          <li className="rounded-md bg-nested px-3 py-2" key={signalName}>
             <div className="flex items-center justify-between gap-2">
               <Txt as="span" variant="subheading" style={signalStyle(signalName)}>
                 {label}
@@ -146,7 +146,7 @@ export function PendingSignalProgress({
   if (pendingSignals.length === 0) return null;
 
   return (
-    <section className="rounded-lg border border-border bg-background p-4" aria-labelledby="pending-signals-heading">
+    <section className="rounded-lg bg-nested p-4" aria-labelledby="pending-signals-heading">
       <Txt as="h2" variant="subheading" tone="ink" id="pending-signals-heading">
         Signals building themes
       </Txt>
@@ -326,7 +326,7 @@ export const SignalsEmptyState = ({
           </ul>
         </section>
 
-        <aside className="mt-9 rounded-md border border-border bg-background px-5 py-4">
+        <aside className="mt-9 rounded-md bg-nested px-5 py-4">
           <div className="flex min-w-0 items-start gap-3">
             <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-warning-indicator" />
             <div className="min-w-0 flex-1">

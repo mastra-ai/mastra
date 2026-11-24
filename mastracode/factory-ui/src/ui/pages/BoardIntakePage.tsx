@@ -1,8 +1,7 @@
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
-import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import { useBoardQuery } from '../../hooks/useBoardEditor';
@@ -10,13 +9,10 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { IntakeOrderSection } from '../domains/settings/components/IntakeOrderSection';
-import { NotRoutedSection } from '../domains/settings/components/NotRoutedSection';
 import { settingsSectionPath } from '../domains/settings/settingsSections';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
-const COLUMN = 'mx-auto w-full max-w-2xl';
-
-/** Which board takes new work: the order boards are offered a new item, and the items no board took. */
+/** Which board takes new work: the order boards are offered a new issue or pull request, and the ones no board took. */
 export function BoardIntakePage() {
   const factory = useActiveFactory();
   const boardId = useBoardConfigRoute()?.boardId ?? '';
@@ -40,27 +36,24 @@ export function BoardIntakePage() {
 
   return (
     <PageLayout
-      variant="narrow"
+      variant="settings"
       header={
-        <div className={cn(COLUMN, 'pb-8')}>
-          <PageHeader>
-            <PageHeader.Title>Routing</PageHeader.Title>
-            <PageHeader.Description>
+        <PageHeader>
+          <PageHeader.Title>Routing</PageHeader.Title>
+          <PageHeader.Description>
+            <span>
               The order boards are offered new issues and pull requests. What comes in is chosen in{' '}
               <Link to={settingsSectionPath(factory.id, 'intake')} className="underline">
                 Settings → Work Intake
               </Link>
               .
-            </PageHeader.Description>
-          </PageHeader>
-        </div>
+            </span>
+          </PageHeader.Description>
+        </PageHeader>
       }
       {...slots}
     >
-      <div className={cn(COLUMN, 'flex flex-col gap-8')}>
-        <IntakeOrderSection factoryId={factory.id} />
-        <NotRoutedSection factoryId={factory.id} />
-      </div>
+      <IntakeOrderSection factoryId={factory.id} />
     </PageLayout>
   );
 }

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { screen } from '@testing-library/react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
@@ -257,15 +256,14 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     expect(drawnIds(container)).not.toContain('other-out');
   });
 
-  it(`draws at most ${FOCUS_LINK_CAP} links each way and counts the rest as more`, () => {
+  it(`fetches every link end but draws at most ${FOCUS_LINK_CAP} links out of the focus`, () => {
     const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `site:mastra#blog/ref-${index}`);
     const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
     const requested: string[][] = [];
     const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));
     const { container } = render({ wardPage: heavy, reachable: reachableMany, requested });
     expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP + 5);
-    expect(screen.queryByTestId('knowledge-graph-more-links')).toBeNull();
-    expect(container.textContent ?? '').not.toMatch(/more links of this page not drawn/);
+    expect(edgeIds(container).filter(id => id.startsWith('link:ward->'))).toHaveLength(FOCUS_LINK_CAP);
   });
 
   it('counts a page linked by both a note and the body once, not once per kind', () => {

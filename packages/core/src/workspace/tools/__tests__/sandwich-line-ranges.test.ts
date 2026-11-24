@@ -169,7 +169,7 @@ describe.skipIf(process.platform === 'win32')('sandwich truncation reports line 
     } as any);
     const pid = String(started).match(/PID: (.+)\)/)![1]!;
 
-    const result = await getProcessOutputTool.execute!({ pid, wait: true, tail: 0 }, { workspace } as any);
+    const result = await getProcessOutputTool.execute!({ pid, waitSeconds: 30, tail: 0 }, { workspace } as any);
 
     expectNoticeMatchesSeqOutput(splitAtNotice(String(result)), 1, 3000);
   });

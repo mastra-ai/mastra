@@ -22,6 +22,8 @@ import {
   ComposerInput,
   ComposerRing,
   ComposerStatus,
+  ComposerStatusEnd,
+  ComposerStatusStart,
 } from './index';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { IconMicrophone } from '@/ds/icons/central/IconMicrophone';
@@ -62,14 +64,6 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
   return (
     <div className="flex h-[420px] flex-col justify-end gap-1.5">
       <p className="text-body-sm text-muted-foreground">Transcript content stays put when the header opens.</p>
-      <ComposerStatus>
-        {status && (
-          <>
-            <span>You&apos;re steering Sam&apos;s session</span>
-            <span>2 queued</span>
-          </>
-        )}
-      </ComposerStatus>
       <Composer aria-label="Message composer">
         <ComposerHeader placement="overlay" open={reconnecting}>
           <ComposerHeaderRow role="status" aria-live="polite">
@@ -102,8 +96,12 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
                 >
                   <span className="sr-only">Model: </span>
                   <ProviderLogo providerId={model.provider} size={14} />
-                  <span className="truncate max-sm:max-w-28">{formatModelName(model.model)}</span>
-                  <ThinkingLevelIcon options={thinkingLevels} value={thinking} />
+                  <span className="truncate max-sm:max-w-28" data-composer-line-hidden>
+                    {formatModelName(model.model)}
+                  </span>
+                  <span className="flex shrink-0" data-composer-line-hidden>
+                    <ThinkingLevelIcon options={thinkingLevels} value={thinking} />
+                  </span>
                 </ModelPicker>
                 <Button type="button" variant="ghost" size="icon-sm" tooltip="Start dictation">
                   <IconMicrophone />
@@ -122,6 +120,19 @@ const LayoutStory = ({ reconnecting = false, status = false, singleProvider = fa
           </ComposerBox>
         </ComposerRing>
       </Composer>
+      <ComposerStatus>
+        {status && (
+          <>
+            <ComposerStatusStart>
+              <span>You&apos;re steering Sam&apos;s session</span>
+              <span>2 queued</span>
+            </ComposerStatusStart>
+            <ComposerStatusEnd>
+              <span>42 tok/s</span>
+            </ComposerStatusEnd>
+          </>
+        )}
+      </ComposerStatus>
     </div>
   );
 };
@@ -134,7 +145,7 @@ const meta: Meta<typeof LayoutStory> = {
     docs: {
       description: {
         component:
-          'Shared composer layout for Studio and Factory: a right-aligned status row above the composer, an overlay header that never moves the transcript, the "+" attach menu on the left, and model, voice and the primary Send on the right. The model picker holds the thinking level and a link to connect a provider, and opens as a popover, or as a bottom sheet on small screens.',
+          'Shared composer layout for Studio and Factory. Idle, it is one line: "+", input, model picker, voice and Send. Focusing the input or writing a draft opens it, giving the input its own row above the actions, which stay where they were. The status footer below holds session context on the left and runtime readings on the right, and gives its row back while it has nothing to show. The overlay header never moves the transcript. The model picker holds the thinking level and a link to connect a provider, and opens as a popover, or as a bottom sheet on small screens.',
       },
     },
   },

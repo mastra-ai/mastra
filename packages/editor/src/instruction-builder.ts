@@ -20,6 +20,8 @@ export interface InstructionBuilderDeps {
   promptBlocksStorage: PromptBlocksStorage;
   /** When true, include draft (unpublished) prompt block refs. Used for preview mode. */
   includeDrafts?: boolean;
+  /** Include the name and ID of each rendered prompt block reference in agent instructions. */
+  includePromptBlockLabels?: boolean;
 }
 
 /**
@@ -117,7 +119,11 @@ export async function resolveInstructionBlocks(
     // Render template content
     const rendered = renderTemplate(resolved.content, context);
     if (rendered.trim()) {
-      segments.push(rendered);
+      segments.push(
+        deps.includePromptBlockLabels
+          ? `Prompt block: ${JSON.stringify(resolved.name)} (ID: ${JSON.stringify(resolved.id)})\n${rendered}`
+          : rendered,
+      );
     }
   }
 

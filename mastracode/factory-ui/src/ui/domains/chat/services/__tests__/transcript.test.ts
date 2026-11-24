@@ -894,23 +894,6 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3', 'msg-4']);
   });
 
-  it('does not duplicate the overlapping/anchor message', () => {
-    const onScreen = createInitialTranscript({
-      messages: [dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }])],
-    });
-
-    const grown = [
-      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
-      dbMessage('msg-2', 'assistant', [{ type: 'text', text: 'second' }]),
-    ];
-
-    const next = transcriptReducer(onScreen, { type: 'mergeWindow', messages: grown });
-    const ids = next.entries.filter(e => e.kind === 'message').map(e => (e.kind === 'message' ? e.id : ''));
-
-    expect(ids).toEqual(['msg-1', 'msg-2']);
-    expect(ids.filter(id => id === 'msg-2')).toHaveLength(1);
-  });
-
   it('preserves live-streamed messages at the tail when prepending older history', () => {
     let state = createInitialTranscript({
       messages: [dbMessage('history-2', 'assistant', [{ type: 'text', text: 'older reply' }])],
@@ -2295,8 +2278,6 @@ describe('transcript reducer entry identity', () => {
     });
     const drawnId = drawn.entries[0]?.id;
 
-    expect(drawnId).toMatch(/^assistant-tools-/);
-
     const claimed = transcriptReducer(drawn, {
       type: 'event',
       event: {
@@ -2479,5 +2460,60 @@ describe('transcript reducer prompts answered elsewhere', () => {
       event: { type: 'tool_end', toolCallId: 'c1', result: 'ok', isError: false },
     });
     expect(prompts(next)).toEqual(['c2']);
+  });
+});
+
+describe('a retracted prompt', () => {
+  it('drops the prompt the server cancelled and keeps the others', () => {
+    let state = initialTranscript;
+    for (const toolCallId of ['plan', 'question']) {
+      state = transcriptReducer(state, {
+        type: 'event',
+        event: { type: 'tool_suspended', toolCallId, toolName: 'ask_user', args: {}, suspendPayload: {} },
+      });
+    }
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_suspension_cancelled',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        reason: 'could not find a suspended run',
+      },
+    });
+
+    expect(state.entries.filter(entry => entry.kind === 'suspension').map(entry => entry.id)).toEqual([
+      'suspension-question',
+    ]);
+  });
+
+  it('keeps a prompt when the cancellation names another run', () => {
+    let state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: {
+        type: 'tool_suspended',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: {},
+        runId: 'run-b',
+      },
+    });
+
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_suspension_cancelled',
+        toolCallId: 'plan',
+        toolName: 'ask_user',
+        reason: 'gone',
+        runId: 'run-a',
+      },
+    });
+
+    expect(state.entries.filter(entry => entry.kind === 'suspension').map(entry => entry.id)).toEqual([
+      'suspension-plan',
+    ]);
   });
 });

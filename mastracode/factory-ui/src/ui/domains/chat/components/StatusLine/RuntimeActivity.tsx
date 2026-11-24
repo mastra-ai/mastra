@@ -7,7 +7,7 @@ import { omWork } from '../../services/om';
 
 const MemoryGlyph = agentGlyph('memory');
 
-const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-subtle-foreground';
 
 function holdingLabel({ messages, observations }: OMWorkByBudget): string | undefined {
   if (messages === 'blocking') return 'saving memory';

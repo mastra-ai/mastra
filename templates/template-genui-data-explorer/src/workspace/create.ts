@@ -47,7 +47,7 @@ export async function createWorkspace(options: {
       source,
       options.model ?? {
         providerId: "openai",
-        modelId: process.env.ANALYSIS_MODEL ?? "gpt-4.1-mini",
+        modelId: process.env.ANALYSIS_MODEL ?? "gpt-6-luna",
       },
       {
         catalog: options.catalog ?? components,

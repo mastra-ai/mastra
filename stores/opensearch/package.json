@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opensearch",
-  "version": "1.1.4",
+  "version": "1.1.5-alpha.1",
   "description": "OpenSearch vector store provider for Mastra",
   "license": "Apache-2.0",
   "type": "module",
@@ -33,7 +33,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@opensearch-project/opensearch": "^3.9.0"
+    "@opensearch-project/opensearch": "^3.10.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -52,7 +52,8 @@
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -26,7 +26,7 @@ npm install @mastra/ai-sdk@latest
 
 ## Examples
 
-### With Processors
+### With processors
 
 Processors let you transform messages before they're sent to the model (`processInput`) and after responses are received (`processOutputResult`). This example creates a logging processor that logs message counts at each stage, then wraps an OpenAI model with it.
 
@@ -92,7 +92,7 @@ const { text } = await generateText({
 })
 ```
 
-### With Processors & Memory
+### With processors & Memory
 
 You can combine processors and memory together. Input processors run after memory loads historical messages, and output processors run before memory saves the response.
 

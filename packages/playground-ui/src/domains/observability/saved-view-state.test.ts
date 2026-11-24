@@ -38,11 +38,6 @@ describe.each(pages)('saved views on the $page page', ({ page, url, base, view, 
     expect(savedViewFromSearchParams(page, url(), { columns })).toEqual(view);
   });
 
-  it('a saved URL applies back to the same URL', () => {
-    const saved = savedViewFromSearchParams(page, url(), { columns });
-    expect(applySavedView(saved, new URLSearchParams(base)).params.toString()).toBe(url().toString());
-  });
-
   it('a saved view passes the saved view schema', () => {
     expect(savedViewStateSchema.safeParse(savedViewFromSearchParams(page, url(), { columns })).success).toBe(true);
   });

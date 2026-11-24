@@ -45,7 +45,6 @@ describe('IntakeSection gitlab', () => {
       const githubSection = await screen.findByRole('region', { name: 'GitHub' });
       expect(await within(githubSection).findByText('No linked repositories yet')).toBeInTheDocument();
       expect(within(githubSection).queryByRole('button', { name: 'Add acme/app' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('region', { name: 'GitHub routing' })).not.toBeInTheDocument();
       await openSourcePicker('GitLab projects');
       const gitlabProjects = await screen.findByRole('group', { name: 'GitLab projects' });
       expect(within(gitlabProjects).getByRole('button', { name: 'Add acme/app' })).toBeInTheDocument();

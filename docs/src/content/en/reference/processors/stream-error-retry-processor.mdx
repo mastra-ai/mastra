@@ -117,7 +117,7 @@ export const agent = new Agent({
 })
 ```
 
-## Default OpenAI Responses matcher
+## Default OpenAI responses matcher
 
 `isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It reads each chunk with the shared provider-failure reader from `@mastra/core/error` and retries chunks that report a rate limit, a provider outage, or a timeout. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`. It never retries a credential or quota refusal.
 

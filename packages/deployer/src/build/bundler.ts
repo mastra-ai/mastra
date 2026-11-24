@@ -148,6 +148,8 @@ export async function getInputOptions(
       }),
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
+        // v6 rewrites lodash.<method> imports to lodash/<method>, which breaks projects that don't install lodash.
+        optimizeModularizedImports: false,
       }),
       commonjs({
         extensions: ['.js', '.ts', '.cjs'],

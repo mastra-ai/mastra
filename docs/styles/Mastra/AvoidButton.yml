@@ -1,6 +1,10 @@
 extends: existence
-message: "Avoid using 'button'. Instead of 'Select the **X** button', write 'Select **X**'."
-level: suggestion
+message: "Name the control instead of calling it a button: write 'Select **X**', not 'Select the **X** button'."
+link: https://docs.microsoft.com/en-us/style-guide/procedures-instructions/writing-step-by-step-instructions
+level: error
 ignorecase: true
 tokens:
-  - 'button'
+  # The anti-pattern is "Select the **X** button": the control's label plus a
+  # redundant "button". Plain uses of the word (mouse button, button id,
+  # doorbell button) are accurate and stay allowed.
+  - '\b(?:select|click|choose)\s+the\s+[^.\n]{0,40}?button\b'

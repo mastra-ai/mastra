@@ -10,17 +10,22 @@ interface SpanClocks {
 /**
  * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
  * resumed segment keeps them on the run registry beside its fresh spans; the
- * originals keep them in the loop state. Undefined when none was captured yet.
+ * originals keep them in the loop state. Undefined when none was captured yet,
+ * and for a carried segment this process holds no live spans of: the loop
+ * state's clocks belong to the run's first pair.
  */
 export function carriedSpanClocks(
   registry:
-    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | Pick<RunRegistryEntry, 'resumeModelSpan' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
     | undefined,
   state: SpanClocks,
+  carried = false,
 ): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
-  const clocks: SpanClocks = registry?.resumeModelSpanData
+  const clocks: SpanClocks = registry?.resumeModelSpan
     ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
-    : state;
+    : carried
+      ? {}
+      : state;
   const attributes = {
     ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
     ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),

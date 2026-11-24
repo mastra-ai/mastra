@@ -166,5 +166,54 @@ describe('ToneConsistencyMetric', () => {
       expect(Math.abs(metrics?.avgSentiment || 0)).toBeLessThan(0.2);
       expect(metrics?.sentimentVariance).toBeLessThan(0.1);
     });
+
+    it('should score every sentence, with or without final punctuation', async () => {
+      const scorer = createToneScorer();
+      const scoreFor = async (content: string) => {
+        const output = [createTestMessage({ content, role: 'assistant', id: 'test-output' })];
+        return (await scorer.run(createAgentTestRun({ output }))).score;
+      };
+      const kind = 'Thank you for reaching out. I am happy to help.';
+      const kindScore = await scoreFor(kind);
+
+      for (const ending of [
+        'This is terrible garbage and I hate it',
+        '**I hate it**',
+        '(I hate it)',
+        '(Your package arrives tomorrow)',
+        '(I love this and hate this)',
+        'Ужасно',
+      ]) {
+        const score = await scoreFor(`${kind} ${ending}`);
+        expect(score).toBeLessThan(kindScore);
+        expect(score).toBe(await scoreFor(`${kind} ${ending}.`));
+      }
+      for (const ending of ['Terrible', '**Terrible**', '"Terrible"', '(Terrible)']) {
+        expect(await scoreFor(`${kind} ${ending}`)).toBeLessThan(0.75);
+      }
+      for (const rude of [
+        'I love this\nI hate this awful garbage',
+        '(I love this\nI hate this awful garbage)',
+        'I love this!I hate this awful garbage.',
+        'I love this?I hate this awful garbage.',
+        'I love this.I hate this awful garbage.',
+        '_Thank you for reaching out._ I hate this terrible garbage.',
+        `${kind} Terrible.`,
+        `${kind} (Terrible).`,
+      ]) {
+        expect(await scoreFor(rude)).toBe(0);
+      }
+
+      for (const ending of ['Thanks', 'Good luck 🍀', 'Best wishes,\nAnna']) {
+        expect(await scoreFor(`Your refund is on the way. It takes three days.\n\n${ending}`)).toBeGreaterThan(0.85);
+      }
+      for (const ending of [' [1, 2, 3]', ' [see the source]', ' (see source)', '</p>', ' 😊']) {
+        expect(await scoreFor(`${kind}${ending}`)).toBe(kindScore);
+      }
+      for (const link of ['$3.50', 'example.com', 'EXAMPLE.COM', 'example.рф']) {
+        expect(await scoreFor(`Great news, see ${link} for your order today`)).toBe(1);
+      }
+      expect(await scoreFor('👍')).toBe(1);
+    });
   });
 });

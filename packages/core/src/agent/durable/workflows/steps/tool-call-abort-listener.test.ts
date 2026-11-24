@@ -60,7 +60,7 @@ describe('durable tool-call remote abort listener', () => {
     const failing = vi.spyOn(pubsub, 'subscribe').mockRejectedValueOnce(new Error('pubsub down'));
     await expect(ensureRemoteAbortListener(pubsub, RUN_ID)).rejects.toThrow('pubsub down');
     expect(entry.abortSignal).toBeDefined();
-    expect(entry.remoteAbortListenerInstalled).toBe(false);
+    expect(entry.remoteAbortListener).toBeUndefined();
     failing.mockImplementation(subscribe);
 
     try {

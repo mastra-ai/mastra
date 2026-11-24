@@ -143,7 +143,7 @@ await storage.init()
 ]}
 />
 
-## Constructor Examples
+## Constructor examples
 
 You can instantiate `DSQLStore` in the following ways:
 
@@ -200,9 +200,9 @@ const store5 = new DSQLStore({
 })
 ```
 
-## Additional Notes
+## Additional notes
 
-### Schema Management
+### Schema management
 
 The storage implementation handles schema creation and updates automatically. It creates the following tables:
 
@@ -254,7 +254,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
-### Direct Database and Pool Access
+### Direct database and pool access
 
 `DSQLStore` exposes both the underlying database client and the pg.Pool instance as public fields:
 
@@ -271,7 +271,7 @@ It supports direct queries and custom transaction management. When using these f
 
 This approach is intended for advanced scenarios where low-level access is required.
 
-### Aurora DSQL Specifics
+### Aurora DSQL specifics
 
 #### IAM-only authentication
 
@@ -307,7 +307,7 @@ Aurora DSQL uses optimistic concurrency control (OCC) and may return retriable O
 
 Individual connections are limited to about 60 minutes. The default `maxLifetimeSeconds: 3300` ensures connections are recycled before hitting this limit.
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 
@@ -378,11 +378,11 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
-## Index Management
+## Index management
 
 Aurora DSQL storage provides index management capabilities to optimize query performance.
 
-### Automatic Performance Indexes
+### Automatic performance indexes
 
 Aurora DSQL storage automatically creates composite indexes during initialization for common query patterns:
 
@@ -396,7 +396,7 @@ Aurora DSQL storage automatically creates composite indexes during initializatio
 
 Aurora DSQL creates these indexes asynchronously using `CREATE INDEX ASYNC`. Because index creation is asynchronous, new indexes may not be immediately available after `init()`. The store will continue to function without them, but queries may be slower until index creation completes.
 
-### Creating Custom Indexes
+### Creating custom indexes
 
 Create additional indexes to optimize specific query patterns:
 
@@ -416,7 +416,7 @@ await storage.createIndex({
 
 Aurora DSQL doesn't allow `ASC`/`DESC` in `CREATE INDEX ASYNC`. If you include them, they will be automatically stripped.
 
-### Index Options
+### Index options
 
 <PropertiesTable
   content={[
@@ -484,7 +484,7 @@ Aurora DSQL doesn't allow `ASC`/`DESC` in `CREATE INDEX ASYNC`. If you include t
 ]}
 />
 
-### Managing Indexes
+### Managing indexes
 
 List and monitor existing indexes:
 
@@ -527,7 +527,7 @@ console.log(stats)
 await storage.dropIndex('idx_threads_status')
 ```
 
-### Schema-Specific Indexes
+### Schema-specific indexes
 
 When using custom schemas, indexes are created with schema prefixes:
 
@@ -546,7 +546,7 @@ await storage.createIndex({
 })
 ```
 
-## Related Resources
+## Related resources
 
 - [Aurora DSQL Documentation](https://docs.aws.amazon.com/aurora-dsql/)
 - [SQL Reference](https://docs.aws.amazon.com/aurora-dsql/latest/userguide/working-with-aurora-dsql-sql.html)

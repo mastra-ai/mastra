@@ -27,7 +27,7 @@ export interface LLMIterationStepResult {
   reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
   isContinued: boolean;
-  /** Private continuation: the physical attempt did not complete a logical step. */
+  /** Private continuation: the physical attempt did not complete a logical step (signal preemption, API-error retry). */
   signalPreempted?: boolean;
   logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;
@@ -189,6 +189,13 @@ export const toolCallOutputSchema = toolCallInputSchema.extend({
   // honesty — no engine validates step outputs today, but Zod would strip an undeclared
   // field if validation is ever (re-)enabled (see schema.test.ts).
   aborted: z.boolean().optional(),
+  // Model-facing form of a validation error Mastra's own validation produced for this call
+  // (see getModelFacingValidationError). Read in the process that ran the tool and carried beside
+  // the result, because the marker on the result does not survive serialization between steps.
+  // llm-mapping sends it to the model in place of the tool's `toModelOutput` mapping.
+  validationError: z
+    .object({ error: z.literal(true), message: z.string(), validationErrors: z.any().optional() })
+    .optional(),
   // HITL approval decision, present when the tool required approval and was resumed.
   approval: z
     .object({

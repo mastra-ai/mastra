@@ -3,7 +3,7 @@ import { Memory } from '@mastra/memory';
 
 import { webSearchTool } from '../tools/web-search';
 
-const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-5-mini';
+const agentModel = process.env.AGENT_MODEL?.trim() || 'mastra/openai/gpt-6.1-terra';
 
 export const docsExpert = new Agent({
   id: 'docs-expert',

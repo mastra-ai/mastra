@@ -78,11 +78,18 @@ export function useRespondAgentControllerSuspensionMutation(args: AgentControlle
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
-    mutationFn: ({ toolCallId, resumeData }: { toolCallId: string; resumeData: string | string[] | PlanResume }) =>
-      requireAgentControllerSession(session).respondToToolSuspension(toolCallId, resumeData).then(requireAccepted),
+    mutationFn: ({
+      toolCallId,
+      resumeData,
+    }: {
+      toolCallId: string;
+      resumeData: string | string[] | PlanResume;
+      /** The caller handles a reply to an ended prompt itself, so don't report it. */
+      quietWhenEnded?: boolean;
+    }) => requireAgentControllerSession(session).respondToToolSuspension(toolCallId, resumeData).then(requireAccepted),
     onSuccess: invalidateSession,
-    onError: error => {
-      reportRejectedReply(error);
+    onError: (error, { quietWhenEnded }) => {
+      if (!(quietWhenEnded && isEndedPrompt(error))) reportRejectedReply(error);
       // Refetch so a prompt nothing is waiting on stops offering buttons.
       void invalidateSession();
     },
