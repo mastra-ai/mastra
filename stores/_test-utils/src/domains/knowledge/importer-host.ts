@@ -402,6 +402,24 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await page('notion'))?.body).toBe('body of notion');
     });
 
+    it("refuses every op when another binding's anchor sits at the target, and never takes it over", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear/notion' },
+      ]);
+      await run([upsert({ sourceId: 'l1' })], 'b2');
+      // A human moves b2's folder to where b1's target goes.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/notion', parent: '' });
+      const anchor = await page('notion');
+      const receipt = await run([upsert({ sourceId: 'p1' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 0, refused: 1 } });
+      expect(await page('notion/p1')).toBeNull();
+      expect(await page('notion')).toMatchObject({ id: anchor!.id, version: anchor!.version });
+      // b2's anchor is pinned by id and now sits outside its target, so b2 refuses too: the page is b2's.
+      const b2 = await run([upsert({ sourceId: 'l2' })], 'b2');
+      expect(b2).toMatchObject({ counts: { created: 0, refused: 1 } });
+    });
+
     it("takes over a page someone else wrote at an item's path, keeping its id, and lands the rest of the flush", async () => {
       const { knowledge, run, page } = setup();
       await run([upsert({ sourceId: 'p1' })]);
