@@ -331,8 +331,27 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   }
   const anchorPath = target.path;
 
-  // A page this binding owns, checked after locking: live, under the anchor, mapped back to the node.
-  const owned = async (pageId: string, sourceId?: string): Promise<{ page: KnowledgePage; keys: string[] }> => {
+  // Another binding's pages: its anchor or one of its nodes. Read once per flush.
+  let otherAnchors: Set<string> | undefined;
+  const otherBindings = async () =>
+    (otherAnchors ??= new Set(
+      (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
+    ));
+  const othersPage = async (id: string) => {
+    if ((await otherBindings()).has(id)) return true;
+    const node = await importers.getNodeByPage(id);
+    return !!node && node.bindingId !== binding.id;
+  };
+
+  /**
+   * A page this binding owns, checked after locking: live, in the target's scope, mapped back to the
+   * node. A person may have moved it out of the anchor: it is still the binding's and is updated
+   * where they put it (`outside`), unless they put it inside another binding's pages.
+   */
+  const owned = async (
+    pageId: string,
+    sourceId?: string,
+  ): Promise<{ page: KnowledgePage; keys: string[]; outside: boolean }> => {
     const read = async () => {
       const page = await storage.getPage({ id: pageId, read: 'all' });
       const path = live(page) ? await keyPath(page) : null;
@@ -342,20 +361,24 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     if (!before) throw new KnowledgeImportRefusalError('conflict');
     await storage.lockPages(before.path.ids);
     const after = await read();
-    const under =
-      after && sameKeys(after.path.keys.slice(0, anchorPath.length), anchorPath) && after.path.ids.includes(anchor.id);
-    if (!after || !under) throw new KnowledgeImportRefusalError('conflict');
+    if (!after) throw new KnowledgeImportRefusalError('conflict');
+    const outside = !(
+      sameKeys(after.path.keys.slice(0, anchorPath.length), anchorPath) && after.path.ids.includes(anchor.id)
+    );
+    if (outside) {
+      for (const id of after.path.ids.slice(0, -1)) {
+        if (await othersPage(id)) throw new KnowledgeImportRefusalError('conflict');
+      }
+    }
     if (after.page.id !== anchor.id) {
       const node = await importers.getNodeByPage(after.page.id);
       if (!node || node.bindingId !== binding.id || (sourceId !== undefined && node.sourceId !== sourceId)) {
         throw new KnowledgeImportRefusalError('conflict');
       }
     }
-    return { page: after.page, keys: after.path.keys };
+    return { page: after.page, keys: after.path.keys, outside };
   };
 
-  // Another binding's pages: its anchor or one of its nodes. Read once per flush.
-  let otherAnchors: Set<string> | undefined;
   /**
    * Locks the live subtree under a page this binding is about to move or stub, and refuses the op if
    * any page in that locked set belongs to another binding. Human pages are fine: they move with
@@ -363,13 +386,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
    * `movePage` moves, since nothing can join or leave it until commit.
    */
   const assertSubtreeOwned = async (pageId: string) => {
-    otherAnchors ??= new Set(
-      (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
-    );
     for (const id of await storage.lockSubtree(pageId)) {
-      if (otherAnchors.has(id)) throw new KnowledgeImportRefusalError('conflict');
-      const node = await importers.getNodeByPage(id);
-      if (node && node.bindingId !== binding.id) throw new KnowledgeImportRefusalError('conflict');
+      if (await othersPage(id)) throw new KnowledgeImportRefusalError('conflict');
     }
   };
 
@@ -432,8 +450,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     return { page, changed: true, section, unresolved };
   };
   // Away from its source parent: that parent hasn't arrived, or the page isn't under it yet.
-  const misplacedAt = async (node: KnowledgeImporterNodeRecord, page: KnowledgePage) => {
-    if (!node.parentSourceId) return false;
+  // A page a person moved out of the target is where they want it, not misplaced.
+  const misplacedAt = async (node: KnowledgeImporterNodeRecord, page: KnowledgePage, outside: boolean) => {
+    if (!node.parentSourceId || outside) return false;
     const parent = await nodeOf(node.parentSourceId);
     return !parent || page.parentId !== parent.pageId;
   };
@@ -481,7 +500,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     for (const sourceId of linking.items.filter(id => id !== self).slice(0, MAX_KNOWLEDGE_LINK_REFRESH_SOURCES)) {
       const node = await importers.getNode(binding.id, sourceId);
       if (!node) continue;
-      let current: { page: KnowledgePage; keys: string[] };
+      let current: Awaited<ReturnType<typeof owned>>;
       try {
         current = await owned(node.pageId, sourceId);
       } catch (error) {
@@ -495,7 +514,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         ...node,
         linkSection: out.section,
         unresolvedLinks: out.unresolved,
-        unsettled: (await misplacedAt(node, out.page)) || out.unresolved.length > 0,
+        unsettled: (await misplacedAt(node, out.page, current.outside)) || out.unresolved.length > 0,
       });
       if (out.changed) relinked.push({ sourceId, page: out.page, keys: current.keys });
     }
@@ -558,10 +577,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       if (!live(fresh) || fresh.parentId !== destination.page.id || fresh.key !== key) {
         throw new KnowledgeImportRefusalError('occupied');
       }
-      otherAnchors ??= new Set(
-        (await importers.listBindings()).flatMap(b => (b.id !== binding.id && b.anchorPageId ? [b.anchorPageId] : [])),
-      );
-      if (otherAnchors.has(fresh.id) || (await importers.getNodeByPage(fresh.id))) {
+      if ((await otherBindings()).has(fresh.id) || (await importers.getNodeByPage(fresh.id))) {
         throw new KnowledgeImportRefusalError('occupied');
       }
       renamed = fields.name !== fresh.name;
@@ -580,7 +596,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     } else {
       const current = await owned(existing.pageId, item.sourceId);
       page = current.page;
-      if (page.parentId !== destination.page.id) {
+      // A page a person moved out of the target stays where they put it.
+      if (!current.outside && page.parentId !== destination.page.id) {
         // A page can't move under its own subtree.
         if (
           destination.keys.length > current.keys.length &&
@@ -803,12 +820,13 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   ): Promise<{ moved: boolean; relinked: boolean }> {
     const node = await importers.getNode(binding.id, sourceId);
     if (!node?.unsettled) return { moved: false, relinked: false };
-    let { page, keys } = await owned(node.pageId, sourceId);
+    const current = await owned(node.pageId, sourceId);
+    let { page, keys } = current;
     let moved = false;
     let relinked = false;
 
-    const parent = await nodeOf(node.parentSourceId);
-    let misplaced = !!node.parentSourceId && !parent;
+    const parent = current.outside ? null : await nodeOf(node.parentSourceId);
+    let misplaced = !current.outside && !!node.parentSourceId && !parent;
     if (parent && canMove) {
       const destination = await owned(parent.pageId, parent.sourceId);
       if (page.parentId !== destination.page.id) {

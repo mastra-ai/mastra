@@ -45,7 +45,7 @@ export type KnowledgeImporterState = Record<string, string>;
 export type KnowledgeImportRefusalReason =
   /** Another binding's page is at the path or at the binding's target. */
   | 'occupied'
-  /** The mapped page was moved out of the binding's subtree, deleted, or belongs to another binding. */
+  /** The mapped page was moved into another scope or inside another binding's pages, or belongs to another binding. */
   | 'conflict'
   /** The op names something the binding can't hold (bad parent, malformed item). */
   | 'invalid';

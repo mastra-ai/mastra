@@ -503,13 +503,66 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(b2).toMatchObject({ counts: { refused: 1 } });
     });
 
-    it('refuses to touch an imported page a human moved out of the target', async () => {
+    it('keeps updating an imported page a person moved out of the target, where they put it', async () => {
       const { knowledge, run, page } = setup();
+      await run([
+        upsert({ sourceId: 'p1' }),
+        upsert({ sourceId: 'c1', parent: 'p1' }),
+        upsert({ sourceId: 'a', links: [{ sourceId: 'p1' }] }),
+      ]);
+      const before = await page('notion/p1');
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'archive', name: 'Archive' });
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: 'archive' });
+
+      const receipt = await run([
+        upsert({ sourceId: 'p1', body: 'new' }),
+        upsert({ sourceId: 'c2', parent: 'p1' }),
+        upsert({ sourceId: 'a', body: 'a again', links: [{ sourceId: 'p1' }] }),
+      ]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 1, updated: 2, moved: 0, refused: 0 } });
+      expect(await page('archive/p1')).toMatchObject({ id: before!.id, body: 'new' });
+      expect(await page('notion/p1')).toBeNull();
+      // Children follow their parent where it is; links render from the page's real path.
+      expect((await page('archive/p1/c2'))?.body).toBe('body of c2');
+      expect((await page('notion/a'))?.body).toBe('a again\n\nLinks:\n- [[docs:acme#archive/p1]]');
+      // Nothing left to settle: the page stays where the person put it.
+      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({
+        chain: false,
+        counts: { unchanged: 1, moved: 0, refused: 0 },
+      });
+
+      // Removed from the source with children under it, it is kept as a stub, not deleted.
+      const removed = await run([{ op: 'remove', sourceId: 'p1' }]);
+      expect(removed).toMatchObject({ counts: { stubbed: 1, removed: 0, refused: 0 } });
+      expect((await page('archive/p1'))?.id).toBe(before!.id);
+    });
+
+    it("refuses an imported page a person moved into another binding's folder", async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#linear' },
+      ]);
       await run([upsert({ sourceId: 'p1' })]);
-      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: '' });
+      await run([upsert({ sourceId: 'l1' })], 'b2');
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', parent: 'linear/l1' });
       const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
       expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
-      expect((await page('p1'))?.body).toBe('body of p1');
+      expect((await page('linear/l1/p1'))?.body).toBe('body of p1');
+      // Its anchor directly, too.
+      await knowledge.movePage({ scope: 'docs:acme', path: 'linear/l1/p1', parent: 'linear' });
+      expect(await run([upsert({ sourceId: 'p1', body: 'new' })])).toMatchObject({ counts: { refused: 1 } });
+      expect((await page('linear/p1'))?.body).toBe('body of p1');
+    });
+
+    it('refuses an imported page a person moved into another scope', async () => {
+      const { knowledge, run } = setup();
+      await run([upsert({ sourceId: 'p1' })]);
+      await knowledge.movePage({ scope: 'docs:acme', path: 'notion/p1', toScope: 'docs:other' });
+      const receipt = await run([upsert({ sourceId: 'p1', body: 'new' })]);
+      expect(receipt).toMatchObject({ counts: { updated: 0, refused: 1 } });
+      const storage = await knowledge.getStorage();
+      const [other] = await storage.getScopesByAddress(['docs:other']);
+      expect((await storage.getPageByPath({ scopeId: other!.id, path: ['p1'], read: 'all' }))?.body).toBe('body of p1');
     });
 
     it('refuses every op after the anchor moved away from its configured path', async () => {
