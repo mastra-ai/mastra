@@ -9,19 +9,17 @@ import * as babel from '@babel/core';
  */
 const LATIN1_MAX = 0xff;
 
-export interface NonLatin1Character {
-  line: number;
-  column: number;
-  codePoint: number;
-}
-
 /**
  * Characters above Latin-1 in executable code: strings, templates, regular expressions and
  * identifiers. Comments are skipped: every minifier removes them, and a Worker is only one byte
  * per character after minification anyway, because inlined third-party code keeps comments with
  * such characters in an unminified bundle.
+ *
+ * @param {string} code
+ * @param {string} fileName
+ * @returns {{ line: number; column: number; codePoint: number }[]}
  */
-export function findNonLatin1InCode(code: string, fileName: string): NonLatin1Character[] {
+export function findNonLatin1InCode(code, fileName) {
   if (!hasNonLatin1(code)) return [];
 
   const ast = babel.parseSync(code, {
@@ -30,14 +28,14 @@ export function findNonLatin1InCode(code: string, fileName: string): NonLatin1Ch
     filename: fileName,
     sourceType: 'unambiguous',
   });
-  const comments = (ast?.comments ?? []).map(comment => [comment.start!, comment.end!] as const);
+  const comments = (ast?.comments ?? []).map(comment => [comment.start, comment.end]);
 
-  const found: NonLatin1Character[] = [];
+  const found = [];
   let line = 1;
   let lineStart = 0;
   let nextComment = 0;
   for (let index = 0; index < code.length; index++) {
-    const codePoint = code.codePointAt(index)!;
+    const codePoint = code.codePointAt(index);
     const start = index;
     if (codePoint === 0x0a) {
       line++;
@@ -46,7 +44,7 @@ export function findNonLatin1InCode(code: string, fileName: string): NonLatin1Ch
     if (codePoint > 0xffff) index++;
     if (codePoint <= LATIN1_MAX) continue;
 
-    while (nextComment < comments.length && comments[nextComment]![1] <= start) nextComment++;
+    while (nextComment < comments.length && comments[nextComment][1] <= start) nextComment++;
     const comment = comments[nextComment];
     if (comment && comment[0] <= start) continue;
 
@@ -55,9 +53,14 @@ export function findNonLatin1InCode(code: string, fileName: string): NonLatin1Ch
   return found;
 }
 
-/** Every emitted `.js`, `.cjs` and `.mjs` file under `distDir`, as `file:line:column U+XXXX` lines. */
-export function findNonLatin1InDist(distDir: string): string[] {
-  const problems: string[] = [];
+/**
+ * Every emitted `.js`, `.cjs` and `.mjs` file under `distDir`, as `file:line:column U+XXXX` lines.
+ *
+ * @param {string} distDir
+ * @returns {string[]}
+ */
+export function findNonLatin1InDist(distDir) {
+  const problems = [];
   for (const entry of fs.readdirSync(distDir, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || !/\.[cm]?js$/.test(entry.name)) continue;
     const file = path.join(entry.parentPath, entry.name);
@@ -71,6 +74,24 @@ export function findNonLatin1InDist(distDir: string): string[] {
   return problems;
 }
 
-function hasNonLatin1(code: string): boolean {
+/**
+ * For a tsdown `onSuccess` step of a package built with `outputOptions: { charset: 'ascii' }`: throws
+ * when the emitted JavaScript still holds characters above U+00FF outside comments.
+ *
+ * @param {string} distDir
+ */
+export function assertLatin1Dist(distDir) {
+  const nonLatin1 = findNonLatin1InDist(distDir);
+  if (nonLatin1.length > 0) {
+    throw new Error(
+      `Published JavaScript contains characters above U+00FF in code. Write them as \\u escapes in source; ` +
+        `in bundled third-party code, check that \`charset: 'ascii'\` still applies:\n${nonLatin1.slice(0, 50).join('\n')}` +
+        (nonLatin1.length > 50 ? `\n...and ${nonLatin1.length - 50} more` : ''),
+    );
+  }
+  console.info('✓ Checked published JavaScript holds no characters above U+00FF outside comments');
+}
+
+function hasNonLatin1(code) {
   return /[^\u0000-\u00ff]/.test(code);
 }
