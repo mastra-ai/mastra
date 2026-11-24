@@ -500,6 +500,11 @@ export interface Config<
 
   /**
    * Pub/sub system for event-driven communication between components.
+   *
+   * The default delivers inside this process. Evented workflows and evented
+   * agents that run on several processes need a pubsub that redelivers
+   * unacknowledged events and a workflows store with step guards.
+   * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
    * @default EventEmitterPubSub
    */
   pubsub?: PubSub;
@@ -8192,9 +8197,10 @@ export class Mastra<
         void delivery.finally(() => this.#inFlightPushEvents.delete(delivery));
       };
       const cb: EventCallback = (event, ack, nack) => {
-        // In cross-process push environments (e.g. UnixSocketPubSub),
-        // every subscriber receives every event — including events for
-        // internal workflows registered on a different process. Skip
+        // On a push transport shared with other processes (e.g. Mastra Code
+        // sessions on a UnixSocketPubSub), every subscriber receives every
+        // event, including events for internal workflows registered on a
+        // different process. Skip
         // events whose workflow exists in neither the internal nor the
         // public registry so only the owning process handles them.
         // Without this guard the WEP would publish workflow.fail,
