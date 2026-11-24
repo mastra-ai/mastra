@@ -2,17 +2,17 @@
 '@mastra/code-sdk': minor
 ---
 
-Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback model IDs per request. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. A tenant credential store, which disallows environment keys, skips the fallbacks it holds no key for. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
+Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback model IDs per request. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
 
 ```ts
 const code = await createMastraCode({
-  resolveModelFallbacks: async ({ requestContext }) => ['openai/gpt-5.6-sol'],
+  resolveModelFallbacks: async () => ['openai/gpt-5.6-sol'],
 });
 ```
 
 An error that does not switch models, such as a prompt that is too long, now ends the run with the provider's own error even when a fallback model is configured. Before, it ended with `Processor "mastracode-account-rotation" stopped the run: …`.
 
-Each model switch now records why it happened (rate limit, out of credits, missing or rejected credentials, provider unavailable or timeout), along with the provider's retry time when it sends one. The new `@mastra/code-sdk/model-fallback` module holds every fallback contract, so hosts and browser clients render switches the same way: the part type, the notice text (`modelFallbackNoticeText`, with an optional formatter for model display names), `parseModelFallbackPart` for saved switch records, `MODEL_FALLBACK_STATE_KEY` and `parsePendingModelFallback` for the pending switch in session state and thread settings, `pendingModelFallbackForThread` to read that switch for one thread, `fallbackModelIdsToTry` for the fallbacks a request will actually try, and `modelRouteFailureFromError` to turn a provider error into its recorded cause.
+Each model switch now records why it happened (rate limit, out of credits, missing or rejected credentials, provider unavailable or timeout), along with the provider's retry time when it sends one.
 
 The `info` event sent on a model switch now names the cause first.
 
@@ -20,7 +20,7 @@ The `info` event sent on a model switch now names the cause first.
 
 **After:** `anthropic/claude-opus-5.5 is rate-limited, switched to openai/gpt-5.6-sol`
 
-The fallback exports now live in `@mastra/code-sdk/model-fallback`. Importing them from `@mastra/code-sdk/auth/account-rotation-processor` or `@mastra/code-sdk/schema` still works but is deprecated. `isModelFallbackReason` is deprecated too; `parseModelFallbackPart` validates the whole record:
+Fallback helpers now live in `@mastra/code-sdk/model-fallback`, so hosts and browser clients read and word model switches the same way. Importing them from `@mastra/code-sdk/auth/account-rotation-processor` or `@mastra/code-sdk/schema` still works but is deprecated. `isModelFallbackReason` is deprecated too; `parseModelFallbackPart` validates the whole record:
 
 ```diff
 - import {

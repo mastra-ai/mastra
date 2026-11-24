@@ -312,11 +312,7 @@ export async function handlePackFallbackState(
   const marker = event.state[MODEL_FALLBACK_STATE_KEY];
   if (marker === null || marker === undefined) return;
   const pending = parsePendingModelFallback(marker);
-  const markerThreadId = pending
-    ? pending.threadId
-    : typeof marker === 'object' && 'threadId' in marker
-      ? marker.threadId
-      : undefined;
+  const markerThreadId = typeof marker === 'object' && 'threadId' in marker ? marker.threadId : undefined;
 
   const entryThreadId = ectx.state.session.thread.getId();
   const pendingThreadId = typeof markerThreadId === 'string' && markerThreadId ? markerThreadId : entryThreadId;
