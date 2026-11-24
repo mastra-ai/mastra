@@ -7,7 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useBlocker, useNavigate } from 'react-router';
+import { Link, useBeforeUnload, useBlocker, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../api/keys';
 import type { BoardCatalogResponse, FactorySkillInfo, StoredBoardResponse } from '../../../../api/types';
@@ -103,6 +103,11 @@ export function BoardConfigEditor({
       next.rules === true ||
       next.intake === true
     );
+  });
+
+  // Reloading or closing the tab would drop the edits too.
+  useBeforeUnload(event => {
+    if (changed) event.preventDefault();
   });
 
   const generalPath = boardConfigPath(factory.id, boardId);
