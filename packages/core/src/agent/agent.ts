@@ -2114,7 +2114,7 @@ export class Agent<
     this.logger.warn(`Agent "${this.id}": ${message}`);
   }
 
-  #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
+  #warnInheritedExecutionOptions(options: { eagerToolExecution?: boolean; stopWhen?: unknown }): void {
     if (!this.#executionEnginePolicy.inherited) return;
     if (options.eagerToolExecution === true) {
       this.#warnExecutionPolicy(
@@ -2123,7 +2123,10 @@ export class Agent<
       );
     }
     if (this.#executionEnginePolicy.engine === 'evented' && options.stopWhen !== undefined) {
-      this.#warnExecutionPolicy('stopWhen', 'Mastra-inherited evented policy does not support stopWhen.');
+      this.#warnExecutionPolicy(
+        'stopWhen',
+        'Mastra-inherited evented execution does not carry stopWhen to another process. Set maxSteps to bound the run across processes.',
+      );
     }
   }
 
@@ -14385,11 +14388,11 @@ export class Agent<
     }
 
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
-    this.#warnInheritedExecutionOptions(defaultOptions);
     const resolvedOptions = deepMerge(
       withDefaultToolCallConcurrencyLimit(defaultOptions ?? {}, options) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    this.#warnInheritedExecutionOptions(resolvedOptions);
     // Actor is a per-call trust signal, so an explicit value replaces the
     // default actor as a whole rather than inheriting any of its fields.
     if (options?.actor !== undefined) {
