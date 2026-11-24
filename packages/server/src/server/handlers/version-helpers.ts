@@ -3,6 +3,8 @@
  * These utilities are domain-agnostic and work with any VersionedStorageDomain.
  */
 
+import { getTaggedVersionIds } from './version-tags';
+
 // Default maximum versions per entity (can be made configurable in the future)
 export const DEFAULT_MAX_VERSIONS = 50;
 
@@ -170,6 +172,8 @@ export async function enforceRetentionLimit(
   parentIdField: string,
   activeVersionId: string | undefined | null,
   maxVersions: number = DEFAULT_MAX_VERSIONS,
+  /** Versions a tag points at. Like the active version, these are never pruned. */
+  protectedVersionIds: ReadonlySet<string> = new Set(),
 ): Promise<{ deletedCount: number }> {
   const { total } = await store.listVersions({ [parentIdField]: parentId, perPage: 1 });
 
@@ -181,7 +185,8 @@ export async function enforceRetentionLimit(
 
   const { versions: oldestVersions } = await store.listVersions({
     [parentIdField]: parentId,
-    perPage: versionsToDelete + 1,
+    // Over-fetch by the number of versions we may have to skip (active + tagged).
+    perPage: versionsToDelete + 1 + protectedVersionIds.size,
     orderBy: { field: 'versionNumber', direction: 'ASC' },
   });
 
@@ -191,7 +196,7 @@ export async function enforceRetentionLimit(
       break;
     }
 
-    if (version.id === activeVersionId) {
+    if (version.id === activeVersionId || protectedVersionIds.has(version.id)) {
       continue;
     }
 
@@ -296,7 +301,14 @@ export async function handleAutoVersioning<TEntity>(
   // activeVersionId is only updated when the user explicitly publishes/activates a version.
 
   const activeVersionId = existingEntity.activeVersionId || versionId;
-  await enforceRetentionLimit(store, parentId, parentIdField, activeVersionId);
+  await enforceRetentionLimit(
+    store,
+    parentId,
+    parentIdField,
+    activeVersionId,
+    DEFAULT_MAX_VERSIONS,
+    getTaggedVersionIds(updatedEntity as { metadata?: Record<string, unknown> }),
+  );
 
   return { entity: updatedEntity, versionCreated: true };
 }

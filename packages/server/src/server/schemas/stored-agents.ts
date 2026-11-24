@@ -5,6 +5,7 @@ import { storedMemoryRefSchema } from './memory-config';
 import { ruleGroupSchema } from './rule-group';
 import { workspaceSnapshotConfigSchema } from './stored-workspaces';
 import { toolProvidersSchema } from './tool-providers';
+import { metadataWithVersionTagsSchema } from './version-tags';
 
 // ============================================================================
 // Path Parameter Schemas
@@ -348,7 +349,13 @@ const snapshotConfigSchema = z.object({
  */
 const agentMetadataSchema = z.object({
   authorId: z.string().optional().describe('Author identifier for multi-tenant filtering'),
-  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata for the agent'),
+  metadata: metadataWithVersionTagsSchema
+    .optional()
+    .describe(
+      'Additional metadata for the agent. Keys are merged into the existing metadata. ' +
+        'Set `versionTags` to a map of tag name to version ID to name versions (e.g. { "production": "<versionId>" }); ' +
+        'the map replaces the existing tags, so include every tag you want to keep.',
+    ),
   visibility: z
     .enum(['private', 'public'])
     .optional()

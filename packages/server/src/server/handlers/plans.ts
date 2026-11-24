@@ -31,9 +31,9 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  handler: async ({ agentId, mastra, path, requestContext, status, versionId }) => {
+  handler: async ({ agentId, mastra, path, requestContext, status, versionId, tag }) => {
     try {
-      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const versionOptions = versionId ? { versionId } : tag ? { tag } : status ? { status } : undefined;
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const tools = await agent.listTools({ requestContext });
       const hasSubmitPlan = Object.values(tools).some(

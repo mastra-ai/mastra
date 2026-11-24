@@ -12,7 +12,14 @@ import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyD
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconRocket } from '@mastra/playground-ui/icons/central/IconRocket';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { useAgent, useAgentVersion, useAgentVersions, useStoredAgent } from '@mastra/react/hooks/agents';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import {
+  useAgent,
+  useAgentVersion,
+  useAgentVersions,
+  useStoredAgent,
+  useStoredAgentMutations,
+} from '@mastra/react/hooks/agents';
 import { useCallback, useEffect, useMemo } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -24,6 +31,8 @@ import { isCodeBackedAgent } from '@/domains/agents/utils/agent-source';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
+import { readVersionTags } from '@/domains/agents/utils/version-tags';
+import type { VersionTags } from '@/domains/agents/utils/version-tags';
 import { CmsEditHeaderActions } from '@/domains/cms/components/cms-edit-header-actions';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { agentCrumb, navCrumb } from '@/domains/navigation/crumbs';
@@ -48,6 +57,9 @@ function EditFormContent({
   isCodeAgentOverride = false,
   isCodeSourceAgent = false,
   editorConfig,
+  versionTags,
+  onVersionTagsChange,
+  isUpdatingVersionTags = false,
 }: {
   agentId: string;
   selectedVersionId: string | null;
@@ -65,6 +77,9 @@ function EditFormContent({
   isCodeAgentOverride?: boolean;
   isCodeSourceAgent?: boolean;
   editorConfig?: NonNullable<GetAgentResponse>['editor'];
+  versionTags?: VersionTags;
+  onVersionTagsChange?: (versionTags: VersionTags) => void;
+  isUpdatingVersionTags?: boolean;
 }) {
   const [, setSearchParams] = useSearchParams();
   const { pathname } = useLocation();
@@ -99,6 +114,9 @@ function EditFormContent({
       selectedVersionId={selectedVersionId ?? undefined}
       onVersionSelect={onVersionSelect}
       activeVersionId={activeVersionId}
+      versionTags={versionTags}
+      onVersionTagsChange={onVersionTagsChange}
+      isUpdatingVersionTags={isUpdatingVersionTags}
     />
   );
   const isEditorLocked = getEditorOwnership(isCodeAgentOverride, editorConfig).isFullyLocked;
@@ -255,6 +273,24 @@ function EditLayoutWrapper() {
     [setSearchParams],
   );
 
+  // Tags are a name → version ID map on the stored agent's metadata; saving them creates no version.
+  const versionTags = useMemo(() => readVersionTags(agent?.metadata), [agent?.metadata]);
+  const { updateStoredAgent: updateVersionTags } = useStoredAgentMutations({ agentId });
+  const { mutate: saveVersionTags, isPending: isUpdatingVersionTags } = updateVersionTags;
+  const handleVersionTagsChange = useCallback(
+    (nextVersionTags: VersionTags) => {
+      saveVersionTags(
+        { metadata: { versionTags: nextVersionTags } },
+        {
+          onError: error => {
+            toast.error(error instanceof Error ? error.message : 'Failed to update version tags');
+          },
+        },
+      );
+    },
+    [saveVersionTags],
+  );
+
   const isNotFound = !isLoading && !agent && !codeAgent;
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
   const isCodeAgentEditable = !getEditorOwnership(isCodeAgentOverride, codeAgent?.editor).isFullyLocked;
@@ -386,6 +422,9 @@ function EditLayoutWrapper() {
           isCodeAgentOverride={isCodeAgentOverride}
           isCodeSourceAgent={showCodeModeActions}
           editorConfig={codeAgent?.editor}
+          versionTags={versionTags}
+          onVersionTagsChange={storedAgent && isCodeAgentEditable ? handleVersionTagsChange : undefined}
+          isUpdatingVersionTags={isUpdatingVersionTags}
         />
       )}
     </PageLayout>

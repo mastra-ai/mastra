@@ -119,6 +119,7 @@ import {
   validateThreadOwnership,
   validateRunOwnership,
 } from './utils';
+import { getVersionTags, isReservedVersionTag } from './version-tags';
 
 /**
  * Merge incoming version overrides onto a RequestContext.
@@ -146,12 +147,18 @@ function stashVersionOverrides(ctx: RequestContext, versions: VersionOverrides |
  * chat), sub-agents default to `published`. An explicit `defaultStatus` from
  * the request body takes precedence.
  */
-function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versionId: string } | undefined): void {
+function ensureDefaultVersionStatus(
+  ctx: RequestContext,
+  versionOptions: { versionId: string } | { tag: string } | undefined,
+): void {
   const existingRaw = ctx.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
   // Don't overwrite an explicit defaultStatus from the body
   if (existingRaw?.defaultStatus) return;
 
-  const inferredStatus: 'draft' | 'published' = versionOptions ? 'draft' : 'published';
+  // A version ID means the editor is testing a specific version, so sub-agents follow as drafts.
+  // A tag is how deployed callers pin a version, so sub-agents stay published (unless the tag is "draft").
+  const wantsDraft = !!versionOptions && ('versionId' in versionOptions ? true : versionOptions.tag === 'draft');
+  const inferredStatus: 'draft' | 'published' = wantsDraft ? 'draft' : 'published';
   const updated: VersionOverrides = { ...existingRaw, defaultStatus: inferredStatus };
   ctx.set(MASTRA_VERSIONS_KEY, updated);
 }
@@ -1141,7 +1148,7 @@ async function formatAgentList({
 export function extractVersionOptions(
   requestContext?: RequestContext,
   bodyRequestContext?: Record<string, unknown>,
-): { versionId: string } | undefined {
+): { versionId: string } | { tag: string } | undefined {
   // First check the server-populated RequestContext (e.g. from auth middleware)
   const agentVersionId = requestContext?.get('agentVersionId');
   if (typeof agentVersionId === 'string' && agentVersionId) {
@@ -1153,7 +1160,35 @@ export function extractVersionOptions(
   if (typeof bodyVersionId === 'string' && bodyVersionId) {
     return { versionId: bodyVersionId };
   }
+  // A version tag (e.g. "production") works the same way, with an explicit version ID winning.
+  const agentVersionTag = requestContext?.get('agentVersionTag');
+  if (typeof agentVersionTag === 'string' && agentVersionTag) {
+    return { tag: agentVersionTag };
+  }
+  const bodyVersionTag = bodyRequestContext?.agentVersionTag;
+  if (typeof bodyVersionTag === 'string' && bodyVersionTag) {
+    return { tag: bodyVersionTag };
+  }
   return undefined;
+}
+
+/**
+ * Turns a version tag into the selector the editor understands. "published" and "draft" alias the
+ * matching status; any other tag is looked up in the stored agent's `metadata.versionTags`.
+ * Returns `undefined` when the agent has no such tag.
+ */
+async function resolveVersionTag(
+  mastra: Context['mastra'],
+  agentId: string,
+  tag: string,
+): Promise<{ status: 'draft' | 'published' } | { versionId: string } | undefined> {
+  if (isReservedVersionTag(tag)) {
+    return { status: tag };
+  }
+  const agentsStore = await mastra.getStorage()?.getStore('agents');
+  const record = await agentsStore?.getById(agentId);
+  const versionId = getVersionTags(record)[tag];
+  return versionId ? { versionId } : undefined;
 }
 
 /**
@@ -1166,13 +1201,13 @@ export function extractVersionOptions(
 export async function getAgentFromSystem({
   mastra,
   agentId,
-  versionOptions,
+  versionOptions: requestedVersionOptions,
   requestContext,
   access = 'execute',
 }: {
   mastra: Context['mastra'];
   agentId: string;
-  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string };
+  versionOptions?: { status?: 'draft' | 'published' } | { versionId: string } | { tag: string };
   requestContext: RequestContext;
   /** `read` for routes that only describe the agent; `execute` (default) for anything that runs or changes it. */
   access?: 'read' | 'execute';
@@ -1181,6 +1216,24 @@ export async function getAgentFromSystem({
 
   if (!agentId) {
     throw new HTTPException(400, { message: 'Agent ID is required' });
+  }
+
+  // Resolve a version tag to the version it points at. An unknown tag falls through to the default
+  // resolution so the caller's access is checked first: only someone allowed to see the agent learns
+  // which tags it has.
+  let versionOptions: { status?: 'draft' | 'published' } | { versionId: string } | undefined;
+  let unknownTag: string | undefined;
+  if (requestedVersionOptions && 'tag' in requestedVersionOptions) {
+    versionOptions = await resolveVersionTag(mastra, agentId, requestedVersionOptions.tag);
+    if (!versionOptions) {
+      unknownTag = requestedVersionOptions.tag;
+    } else if ('versionId' in versionOptions) {
+      // Pin this agent to the tagged version for the run itself. Without it the agent re-resolves
+      // from the request's default status when it executes and would run the published version.
+      stashVersionOverrides(requestContext, { agents: { [agentId]: { versionId: versionOptions.versionId } } });
+    }
+  } else {
+    versionOptions = requestedVersionOptions;
   }
 
   let agent: Agent | null | undefined;
@@ -1244,6 +1297,10 @@ export async function getAgentFromSystem({
   }
 
   assertStoredAgentAccess({ agent, agentId, requestContext, access, fromStore });
+
+  if (unknownTag) {
+    throw new HTTPException(404, { message: `Version tag "${unknownTag}" not found for agent ${agentId}` });
+  }
 
   return agent;
 }
@@ -1692,7 +1749,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   responseSchema: serializedAgentSchema,
   summary: 'Get agent by ID',
   description:
-    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), or ?versionId=<id> (specific version). Use either status or versionId, not both.',
+    'Returns details for a specific agent including configuration, tools, and memory settings. Use query params to control which stored config version is used for overrides: ?status=published (active version, default), ?status=draft (latest draft), ?versionId=<id> (specific version), or ?tag=<name> (the version a tag such as "production" points at). Use one selector; versionId wins over tag, and tag wins over status.',
   tags: ['Agents'],
   mcp: {
     toolset: 'agents',
@@ -1701,9 +1758,9 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   },
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
+  handler: async ({ agentId, mastra, requestContext, status, versionId, tag }) => {
     try {
-      const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
+      const versionOptions = versionId ? { versionId } : tag ? { tag } : status ? { status } : undefined;
       const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext, access: 'read' });
       const isStudio = getIsStudioFromContext(requestContext);
       const result = await formatAgent({

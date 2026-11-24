@@ -1089,7 +1089,12 @@ const draftAgent = mastraClient.getAgent('support-agent', { status: 'draft' })
 
 // Load a specific version
 const versionedAgent = mastraClient.getAgent('support-agent', { versionId: 'abc-123' })
+
+// Load the version a tag points at
+const productionAgent = mastraClient.getAgent('support-agent', { tag: 'production' })
 ```
+
+See [version tags](/reference/editor/versioning#version-tags) for how to set a tag and run a tagged version.
 
 For stored agents, pass a status option to `details()`:
 

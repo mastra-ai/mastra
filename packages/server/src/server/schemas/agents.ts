@@ -127,9 +127,10 @@ export const agentIdPathParams = z.object({
 
 /**
  * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
- * When `status` and `versionId` are both provided, `versionId` takes precedence.
+ * Precedence when several are provided: `versionId`, then `tag`, then `status`.
  * - `status` — 'draft' (latest version) or 'published' (active published version, default).
  * - `versionId` — Resolve with a specific version ID.
+ * - `tag` — Resolve with the version a named tag points at.
  */
 export const agentVersionQuerySchema = z.object({
   status: z
@@ -142,6 +143,13 @@ export const agentVersionQuerySchema = z.object({
     .string()
     .optional()
     .describe('Specific version ID to resolve. Takes precedence over status when both are provided.'),
+  tag: z
+    .string()
+    .optional()
+    .describe(
+      'Version tag to resolve, e.g. "production". Tags are set on the stored agent\'s `metadata.versionTags`. ' +
+        '"published" and "draft" behave like the matching status. Ignored when versionId is provided.',
+    ),
 });
 
 export const agentPlanQuerySchema = agentVersionQuerySchema.extend({

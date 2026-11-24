@@ -5102,6 +5102,8 @@ export type GetAgentsAgentId_QueryParams = {
   status?: ('draft' | 'published') | undefined;
   /** Specific version ID to resolve. Takes precedence over status when both are provided. */
   versionId?: string | undefined;
+  /** Version tag to resolve, e.g. "production". Tags are set on the stored agent's `metadata.versionTags`. "published" and "draft" behave like the matching status. Ignored when versionId is provided. */
+  tag?: string | undefined;
 };
 
 export type GetAgentsAgentId_Response = Shared_Type_7;
@@ -6713,6 +6715,8 @@ export type GetAgentsAgentIdPlansFile_QueryParams = {
   status?: ('draft' | 'published') | undefined;
   /** Specific version ID to resolve. Takes precedence over status when both are provided. */
   versionId?: string | undefined;
+  /** Version tag to resolve, e.g. "production". Tags are set on the stored agent's `metadata.versionTags`. "published" and "draft" behave like the matching status. Ignored when versionId is provided. */
+  tag?: string | undefined;
   /** Relative path to a markdown plan under .mastracode/plans/ */
   path: string;
 };
@@ -16715,7 +16719,7 @@ export type PatchStoredAgentsStoredAgentId_PathParams = GetStoredAgentsStoredAge
 export type PatchStoredAgentsStoredAgentId_Body = {
   /** Author identifier for multi-tenant filtering */
   authorId?: (string | undefined) | undefined;
-  /** Additional metadata for the agent */
+  /** Additional metadata for the agent. Keys are merged into the existing metadata. Set `versionTags` to a map of tag name to version ID to name versions (e.g. { "production": "<versionId>" }); the map replaces the existing tags, so include every tag you want to keep. */
   metadata?:
     | (
         | {

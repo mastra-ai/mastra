@@ -36,6 +36,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [
       "status",
+      "tag",
       "versionId"
     ],
     "bodyParams": [],
@@ -513,6 +514,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "path",
       "status",
+      "tag",
       "versionId"
     ],
     "bodyParams": [],

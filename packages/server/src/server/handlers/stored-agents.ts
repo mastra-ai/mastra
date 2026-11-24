@@ -41,6 +41,7 @@ import { validateAgentInstructionReferences } from './validate-agent-instruction
 import { validateMetadataAvatarUrl } from './validate-avatar';
 import { handleAutoVersioning } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { assertVersionTagTargetsExist, getTaggedVersionIds, getVersionTags } from './version-tags';
 
 /**
  * Resolve a `browser` field that may be a boolean shorthand from the UI.
@@ -676,6 +677,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
+      // Tags point at existing versions, and a new agent has none yet.
+      if (Object.keys(getVersionTags({ metadata })).length > 0) {
+        throw new HTTPException(400, {
+          message: 'Version tags cannot be set when creating an agent. Create the agent, then tag one of its versions.',
+        });
+      }
+
       // Model policy enforcement is intentionally not done on save: each UI
       // surface gates its own model picker via ModelPolicyProvider, and the
       // policy is surface-scoped (builder vs editor). Re-introducing a single
@@ -899,6 +907,15 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Reject oversized avatar images before writing to storage.
       validateMetadataAvatarUrl(metadata);
 
+      // New or moved version tags must point at a version of this agent.
+      await assertVersionTagTargetsExist({
+        metadata,
+        existing,
+        entityId: storedAgentId,
+        parentIdField: 'agentId',
+        getVersion: versionId => agentsStore.getVersion(versionId),
+      });
+
       // No owner = always public, regardless of what the client sent.
       const callerAuthorId = getCallerAuthorId(requestContext) ?? undefined;
       const resolvedVisibility = callerAuthorId ? visibility : visibility != null ? 'public' : undefined;
@@ -1035,7 +1052,8 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
         const previousVersion = versions[1];
         const isPublishedVersion = previousVersion?.id === existing.activeVersionId;
-        if (previousVersion && !isPublishedVersion) {
+        const isTaggedVersion = !!previousVersion && getTaggedVersionIds(updatedAgent).has(previousVersion.id);
+        if (previousVersion && !isPublishedVersion && !isTaggedVersion) {
           await agentsStore.deleteVersion(previousVersion.id);
         }
       }

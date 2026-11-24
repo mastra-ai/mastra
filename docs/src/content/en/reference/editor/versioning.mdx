@@ -59,6 +59,65 @@ curl http://localhost:4111/api/agents/support-agent?versionId=abc-123
 
 See the [Client SDK agents reference](/reference/client-js/agents#version-management) for Client SDK and React SDK selectors.
 
+## Version tags
+
+A version tag is a name, such as `production` or `staging`, that points at one version of a stored agent. Callers select the tag instead of a version ID, so moving the tag changes which version they get without changing their code.
+
+The agent record stores tags in `metadata.versionTags`, a map of tag name to version ID, so setting a tag doesn't create a version or change the published version.
+
+### Set a tag
+
+Send the tag map in a stored-agent update. The map replaces the agent's existing tags, so include every tag to keep. Other `metadata` keys aren't affected.
+
+```bash title="Tag a version"
+curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metadata": {
+      "versionTags": {
+        "production": "abc-123",
+        "staging": "def-456"
+      }
+    }
+  }'
+```
+
+To move a tag, send the map with the new version ID. To remove a tag, send the map without it. In Studio, the version history panel of the agent editor lists the tags and has a field to tag the selected version.
+
+The update is rejected with a `400` response when:
+
+- A tag name isn't 1 to 63 letters, digits, `.`, `_`, or `-`, or doesn't start with a letter or digit
+- A tag is named `published` or `draft`. These names are reserved because they select the matching `status`
+- A tag points at a version that doesn't exist or belongs to another agent
+- The agent would have more than 20 tags
+
+Tags can't be set in the request that creates an agent, because the agent has no versions yet.
+
+### Select a version by tag
+
+Pass `tag` as a query parameter to read the tagged version:
+
+```bash title="Read a tagged version"
+curl http://localhost:4111/api/agents/support-agent?tag=production
+```
+
+To run the tagged version, pass `agentVersionTag` in the request context of a `generate` or `stream` call:
+
+```bash title="Run a tagged version"
+curl -X POST http://localhost:4111/api/agents/support-agent/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [{ "role": "user", "content": "Where is my order?" }],
+    "requestContext": { "agentVersionTag": "production" }
+  }'
+```
+
+When several selectors are sent, `versionId` wins over `tag`, and `tag` wins over `status`. A tag the agent doesn't have returns a `404` response. Sub-agents of a tagged agent resolve to their published versions unless the request sets [sub-agent versions](#sub-agent-versioning).
+
+### Retention
+
+A tagged version is kept like the published version. It can't be deleted until the tag is removed or moved, and it's skipped when old versions are pruned from the version history.
+
 ## Sub-agent versioning
 
 Version overrides propagate through [supervisor-agent delegation](/docs/subagents) in request context. Define selectors at three levels:

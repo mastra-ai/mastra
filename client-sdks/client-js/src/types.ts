@@ -134,7 +134,7 @@ export interface ClientOptions {
   fetch?: typeof fetch;
 }
 
-export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
+export type AgentVersionIdentifier = { versionId: string } | { tag: string } | { status: 'draft' | 'published' };
 
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 

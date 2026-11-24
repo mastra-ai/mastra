@@ -30,8 +30,10 @@ import {
   computeVersionDiffs,
   createVersionWithRetry,
   enforceRetentionLimit,
+  DEFAULT_MAX_VERSIONS,
 } from './version-helpers';
 import type { VersionedStoreInterface } from './version-helpers';
+import { getTaggedVersionIds, getTagsForVersion } from './version-tags';
 
 /**
  * The config field names that live on version rows (StorageAgentSnapshotType fields).
@@ -220,6 +222,8 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         agentId,
         'agentId',
         agent.activeVersionId,
+        DEFAULT_MAX_VERSIONS,
+        getTaggedVersionIds(agent),
       );
 
       return version;
@@ -437,6 +441,8 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         agentId,
         'agentId',
         agent.activeVersionId,
+        DEFAULT_MAX_VERSIONS,
+        getTaggedVersionIds(agent),
       );
 
       // Clear the editor cache so subsequent requests see the restored config
@@ -460,7 +466,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   pathParamSchema: versionIdPathParams,
   responseSchema: deleteVersionResponseSchema,
   summary: 'Delete agent version',
-  description: 'Deletes a specific version (cannot delete the active version)',
+  description: 'Deletes a specific version (cannot delete the active version or a version a tag points at)',
   tags: ['Agent Versions'],
   handler: async ({ mastra, agentId, versionId, requestContext }) => {
     try {
@@ -496,6 +502,14 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       if (agent.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+        });
+      }
+
+      // A tag is a promise that the name keeps resolving, so a tagged version can't be deleted either.
+      const tags = getTagsForVersion(agent, versionId);
+      if (tags.length > 0) {
+        throw new HTTPException(400, {
+          message: `Cannot delete a tagged version. Remove or move ${tags.map(tag => `"${tag}"`).join(', ')} first.`,
         });
       }
 
