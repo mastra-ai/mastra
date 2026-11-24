@@ -7,6 +7,7 @@ import { Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 import KnowledgePage from '..';
 import {
+  archiveScope,
   emptyKnowledgeGraph,
   knowledgeGraph,
   knowledgeGraphWithGrants,
@@ -160,6 +161,36 @@ describe('Knowledge page', () => {
       expect(within(tree).getByText('Acme')).toBeTruthy();
       expect(await within(tree).findByText('Payments Service')).toBeTruthy();
       expect(within(tree).getByText('Deploy Runbook')).toBeTruthy();
+    });
+  });
+
+  describe('when the member switches Knowledge instances', () => {
+    it('opens the new tree without requesting branches from the previous instance', async () => {
+      const parents: (string | null)[] = [];
+      withInstance();
+      server.use(
+        http.get(api, () =>
+          HttpResponse.json({ instances: [...knowledgeInstances.instances, { key: 'archive', id: 'archive' }] }),
+        ),
+        http.get(`${api}/archive/graph`, () => HttpResponse.json({ ...emptyKnowledgeGraph, pages: [archiveScope] })),
+        http.get(`${api}/archive/tree`, ({ request }) => {
+          const parent = new URL(request.url).searchParams.get('parentId');
+          parents.push(parent);
+          return HttpResponse.json({ pages: parent === null ? [archiveScope] : [], truncated: false });
+        }),
+        http.get(`${api}/archive/events`, () => new HttpResponse(null, { status: 501 })),
+        http.get(`${api}/:instance/link-counts`, () =>
+          HttpResponse.json({ counts: {} } satisfies KnowledgeLinkCountsResponse),
+        ),
+      );
+      renderPage();
+      const tree = await screen.findByRole('tree');
+      await within(tree).findByText('Payments Service');
+      fireEvent.change(screen.getByRole('combobox', { name: 'Knowledge instance' }), { target: { value: 'archive' } });
+      await within(await screen.findByRole('tree')).findByText('Archive');
+      expect(parents).toContain(null);
+      expect(parents).not.toContain('scope-acme');
+      expect(screen.getByTestId('location-search').textContent).toBe('?instance=archive');
     });
   });
 

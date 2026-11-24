@@ -38,6 +38,16 @@ export const orgScope = page({
   position: 'a0',
 });
 
+export const archiveScope = page({
+  id: 'scope-archive',
+  scopeId: 'scope-archive',
+  parentId: null,
+  isScope: true,
+  address: 'org:archive',
+  name: 'Archive',
+  position: 'a0',
+});
+
 export const paymentsPage = page({
   id: 'page-payments',
   scopeId: 'scope-acme',
