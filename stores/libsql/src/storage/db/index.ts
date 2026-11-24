@@ -49,6 +49,11 @@ export type LibSQLDomainBaseConfig = {
    */
   embeddedReplica?: boolean;
   /**
+   * Whether every process that opens this database reads and writes the same rows.
+   * @internal Set by `LibSQLStore`, which sees the whole connection config.
+   */
+  sharedAcrossProcesses?: boolean;
+  /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
    */
