@@ -4,12 +4,15 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   FACTORY_OPEN_RUNS_SETTING,
+  FACTORY_RUN_ENDS_SETTING,
   FACTORY_RUN_USAGE_STEPS_JSON_BUDGET,
   heartbeatSessionOpenRun,
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   observeSessionRunEnd,
+  readThreadRunEnd,
   recordSessionRunStart,
+  waitForSessionRunAudit,
 } from './run-audit.js';
 import type { RunEndCaptureSession } from './run-audit.js';
 
@@ -168,6 +171,41 @@ describe('Factory run lifecycle audit', () => {
     emit('complete');
     await start(OPEN_RUN, 'complete');
     expect((await events()).map(event => event.action).sort()).toEqual(['factory.run.ended', 'factory.run.started']);
+  });
+
+  it('records how a run ended on the thread, before the run leaves the ledger', async () => {
+    const { session, start, emit, settings } = await setup();
+    await start();
+    const order: string[] = [];
+    const setSetting = session.thread.setSetting;
+    session.thread.setSetting = async args => {
+      order.push(args.key);
+      await setSetting(args);
+    };
+    emit('error');
+    await waitForSessionRunAudit(session);
+
+    expect(order).toEqual([FACTORY_RUN_ENDS_SETTING, FACTORY_OPEN_RUNS_SETTING]);
+    expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    const reader = { thread: { getSettingOn: async ({ key }: { key: string }) => settings[key] } };
+    await expect(readThreadRunEnd(reader, 'thread-1', OPEN_RUN.kickoffId)).resolves.toMatchObject({
+      kickoffId: OPEN_RUN.kickoffId,
+      reason: 'error',
+    });
+    await expect(readThreadRunEnd(reader, 'thread-1', 'another-kickoff')).resolves.toBeUndefined();
+  });
+
+  it('keeps only the latest run ends on a thread', async () => {
+    const { start, emit, settings } = await setup();
+    for (let run = 0; run < 25; run += 1) {
+      await start({ ...OPEN_RUN, kickoffId: `kickoff-${run}` });
+      emit('complete');
+      await vi.waitFor(() => expect(settings[FACTORY_OPEN_RUNS_SETTING]).toEqual([]));
+    }
+
+    const ends = settings[FACTORY_RUN_ENDS_SETTING] as Array<{ kickoffId: string }>;
+    expect(ends).toHaveLength(20);
+    expect(ends.at(-1)?.kickoffId).toBe('kickoff-24');
   });
 
   it('leaves an end recoverable when the audit store is temporarily unavailable', async () => {

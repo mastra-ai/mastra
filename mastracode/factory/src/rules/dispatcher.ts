@@ -50,6 +50,7 @@ import {
   isOpenRunLiveElsewhere,
   listSessionOpenRuns,
   listThreadOpenRuns,
+  readThreadRunEnd,
   recordSessionRunStart,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -274,6 +275,7 @@ function watchRun(
     onAgentEnd,
     label,
     runStillActive,
+    storedRunEnd,
     stopRequested,
   }: {
     timeoutMs: number;
@@ -287,6 +289,12 @@ function watchRun(
     label: string;
     /** Level-triggered check against the run registry, consulted at every heartbeat the edge-triggered wait misses. */
     runStillActive: () => boolean;
+    /**
+     * What the stored run records say once the run is not active here: still running in another
+     * process, ended (and how), or unknown. A run that moved to another worker ends there, so its
+     * `agent_end` never reaches this process.
+     */
+    storedRunEnd?: () => Promise<'running' | 'complete' | 'aborted' | 'error' | undefined>;
     stopRequested?: () => Promise<boolean>;
   },
 ) {
@@ -350,7 +358,14 @@ function watchRun(
     while (Date.now() < deadline) {
       const heartbeatMs = Math.min(RUN_REGISTRY_HEARTBEAT_MS, deadline - Date.now());
       if (await waitForAgentEndOrTimeout(agentEnd, heartbeatMs)) return true;
-      if (!runStillActive()) return false;
+      if (runStillActive()) continue;
+      const stored = await storedRunEnd?.();
+      if (stored === 'running') continue;
+      if (!stored) return false;
+      // Another process saw the run end; take its record as this run's `agent_end`.
+      endReason = stored;
+      supersededAtEnd = onAgentEnd?.();
+      return true;
     }
     throw new FactoryDispatchError(
       'run_overdue',
@@ -1805,6 +1820,13 @@ export class FactoryDecisionDispatcher {
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
+            storedRunEnd: async () => {
+              const ended = await readThreadRunEnd(session, binding.threadId, deliveryId);
+              if (ended) return ended.reason;
+              const open = await listThreadOpenRuns(session, binding.threadId);
+              const entry = open.find(run => run.kickoffId === deliveryId);
+              return entry && isOpenRunLiveElsewhere(entry, this.#ownerId) ? 'running' : undefined;
+            },
             stopRequested,
           });
 

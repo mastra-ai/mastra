@@ -33,6 +33,34 @@ const factoryOpenRunSchema = z.object({
 
 export type FactoryOpenRun = z.infer<typeof factoryOpenRunSchema>;
 
+/**
+ * How each recent run on a thread ended, keyed by kickoff id. A run can end in a process other
+ * than the one waiting on it (a durable run that moved workers), where the waiter never sees the
+ * in-memory `agent_end`; this record is what it reads instead.
+ */
+export const FACTORY_RUN_ENDS_SETTING = 'factoryRunEnds';
+/** Only a waiter still in flight reads an end, so a short tail of recent ends is enough. */
+const FACTORY_RUN_ENDS_KEPT = 20;
+
+const factoryRunEndSchema = z.object({
+  kickoffId: z.string(),
+  reason: z.enum(['complete', 'aborted', 'error']),
+  endedAt: z.number(),
+});
+
+export type FactoryRunEnd = z.infer<typeof factoryRunEndSchema>;
+
+/** How the run of `kickoffId` on `threadId` ended, when its end was recorded. */
+export async function readThreadRunEnd(
+  session: { readonly thread: { getSettingOn(args: { threadId: string; key: string }): Promise<unknown> } },
+  threadId: string,
+  kickoffId: string,
+): Promise<FactoryRunEnd | undefined> {
+  const stored = await session.thread.getSettingOn({ threadId, key: FACTORY_RUN_ENDS_SETTING });
+  const ends = z.array(factoryRunEndSchema).safeParse(stored ?? []);
+  return ends.success ? ends.data.find(end => end.kickoffId === kickoffId) : undefined;
+}
+
 /** A heartbeat older than this means the owner is gone; nothing renews it once the run's dispatcher dies. */
 export const FACTORY_OPEN_RUN_STALE_MS = 30_000;
 
@@ -210,6 +238,22 @@ async function recordRunEnds(
   const steps = turn && !turn.claimed ? turn.steps : [];
   if (turn && ending.length > 0) turn.claimed = true;
   const turnUsage = runUsage(steps);
+  // The end is recorded before the run leaves the ledger: a reader that finds neither would take
+  // the run for lost.
+  if (ending.length > 0) {
+    const stored = z
+      .array(factoryRunEndSchema)
+      .safeParse((await session.thread.getSetting({ key: FACTORY_RUN_ENDS_SETTING })) ?? []);
+    const endedAt = Date.now();
+    const ended = new Set(ending.map(run => run.kickoffId));
+    await session.thread.setSetting({
+      key: FACTORY_RUN_ENDS_SETTING,
+      value: [
+        ...(stored.success ? stored.data : []).filter(end => !ended.has(end.kickoffId)),
+        ...ending.map(run => ({ kickoffId: run.kickoffId, reason, endedAt })),
+      ].slice(-FACTORY_RUN_ENDS_KEPT),
+    });
+  }
   const remaining = [];
   for (const run of runs) {
     if (!ending.includes(run)) {

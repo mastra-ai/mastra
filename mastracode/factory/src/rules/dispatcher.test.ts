@@ -30,7 +30,12 @@ import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
-import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
+import {
+  FACTORY_OPEN_RUNS_SETTING,
+  FACTORY_RUN_ENDS_SETTING,
+  observeSessionRunEnd,
+  waitForSessionRunAudit,
+} from '../session/run-audit.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { Cards } from '../storage/domains/work-items/cards.js';
@@ -3987,6 +3992,124 @@ describe('FactoryDecisionDispatcher', () => {
       'succeeded',
       'succeeded',
     ]);
+  });
+
+  describe('a run that ends in another process', () => {
+    async function remoteRun(key: string) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'understand-issue',
+        idempotencyKey: key,
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      // Delivered here, but the run steps elsewhere: this process never sees its `agent_end`.
+      const { controller, session } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+      const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      return { storage, session, dispatcher, binding, kickoffId: record!.id };
+    }
+
+    it('settles the run from its recorded end', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-end');
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(session.sendSignal).toHaveBeenCalledTimes(1);
+        await session.thread.setSetting({
+          key: FACTORY_RUN_ENDS_SETTING,
+          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
+        });
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fails the run with the error its recorded end names', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, session, dispatcher, kickoffId } = await remoteRun('remote-error');
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        await session.thread.setSetting({
+          key: FACTORY_RUN_ENDS_SETTING,
+          value: [{ kickoffId, reason: 'error', endedAt: Date.now() }],
+        });
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).not.toMatchObject({
+          status: 'succeeded',
+        });
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.failureCode).not.toBe(
+          'run_terminal_event_missing',
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps waiting while another process heartbeats the run, then settles from its end', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, session, dispatcher, binding, kickoffId } = await remoteRun('remote-live');
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        const liveEntry = () => ({
+          kickoffId,
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ownerId: 'worker-2',
+          // The other worker renews every few seconds; stamp the beat it sends just before this check.
+          heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
+        });
+        for (let beat = 0; beat < 3; beat += 1) {
+          await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [liveEntry()] });
+          await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        }
+        const pending = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
+        expect(pending).toMatchObject({ status: 'leased', lastError: null });
+
+        await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [] });
+        await session.thread.setSetting({
+          key: FACTORY_RUN_ENDS_SETTING,
+          value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
+        });
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        await dispatch;
+
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
