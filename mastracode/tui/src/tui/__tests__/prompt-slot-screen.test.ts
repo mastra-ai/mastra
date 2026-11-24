@@ -144,6 +144,31 @@ describe('menus in the prompt slot on screen', () => {
     }
   });
 
+  it('stays responsive when the terminal shrinks while nothing matches the search', async () => {
+    app = createApp({ rows: 40 });
+    await app.render();
+    const list = new MenuList(
+      Array.from({ length: 30 }, (_, i) => ({ value: `item-${i}`, label: `item-${i}` })),
+      12,
+    );
+    const menu = Object.assign(new Container(), { handleInput: (data: string) => list.handleInput(data) });
+    menu.addChild(list);
+    menu.addChild(new Text('A note under the list that wraps to several rows. '.repeat(16), 0, 0));
+    showModalOverlay(app.ui, menu, { title: 'API keys' });
+    await app.render();
+    app.send('zzzz');
+    await app.render();
+    app.resize(80, 14);
+    await app.render();
+    expect(rowWith(app.screen(), 'zzzz')).toBeGreaterThanOrEqual(0);
+    expect(rowWith(app.screen(), 'no matches')).toBeGreaterThan(0);
+    expect(app.screen().at(-1)).toContain('status line');
+
+    for (let i = 0; i < 4; i++) app.send('\x7f');
+    await app.render();
+    expect(rowWith(app.screen(), '→ item-0')).toBeGreaterThan(0);
+  });
+
   it('leaves the status line at the bottom and the scrollback alone while filtering and after closing', async () => {
     app = createApp();
     await app.render();

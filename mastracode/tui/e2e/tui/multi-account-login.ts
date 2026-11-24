@@ -152,7 +152,7 @@ export const multiAccountLoginScenario = {
     // Rows: [Account A, Account B, Add another account, Back]. Account A is
     // the first row; Enter opens its submenu.
     terminal.write('\r');
-    await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) Account A:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/accounts › Anthropic \(Claude Pro\/Max\) Account A/i, terminal, 8_000);
     await runtime.waitForScreenText(/Re-authenticate…/i, terminal, 8_000);
     terminal.write('\x1b[B');
     await runtime.waitForScreenText(/→ Re-authenticate…/i, terminal, 8_000);
@@ -187,7 +187,7 @@ export const multiAccountLoginScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Account B\s*✓ active/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) Account A:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/accounts › Anthropic \(Claude Pro\/Max\) Account A/i, terminal, 8_000);
     await runtime.waitForScreenText(/Set as active/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\x1b[B');
@@ -223,7 +223,7 @@ export const multiAccountLoginScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Peer Account\s*✓ active/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Peer Account/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Re-authenticate…/i, terminal, 8_000);
     terminal.write('\x1b');
     terminal.write('\x1b');
 

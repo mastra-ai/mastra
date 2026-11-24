@@ -64,6 +64,34 @@ describe('SettingsMenu', () => {
     expect(plain(menu.render(100))[2]).toMatch(/^→ Notifications\s+Bell$/);
   });
 
+  it('keeps a newer submenu open when an earlier one finishes saving', () => {
+    let finishSaving: ((value?: string) => void) | undefined;
+    const list = () => new MenuList([{ value: 'On', label: 'On' }]);
+    const menu = new SettingsMenu(
+      [
+        {
+          id: 'signals',
+          label: 'GitHub signals',
+          currentValue: 'Off',
+          submenu: (_value, done) => {
+            finishSaving = done;
+            return Object.assign(list(), { onCancel: () => done() });
+          },
+        },
+        { id: 'mouse', label: 'Mouse', currentValue: 'Off', submenu: () => list() },
+      ],
+      10,
+      () => {},
+      () => {},
+    );
+    menu.handleInput('\r');
+    menu.handleInput('\x1b');
+    menu.handleInput('\x1b[B');
+    menu.handleInput('\r');
+    finishSaving!('On');
+    expect(menu.openSubmenuLabel()).toBe('Mouse');
+  });
+
   it('filters settings by label', () => {
     const menu = new SettingsMenu(
       items(),

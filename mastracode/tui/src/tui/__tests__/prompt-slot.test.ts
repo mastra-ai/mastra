@@ -137,6 +137,24 @@ describe('PromptSlot', () => {
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ value: 'Extra high' }));
   });
 
+  it('stops replaying typed-ahead keys once one of them opened another menu', async () => {
+    vi.useFakeTimers();
+    const { slot, mounted } = setup();
+    const providers = list(['One', 'Two']);
+    const opened = vi.fn();
+    providers.onSelect = item => {
+      opened(item.value);
+      slot.open(list(['Dialog']), { title: 'API key' });
+    };
+    const command = slowMenuCommand(slot, 'api-keys', providers);
+    vi.advanceTimersByTime(150);
+    mounted().handleInput!('\r');
+    mounted().handleInput!('\r');
+    await command.load();
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(plain(mounted().render(60)).some(row => row.includes('API key'))).toBe(true);
+  });
+
   it('Ctrl+C on the loading row stops waiting and goes to the prompt', async () => {
     vi.useFakeTimers();
     const { slot, mounted, editor } = setup();

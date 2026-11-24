@@ -237,10 +237,12 @@ export class MenuFrame implements Component, Focusable, MouseAware {
       lines = draw();
     }
     while (window && lines.length > available && window.shownItems > 1) {
-      const items = Math.max(1, window.shownItems - Math.max(1, Math.floor((lines.length - available) / 2)));
+      const shown = window.shownItems;
       this.fitted = window;
-      window.setLimit(items);
+      window.setLimit(Math.max(1, shown - Math.max(1, Math.floor((lines.length - available) / 2))));
       lines = draw();
+      // A window that isn't drawn right now can't make room.
+      if (window.shownItems >= shown) break;
     }
 
     if (lines.length > available) {
@@ -333,7 +335,15 @@ export class PromptSlot {
       // Esc while it loaded cancels the menu, once the caller has finished setting it up. Keys typed while
       // it loaded (a search, Enter) apply to it then.
       if (cancelled) queueMicrotask(() => frame.handleInput('\x1b'));
-      else if (typedAhead.length) queueMicrotask(() => typedAhead.forEach(data => frame.handleInput(data)));
+      else if (typedAhead.length) {
+        queueMicrotask(() => {
+          for (const data of typedAhead) {
+            // A key that opened another menu or closed this one ends the replay: the rest wasn't meant for it.
+            if (this.mounted() !== frame) break;
+            frame.handleInput(data);
+          }
+        });
+      }
     }
     let hidden = false;
     return {

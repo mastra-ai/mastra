@@ -89,11 +89,11 @@ export class MenuList implements Component, Filterable, MenuChrome, MouseAware {
   invalidate(): void {}
 
   render(width: number): string[] {
+    const { startIndex, endIndex } = this.visibleRange();
     if (this.filteredItems.length === 0) return [theme.fg('muted', '  no matches')];
 
     const column = labelColumnWidth(this.items.filter(item => item.description).map(item => item.label || item.value));
     const labelWidth = column - COLUMN_GAP;
-    const { startIndex, endIndex } = this.visibleRange();
     const lines: string[] = [];
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i]!;

@@ -59,10 +59,10 @@ export class SettingsMenu implements Component, Filterable, MenuChrome, MouseAwa
 
   render(width: number): string[] {
     if (this.submenu) return this.submenu.component.render(width);
+    const { startIndex, endIndex } = this.visibleRange();
     if (this.filteredItems.length === 0) return [theme.fg('muted', '  no matches')];
 
     const column = labelColumnWidth(this.items.map(item => item.label));
-    const { startIndex, endIndex } = this.visibleRange();
     const lines: string[] = [];
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i]!;
@@ -127,16 +127,19 @@ export class SettingsMenu implements Component, Filterable, MenuChrome, MouseAwa
     if (item.submenu) {
       const returnIndex = this.selectedIndex;
       let closed = false;
+      let opened: { component: Component; item: SettingItem } | null = null;
       const component = item.submenu(item.currentValue, selectedValue => {
         closed = true;
         if (selectedValue !== undefined) {
           item.currentValue = selectedValue;
           this.onChange(item.id, selectedValue);
         }
+        // A setting that saves in the background can finish after the user moved on to another submenu.
+        if (this.submenu !== opened) return;
         this.submenu = null;
         this.selectedIndex = returnIndex;
       });
-      if (!closed) this.submenu = { component, item };
+      if (!closed) this.submenu = opened = { component, item };
     } else if (item.values?.length) {
       const next = item.values[(item.values.indexOf(item.currentValue) + 1) % item.values.length]!;
       item.currentValue = next;
