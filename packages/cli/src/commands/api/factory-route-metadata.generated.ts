@@ -6057,7 +6057,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "__schema3": {
           "type": "string",
           "maxLength": 256,
-          "pattern": "^[^\\s/]+\\/\\S+$"
+          "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
         },
         "__schema4": {
           "type": "string",

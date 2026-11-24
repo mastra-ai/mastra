@@ -127,6 +127,12 @@ describe('Factory route contracts', () => {
       fallbackModelIds: ['openrouter/anthropic/claude-opus-5.5'],
     });
     expect(
+      updateProjectBodySchema.parse({ defaultModelId: 'acme/Llama 3 70B', fallbackModelIds: ['acme/Qwen 3'] }),
+    ).toEqual({
+      defaultModelId: 'acme/Llama 3 70B',
+      fallbackModelIds: ['acme/Qwen 3'],
+    });
+    expect(
       updateProjectBodySchema.safeParse({ fallbackModelIds: ['openai/gpt-5.6-sol', ' openai/gpt-5.6-sol'] }).success,
     ).toBe(false);
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
