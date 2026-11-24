@@ -18,6 +18,7 @@
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
 //   playground-ui/no-page-width      a page takes its width from PageLayout, not a centred max-w-* column
 //   playground-ui/page-layout-props  every PageLayout names a variant and passes only the props that variant takes
+//   playground-ui/date-locale        dates and times follow the browser's locale and clock, not a pinned one
 
 import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
@@ -365,6 +366,87 @@ const pageLayoutProps = selectorRule(() => [
   { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
 ]);
 
+// --- date-locale ---------------------------------------------------------------------------------------
+// Dates and times follow the browser: `Nov 3, 2:05 PM` in en-US, `3 Nov, 14:05` in en-GB. Reported:
+//   a pinned locale      d.toLocaleTimeString('en-US'), new Intl.DateTimeFormat(['en-US'])
+//   a forced clock       { hour: 'numeric', hour12: false }, { timeStyle: 'short', hourCycle: 'h23' }
+//   a date-fns pattern   format(d, 'MMM d, h:mm a'), which is English in US order whatever the browser
+// No locale, `undefined` and `[]` mean the browser's. A locale or pattern in a variable is the caller's call.
+const DATE_LOCALE_MESSAGE =
+  "Dates and times follow the browser's locale and clock. Use formatDate or formatClock from @mastra/playground-ui/utils/date-format, or Intl with an undefined locale and no hour12 or hourCycle.";
+// Data, not text: ISO-like API values, and the `HH:mm` a native time input takes.
+const DATA_DATE_PATTERN = /^(yyyy-MM(-dd(('T'| )HH:mm(:ss(\.SSS)?)?(XXX|'Z')?)?)?|HH:mm)$/;
+const DATE_FNS_FORMATTERS = new Set(['format', 'formatDate']);
+const DATE_OPTIONS = new Set(
+  'weekday era year month day dayPeriod hour minute second fractionalSecondDigits dateStyle timeStyle'.split(' '),
+);
+const CLOCK_OPTIONS = new Set(['hour12', 'hourCycle']);
+
+function dateLocale(context) {
+  const dateFnsNames = new Set();
+  const report = node => context.report({ node, message: DATE_LOCALE_MESSAGE });
+  const keyOf = key => (key?.type === 'Identifier' ? key.name : key?.type === 'Literal' ? key.value : undefined);
+  const staticString = node => {
+    if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+    if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+    return undefined;
+  };
+  const isPinned = node =>
+    staticString(node) !== undefined ||
+    (node?.type === 'ArrayExpression' && node.elements.some(element => staticString(element) !== undefined));
+  const optionsIn = (object, keys) =>
+    object?.type === 'ObjectExpression'
+      ? object.properties.filter(property => property.type === 'Property' && keys.has(keyOf(property.key)))
+      : [];
+  const hasDateOptions = object => optionsIn(object, DATE_OPTIONS).length > 0;
+  const forcedClocks = object => optionsIn(object, CLOCK_OPTIONS).filter(({ value }) => value.type === 'Literal');
+  const isDateTimeFormat = callee =>
+    callee.type === 'MemberExpression' &&
+    callee.object.type === 'Identifier' &&
+    callee.object.name === 'Intl' &&
+    keyOf(callee.property) === 'DateTimeFormat';
+  const dateMethod = callee => {
+    const method = callee.type === 'MemberExpression' ? keyOf(callee.property) : undefined;
+    return ['toLocaleString', 'toLocaleDateString', 'toLocaleTimeString'].includes(method) ? method : undefined;
+  };
+  // `toLocaleString` is on numbers too: a date is a `new Date()` receiver or date options.
+  const formatsDate = (method, callee, options) =>
+    method !== 'toLocaleString' ||
+    hasDateOptions(options) ||
+    forcedClocks(options).length > 0 ||
+    (callee.object.type === 'NewExpression' && callee.object.callee.name === 'Date');
+
+  function checkCall(node) {
+    const { callee } = node;
+    const [first, second] = node.arguments;
+    if (node.type === 'CallExpression' && callee.type === 'Identifier' && dateFnsNames.has(callee.name)) {
+      const pattern = staticString(second);
+      if (pattern !== undefined && !DATA_DATE_PATTERN.test(pattern)) report(second);
+      return;
+    }
+    const method = node.type === 'CallExpression' ? dateMethod(callee) : undefined;
+    if (!isDateTimeFormat(callee) && !(method && formatsDate(method, callee, second))) return;
+    if (isPinned(first)) report(first);
+    // With date options beside it, the clock is reported by ObjectExpression below.
+    if (!hasDateOptions(second)) forcedClocks(second).forEach(report);
+  }
+
+  return {
+    ImportDeclaration(node) {
+      if (node.source.value !== 'date-fns' && node.source.value !== 'date-fns/format') return;
+      for (const specifier of node.specifiers) {
+        if (specifier.type === 'ImportSpecifier' && DATE_FNS_FORMATTERS.has(keyOf(specifier.imported)))
+          dateFnsNames.add(specifier.local.name);
+      }
+    },
+    CallExpression: checkCall,
+    NewExpression: checkCall,
+    ObjectExpression(node) {
+      if (hasDateOptions(node)) forcedClocks(node).forEach(report);
+    },
+  };
+}
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -379,6 +461,7 @@ const plugin = {
     'no-text-layout-spacing': noTextLayoutSpacing,
     'no-page-width': { meta: { type: 'suggestion', schema: false }, create: noPageWidth },
     'page-layout-props': { meta: { type: 'problem', schema: false }, create: pageLayoutProps },
+    'date-locale': { meta: { type: 'suggestion', schema: false }, create: dateLocale },
   },
 };
 
@@ -407,6 +490,7 @@ export const recommended = {
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
   'playground-ui/page-layout-props': 'error',
+  'playground-ui/date-locale': 'error',
   ...copyRules,
 };
 

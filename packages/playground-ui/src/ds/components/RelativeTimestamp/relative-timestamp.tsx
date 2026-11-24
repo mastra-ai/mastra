@@ -67,13 +67,8 @@ function zoneName(date: Date, timeZone?: string) {
 function zoneRow(date: Date, timeZone?: string) {
   return {
     zone: zoneName(date, timeZone) ?? 'Local',
-    day: new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: 'numeric', year: 'numeric' }).format(date),
-    time: new Intl.DateTimeFormat(undefined, {
-      timeZone,
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(date),
+    day: formatDate(date, 'date-year', { timeZone }),
+    time: formatDate(date, 'time-seconds', { timeZone }),
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatMoment, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
+import { formatClock, formatDate, formatMoment, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
 
 const NOW = new Date('2026-09-24T18:00:00.000Z');
 const TODAY = new Date('2026-09-24T14:32:00.000Z');
@@ -153,6 +153,33 @@ describe('formatDate', () => {
       expect(formatDate(undefined, 'date-time')).toBeUndefined();
       expect(formatDate('not-a-date', 'date')).toBeUndefined();
     });
+  });
+});
+
+describe('formatDate hours', () => {
+  it.each([
+    ['en-US', '9:05 AM', 'Sep 24, 9:05 AM'],
+    ['en-GB', '09:05', '24 Sept, 09:05'],
+    ['es-ES', '9:05', '24 sept, 9:05'],
+  ])('pads them only where %s does', (locale, time, dayTime) => {
+    const nineOhFive = new Date(2026, 8, 24, 9, 5);
+    expect(formatDate(nineOhFive, 'time', { locale })).toBe(time);
+    expect(formatDate(nineOhFive, 'day-time', { locale })).toBe(dayTime);
+  });
+});
+
+describe('formatClock', () => {
+  it.each([
+    ['en-US', '2 PM', '2:05 PM', '12 AM'],
+    ['en-GB', '14:00', '14:05', '00:00'],
+    ['de-DE', '14:00', '14:05', '00:00'],
+  ])('keeps %s times short but readable as times', (locale, onTheHour, withMinutes, midnight) => {
+    const label = (hours: number, minutes: number) => formatClock(new Date(2026, 8, 24, hours, minutes), { locale });
+    expect([label(14, 0), label(14, 5), label(0, 0)]).toEqual([onTheHour, withMinutes, midnight]);
+  });
+
+  it('returns undefined when unusable', () => {
+    expect(formatClock('not-a-date')).toBeUndefined();
   });
 });
 

@@ -629,6 +629,7 @@ export default defineConfig({
 | `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
 | `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
 | `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
+| `playground-ui/date-locale`            | A pinned locale, a forced 12/24-hour clock or a date-fns display pattern on a date or time       |
 
 Turn rules off per glob in `overrides`, for example for tests and stories.
 
