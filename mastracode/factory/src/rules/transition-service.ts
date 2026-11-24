@@ -10,7 +10,7 @@ import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../b
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
+import { isAgentActor, REVISION_CONFLICT_REASON } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type {
@@ -209,8 +209,9 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   }
 }
 
-function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
-  return result.status === 'rejected' && result.code === 'stale';
+/** The commit lost a race on the card's revision; a board policy's own `stale` is not one. */
+function isRevisionConflict(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
+  return result.status === 'rejected' && result.code === 'stale' && result.reason === REVISION_CONFLICT_REASON;
 }
 
 /** Tell the caller where the card is now, so a model doesn't read "stale" as "already moved". */
@@ -222,6 +223,16 @@ function staleRejection(result: FactoryTransitionResultRejected, current: Card):
     'stale',
     `The card changed (now revision ${current.revision}, in ${stage}). Retry with expectedRevision ${current.revision} if the move still applies.`,
   );
+}
+
+/**
+ * Whether an agent's stale move asked for the board and phase the card is already in. Only an
+ * agent's own move: rules and intake routes re-read and re-plan against the card on `stale`.
+ */
+function reachedTarget(request: FactoryTransitionRequest, current: Card): boolean {
+  if (request.actor.type !== 'agent' || request.eventRoute || request.initialEntry || request.reenter) return false;
+  if (request.toBoard !== undefined && request.toBoard !== request.board) return false;
+  return boardForWorkItem(current) === request.board && currentStage(current.stages) === request.stage;
 }
 
 export function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
@@ -284,7 +295,7 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 }
 
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
-// A run that starts after its own agent's move is queued onto that agent's run instead.
+// A run that starts after its own agent's move waits for that agent's run to end instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   // A run-start cause marks an agent landing the card where its run already is — on its own
   // board. A cross-board request is never that, and its destination runner still queues.
@@ -391,12 +402,33 @@ export class FactoryTransitionService {
       }
     }
     let result = await this.#evaluateAndCommit(request, transitionId, item);
-    if (isStale(result)) {
+    let from = item;
+    if (isRevisionConflict(result)) {
       const current = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
-      if (current) result = staleRejection(result, current);
+      if (current && reachedTarget(request, current)) {
+        // Another move already took the card where this one was going (e.g. an approval
+        // that waited while a later run moved it on). Retrying at the old revision would
+        // only go stale again, so evaluate the move once more against the card as it is:
+        // it commits as a same-phase move, or is rejected for a real reason. The card
+        // never moves, so whatever consent or cleanup the earlier move applied stands.
+        from = current;
+        result = await this.#evaluateAndCommit(
+          { ...request, expectedRevision: current.revision },
+          transitionId,
+          current,
+          { reachedTarget: true },
+        );
+        if (isRevisionConflict(result)) {
+          // Lost a second race: report where the card is now, not where it was.
+          const latest = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+          if (latest) result = staleRejection(result, latest);
+        }
+      } else if (current) {
+        result = staleRejection(result, current);
+      }
     }
-    await this.#recordTransition(request, item, result);
-    this.#notifyCommitted(request, item, result);
+    await this.#recordTransition(request, from, result);
+    this.#notifyCommitted(request, from, result);
     return result;
   }
 
@@ -482,6 +514,7 @@ export class FactoryTransitionService {
     request: FactoryTransitionRequest,
     transitionId: string,
     item: Card,
+    { reachedTarget = false }: { reachedTarget?: boolean } = {},
   ): Promise<FactoryTransitionResult> {
     const boards = await this.#boards.load(request);
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
@@ -784,9 +817,10 @@ export class FactoryTransitionService {
       transitionId,
       evaluation,
       evaluation.outcome === 'accepted'
-        ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
+        ? { ...(reachedTarget ? {} : consentEffect(request, entersWorking, humanMove)), ...evaluation.intents }
         : {},
-      boards,
+      // The card stays put, so the move it lost to already released what it left.
+      reachedTarget ? undefined : boards,
       fromStage,
     );
   }

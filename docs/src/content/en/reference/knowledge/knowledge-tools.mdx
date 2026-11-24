@@ -1,17 +1,17 @@
 ---
 title: 'Reference: Knowledge tools | Knowledge'
-description: 'Arguments, operations, required roles and errors of the six Knowledge tools.'
+description: 'Arguments, operations, required roles and errors of the seven Knowledge tools.'
 packages:
   - '@mastra/core'
 ---
 
 # Knowledge tools
 
-Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
+Knowledge gives agents seven tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
 
 | Group | Tools | Enabled by |
 | - | - | - |
-| Read | `knowledge_list`, `knowledge_search`, `knowledge_read` | `tools: true` or `tools: { read: true }` |
+| Read | `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_activity` | `tools: true` or `tools: { read: true }` |
 | Write | `knowledge_page`, `knowledge_note` | `tools: true` or `tools: { write: true }` |
 | Pins | `knowledge_pin` | `pinnedContext` |
 
@@ -221,6 +221,46 @@ A `range` is `{ start: { line, col? }, end: { line, col? } }`. Lines start at 1.
 knowledge_read: read notes or mentionedIn on their own, without outline, section, match or from.
 ```
 
+## `knowledge_activity`
+
+Lists what changed in Knowledge over a period, newest first, so an agent can answer questions like "what changed since Q3?". It covers page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored. It shows only changes to pages and notes the run can read now.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'since',
+    type: 'string',
+    description:
+      'Changes at or after this time: a date such as `2026-07-01` (UTC midnight), or a date-time with a zone such as `2026-07-01T09:30:00Z` or `2026-07-01T09:30:00+02:00`. A date-time without a zone, or a date that does not exist, is refused. Give `since`, `until` or both.',
+    isOptional: true,
+  },
+  { name: 'until', type: 'string', description: 'Changes before this time, in the same formats.', isOptional: true },
+  {
+    name: 'from',
+    type: 'string',
+    description: 'Only changes to this page, or to pages in this scope: a page reference.',
+    isOptional: true,
+  },
+  { name: 'limit', type: 'number', description: 'Maximum changes, 1 to 100.', isOptional: true, defaultValue: '25' },
+  {
+    name: 'cursor',
+    type: 'string',
+    description:
+      "The previous result's `cursor`. Pass the same `since`, `until` and `from`; a cursor from other ones is refused.",
+    isOptional: true,
+  },
+]}
+/>
+
+Returns `{ from?, changes, more?, cursor? }`. Each change is `{ at, action, page, author, note? }`:
+
+- `page` is `{ ref, name }` with the page's current name, plus `deleted: true` when it has since been deleted.
+- `note`, on a note change, is `{ ref, text, current: true }` with the note's **current** text, not its text when the change happened. A note that has since been removed shows `{ ref, removed: true }` and no text.
+
+A change to a page or note the run can no longer read is left out. A result stops at `limit` changes, at the read cap, or after scanning eight batches, whichever comes first. The read cap never excludes the first readable change in those batches. When it stops early, `more` is `true` and `cursor` continues after the last change it consumed, including changes left out because they became unreadable. A result can contain no changes and still have `more: true` when it reaches the scan cap. Continue with its cursor to read older changes. A single note too large for the read cap comes back cut short with `truncated: true`.
+
+The tool needs a store that filters activity by date: the in-memory store, LibSQL and PostgreSQL. On other stores it refuses rather than return the whole history.
+
 ## `knowledge_page`
 
 Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`, and a delete ignores it. All three act on the page's own scope.
@@ -343,7 +383,8 @@ Adds, restamps and removes notes. A note is one durable fact on a page. Link oth
   {
     name: 'scope',
     type: 'string[]',
-    description: 'Add and restamp: the stamp scope addresses. Required for both.',
+    description:
+      "Add: the stamp scope addresses; defaults to the page's own scope. Pass narrower scopes to keep a note private. Restamp: the new stamp scope addresses (required).",
     isOptional: true,
   },
   {
@@ -372,7 +413,7 @@ Removing a note and adding it again creates a new note ID. Errors:
 
 ```text
 Adding a note needs page and text.
-Adding a note needs scope: the stamp scopes.
+Restamping a note needs scope: the stamp scopes.
 Adding a note needs contributor on "team:acme:support"; this run has viewer there.
 Removing a note needs editor on "team:acme:support"; this run has viewer there.
 Knowledge note text exceeds the 250 token limit; split it into separate notes or put long-form text in the page body
@@ -418,7 +459,7 @@ Pin audience "project:x" does not match a declared scope type.
 
 | Operation | Role | On |
 | - | - | - |
-| Search, read, list | `viewer` | The page's scope |
+| Search, read, list, activity | `viewer` | The page's scope (and, for a note change, the note's stamps) |
 | Create a page | `contributor` | `scope` |
 | Edit a page | `editor` | The page's scope |
 | Move within a scope | `editor` | The page's scope |

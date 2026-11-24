@@ -7,7 +7,7 @@ import { Icon } from '@/ds/icons/Icon';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// On a settings page (`SettingsLayout`), section titles and descriptions sit 10px inside the card's edge, in line with
+// On a settings page (`PageLayout variant="settings"`), section titles and descriptions sit 10px inside the card's edge, in line with
 // the inset page title. Anywhere else (forms, other pages) they line up with the page's left edge and field labels.
 // The inset is a custom property, so a caller's `ps-*` class still wins. Written out in full so Tailwind finds it.
 const settingsInset =
@@ -87,7 +87,7 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
             tabIndex={0}
             aria-describedby={infoId}
             className={cn(
-              'group/title-info -mx-1 inline-flex cursor-help items-center gap-1 rounded-sm px-1',
+              'group/title-info -mx-1 inline-flex cursor-default items-center gap-1 rounded-sm px-1',
               focusRing,
             )}
           />
@@ -99,7 +99,7 @@ function SettingsTitleInfo({ info, children }: { info: ReactNode; children: Reac
           aria-hidden
           // Half a pixel down centers the circle optically against the title's text.
           className={cn(
-            'translate-y-[0.5px] text-placeholder/80 group-hover/title-info:text-muted-foreground group-focus-visible/title-info:text-muted-foreground',
+            'translate-y-[0.5px] text-subtle-foreground group-hover/title-info:text-muted-foreground group-focus-visible/title-info:text-muted-foreground',
             controlStateColorTransition,
           )}
         >

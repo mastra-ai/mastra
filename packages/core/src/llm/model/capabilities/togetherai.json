@@ -1,14 +1,20 @@
 {
   "attachment": [
     "MiniMaxAI/MiniMax-M3",
+    "MiniMaxAI/MiniMax-M3.1-Flash",
     "Qwen/Qwen3.5-397B-A17B",
     "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen4-Max",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "meta-models/Muse-Glimmer-30B",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "moonshotai/Kimi-K3",
     "moonshotai/Kimi-K3.1-Pro",
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
+    "tencent/Hy4",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5.3-Flash"
   ],
   "temperature": [
@@ -16,6 +22,7 @@
     "MiniMaxAI/MiniMax-M2.5",
     "MiniMaxAI/MiniMax-M2.7",
     "MiniMaxAI/MiniMax-M3",
+    "MiniMaxAI/MiniMax-M3.1-Flash",
     "Qwen/Qwen2.5-7B-Instruct-Turbo",
     "Qwen/Qwen3-235B-A22B-Instruct-2507-tput",
     "Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8",
@@ -24,20 +31,25 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-Plus",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen4-Max",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-V3",
     "deepseek-ai/DeepSeek-V3-1",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "essentialai/Rnj-1-Instruct",
     "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "meta-models/Muse-Glimmer-30B",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-oss-120b",
     "reflection/Beam-1.0-501B-A23B",
+    "tencent/Hy4",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2",
@@ -47,13 +59,17 @@
   "structuredOutput": [
     "MiniMaxAI/MiniMax-M2.7",
     "MiniMaxAI/MiniMax-M3",
+    "MiniMaxAI/MiniMax-M3.1-Flash",
     "Qwen/Qwen2.5-7B-Instruct-Turbo",
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-Plus",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen4-Max",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "meta-models/Muse-Glimmer-30B",
     "meta-models/Muse-Spark-Open-816B-A42B",
     "moonshotai/Kimi-K3",
     "moonshotai/Kimi-K3.1-Pro",
@@ -61,7 +77,9 @@
     "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-oss-120b",
     "reflection/Beam-1.0-501B-A23B",
+    "tencent/Hy4",
     "thinkingmachines/Inkling",
+    "thinkingmachines/Inkling-2-Small",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2",
@@ -69,6 +87,18 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "thinkingmachines/Inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
+      }
+    ],
     "zai-org/GLM-5": [
       {
         "type": "toggle"
@@ -77,6 +107,18 @@
     "zai-org/GLM-5.1": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.2": [
@@ -88,22 +130,53 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "Qwen/Qwen3.5-9B": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3": [
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-Plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "meta-models/Muse-Spark-Open-816B-A42B": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "tencent/Hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "toggle"
       }
     ],
     "moonshotai/Kimi-K3.1-Pro": [
@@ -118,18 +191,27 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3-1": [
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
     ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
       },
@@ -144,47 +226,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "Qwen/Qwen3.6-Plus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
+    "deepseek-ai/DeepSeek-V3-1": [
       {
         "type": "toggle"
       }

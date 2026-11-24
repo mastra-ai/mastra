@@ -1,0 +1,12 @@
+{
+  "temperature": ["gpt-oss-120b", "qwen3-coder-480b"],
+  "structuredOutput": ["gpt-oss-120b", "qwen3-coder-480b"],
+  "reasoning": {
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
+}

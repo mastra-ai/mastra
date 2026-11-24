@@ -125,7 +125,7 @@ export async function runSmokeTests(options: RunnerOptions = {}): Promise<RunRes
   };
 }
 
-async function executeScenario(
+export async function executeScenario(
   scenario: Scenario,
   tools: ResolvedToolset,
   allTools: ResolvedToolset,

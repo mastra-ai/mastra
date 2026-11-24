@@ -1,47 +1,49 @@
 {
   "temperature": [
+    "deepseek-v4.1-flash-1017-tl5",
     "deepseek-v4.1-flash-552b",
     "gemma4-26b",
     "glm5.3-754b",
     "gpt-oss-120b",
+    "kolibri-1-tl5",
     "mistral4-119b",
-    "qwen3.6-35b",
     "qwen3.8-27b"
   ],
   "structuredOutput": [
+    "deepseek-v4.1-flash-1017-tl5",
     "deepseek-v4.1-flash-552b",
     "gemma4-26b",
     "glm5.3-754b",
     "gpt-oss-120b",
-    "qwen3.6-35b",
+    "kolibri-1-tl5",
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "glm5.3-754b": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral4-119b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "deepseek-v4.1-flash-552b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "gemma4-26b": [
+    "glm5.3-754b": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.6-35b": [
+    "kolibri-1-tl5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemma4-26b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -53,10 +55,16 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "gpt-oss-120b": [
+    "mistral4-119b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
+      }
+    ],
+    "deepseek-v4.1-flash-1017-tl5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

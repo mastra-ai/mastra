@@ -4,6 +4,8 @@ import {
   getActiveDurableAgentWorkflowExecutions,
   isDurableAgentExecutionDetached,
 } from '../agent/durable/run-registry';
+import { hasDurableExecution } from '../agent/streams/execution-capability';
+import type { ExecutionEngineDefaults } from '../agent/streams/execution-policy';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -16,6 +18,7 @@ import type { MastraServerCache } from '../cache';
 import { AgentChannels } from '../channels';
 import type { ChannelProvider, ChannelsResolver } from '../channels';
 import type { Classifier, ClassifierQuestions } from '../classifier';
+import { EXPERIMENT_WORKFLOW_ID } from '../datasets/experiment/workflow-id.js';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { IDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
@@ -501,6 +504,9 @@ export interface Config<
    * @default EventEmitterPubSub
    */
   pubsub?: PubSub;
+
+  /** Provisional naming/API: registered native-agent policy defaults; execution activation is deferred. */
+  durable?: ExecutionEngineDefaults;
 
   /**
    * Server cache for storing stream events and other temporary data.
@@ -1290,6 +1296,7 @@ export class Mastra<
   #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
+  #durable: ExecutionEngineDefaults | undefined;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Cache for stored scorers to allow in-memory modifications to persist across requests
@@ -1836,6 +1843,7 @@ export class Mastra<
 
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
+    this.#durable = config?.durable;
 
     // Boot-time recovery policy for durable agent runs. Default is 'off' so
     // that an install can't silently re-run tools/LLM calls on restart; opt-in
@@ -3248,6 +3256,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3275,6 +3284,7 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    mastraAgent.__registerExecutionEnginePolicy?.(this.#durable);
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
@@ -4004,17 +4014,26 @@ export class Mastra<
   /**
    * Retrieves a registered workspace by its ID.
    *
-   * @throws {MastraError} When the workspace with the specified ID is not found
+   * Pass `{ optional: true }` to get `undefined` instead of an error when the
+   * workspace isn't registered, e.g. when checking before creating it.
+   *
+   * @throws {MastraError} When the workspace with the specified ID is not found and `optional` is not set
    *
    * @example
    * ```typescript
    * const workspace = mastra.getWorkspaceById('workspace-123');
    * const files = await workspace.filesystem.readdir('/');
+   *
+   * const existing = mastra.getWorkspaceById('workspace-123', { optional: true });
    * ```
    */
-  public getWorkspaceById(id: string): Workspace {
+  public getWorkspaceById(id: string, options?: { optional?: false }): Workspace;
+  public getWorkspaceById(id: string, options: { optional: true }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined;
+  public getWorkspaceById(id: string, options?: { optional?: boolean }): Workspace | undefined {
     const entry = this.#workspaces[id];
     if (!entry) {
+      if (options?.optional) return undefined;
       const error = new MastraError({
         id: 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND',
         domain: ErrorDomain.MASTRA,
@@ -4332,6 +4351,24 @@ export class Mastra<
     if (this.#pushSubscription) return true;
     const orchestration = this.#workers.find(w => w.name === 'orchestration');
     return !!orchestration?.isRunning;
+  }
+
+  /**
+   * Register the durable experiment workflow (`__mastra-experiment`) once.
+   * Registered `distributed` because every process registers it identically,
+   * so whichever process receives a run's events can execute them.
+   *
+   * @internal
+   */
+  async __ensureExperimentWorkflow(): Promise<void> {
+    if (this.__hasInternalWorkflow(EXPERIMENT_WORKFLOW_ID)) return;
+    // Dynamic import: the workflow module pulls in the evented engine, which
+    // would create a static import cycle through `mastra`.
+    const { buildExperimentWorkflow } = await import('../datasets/experiment/workflow.js');
+    if (this.__hasInternalWorkflow(EXPERIMENT_WORKFLOW_ID)) return;
+    this.__registerInternalWorkflow(buildExperimentWorkflow() as unknown as AnyWorkflow, undefined, {
+      distributed: true,
+    });
   }
 
   __hasInternalWorkflow(id: string, runId?: string): boolean {
@@ -5208,9 +5245,9 @@ export class Mastra<
       return { agents: 0, recovered: 0, succeeded: 0, failed: 0, skipped: 0 };
     }
 
-    const durableAgents: DurableAgentLike[] = [];
+    const durableAgents: (Agent<any, any, any> | DurableAgentLike)[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && isDurableAgentLike(agent)) {
+      if (agent && hasDurableExecution(agent)) {
         durableAgents.push(agent);
       }
     }
@@ -5282,7 +5319,7 @@ export class Mastra<
    * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
-    agent: DurableAgentLike,
+    agent: Agent<any, any, any> | DurableAgentLike,
     run: { runId: string; retryAt?: number },
     failures = 0,
   ): void {
@@ -7209,6 +7246,8 @@ export class Mastra<
     this.#storageSource = getStorageSource(storage);
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+    // Storage attached after construction must log through this instance's logger too.
+    this.#storage.__setLogger(this.#logger);
     for (const knowledge of Object.values(this.#knowledge)) {
       if (!knowledge.hasOwnStorage) {
         knowledge.setStorage(this.#storage, this.#storageSource);
@@ -7952,6 +7991,13 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, this.#ackingTopicListener(listener));
   }
 
+  /** Build native durable agents' engines and register their workflows, so event ownership checks can find them. */
+  #initializeDurableAgents(): void {
+    for (const agent of Object.values(this.#agents ?? {})) {
+      if (hasDurableExecution(agent) && !isDurableAgentLike(agent)) agent.__initializeDurableExecution();
+    }
+  }
+
   /**
    * Process a single workflow event. Shared entry point used by:
    * - pull-mode workers (OrchestrationWorker)
@@ -7963,6 +8009,17 @@ export class Mastra<
    * should nack/return 5xx so the broker retries.
    */
   public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    try {
+      this.#initializeDurableAgents();
+    } catch (error) {
+      this.#logger.error('Failed to initialize durable agents for workflow event', { error });
+      return { ok: false, retry: true };
+    }
+    // A process that never started the experiment (e.g. one handling a pushed
+    // event per request) still has to resolve the experiment workflow.
+    if (event.data?.workflowId === EXPERIMENT_WORKFLOW_ID) {
+      await this.__ensureExperimentWorkflow();
+    }
     if (!this.#workflowEventProcessor) {
       this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
     }
@@ -7994,6 +8051,11 @@ export class Mastra<
     if (this.#storage) {
       await this.#storage.init();
     }
+
+    this.#initializeDurableAgents();
+    // Workers can pick up a durable experiment started by another process, so
+    // register its workflow before they consume events.
+    await this.__ensureExperimentWorkflow();
 
     // Skip the boot probe when it cannot affect startup. Besides avoiding an
     // unnecessary query, this preserves request-scoped storage behavior from
@@ -8151,6 +8213,11 @@ export class Mastra<
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
     if (pushOnly && !this.#pushSubscription) {
+      // Tracked so a concurrent stopWorkers() drain waits for the acknowledgement too.
+      const track = (delivery: Promise<unknown>) => {
+        this.#inFlightPushEvents.add(delivery);
+        void delivery.finally(() => this.#inFlightPushEvents.delete(delivery));
+      };
       const cb: EventCallback = (event, ack, nack) => {
         // In cross-process push environments (e.g. UnixSocketPubSub),
         // every subscriber receives every event — including events for
@@ -8163,9 +8230,16 @@ export class Mastra<
         const data = event.data as Record<string, unknown> | undefined;
         const wfId = data?.workflowId as string | undefined;
         const rId = data?.runId as string | undefined;
+        try {
+          this.#initializeDurableAgents();
+        } catch (error) {
+          this.#logger.error('Failed to initialize durable agents for push delivery', { error });
+          if (nack) track(nack().catch(err => this.#logger.error('Error nacking workflow event', err)));
+          return;
+        }
         if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
           if (ack) {
-            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            track(ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err)));
           }
           return;
         }
@@ -8209,8 +8283,7 @@ export class Mastra<
             }
           })
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        this.#inFlightPushEvents.add(inFlight);
-        void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
+        track(inFlight);
       };
       await this.#pubsub.subscribe('workflows', cb);
       this.#pushSubscription = { topic: 'workflows', cb };
@@ -8262,6 +8335,7 @@ export class Mastra<
   }
 
   async #startExecutionWorkers(): Promise<void> {
+    this.#initializeDurableAgents();
     // Storage init is memoized (see augmentWithInit) — cheap when already run.
     if (this.#storage) {
       await this.#storage.init();

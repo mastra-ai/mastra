@@ -4,7 +4,9 @@ import {
   MastraCompositeStore,
   KnowledgeStorage,
   KnowledgeConflictError,
+  KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
+  KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
@@ -120,7 +122,16 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
     });
     const text = await response.text();
     if (!response.ok) {
-      let body: { name?: string; detail?: string; title?: string; error?: { name?: string; message?: string } } = {};
+      let body: {
+        name?: string;
+        detail?: string;
+        title?: string;
+        error?: { name?: string; message?: string };
+        key?: unknown;
+        parentId?: unknown;
+        pageId?: unknown;
+        pages?: unknown;
+      } = {};
       try {
         const parsed: unknown = JSON.parse(text);
         if (parsed && typeof parsed === 'object') body = parsed;
@@ -146,7 +157,9 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         throw error;
       }
       if (name === 'KnowledgePageKeyConflictError') {
-        const error = new KnowledgePageKeyConflictError('', '');
+        const key = typeof body.key === 'string' ? body.key : '';
+        const parentId = typeof body.parentId === 'string' ? body.parentId : '';
+        const error = new KnowledgePageKeyConflictError(key, parentId);
         error.message = message;
         throw error;
       }
@@ -154,6 +167,18 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
         const error = new KnowledgePageHasChildrenError('');
         error.message = message;
         throw error;
+      }
+      if (name === 'KnowledgePageDepthError') {
+        const error = new KnowledgePageDepthError('');
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
+      }
+      if (name === 'KnowledgeMoveTooLargeError') {
+        const pageId = typeof body.pageId === 'string' ? body.pageId : '';
+        const pages = typeof body.pages === 'number' ? body.pages : 0;
+        const error = new KnowledgeMoveTooLargeError(pageId, pages);
+        error.message = message;
+        throw Object.assign(error, { status: response.status });
       }
       throw Object.assign(new Error(message), { status: response.status });
     }

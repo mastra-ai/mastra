@@ -167,7 +167,7 @@ export function MCPClientList() {
               return (
                 <Entity
                   key={mcpClient.id ?? `pending-${index}`}
-                  className="items-center bg-background"
+                  className="items-center bg-nested"
                   onClick={() => setViewIndex(index)}
                 >
                   <div

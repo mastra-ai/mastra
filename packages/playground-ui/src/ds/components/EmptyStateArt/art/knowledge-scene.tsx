@@ -4,15 +4,25 @@ import type { SceneProps } from './scene-style';
 export function KnowledgeScene({ id }: SceneProps) {
   return (
     <>
-      <path
-        d="M-53,21.2Q-53,19.4 -51.1,18.5L-2,-6.1Q0,-7.1 2,-6.1L61.7,23.8Q63.6,24.8 63.6,26.5L63.6,26.8Q63.6,28.5 61.7,29.5L12.6,54Q10.6,55 8.6,54L-51.1,24.2Q-53,23.2 -53,21.5Z"
-        fill="var(--face)"
-        stroke="var(--line)"
-        strokeWidth="1"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <defs>
+        <pattern id={`${id}-gh`} patternUnits="userSpaceOnUse" width="1.8" height="1.8" patternTransform="rotate(-30)">
+          <line x1="0" y1="0" x2="0" y2="1.8" stroke="var(--detail)" strokeOpacity=".42" strokeWidth=".34" />
+        </pattern>
+        <radialGradient id={`${id}-gg0`} gradientUnits="userSpaceOnUse" cx="7.1" cy="21.2" r="55.5">
+          <stop offset=".2" stopColor="#fff" />
+          <stop offset=".9" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`${id}-gm0`} maskUnits="userSpaceOnUse" x="-400" y="-400" width="800" height="800">
+          <rect x="-400" y="-400" width="800" height="800" fill={`url(#${id}-gg0)`} />
+        </mask>
+      </defs>
+      <g className="ground">
+        <path
+          mask={`url(#${id}-gm0)`}
+          d="M-41.6,17.6C-42.8,13.5 -27.9,10.7 -21,7.2C-14.2,3.7 -4.3,-1.8 -0.2,-3.4C3.8,-5 2,-2.7 3.1,-2.4C4.2,-2.1 1.1,-3.9 6.4,-1.4C11.7,1.1 25.3,8 34.6,12.7C43.9,17.4 61.1,22.7 62.3,26.8C63.4,30.9 48.6,33.8 41.7,37.3C34.8,40.8 24.9,46.2 20.9,47.8C16.9,49.4 18.7,47.2 17.6,46.8C16.5,46.5 19.5,48.4 14.2,45.9C9,43.3 -4.7,36.4 -14,31.7C-23.3,27 -40.4,21.7 -41.6,17.6Z"
+          fill={`url(#${id}-gh)`}
+        />
+      </g>
       <path
         d="M-35.4,-60.1Q-35.4,-62.3 -33.4,-63.3L-2,-79Q0,-80 2,-79L47.5,-56.2Q49.5,-55.2 49.5,-53L49.5,22.6Q49.5,24.8 47.5,25.7L16.1,41.4Q14.1,42.4 12.2,41.4L-33.4,18.7Q-35.4,17.7 -35.4,15.5Z"
         fill="var(--face)"

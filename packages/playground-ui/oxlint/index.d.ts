@@ -4,6 +4,7 @@ declare const plugin: {
 };
 export declare const recommended: Record<string, 'error'>;
 export declare const copyRules: Record<string, 'error'>;
+export declare const pageRules: Record<string, 'error'>;
 export declare const copyRuleExclusions: {
   files: string[];
   rules: Record<string, 'off'>;

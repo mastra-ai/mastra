@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_MOCK_MISMATCH } from '../../tool-mocks';
-import { recordingTool, runToolMockScenario } from './scenario-helpers';
+import { EXPERIMENT_PATHS, recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
  * BDD scenario: a mocked tool called with the wrong args fails the item
@@ -11,11 +11,12 @@ import { recordingTool, runToolMockScenario } from './scenario-helpers';
  *      a live `sendReceipt` tool on the next step
  * Then the item fails with TOOL_MOCK_MISMATCH and `sendReceipt` never executes.
  */
-describe('Tool mock scenario: item tool mock mismatch aborts the run', () => {
+describe.each(EXPERIMENT_PATHS)('Tool mock scenario: item tool mock mismatch aborts the run (%s)', path => {
   it('fails with TOOL_MOCK_MISMATCH and prevents a later live tool from running', async () => {
     const liveLog: string[] = [];
 
     const { summary, item } = await runToolMockScenario({
+      path,
       tools: {
         processRefund: recordingTool('processRefund', liveLog),
         sendReceipt: recordingTool('sendReceipt', liveLog),

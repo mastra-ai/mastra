@@ -21,14 +21,21 @@ import {
   resolveModelOutputAfterToolResultProcessors,
   snapshotToolResult,
   hasToolResultProcessor,
+  withAgentWorkflowToolMarker,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
-import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import {
+  ownToolCallSuspendData,
+  resolveFrameworkSuspendedToolIdentity,
+} from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { isMastraTimeoutError } from '../../../../loop/timeout';
-import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
+import {
+  INTERNAL_APPROVAL_KEYS,
+  runBeforeApprovalChecks,
+} from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
@@ -51,7 +58,12 @@ import {
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
 import { getToolTitle } from '../../../../tools/tool-title';
-import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
+import {
+  getModelFacingValidationError,
+  resolveToolOutputValidationSchema,
+  validateToolOutput,
+} from '../../../../tools/validation';
+import type { ModelFacingValidationError } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { defineLazyWriter } from '../../../../workflows/utils';
@@ -75,6 +87,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
+import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -428,7 +441,6 @@ export function createDurableToolCallStep() {
         mastra,
         suspend,
         resumeData: workflowResumeData,
-        suspendData,
         requestContext,
         actor,
         getInitData,
@@ -442,6 +454,7 @@ export function createDurableToolCallStep() {
 
       const typedInput = inputData as DurableToolCallInput;
       const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;
+      const suspendData = ownToolCallSuspendData(params.suspendData, toolCallId);
 
       // Extract resumeData from tool call arguments (autoResumeSuspendedTools path)
       // When the LLM auto-resumes a suspended tool, it injects `resumeData` into the
@@ -511,11 +524,11 @@ export function createDurableToolCallStep() {
             toolName: info.toolName,
             toolCallId: info.toolCallId,
           };
-          // After a prior resume, end the resume spans (registry override) — they are the
-          // active root for this segment. Otherwise end the threaded originals.
+          // The pair this execution reports under: the run's first, or the one a resume or
+          // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-          const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-          const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+          const segment = segmentSpanData(requestContext, runId, initData, reg);
+          const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
           // iteration) for the originals.
@@ -527,8 +540,9 @@ export function createDurableToolCallStep() {
                   completionStartTime: typedInput.completionStartTime,
                   timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
                 },
+            segment.carried,
           );
-          if (typedInput.stepSpanData) {
+          if (typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData)) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
               output,
               outcome: 'suspend',
@@ -543,7 +557,7 @@ export function createDurableToolCallStep() {
             });
           }
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({
+            obs.rebuildSpan(modelSpanData)?.end({
               output,
               attributes,
               outcome: 'suspend',
@@ -558,7 +572,7 @@ export function createDurableToolCallStep() {
             });
           }
           if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({
+            obs.rebuildSpan(agentSpanData)?.end({
               output,
               attributes,
               outcome: 'suspend',
@@ -612,13 +626,10 @@ export function createDurableToolCallStep() {
 
       // Tracing context for per-chunk PROCESSOR_RUN spans: the run's AGENT_RUN span (live
       // in-process, rebuilt cross-process). Without it they export as orphan trace roots.
-      const processorAgentSpanData = registryEntry?.resumeAgentSpanData ?? initData.agentSpanData;
+      const processorAgentSpanData = segmentSpanData(requestContext, runId, initData, registryEntry).agentSpanData;
       const processorAgentSpan =
-        registryEntry?.resumeAgentSpan ??
-        registryEntry?.agentSpan ??
-        (processorAgentSpanData && observability
-          ? observability.rebuildSpan(processorAgentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-          : undefined);
+        liveSegmentSpan(processorAgentSpanData, registryEntry?.resumeAgentSpan, registryEntry?.agentSpan) ??
+        (processorAgentSpanData && observability ? observability.rebuildSpan(processorAgentSpanData) : undefined);
       const processorObservabilityContext = processorAgentSpan
         ? createObservabilityContext({ currentSpan: processorAgentSpan })
         : undefined;
@@ -982,7 +993,7 @@ export function createDurableToolCallStep() {
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+          [...approvalRequestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
@@ -1190,6 +1201,24 @@ export function createDurableToolCallStep() {
         });
         if (rejection) {
           const result = rejection.output;
+          // A failed input check here is Mastra's own validation error. Map it now, in this
+          // process: llm-mapping only sees the serialized copy, which lost the marker.
+          const validationError = getModelFacingValidationError(result);
+          const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
+          const validationErrorOutput =
+            validationError && mappingTool.toModelOutput
+              ? {
+                  providerMetadata: (await computeModelOutputProviderMetadata({
+                    tool: mappingTool,
+                    toolName,
+                    toolCallId,
+                    result,
+                    validationError,
+                    existingProviderMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                  })) as typeof typedInput.providerMetadata,
+                  modelOutputComputed: true,
+                }
+              : undefined;
           if (pubsub) {
             try {
               const resultChunk = await applyToolPayloadTransformToChunk(
@@ -1197,7 +1226,14 @@ export function createDurableToolCallStep() {
                   type: 'tool-result' as const,
                   runId,
                   from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, result, providerExecuted },
+                  payload: {
+                    toolCallId,
+                    toolName,
+                    args,
+                    result,
+                    ...(validationErrorOutput ? { providerMetadata: validationErrorOutput.providerMetadata } : {}),
+                    providerExecuted,
+                  },
                 },
                 {
                   policy: toolPayloadTransform,
@@ -1227,6 +1263,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             result,
+            ...(validationErrorOutput ?? {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }
@@ -1490,12 +1527,17 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // Rebuild the forwarded model_step span and pass it as the tool's tracing context so
-      // the TOOL_CALL span nests under the LLM call (matches the non-durable path).
+      // The TOOL_CALL span nests under the forwarded model_step (matches the non-durable path). A
+      // resumed execution did not open the step that suspended, so its tool call nests under its
+      // own generation instead, as the non-durable resume does.
+      const toolSegment = segmentSpanData(requestContext, runId, initData, registryEntry);
+      const toolParentData =
+        typedInput.stepSpanData && segmentOwnsStep(toolSegment, typedInput.stepSpanData)
+          ? (typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+          : toolSegment.modelSpanData;
       const stepSpan =
-        typedInput.stepSpanData && observability
-          ? observability.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
-          : undefined;
+        liveSegmentSpan(toolParentData, registryEntry?.resumeModelSpan) ??
+        (toolParentData && observability ? observability.rebuildSpan(toolParentData) : undefined);
       const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
 
       // Track whether the tool's suspend callback was invoked so we can skip
@@ -1792,17 +1834,26 @@ export function createDurableToolCallStep() {
 
       // Live-attempt barrier only. Durable recovery must use persisted task and
       // transcript state because this Promise does not survive workflow replay.
-      let resolveReconciliation!: (outcome: { error?: unknown }) => void;
-      const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
-        resolveReconciliation = resolve;
-      });
-      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
-        ...typedInput.providerMetadata,
-        mastra: {
-          ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
-          backgroundTask: { taskId, status },
+      // `validationError` is read from the result in `onResult`, in the process that ran the
+      // task, so an awaited call can map its result after the stored copy dropped the marker.
+      let resolveReconciliation!: (outcome: { error?: unknown; validationError?: ModelFacingValidationError }) => void;
+      const reconciliationComplete = new Promise<{ error?: unknown; validationError?: ModelFacingValidationError }>(
+        resolve => {
+          resolveReconciliation = resolve;
         },
-      });
+      );
+      // Marked here so a later step needn't resolve the tool to know it ran a workflow (#30219).
+      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') =>
+        withAgentWorkflowToolMarker(
+          {
+            ...typedInput.providerMetadata,
+            mastra: {
+              ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
+              backgroundTask: { taskId, status },
+            },
+          },
+          tool,
+        );
       // Background task dispatch via the shared dispatch ladder with the
       // durable policy: steps replay under at-least-once redelivery, so an
       // already-running task is restarted to reattach hooks and
@@ -1973,6 +2024,7 @@ export function createDurableToolCallStep() {
               // process restart.
               const liveEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
+              const baseProviderMetadata = withAgentWorkflowToolMarker(typedInput.providerMetadata, mappingTool);
               // Resolve the tool-level transform from the live registry at
               // completion, since the entry may have been rebuilt after dispatch.
               // Use the same resolved run/agent/Mastra policy as the other chunks.
@@ -2017,7 +2069,7 @@ export function createDurableToolCallStep() {
                     ? transcriptResultTransform.transformed
                     : result,
                   providerMetadata: withToolPayloadTransformProviderMetadata(
-                    typedInput.providerMetadata as any,
+                    baseProviderMetadata as any,
                     transformCarrier.metadata,
                   ) as any,
                 };
@@ -2034,7 +2086,7 @@ export function createDurableToolCallStep() {
                   args: cleanedArgs,
                   messageList: list,
                   approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                  baseProviderMetadata: typedInput.providerMetadata as any,
+                  baseProviderMetadata: baseProviderMetadata as any,
                   transformForTranscript: result => (transcript ??= transformForTranscript(result)),
                   toModelOutput:
                     toModelOutput && (output => (modelOutput ??= Promise.resolve().then(() => toModelOutput(output)))),
@@ -2060,7 +2112,10 @@ export function createDurableToolCallStep() {
                 recordBackgroundResult(liveEntry, params.taskId, params.toolCallId, reconciliationComplete).apply =
                   list => applyTo(list, async () => {});
               }
-              resolveReconciliation({});
+              resolveReconciliation({
+                validationError:
+                  params.status === 'completed' ? getModelFacingValidationError(params.result) : undefined,
+              });
               if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
                 const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
                 void owner?.__notifyBackgroundTaskFinished({
@@ -2142,11 +2197,13 @@ export function createDurableToolCallStep() {
             };
           }
           // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+          let reconciledValidationError: ModelFacingValidationError | undefined;
           if (completedTask.status !== 'cancelled') {
             const reconciliation = await reconciliationComplete;
             if (reconciliation.error) {
               throw reconciliation.error;
             }
+            reconciledValidationError = reconciliation.validationError;
           }
 
           if (completedTask.status !== 'completed') {
@@ -2162,6 +2219,20 @@ export function createDurableToolCallStep() {
             // Normalize a void result to null like executeToolCall does, so the loop continues.
             result: completedTask.result === undefined ? null : completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+            // Map a validation error here: llm-mapping only sees the stored copy, which lost the marker.
+            ...(reconciledValidationError
+              ? {
+                  providerMetadata: await computeModelOutputProviderMetadata({
+                    tool: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool,
+                    toolName,
+                    toolCallId,
+                    result: completedTask.result,
+                    validationError: reconciledValidationError,
+                    existingProviderMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+                  }),
+                  modelOutputComputed: true,
+                }
+              : {}),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),
           };
@@ -2336,6 +2407,7 @@ export function createDurableToolCallStep() {
                     toolName,
                     toolCallId,
                     result: settled.rawResult,
+                    validationError: getModelFacingValidationError(settled.rawResult),
                     existingProviderMetadata: lateProviderMetadata,
                     parentSpan: stepSpan,
                   });
@@ -2376,7 +2448,22 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput && outcome.status === 'success') {
+        // Read in the process that ran the tool, before the result is serialized.
+        const validationError =
+          outcome.status === 'success' ? getModelFacingValidationError(outcome.rawResult) : undefined;
+        if (toModelOutput && outcome.status === 'success' && validationError) {
+          // Mastra's own validation errors skip the mapper, as on the main engine.
+          modelOutputComputed = true;
+          providerMetadata = (await computeModelOutputProviderMetadata({
+            tool: mappingTool,
+            toolName,
+            toolCallId,
+            result: outcome.rawResult,
+            validationError,
+            existingProviderMetadata: providerMetadata as Record<string, unknown> | undefined,
+            parentSpan: stepSpan,
+          })) as typeof providerMetadata;
+        } else if (toModelOutput && outcome.status === 'success') {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
@@ -2406,6 +2493,11 @@ export function createDurableToolCallStep() {
             mappingFailure = { error: mappingError };
             throw mappingError;
           }
+        }
+        // Mark results of an agent's workflow tools here, like the mapping above:
+        // llm-mapping may run where the run registry, and so the tool, is gone (#30219).
+        if (outcome.status === 'success') {
+          providerMetadata = withAgentWorkflowToolMarker(providerMetadata, mappingTool);
         }
 
         // Run processToolResult hooks before the tool-result chunk is emitted.
@@ -2541,6 +2633,8 @@ export function createDurableToolCallStep() {
                 resultBeforeProcessors,
                 resultSnapshotBeforeProcessors,
                 providerMetadata,
+                // Read from `outcome.rawResult` above, before the result was serialized.
+                validationError,
                 parentSpan: stepSpan,
               })) as typeof providerMetadata;
             } catch (mappingError) {

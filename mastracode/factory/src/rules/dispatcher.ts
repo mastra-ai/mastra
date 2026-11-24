@@ -156,9 +156,10 @@ const BOOKKEEPING_MAX_IN_FLIGHT = 4;
 // slow cadence so the per-tick reconcile walk stays bounded.
 const STALE_BINDING_SWEEP_INTERVAL_MS = 10 * 60_000;
 const STALE_BINDING_TTL_MS = 24 * 60 * 60_000;
-// The bound-thread reconcile walk reads a cursor + messages per binding; it
-// exists to catch results missed at run end, so it runs on a slow cadence off
-// the claim path rather than on every 1s tick.
+// The bound-thread reconcile pass reads a cursor + messages per binding that
+// stepped recently (and every active binding on a much slower cadence); it
+// exists to catch results missed at run end, so it runs off the claim path
+// rather than on every 1s tick.
 const RECONCILE_INTERVAL_MS = 30_000;
 
 /** The card moved on before this run could act; it settles as superseded, not succeeded. */
@@ -517,6 +518,8 @@ export interface FactoryReviewStatusEvent {
   phase: FactoryReviewStatusPhase;
   /** When the agent was handed the review; set on the 'reviewing' step. */
   startedAt?: Date;
+  /** The session running the review, on every step after it was delivered, so the status can link to it. */
+  session?: { sessionId: string; threadId: string };
   /** When the run ended; set on final steps. */
   endedAt?: Date;
   /** Why the run failed or will retry, already sanitized. */
@@ -804,6 +807,8 @@ export class FactoryDecisionDispatcher {
   readonly #reviewWatched = new WeakSet<FactoryDeferredDecisionRecord>();
   /** Re-claims that found an earlier attempt's kickoff landed and its run already over. */
   readonly #reviewReplayed = new WeakSet<FactoryDeferredDecisionRecord>();
+  /** The session a review run was delivered to, so every later status step can link it. */
+  readonly #reviewSessions = new WeakMap<FactoryDeferredDecisionRecord, { sessionId: string; threadId: string }>();
   /** Last pending status-comment write per run, so writes stay ordered. */
   /**
    * Per review run: the write chain, the newest step issued, and how many
@@ -1265,7 +1270,8 @@ export class FactoryDecisionDispatcher {
         return;
       }
       const failureCode = factoryDispatchFailureCode(error);
-      const terminal = isTerminalFailure(record.attempts, failureCode);
+      const terminal =
+        isTerminalFailure(record.attempts, failureCode) || (error instanceof FactoryRuleRejectedError && error.settled);
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
         now: new Date(),
@@ -1283,6 +1289,7 @@ export class FactoryDecisionDispatcher {
           phase: terminal ? 'failed' : 'retrying',
           endedAt: new Date(),
           reason: publicFailureReason(failureCode, error),
+          session: this.#reviewSessions.get(record),
         });
       }
     }
@@ -1461,7 +1468,7 @@ export class FactoryDecisionDispatcher {
   async #reviewStatus(
     record: FactoryDeferredDecisionRecord,
     decision: unknown,
-    step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason'>,
+    step: Pick<FactoryReviewStatusEvent, 'phase' | 'startedAt' | 'endedAt' | 'reason' | 'session'>,
   ): Promise<void> {
     const report = this.#reportReviewStatus;
     if (!report || !record.workItemId) return;
@@ -1481,6 +1488,8 @@ export class FactoryDecisionDispatcher {
       attempt: record.attempts,
       ...step,
     };
+    const session = step.session ?? this.#reviewSessions.get(record);
+    if (session) event.session = session;
     // Writes for one run go out in order even when the run stops waiting on a
     // slow one, so an earlier step can never land on top of a later one.
     const run = this.#reviewStatusRuns.get(record.id) ?? {
@@ -1671,6 +1680,7 @@ export class FactoryDecisionDispatcher {
                     arguments: decision.arguments,
                   });
           await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
+          this.#reviewSessions.set(record, { sessionId: binding.sessionId, threadId: binding.threadId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1681,7 +1691,7 @@ export class FactoryDecisionDispatcher {
             (await this.#decisionOvertaken(record, decision.role));
           const runStillActive = () =>
             this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
-          await this.#waitForOpenRun(session, binding, 'Factory skill run');
+          await this.#waitForOpenRun(session, binding, 'Factory skill run', decision.startsAfterOwnMove === true);
           if (await this.#roleSuperseded(record, decision.role)) throw new FactoryDecisionSuperseded();
           const activeBinding = await this.#requireBinding(record, decision.role);
           if (activeBinding.id !== binding.id) {
@@ -2658,7 +2668,11 @@ export class FactoryDecisionDispatcher {
       // queues waits for a person just as a rule's move does.
       ...(decision.event && untrustedPullRequestEvent(decision.event) ? { untrustedPullRequestEvent: true } : {}),
     });
-    if (result.status === 'rejected') throw new FactoryRuleRejectedError(result.code, result.reason);
+    // The refusal is recorded under this decision's fixed ingress, so a retry replays it
+    // unchanged; only a stale refusal is left unrecorded for a retry at the new revision.
+    if (result.status === 'rejected') {
+      throw new FactoryRuleRejectedError(result.code, result.reason, result.code !== 'stale');
+    }
     const transitionMessage = decision.message;
     if (!transitionMessage) return;
     // The message may wake an idle session and hold it for a whole agent
@@ -3149,8 +3163,18 @@ export class FactoryDecisionDispatcher {
     return this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
   }
 
-  /** Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. */
-  async #waitForOpenRun(session: BoundDispatcherSession, binding: FactoryRunBindingRecord, label: string) {
+  /**
+   * Waits for the run in flight on `binding` to end, so a kickoff never overlaps it. With
+   * `afterOwnMove`, a run live here on the binding's thread is waited on whoever started it: the
+   * agent that moved the card may still be running under the role it had before the move, with
+   * that role's tools, and the next phase's kickoff must start a fresh run with its own.
+   */
+  async #waitForOpenRun(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    label: string,
+    afterOwnMove: boolean,
+  ) {
     const runStillActive = () =>
       this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId);
     // Only a *live* run on this binding can be duplicated by a second
@@ -3171,8 +3195,9 @@ export class FactoryDecisionDispatcher {
       });
       try {
         const open = (await listSessionOpenRuns(session)).filter(entry => entry.bindingId === binding.id);
-        if (open.length === 0) break;
-        if (open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
+        const waitsOnLiveRun = afterOwnMove && runStillActive();
+        if (open.length === 0 && !waitsOnLiveRun) break;
+        if (!waitsOnLiveRun && open.some(entry => isOpenRunLiveElsewhere(entry, this.#ownerId))) {
           throw new FactoryDispatchError(
             'session_unavailable',
             `Factory binding ${binding.id} has a run in flight on another dispatcher.`,

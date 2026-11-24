@@ -1,4 +1,4 @@
-import { createDurableAgent, createEventedAgent, DurableStepIds } from '@mastra/core/agent/durable';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 
 import { LibSQLStore } from '../../../storage';
@@ -11,7 +11,8 @@ export interface Cor1411PeerArgs {
   runId: string;
   finalText: string;
   prompt: string;
-  blockRefresh?: boolean;
+  /** Reading the run from storage fails once the observer attached. */
+  failRunReadsAfterAttach?: boolean;
 }
 
 export interface Cor1411PeerResult {
@@ -70,37 +71,21 @@ runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
     await peer.waitFor('run-live', { timeoutMs: 60_000 });
     const workflowsStore = await storage.getStore('workflows');
     const getWorkflowRunById = workflowsStore?.getWorkflowRunById.bind(workflowsStore);
-    let blockRefresh = false;
-    let refreshBlocked = false;
-    let observedFinalText = false;
+    let failRunReads = false;
     if (workflowsStore && getWorkflowRunById) {
       workflowsStore.getWorkflowRunById = async args => {
-        if (
-          blockRefresh &&
-          observedFinalText &&
-          !refreshBlocked &&
-          args.workflowName === DurableStepIds.AGENTIC_EXECUTION
-        ) {
-          refreshBlocked = true;
-          await peer.signal('refresh-started', { runId });
-          await peer.waitFor('release-refresh', { timeoutMs: 60_000 });
-        }
+        if (failRunReads) throw new Error(`Run store unavailable (${args.workflowName})`);
         return getWorkflowRunById(args);
       };
     }
 
     let onFinishMessagesIncludeAnswer = false;
     const observed = await runner.observe(runId, {
-      onChunk: chunk => {
-        if (chunk.type === 'text-delta' && chunk.payload.text.includes(finalText.toUpperCase())) {
-          observedFinalText = true;
-        }
-      },
       onFinish: data => {
         onFinishMessagesIncludeAnswer = JSON.stringify(data.messages).includes(finalText.toUpperCase());
       },
     });
-    blockRefresh = peer.args.blockRefresh === true;
+    failRunReads = peer.args.failRunReadsAfterAttach === true;
     const outputPromise = observed.output.getFullOutput();
     await peer.signal('observer-attached', { runId });
     for await (const _chunk of observed.fullStream) {

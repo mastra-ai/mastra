@@ -4,8 +4,8 @@ import type { MastraMemory } from '../../../../memory/memory';
 import type { RequestContext } from '../../../../request-context';
 import { delay } from '../../../../utils';
 import type { WorkflowRunState } from '../../../../workflows/types';
-import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-list/memory-message-refs';
 import type { DehydratedMessageListState, StoredMessageLoader } from '../../../message-list/memory-message-refs';
+import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
 import { getRunMessageRefs, peekRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
 import { getRunRegistryEntry } from '../../run-registry';
@@ -259,4 +259,25 @@ async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMem
   if (memory || !params.mastra || !run.agentId) return memory;
   const agent = params.mastra.getAgentById(run.agentId);
   return agent.getMemory({ requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext) });
+}
+
+/** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
+export function latestMessageListState(snapshot: {
+  value?: Record<string, any>;
+  state?: Record<string, any>;
+  context?: Record<string, any>;
+}): unknown {
+  // Evented checkpoints keep the latest setState under context.__state;
+  // value can still contain the transcript from the start of the iteration.
+  if (snapshot.context?.__state?.messageListState) return snapshot.context.__state.messageListState;
+  // The default engine persists workflow state under `value`.
+  if (snapshot.value?.messageListState) return snapshot.value.messageListState;
+  if (snapshot.state?.messageListState) return snapshot.state.messageListState;
+  let latest: { at: number; value: unknown } | undefined;
+  for (const step of Object.values(snapshot.context ?? {})) {
+    const value = step?.output?.messageListState;
+    const at = step?.endedAt ?? step?.startedAt ?? 0;
+    if (value && (!latest || at >= latest.at)) latest = { at, value };
+  }
+  return latest?.value;
 }

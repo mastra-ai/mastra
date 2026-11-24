@@ -1476,7 +1476,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
     isOptional: true,
     defaultValue: "'messages'",
     description:
-      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` finds messages by semantic similarity (requires a vector store, plus an embedder unless the store generates embeddings itself). `"observations"` pages original observation groups around a search hit.',
+      'What to retrieve. `"messages"` (default) pages through message history. `"threads"` lists threads for the current user. `"search"` searches observation groups by semantic similarity and returns the matching observations with the ranges of the messages they came from (requires a vector store, plus an embedder unless the store generates embeddings itself). `"observations"` pages original observation groups around a search hit.',
   },
   {
     name: 'groupId',
@@ -1497,7 +1497,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
     type: 'string',
     isOptional: true,
     description:
-      'Search query for `mode: "search"`. Finds messages semantically similar to this text across all threads for the current user.',
+      'Search query for `mode: "search"`. Finds observation groups semantically similar to this text in the threads the tool can reach: every thread of the resource, or only the current thread with `retrieval: { scope: \'thread\' }`.',
   },
   {
     name: 'cursor',

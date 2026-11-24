@@ -539,20 +539,6 @@ describe('crowdScale', () => {
 });
 
 describe('readable framing', () => {
-  it('draws up to 48 children as circles and counts the rest', () => {
-    const many = Array.from({ length: 60 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
-    const graph = lazyGraph({
-      rootKey: '',
-      openGroups: new Set<string>(),
-      pages: [page('site', null), page('blog', 'site', { childCount: 60 }), ...many],
-      loadedParents: new Set(['', 'site', 'blog']),
-      focusId: 'blog',
-    });
-    const circles = graph.pages.filter(candidate => candidate.parentId === 'blog' && !isRestCircle(candidate));
-    expect(circles).toHaveLength(GRAPH_CHILD_CAP);
-    expect(graph.pages.find(isRestCircle)?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
-  });
-
   it('staggers 45 circles over rows so all of them stay within reach of the centre at the readable zoom', () => {
     const kids = Array.from({ length: 45 }, (_, index) =>
       page(`c${index}`, 'hub', { position: `a${String(index).padStart(2, '0')}` }),

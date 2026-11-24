@@ -78,6 +78,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       client: this.#client,
       maxRetries: config.maxRetries,
       initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
     });
     this.#pages = new LibSQLKnowledgePages({
       read: this.#client,
@@ -92,6 +93,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
       supportsPinKinds: true,
+      supportsActivityDateRange: true,
     } as const;
   }
 

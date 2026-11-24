@@ -37,7 +37,7 @@ No tool, memory, delegation, approval, containment, HTTP, shell, SQL, or code ca
 }
 
 export const responsePlanner = createResponsePlanner(
-  process.env.MASTRA_MODEL ?? "openai/gpt-4o-mini",
+  process.env.MASTRA_MODEL ?? "openai/gpt-6-luna",
 );
 
 export const invokeResponsePlanner: ResponsePlannerInvoker = async (

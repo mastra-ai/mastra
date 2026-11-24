@@ -124,7 +124,7 @@ describe('client-file generation', () => {
     expect(first.output).not.toContain('SENTINEL');
     const source = await readFile(join(directory, 'generated.ts'), 'utf8');
     expect(source).toContain('celsius: ToolSchema2Value1');
-    expect(source).toContain('export type ToolSchema2Value1 = number;');
+    expect(source).toContain('export type ToolSchema2Value1 = number');
     const second = await launch(['generate', 'client.ts']).done;
     expect(second.code, second.output).toBe(0);
     expect(await readFile(join(directory, 'generated.ts'), 'utf8')).toBe(source);

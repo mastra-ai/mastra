@@ -1,5 +1,67 @@
 # @mastra/libsql
 
+## 1.32.0-alpha.1
+
+### Patch Changes
+
+- Fixed buffered reflections activating a buffer that another process extended at the same moment. Activation now applies only the buffered reflection it read; an extended buffer stays in place until a later eligible activation, so values extracted for the earlier buffer are never published with it. Fixes [#27262](https://github.com/mastra-ai/mastra/issues/27262). ([#28293](https://github.com/mastra-ai/mastra/pull/28293))
+
+- Updated dependencies [[`432e9be`](https://github.com/mastra-ai/mastra/commit/432e9bee6a30750e092c972a28e2f40027c6d7c5), [`f030844`](https://github.com/mastra-ai/mastra/commit/f03084426faf5d65c78ab391b74c3773ac173b0c), [`c28f67d`](https://github.com/mastra-ai/mastra/commit/c28f67d81eede65d220ff742f2f56804603c6674), [`bc2dcc7`](https://github.com/mastra-ai/mastra/commit/bc2dcc78b75b4467d95afaf2b7369c54880d207a), [`0d8280d`](https://github.com/mastra-ai/mastra/commit/0d8280ddd778487b89bd2504ced24e3586e7711f)]:
+  - @mastra/core@1.86.0-alpha.7
+
+## 1.32.0-alpha.0
+
+### Minor Changes
+
+- Added worker takeover for evented and durable agents on libSQL storage. When a worker process stops in the middle of a run, another worker can pick up the step from a broker such as Redis Streams and finish the run, and the original caller gets the result. If the same step message arrives again late, it no longer overwrites a step that already finished, and a finished loop iteration keeps its saved result instead of running again. ([#30911](https://github.com/mastra-ai/mastra/pull/30911))
+
+  Requires `@mastra/core` 1.86.0 or later. Older versions can leave a restarted loop stuck once libSQL guards its steps.
+
+  All processes must use the same database. When they run on more than one machine, use a libSQL server such as sqld or Turso. A database file only works when every process runs on the same machine, because SQLite file locking isn't reliable on network filesystems.
+
+  ```ts
+  import { createEventedAgent } from '@mastra/core/agent/durable';
+  import { Mastra } from '@mastra/core/mastra';
+  import { LibSQLStore } from '@mastra/libsql';
+  import { RedisStreamsPubSub } from '@mastra/redis-streams';
+
+  const agent = createEventedAgent({ agent: supportAgent });
+
+  export const mastra = new Mastra({
+    storage: new LibSQLStore({ id: 'storage', url: process.env.LIBSQL_URL, authToken: process.env.LIBSQL_AUTH_TOKEN }),
+    pubsub: new RedisStreamsPubSub({ url: process.env.REDIS_URL }),
+    agents: { [agent.id]: agent },
+  });
+  ```
+
+  Evented workflow runs now keep a record in storage while they run, even when `shouldPersistSnapshot` returns `false`, so another worker can recover them.
+
+  Runs started on older versions can finish after upgrading, but don't have guaranteed crash recovery. An evented workflow run that was already running with `shouldPersistSnapshot` returning `false` has no stored record, so it fails at its next step after the upgrade. Let those runs finish before upgrading.
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Runs stored with the experimental workflow `storageVersion: 2` option now keep less in storage. When a step is written again, its earlier rows are deleted, including a running `foreach`'s progress. At the end of each run, versions of the workflow state that neither the run nor a nested run still reads are deleted. In a durable agent run paused for approval after 16 tool calls on `@mastra/pg`, the stored run shrank from 275 kB to 132 kB. ([#30822](https://github.com/mastra-ai/mastra/pull/30822))
+
+  `init()` adds a `first_seq` column to the `mastra_workflow_run_entries` table, which keeps steps in the order they were first written. Runs stored before the upgrade keep working.
+
+  These stores now require `@mastra/core` 1.86.0 or newer, the first release that exports the state cleanup helper and table definitions they use.
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`8bbaab6`](https://github.com/mastra-ai/mastra/commit/8bbaab64784fac9426f5b2bd0e35f1bd6ae4640a), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`d5546d6`](https://github.com/mastra-ai/mastra/commit/d5546d686498ddb3981f4e1e05c322eba9777e07), [`3b11b67`](https://github.com/mastra-ai/mastra/commit/3b11b677ee2c1755c7a6ab2691cb3ac7269cde84), [`16428c7`](https://github.com/mastra-ai/mastra/commit/16428c7ad01ac22cd76a09a6721566d31202b41b), [`7388601`](https://github.com/mastra-ai/mastra/commit/73886018497772a47154f67ce512081d8f3e9818), [`45320c3`](https://github.com/mastra-ai/mastra/commit/45320c334035c969dcef98a91de6ad2a6610c8c0), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`8fab5e2`](https://github.com/mastra-ai/mastra/commit/8fab5e2fda43beca4be00e43d4f231cdd87fd7fd), [`3fe2318`](https://github.com/mastra-ai/mastra/commit/3fe2318cba624a0e48cff0ec5c8503bfa0a4804b), [`89fb271`](https://github.com/mastra-ai/mastra/commit/89fb27175fd7036b8600241da8a6d288a7f2bae4), [`4aeb6ce`](https://github.com/mastra-ai/mastra/commit/4aeb6ce414105e45b1c36d174258f9165738ecef), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4), [`55a2249`](https://github.com/mastra-ai/mastra/commit/55a2249be2f5505e3022856d477628e6ca2fd9a9)]:
+  - @mastra/core@1.86.0-alpha.6
+
+## 1.31.1
+
+### Patch Changes
+
+- Fixed LibSQL storage write failures printing raw database errors after Mastra was created with `logger: false` or a custom logger. Storage write retry and failure logs now go through the configured logger and include only the error type and code, not the error message, cause or stack. The original error is still thrown to the caller. Fixes [#29885](https://github.com/mastra-ai/mastra/issues/29885). ([#30314](https://github.com/mastra-ai/mastra/pull/30314))
+
+- Updated dependencies [[`10484e3`](https://github.com/mastra-ai/mastra/commit/10484e3b5544f0a160bc28446e4584be1a32c8e5), [`0410aad`](https://github.com/mastra-ai/mastra/commit/0410aadf076536e3318b06b9ee493d70c3ef271f), [`a094a96`](https://github.com/mastra-ai/mastra/commit/a094a964cca2477f6fdaea8e4224666990331c14), [`998939a`](https://github.com/mastra-ai/mastra/commit/998939acc06a9d10f0c0aba21a36d3d21c8a08a3), [`7dd73e5`](https://github.com/mastra-ai/mastra/commit/7dd73e52417f6f438a37d24bdad6e6a2493d76b2), [`9b7df85`](https://github.com/mastra-ai/mastra/commit/9b7df85172170dd1f92bbb1343ae375d464334af), [`732a6a9`](https://github.com/mastra-ai/mastra/commit/732a6a9a831ca0a523188458c927d60068651119), [`ac63b9c`](https://github.com/mastra-ai/mastra/commit/ac63b9cc80f26f1d09901d9626a476555e294963), [`08faca4`](https://github.com/mastra-ai/mastra/commit/08faca458e39ab0b87e8597f75b6f1a7979a8599), [`3724a2e`](https://github.com/mastra-ai/mastra/commit/3724a2eb71acd0832938dcf25f428fa34237503c), [`b9d38c7`](https://github.com/mastra-ai/mastra/commit/b9d38c73982210c6564ee8a33d992a238e29a20b), [`192bb52`](https://github.com/mastra-ai/mastra/commit/192bb5225e53032dc1bd1e3ff861526861a62586), [`ab2295f`](https://github.com/mastra-ai/mastra/commit/ab2295fc158d6c107eb8459c648ad7293ba2af8e), [`e8a81e0`](https://github.com/mastra-ai/mastra/commit/e8a81e0919d9d8f75f85909178c637c708edc1d5), [`5564da0`](https://github.com/mastra-ai/mastra/commit/5564da07d1f09c551a7a0c3749dd8ad7281be2d1), [`00e2a36`](https://github.com/mastra-ai/mastra/commit/00e2a36a63153763efef33dee69753be5cdc85f0)]:
+  - @mastra/core@1.85.0
+
 ## 1.31.0
 
 ### Minor Changes

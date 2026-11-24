@@ -3,7 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
-import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
+import {
+  hasWorkersRedisRequirement,
+  mergePreflightEnvVars,
+  preflightBuildOutput,
+  printPreflightIssues,
+} from './deploy-preflight.js';
 import type { PreflightIssue } from './deploy-preflight.js';
 
 /**
@@ -670,6 +675,24 @@ describe('preflightBuildOutput', () => {
       expect(workerIssue).toBeUndefined();
     });
 
+    it('does not reject a stored write-only REDIS_URL secret', async () => {
+      writeBundle(`export default {};`);
+      writeWorkersManifest({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false },
+        backgroundTasks: { enabled: false },
+        custom: [],
+      });
+
+      const deploymentEnv = mergePreflightEnvVars({ REDIS_URL: '__mastra_secret__' }, { LOG_LEVEL: 'info' });
+      expect(hasWorkersRedisRequirement(deploymentEnv, [])).toBe(true);
+
+      const issues = await preflightBuildOutput(tmpDir, deploymentEnv, { checkWorkers: true });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+      expect(issues.find(i => i.message.includes('Background tasks'))).toBeUndefined();
+    });
+
     it('does not flag when REDIS_URL is injected by a platform-managed database', async () => {
       writeBundle(`export default {};`);
       writeWorkersManifest({
@@ -754,6 +777,19 @@ describe('mergePreflightEnvVars', () => {
     ).toEqual({
       TURSO_DATABASE_URL: '',
     });
+  });
+
+  it('keeps the stored value when the local file holds a write-only secret placeholder', () => {
+    expect(mergePreflightEnvVars({ REDIS_URL: 'redis://stored:6379' }, { REDIS_URL: '__mastra_secret__' })).toEqual({
+      REDIS_URL: 'redis://stored:6379',
+    });
+    expect(mergePreflightEnvVars({ REDIS_URL: '__mastra_secret__' }, { REDIS_URL: '__mastra_secret__' })).toEqual({
+      REDIS_URL: '__mastra_secret__',
+    });
+  });
+
+  it('does not invent a value for a placeholder with nothing stored', () => {
+    expect(mergePreflightEnvVars({}, { REDIS_URL: '__mastra_secret__' })).toEqual({});
   });
 
   it('tolerates absent stored env (older platform responses)', () => {

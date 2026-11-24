@@ -251,7 +251,9 @@ export class SlackIntegration implements FactoryIntegration {
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
-      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings }) : {}),
+      ...(chat && sessionThreadId
+        ? await createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings })
+        : {}),
     };
   }
 

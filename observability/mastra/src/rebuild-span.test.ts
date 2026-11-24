@@ -374,3 +374,39 @@ describe('rebuildSpan trace state', () => {
     expect(child.metadata).toEqual({ tenant: 'acme' });
   });
 });
+
+/**
+ * A durable run ends its spans from rebuilt copies, often in another process
+ * than the one that started them. Stores that keep only the end event, and the
+ * metrics the rebuilt spans emit, have nothing else to read the tags from.
+ */
+describe('rebuildSpan tags and request context', () => {
+  it('keeps the tags and request context of a span ended from its rebuilt copy', async () => {
+    const events: TracingEvent[] = [];
+    const tracing = new DefaultObservabilityInstance({
+      serviceName: 's',
+      name: 'i',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [{ name: 'capture', exportTracingEvent: async e => void events.push(e), shutdown: async () => {} }],
+    });
+    const agent = tracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'agent',
+      requestContext: new RequestContext([['tenant', 'acme']]),
+      tracingOptions: { tags: ['checkout'] },
+    });
+    const generation = agent.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'llm' });
+    const roundTrip = <T extends SpanType>(span: { snapshot(): SpanSnapshot<T> }) =>
+      JSON.parse(JSON.stringify(span.snapshot())) as SpanSnapshot<T>;
+
+    tracing.rebuildSpan(roundTrip(agent)).end();
+
+    await expect
+      .poll(() => events.find(e => e.type === TracingEventType.SPAN_ENDED)?.exportedSpan)
+      .toMatchObject({ name: 'agent', tags: ['checkout'], requestContext: { tenant: 'acme' } });
+    // Token and cost metrics come from the generation, which is not the root.
+    const rebuiltGeneration = tracing.rebuildSpan(roundTrip(generation));
+    expect(rebuiltGeneration.getCorrelationContext().tags).toEqual(['checkout']);
+    expect(rebuiltGeneration.exportSpan()).not.toHaveProperty('tags');
+  });
+});

@@ -14,10 +14,16 @@
  */
 
 import fs from 'node:fs/promises'
-import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import * as ts from 'typescript'
-import { isGlobPattern, routeToFilePath, routeToSidebarId, updateMdxLinks, updateRedirects } from './move-doc'
+import {
+  isGlobPattern,
+  listLinkSourceFiles,
+  routeToFilePath,
+  routeToSidebarId,
+  updateMdxLinks,
+  updateRedirects,
+} from './move-doc'
 
 const CONTENT_ROOT = 'src/content/en'
 const VERCEL_REDIRECTS_FILE = 'vercel.redirects.json'
@@ -308,29 +314,6 @@ export const removeSidebarDocId = (content: string, family: Family, sidebarId: s
   return { content: updated, matched: analysis.matched }
 }
 
-const listEditableMdxFiles = async (): Promise<string[]> => {
-  const files: string[] = []
-
-  const walk = async (directory: string): Promise<void> => {
-    let entries: Dirent[]
-    try {
-      entries = await fs.readdir(directory, { withFileTypes: true })
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
-      throw error
-    }
-
-    for (const entry of entries) {
-      const fullPath = path.join(directory, entry.name)
-      if (entry.isDirectory()) await walk(fullPath)
-      else if (entry.isFile() && entry.name.endsWith('.mdx')) files.push(fullPath)
-    }
-  }
-
-  for (const family of Object.keys(SIDEBAR_ROOTS)) await walk(path.join(CONTENT_ROOT, family))
-  return files.sort()
-}
-
 const readOptionalFile = async (filePath: string): Promise<string | null> => {
   try {
     return await fs.readFile(filePath, 'utf-8')
@@ -409,12 +392,17 @@ export async function deleteDocument(
 
     const sidebarContent = await readOptionalFile(sidebarPath)
     const sidebarAnalysis = sidebarContent === null ? null : removeSidebarDocId(sidebarContent, family, sidebarId)
-    const mdxFiles = await listEditableMdxFiles()
+    const linkSourceFiles = await listLinkSourceFiles()
 
     snapshots.set(VERCEL_REDIRECTS_FILE, redirectContent)
     if (sidebarContent !== null) snapshots.set(sidebarPath, sidebarContent)
-    for (const filePath of mdxFiles) snapshots.set(filePath, await fs.readFile(filePath, 'utf-8'))
-    mutationOrder = [VERCEL_REDIRECTS_FILE, ...(sidebarAnalysis?.matched ? [sidebarPath] : []), ...mdxFiles, sourcePath]
+    for (const filePath of linkSourceFiles) snapshots.set(filePath, await fs.readFile(filePath, 'utf-8'))
+    mutationOrder = [
+      VERCEL_REDIRECTS_FILE,
+      ...(sidebarAnalysis?.matched ? [sidebarPath] : []),
+      ...linkSourceFiles,
+      sourcePath,
+    ]
 
     if (dryRun) {
       if (verbose) console.log(`Would delete ${sourceRoute.path} and redirect it to ${destinationFull}`)
