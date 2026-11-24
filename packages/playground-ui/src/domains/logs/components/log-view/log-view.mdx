@@ -39,10 +39,36 @@ import {
 
 ## A full panel
 
-This is the sandbox Logs panel in Platform, trimmed. The page owns the query and the filter state, and renders exactly one of error, empty or list below the header.
+This is the sandbox Logs panel in Platform, trimmed. The page owns the query and the filter state. A body component picks exactly one of error, empty or list with early returns, so the panel's frame is written once.
 
 ```tsx
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
+
+function SandboxLogsBody({ logs, lines, logIdMap, openLogId, onLogClick, onClearFilters }: SandboxLogsBodyProps) {
+  if (logs.error) {
+    return (
+      <LogView.Fill>
+        <YourLoadError error={logs.error} onRetry={logs.refetch} />
+      </LogView.Fill>
+    );
+  }
+  if (!logs.isLoading && lines.length === 0 && !logs.hasNextPage) {
+    return <LogView.Empty onClearFilters={onClearFilters} />;
+  }
+  return (
+    <LogView.List
+      logs={lines}
+      logIdMap={logIdMap}
+      order="oldest-first"
+      isLoading={logs.isLoading}
+      hasNextPage={logs.hasNextPage}
+      isFetchingNextPage={logs.isFetchingNextPage}
+      onFetchNextPage={logs.fetchNextPage}
+      featuredLogId={openLogId}
+      onLogClick={onLogClick}
+    />
+  );
+}
 
 function SandboxLogs({ sandboxId }: { sandboxId: string }) {
   const [levels, setLevels] = useState<LogLevel[]>(LEVELS);
@@ -61,6 +87,10 @@ function SandboxLogs({ sandboxId }: { sandboxId: string }) {
     ({ logId }) => setOpenLogId(logId ?? undefined),
   );
   const filtered = filters.length > 0 || levels.length !== LEVELS.length;
+  const clearFilters = () => {
+    setFilters([]);
+    setLevels(LEVELS);
+  };
 
   return (
     <LogView>
@@ -71,34 +101,14 @@ function SandboxLogs({ sandboxId }: { sandboxId: string }) {
         <LogView.Refresh onRefresh={logs.refetch} refreshing={logs.isFetching} />
       </LogView.Header>
 
-      {logs.error ? (
-        <LogView.Fill>
-          <YourLoadError error={logs.error} onRetry={logs.refetch} />
-        </LogView.Fill>
-      ) : !logs.isLoading && lines.length === 0 && !logs.hasNextPage ? (
-        <LogView.Empty
-          onClearFilters={
-            filtered
-              ? () => {
-                  setFilters([]);
-                  setLevels(LEVELS);
-                }
-              : undefined
-          }
-        />
-      ) : (
-        <LogView.List
-          logs={lines}
-          logIdMap={logIdMap}
-          order="oldest-first"
-          isLoading={logs.isLoading}
-          hasNextPage={logs.hasNextPage}
-          isFetchingNextPage={logs.isFetchingNextPage}
-          onFetchNextPage={logs.fetchNextPage}
-          featuredLogId={openLogId}
-          onLogClick={handleLogClick}
-        />
-      )}
+      <SandboxLogsBody
+        logs={logs}
+        lines={lines}
+        logIdMap={logIdMap}
+        openLogId={openLogId}
+        onLogClick={handleLogClick}
+        onClearFilters={filtered ? clearFilters : undefined}
+      />
 
       <LogDataPanel
         log={featuredLog ?? undefined}

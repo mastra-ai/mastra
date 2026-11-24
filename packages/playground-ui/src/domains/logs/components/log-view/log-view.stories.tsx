@@ -64,6 +64,20 @@ interface CompositionProps {
   onLogClick?: (log: LogRecord) => void;
 }
 
+type CompositionBodyProps = Omit<
+  CompositionProps,
+  'logs' | 'filters' | 'search' | 'fieldChips' | 'initialFilters' | 'onRefresh'
+> & {
+  lines: LogRecord[];
+  logIdMap: Map<LogRecord, string>;
+  onClearFilters?: () => void;
+};
+
+function CompositionBody({ lines, onClearFilters, ...listProps }: CompositionBodyProps) {
+  if (!listProps.isLoading && lines.length === 0) return <LogView.Empty onClearFilters={onClearFilters} />;
+  return <LogView.List logs={lines} {...listProps} />;
+}
+
 function Composition({
   logs: allLogs,
   filters = true,
@@ -81,6 +95,10 @@ function Composition({
   );
   const logIdMap = new Map(allLogs.map((log, index) => [log, `line-${index}`]));
   const filtered = items.length > 0 || levels.length !== LEVELS.length;
+  const clearFilters = () => {
+    setItems([]);
+    setLevels(LEVELS);
+  };
 
   return (
     <LogView>
@@ -98,20 +116,12 @@ function Composition({
         )}
         <LogView.Refresh onRefresh={onRefresh} />
       </LogView.Header>
-      {!listProps.isLoading && lines.length === 0 ? (
-        <LogView.Empty
-          onClearFilters={
-            filtered
-              ? () => {
-                  setItems([]);
-                  setLevels(LEVELS);
-                }
-              : undefined
-          }
-        />
-      ) : (
-        <LogView.List logs={lines} logIdMap={logIdMap} {...listProps} />
-      )}
+      <CompositionBody
+        lines={lines}
+        logIdMap={logIdMap}
+        onClearFilters={filtered ? clearFilters : undefined}
+        {...listProps}
+      />
     </LogView>
   );
 }
