@@ -21,7 +21,7 @@ const MAX_PATH_SEGMENT_LENGTH = 128;
 const MAX_SOCKET_PATH_BYTES = 104;
 // The longest name a socket in a scope directory gets: `/<16 hex>.sock`.
 const MAX_SOCKET_NAME_BYTES = 22;
-const HASHED_SCOPE_DIR = /^_h[0-9a-f]{16}$/;
+const HASHED_SCOPE_DIR = /^_h[0-9a-f]{16}$/i;
 const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const DISCOVERY_REPLY_TOPIC = new RegExp(`^agent\\.thread-(?:peer|owner)-discovery\\.${UUID_PATTERN}$`, 'i');
 const IDLE_ACCEPTANCE_REPLY_TOPIC = new RegExp(`^agent\\.thread-stream\\..+\\.idle-acceptance\\.${UUID_PATTERN}$`, 'i');

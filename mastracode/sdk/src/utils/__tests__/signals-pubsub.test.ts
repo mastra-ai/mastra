@@ -733,12 +733,15 @@ describe('SignalsPubSub', () => {
       const lookalikeResourceId = hashedDir.slice(macRoot.length + 1);
       expect(lookalikeResourceId).toMatch(/^_h[0-9a-f]{16}$/);
 
-      const lookalike = createSignalsPubSub(lookalikeResourceId, { rootDir: macRoot });
-      await lookalike.publish('workflows', event);
+      // The uppercase spelling names the same directory on case-insensitive volumes such as default APFS.
+      for (const id of [lookalikeResourceId, `_h${lookalikeResourceId.slice(2).toUpperCase()}`]) {
+        const lookalike = createSignalsPubSub(id, { rootDir: macRoot });
+        await lookalike.publish('workflows', event);
 
-      const lookalikeDir = socketPaths().at(-1)!.slice(0, socketPaths().at(-1)!.lastIndexOf('/'));
-      expect(lookalikeDir).toMatch(new RegExp(`^${macRoot}/_h[0-9a-f]{16}$`));
-      expect(lookalikeDir).not.toBe(hashedDir);
+        const lookalikeDir = socketPaths().at(-1)!.slice(0, socketPaths().at(-1)!.lastIndexOf('/'));
+        expect(lookalikeDir).toMatch(new RegExp(`^${macRoot}/_h[0-9a-f]{16}$`));
+        expect(lookalikeDir.toLowerCase()).not.toBe(hashedDir);
+      }
     });
 
     it('rejects a socket root too long to fit any socket path', async () => {
