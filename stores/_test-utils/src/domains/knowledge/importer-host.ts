@@ -1161,7 +1161,7 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       let pending = true;
       while (pending && seq < 10) {
         seq++;
-        pending = (await flushOnce(host, first.runId, first.generation, seq, [])).pending;
+        pending = (await flushOnce(host, first.runId, first.generation, seq, [])).pending === true;
       }
       expect(pending).toBe(false);
       await host.finishRun({
