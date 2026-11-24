@@ -2214,11 +2214,17 @@ export class ObservationalMemory {
    *
    * Messages with observation markers are always saved (upserted) even if sealed,
    * because the markers need to be persisted to storage.
+   *
+   * `rememberedIds` are the ids of messages that were loaded from storage at the start
+   * of the turn. A sealed one holding a completed boundary is upserted onto its stored
+   * row, so if that row is gone the message was deleted during the turn and is not saved
+   * back. A boundary holder that is not remembered is this turn's own and has no row yet.
    */
   async persistMessages(
     messagesToSave: MastraDBMessage[],
     threadId: string,
     resourceId: string | undefined,
+    rememberedIds?: ReadonlySet<string>,
   ): Promise<void> {
     const filteredMessages: MastraDBMessage[] = [];
     for (const msg of messagesToSave) {
@@ -2231,6 +2237,24 @@ export class ObservationalMemory {
         }
       } else {
         filteredMessages.push(msg);
+      }
+    }
+
+    const rememberedHolderIds = filteredMessages
+      .filter(
+        msg =>
+          rememberedIds?.has(msg.id) && (msg.content?.metadata as { mastra?: { sealed?: boolean } })?.mastra?.sealed,
+      )
+      .map(msg => msg.id);
+    if (rememberedHolderIds.length > 0) {
+      const stored = new Set(
+        (await this.storage.listMessagesById({ messageIds: rememberedHolderIds })).messages.map(m => m.id),
+      );
+      const deleted = new Set(rememberedHolderIds.filter(id => !stored.has(id)));
+      if (deleted.size > 0) {
+        for (let i = filteredMessages.length - 1; i >= 0; i--) {
+          if (deleted.has(filteredMessages[i]!.id)) filteredMessages.splice(i, 1);
+        }
       }
     }
 
@@ -2974,7 +2998,12 @@ ${formattedMessages}
         }
 
         if (messagesToSave.length > 0) {
-          await this.persistMessages(messagesToSave, threadId, resourceId);
+          await this.persistMessages(
+            messagesToSave,
+            threadId,
+            resourceId,
+            new Set(messageList.get.remembered.db().map(m => m.id)),
+          );
         }
 
         omDebug(`[OM:cleanupMarker] removed ${idsToRemove.length} messages, saved ${messagesToSave.length}`);

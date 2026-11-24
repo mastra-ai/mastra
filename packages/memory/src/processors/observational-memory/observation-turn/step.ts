@@ -708,7 +708,12 @@ export class ObservationStep {
       }
 
       if (messagesToSeal.length > 0) {
-        await om.persistMessages(messagesToSeal, threadId, resourceId);
+        await om.persistMessages(
+          messagesToSeal,
+          threadId,
+          resourceId,
+          new Set(this.turn.messageList.get.remembered.db().map(m => m.id)),
+        );
       }
     }
 
