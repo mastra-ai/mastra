@@ -39,7 +39,11 @@ export default defineConfig({
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
-          setupFiles: ['@internal/test-utils/setup', path.resolve(__dirname, 'vitest.no-isolate-setup.ts')],
+          setupFiles: [
+            '@internal/test-utils/setup',
+            path.resolve(__dirname, 'vitest.no-isolate-setup.ts'),
+            path.resolve(__dirname, 'vitest.registry-guard-setup.ts'),
+          ],
           // Files share their worker's module cache, which removes most of the import cost.
           // Files that touch process-wide state run in the isolated project below; see the header of
           // vitest.isolated-tests.ts before adding a test that mocks modules or sets env at import.
@@ -63,7 +67,7 @@ export default defineConfig({
           name: 'unit:packages/core-isolated',
           environment: 'node',
           include: isolatedTestFiles,
-          setupFiles: ['@internal/test-utils/setup'],
+          setupFiles: ['@internal/test-utils/setup', path.resolve(__dirname, 'vitest.registry-guard-setup.ts')],
           testTimeout: 120000,
           env: unitEnv,
         },
