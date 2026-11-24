@@ -38,11 +38,11 @@ export function createKnowledgeHeldScopeTests(createStore: () => Promise<Knowled
     it('knowledge_read lists every held scope with its role and what the caller can do there', async () => {
       const { scopes } = await call('knowledge_read');
       expect(scopes).toEqual([
-        { address: 'org:acme', role: 'editor', can: 'write', empty: true },
-        { address: 'agent:support', can: 'none', empty: true },
-        { address: 'docs:acme', role: 'viewer', can: 'read', empty: true },
-        { address: 'resource:user-abhi', role: 'owner', can: 'write', empty: true },
-        { address: 'thread:t-abhi-1', role: 'owner', can: 'write', empty: true },
+        { address: 'org:acme', name: 'org:acme', role: 'editor', can: 'write', empty: true },
+        { address: 'agent:support', name: 'agent:support', can: 'none', empty: true },
+        { address: 'docs:acme', name: 'docs:acme', role: 'viewer', can: 'read', empty: true },
+        { address: 'resource:user-abhi', name: 'resource:user-abhi', role: 'owner', can: 'write', empty: true },
+        { address: 'thread:t-abhi-1', name: 'thread:t-abhi-1', role: 'owner', can: 'write', empty: true },
       ]);
     });
 

@@ -677,7 +677,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         return {
           scopes: (await heldScopes(run)).map(({ address, page, role, can }) => ({
             address,
-            ...(page ? { name: page.name } : {}),
+            name: page?.name ?? address,
             ...(page?.description ? { description: page.description } : {}),
             ...(role ? { role } : {}),
             can,
