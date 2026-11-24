@@ -405,7 +405,7 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
 
 ### Board tool-result rules
 

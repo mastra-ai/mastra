@@ -19,7 +19,16 @@ export type FactoryCardPlacementResult = Awaited<ReturnType<typeof moveCardToBoa
  * The host picks one engine per deployment with `MastraFactory`'s `boardEngine` option.
  */
 export interface FactoryBoardEngine {
-  /** Asks to move a card; the engine may refuse, and answers with the board's verdict. */
+  /**
+   * Asks to move a card; the engine may refuse, and answers with the board's verdict.
+   *
+   * A request is identified by its `ingress.identity`, and the same move can be requested more
+   * than once under one identity, from different places and concurrently: an agent's tool result
+   * asks right away, and the dispatcher replays the queued decision later. The engine must give
+   * every request with an identity it has already answered that first verdict (a lost revision
+   * race, `stale`, excepted), whatever else differs between the requests. The default engine
+   * gets this from the transition service, which records each verdict under its identity.
+   */
   requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult>;
   /** Asks to file a card on a board and phase without a transition; the engine may answer `skipped`. */
   requestPlacement(placement: FactoryCardPlacement): Promise<FactoryCardPlacementResult>;
