@@ -348,23 +348,28 @@ function toolText(result: { content: Array<{ type: string; text: string }> }): a
 /**
  * WorkOS user management as the resolver calls it: users by id, and each
  * user's active memberships. `members` is mutable so a test can remove someone,
- * and `status.down` makes every lookup fail with a 500.
+ * and `down` makes users or memberships lookups fail with a 500.
  */
-function workosDirectory(members: Record<string, string[]>, status = { down: false }) {
+function workosDirectory(members: Record<string, string[]>, down = { users: false, memberships: false }) {
   const people: Record<string, { firstName: string; lastName: string; email: string }> = {
     alice: { firstName: 'Alice', lastName: 'Liddell', email: 'alice@example.com' },
     bob: { firstName: 'Bob', lastName: 'Builder', email: 'bob@example.com' },
   };
   const userManagement = {
     getUser: async (userId: string) => {
-      if (status.down) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+      if (down.users) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
       const person = people[userId];
       if (!person) throw Object.assign(new Error('User not found'), { status: 404 });
       return { id: userId, profilePictureUrl: null, ...person };
     },
-    listOrganizationMemberships: async ({ userId, organizationId }: { userId: string; organizationId: string }) => ({
-      data: (members[userId] ?? []).filter(orgId => orgId === organizationId).map(orgId => ({ organizationId: orgId })),
-    }),
+    listOrganizationMemberships: async ({ userId, organizationId }: { userId: string; organizationId: string }) => {
+      if (down.memberships) throw Object.assign(new Error('Internal Server Error'), { status: 500 });
+      return {
+        data: (members[userId] ?? [])
+          .filter(orgId => orgId === organizationId)
+          .map(orgId => ({ organizationId: orgId })),
+      };
+    },
   };
   return createWorkosMcpCallerResolver(
     userManagement as unknown as Parameters<typeof createWorkosMcpCallerResolver>[0],
@@ -482,15 +487,22 @@ describe('Factory MCP server', () => {
     expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(500);
   });
 
-  it('a failed membership lookup is a server error, not access', async () => {
-    const status = { down: true };
-    const { url } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }, status) });
+  it('a failed user or membership lookup is a server error, not access', async () => {
+    const down = { users: true, memberships: false };
+    const { url } = await setup({ resolveCaller: workosDirectory({ alice: ['org-1'] }, down) });
 
-    const response = await claudeRequest(url, 'server/discover', {}, 'token-alice');
-    expect(response.status).toBe(500);
-    expect(response.headers.get('WWW-Authenticate')).toBeNull();
+    const usersDown = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(usersDown.status).toBe(500);
+    expect(usersDown.headers.get('WWW-Authenticate')).toBeNull();
 
-    status.down = false;
+    Object.assign(down, { users: false, memberships: true });
+    const membershipsDown = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(membershipsDown.status).toBe(500);
+    expect(membershipsDown.headers.get('WWW-Authenticate')).toBeNull();
+    // An unknown user doesn't hide the outage, whichever lookup answers first.
+    expect((await claudeRequest(url, 'server/discover', {}, 'token-mallory')).status).toBe(500);
+
+    down.memberships = false;
     expect((await claudeRequest(url, 'server/discover', {}, 'token-alice')).status).toBe(200);
   });
 

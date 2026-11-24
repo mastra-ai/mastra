@@ -19,18 +19,18 @@ type UserManagement = Pick<WorkOS['userManagement'], 'getUser' | 'listOrganizati
  */
 export function createWorkosMcpCallerResolver(userManagement: UserManagement): McpCallerResolver {
   return async ({ userId, orgId }) => {
-    let user;
-    let memberships;
-    try {
-      [user, memberships] = await Promise.all([
-        userManagement.getUser(userId),
-        userManagement.listOrganizationMemberships({ userId, organizationId: orgId, statuses: ['active'] }),
-      ]);
-    } catch (error) {
-      if (isNotFound(error)) return null;
-      throw error;
+    // Settle both so an outage in either is reported, whichever answers first.
+    const [userResult, membershipsResult] = await Promise.allSettled([
+      userManagement.getUser(userId),
+      userManagement.listOrganizationMemberships({ userId, organizationId: orgId, statuses: ['active'] }),
+    ]);
+    if (membershipsResult.status === 'rejected') throw membershipsResult.reason;
+    if (userResult.status === 'rejected') {
+      if (isNotFound(userResult.reason)) return null;
+      throw userResult.reason;
     }
-    if (!memberships.data.some(membership => membership.organizationId === orgId)) return null;
+    const user = userResult.value;
+    if (!membershipsResult.value.data.some(membership => membership.organizationId === orgId)) return null;
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
     return {
       userId: user.id,
