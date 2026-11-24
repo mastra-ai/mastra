@@ -868,30 +868,10 @@ export class Memory extends MastraMemory {
       }
 
       const memoryStore = await this.getMemoryStore();
-      let semanticBranchSegments: ThreadBranchSegment[] | undefined;
-      if (config.semanticRecall && vectorSearchString) {
-        if (resourceScope && resourceId) {
-          const resourceThreads = await listRawThreads(memoryStore, resourceId);
-          const resourceHasReadyBranch = resourceThreads.some(
-            thread => parseThreadBranchMetadata(thread)?.state === 'ready',
-          );
-          if (resourceHasReadyBranch) {
-            const resolved = await resolveThreadBranchSegments(memoryStore, threadId, resourceThreads);
-            if (!resolved) {
-              throw createThreadBranchError(
-                'BRANCH_INVALID_REQUEST',
-                'Semantic recall for a resource containing branches requires an existing threadId.',
-              );
-            }
-            semanticBranchSegments = resolved.segments;
-          }
-        } else {
-          const participation = await getThreadBranchParticipation(memoryStore, threadId);
-          if (participation.participant) {
-            semanticBranchSegments = (await resolveThreadBranchSegments(memoryStore, threadId))?.segments;
-          }
-        }
-      }
+      const semanticBranchSegments =
+        config.semanticRecall && vectorSearchString
+          ? await this.resolveSemanticBranchSegments(memoryStore, threadId, resourceScope ? resourceId : undefined)
+          : undefined;
 
       let usage: { tokens: number } | undefined;
 
@@ -936,7 +916,10 @@ export class Memory extends MastraMemory {
                     userFilter,
                     query: (topK, branchFilter) =>
                       this.vector!.query({
-                        indexName,
+                        // The SemanticRecall processor writes rows to a configured custom index.
+                        indexName:
+                          (typeof config.semanticRecall === 'object' ? config.semanticRecall.indexName : undefined) ??
+                          indexName,
                         queryVector: embedding,
                         topK,
                         filter: branchFilter,
@@ -1296,8 +1279,13 @@ export class Memory extends MastraMemory {
         }
 
         const previousAccepted = latestTupleByThread.get(message.threadId!);
+        // A row re-saved at its stored timestamp keeps its stored place, which generated-message
+        // normalization may already have put before a generated row from an earlier save.
+        const unchangedStoredRow =
+          existing && new Date(existing.createdAt).getTime() === new Date(message.createdAt).getTime();
         if (
           !existingGenerated &&
+          !unchangedStoredRow &&
           mixedTrustedBatch &&
           previousAccepted &&
           compareMessageTuples(message, previousAccepted) <= 0
@@ -2516,7 +2504,14 @@ ${workingMemory}`;
   }
 
   private async saveMessagesInternal(
-    { messages, memoryConfig, observabilityContext, embeddedMessages, thread }: GeneratedMessagePersistenceInput,
+    {
+      messages,
+      memoryConfig,
+      observabilityContext,
+      embeddedMessages,
+      thread,
+      skipVectors,
+    }: GeneratedMessagePersistenceInput,
     generatedMessageIds: readonly string[],
   ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
@@ -2559,7 +2554,7 @@ ${workingMemory}`;
       );
 
       const usage =
-        this.vector && config.semanticRecall
+        this.vector && config.semanticRecall && !skipVectors
           ? await this.writeMessageVectors({
               items: updatedMessages.map(message => ({ message })),
               config,
@@ -4899,10 +4894,49 @@ Notes:
     return async (input: StorageListMessagesInput) => queryThreadMessages(await this.getMemoryStore(), input);
   }
 
+  /**
+   * The branch path semantic recall must search, or undefined when the thread (or, for
+   * resource scope, the resource) has no ready branch and plain recall applies.
+   */
+  private async resolveSemanticBranchSegments(
+    memoryStore: MemoryStorage,
+    threadId: string,
+    resourceId: string | undefined,
+  ): Promise<ThreadBranchSegment[] | undefined> {
+    if (resourceId) {
+      const resourceThreads = await listRawThreads(memoryStore, resourceId);
+      const resourceHasReadyBranch = resourceThreads.some(
+        thread => parseThreadBranchMetadata(thread)?.state === 'ready',
+      );
+      if (!resourceHasReadyBranch) return undefined;
+      const resolved = await resolveThreadBranchSegments(memoryStore, threadId, resourceThreads);
+      if (!resolved) {
+        throw createThreadBranchError(
+          'BRANCH_INVALID_REQUEST',
+          'Semantic recall for a resource containing branches requires an existing threadId.',
+        );
+      }
+      return resolved.segments;
+    }
+    const participation = await getThreadBranchParticipation(memoryStore, threadId);
+    if (!participation.participant) return undefined;
+    return (await resolveThreadBranchSegments(memoryStore, threadId))?.segments;
+  }
+
   protected override getSemanticRecallMessageRetriever(semanticRecall: MemoryConfigInternal['semanticRecall']) {
     if (!semanticRecall) return undefined;
 
+    const resourceScope =
+      semanticRecall === true || (typeof semanticRecall === 'object' && semanticRecall.scope !== 'thread');
     return async ({ query, threadId, resourceId }: { query: string; threadId: string; resourceId?: string }) => {
+      // Without a branch on the recall path the processor's own search applies unchanged.
+      const memoryStore = await this.getMemoryStore();
+      const segments = await this.resolveSemanticBranchSegments(
+        memoryStore,
+        threadId,
+        resourceScope ? resourceId : undefined,
+      );
+      if (!segments) return undefined;
       const result = await this.recall({
         threadId,
         ...(resourceId ? { resourceId } : {}),

@@ -409,6 +409,28 @@ describe('branch mutation integrity', () => {
     expect(saveStorage).not.toHaveBeenCalled();
   });
 
+  it('accepts re-saving a mixed batch whose stored rows were already reordered by generated normalization', async () => {
+    await memory.createThread({ threadId: 'ordinary', resourceId });
+    const at = (ms: number) => new Date(forkTime.getTime() + ms);
+    const lateSignal = message('late-signal', 'ordinary', at(11));
+    await memory.saveMessages({ messages: [lateSignal] });
+    const earlyUser = message('early-user', 'ordinary', at(1));
+    const reply = message('reply', 'ordinary', at(5));
+    // The reply is placed after the stored tail, so it now sorts after the signal.
+    await persistGeneratedMessages(memory, { messages: [earlyUser, reply] }, [reply.id]);
+    const storedReply = (await store.listMessagesById({ messageIds: [reply.id] })).messages[0]!;
+    expect(storedReply.createdAt.getTime()).toBeGreaterThan(lateSignal.createdAt.getTime());
+
+    await expect(
+      persistGeneratedMessages(memory, { messages: [earlyUser, reply, lateSignal] }, [reply.id]),
+    ).resolves.toBeDefined();
+
+    const backdated = message('zzz-backdated', 'ordinary', at(2));
+    await expect(
+      persistGeneratedMessages(memory, { messages: [earlyUser, reply, backdated] }, [reply.id]),
+    ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+  });
+
   it('validates raw observational-memory persistence and its generated provenance', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(forkTime.getTime());
     const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });

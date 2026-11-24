@@ -20,7 +20,7 @@ type SemanticRecallMessageRetriever = (args: {
   query: string;
   threadId: string;
   resourceId?: string;
-}) => Promise<MastraDBMessage[]>;
+}) => Promise<MastraDBMessage[] | undefined>;
 
 export interface SemanticRecallOptions {
   /**
@@ -448,9 +448,8 @@ export class SemanticRecall implements Processor {
     threadId: string;
     resourceId?: string;
   }): Promise<MastraDBMessage[]> {
-    if (this.messageRetriever) {
-      return this.messageRetriever({ query, threadId, resourceId });
-    }
+    const retrieved = await this.messageRetriever?.({ query, threadId, resourceId });
+    if (retrieved) return retrieved;
 
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();

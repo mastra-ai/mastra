@@ -1144,7 +1144,7 @@ describe('MessageHistory', () => {
         threadId: 'thread-1',
       });
 
-      expect(persistMessages).toHaveBeenCalledWith({ messages: [generated] }, [generated.id]);
+      expect(persistMessages).toHaveBeenCalledWith({ messages: [generated], skipVectors: true }, [generated.id]);
     });
 
     it('delegates missing-thread creation to validated persistence without raw storage side effects', async () => {
@@ -1177,6 +1177,7 @@ describe('MessageHistory', () => {
         {
           messages: [generated],
           thread: expect.objectContaining({ id: 'thread-1', resourceId: 'resource-1' }),
+          skipVectors: true,
         },
         [generated.id],
       );
@@ -1210,6 +1211,7 @@ describe('MessageHistory', () => {
         {
           messages: [explicit],
           thread: expect.objectContaining({ id: 'thread-1', resourceId: 'resource-1' }),
+          skipVectors: true,
         },
         [],
       );
@@ -1245,7 +1247,9 @@ describe('MessageHistory', () => {
         resourceId: 'resource-1',
       });
 
-      expect(persistMessages).toHaveBeenCalledWith({ messages: [explicit, generated] }, [generated.id]);
+      expect(persistMessages).toHaveBeenCalledWith({ messages: [explicit, generated], skipVectors: true }, [
+        generated.id,
+      ]);
     });
 
     it('should drop transient signals but keep normal signals when persisting', async () => {

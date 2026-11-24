@@ -622,10 +622,11 @@ https://mastra.ai/en/docs/memory/overview`,
       /** @internal See `MastraMemory.saveMessages`. */
       embeddedMessages?: Map<string, string>;
       thread?: StorageThreadType;
+      skipVectors?: boolean;
     },
     _generatedMessageIds: readonly string[],
   ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
-    const { thread: _thread, ...saveArgs } = args;
+    const { thread: _thread, skipVectors: _skipVectors, ...saveArgs } = args;
     return this.saveMessages(saveArgs);
   }
 
@@ -884,7 +885,9 @@ https://mastra.ai/en/docs/memory/overview`,
 
   protected getSemanticRecallMessageRetriever(
     _semanticRecall: MemoryConfigInternal['semanticRecall'],
-  ): ((args: { query: string; threadId: string; resourceId?: string }) => Promise<MastraDBMessage[]>) | undefined {
+  ):
+    | ((args: { query: string; threadId: string; resourceId?: string }) => Promise<MastraDBMessage[] | undefined>)
+    | undefined {
     return undefined;
   }
 

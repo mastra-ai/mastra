@@ -27,7 +27,7 @@ export interface MessageHistoryOptions {
   listMessages?: (input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>;
   /** @internal Framework persistence hook used to preserve Memory-level mutation guarantees. */
   persistMessages?: (
-    input: { messages: MastraDBMessage[]; thread?: StorageThreadType },
+    input: { messages: MastraDBMessage[]; thread?: StorageThreadType; skipVectors?: boolean },
     generatedMessageIds: readonly string[],
   ) => Promise<{ messages: MastraDBMessage[] }>;
   /** @internal Whether the persistence hook atomically creates a supplied missing thread. */
@@ -402,13 +402,16 @@ export class MessageHistory implements Processor {
     const persistedIds = new Set(filtered.map(message => message.id));
     const persistedGeneratedIds = generatedMessageIds.filter(messageId => persistedIds.has(messageId));
     if (this.persistMessagesHook && (persistedGeneratedIds.length > 0 || this.persistMessagesCreatesThread)) {
-      await this.persistMessagesHook({ messages: filtered, thread: threadToCreate }, persistedGeneratedIds);
+      await this.persistMessagesHook(
+        { messages: filtered, thread: threadToCreate, skipVectors: true },
+        persistedGeneratedIds,
+      );
       return;
     }
 
     if (threadToCreate) await this.storage.saveThread({ thread: threadToCreate });
     if (this.persistMessagesHook) {
-      await this.persistMessagesHook({ messages: filtered }, persistedGeneratedIds);
+      await this.persistMessagesHook({ messages: filtered, skipVectors: true }, persistedGeneratedIds);
       return;
     }
     await this.storage.saveMessages({ messages: filtered });

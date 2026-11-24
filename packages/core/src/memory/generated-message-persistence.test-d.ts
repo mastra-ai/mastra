@@ -16,6 +16,7 @@ describe('@mastra/core/memory/internal generated-message persistence types', () 
       observabilityContext?: Parameters<MastraMemory['saveMessages']>[0]['observabilityContext'];
       embeddedMessages?: Map<string, string>;
       thread?: StorageThreadType;
+      skipVectors?: boolean;
     }>();
     expectTypeOf(persistGeneratedMessages).parameter(0).toEqualTypeOf<MastraMemory>();
     expectTypeOf(persistGeneratedMessages).parameter(2).toEqualTypeOf<readonly string[]>();
