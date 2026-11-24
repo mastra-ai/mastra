@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Memory } from '@mastra/memory';
+import type { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 interface BranchingTestContext {

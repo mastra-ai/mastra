@@ -1,4 +1,5 @@
-import { MessageList, type MastraDBMessage } from '@mastra/core/agent';
+import { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraVector, QueryResult } from '@mastra/core/vector';

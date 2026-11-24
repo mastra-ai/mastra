@@ -24,8 +24,8 @@ import {
   getLastObservedMessageCursor,
   sortThreadsByOldestMessage,
 } from '../message-utils';
-import { buildMessageRange } from '../observational-memory';
 import type { ObservationGroup } from '../observation-groups';
+import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
 import { getMaxThreshold } from '../thresholds';
