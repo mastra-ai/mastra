@@ -119,10 +119,22 @@ const streamLines = [
 
 export const Stream: Story = {
   render: () => (
-    <div className="h-80">
-      <LogsDataList columns="minmax(0,1fr)" fit="container" variant="light" density="compact">
+    <div className="flex h-80 flex-col">
+      <LogsDataList
+        columns="auto auto minmax(0,1fr)"
+        fit="container"
+        variant="well"
+        density="compact"
+        mask={false}
+        className="flex-1"
+      >
+        <LogsDataList.Top>
+          <LogsDataList.TopCell>Time</LogsDataList.TopCell>
+          <LogsDataList.TopCell>Level</LogsDataList.TopCell>
+          <LogsDataList.TopCell>Message</LogsDataList.TopCell>
+        </LogsDataList.Top>
         {streamLines.map(line => (
-          <LogsDataList.RowButton key={line.id} onClick={fn()}>
+          <LogsDataList.RowButton key={line.id} onClick={fn()} variant={line.level === 'error' ? 'error' : 'default'}>
             <LogsDataList.LineCell
               timestamp={line.timestamp}
               level={line.level}
