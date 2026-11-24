@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-23",
+  "updated": "2026-11-24",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -25513,9 +25513,9 @@
     },
     "packages/playground-ui/src/theme-export.test.ts": {
       "tier": "in",
-      "since": "2026-10-27",
-      "last_failure": "2026-11-18",
-      "reason": "pr-catch",
+      "since": "2026-11-24",
+      "last_failure": "2026-11-24",
+      "reason": "versioning-fail",
       "pr_failures": {
         "134468406231": {
           "date": "2026-11-18",
