@@ -101,11 +101,6 @@ function StudioThreadFeatures({
     }
   };
 
-  // Only persisted messages have UUID ids; the chat accumulator renders
-  // streamed messages under synthetic ids that the server cannot fork at.
-  const PERSISTED_MESSAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const canBranchMessage = (messageId: string) => canBranch && !isRunning && PERSISTED_MESSAGE_ID.test(messageId);
-
   const renderMessageFooter = (message: MastraDBMessage) =>
     canBranchMessage(message.id) ? (
       <BranchFromMessageAction

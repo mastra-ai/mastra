@@ -4,7 +4,7 @@ import { GitFork } from 'lucide-react';
 export const BranchFromMessageAction = ({ onBranch, disabled }: { onBranch: () => void; disabled?: boolean }) => (
   <Button
     variant="ghost"
-    size="icon-xs"
+    size="icon-sm"
     tooltip="Branch from here"
     aria-label="Branch from here"
     onClick={onBranch}
