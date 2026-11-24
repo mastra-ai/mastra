@@ -161,10 +161,7 @@ function parseFactoryReviewCommand(
  * a session is not woken by what it wrote.
  */
 export function activitySignalFor(
-  context: Pick<
-    FactoryGithubRuleContext,
-    'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'
-  >,
+  context: Pick<FactoryGithubRuleContext, 'event' | 'item' | 'actor' | 'ingress' | 'repository' | 'issue' | 'issueComment'>,
 ): FactorySignalActivityDecision | undefined {
   const event =
     context.event === 'issueCommentCreated'
@@ -243,10 +240,7 @@ export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 
       return { type: 'pull_request.reopened' };
     case 'issueClosed': {
       const stateReason = context.issue?.stateReason;
-      return {
-        type: 'work_item.closed',
-        reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate'),
-      };
+      return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
     }
     default:
       return undefined;
@@ -681,8 +675,9 @@ export class GithubRules {
       actor: { ...actor },
       // A pull request update carries who made it: run approval reads the actor, not the author.
       // Factory's own app is never a collaborator; its authorship is its trust signal.
-      event: isPullRequestEvent(event.type)
-        ? { ...event, actorTrusted: actor.type === 'github' && (actor.trusted || actor.factoryAuthored) }
+      event:
+        isPullRequestEvent(event.type) ?
+          { ...event, actorTrusted: actor.type === 'github' && (actor.trusted || actor.factoryAuthored) }
         : event,
       fromCardSession,
     });
@@ -788,7 +783,8 @@ export class GithubRules {
     const holders = [
       card,
       ...shared.filter(
-        item => item.id !== card.id && attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber),
+        item =>
+          item.id !== card.id && attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber),
       ),
     ];
     const reopened = await Promise.all(
@@ -865,12 +861,9 @@ export class GithubRules {
       null,
     );
     // A pull request intake turned away arrives again, now that it may match a board's rule.
-    if (!item)
-      return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, pullRequestNumber, 'pull-request');
+    if (!item) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, pullRequestNumber, 'pull-request');
     const ownCard = item.externalSource?.type === 'pull-request';
-    const attached = ownCard
-      ? undefined
-      : attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber);
+    const attached = ownCard ? undefined : attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber);
     if (!ownCard && !attached) return { status: 'ignored' };
     const labelChange = action === 'labeled' || action === 'unlabeled';
     const delta =
@@ -936,6 +929,7 @@ export class GithubRules {
     return { status: queued === 'unchanged' ? 'ignored' : 'committed' };
   }
 
+
   /** `issues` and `pull_request` actions that are not rule events but still update an existing card. */
   #cardSyncHandler(parsed: ParsedGithubWebhook): CardSyncHandler | undefined {
     const action = string(parsed.payload.action);
@@ -985,15 +979,7 @@ export class GithubRules {
     const opened = openedByAuthor(parsed, item);
     if (!opened) return { status: 'ignored' };
     const event = kind === 'issue' ? 'issueOpened' : 'pullRequestOpened';
-    return this.#ingestProject(
-      opened.arrival,
-      event,
-      installationId,
-      repositoryId,
-      repositoryName,
-      opened.login,
-      project,
-    );
+    return this.#ingestProject(opened.arrival, event, installationId, repositoryId, repositoryName, opened.login, project);
   }
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
@@ -1174,7 +1160,8 @@ export class GithubRules {
         ? undefined
         : resolvedItem;
     // An issue or pull request reopened with no card is filed as if its author had just opened it.
-    const reopenedItem = event === 'issueReopened' ? issue : event === 'pullRequestReopened' ? pullRequest : undefined;
+    const reopenedItem =
+      event === 'issueReopened' ? issue : event === 'pullRequestReopened' ? pullRequest : undefined;
     if (reopenedItem && !resolvedItem && string(reopenedItem.state) === 'open') {
       const opened = openedByAuthor(parsed, reopenedItem);
       if (!opened) return { status: 'ignored' };
@@ -1422,8 +1409,7 @@ export class GithubRules {
         const trusted = githubPullRequestTrusted(context);
         // An unknown actor — a polled or system delivery — vouches for nothing. Factory's own
         // app is never a collaborator, so its authorship is its trust signal, as everywhere else.
-        const actorTrusted =
-          context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
+        const actorTrusted = context.actor.type === 'github' && (context.actor.trusted || context.actor.factoryAuthored);
         decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
       }
 
@@ -1570,8 +1556,7 @@ export class GithubRules {
         const recordedState = reviewCard ? reviewCard.workItem.state : attached?.state;
         const stillOpen =
           companionStatus === 'replayed'
-            ? (reviewCard !== undefined || attached !== undefined) &&
-              !['closed', 'merged'].includes(recordedState ?? '')
+            ? (reviewCard !== undefined || attached !== undefined) && !['closed', 'merged'].includes(recordedState ?? '')
             : !['closed', 'merged'].includes(recordedState ?? '');
         if (!stillOpen) return;
         // Only a pull request the card wrote is the one it has out. One filed there because it
@@ -1581,7 +1566,9 @@ export class GithubRules {
         const ownedByCard =
           home?.reason === 'authored' ||
           (home === undefined &&
-            (attached === undefined || pullRequestFactoryAuthored || cardOwnsBranch(authoringItem, headBranch)));
+            (attached === undefined ||
+              pullRequestFactoryAuthored ||
+              cardOwnsBranch(authoringItem, headBranch)));
         if (!ownedByCard) return;
         // The head comes along so a head recorded for an earlier pull
         // request cannot mark this one's verdict outdated.
@@ -2413,14 +2400,10 @@ export function createGithubPullRequestReconciler(
           for (const item of items) {
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
-            if (
-              item.externalSource?.type !== 'pull-request' &&
-              !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)
-            ) {
+            if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
               for (const source of pullRequestSources(item)) {
                 const number = attachedPullRequestNumber(source, repository);
-                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? ''))
-                  attachedOpen.add(number);
+                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
               }
             }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -2510,8 +2493,7 @@ export function createGithubPullRequestReconciler(
           if (state.state !== 'closed') continue;
           const cleanupFailures = new Set<string>();
           for (const card of cards) {
-            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(card), card)?.kind !== 'terminal')
-              continue;
+            if (workItemPhaseSemantics(toBoardSource(options.boards).forProject(card), card)?.kind !== 'terminal') continue;
             try {
               await options.storage.supersedeDecisionsForWorkItem({
                 orgId: card.orgId,
