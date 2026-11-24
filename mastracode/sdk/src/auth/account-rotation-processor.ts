@@ -31,17 +31,16 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { hostModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import { hostModelRoute, requestModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
 import {
   MODEL_FALLBACK_PART_TYPE,
   MODEL_FALLBACK_STATE_KEY,
   modelFallbackNoticeText,
   modelRouteFailureFromError,
-  pendingModelFallbackForThread,
 } from '../model-fallback.js';
 import type { ModelFallbackPartData, ModelFallbackReason, PendingModelFallback } from '../model-fallback.js';
 import { findRouteModelIndex, getCredentialProviderId, normalizeLegacyModelId } from '../providers/model-ids.js';
-import type { ModelRoute, ModelRouteEntry } from '../schema.js';
+import type { ModelRouteEntry } from '../schema.js';
 import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import {
@@ -53,6 +52,16 @@ import {
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore, OAuthAccountRecord } from './types.js';
+
+/** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+export {
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
+  isModelFallbackReason,
+  modelFallbackNoticeText,
+} from '../model-fallback.js';
+/** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+export type { ModelFallbackPartData, PendingModelFallback } from '../model-fallback.js';
 
 export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
 
@@ -477,10 +486,8 @@ function resolveAccountRoute(
   explicit?: ModelRouteEntry,
 ): AccountRoute | null {
   const controller = getRoutingController(args);
-  const state = controller?.getState?.();
-  const pending = pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
-  const route = (state?.modelRoute as ModelRoute | undefined)?.entries;
-  const routeEntries = Array.isArray(route) ? route : [];
+  const { entries, pending } = requestModelRoute(args.requestContext, controller);
+  const routeEntries = entries ?? [];
   const entry = explicit
     ? explicit
     : pending
@@ -755,16 +762,10 @@ export class AccountRotationProcessor implements Processor {
     }
     const controller = getRoutingController(args);
     const state = controller?.getState?.();
-    const hostRoute = hostModelRoute(args.requestContext);
-    const route = hostRoute ?? (state?.modelRoute as ModelRoute | undefined)?.entries;
-    const pending = hostRoute
-      ? null
-      : pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
-    const startIndex = hostRoute
-      ? 0
-      : pending
-        ? route?.findIndex(entry => entry.id === pending.toEntryId)
-        : route && findRouteModelIndex(route, controller?.session?.modelId);
+    const { entries: route, pending } = requestModelRoute(args.requestContext, controller);
+    const startIndex = pending
+      ? route?.findIndex(entry => entry.id === pending.toEntryId)
+      : route && findRouteModelIndex(route, controller?.session?.modelId);
     if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
       args.state.modelRouteCascade = null;
       return null;
