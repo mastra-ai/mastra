@@ -34,7 +34,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
         variant="ghost"
         size="icon-md"
         type="button"
-        tooltip="Connecting…"
+        tooltip="Start voice call"
         data-testid="voice-call-button"
       >
         <IconCall />

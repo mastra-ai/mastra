@@ -27,11 +27,11 @@ export function LogViewRefresh({ onRefresh, refreshing }: LogViewRefreshProps) {
       size="icon-sm"
       variant="ghost"
       onClick={onRefresh}
-      disabled={refreshing}
+      loading={refreshing}
       aria-label="Refresh logs"
       className="ml-auto"
     >
-      <IconArrowRotateClockwise className={refreshing ? 'animate-spin' : undefined} />
+      <IconArrowRotateClockwise />
     </Button>
   );
 }

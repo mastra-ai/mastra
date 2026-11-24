@@ -147,6 +147,8 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
           <IconShareAndroid className="text-muted-foreground" />
         ) : (
+          // The task's status: the button itself only opens the details.
+          // oxlint-disable-next-line playground-ui/button-loading
           <IconLoadingCircle className="animate-spin text-muted-foreground" />
         )}
       </Button>

@@ -51,6 +51,10 @@ tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
       name: 'allows a size that may be an icon size',
       code: jsx("<Button size={compact ? 'icon-sm' : 'sm'}><IconPlusMedium /> {label}</Button>"),
     },
+    {
+      name: 'leaves a loader beside the label to button-loading',
+      code: jsx('<Button>{busy ? <Spinner /> : <IconPlusMedium />} Save {busy && <Spinner />}</Button>'),
+    },
     { name: 'allows an avatar beside the label', code: jsx('<Button><Avatar name="Ada" /> Ada</Button>') },
     { name: 'allows a badge after the label', code: jsx('<Button>Runs <Badge>3</Badge></Button>') },
     { name: 'allows a key hint after the label', code: jsx('<Button>Search <Kbd>K</Kbd></Button>') },
@@ -119,27 +123,27 @@ tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
     },
     {
       name: 'flags an icon that renders on a condition',
-      code: jsx('<Button>{busy && <Spinner />} Save</Button>'),
+      code: jsx('<Button>{busy && <Trash2 />} Save</Button>'),
       errors: [error('icon')],
     },
     {
       name: 'flags an icon with an empty alternative',
-      code: jsx('<Button>{busy ? <Spinner /> : null} Save</Button>'),
+      code: jsx('<Button>{busy ? <Trash2 /> : null} Save</Button>'),
       errors: [error('icon')],
     },
     {
       name: 'flags one of two icons',
-      code: jsx('<Button>{busy ? <Spinner /> : <IconPlusMedium />} Save</Button>'),
+      code: jsx('<Button>{busy ? <Trash2 /> : <IconPlusMedium />} Save</Button>'),
       errors: [error('icon')],
     },
     {
       name: 'flags icons in the branches of a condition, each with its label',
-      code: jsx('<Button>{busy ? <><Spinner /> Saving</> : <><IconPlusMedium /> Save</>}</Button>'),
+      code: jsx('<Button>{busy ? <><Trash2 /> Saving</> : <><IconPlusMedium /> Save</>}</Button>'),
       errors: [error('icon'), error('icon')],
     },
     {
       name: 'flags an icon in one branch only',
-      code: jsx("<Button>{busy ? <><Spinner /> Saving</> : 'Save'}</Button>"),
+      code: jsx("<Button>{busy ? <><Trash2 /> Saving</> : 'Save'}</Button>"),
       errors: [error('icon')],
     },
     {

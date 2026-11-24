@@ -10,6 +10,7 @@
 // Rules (plugin name `playground-ui`):
 //   playground-ui/icon-button-size   a <Button> holding only an icon uses an `icon-*` size
 //   playground-ui/button-icon-prop   an icon beside a <Button>'s label is its `icon` / `iconEnd`, not a child
+//   playground-ui/button-loading     a <Button> shows loading through `loading`: no loader inside, the label stays
 //   playground-ui/text-role          typography comes from a DS text role, not Tailwind's text-sm / text-[13px]
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
@@ -241,12 +242,218 @@ function buttonIconProp(context) {
       const content = contentOf(node);
       for (const prop of components[name]) {
         if (attributes.has(prop)) continue;
-        for (const icon of iconsAtEdge(content, prop, iconImports))
+        for (const icon of iconsAtEdge(content, prop, iconImports)) {
+          // A loader belongs to `loading`, not to `icon`: button-loading reports it.
+          if (branches(icon).some(isLoader)) continue;
           context.report({
             node: icon,
             message: `Pass this icon through <${name}>'s \`${prop}\` prop, not as a child beside the label.`,
           });
+        }
       }
+    },
+  };
+}
+
+// --- button-loading ------------------------------------------------------------------------------------
+// A button shows that its action is running through `loading` alone: no loader of its own inside, and a label
+// that stays the same. A label is only held against the expression its button's `loading` gets, so one that
+// changes with any other state is fine.
+// Options: { components: ['Button'] }, the component names to check.
+const LOADING_BUTTONS = [...Object.keys(BUTTON_ICON_PROPS), 'AlertDialog.Action'];
+
+function attributesOf(element) {
+  const attributes = new Map();
+  for (const attribute of element.openingElement.attributes)
+    if (attribute.type === 'JSXAttribute') attributes.set(jsxName(attribute.name), attribute);
+  return attributes;
+}
+
+// A `Spinner`, or any glyph that spins.
+function isLoader(node) {
+  if (node.type !== 'JSXElement') return false;
+  if (jsxName(node.openingElement.name) === 'Spinner') return true;
+  const className = attributesOf(node).get('className')?.value;
+  return classValues(className).some(value => /(^|[\s:])animate-spin(\s|$)/.test(value));
+}
+
+function buttonLoading(context) {
+  const { components = LOADING_BUTTONS } = context.options[0] ?? {};
+  const names = new Set(components);
+  const iconImports = new Set();
+  const { sourceCode } = context;
+
+  // What `const label = …` holds. A prop, a destructured value or anything reassignable stays unknown.
+  function constantValue(identifier) {
+    for (let scope = sourceCode.getScope(identifier); scope; scope = scope.upper) {
+      const variable = scope.set.get(identifier.name);
+      if (!variable) continue;
+      const declarator = variable.defs.length === 1 ? variable.defs[0].node : undefined;
+      if (declarator?.type !== 'VariableDeclarator' || declarator.parent.kind !== 'const') return undefined;
+      return declarator.id.type === 'Identifier' ? declarator.init : undefined;
+    }
+    return undefined;
+  }
+
+  // The pieces a node renders: its children, the results of its conditions, the values in its template. Props,
+  // callbacks and tests render nothing.
+  function parts(node) {
+    switch (node.type) {
+      case 'JSXExpressionContainer':
+      case 'TSAsExpression':
+      case 'TSNonNullExpression':
+      case 'ParenthesizedExpression':
+        return [node.expression];
+      case 'JSXElement':
+      case 'JSXFragment':
+        return node.children;
+      case 'ConditionalExpression':
+        return [node.consequent, node.alternate];
+      case 'LogicalExpression':
+        return node.operator === '&&' ? [node.right] : [node.left, node.right];
+      case 'BinaryExpression':
+        return [node.left, node.right];
+      case 'TemplateLiteral':
+        return node.expressions;
+      case 'Identifier': {
+        const value = constantValue(node);
+        return value ? [value] : [];
+      }
+      default:
+        return [];
+    }
+  }
+
+  const loadersIn = node => (isLoader(node) ? [node] : parts(node).flatMap(loadersIn));
+
+  function hasText(node) {
+    if (isIcon(node, iconImports)) return false;
+    switch (node.type) {
+      case 'JSXText':
+        return node.value.trim() !== '';
+      case 'Literal':
+        return typeof node.value === 'number' || (typeof node.value === 'string' && node.value.trim() !== '');
+      case 'Identifier':
+        return node.name !== 'undefined' && (constantValue(node) ? parts(node).some(hasText) : true);
+      case 'TemplateLiteral':
+      case 'MemberExpression':
+      case 'ChainExpression':
+      case 'CallExpression':
+        return true;
+      default:
+        return parts(node).some(hasText);
+    }
+  }
+
+  // The expression behind a constant, `!!`, `Boolean()` and TypeScript's wrappers.
+  function unwrap(node) {
+    switch (node.type) {
+      case 'JSXExpressionContainer':
+      case 'ChainExpression':
+      case 'TSAsExpression':
+      case 'TSNonNullExpression':
+      case 'ParenthesizedExpression':
+        return unwrap(node.expression);
+      case 'UnaryExpression':
+        return isNot(node) && isNot(node.argument) ? unwrap(node.argument.argument) : node;
+      case 'CallExpression':
+        return node.callee.name === 'Boolean' && node.arguments.length === 1 ? unwrap(node.arguments[0]) : node;
+      case 'Identifier': {
+        const value = constantValue(node);
+        return value ? unwrap(value) : node;
+      }
+      default:
+        return node;
+    }
+  }
+
+  const isNot = node => node.type === 'UnaryExpression' && node.operator === '!';
+  const textOf = node => sourceCode.getText(unwrap(node)).replace(/\s+/g, '').replaceAll('?.', '.');
+
+  function operands(node, operator) {
+    const value = unwrap(node);
+    if (value.type !== 'LogicalExpression' || value.operator !== operator) return [value];
+    return [...operands(value.left, operator), ...operands(value.right, operator)];
+  }
+
+  // The expressions that are true only while the button loads: what `loading` gets, and each side of its `||`.
+  function loadingStates(element, attributes) {
+    const value = attributes.has('loading') ? attributes.get('loading').value : dialogPending(element);
+    if (!value || value.type === 'Literal') return undefined;
+    const expression = unwrap(value);
+    if (expression.type === 'Literal') return undefined;
+    return new Set([expression, ...operands(expression, '||')].map(textOf));
+  }
+
+  // A DialogAction without `loading` takes its Dialog's `pending`.
+  function dialogPending(element) {
+    if (jsxName(element.openingElement.name) !== 'DialogAction') return undefined;
+    for (let node = element.parent; node; node = node.parent)
+      if (node.type === 'JSXElement' && jsxName(node.openingElement.name) === 'Dialog')
+        return attributesOf(node).get('pending')?.value;
+    return undefined;
+  }
+
+  // Does the button starting to load decide the test? `!saving && saved` isn't decided by `saving`, it only holds
+  // the finished label back until then.
+  function isDecidedBy(states, test) {
+    const value = unwrap(test);
+    if (states.has(textOf(value))) return true;
+    if (isNot(value)) return isDecidedBy(states, value.argument);
+    if (value.type === 'BinaryExpression' && value.operator.startsWith('!='))
+      return states.has(`${textOf(value.left)}${value.operator.replace('!', '=')}${textOf(value.right)}`);
+    if (value.type !== 'LogicalExpression') return false;
+    if (value.operator === '||') return operands(value, '||').some(side => isDecidedBy(states, side));
+    return operands(value, '&&').some(side => states.has(textOf(side)));
+  }
+
+  function changesWith(states, node) {
+    const changes =
+      node.type === 'ConditionalExpression'
+        ? textOf(node.consequent) !== textOf(node.alternate) &&
+          parts(node).some(hasText) &&
+          isDecidedBy(states, node.test)
+        : node.type === 'LogicalExpression' &&
+          node.operator === '&&' &&
+          hasText(node.right) &&
+          isDecidedBy(states, node.left);
+    return changes || parts(node).some(part => changesWith(states, part));
+  }
+
+  // Its content, and the props that name it. An icon button without an `aria-label` is named by its tooltip.
+  function labelsOf(element, attributes) {
+    const labels = [...element.children, attributes.get('children'), attributes.get('aria-label')];
+    const size = literalAttribute(attributes.get('size')?.value);
+    const isIconButton =
+      String(size).startsWith('icon-') ||
+      (element.children.length > 0 && hasOnlyIconChildren(element.children, iconImports));
+    if (isIconButton && !attributes.has('aria-label')) labels.push(attributes.get('tooltip'));
+    return labels.filter(label => label && (label.type !== 'JSXAttribute' || label.value));
+  }
+
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
+    },
+    JSXElement(node) {
+      const name = jsxName(node.openingElement.name);
+      if (!names.has(name)) return;
+      const attributes = attributesOf(node);
+      const content = [...node.children, ...['icon', 'iconEnd'].map(prop => attributes.get(prop)?.value)];
+      for (const loader of content.filter(Boolean).flatMap(loadersIn))
+        context.report({
+          node: loader,
+          message: `Show loading with <${name}>'s \`loading\` prop, not a loader inside it.`,
+        });
+      const states = loadingStates(node, attributes);
+      if (!states) return;
+      for (const label of labelsOf(node, attributes))
+        if (changesWith(states, label.type === 'JSXAttribute' ? label.value : label))
+          context.report({
+            node: label,
+            message: `Keep <${name}>'s label the same while it loads: \`loading\` already shows it.`,
+          });
     },
   };
 }
@@ -603,6 +810,7 @@ const plugin = {
   rules: {
     'icon-button-size': { meta: { type: 'suggestion', schema: false }, create: iconButtonSize },
     'button-icon-prop': { meta: { type: 'suggestion', schema: false }, create: buttonIconProp },
+    'button-loading': { meta: { type: 'suggestion', schema: false }, create: buttonLoading },
     'icon-size-from-parent': { meta: { type: 'suggestion', schema: false }, create: iconSizeFromParent },
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
@@ -636,6 +844,7 @@ export const copyRuleExclusions = {
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
   'playground-ui/button-icon-prop': 'error',
+  'playground-ui/button-loading': 'error',
   'playground-ui/icon-size-from-parent': 'error',
   'playground-ui/text-role': 'error',
   'playground-ui/txt-tone': 'error',

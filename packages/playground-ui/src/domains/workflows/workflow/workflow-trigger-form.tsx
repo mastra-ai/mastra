@@ -16,7 +16,6 @@ export interface WorkflowTriggerFormProps {
   leftActions?: ReactNode;
   headingSlot?: ReactNode;
   collapsible?: boolean;
-  submitButtonLabel?: string;
 }
 
 export function WorkflowTriggerForm({
@@ -30,7 +29,6 @@ export function WorkflowTriggerForm({
   leftActions,
   headingSlot,
   collapsible,
-  submitButtonLabel = 'Run',
 }: WorkflowTriggerFormProps) {
   if (isViewingRun) {
     return headingSlot && <div className="pb-3">{headingSlot}</div>;
@@ -42,7 +40,7 @@ export function WorkflowTriggerForm({
         schema={zodSchema}
         defaultValues={defaultValues}
         isSubmitLoading={isStreaming}
-        submitButtonLabel={submitButtonLabel}
+        submitButtonLabel="Run"
         inputTypeLabel="Next run input"
         submitButtonVariant="primary"
         submitButtonIcon={<IconPlay />}
@@ -64,7 +62,7 @@ export function WorkflowTriggerForm({
         <div className="flex items-center gap-1">
           {submitActions}
           <Button variant="primary" onClick={() => onExecute(null)} icon={<IconPlay />} loading={isStreaming}>
-            {submitButtonLabel}
+            Run
           </Button>
         </div>
       </div>

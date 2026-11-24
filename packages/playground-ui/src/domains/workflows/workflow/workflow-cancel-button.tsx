@@ -22,14 +22,12 @@ export function WorkflowCancelButton({
     return null;
   }
 
-  const label = isCancelling ? 'Cancelling run…' : cancelMessage || 'Cancel workflow run';
-
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon-md"
-      tooltip={label}
+      tooltip={cancelMessage || 'Cancel workflow run'}
       onClick={onCancel}
       disabled={disabled || !!cancelMessage}
       loading={isCancelling}

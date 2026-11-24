@@ -141,12 +141,11 @@ describe('WorkflowTrigger cancellation', () => {
       );
       renderRun();
       fireEvent.click(await screen.findByRole('button', { name: 'Cancel workflow run' }));
-      await screen.findByRole('button', { name: 'Cancelling run…' });
+      await screen.findByRole('button', { name: 'Cancel workflow run', busy: true });
       fireEvent.click(screen.getByRole('button', { name: 'View another run' }));
       finishCancellation();
-      await waitFor(() =>
-        expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel workflow run' }).disabled).toBe(false),
-      );
+      await screen.findByRole('button', { name: 'Cancel workflow run', busy: false });
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel workflow run' }).disabled).toBe(false);
       expect(screen.getByText('another-run')).not.toBeNull();
       expect(screen.getByText('Paused')).not.toBeNull();
       expect(screen.queryByText('Canceled')).toBeNull();

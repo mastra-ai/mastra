@@ -52,7 +52,7 @@ describe('ChatComposer', () => {
     expect(submit.querySelector('.animate-spin')).toBeNull();
   });
 
-  it('shows spinner and Generating tooltip when running, with disabled textarea + submit', () => {
+  it('is loading, and still named Send, when running, with disabled textarea + submit', () => {
     const { getByTestId } = renderComposer({
       isRunning: true,
       disabled: true,
@@ -61,7 +61,7 @@ describe('ChatComposer', () => {
     const submit = getByTestId('composer-submit');
     const textarea = getByTestId('composer-input') as HTMLTextAreaElement;
 
-    expect(submit.getAttribute('aria-label')).toBe('Generating…');
+    expect(submit.getAttribute('aria-label')).toBe('Send');
     expect(submit.getAttribute('aria-busy')).toBe('true');
     expect(submit.getAttribute('aria-disabled')).toBe('true');
     expect(textarea.disabled).toBe(true);

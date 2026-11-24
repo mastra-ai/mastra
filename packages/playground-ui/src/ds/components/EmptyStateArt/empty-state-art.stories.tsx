@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '../Button';
 import { CopyButton } from '../CopyButton';
 import { EmptyState } from '../EmptyState';
-import { Spinner } from '../Spinner';
 import { StatusDot } from '../StatusIndicators';
 import { Txt } from '../Txt';
 import { sceneByName } from './art/scenes';
@@ -74,8 +73,8 @@ export const SettingUp: Story = {
       descriptionSlot="Creating a dedicated Postgres database for this project. This page updates when it’s ready."
       iconSlot={<EmptyStateArt name="knowledge" state="working" />}
       actionSlot={
-        <Button icon={<Spinner />} variant="primary" disabled>
-          Setting up
+        <Button variant="primary" loading>
+          Set up knowledge
         </Button>
       }
     />

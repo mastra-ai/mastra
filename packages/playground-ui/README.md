@@ -100,7 +100,7 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 
 ### Loading buttons
 
-Pass `loading` to the button whose action is in progress. Don't put a `Spinner` in a button, swap its icon or change its label.
+Pass `loading` to the button whose action is in progress. Don't put a `Spinner` in a button, swap its icon or change its label: the `playground-ui/button-loading` lint rule reports a loader inside a button and a label that depends on its `loading`.
 
 ```tsx
 <Button variant="primary" icon={<IconPlusMedium />} loading={createProject.isPending} onClick={create}>
@@ -642,6 +642,7 @@ export default defineConfig({
 | -------------------------------------- | ------------------------------------------------------------------------------------------------ |
 | `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
 | `playground-ui/button-icon-prop`       | An icon beside a `<Button>` label as a child instead of `icon` / `iconEnd`                       |
+| `playground-ui/button-loading`         | A `Spinner` or spinning icon inside a `<Button>`, or a label that changes with its `loading`     |
 | `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
 | `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
 | `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |

@@ -11,6 +11,7 @@ export default defineConfig({
     // typography rules have existing hits here.
     'playground-ui/icon-button-size': 'error',
     'playground-ui/button-icon-prop': 'error',
+    'playground-ui/button-loading': 'error',
     'playground-ui/placeholder-text': 'error',
     'playground-ui/icon-size-from-parent': 'error',
     'playground-ui/page-layout-props': 'error',

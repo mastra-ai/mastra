@@ -219,7 +219,6 @@ export function WorkflowTrigger({
             collapsible={false}
             headingSlot={headingSlot}
             leftActions={!paramsRunId ? <WorkflowDebugModeSwitch /> : undefined}
-            submitButtonLabel={isStarting ? 'Starting…' : 'Run'}
             submitActions={runActionsSlot?.({ resourceId, setResourceId })}
           />
         )}
