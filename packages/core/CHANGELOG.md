@@ -1,5 +1,52 @@
 # @mastra/core
 
+## 1.86.0-alpha.7
+
+### Minor Changes
+
+- Added native `Agent` execution on the default or evented engine while preserving model-output APIs. Configure `durable.executionEngine` on an agent or set `Mastra.durable.executionEngine` for registered agents: ([#31008](https://github.com/mastra-ai/mastra/pull/31008))
+
+  ```typescript
+  import { Agent, type AgentStreamOutput } from '@mastra/core/agent';
+
+  const agent = new Agent({
+    id: 'support',
+    name: 'Support',
+    instructions: 'Help customers with their orders.',
+    model: 'openai/gpt-6.1-sol',
+    durable: { executionEngine: 'default' },
+  });
+
+  const output: AgentStreamOutput = await agent.stream('Where is my order?');
+  console.log(await output.text);
+  output.cleanup?.();
+  ```
+
+  Native streams keep the `MastraModelOutput` return type. Type the output as `AgentStreamOutput` to reach durable lifecycle controls. Existing wrapper factories keep their stream result contracts.
+
+  The `executionEngine: 'durable'` value from earlier prereleases is now `executionEngine: 'default'`.
+
+- Added `createChannelTools()` to `@mastra/core/channels`. It gives any agent with channels tools that read and post messages on its chat platforms: `fetchMessages`, `fetchChannelMessages`, `fetchThread`, `listThreads`, `getThreadParticipants`, `getChannelInfo`, `postMessage` and `postChannelMessage`, plus `sendDirectMessage` when you allow it. Each call uses the channel thread of the run that makes it. By default the tools stay in that conversation's own channel. Nothing is added automatically, so spread the tools into `tools`: ([#31220](https://github.com/mastra-ai/mastra/pull/31220))
+
+  ```ts
+  import { createChannelTools } from '@mastra/core/channels';
+
+  const agent = new Agent({
+    tools: { ...(await createChannelTools({ channels: 'selected', channelIds: ['slack:C0123ABC'], access: 'read' })) },
+    channels: { adapters: { slack: createSlackAdapter() } },
+  });
+  ```
+
+  Other people's direct messages with the bot, including group DMs, can never be read. `channelIds` must be full chat ids such as `slack:C0123ABC`. With `access: 'read'`, the tools post only in the conversation's own channel. The tools need zod 4.2 or newer.
+
+### Patch Changes
+
+- Fixed durable and evented agents ignoring later changes to the agent they wrap. Knowledge, retry settings, and model-list edits made on the wrapped agent or through the wrapper now apply to wrapped runs. ([#31014](https://github.com/mastra-ai/mastra/pull/31014))
+
+- Fixed slow processing of long streamed words in the PII detector, which could stall output when a response contained a very long unbroken token or a long run of letters with no email address in it. ([#31095](https://github.com/mastra-ai/mastra/pull/31095))
+
+- Fixed buffered reflections activating a buffer that another process extended at the same moment. Activation now applies only the buffered reflection it read; an extended buffer stays in place until a later eligible activation, so values extracted for the earlier buffer are never published with it. Fixes [#27262](https://github.com/mastra-ai/mastra/issues/27262). ([#28293](https://github.com/mastra-ai/mastra/pull/28293))
+
 ## 1.86.0-alpha.6
 
 ### Minor Changes
