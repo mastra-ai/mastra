@@ -1946,7 +1946,7 @@ export class MastraFactory {
         resolveDefaultThinkingLevel: async ({ requestContext }) =>
           (await resolveRoutedDefaults(requestContext)).thinkingLevel,
         resolveModelFallbacks: async ({ requestContext }) =>
-          (await resolveRoutedDefaults(requestContext)).fallbackModelIds,
+          (await resolveRoutedDefaults(requestContext)).fallbackModelIds.map(modelId => ({ modelId })),
         workspace: createWorkspaceFactory({
           skills: this.#skills,
           ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),
