@@ -40,6 +40,11 @@ export interface RunOwnershipRecord {
   leaseExpiresAt: Date | null;
   /** Whether the owner holds an unexpired lease, judged on the store's clock. */
   live: boolean;
+  /**
+   * When the record last changed (claim, renewal or release), on the store's clock. Absent on
+   * stores that don't report it.
+   */
+  updatedAt?: Date;
 }
 
 export interface ClaimRunOwnershipInput {
