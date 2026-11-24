@@ -231,9 +231,7 @@ export class ObservationStep {
         const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
         const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
         messageList.removeByIds(sealedOutput.map(msg => msg.id));
-        for (const msg of sealedOutput) {
-          messageList.add(msg, 'memory');
-        }
+        if (sealedOutput.length) messageList.add(sealedOutput, 'memory');
       }
 
       if (!deferred) {
@@ -307,11 +305,9 @@ export class ObservationStep {
           .map(msg => msg.id);
         inFlightIds = [...new Set(unreadIds)];
         if (messagesToSave.length > 0) {
-          for (const msg of messagesToSave) {
-            messageList.add(msg, 'memory');
-          }
+          messageList.add(messagesToSave, 'memory');
           try {
-            await om.persistMessages(messagesToSave, threadId, resourceId, rememberedIds);
+            await om.persistMessages(messagesToSave, threadId, resourceId, undefined, rememberedIds);
           } catch (error) {
             restoreDrainedMessages(messageList, newInput, 'input');
             restoreDrainedMessages(messageList, newOutput, 'response');
@@ -333,7 +329,7 @@ export class ObservationStep {
         // these messages later is harmless.
         const pending = [...messageList.get.input.db(), ...messageList.get.response.db()];
         if (pending.length > 0) {
-          await om.persistMessages(pending, threadId, resourceId, rememberedIds);
+          await om.persistMessages(pending, threadId, resourceId, undefined, rememberedIds);
         }
         // The in-flight prompt was just observed, but the model still needs it to answer —
         // protect it (and everything else pending) from cleanup by identity rather than
@@ -713,6 +709,7 @@ export class ObservationStep {
           messagesToSeal,
           threadId,
           resourceId,
+          undefined,
           new Set(this.turn.messageList.getPersisted.remembered.db().map(message => message.id)),
         );
       }

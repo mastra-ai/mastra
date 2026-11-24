@@ -30,7 +30,7 @@ vi.hoisted(() => {
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -155,7 +155,13 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: base });
     return { mastra, pubsub, agent: mastra.getAgent('agent') };
   }
@@ -187,7 +193,7 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
       memory: { thread: threadId, resource: RESOURCE },
       ...extra,
     });
-    const output = isDurableEngineVariant(engine) && 'output' in result ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     void output.consumeStream().catch(() => undefined);
     return output;
   }

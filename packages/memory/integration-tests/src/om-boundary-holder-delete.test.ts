@@ -91,7 +91,7 @@ describe('Observational Memory saving a sealed message that holds a completed bo
     } as any);
 
     await memory.deleteMessages([id]);
-    await om.persistMessages([live!], threadId, RESOURCE, list.getRememberedAndInputMessageIds());
+    await om.persistMessages([live!], threadId, RESOURCE, undefined, list.getRememberedAndInputMessageIds());
 
     const rows = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
     expect(rows).toEqual([]);
@@ -125,7 +125,7 @@ describe('Observational Memory saving a sealed message that holds a completed bo
     expect(list.get.remembered.db().map(m => m.id)).not.toContain(id);
 
     await memory.deleteMessages([id]);
-    await om.persistMessages([live!], threadId, RESOURCE, list.getRememberedAndInputMessageIds());
+    await om.persistMessages([live!], threadId, RESOURCE, undefined, list.getRememberedAndInputMessageIds());
 
     expect((await memoryStore.listMessagesById({ messageIds: [id] })).messages).toEqual([]);
     expect(list.getPersisted.remembered.db().map(m => m.id)).toContain(id);
@@ -149,7 +149,7 @@ describe('Observational Memory saving a sealed message that holds a completed bo
       ],
     });
     const holder = sealedBoundaryHolder(threadId, id, new Date(0));
-    await om.persistMessages([holder], threadId, RESOURCE, new Set([id]));
+    await om.persistMessages([holder], threadId, RESOURCE, undefined, new Set([id]));
 
     const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
     expect(saved!.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
@@ -175,7 +175,13 @@ describe('Observational Memory saving a sealed message that holds a completed bo
   it("still saves this turn's own sealed message that has no stored row yet", async () => {
     const { memoryStore, threadId, om } = await setup('new');
     const id = `${threadId}-new-holder`;
-    await om.persistMessages([sealedBoundaryHolder(threadId, id, new Date(0))], threadId, RESOURCE, new Set());
+    await om.persistMessages(
+      [sealedBoundaryHolder(threadId, id, new Date(0))],
+      threadId,
+      RESOURCE,
+      undefined,
+      new Set(),
+    );
 
     const [saved] = (await memoryStore.listMessagesById({ messageIds: [id] })).messages;
     expect(saved?.content.parts.some(part => part.type === 'data-om-observation-end')).toBe(true);
