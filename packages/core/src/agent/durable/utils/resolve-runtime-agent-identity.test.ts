@@ -65,3 +65,67 @@ describe('cross-process registry agent identity', () => {
     expect(getRunRegistryEntry(RUN_ID, mastra)?.agent).toBe(inner);
   });
 });
+
+describe('cross-process rebuild of a stored agent', () => {
+  // A worker that never registered the agent must find it through the editor,
+  // the same way server handlers and the schedule worker do.
+  function setupStored() {
+    const stored = new Agent({
+      id: 'stored-agent',
+      name: 'stored-agent',
+      instructions: 'test',
+      model: new MockLanguageModelV2(),
+    });
+    const getById = async (id: string) => (id === 'stored-agent' ? stored : null);
+    const mastra = new Mastra({ logger: false, editor: { agent: { getById } } as any });
+    expect(() => mastra.getAgentById('stored-agent')).toThrow();
+    return { mastra, stored };
+  }
+
+  it('resolveRuntimeDependencies falls back to the editor', async () => {
+    const { mastra, stored } = setupStored();
+    await resolveRuntimeDependencies({
+      mastra,
+      runId: RUN_ID,
+      agentId: 'stored-agent',
+      input: {
+        messageListState: new MessageList().serialize(),
+        state: { threadId: undefined, resourceId: undefined },
+        options: {},
+        modelConfig: { provider: 'mock', modelId: 'mock' },
+      } as any,
+    });
+
+    expect(getRunRegistryEntry(RUN_ID, mastra)?.agent).toBe(stored);
+  });
+
+  it('rebuildRunToolsFromMastra falls back to the editor', async () => {
+    const { mastra, stored } = setupStored();
+    await rebuildRunToolsFromMastra({
+      mastra,
+      runId: RUN_ID,
+      agentId: 'stored-agent',
+      state: { threadId: undefined, resourceId: undefined } as any,
+      options: {} as any,
+    });
+
+    expect(getRunRegistryEntry(RUN_ID, mastra)?.agent).toBe(stored);
+  });
+
+  it('resolveRuntimeDependencies fails loudly when no source knows the agent', async () => {
+    const { mastra } = setupStored();
+    await expect(
+      resolveRuntimeDependencies({
+        mastra,
+        runId: RUN_ID,
+        agentId: 'unknown-agent',
+        input: {
+          messageListState: new MessageList().serialize(),
+          state: { threadId: undefined, resourceId: undefined },
+          options: {},
+          modelConfig: { provider: 'mock', modelId: 'mock' },
+        } as any,
+      }),
+    ).rejects.toThrow(/unknown-agent/);
+  });
+});
