@@ -13,6 +13,10 @@ import { tools } from '../tools.js';
 // HTTP server standing in for the Mastra platform, so each test sees the exact
 // request that would reach Figma through the proxy.
 
+interface ResolvedTool {
+  execute?: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown>;
+}
+
 const connection = {
   id: 'fg_test',
   integrationId: 'figma',
@@ -144,9 +148,7 @@ describe('Figma tools', () => {
       projectId: `proj_${++resolutions}`,
       client: { accessToken: 'test-platform-token', baseUrl },
     })();
-    const tool = resolved[toolId] as
-      | { execute?: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown> }
-      | undefined;
+    const tool = resolved[toolId] as ResolvedTool | undefined;
     if (!tool?.execute) throw new Error(`${toolId} was not resolved`);
     const result = await tool.execute(input, { requestContext: new RequestContext() });
     if (isValidationError(result)) throw new Error(`${toolId} failed validation: ${result.message}`);
@@ -328,15 +330,16 @@ describe('Figma tools', () => {
         };
       };
 
-      const failure = await run('figma_get_version', { file_key: 'FILE', version_id: '1' }).catch(
+      const failure = await run('figma_get_version', { file_key: 'FILE', version_id: '1' }).then(
+        () => undefined,
         (error: unknown) => error as Error,
       );
 
       expect(requests).toHaveLength(20);
       expect(failure).toBeInstanceOf(Error);
-      expect(failure!.message).toMatch(/newest 1000 versions/);
-      expect(failure!.message).toMatch(/figma_list_versions/);
-      expect(failure!.message).not.toMatch(/not found/);
+      expect(failure?.message).toMatch(/newest 1000 versions/);
+      expect(failure?.message).toMatch(/figma_list_versions/);
+      expect(failure?.message).not.toMatch(/not found/);
     });
   });
 
