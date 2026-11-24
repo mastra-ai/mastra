@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { fn } from 'storybook/test';
 import type { LogLevel, LogRecord } from '../../types';
 import type { LogViewOrder } from '../log-view-list';
 import { LogView, filterLogsByFields } from './index';
@@ -47,23 +48,39 @@ const logs: LogRecord[] = [
   },
 ];
 
-const logIdMap = new Map(logs.map((log, index) => [log, `line-${index}`]));
-
 interface CompositionProps {
+  logs: LogRecord[];
   order?: LogViewOrder;
   wrap?: boolean;
   search?: boolean;
   fieldChips?: boolean;
   filters?: boolean;
+  initialFilters?: FilterBarItem[];
+  isLoading?: boolean;
+  hasNextPage?: boolean;
+  isFetchingNextPage?: boolean;
+  onFetchNextPage?: () => void;
+  onRefresh: () => void;
+  onLogClick?: (log: LogRecord) => void;
 }
 
-function Composition({ order, wrap, search, fieldChips, filters = true }: CompositionProps) {
+function Composition({
+  logs: allLogs,
+  filters = true,
+  search,
+  fieldChips,
+  initialFilters = [],
+  onRefresh,
+  ...listProps
+}: CompositionProps) {
   const [levels, setLevels] = useState<LogLevel[]>(LEVELS);
-  const [items, setItems] = useState<FilterBarItem[]>([]);
+  const [items, setItems] = useState<FilterBarItem[]>(initialFilters);
   const lines = filterLogsByFields(
-    logs.filter(log => levels.includes(log.level)),
+    allLogs.filter(log => levels.includes(log.level)),
     items,
   );
+  const logIdMap = new Map(allLogs.map((log, index) => [log, `line-${index}`]));
+  const filtered = items.length > 0 || levels.length !== LEVELS.length;
 
   return (
     <LogView>
@@ -71,23 +88,35 @@ function Composition({ order, wrap, search, fieldChips, filters = true }: Compos
         <LogView.Title />
         <LogView.LevelToggles size="sm" levels={LEVELS} value={levels} onValueChange={setLevels} />
         {filters && (
-          <LogView.Filters logs={logs} value={items} onValueChange={setItems} search={search} fieldChips={fieldChips} />
+          <LogView.Filters
+            logs={allLogs}
+            value={items}
+            onValueChange={setItems}
+            search={search}
+            fieldChips={fieldChips}
+          />
         )}
-        <LogView.Refresh onRefresh={() => {}} />
+        <LogView.Refresh onRefresh={onRefresh} />
       </LogView.Header>
-      {lines.length === 0 ? (
+      {!listProps.isLoading && lines.length === 0 ? (
         <LogView.Empty
-          onClearFilters={() => {
-            setItems([]);
-            setLevels(LEVELS);
-          }}
+          onClearFilters={
+            filtered
+              ? () => {
+                  setItems([]);
+                  setLevels(LEVELS);
+                }
+              : undefined
+          }
         />
       ) : (
-        <LogView.List logs={lines} logIdMap={logIdMap} order={order} wrap={wrap} />
+        <LogView.List logs={lines} logIdMap={logIdMap} {...listProps} />
       )}
     </LogView>
   );
 }
+
+const describe = (story: string) => ({ docs: { description: { story } } });
 
 const meta = {
   title: 'Domains/Logs/LogView',
@@ -102,20 +131,68 @@ const meta = {
     ),
   ],
   parameters: { layout: 'fullscreen' },
-  args: { order: 'oldest-first' },
+  args: {
+    logs,
+    order: 'oldest-first',
+    onRefresh: fn(),
+    onLogClick: fn(),
+    onFetchNextPage: fn(),
+  },
 } satisfies Meta<typeof Composition>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const Default: Story = {};
+export const Default: Story = {
+  parameters: describe(
+    'Oldest first like a terminal, opening on the newest line. Click a level to hide it, Cmd or Ctrl-click to show only it, and pick a field in the filter bar to filter by its value.',
+  ),
+};
 
-export const NewestFirst: Story = { args: { order: 'newest-first' } };
+export const NewestFirst: Story = {
+  args: { order: 'newest-first' },
+  parameters: describe('Newest first like an audit log; older logs load at the bottom.'),
+};
 
-export const NoWrap: Story = { args: { wrap: false } };
+export const NoWrap: Story = {
+  args: { wrap: false },
+  parameters: describe('Each line stays on one row and the list scrolls sideways.'),
+};
 
-export const SearchOnly: Story = { args: { fieldChips: false } };
+export const ReadOnly: Story = {
+  args: { onLogClick: undefined },
+  parameters: describe('Without onLogClick, lines are plain rows that open nothing.'),
+};
 
-export const FieldChipsOnly: Story = { args: { search: false } };
+export const Loading: Story = {
+  args: { isLoading: true },
+};
 
-export const NoFilters: Story = { args: { filters: false } };
+export const LoadingOlder: Story = {
+  args: { hasNextPage: true, isFetchingNextPage: true },
+  parameters: describe('The loading line sits at the older end and keeps its height between pages.'),
+};
+
+export const Empty: Story = {
+  args: { logs: [] },
+};
+
+export const FilteredEmpty: Story = {
+  args: {
+    initialFilters: [{ id: 'field:exit_code', fieldId: 'field:exit_code', operatorId: 'is', value: '9' }],
+  },
+  parameters: describe('When filters hide every line, the empty state offers to clear them.'),
+};
+
+export const SearchOnly: Story = {
+  args: { fieldChips: false },
+};
+
+export const FieldChipsOnly: Story = {
+  args: { search: false },
+};
+
+export const NoFilters: Story = {
+  args: { filters: false },
+  parameters: describe('Leave LogView.Filters out to drop filtering entirely.'),
+};
