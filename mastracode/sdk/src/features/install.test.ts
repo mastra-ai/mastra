@@ -1,6 +1,8 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { FastembedWorker } from '../agents/fastembed-subprocess.js';
@@ -107,13 +109,51 @@ describe('first-use feature install', () => {
     expect(leftovers()).toEqual([]);
   }, 60_000);
 
+  it('installs once when separate Mastra Code processes need the feature at the same time', async () => {
+    const script = path.join(root, 'install.mjs');
+    fs.writeFileSync(
+      script,
+      `import { installFeature } from ${JSON.stringify(new URL('./install.ts', import.meta.url).href)};
+      const dir = await installFeature(${JSON.stringify(target())}, { registry: ${JSON.stringify(registry.url)} });
+      process.stdout.write(dir);\n`,
+    );
+    const runs = Array.from({ length: 3 }, () => {
+      const child = spawn(process.execPath, ['--import', 'tsx', script], {
+        cwd: fileURLToPath(new URL('../..', import.meta.url)),
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
+      let out = '';
+      child.stdout.on('data', chunk => (out += chunk));
+      return new Promise<{ code: number | null; out: string }>(resolve =>
+        child.once('exit', code => resolve({ code, out })),
+      );
+    });
+
+    const results = await Promise.all(runs);
+
+    expect(results).toEqual(Array(3).fill({ code: 0, out: getFeatureDir(target()) }));
+    expect(tarballRequests()).toHaveLength(1);
+    expect(leftovers()).toEqual([]);
+  }, 60_000);
+
+  it("leaves a running process's staging directory alone", async () => {
+    const live = path.join(target().versionDir, `.staging-embeddings-${process.pid}-abc`);
+    fs.mkdirSync(live, { recursive: true });
+
+    await installFeature(target(), { registry: registry.url });
+
+    expect(fs.existsSync(live)).toBe(true);
+    expect(findInstalledFeature(target())).toBe(getFeatureDir(target()));
+  }, 60_000);
+
   it('recovers from an install that crashed half way (stale lock and partial directory)', async () => {
     const { versionDir } = target();
     fs.mkdirSync(path.join(versionDir, '.lock-embeddings'), { recursive: true });
     // A pid that cannot be running.
     fs.writeFileSync(
       path.join(versionDir, '.lock-embeddings', 'owner.json'),
-      JSON.stringify({ pid: 2 ** 22 + 12345, startedAt: Date.now() }),
+      JSON.stringify({ pid: 2 ** 22 + 12345, host: os.hostname(), token: 'crashed' }),
     );
     fs.mkdirSync(path.join(versionDir, '.staging-embeddings-crashed', 'node_modules'), { recursive: true });
     // A feature directory without a completion marker is not an install.

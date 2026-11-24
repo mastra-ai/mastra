@@ -7,6 +7,7 @@ import { execa } from 'execa';
 import type { FeatureId } from './catalog.js';
 import { FeatureNotInstalledError } from './events.js';
 import type { FeatureUnavailableReason } from './events.js';
+import { acquireLock, isProcessAlive } from './lock.js';
 
 /**
  * Feature packages live outside the mastracode install, in `<featuresRoot>/<sdkVersion>/<feature>/`, each
@@ -20,9 +21,6 @@ import type { FeatureUnavailableReason } from './events.js';
 const MARKER_FILE = '.feature.json';
 const RESOLVER_FILE = 'resolve.mjs';
 const LOG_FILE = 'install.log';
-/** A lock older than this is from a crashed or hung install. */
-const STALE_LOCK_MS = 15 * 60_000;
-const LOCK_POLL_MS = 250;
 
 export interface FeatureInstallTarget {
   id: FeatureId;
@@ -88,13 +86,26 @@ export async function resolveFromFeatureDir(dir: string, specifier: string): Pro
   return resolver.resolve(specifier);
 }
 
+/** The lock was taken over (this process looked hung). The new owner finishes the install. */
+class LockLostError extends Error {}
+
 /** Installs a feature's packages into its own directory. Safe to call from several processes at once. */
 export async function installFeature(
   target: FeatureInstallTarget,
   options: FeatureInstallOptions = {},
 ): Promise<string> {
   fs.mkdirSync(target.versionDir, { recursive: true });
-  const release = await acquireLock(path.join(target.versionDir, `.lock-${target.id}`), options.signal);
+  while (true) {
+    try {
+      return await installHoldingLock(target, options);
+    } catch (error) {
+      if (!(error instanceof LockLostError)) throw error;
+    }
+  }
+}
+
+async function installHoldingLock(target: FeatureInstallTarget, options: FeatureInstallOptions): Promise<string> {
+  const lock = await acquireLock(path.join(target.versionDir, `.lock-${target.id}`), options.signal);
   const failedPath = path.join(target.versionDir, `.failed-${target.id}.json`);
   let staging: string | undefined;
   try {
@@ -103,7 +114,7 @@ export async function installFeature(
     if (existing) return existing;
 
     removeStagingDirs(target);
-    staging = fs.mkdtempSync(path.join(target.versionDir, `.staging-${target.id}-`));
+    staging = fs.mkdtempSync(path.join(target.versionDir, `${stagingPrefix(target)}${process.pid}-`));
     fs.writeFileSync(
       path.join(staging, 'package.json'),
       `${JSON.stringify({ name: `mastracode-feature-${target.id}`, private: true, dependencies: target.packages }, null, 2)}\n`,
@@ -127,15 +138,18 @@ export async function installFeature(
     };
     fs.writeFileSync(path.join(staging, MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`);
 
+    if (!lock.isHeld()) throw new LockLostError();
     const dir = getFeatureDir(target);
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Move an outdated install aside rather than deleting it first, so the directory is only briefly absent.
+    const previous = fs.existsSync(dir) ? `${staging}.previous` : undefined;
+    if (previous) fs.renameSync(dir, previous);
     fs.renameSync(staging, dir);
-    staging = undefined;
+    staging = previous;
     fs.rmSync(failedPath, { force: true });
     fs.rmSync(path.join(target.versionDir, `.failed-${target.id}.log`), { force: true });
     return dir;
   } catch (error) {
-    if (options.signal?.aborted) throw error;
+    if (options.signal?.aborted || error instanceof LockLostError) throw error;
     // Keep npm's output next to the failure record; the staging directory is about to go.
     const stagedLog = staging && path.join(staging, LOG_FILE);
     const logPath =
@@ -158,7 +172,7 @@ export async function installFeature(
     throw failure;
   } finally {
     if (staging) fs.rmSync(staging, { recursive: true, force: true });
-    release();
+    lock.release();
   }
 }
 
@@ -170,45 +184,21 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Staging directories left by an interrupted install. Only called while holding the feature's lock. */
+function stagingPrefix(target: Pick<FeatureInstallTarget, 'id'>): string {
+  return `.staging-${target.id}-`;
+}
+
+/**
+ * Staging directories left by an interrupted install. Only called while holding the feature's lock; a
+ * directory whose process is still running is left alone (that process lost the lock and cleans up itself).
+ */
 function removeStagingDirs(target: FeatureInstallTarget): void {
+  const prefix = stagingPrefix(target);
   for (const entry of fs.readdirSync(target.versionDir)) {
-    if (entry.startsWith(`.staging-${target.id}-`)) {
-      fs.rmSync(path.join(target.versionDir, entry), { recursive: true, force: true });
-    }
-  }
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
-/** A directory lock (mkdir is atomic). A lock whose owner died or that is older than 15 minutes is taken over. */
-async function acquireLock(lockDir: string, signal?: AbortSignal): Promise<() => void> {
-  const ownerFile = path.join(lockDir, 'owner.json');
-  while (true) {
-    signal?.throwIfAborted();
-    try {
-      fs.mkdirSync(lockDir);
-      fs.writeFileSync(ownerFile, JSON.stringify({ pid: process.pid, startedAt: Date.now() }));
-      return () => fs.rmSync(lockDir, { recursive: true, force: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
-    const owner = readJson<{ pid: number; startedAt: number }>(ownerFile);
-    const stat = fs.statSync(lockDir, { throwIfNoEntry: false });
-    const startedAt = owner?.startedAt ?? stat?.mtimeMs ?? Date.now();
-    const stale = (owner && !isProcessAlive(owner.pid)) || Date.now() - startedAt > STALE_LOCK_MS;
-    if (stale) {
-      fs.rmSync(lockDir, { recursive: true, force: true });
-      continue;
-    }
-    await new Promise(resolve => setTimeout(resolve, LOCK_POLL_MS));
+    if (!entry.startsWith(prefix)) continue;
+    const pid = Number(entry.slice(prefix.length).split('-')[0]);
+    if (Number.isInteger(pid) && pid > 0 && isProcessAlive(pid)) continue;
+    fs.rmSync(path.join(target.versionDir, entry), { recursive: true, force: true });
   }
 }
 

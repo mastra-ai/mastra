@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import type { fastembed } from '@mastra/fastembed';
+import type { MastraEmbeddingModel } from '@mastra/core/vector';
 import { FeatureNotInstalledError, isFeatureNotInstalledError } from '../features/events.js';
 import { resolveFeatureModule } from '../features/load.js';
 
-type FastembedModel = typeof fastembed.small;
+/** `fastembed.small`'s shape, without importing `@mastra/fastembed`: an optional peer must not appear in published types. */
+export type FastembedModel = Extract<MastraEmbeddingModel<string>, { specificationVersion: 'v3' }>;
 type DoEmbedOptions = Parameters<FastembedModel['doEmbed']>[0];
 type DoEmbedResult = Awaited<ReturnType<FastembedModel['doEmbed']>>;
 type WorkerReply = { id: number; embeddings?: number[][]; warnings?: DoEmbedResult['warnings']; error?: string };

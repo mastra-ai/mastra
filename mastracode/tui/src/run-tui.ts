@@ -529,6 +529,11 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
   void shutdownAndExit(1);
 });
 
+/** Waits until everything written to stdout and stderr is flushed, so `process.exit` cannot truncate piped output. */
+function flushStdio(): Promise<unknown> {
+  return Promise.all([process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))));
+}
+
 async function main() {
   if (isVersionCommand(process.argv)) {
     process.stdout.write(`${getCurrentVersion()}\n`);
@@ -550,16 +555,16 @@ async function main() {
   // Lists and pre-installs the optional features that otherwise install on first use.
   if (process.argv[2] === 'features') {
     const { runFeaturesCommand } = await import('@mastra/code-sdk/features/cli');
-    return process.exit(await runFeaturesCommand(process.argv.slice(3)));
+    const code = await runFeaturesCommand(process.argv.slice(3));
+    await flushStdio();
+    return process.exit(code);
   }
 
   // Also checked before the headless branch, which would send the bare word as a prompt.
   const updateArgs = getUpdateCommandArgs(process.argv);
   if (updateArgs) {
     const code = await runUpdateCommand({ args: updateArgs, currentVersion: getCurrentVersion() });
-    await Promise.all(
-      [process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))),
-    );
+    await flushStdio();
     return process.exit(code);
   }
 

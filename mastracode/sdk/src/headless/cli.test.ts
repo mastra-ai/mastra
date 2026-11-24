@@ -679,3 +679,106 @@ describe('flag spec', () => {
     );
   });
 });
+
+describe('runMCCli first-use install notices', () => {
+  const originalArgv = process.argv;
+  let stdout: string;
+  let stderr: string;
+  let spies: { mockRestore(): void }[];
+
+  beforeEach(() => {
+    stdout = '';
+    stderr = '';
+    lifecycleMocks.createMastraCode.mockReset();
+    lifecycleMocks.runMC.mockReset();
+    lifecycleMocks.loadSettings.mockReset().mockReturnValue({
+      models: { activeModelPackId: null, modeDefaults: {} },
+      preferences: { subagentsEnabled: false },
+    });
+    lifecycleMocks.resolveModelDefaults.mockReset().mockReturnValue({});
+    lifecycleMocks.listBuiltinModePacks.mockReset().mockReturnValue([]);
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: {},
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+      stopNotificationDispatch: vi.fn(async () => {}),
+      stopPluginSignalProviders: vi.fn(),
+      releaseThreadClaims: vi.fn(),
+    }));
+    // The run needs local embeddings mid-way, and they install on first use.
+    lifecycleMocks.runMC.mockImplementation(() => ({
+      async *[Symbol.asyncIterator]() {
+        const { emitFeatureInstall } = await import('../features/events.js');
+        const base = {
+          type: 'feature_install',
+          feature: 'embeddings',
+          label: 'local embeddings for memory recall',
+        } as const;
+        emitFeatureInstall({ ...base, status: 'started', approxSizeMb: 325 });
+        emitFeatureInstall({ ...base, status: 'completed', durationMs: 3600 });
+      },
+      result: Promise.resolve({ status: 'completed', exitCode: 0, text: 'the answer' }),
+    }));
+    spies = [
+      vi.spyOn(process.stdout, 'write').mockImplementation(chunk => ((stdout += String(chunk)), true)),
+      vi.spyOn(process.stderr, 'write').mockImplementation(chunk => ((stderr += String(chunk)), true)),
+      vi.spyOn(process, 'exit').mockImplementation(code => {
+        throw new Error(`EXIT:${code}`);
+      }),
+    ];
+  });
+
+  afterEach(() => {
+    process.argv = originalArgv;
+    for (const spy of spies) spy.mockRestore();
+  });
+
+  async function run(output: string) {
+    process.argv = argv('--prompt', 'do it', '--output', output);
+    await expect(runMCCli('do it')).rejects.toThrow('EXIT:0');
+  }
+
+  it('json: stdout is exactly the result object; the install notices go to stderr', async () => {
+    await run('json');
+
+    expect(JSON.parse(stdout)).toMatchObject({ status: 'completed', text: 'the answer' });
+    expect(stderr).toContain('Installing local embeddings for memory recall (about 325 MB, one time)');
+    expect(stderr).toContain('Installed local embeddings for memory recall in 3.6 s');
+  });
+
+  it('jsonl: every stdout line is JSON, including the install events', async () => {
+    await run('jsonl');
+
+    const lines = stdout
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    expect(lines.filter(line => line.type === 'feature_install').map(line => line.status)).toEqual([
+      'started',
+      'completed',
+    ]);
+    expect(lines.at(-1)).toMatchObject({ type: 'result', status: 'completed' });
+    expect(stderr).not.toContain('Installing');
+  });
+
+  it('human: notices stay off stdout, and stop once the run is over', async () => {
+    await run('human');
+    expect(stdout).not.toContain('Installing');
+    expect(stderr).toContain('Installing local embeddings');
+
+    const { emitFeatureInstall } = await import('../features/events.js');
+    stderr = '';
+    emitFeatureInstall({
+      type: 'feature_install',
+      status: 'started',
+      feature: 'embeddings',
+      label: 'x',
+      approxSizeMb: 1,
+    });
+    expect(stderr).toBe('');
+  });
+});

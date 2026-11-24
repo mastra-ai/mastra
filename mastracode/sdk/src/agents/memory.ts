@@ -3,7 +3,6 @@ import { ModelRouterEmbeddingModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
-import type { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
@@ -13,13 +12,14 @@ import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { embedInSubprocess } from './fastembed-subprocess.js';
+import type { FastembedModel } from './fastembed-subprocess.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
 
 /**
  * `fastembed.small`, run in a reusable child process (see `FastembedWorker`) so ONNX Runtime and the model
  * never load into the agent process.
  */
-const lazyFastembedSmall: typeof fastembed.small = {
+const lazyFastembedSmall: FastembedModel = {
   specificationVersion: 'v3',
   provider: 'fastembed',
   modelId: 'bge-small-en-v1.5',
