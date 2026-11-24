@@ -345,13 +345,13 @@ function searchTool(host: KnowledgePageToolHost) {
       );
       const matched = results.some(result => result.type === 'page' && 'line' in result.page);
       const readWords = knowledgeSearchWords(words);
+      const readMatch =
+        readWords.length <= READ_MATCH_MAX_WORDS
+          ? JSON.stringify(readWords)
+          : `${JSON.stringify(readWords.slice(0, READ_MATCH_MAX_WORDS))} (the first ${READ_MATCH_MAX_WORDS} of your ${readWords.length} search words; search again with fewer words to see the rest)`;
       const readOn = matched
         ? [
-            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${
-              readWords.length <= READ_MATCH_MAX_WORDS
-                ? JSON.stringify(readWords)
-                : '["your", "words"] (up to 10 of your search words)'
-            } }.`,
+            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${readMatch} }.`,
           ]
         : [];
       const more = [

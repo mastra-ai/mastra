@@ -81,7 +81,13 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
     const hint = result.more.join('\n');
     expect(hint).toContain('knowledge_read { page, from: { line } }');
     const arrays = [...hint.matchAll(/match: (\[[^\]]*\])/g)].map(m => JSON.parse(m[1]));
-    for (const a of arrays) expect(a.length).toBeLessThanOrEqual(10);
+    expect(arrays.length).toBeGreaterThan(0);
+    const words = query.split(' ');
+    for (const a of arrays) {
+      expect(a.length).toBeLessThanOrEqual(10);
+      expect(a).toEqual(words.slice(0, a.length));
+    }
+    expect(hint).toContain('the first 10 of your 12 search words');
   });
 
   it('never returns a page or its body text from a scope the run cannot read', async () => {
