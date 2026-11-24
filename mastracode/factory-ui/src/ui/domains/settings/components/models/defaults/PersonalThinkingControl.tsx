@@ -32,7 +32,7 @@ export function PersonalThinkingControl({ savedModelId, savedThinkingLevel, savi
       .mutateAsync(next)
       .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to change thinking level'));
 
-  const thinkingDefault = personalThinkingDefault(savedThinkingLevel);
+  const thinkingDefault = personalThinkingDefault(setLevel.pendingOr(savedThinkingLevel));
   const followsBuiltIn = thinkingDefault.origin === 'built-in';
   return (
     <ThinkingLevelPicker

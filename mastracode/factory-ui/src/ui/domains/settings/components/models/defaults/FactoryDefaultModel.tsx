@@ -91,7 +91,7 @@ export function FactoryFallbackModels({ factoryId }: { factoryId: string }) {
 
   return (
     <FallbackModelsEditor
-      value={projectQuery.data?.fallbackModelIds ?? []}
+      value={setFallbackModels.pendingOr(projectQuery.data?.fallbackModelIds ?? [])}
       primaryModelId={projectQuery.data?.defaultModelId ?? null}
       models={modelsQuery.data}
       disabled={projectQuery.isPending}

@@ -40,7 +40,7 @@ export function FactoryThinkingControl({ factoryId }: { factoryId: string }) {
   return (
     <ThinkingLevelPicker
       options={ALL_THINKING_LEVEL_OPTIONS}
-      value={levelQuery.data}
+      value={setLevel.pendingOr(levelQuery.data)}
       label="Thinking"
       onChange={(level: ThinkingLevelSetting) =>
         setLevel.mutateAsync(level).catch(error => toast.error(thinkingWriteFailureMessage(error)))

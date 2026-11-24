@@ -96,7 +96,7 @@ export function PersonalFallbackModels() {
 
   return (
     <FallbackModelsEditor
-      value={defaultModelQuery.data?.fallbackModelIds ?? []}
+      value={setFallbackModels.pendingOr(defaultModelQuery.data?.fallbackModelIds ?? [])}
       primaryModelId={defaultModelQuery.data?.modelId ?? null}
       models={modelsQuery.data}
       disabled={defaultModelQuery.isPending}

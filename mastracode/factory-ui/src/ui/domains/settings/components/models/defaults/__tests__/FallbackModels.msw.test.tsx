@@ -313,6 +313,59 @@ describe('Factory fallback models', () => {
 
     expectFallbackOrder([GPT, GEMINI]);
   });
+
+  it('keeps a fallback addition still saving when a thinking level change fails', async () => {
+    const firstAddition = gate();
+    const fallbackBodies: unknown[] = [];
+    let savedFallbacks = [GPT];
+    const project = (): FactoryProjectPayload => ({
+      id: 'fp-1',
+      name: 'Mastra',
+      defaultModelId: PRIMARY,
+      defaultThinkingLevel: 'off',
+      fallbackModelIds: savedFallbacks,
+    });
+    stubCatalog();
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: project() })),
+      http.patch<PathParams, { fallbackModelIds?: string[] }>(FACTORY_URL, async ({ request }) => {
+        const body = await request.json();
+        if (!body.fallbackModelIds) {
+          return HttpResponse.json({ error: 'unavailable', message: 'Thinking level not saved' }, { status: 500 });
+        }
+        fallbackBodies.push(body);
+        if (fallbackBodies.length === 1) await firstAddition.opened;
+        savedFallbacks = body.fallbackModelIds;
+        return HttpResponse.json({ project: project() });
+      }),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(
+      <>
+        <FactoryThinkingControl factoryId="fp-1" />
+        <FactoryFallbackModels factoryId="fp-1" />
+      </>,
+    );
+
+    await pickModel(user, 'Add fallback', GEMINI);
+    await waitFor(() => expect(fallbackBodies).toEqual([{ fallbackModelIds: [GPT, GEMINI] }]));
+    await user.click(screen.getByRole('button', { name: 'Thinking: Off' }));
+    const ramp = screen.getByRole('slider', { name: 'Thinking' });
+    fireEvent.change(ramp, { target: { value: '3' } });
+    fireEvent.pointerUp(ramp);
+    fireEvent.blur(ramp);
+    await waitFor(() => expect(client.isMutating()).toBe(1));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    expectFallbackOrder([GPT, GEMINI]);
+
+    await pickModel(user, 'Add fallback', GROK);
+    firstAddition.open();
+    await waitForMutationsIdle(client);
+
+    expect(fallbackBodies).toEqual([{ fallbackModelIds: [GPT, GEMINI] }, { fallbackModelIds: [GPT, GEMINI, GROK] }]);
+    expectFallbackOrder([GPT, GEMINI, GROK]);
+  });
 });
 
 describe('Personal fallback models', () => {
