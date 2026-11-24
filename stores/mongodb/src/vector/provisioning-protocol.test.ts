@@ -327,6 +327,13 @@ describe('provisioning protocol', () => {
         const name = uniqueName('psdm');
         colls.push(name);
         await a.createIndex({ indexName: name, dimension: 4 });
+        // Atlas Local keeps listing a dropped collection's search indexes as DOES_NOT_EXIST until
+        // they finish building, which never happens once the collection is gone, so the recreate
+        // below would CONFLICT until it timed out. Drop only once both are READY.
+        await waitFor(async () => {
+          const rows = await db.collection(name).listSearchIndexes().toArray();
+          return rows.length === 2 && rows.every(r => r.status === 'READY');
+        });
         const original = (await entry(name))?.generation;
         const p = parkDelete(a);
         try {
