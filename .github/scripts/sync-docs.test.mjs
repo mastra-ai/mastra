@@ -119,7 +119,6 @@ describe('validateManifest', () => {
     'dest inside .git': target({ dest: '.git/hooks' }),
     'source outside docs/': target({ source: 'packages/core' }),
     'source escaping docs/ with ..': target({ source: 'docs/../packages' }),
-    'source in docs/ but outside docs/src/': target({ source: 'docs/external' }),
     'missing source dir': target({ source: 'docs/src/missing' }),
   };
   for (const [label, bad] of Object.entries(invalid)) {
@@ -128,6 +127,15 @@ describe('validateManifest', () => {
       assert.throws(() => validateManifest({ targets: [bad] }, { rootDir: root }), /Invalid docs sync manifest/);
     });
   }
+
+  test('rejects an existing mdx source in docs/ but outside docs/src/', () => {
+    const root = makeRoot();
+    writeFiles(path.join(root, 'docs/external'), { 'index.mdx': '# External' });
+    assert.throws(
+      () => validateManifest({ targets: [target({ source: 'docs/external' })] }, { rootDir: root }),
+      /"source" must be a relative path under docs\/src\//,
+    );
+  });
 
   test('rejects a source without .mdx files', () => {
     const root = makeRoot();
