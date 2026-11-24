@@ -1835,7 +1835,7 @@ export class AgentController<TState = {}> {
         // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
         const deleted = await agents[0]!.__deleteSuspendedRun(runId, { isResuming: resumed, workflowNames });
         // A resume that started while the deletes were in flight may have parked the run again; the retry releases
-        // it when the deletes landed first. A delete that erases the re-parked row needs a storage fence to rule out.
+        // its in-memory state either way. Only keeping the re-parked row, which a delete may erase, needs a storage fence.
         return deleted && !resumed();
       } catch (error) {
         // A resume overlapped the failed attempt: decide once it settles rather than leave what it parks.

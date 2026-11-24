@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { EventedAgentExecutionEngine } from '../agent/durable/execution-engine';
 import { globalRunRegistry } from '../agent/durable/run-registry';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
@@ -106,7 +107,7 @@ function collectErrors(session: Awaited<ReturnType<typeof park>>) {
 describe('deleteSession with a parked suspension (#30743)', () => {
   it('releases the parked run from memory', async () => {
     const { agent, controller, storage } = await setup();
-    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+    const releaseParkedRun = vi.spyOn(agent, '__releaseParkedRun');
     for (let i = 0; i < 3; i++) {
       await park(controller, i);
       await controller.deleteSession({ sessionId: `s-${i}` });
@@ -125,7 +126,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
 
   it('still deletes the snapshot when releasing the run from memory fails', async () => {
     const { agent, controller, storage } = await setup();
-    vi.spyOn(agent, 'releaseParkedRun').mockRejectedValue(new Error('release failed'));
+    vi.spyOn(agent, '__releaseParkedRun').mockRejectedValue(new Error('release failed'));
     const session = await park(controller, 0);
     const errors = collectErrors(session);
     await controller.deleteSession({ sessionId: 's-0' });
@@ -151,7 +152,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     const { agent, controller, storage } = await setup();
     const session = await park(controller, 0);
     const errors = collectErrors(session);
-    const failing = { releaseParkedRun: vi.fn().mockRejectedValue(new Error('other agent failed')) };
+    const failing = { __releaseParkedRun: vi.fn().mockRejectedValue(new Error('other agent failed')) };
     const machinery = (session as any).machinery;
     // Only the release after the denial settles sees the failing agent first.
     const settle = session.runEngine.settleSuspendedToolCallsAsDenied.bind(session.runEngine);
@@ -160,10 +161,10 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       vi.spyOn(machinery, 'getAgent').mockReturnValue(failing);
       machinery.getAgents = () => [failing, agent];
     });
-    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+    const releaseParkedRun = vi.spyOn(agent, '__releaseParkedRun');
     await controller.deleteSession({ sessionId: 's-0' });
 
-    expect(failing.releaseParkedRun).toHaveBeenCalledTimes(1);
+    expect(failing.__releaseParkedRun).toHaveBeenCalledTimes(1);
     expect(await releaseParkedRun.mock.results[0]?.value).toBe(true);
     expect(errors).toEqual(['other agent failed']);
     expect(agent.runRegistry.size).toBe(0);
@@ -174,7 +175,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
   it('asks every agent to release the parked run, not just the first that held it', async () => {
     const { agent, controller } = await setup();
     const session = await park(controller, 0);
-    const other = { releaseParkedRun: vi.fn().mockResolvedValue(true) };
+    const other = { __releaseParkedRun: vi.fn().mockResolvedValue(true) };
     const machinery = (session as any).machinery;
     const settle = session.runEngine.settleSuspendedToolCallsAsDenied.bind(session.runEngine);
     vi.spyOn(session.runEngine, 'settleSuspendedToolCallsAsDenied').mockImplementation(async (...args: any[]) => {
@@ -184,7 +185,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     });
     await controller.deleteSession({ sessionId: 's-0' });
 
-    expect(other.releaseParkedRun).toHaveBeenCalledTimes(1);
+    expect(other.__releaseParkedRun).toHaveBeenCalledTimes(1);
     expect(agent.runRegistry.size).toBe(0);
   });
 
@@ -219,12 +220,13 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
 
       expect((await workflows.getWorkflowRunById({ runId }))?.snapshot).toBeDefined();
-      const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+      const releaseParkedRun = vi.spyOn(agent, '__releaseParkedRun');
       proceed();
       expect(await resumed).toBe('done');
-      // The deferred release, run once the resume settles, finds nothing of the finished run to release.
-      await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
-      for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+      // The deferred release, run once the resume settles, frees what the finished run still holds in memory.
+      await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId, { forDeletion: true }));
+      expect(await releaseParkedRun.mock.results.at(-1)?.value).toBe(true);
+      expect(agent.runRegistry.size).toBe(0);
     },
   );
 
@@ -298,11 +300,11 @@ describe('deleteSession with a parked suspension (#30743)', () => {
       const { agent, workflows, runId, errors, resumed, proceed } = await deleteDuringResume(storageVersion, {
         resumeData: { a: 'again' },
       });
-      const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun').mockRejectedValue(new Error('release failed'));
+      const releaseParkedRun = vi.spyOn(agent, '__releaseParkedRun').mockRejectedValue(new Error('release failed'));
       proceed();
       expect(await resumed).toBe('resumed');
       await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
-      expect(releaseParkedRun).toHaveBeenCalledWith(runId);
+      expect(releaseParkedRun).toHaveBeenCalledWith(runId, { forDeletion: true });
       expect(errors).toContain('release failed');
     },
   );
@@ -335,7 +337,7 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     expect(agent.__isResumingRun(runId)).toBe(true);
 
     expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
-    const releaseParkedRun = vi.spyOn(agent, 'releaseParkedRun');
+    const releaseParkedRun = vi.spyOn(agent, '__releaseParkedRun');
     proceed();
     const settled = (async () => {
       const result = await resumed;
@@ -369,9 +371,10 @@ describe('deleteSession with a parked suspension (#30743)', () => {
           'yes',
         );
         expect(await settled.catch((error: Error) => error.message)).toBe('model failed');
-        // Decided once the resume settles: nothing of the failed run is left to release.
-        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
-        for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+        // Decided once the resume settles: what the failed run still holds in memory is freed.
+        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId, { forDeletion: true }));
+        expect(await releaseParkedRun.mock.results.at(-1)?.value).toBe(true);
+        expect(agent.runRegistry.size).toBe(0);
         await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
         expect(agent.getWorkflow().runs.size).toBe(0);
       } finally {
@@ -391,14 +394,15 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     'leaves a run stored as running by a resume in flight at deletion to that resume when it finishes (storage v%i, answer %s)',
     async (storageVersion, answer) => {
       try {
-        const { workflows, runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(
+        const { agent, workflows, runId, settled, releaseParkedRun } = await deleteWhileResumedRunIsRunning(
           storageVersion,
           answer,
         );
         expect(await settled).toBe('done');
-        // The deferred release runs once the resume settles and finds nothing of the finished run to release.
-        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId));
-        for (const result of releaseParkedRun.mock.results) expect(await result.value).toBe(false);
+        // The deferred release runs once the resume settles and frees what the finished run still holds in memory.
+        await vi.waitFor(() => expect(releaseParkedRun).toHaveBeenCalledWith(runId, { forDeletion: true }));
+        expect(await releaseParkedRun.mock.results.at(-1)?.value).toBe(true);
+        expect(agent.runRegistry.size).toBe(0);
         // The finished run drops its own snapshot and workflow run, session deleted or not.
         await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
       } finally {
@@ -427,14 +431,14 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     // Counts the delete's in-memory releases, so only the first attempt's own calls are held.
     let releases = 0;
     let firstReleaseDone = false;
-    const releaseParkedRun = agent.releaseParkedRun.bind(agent);
-    vi.spyOn(agent, 'releaseParkedRun').mockImplementation(async (id: string) => {
+    const releaseParkedRun = agent.__releaseParkedRun.bind(agent);
+    vi.spyOn(agent, '__releaseParkedRun').mockImplementation(async (id, options) => {
       if (++releases === 1 && phase === 'release') {
         held();
         await settledGate;
       }
       try {
-        return await releaseParkedRun(id);
+        return await releaseParkedRun(id, options);
       } finally {
         if (releases === 1) firstReleaseDone = true;
       }
@@ -591,5 +595,138 @@ describe('deleteSession with a parked suspension (#30743)', () => {
     await session.thread.create();
 
     expect(agent.runRegistry.size).toBe(1);
+  });
+});
+
+// Factory #3: deletion can leave no snapshot to prove the run parked, so the local state has to.
+describe('deleteSession when no snapshot of the parked run is left', () => {
+  async function expectNothingHeld(agent: any, workflows: any, runId: string) {
+    await vi.waitFor(async () => expect((await workflows.listWorkflowRuns({})).runs).toEqual([]));
+    expect(agent.runRegistry.size).toBe(0);
+    expect(agent.getWorkflow().runs.size).toBe(0);
+    expect(globalRunRegistry.get(runId)).toBeUndefined();
+  }
+
+  it.each([1, 2] as const)(
+    "releases the run a resume parked again when the delete erased that resume's row (storage v%i)",
+    async storageVersion => {
+      const { agent, controller, storage } = await setup({ storageVersion });
+      await park(controller, 0);
+      const workflows = (await storage.getStore('workflows'))!;
+      const [parked] = (await workflows.listWorkflowRuns({ status: 'suspended' })).runs;
+      const runId = parked!.runId;
+      const remove = workflows.deleteWorkflowRunById.bind(workflows);
+      let reparked: Promise<void> | undefined;
+      // Every delete of the first attempt commits only after a resume stored the run as suspended again.
+      vi.spyOn(workflows, 'deleteWorkflowRunById').mockImplementation(async args => {
+        reparked ??= agent.resume(runId, { a: 'again' }).then(() => agent.__resumesSettled(runId));
+        await reparked;
+        return remove(args);
+      });
+
+      expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+
+      await expectNothingHeld(agent, workflows, runId);
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'releases a parked run whose snapshot was never stored (storage v%i)',
+    async storageVersion => {
+      const { agent, controller, storage } = await setup({ storageVersion, shouldPersistSnapshot: () => false });
+      const session = await park(controller, 0);
+      const workflows = (await storage.getStore('workflows'))!;
+      expect((await workflows.listWorkflowRuns({})).runs).toEqual([]);
+      const [runId] = [...agent.getWorkflow().runs.keys()];
+
+      expect(await controller.deleteSession({ sessionId: 's-0' })).toBe(true);
+
+      await expectNothingHeld(agent, workflows, runId!);
+    },
+  );
+
+  async function parkWithoutSnapshot(storageVersion: 1 | 2) {
+    const { agent, controller, storage } = await setup({ storageVersion });
+    await park(controller, 0);
+    const [runId] = [...agent.getWorkflow().runs.keys()];
+    const engine = (agent as any).executionEngine;
+    vi.spyOn(engine, 'loadRunSnapshot').mockResolvedValue(undefined);
+    const warn = vi.spyOn((agent as any).logger, 'warn');
+    const warnings = () => warn.mock.calls.filter(([message]) => String(message).includes(runId!));
+    return { agent, storage, engine, runId: runId!, warnings };
+  }
+
+  it.each([1, 2] as const)('keeps and reports a run that is running again (storage v%i)', async storageVersion => {
+    const { agent, runId, warnings } = await parkWithoutSnapshot(storageVersion);
+    agent.getWorkflow().runs.get(runId)!.workflowRunStatus = 'running';
+
+    expect(await agent.__releaseParkedRun(runId, { forDeletion: true })).toBe(false);
+
+    expect(agent.getWorkflow().runs.size).toBe(1);
+    expect(agent.runRegistry.size).toBe(1);
+    expect(warnings()).toHaveLength(1);
+  });
+
+  it.each([1, 2] as const)(
+    'releases a parked hold whose workflow run is gone on the default engine (storage v%i)',
+    async storageVersion => {
+      const { agent, runId, warnings } = await parkWithoutSnapshot(storageVersion);
+      agent.getWorkflow().runs.delete(runId);
+
+      expect(await agent.__releaseParkedRun(runId, { forDeletion: true })).toBe(true);
+
+      expect(agent.runRegistry.size).toBe(0);
+      expect(globalRunRegistry.get(runId)).toBeUndefined();
+      expect(warnings()).toEqual([]);
+    },
+  );
+
+  it.each([1, 2] as const)(
+    'keeps and reports a hold whose workflow run is gone when the engine stores suspensions late (storage v%i)',
+    async storageVersion => {
+      const { agent, engine, runId, warnings } = await parkWithoutSnapshot(storageVersion);
+      agent.getWorkflow().runs.delete(runId);
+      vi.spyOn(engine, 'suspendPersistedOnReturn', 'get').mockReturnValue(false);
+
+      expect(await agent.__releaseParkedRun(runId, { forDeletion: true })).toBe(false);
+
+      expect(agent.runRegistry.size).toBe(1);
+      expect(warnings()).toHaveLength(1);
+    },
+  );
+
+  it.each([1, 2] as const)('still needs a stored snapshot outside deletion (storage v%i)', async storageVersion => {
+    const { agent, runId, warnings } = await parkWithoutSnapshot(storageVersion);
+
+    expect(await agent.releaseParkedRun(runId)).toBe(false);
+
+    expect(agent.getWorkflow().runs.size).toBe(1);
+    expect(agent.runRegistry.size).toBe(1);
+    expect(warnings()).toEqual([]);
+  });
+
+  it('leaves an agent that holds nothing of the run untouched', async () => {
+    const { agent: other } = await setup();
+    const { runId, warnings, agent } = await parkWithoutSnapshot(1);
+    const otherWarn = vi.spyOn((other as any).logger, 'warn');
+
+    expect(await other.__releaseParkedRun(runId, { forDeletion: true })).toBe(false);
+
+    expect(agent.runRegistry.size).toBe(1);
+    expect(warnings()).toEqual([]);
+    expect(otherWarn).not.toHaveBeenCalled();
+  });
+});
+
+describe('evented engine parked proof', () => {
+  const engine = Object.create(EventedAgentExecutionEngine.prototype) as any;
+  it.each([
+    ['suspended', undefined, true],
+    ['running', undefined, false],
+    ['pending', undefined, false],
+    ['running', 'suspended', true],
+    ['running', 'running', false],
+  ] as const)('local %s with stored %s is parked: %s', (local, stored, parked) => {
+    expect(engine.isRunParked({ workflowRunStatus: local }, stored)).toBe(parked);
   });
 });

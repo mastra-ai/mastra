@@ -956,15 +956,15 @@ export class DefaultAgentExecutionEngine {
     workflow: DurableWorkflow,
     runId: string,
     run: DurableRun,
-    persistedStatus: WorkflowRunState['status'],
+    persistedStatus: WorkflowRunState['status'] | undefined,
   ): boolean {
     if (workflow.runs.get(runId) !== run || !this.isRunParked(run, persistedStatus)) return false;
     workflow.runs.delete(runId);
     return true;
   }
 
-  /** Whether a run whose snapshot is stored with `persistedStatus` sits parked at a suspension. */
-  protected isRunParked(run: DurableRun, _persistedStatus: WorkflowRunState['status']): boolean {
+  /** Whether a run whose snapshot is stored with `persistedStatus` (`undefined`: none is) sits parked at a suspension. */
+  protected isRunParked(run: DurableRun, _persistedStatus: WorkflowRunState['status'] | undefined): boolean {
     return run.workflowRunStatus === 'suspended';
   }
 
@@ -1036,8 +1036,12 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   // The local run learns of a worker's suspension only from the start result, which can trail the
   // stored snapshot (until then it reads pending or running): it is parked once the snapshot says so.
   // A stored suspended snapshot is the workers' final write for the segment, so none still uses the run.
-  protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status']): boolean {
-    return persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus);
+  // Once the start result landed this process is done with the run, which is all a deletion without a snapshot needs.
+  protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status'] | undefined): boolean {
+    return (
+      run.workflowRunStatus === 'suspended' ||
+      (persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus))
+    );
   }
 
   // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).

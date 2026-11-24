@@ -354,6 +354,14 @@ export class DurableAgent<
   }
 
   /**
+   * @internal {@link releaseParkedRun} for a session deletion, which also deletes the run's snapshot: with no
+   * snapshot left, this process's own state must show the run parked, and a hold it keeps is logged.
+   */
+  __releaseParkedRun(runId: string, options: { forDeletion: boolean }): Promise<boolean> {
+    return this.releaseParkedExecution(runId, options);
+  }
+
+  /**
    * Get the run registry (for testing and advanced usage)
    */
   get runRegistry(): ExtendedRunRegistry {

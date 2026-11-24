@@ -13220,8 +13220,14 @@ export class Agent<
   /**
    * Releases this process's hold on a durable run parked at a suspension, keeping its snapshot.
    * Backs {@link DurableAgent.releaseParkedRun}.
+   *
+   * `forDeletion`: the run's snapshot is being deleted, so one that is gone (erased by the delete, or never stored)
+   * is no reason to keep the run resumable; this process's own state must then prove the run parked.
    */
-  protected async releaseParkedExecution(runId: string): Promise<boolean> {
+  protected async releaseParkedExecution(
+    runId: string,
+    { forDeletion = false }: { forDeletion?: boolean } = {},
+  ): Promise<boolean> {
     const engine = this.executionEngine;
     const workflow = this.getWorkflow();
     const localEntry = this.executionRunRegistry.get(runId);
@@ -13243,7 +13249,8 @@ export class Agent<
 
     // A failed read is not a miss: it propagates so the caller can report it.
     const snapshot = await engine.loadRunSnapshot(runId);
-    if (snapshot?.status !== 'suspended') return false;
+    const provedLocally = forDeletion && snapshot === undefined;
+    if (!provedLocally && snapshot?.status !== 'suspended') return false;
     // A resume that started while the snapshot was read registers its own segment.
     const currentCleanups = this.#runHolds.get(runId)?.cleanups;
     if (
@@ -13258,7 +13265,19 @@ export class Agent<
     }
 
     // Checked before anything is released, so `false` always means nothing was.
-    if (run && !engine.releaseParkedRun(workflow, runId, run, snapshot.status)) return false;
+    const parked = run
+      ? engine.releaseParkedRun(workflow, runId, run, snapshot?.status)
+      : // Without a workflow run only a parked output proves the suspension, and only where the engine's
+        // suspension has landed by the time the execution returns.
+        !provedLocally || (!!this.#runHolds.get(runId)?.parkedOutputs.size && engine.suspendPersistedOnReturn);
+    if (!parked) {
+      if (provedLocally) {
+        this.logger.warn(
+          `Agent "${this.id}": kept the in-memory state of run ${runId} after its snapshot was deleted, since it may still be running`,
+        );
+      }
+      return false;
+    }
     // The workflow run is gone now, so a failing step must not strand the rest of the hold.
     this.#releaseRunHold(runId, {
       releaseEntries: () => {

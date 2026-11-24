@@ -4862,11 +4862,13 @@ export class Session<TState = unknown> {
 
   async #releaseParkedRunInMemory(runId: string): Promise<void> {
     for (const agent of new Set([this.machinery.getAgent(), ...(this.machinery.getAgents?.() ?? [])])) {
-      const release = (agent as { releaseParkedRun?: (runId: string) => Promise<boolean> }).releaseParkedRun;
+      const release = (
+        agent as { __releaseParkedRun?: (runId: string, options: { forDeletion: boolean }) => Promise<boolean> }
+      ).__releaseParkedRun;
       if (typeof release !== 'function') continue;
       try {
         // Every agent is asked: each holds its own state for the run, and one that holds none resolves false.
-        await release.call(agent, runId);
+        await release.call(agent, runId, { forDeletion: true });
       } catch (error) {
         // One agent's failure must not keep the others from releasing the run.
         this.emit({ type: 'error', error: getErrorFromUnknown(error) });
