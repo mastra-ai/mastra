@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EventCallback } from '../../events/types';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { createBlockingFirstTextStreamModel, waitForCondition } from './signals-test-utils';
 import { LeasePubSub } from './thread-stream-test-utils';
@@ -71,8 +72,9 @@ class LaggingReaderPubSub extends LeasePubSub {
 
 /**
  * The owner admits and runs a forward while the forwarder's reader lags, then trims the run and lets go of the lease.
+ * `leaseChecks` forwarder lease checks run before the lagging reader catches up.
  */
-async function forwardWhileLagging() {
+async function forwardWhileLagging(leaseChecks: number, { delayFirstAdmissionMs = 0 } = {}) {
   const scope = { resourceId: 'forward-admission-user', threadId: 'forward-admission-thread' };
   const pubsub = new LaggingReaderPubSub();
   pubsub.retain = true;
@@ -81,9 +83,22 @@ async function forwardWhileLagging() {
   const forwardAdmitted = new Promise<void>(resolve => {
     admitted = resolve;
   });
+  let forwarderLeaseChecks = 0;
+  const getLeaseOwner = pubsub.getLeaseOwner.bind(pubsub);
+  pubsub.getLeaseOwner = async (key: string) => {
+    // Only the forwarder's lease watcher reads the lease from `checkLease`.
+    if (new Error().stack?.includes('checkLease')) forwarderLeaseChecks++;
+    return getLeaseOwner(key);
+  };
   const publish = pubsub.publish.bind(pubsub);
+  let admissionDelayed = false;
   pubsub.publish = async (topic: string, event: any) => {
     if (event.type === 'run-completed') completed.push(event.runId);
+    if (delayFirstAdmissionMs > 0 && event.data?.type === 'user-message-admitted' && !admissionDelayed) {
+      // The first append fails transiently and the backend retries it after a delay, as Redis Streams' publish does.
+      admissionDelayed = true;
+      await new Promise(resolve => setTimeout(resolve, delayFirstAdmissionMs));
+    }
     await publish(topic, event);
     // The forwarder falls behind right after sending its forward.
     if (event.data?.type === 'signal-enqueued' && JSON.stringify(event.data.signal).includes('idle B')) {
@@ -162,10 +177,26 @@ async function forwardWhileLagging() {
       2_000,
     );
 
+    for (let check = 1; check <= leaseChecks; check++) {
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+      // A check that queued the copy again stops the watcher, so no later check comes.
+      await waitForCondition(() => forwarderLeaseChecks >= check || idleBRuns() > 1, 2_000);
+    }
+
     pubsub.resume();
     await pubsub.caughtUp();
     await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
     expect(idleBRuns()).toBe(1);
+    // The checks ran: the watcher kept the copy held through them instead of queueing it again.
+    expect(forwarderLeaseChecks).toBeGreaterThanOrEqual(leaseChecks);
+    if (leaseChecks >= 2) {
+      // The forwarder probed the thread after the lease was gone twice, and its reader read the probe back after the
+      // admission, so the probe found nothing left to queue again.
+      const handled = pubsub.handledTypes;
+      expect(handled).toContain('forwarded-lease-probe');
+      expect(handled.indexOf('user-message-admitted')).not.toBe(-1);
+      expect(handled.indexOf('user-message-admitted')).toBeLessThan(handled.indexOf('forwarded-lease-probe'));
+    }
   } finally {
     admitted();
     releaseFirst();
@@ -184,5 +215,11 @@ describe('forwarded user message admission', () => {
   });
 
   it('runs a forwarded message once when the owner trims its run before the forwarder reads the admission', () =>
-    forwardWhileLagging());
+    forwardWhileLagging(0));
+
+  it('runs a forwarded message once when the forwarder lags through lease checks after the owner let go', () =>
+    forwardWhileLagging(3));
+
+  it('runs a forwarded message once when the owner retries a failed admission append while its run goes on', () =>
+    forwardWhileLagging(0, { delayFirstAdmissionMs: 300 }));
 });
