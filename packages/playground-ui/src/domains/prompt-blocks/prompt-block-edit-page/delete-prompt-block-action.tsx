@@ -33,13 +33,13 @@ export function DeletePromptBlockAction({ blockId, blockName, disabled = false }
   return (
     <>
       <Button
+        icon={<TrashIcon />}
         onClick={() => setOpen(true)}
         disabled={disabled || isPending}
         data-testid="prompt-block-delete"
         variant="ghost"
         size="sm"
       >
-        <TrashIcon />
         Delete
       </Button>
       <AlertDialog open={open} onOpenChange={setOpen}>
@@ -57,14 +57,14 @@ export function DeletePromptBlockAction({ blockId, blockName, disabled = false }
             <Button
               variant="primary"
               data-testid="prompt-block-delete-confirm"
-              disabled={isPending}
               onClick={() => {
                 // Use a plain button (not AlertDialog.Close) so the dialog stays
                 // open while the request is in flight and on error.
                 void confirm();
               }}
+              loading={isPending}
             >
-              {isPending ? 'Deleting…' : 'Delete prompt block'}
+              Delete prompt block
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>

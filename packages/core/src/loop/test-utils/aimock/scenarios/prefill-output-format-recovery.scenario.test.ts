@@ -31,12 +31,7 @@ import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { MessageListInput } from '../../../../agent/message-list';
 import { MockMemory } from '../../../../memory/mock';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 const ANTHROPIC_OUTPUT_FORMAT_PREFILL_ERROR =
   'Your API request included an `assistant` message in the final position, which would pre-fill the `assistant` response. When using output format, pre-filling the `assistant` response is not supported.';
@@ -163,7 +158,7 @@ describeForAllEngines('AIMock loop scenario: Anthropic output-format prefill rec
         expect(output.object).toEqual({ answer: 'Red' });
       } else {
         const result = await agent.stream(input, options);
-        const output = isDurableEngineVariant(engine) ? result.output : result;
+        const output = result.output ?? result;
         await output.consumeStream();
         expect(await output.error).toBeUndefined();
         expect(await output.object).toEqual({ answer: 'Red' });

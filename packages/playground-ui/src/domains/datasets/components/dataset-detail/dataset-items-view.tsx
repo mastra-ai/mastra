@@ -186,8 +186,8 @@ export function DatasetItemsView({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <AlertDialog.Action onClick={handleBulkDeleteConfirm}>
-              {deleteItems.isPending ? 'Deleting...' : 'Delete'}
+            <AlertDialog.Action onClick={handleBulkDeleteConfirm} loading={deleteItems.isPending}>
+              Delete
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

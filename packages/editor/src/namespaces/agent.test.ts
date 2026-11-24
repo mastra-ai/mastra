@@ -271,43 +271,45 @@ describe('EditorAgentNamespace.update', () => {
   });
 
   it.each([
-    true,
-    false,
-    { maxSteps: 25, cleanupTimeoutMs: 0 },
-    { id: 'old', name: 'Old', shouldPersistSnapshot: true },
-  ])('loads an existing persisted durable config %j without silent execution migration', async durable => {
-    const { editor, mastra, agentsStore } = await createEditorWithStore();
-    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-    try {
-      await agentsStore.create({
-        agent: {
-          id: 'legacy-durable-agent',
-          name: 'Legacy Durable Agent',
-          instructions: 'ONE',
-          model: { provider: 'openai', name: 'gpt-4' },
-          durable,
-        },
-      });
-      const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
-      expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
-      expect(agent?.hasResumableStreams()).toBe(durable !== false);
-      expect(agent?.durable).toEqual(durable);
-      await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
-      const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
-      expect(migrationWarnings).toHaveLength(typeof durable === 'object' ? 1 : 0);
-      if (typeof durable === 'object') {
-        expect(migrationWarnings[0]![0]).toContain('legacy-durable-agent');
-        // cleanupTimeoutMs and shouldPersistSnapshot are native durable options, not ignored legacy keys.
-        const nativeKeys = ['cleanupTimeoutMs', 'shouldPersistSnapshot'];
-        for (const key of Object.keys(durable)) {
-          if (nativeKeys.includes(key)) expect(migrationWarnings[0]![0]).not.toContain(key);
-          else expect(migrationWarnings[0]![0]).toContain(key);
+    { durable: true, ignoredKeys: [] },
+    { durable: false, ignoredKeys: [] },
+    { durable: { maxSteps: 25, cleanupTimeoutMs: 0 }, ignoredKeys: [] },
+    { durable: { id: 'old', name: 'Old', maxSteps: 25, shouldPersistSnapshot: true }, ignoredKeys: ['id', 'name'] },
+  ])(
+    'loads an existing persisted durable config $durable without silent execution migration',
+    async ({ durable, ignoredKeys }) => {
+      const { editor, mastra, agentsStore } = await createEditorWithStore();
+      const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+      try {
+        await agentsStore.create({
+          agent: {
+            id: 'legacy-durable-agent',
+            name: 'Legacy Durable Agent',
+            instructions: 'ONE',
+            model: { provider: 'openai', name: 'gpt-4' },
+            durable,
+          },
+        });
+        const agent = await editor.agent.getById('legacy-durable-agent', { status: 'draft' });
+        expect(agent).toBe(mastra.getAgentById('legacy-durable-agent'));
+        expect(agent?.hasResumableStreams()).toBe(durable !== false);
+        expect(agent?.durable).toEqual(durable);
+        await expect(agent!.recover('existing-checkpoint')).rejects.toThrow('createDurableAgent');
+        const migrationWarnings = warn.mock.calls.filter(([message]) => message.includes('createDurableAgent'));
+        expect(migrationWarnings).toHaveLength(ignoredKeys.length > 0 ? 1 : 0);
+        if (typeof durable === 'object' && ignoredKeys.length > 0) {
+          const message = migrationWarnings[0]?.[0];
+          expect(message).toContain('legacy-durable-agent');
+          for (const key of Object.keys(durable)) {
+            if (ignoredKeys.some(ignoredKey => ignoredKey === key)) expect(message).toContain(key);
+            else expect(message).not.toContain(key);
+          }
         }
+      } finally {
+        warn.mockRestore();
       }
-    } finally {
-      warn.mockRestore();
-    }
-  });
+    },
+  );
 
   it('creates a version when SDK updates durable', async () => {
     const { editor, agentsStore } = await createEditorWithStore();

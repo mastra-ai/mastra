@@ -54,6 +54,18 @@ export interface AgentStreamsConfig {
   /** Select the default (in-process) or evented durable engine, or false for the plain Agent loop. */
   executionEngine?: 'default' | 'evented' | false;
 
+  /** Maximum steps for the durable loop when neither defaultOptions nor the call sets a limit. */
+  maxSteps?: number;
+
+  /**
+   * Storage version for new durable runs. Version 2 uses the run journal when supported,
+   * otherwise the agent logs a warning and stores new runs as version 1.
+   * Existing runs keep their stored version.
+   * @default 1
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
+
   /** Snapshot persistence policy for durable execution. */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 

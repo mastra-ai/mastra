@@ -60,14 +60,8 @@ export function WorkspaceFileViewer({
           {file?.contentType === 'text' ? (
             <CopyButton content={content} size="icon-sm" variant="ghost" tooltip="Copy file contents" />
           ) : null}
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
-          >
-            {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
+          <Button size="icon-sm" variant="ghost" onClick={onRefresh} aria-label="Refresh file" loading={isRefreshing}>
+            <IconArrowRotateClockwise />
           </Button>
         </div>
       </div>

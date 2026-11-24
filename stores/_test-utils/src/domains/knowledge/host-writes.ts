@@ -110,5 +110,60 @@ export function createKnowledgeHostWriteTests(createStore: () => Promise<Knowled
       expect(await knowledge.removePage({ scope: 'org:acme', path: 'guides' })).toBeNull();
       expect(await knowledge.removePage(faq)).toBeNull();
     });
+
+    it('removes the page it read, and refuses once someone else has written it or it was replaced', async () => {
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'imported' });
+      await knowledge.upsertPage({ ...faq, body: 'Agent notes', author: 'agent:a' });
+      await expect(knowledge.removePage({ ...faq, expected: { id: page.id, version: 1 } })).rejects.toMatchObject(
+        conflict,
+      );
+      expect((await store.getPage({ id: page.id, read: 'all' }))?.body).toBe('Agent notes');
+
+      await knowledge.removePage(faq);
+      const replacement = await knowledge.upsertPage({ ...faq, body: 'Replacement' });
+      await expect(knowledge.removePage({ ...faq, expected: { id: page.id, version: 1 } })).rejects.toMatchObject(
+        conflict,
+      );
+      expect((await store.getPage({ id: replacement.page.id, read: 'all' }))?.body).toBe('Replacement');
+
+      const removed = await knowledge.removePage({ ...faq, expected: { id: replacement.page.id, version: 1 } });
+      expect(removed?.id).toBe(replacement.page.id);
+      expect((await store.getPage({ id: replacement.page.id, read: 'all' }))?.deletedAt).toBeTruthy();
+      // Gone before the lookup, or never there: still a conflict, not `null`.
+      const gone = { id: replacement.page.id, version: 1 };
+      await expect(knowledge.removePage({ ...faq, expected: gone })).rejects.toMatchObject(conflict);
+      await expect(knowledge.removePage({ scope: 'org:nobody', path: 'faq', expected: gone })).rejects.toMatchObject(
+        conflict,
+      );
+    });
+
+    it('refuses to remove a page written or removed between its read and the delete', async () => {
+      const { page } = await knowledge.upsertPage({ ...faq, body: 'imported' });
+      const remove = store.deletePage.bind(store);
+      store.deletePage = async input => {
+        store.deletePage = remove;
+        // Another writer lands after the host read the page at version 1.
+        await store.updatePage({
+          id: page.id,
+          expectedVersion: 1,
+          body: 'Agent notes',
+          provenance: { author: 'agent:a' },
+        });
+        return remove(input);
+      };
+      await expect(knowledge.removePage({ ...faq, expected: { id: page.id, version: 1 } })).rejects.toMatchObject(
+        conflict,
+      );
+      expect((await store.getPage({ id: page.id, read: 'all' }))?.body).toBe('Agent notes');
+
+      store.deletePage = async input => {
+        store.deletePage = remove;
+        await remove({ id: page.id, expectedVersion: 2, deletedBy: 'agent:a' });
+        return remove(input);
+      };
+      await expect(knowledge.removePage({ ...faq, expected: { id: page.id, version: 2 } })).rejects.toMatchObject(
+        conflict,
+      );
+    });
   });
 }
