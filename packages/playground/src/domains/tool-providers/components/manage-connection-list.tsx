@@ -54,18 +54,12 @@ export const ManageConnectionList = ({
       {onAddConnection && (
         <DialogFooter>
           <Button
+            icon={addingConnection ? <Spinner size="sm" /> : <IconPlusMedium />}
             type="button"
             onClick={onAddConnection}
             disabled={disabled || addingConnection}
             data-testid={`${testIdPrefix}-add`}
           >
-            {addingConnection ? (
-              <Spinner size="sm" />
-            ) : (
-              <Icon>
-                <IconPlusMedium />
-              </Icon>
-            )}
             Add connection
           </Button>
         </DialogFooter>

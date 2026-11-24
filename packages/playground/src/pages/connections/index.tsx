@@ -136,8 +136,8 @@ export default function ConnectionsPage() {
           <PageHeader.Title>Connections</PageHeader.Title>
           {surface.data?.status === 'ready' ? (
             <PageHeader.Action>
-              <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
-                <IconPlusMedium aria-hidden /> Add connection
+              <Button icon={<IconPlusMedium />} variant="primary" size="sm" onClick={() => setAddOpen(true)}>
+                Add connection
               </Button>
             </PageHeader.Action>
           ) : null}

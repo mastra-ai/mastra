@@ -51,8 +51,7 @@ export const AuthHeadersForm = () => {
       <Form onSubmit={handleSubmit} className="w-full max-w-md gap-6 text-left">
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="ml-auto">
-          <IconFloppyDisk1 />
+        <Button icon={<IconFloppyDisk1 />} type="submit" className="ml-auto">
           Save headers
         </Button>
       </Form>

@@ -45,6 +45,7 @@ export const FavoriteButton = ({
 
   return (
     <Button
+      icon={<IconStar className={isFavorited ? 'fill-current' : undefined} />}
       type="button"
       variant="default"
       size={size}
@@ -65,7 +66,6 @@ export const FavoriteButton = ({
         className,
       )}
     >
-      <IconStar className={cn('shrink-0', isFavorited && 'fill-current')} aria-hidden />
       {showCount && typeof favoriteCount === 'number' && (
         <Txt as="span" variant="label" className="whitespace-nowrap">
           <span className="tabular-nums">{favoriteCount}</span> {countLabel}

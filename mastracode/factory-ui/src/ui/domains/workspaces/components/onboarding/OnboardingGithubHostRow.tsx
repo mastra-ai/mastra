@@ -39,8 +39,12 @@ export function OnboardingGithubHostRow({
             onRetry={onRetry}
           />
         ) : (
-          <Button variant="default" disabled={redirecting || unavailableReason !== undefined} onClick={onConnect}>
-            {redirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
+          <Button
+            icon={redirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : undefined}
+            variant="default"
+            disabled={redirecting || unavailableReason !== undefined}
+            onClick={onConnect}
+          >
             Connect GitHub
           </Button>
         )

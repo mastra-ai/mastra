@@ -24,8 +24,14 @@ export function ProviderRows({
     <ul className="divide-border divide-y">
       {children}
       <li>
-        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
-          <IconPlusMedium aria-hidden="true" />
+        <Button
+          icon={<IconPlusMedium />}
+          variant="ghost"
+          size="sm"
+          className="h-10 w-full justify-start"
+          disabled={addDisabled}
+          onClick={onAdd}
+        >
           Add provider
         </Button>
       </li>
