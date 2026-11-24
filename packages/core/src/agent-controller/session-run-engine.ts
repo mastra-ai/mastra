@@ -1161,13 +1161,16 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
-            this.#session.suspensions.register({
-              toolCallId: suspToolCallId,
-              runId: suspRunId,
-              toolName: suspToolName,
-              threadId: suspThreadId,
-              resourceId: suspResourceId,
-            });
+            this.#session.__registerStreamSuspension(
+              {
+                toolCallId: suspToolCallId,
+                runId: suspRunId,
+                toolName: suspToolName,
+                threadId: suspThreadId,
+                resourceId: suspResourceId,
+              },
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY) ?? agent,
+            );
           }
         }
         state.isSuspended = true;
