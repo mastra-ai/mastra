@@ -2433,10 +2433,15 @@ export class MastraFactory {
             factoryTransitionService: transitionService,
             factoryBoardEngine: boardEngine,
             runSlots: () => this.#dispatcher?.runSlots(),
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            onFactoryRuntime: ({
+              transitionService: runtimeTransitionService,
+              boardEngine: runtimeBoardEngine,
+              prepareBinding,
+            }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
+                boardEngine: runtimeBoardEngine,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: boards,

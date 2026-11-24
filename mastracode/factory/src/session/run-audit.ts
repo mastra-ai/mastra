@@ -278,6 +278,28 @@ export function recordSessionRunStart(
   });
 }
 
+/**
+ * Closes ledger entries whose run died with its worker: each is recorded as an aborted run with
+ * no usage seen, and removed so the resumed run that replaces it is the only one left open.
+ */
+export function endInterruptedSessionRuns(
+  session: RunEndCaptureSession,
+  { audit, kickoffIds }: { audit: AuditRecorder | undefined; kickoffIds: string[] },
+): Promise<void> {
+  return serializeRunAudit(session, async () => {
+    if (audit) {
+      for (const kickoffId of kickoffIds) {
+        await recordRunEnds(session, audit, 'aborted', kickoffId, { steps: [], claimed: false });
+      }
+    }
+    const runs = await listSessionOpenRuns(session);
+    const remaining = runs.filter(run => !kickoffIds.includes(run.kickoffId));
+    if (remaining.length !== runs.length) {
+      await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: remaining });
+    }
+  });
+}
+
 /** Renew this process's claim on an open run so other replicas keep treating it as live. */
 export function heartbeatSessionOpenRun(
   session: RunEndCaptureSession,

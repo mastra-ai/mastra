@@ -186,6 +186,7 @@ export interface FactoryApiRoutesDeps {
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
+    boardEngine: FactoryBoardEngine;
     startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
@@ -913,9 +914,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.boardRegistry,
       )
     : undefined;
-  if (transitionService && startCoordinator) {
+  if (transitionService && boardEngine && startCoordinator) {
     deps.onFactoryRuntime?.({
       transitionService,
+      boardEngine,
       startCoordinator,
       ...(sourceControlRegistrations.length > 0
         ? {
