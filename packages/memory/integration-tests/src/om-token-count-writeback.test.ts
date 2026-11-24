@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,6 +163,70 @@ describe('Observational Memory token counts for stored history', () => {
     const record = await (await second.memory.omEngine)!.getRecord(threadId, RESOURCE);
     const pending = record?.pendingMessageTokens ?? 0;
     expect(pending).toBeGreaterThan(trueTotal + history.length * DRIFT);
+  });
+  it('stores a count for a tool result that serializes through toJSON() that matches what storage holds', async () => {
+    const { storage, memory } = open(join(dbDir, 'to-json.db'));
+    const threadId = randomUUID();
+    await memory.saveThread({
+      thread: { id: threadId, resourceId: RESOURCE, title: 't', createdAt: new Date(), updatedAt: new Date() },
+    });
+    // Its own fields are empty; JSON.stringify, and so storage, serializes it as the report.
+    class Report {
+      toJSON() {
+        return { report: 'Quarterly figures and notes. '.repeat(1_000) };
+      }
+    }
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up the report.',
+      execute: async () => new Report(),
+    });
+    let step = 0;
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const model = new MockLanguageModelV2({
+      doStream: async () =>
+        ({
+          stream: convertArrayToReadableStream(
+            step++ === 0
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+                  { type: 'finish', finishReason: 'tool-calls', usage },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'OK.' },
+                  { type: 'text-end', id: 't' },
+                  { type: 'finish', finishReason: 'stop', usage },
+                ],
+          ) as any,
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }) as any,
+    });
+    const agent = new Agent({
+      id: 'to-json',
+      name: 'to-json',
+      instructions: 'Be brief.',
+      model,
+      tools: { lookup },
+      memory,
+    });
+
+    const turn = await agent.stream('Get the report.', { memory: { thread: threadId, resource: RESOURCE } });
+    await turn.consumeStream();
+    expect(await turn.text).toBe('OK.');
+
+    const { messages } = await (await storage.getStore('memory'))!.listMessages({ threadId, perPage: false });
+    const toolPart = messages
+      .flatMap(message => message.content.parts as any[])
+      .find(part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result');
+    expect(toolPart.toolInvocation.result.report).toContain('Quarterly figures');
+    const resultEntries = trustedEntries(toolPart).filter(entry => entry.key.includes('tool-result'));
+    expect(resultEntries).toHaveLength(1);
+    // The report is ~5,000 tokens; a count of the instance's own (empty) fields would be a handful.
+    expect(resultEntries[0]!.tokens).toBeGreaterThan(4_000);
   });
   it("saves the Agent's final reply with its token counts", async () => {
     const { memory, agent } = open(join(dbDir, 'reply.db'));

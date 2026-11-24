@@ -20,6 +20,13 @@ function sanitizeToolResultValue(value: unknown, seen: WeakMap<object, unknown> 
     return seen.get(value);
   }
 
+  // Count what storage and the model see: JSON.stringify serializes a value through its toJSON().
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON === 'function') {
+    const json = toJSON.call(value);
+    if (json !== value) return sanitizeToolResultValue(json, seen);
+  }
+
   if (Array.isArray(value)) {
     const sanitizedArray: unknown[] = [];
     seen.set(value, sanitizedArray);
