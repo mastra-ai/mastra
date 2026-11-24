@@ -2860,19 +2860,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
         // Time travel reuses the recorded child run, or creates one if absent.
-        // A foreach's `nestedRunId` names only its last-started iteration, so iterations use their own id.
-        // Without per-iteration ids, `nestedRunId` is trusted only for a single-item foreach, where it must be item 0's.
+        // A foreach's iterations use their own id. Time-travel params keep a foreach's shared
+        // `nestedRunId` only for a stored single-item foreach without per-iteration ids.
         nestedDispatch = 'time-travel';
-        const recorded = stepResults[leafId];
+        const recordedMetadata = stepResults[leafId]?.metadata;
         nestedRunId =
           (step.type === 'foreach'
-            ? (recorded?.metadata?.foreachNestedRunIds?.[executionPath[1]!] ??
-              (!recorded?.metadata?.foreachNestedRunIds &&
-              Array.isArray(recorded?.payload) &&
-              recorded.payload.length === 1
-                ? recorded?.metadata?.nestedRunId
-                : undefined))
-            : recorded?.metadata?.nestedRunId) ?? globalThis.crypto.randomUUID();
+            ? (recordedMetadata?.foreachNestedRunIds?.[executionPath[1]!] ??
+              (recordedMetadata?.foreachNestedRunIds ? undefined : recordedMetadata?.nestedRunId))
+            : recordedMetadata?.nestedRunId) ?? globalThis.crypto.randomUUID();
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
         // Restart reuses the iteration's or step's child run, if recorded.
         nestedDispatch = 'restart';

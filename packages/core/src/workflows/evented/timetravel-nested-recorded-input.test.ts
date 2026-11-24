@@ -314,4 +314,55 @@ describe('createTimeTravelExecutionParams', () => {
     });
     expect(params.stepResults.first).not.toHaveProperty('metadata');
   });
+
+  it.each([
+    { label: 'several items', stored: [{ n: 0 }, { n: 1 }], expected: undefined },
+    { label: 'one item', stored: [{ n: 0 }], expected: { nestedRunId: 'child-last' } },
+  ])(
+    'keeps a foreach nested run id without per-iteration ids only when the stored input has $label',
+    ({ stored, expected }) => {
+      const charge = createStep({
+        id: 'charge',
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        execute: async ({ inputData }) => inputData,
+      });
+      const inner = createWorkflow({ id: 'inner', inputSchema: z.any(), outputSchema: z.any() }).then(charge).commit();
+      const outer = createWorkflow({ id: 'outer', inputSchema: z.any(), outputSchema: z.any() })
+        .foreach(inner)
+        .commit();
+
+      const now = Date.now();
+      const params = createTimeTravelExecutionParams({
+        steps: ['inner', 'charge'],
+        graph: outer.buildExecutionGraph(),
+        // A caller-supplied one-item payload must not make the shared id look like item 0's.
+        context: { inner: { status: 'failed', payload: [{ n: 0 }] } } as any,
+        snapshot: {
+          runId: 'run-1',
+          status: 'failed',
+          value: {},
+          context: {
+            input: stored,
+            inner: {
+              status: 'failed',
+              payload: stored,
+              startedAt: now,
+              endedAt: now,
+              metadata: { nestedRunId: 'child-last' },
+            },
+          } as any,
+          serializedStepGraph: [],
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: now,
+        },
+      });
+
+      expect((params.stepResults.inner as any)?.metadata).toEqual(expected);
+    },
+  );
 });

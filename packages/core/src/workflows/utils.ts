@@ -496,13 +496,20 @@ export const assertTimeTravelGraphMatchesSnapshot = (params: {
   }
 };
 
-const nestedRunIdentity = (metadata: Record<string, any> | undefined) => {
+// Takes only the stored step result, so caller-supplied context cannot choose another run.
+const nestedRunIdentity = (stored: Record<string, any> | undefined, isForeach: boolean) => {
+  const metadata = stored?.metadata;
+  const foreachNestedRunIds =
+    metadata?.foreachNestedRunIds && typeof metadata.foreachNestedRunIds === 'object'
+      ? metadata.foreachNestedRunIds
+      : undefined;
+  // A foreach's `nestedRunId` names only its last-started iteration. Without per-iteration ids it is
+  // kept only when the stored foreach input has one item, so it can only be item 0's.
+  const keepNestedRunId =
+    !isForeach || (!foreachNestedRunIds && Array.isArray(stored?.payload) && stored.payload.length === 1);
   const identity = removeUndefinedValues({
-    nestedRunId: typeof metadata?.nestedRunId === 'string' ? metadata.nestedRunId : undefined,
-    foreachNestedRunIds:
-      metadata?.foreachNestedRunIds && typeof metadata.foreachNestedRunIds === 'object'
-        ? metadata.foreachNestedRunIds
-        : undefined,
+    nestedRunId: keepNestedRunId && typeof metadata?.nestedRunId === 'string' ? metadata.nestedRunId : undefined,
+    foreachNestedRunIds,
   });
   return Object.keys(identity).length > 0 ? identity : undefined;
 };
@@ -648,8 +655,7 @@ export const createTimeTravelExecutionParams = (params: {
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
         // The evented engine reuses the recorded nested run (and its snapshot) only when these ids survive.
-        // Read them from the stored snapshot only, so caller-supplied context cannot point at another run.
-        metadata: nestedRunIdentity(snapshotContext[stepId]?.metadata),
+        metadata: nestedRunIdentity(snapshotContext[stepId], entry.type === 'foreach'),
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
