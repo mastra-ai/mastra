@@ -263,24 +263,16 @@ export async function authorizeMemoryThreadAccess({
   effectiveResourceId?: string;
   permission?: string;
 }): Promise<void> {
-  if (memory.supportsThreadBranching) {
-    await authorizeThread({
-      mastra,
-      requestContext,
-      thread,
-      effectiveResourceId,
-      permission,
-    });
-  } else {
-    await enforceThreadAccess({
-      mastra,
-      requestContext,
-      threadId: thread.id,
-      thread,
-      effectiveResourceId,
-      permission,
-    });
-  }
+  // The requested thread keeps the ordinary access errors (403 for another owner's thread); only
+  // the lineage around it is reported as BRANCH_NOT_FOUND so hidden ancestors are not disclosed.
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId: thread.id,
+    thread,
+    effectiveResourceId,
+    permission,
+  });
 
   if (memory.supportsThreadBranching) {
     await authorizeRawBranchCandidates({
