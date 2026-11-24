@@ -521,7 +521,7 @@ Floating menu rows, values, and search fields use `menu`: 13px text at the regul
 <Tree.Label>src/index.ts</Tree.Label>
 ```
 
-`Input` and `Textarea` derive typography from their size. `DataPanel.SectionHeading` owns its small-caps style and renders its icon and children directly; callers compose any custom label or action themselves. `PageHeader.Meta` and `PageHeader.Eyebrow` preserve their inherited text styles even for raw children. `CodeEditor` alone exposes a narrow `font="body" | "mono"` choice because its text lives inside CodeMirror: prose fields can use the body face while code defaults to mono.
+`Input` and `Textarea` derive typography from their size. A single-line field's value, typed or picked, is `text-label`; a `Textarea` and mono text read at the regular weight; placeholders are `text-placeholder`. `DataPanel.SectionHeading` owns its small-caps style and renders its icon and children directly; callers compose any custom label or action themselves. `PageHeader.Meta` and `PageHeader.Eyebrow` preserve their inherited text styles even for raw children. `CodeEditor` alone exposes a narrow `font="body" | "mono"` choice because its text lives inside CodeMirror: prose fields can use the body face while code defaults to mono.
 
 ```tsx
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -573,13 +573,14 @@ Mono pairs with the text roles: `body` for logs, `body-sm` for values in tables 
 
 Product code never writes the `font-mono` class, and lint rejects it outside the design system. Use `Txt font="mono"` for identifiers, timestamps, and durations, `InlineCode` or `CodeBlock` for code, and `tabular-nums` for numbers. A raw `<pre>` or `<code>` element is already monospace.
 
-`--font-mono` defaults to the system monospace stack, and `fonts.css` points it at Commit Mono. To use another face, override it in an unlayered rule in your own CSS, and every mono value follows.
+`--font-mono` defaults to the system monospace stack, and `fonts.css` points it at Commit Mono. To use another face, override it in an unlayered rule in your own CSS, and every mono value follows. Text in fields (`Input`, `InputGroup`, `Textarea`, `CopyField`) reads `--font-mono-control` first, which `fonts.css` points at a Commit Mono cut about as heavy as regular Mona Sans; override it too.
 
 At the same font size, a monospace face usually looks larger than the body face because its lowercase letters are taller. Set `--font-mono-size-adjust` to the body face's x-height ratio and mono text scales to match it. Measure the ratio for your body face; `fonts.css` sets `0.508` for Mona Sans. Keycaps (`kbd`) keep their full size, because they are single capitals and x-height matching would only shrink them.
 
 ```css
 :root {
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono-control: var(--font-mono);
   --font-mono-size-adjust: ex-height 0.508;
 }
 ```

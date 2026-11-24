@@ -8,6 +8,8 @@ import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   deprecatedErrorAria,
   fieldErrorRim,
+  fieldMonoStyle,
+  fieldPlaceholderStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -24,8 +26,8 @@ const inputVariants = cva(
     // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
     'flex w-full zoom-safe-text text-ellipsis text-foreground',
     controlStateColorTransition,
-    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
-    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
+    fieldPlaceholderStyle,
+    fieldMonoStyle,
     // Native number spinners clip the pill; WebKit and Firefox need different selectors.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',

@@ -111,6 +111,16 @@
   src: url('./fonts/commit-mono-latin-700-normal.woff2') format('woff2');
 }
 
+/* commit-mono-latin-500-normal, for text in controls: its strokes are about as thick as Mona Sans's at the
+   regular weight. A family of its own, so the rest of the app's mono keeps the 400 and 700 files above. */
+@font-face {
+  font-family: 'Commit Mono Control';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('./fonts/commit-mono-latin-500-normal.woff2') format('woff2');
+}
+
 /* Unlayered, so these win over the system-stack defaults in theme/typography.css. */
 :root {
   --font-display:
@@ -119,6 +129,7 @@
   --font-body: var(--font-display);
   --font-mono:
     'Commit Mono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-mono-control: 'Commit Mono Control', var(--font-mono);
   /* Commit Mono's lowercase is taller than Mona Sans's; scale mono text to Mona Sans's x-height. */
   --font-mono-size-adjust: ex-height 0.508;
 }

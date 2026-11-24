@@ -18,7 +18,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
+import { fieldPlaceholderStyle, inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -365,7 +365,7 @@ function FilterBarInputImpl({
             className={cn(
               unstyledFormElementStyle,
               'min-w-0 flex-1 bg-transparent zoom-safe-text',
-              'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal focus:placeholder:opacity-70',
+              fieldPlaceholderStyle,
             )}
             onFocus={() => setOpen(true)}
             onKeyDown={handleKeyDown}

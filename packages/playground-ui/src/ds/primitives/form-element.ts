@@ -67,10 +67,19 @@ export function deprecatedErrorAria(error: boolean | undefined): { 'aria-invalid
 }
 export const fieldTriggerErrorBorder =
   'aria-invalid:border-destructive-indicator aria-invalid:hover:border-destructive-indicator aria-invalid:focus-visible:border-destructive-indicator';
-// A field shows a value, so its text is the 400-weight `text-body-sm` (13px), like Input and Textarea;
-// the 500-weight `text-label` it would get from Button's size recipe is for labels and button text.
+// One color for every placeholder; `fieldTriggerStyle` below gives it to a trigger with nothing picked.
+export const fieldPlaceholderStyle = 'placeholder:text-placeholder';
+
+// Mono in a field (a key, an ID) reads at the regular weight, in a cut about as heavy as Mona Sans's regular
+// (`--font-mono-control`, set by `fonts.css`): Commit Mono otherwise jumps from a thin 400 to a bold 700. The size
+// adjustment is repeated because preflight's `font: inherit` resets it on inputs.
+export const fieldMonoStyle =
+  '[&.font-mono]:font-(family-name:--font-mono-control,var(--font-mono)) [&.font-mono]:font-normal [&.font-mono]:[font-size-adjust:var(--font-mono-size-adjust,none)]';
+
+// The value takes `text-label` from Button's size recipe, the role Input and InputGroup use, so a picked value and
+// a typed one read the same in one row.
 export const fieldTriggerStyle =
-  'bg-field shadow-input text-body-sm [--control-icon-rest:var(--muted-icon)] ' +
+  'bg-field shadow-input data-[placeholder]:text-placeholder [--control-icon-rest:var(--muted-icon)] ' +
   fieldRimFocus +
   ' disabled:bg-field-disabled aria-disabled:bg-field-disabled data-[disabled]:bg-field-disabled aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 

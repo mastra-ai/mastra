@@ -13,6 +13,7 @@ import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium'
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
+import { fieldPlaceholderStyle } from '@/ds/primitives/form-element';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
@@ -74,8 +75,10 @@ const chipsFieldStyle: React.CSSProperties = {
 
 // `w-0` + `flex-1`: an input's default width (about 20 characters) would otherwise set the field's
 // minimum width, so it couldn't shrink into a narrow column.
-const inputClass =
-  'h-full w-0 min-w-0 flex-1 bg-transparent text-foreground outline-none zoom-safe-text placeholder:text-muted-foreground';
+const inputClass = cn(
+  'h-full w-0 min-w-0 flex-1 bg-transparent zoom-safe-text text-foreground outline-none',
+  fieldPlaceholderStyle,
+);
 
 /** Caret at the end of the value instead of selecting it, the way a text field behaves. */
 function moveCaretToEnd(event: React.FocusEvent<HTMLInputElement>) {

@@ -5,6 +5,8 @@ import * as React from 'react';
 import {
   deprecatedErrorAria,
   fieldErrorRim,
+  fieldMonoStyle,
+  fieldPlaceholderStyle,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
@@ -19,8 +21,8 @@ const textareaVariants = cva(
   cn(
     'flex w-full zoom-safe-text text-foreground',
     controlStateColorTransition,
-    'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
-    'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
+    fieldPlaceholderStyle,
+    fieldMonoStyle,
     // Textarea specific
     'min-h-20 resize-y',
   ),
@@ -30,8 +32,7 @@ const textareaVariants = cva(
         default: cn(inputSurfaceAndFocusStyle, 'rounded-xl', sharedFormElementDisabledStyle),
         unstyled: unstyledFormElementStyle,
       },
-      // Text roles mirror the Input size scale so a Textarea reads at the same size as a
-      // sibling Input: a field value is 400 weight at every height.
+      // Text here is prose that wraps, so it stays at the regular weight; single-line fields use `text-label`.
       size: {
         sm: 'px-2 py-1.5 text-caption',
         md: 'px-2.5 py-1.5 text-body-sm',

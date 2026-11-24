@@ -144,14 +144,13 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
-          visualVariant === 'default' && fieldTriggerStyle,
+          visualVariant === 'default' ? fieldTriggerStyle : 'data-[placeholder]:text-muted-foreground',
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           fieldTriggerWidthStyle,
           'justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-muted-foreground',
           fieldTriggerErrorBorder,
           '[&>span]:truncate',
           className,

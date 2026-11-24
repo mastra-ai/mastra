@@ -50,7 +50,7 @@ export function CopyField({ value, label, className }: CopyFieldProps) {
             data-slot="input-group-control"
             translate="no"
             onCopy={copyWholeValue}
-            className={cn(inputGroupControlClassName, 'flex items-center font-mono font-normal text-muted-foreground')}
+            className={cn(inputGroupControlClassName, 'flex items-center font-mono text-muted-foreground')}
           >
             {/* The whole value sizes the box (so it hugs short values); the visible line fits inside it. */}
             <span ref={ref} className="grid min-w-0 grid-cols-[minmax(0,max-content)]">

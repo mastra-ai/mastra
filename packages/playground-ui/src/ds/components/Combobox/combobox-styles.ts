@@ -48,14 +48,13 @@ export function comboboxTriggerClass({
 
   return cn(
     buttonVariants({ variant: visualVariant, size }),
-    visualVariant === 'default' && fieldTriggerStyle,
+    visualVariant === 'default' ? fieldTriggerStyle : 'data-[placeholder]:text-muted-foreground',
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`). Icon sizes are a fixed square
     // showing only the chevron, so they keep Button's centering.
     !isIconButtonSize(size) && cn(fieldTriggerWidthStyle, 'justify-between'),
     // Read as "active" while the popup is open, per variant (see map above).
     controlTriggerOpenState[visualVariant],
-    'data-[placeholder]:text-muted-foreground',
     fieldTriggerErrorBorder,
     className,
   );
@@ -91,7 +90,7 @@ export const comboboxStyles = {
   /** Chevron icon in trigger — decorative icon token shared by every field. */
 
   /** Placeholder text color */
-  placeholder: 'text-muted-foreground',
+  placeholder: 'text-placeholder',
 
   /**
    * Popup container — shared menu popup, but the search row sits edge-to-edge

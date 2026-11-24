@@ -352,7 +352,7 @@ function MultipleComboboxControl({
       showChevron={look.showChevron}
       className={triggerClassName(look)}
     >
-      <span className={cn(selectedCount === 0 && comboboxStyles.placeholder)}>{text}</span>
+      <span>{text}</span>
     </ComboboxTrigger>
   );
 }
