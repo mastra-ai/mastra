@@ -1,6 +1,7 @@
 import { classifyProviderError, getRetryAfterMs, PROVIDER_FAILURE_KINDS } from '@mastra/core/error';
 import type { ProviderFailureKind } from '@mastra/core/error';
 import { z } from 'zod';
+import type { ThinkingLevelSetting } from './thinking.js';
 
 export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
@@ -10,9 +11,7 @@ const modelFallbackReasonSchema = z.enum(['pool-exhausted', 'persistent-outage']
 
 export type ModelFallbackReason = z.infer<typeof modelFallbackReasonSchema>;
 
-type FallbackClause = (model: string, wait: string) => string;
-
-const REASON_CLAUSE: Record<ModelFallbackReason, FallbackClause> = {
+const REASON_CLAUSE: Record<ModelFallbackReason, (model: string) => string> = {
   'pool-exhausted': model => `${model} failed`,
   'persistent-outage': model => `${model} keeps failing`,
 };
@@ -70,42 +69,40 @@ const modelFallbackPartSchema = z.object({
 
 export type ModelFallbackPartData = z.infer<typeof modelFallbackPartSchema>;
 
-const FAILURE_CLAUSE: Partial<Record<ProviderFailureKind, FallbackClause>> = {
-  rate_limited: (model, wait) => `${model} is rate-limited${wait}`,
-  quota: (model, wait) => `${model} is out of credits or quota${wait}`,
+const FAILURE_CLAUSE: Partial<Record<ProviderFailureKind, (model: string) => string>> = {
+  rate_limited: model => `${model} is rate-limited`,
+  quota: model => `${model} is out of credits or quota`,
   auth: model => `${model} has missing or invalid credentials`,
-  unavailable: (model, wait) => `${model} is unavailable${wait}`,
+  unavailable: model => `${model} is unavailable`,
   timeout: model => `${model} timed out`,
 };
-
-function providerWait({ at, failure }: ModelFallbackPartData): string {
-  const minutes = Math.ceil((Date.parse(failure?.retryAt ?? '') - Date.parse(at)) / 60_000);
-  if (!(minutes > 0)) return '';
-  if (minutes < 60) return ` for ${minutes} min`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return ` for ${hours} h`;
-  const days = Math.round(hours / 24);
-  return ` for ${days} ${days === 1 ? 'day' : 'days'}`;
-}
 
 export function modelFallbackNoticeText(
   data: ModelFallbackPartData,
   modelName: (label: string) => string = label => label,
 ): string {
   const clause = (data.failure && FAILURE_CLAUSE[data.failure.kind]) ?? REASON_CLAUSE[data.reason];
-  return `${clause(modelName(data.from.label), providerWait(data))}, switched to ${modelName(data.to.label)}`;
+  return `${clause(modelName(data.from.label))}, switched to ${modelName(data.to.label)}`;
 }
 
-export function fallbackModelIdsToTry(
+export interface ModelFallback {
+  modelId: string;
+  thinkingLevel?: ThinkingLevelSetting;
+}
+
+export function modelFallbacksToTry(
   primaryModelId: string,
-  fallbackModelIds: readonly string[],
+  fallbacks: readonly ModelFallback[],
   canUse: (modelId: string) => boolean,
   limit = Number.POSITIVE_INFINITY,
-): string[] {
-  const usable: string[] = [];
-  for (const modelId of new Set(fallbackModelIds)) {
+): ModelFallback[] {
+  const usable: ModelFallback[] = [];
+  const seen = new Set([primaryModelId]);
+  for (const fallback of fallbacks) {
     if (usable.length >= limit) break;
-    if (modelId !== primaryModelId && canUse(modelId)) usable.push(modelId);
+    if (seen.has(fallback.modelId)) continue;
+    seen.add(fallback.modelId);
+    if (canUse(fallback.modelId)) usable.push(fallback);
   }
   return usable;
 }

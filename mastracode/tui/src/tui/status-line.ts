@@ -7,25 +7,13 @@ import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
 import { getEffectiveOMRoleModelId } from './om-model.js';
-import type { GithubPrSubscriptionBadge, PackFallbackStatus, TUIState } from './state.js';
+import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, displayModeColor, extendedColors, getContrastBg } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
-
-function formatFallbackLabel({ usingPack, failedPack, retryAt }: PackFallbackStatus, now: number): string {
-  const until = new Date(retryAt ?? '');
-  if (!(until.getTime() > now)) return `Using fallback ${usingPack} (${failedPack} failed)`;
-  const time = until.toLocaleString([], {
-    ...(until.toDateString() === new Date(now).toDateString() ? {} : { weekday: 'short' }),
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  });
-  return `Using fallback ${usingPack} until ${time} (${failedPack} failed)`;
-}
 
 function formatGithubPrLabel(
   state: TUIState,
@@ -267,11 +255,13 @@ export function updateStatusLine(state: TUIState): void {
   };
 
   // --- Transient states ---
-  const fallback = !isJudging && !showOMMode ? state.fallbackStatus : undefined;
-  const fallbackLabel = fallback && formatFallbackLabel(fallback, now);
-  const fallbackPart: Part | null = fallbackLabel
-    ? { plain: fallbackLabel, styled: theme.fg('warning', fallbackLabel) }
-    : null;
+  const fallbackPart: Part | null =
+    !isJudging && !showOMMode && state.fallbackStatus
+      ? (() => {
+          const label = `Using fallback ${state.fallbackStatus!.usingPack} (${state.fallbackStatus!.failedPack} failed)`;
+          return { plain: label, styled: theme.fg('warning', label) };
+        })()
+      : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalMatchesActiveRun =

@@ -44,8 +44,6 @@ const FAILURE_METADATA = {
     label: 'Add an organization model key to run this automatically',
   },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
-  run_rate_limited: { canRetry: true, label: 'Model provider rate limit reached' },
-  run_quota_exhausted: { canRetry: true, autoRetry: false, label: 'Model provider out of credits or quota' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
   plan_awaiting_approval: { canRetry: false, label: 'Plan waiting for review' },

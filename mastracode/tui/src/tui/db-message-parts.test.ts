@@ -215,10 +215,7 @@ describe('getAssistantRenderParts', () => {
 
   it.each([
     [{ kind: 'quota' }, 'anthropic/claude-opus-5.5 is out of credits or quota'],
-    [
-      { kind: 'rate_limited', retryAt: '2026-09-17T00:01:00.000Z' },
-      'anthropic/claude-opus-5.5 is rate-limited for 1 min',
-    ],
+    [{ kind: 'rate_limited', retryAt: '2026-09-17T00:01:00.000Z' }, 'anthropic/claude-opus-5.5 is rate-limited'],
     [{ kind: 'context_overflow' }, 'anthropic/claude-opus-5.5 failed'],
     [{ kind: 'a-kind-from-a-newer-build' }, 'anthropic/claude-opus-5.5 failed'],
   ])('renders a persisted hop that recorded failure %o as "%s"', (failure, cause) => {

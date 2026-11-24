@@ -23,7 +23,6 @@ import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintena
 import type { AgentController, MastraDBMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
-import { z } from 'zod';
 import { AssistantRenderRegistry } from './assistant-render-registry.js';
 import type { BackgroundActivity, BackgroundToolContext } from './background-activity.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
@@ -56,15 +55,6 @@ import type { RenderScheduler } from './render-scheduler.js';
 import type { FactoryRuntimeInfo, LocalRuntime, TuiController, TuiSession } from './runtime.js';
 import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
-
-export const packFallbackStatusSchema = z.object({
-  usingPack: z.string(),
-  failedPack: z.string(),
-  failedPackId: z.string().optional(),
-  retryAt: z.string().optional(),
-});
-
-export type PackFallbackStatus = z.infer<typeof packFallbackStatusSchema>;
 
 export interface PendingSignalMessage {
   component: Component;
@@ -308,7 +298,7 @@ export interface TUIState {
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
   /** Landed model-pack fallback for the current thread. */
-  fallbackStatus?: PackFallbackStatus;
+  fallbackStatus?: { usingPack: string; failedPack: string };
   /** GitHub PR subscriptions for the current thread. */
   activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */

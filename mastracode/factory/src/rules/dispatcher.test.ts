@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -78,14 +77,6 @@ function createSession(
     omObservationError?: string;
     /** Emitted as the run's `error` event just before an `agent_end: 'error'`, as the session does. */
     runError?: string | Error;
-    runEvents?: Array<
-      | { type: 'state_changed'; changedKeys: string[]; state: Record<string, unknown> }
-      | {
-          type: 'usage_update';
-          usage: { promptTokens: number; completionTokens: number; totalTokens: number };
-          total: { promptTokens: number; completionTokens: number; totalTokens: number };
-        }
-    >;
     /** Models a signal queued onto an in-flight run that ends before draining it. */
     dropDeliveredSignal?: boolean;
     /** The run that swallowed the dropped signal ends, freeing the session. */
@@ -123,9 +114,6 @@ function createSession(
   const settings: Record<string, unknown> = {};
   const agentEndListeners = new Set<(event: { type: string; reason?: string; error?: unknown }) => void>();
   const emitAgentEnd = (reason = options?.agentEndReason) => {
-    for (const event of reason === 'error' ? (options?.runEvents ?? []) : []) {
-      for (const listener of agentEndListeners) listener(event);
-    }
     if (reason === 'error' && options?.runError) {
       for (const listener of agentEndListeners) {
         listener({
@@ -9211,117 +9199,6 @@ describe('a skill run that ends in error (#27740)', () => {
     });
   });
 
-  it('waits out a rate limit an earlier model hit, without spending an attempt, when the last model was out of credits', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-rate-limited-hop',
-    });
-    await bindWorkRun(storage, item.id);
-    const { controller } = createSession(undefined, {
-      agentEndReason: 'error',
-      runEvents: [
-        {
-          type: 'state_changed',
-          changedKeys: [MODEL_FALLBACK_STATE_KEY],
-          state: {
-            [MODEL_FALLBACK_STATE_KEY]: {
-              fromEntryId: 'anthropic/claude-opus-5.5',
-              toEntryId: 'openai/gpt-5.6-sol',
-              toModelId: 'openai/gpt-5.6-sol',
-              reason: 'pool-exhausted',
-              at: '2030-01-01T00:00:00.000Z',
-              failure: { kind: 'rate_limited' },
-            },
-          },
-        },
-      ],
-      runError: Object.assign(
-        new Error('You exceeded your current quota, please check your plan and billing details.'),
-        {
-          name: 'AI_APICallError',
-          statusCode: 429,
-          responseBody: '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}',
-        },
-      ),
-    });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      boards: autoStartingBoards(),
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'retry',
-      failureCode: 'run_rate_limited',
-      attempts: 0,
-      rateLimitedSince: expect.any(Date),
-    });
-  });
-
-  it('stops for a person when every model is out of credits, even though an earlier step of the run hopped past a rate limit', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'work',
-      skillName: 'understand-issue',
-      idempotencyKey: 'skill-quota-after-recovered-hop',
-    });
-    await bindWorkRun(storage, item.id);
-    const hop = (failure: { kind: 'rate_limited' | 'quota' }) => ({
-      type: 'state_changed' as const,
-      changedKeys: [MODEL_FALLBACK_STATE_KEY],
-      state: {
-        [MODEL_FALLBACK_STATE_KEY]: {
-          fromEntryId: 'anthropic/claude-opus-5.5',
-          toEntryId: 'openai/gpt-5.6-sol',
-          toModelId: 'openai/gpt-5.6-sol',
-          reason: 'pool-exhausted',
-          at: '2030-01-01T00:00:00.000Z',
-          failure,
-        },
-      },
-    });
-    const stepUsage = { promptTokens: 10, completionTokens: 5, totalTokens: 15 };
-    const { controller } = createSession(undefined, {
-      agentEndReason: 'error',
-      runEvents: [
-        hop({ kind: 'rate_limited' }),
-        { type: 'usage_update', usage: stepUsage, total: stepUsage },
-        hop({ kind: 'quota' }),
-      ],
-      runError: Object.assign(
-        new Error('You exceeded your current quota, please check your plan and billing details.'),
-        {
-          name: 'AI_APICallError',
-          statusCode: 429,
-          responseBody: '{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}',
-        },
-      ),
-    });
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      boards: autoStartingBoards(),
-    });
-
-    await dispatcher.runOnce(new Date('2030-01-01T00:20:00Z'));
-
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'failed',
-      failureCode: 'run_quota_exhausted',
-      rateLimitedSince: null,
-    });
-  });
-
   it.each([
     ['a tool quoting an API key hint', 'Tool failed: README says "set your API key in .env" (user quote)'],
     ['model output naming a 401 handler', 'Model output parse error near "HTTP 401 handler" in user code'],
@@ -9936,7 +9813,7 @@ describe('review status comment lifecycle', () => {
     });
 
     const body = comments()[0]!.body;
-    expect(body).toContain('`Model provider rate limit reached`');
+    expect(body).toContain('`Agent run ended in error (the model provider rate-limited the run, HTTP 429)`');
     expect(body).not.toContain('org-secret-42');
     expect(body).not.toContain('sk-live');
     expect(body).not.toContain('internal-gateway');
