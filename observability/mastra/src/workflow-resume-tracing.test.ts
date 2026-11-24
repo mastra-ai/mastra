@@ -146,9 +146,49 @@ describe('workflow resume span linkage', () => {
     },
   );
 
-  // startAsync() only dispatches; it creates no WORKFLOW_RUN span because the worker may run in another process.
-  it.each(['default', 'evented'] as const)('%s ends suspension before a distinct resumed execution', async engine => {
-    const workflow = makeWorkflow(engine);
+  it.each(['start', 'startAsync'] as const)(
+    'evented %s() saves its trace up front, so another process can continue it',
+    async method => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const storage = new MockStore();
+      const workflow = createEventedWorkflow({ id: 'resume-tracing-workflow', inputSchema: empty, outputSchema: empty })
+        .then(
+          createStep({
+            id: 'wait',
+            inputSchema: empty,
+            outputSchema: empty,
+            execute: async () => {
+              await gate;
+              return {};
+            },
+          }),
+        )
+        .commit();
+      const observability = new Observability({
+        configs: { default: { serviceName: 'workflow-start-record', exporters: [exporter] } },
+      });
+      const host = new Mastra({ logger: false, storage, workflows: { [workflow.id]: workflow }, observability });
+      try {
+        await host.startWorkers();
+        const caller = observability.getDefaultInstance()!.startSpan({ type: SpanType.GENERIC, name: 'caller' });
+        const run = await workflow.createRun();
+        const started = run[method]({ inputData: {}, tracingContext: { currentSpan: caller } });
+        await expect
+          .poll(() => readTracingContext(storage, run.runId))
+          .toMatchObject({ traceId: caller.traceId, parentSpanId: caller.id });
+        release();
+        await started;
+        caller.end();
+      } finally {
+        release();
+        await host.shutdown();
+      }
+    },
+  );
+
+  it.each(['default', 'evented', 'evented-async'] as const)('%s ends suspension before its resume', async engine => {
+    const workflow = makeWorkflow(engine === 'default' ? 'default' : 'evented');
     const host = new Mastra({
       logger: false,
       storage: new MockStore(),
@@ -160,7 +200,11 @@ describe('workflow resume span linkage', () => {
     try {
       if (engine !== 'default') await host.startWorkers();
       const run = await workflow.createRun();
-      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      if (engine === 'evented-async' && 'startAsync' in run) {
+        await run.startAsync({ inputData: {} });
+        await expect.poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status).toBe('suspended');
+        await expect.poll(() => endedSpans().some(span => span.type === SpanType.WORKFLOW_RUN)).toBe(true);
+      } else expect((await run.start({ inputData: {} })).status).toBe('suspended');
       const suspended = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
       expect(suspended).toHaveLength(1);
       expect(suspended[0]).toMatchObject({ outcome: 'suspend' });

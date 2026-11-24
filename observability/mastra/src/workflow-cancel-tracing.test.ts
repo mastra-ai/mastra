@@ -6,7 +6,7 @@ import type { AnyExportedSpan } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createWorkflow as createEventedWorkflow } from '@mastra/core/workflows/evented';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Observability } from './default';
@@ -355,15 +355,17 @@ describe('workflow run cancellation tracing', () => {
         await expect
           .poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status)
           .toBe(fail ? 'failed' : 'success');
-        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
-        expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
-        return;
+        await expect.poll(() => endedSpans().some(span => span.type === SpanType.WORKFLOW_RUN)).toBe(true);
+      } else {
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe(fail ? 'failed' : 'success');
+        if (fail) expectPublicWorkflowError(result);
       }
-      const result = await run.start({ inputData: {} });
-      expect(result.status).toBe(fail ? 'failed' : 'success');
-      if (fail) expectPublicWorkflowError(result);
       const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
       expectWorkflowOutcome(endedSpans(), fail ? 'error' : 'success');
+      expectParentsPresent();
+      expectSingleEndPerSpan();
+      expect(new Set(endedSpans().map(span => span.traceId)).size).toBe(1);
       // A late cancel cannot rewrite an already completed execution.
       await run.cancel();
       expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual(roots);
@@ -409,13 +411,11 @@ describe('workflow run cancellation tracing', () => {
         await expect
           .poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status)
           .toBe(mode === 'tripwire' ? 'failed' : 'success');
-        if (mode === 'retry') expect(attempts()).toBe(2);
-        expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
-        expect(host.__getRunTracingContext(run.runId)).toBeUndefined();
-        return;
+        await expect.poll(() => endedSpans().some(span => span.type === SpanType.WORKFLOW_RUN)).toBe(true);
+      } else {
+        const result = await run.start({ inputData: {} });
+        expect(result.status).toBe(mode === 'tripwire' ? 'tripwire' : 'success');
       }
-      const result = await run.start({ inputData: {} });
-      expect(result.status).toBe(mode === 'tripwire' ? 'tripwire' : 'success');
       if (mode === 'retry') expect(attempts()).toBe(2);
       expectWorkflowOutcome(endedSpans(), mode);
       expectNoDanglingSpans();
@@ -1123,13 +1123,13 @@ describe('workflow run cancellation tracing', () => {
     });
   };
 
-  it('closes the tree on the evented engine', async () => {
-    const mastra = buildEventedMastra('evented');
+  it.each(['start', 'startAsync'] as const)('closes the tree of a canceled evented %s() run', async method => {
+    const mastra = buildEventedMastra(`evented-${method}`);
     await mastra.startWorkers();
 
     try {
       const run = await mastra.getWorkflow('eventedWorkflow').createRun();
-      run.start({ inputData: {} }).catch(() => {});
+      run[method]({ inputData: {} }).catch(() => {});
       await tick(500);
       await run.cancel();
       await tick(200);
@@ -1153,26 +1153,55 @@ describe('workflow run cancellation tracing', () => {
     }
   });
 
-  it('leaves nothing open when an evented startAsync run is canceled', async () => {
-    const mastra = buildEventedMastra('eventedAsync');
-    await mastra.startWorkers();
+  it.each(['start', 'startAsync'] as const)('ends the run span when evented %s() cannot save the run', async method => {
+    const mastra = buildEventedMastra(`unsaved-${method}`);
 
     try {
+      await mastra.startWorkers();
       const run = await mastra.getWorkflow('eventedWorkflow').createRun();
-      await run.startAsync({ inputData: {} });
-      await tick(500);
-      await run.cancel();
-      await tick(200);
+      const workflows = await mastra.getStorage()!.getStore('workflows');
+      vi.spyOn(workflows!, 'persistWorkflowSnapshot').mockRejectedValue(new Error('storage unavailable'));
+      await expect(run[method]({ inputData: {} })).rejects.toThrow('storage unavailable');
 
       expectNoDanglingSpans();
-      expectSingleEndPerSpan();
-      expectParentsPresent();
-      expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toEqual([]);
-      expect(mastra.__getRunTracingContext(run.runId)).toBeUndefined();
+      expect(endedSpans()).toMatchObject([{ type: SpanType.WORKFLOW_RUN, outcome: 'error' }]);
     } finally {
-      // deafStep ignores cancellation, so there is nothing for the worker
-      // drain to wait on; skip it instead of burning the default budget.
-      await mastra.stopWorkers({ drainTimeout: 0 });
+      await mastra.shutdown();
+    }
+  });
+
+  it('opens no run span in a process that runs no workflow workers', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const storage = new MockStore();
+    const build = (observability: Observability | undefined, workers?: false) =>
+      new Mastra({
+        logger: false,
+        storage,
+        pubsub,
+        workers,
+        observability,
+        workflows: {
+          dispatched: createEventedWorkflow({ id: 'dispatched', inputSchema: empty, outputSchema: empty })
+            .then(quickStep)
+            .commit(),
+        },
+      });
+    const worker = build(undefined);
+    const api = build(
+      new Observability({ configs: { default: { serviceName: 'dispatch-only', exporters: [exporter] } } }),
+      false,
+    );
+
+    try {
+      await worker.startWorkers();
+      const workflow = api.getWorkflow('dispatched');
+      const run = await workflow.createRun();
+      await run.startAsync({ inputData: {} });
+      await expect.poll(async () => (await workflow.getWorkflowRunById(run.runId))?.status).toBe('success');
+      expect(exporter.getAllSpans()).toEqual([]);
+    } finally {
+      await worker.shutdown();
+      await api.shutdown();
     }
   });
 });

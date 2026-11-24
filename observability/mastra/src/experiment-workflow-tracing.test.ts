@@ -1,3 +1,6 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
+import { Classifier } from '@mastra/core/classifier';
 import { executeTarget } from '@mastra/core/datasets';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
@@ -103,4 +106,71 @@ describe('workflow-target experiment tracing', () => {
       expect(span.metadata?.experimentId).toBeUndefined();
     }
   });
+});
+
+describe('durable experiment tracing', () => {
+  // The experiment runs items as steps of an internal workflow that has no span of its own.
+  it('gives each item its own trace for work done before its agent run', async () => {
+    const exporter = new TestExporter();
+    const classifier = new Classifier({
+      id: 'tone',
+      model: {
+        specificationVersion: 'v4',
+        provider: 'test-provider',
+        modelId: 'test-model',
+        supportedQuestionTypes: ['boolean'],
+        doEvaluate: async () => ({
+          answers: { formal: { type: 'boolean', probability: 0.9 } },
+          usage: { inputTokens: 1, outputTokens: 1 },
+          warnings: [],
+        }),
+      },
+      questions: { formal: { type: 'boolean', criteria: { true: 'Formal', false: 'Casual' } } },
+    });
+    const writer = new Agent({
+      id: 'writer',
+      name: 'writer',
+      instructions: async () => {
+        await classifier.decide({ state: 'hello' });
+        return 'Answer.';
+      },
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'done' }],
+          warnings: [],
+        }),
+      }),
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      agents: { writer },
+      classifiers: { classifier },
+      observability: new Observability({
+        configs: { default: { serviceName: 'durable-experiment-tracing', exporters: [exporter] } },
+      }),
+    });
+    try {
+      await mastra.startWorkers();
+      const dataset = await mastra.datasets.create({ name: 'greetings' });
+      for (const input of ['hi', 'hey']) await dataset.addItem({ input });
+      const { experimentId } = await dataset.startExperimentAsync({
+        targetType: 'agent',
+        targetId: 'writer',
+        durable: true,
+      });
+      await expect
+        .poll(async () => (await dataset.getExperiment({ experimentId }))?.status, { timeout: 10_000 })
+        .toBe('completed');
+
+      const evaluations = exporter.getSpansByType(SpanType.CLASSIFIER_EVALUATION);
+      expect(evaluations.map(span => span.isRootSpan)).toEqual([true, true]);
+      expect(new Set(evaluations.map(span => span.traceId)).size).toBe(2);
+      expect(exporter.getSpansByType(SpanType.WORKFLOW_RUN)).toEqual([]);
+    } finally {
+      await mastra.shutdown();
+    }
+  }, 15_000);
 });
