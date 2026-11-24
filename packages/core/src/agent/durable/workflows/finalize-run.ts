@@ -885,7 +885,7 @@ export async function generateDurableThreadTitle({
   // Update-only write, as with the regular Agent (#25203): preparation created the thread, so a
   // missing row means it was deleted while the title was generating, and an upsert would resurrect
   // it. Omitting metadata keeps whatever other writers (e.g. the OM cursor) stored meanwhile.
-  if (!(await memory.getThreadById({ threadId }))) {
+  if (!thread && !(await memory.getThreadById({ threadId }))) {
     agent.__getLogger().debug('Skipping generated title save: thread was deleted', { threadId });
     return undefined;
   }
