@@ -67,6 +67,23 @@ describe('knowledge_search body snippets (r397, in-memory store)', () => {
     expect(result.more[0]).toContain('knowledge_read { page, match: ["reimbursement"] }');
   });
 
+  it('only puts a match array in the read-on hint that knowledge_read accepts (at most 10 words)', async () => {
+    const { mine } = run();
+    await mine('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-1',
+      name: 'Long query',
+      body: 'alpha bravo charlie\nnothing\n',
+    });
+    const query = 'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima';
+    const result = await mine('knowledge_search', { query });
+    expect(result.results[0].page.line).toBe(1);
+    const hint = result.more.join('\n');
+    expect(hint).toContain('knowledge_read { page, from: { line } }');
+    const arrays = [...hint.matchAll(/match: (\[[^\]]*\])/g)].map(m => JSON.parse(m[1]));
+    for (const a of arrays) expect(a.length).toBeLessThanOrEqual(10);
+  });
+
   it('never returns a page or its body text from a scope the run cannot read', async () => {
     const { mine, other } = run();
     await mine('knowledge_page', {

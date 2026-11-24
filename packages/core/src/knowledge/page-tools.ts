@@ -102,6 +102,8 @@ type Tools = Record<string, ToolAction<any, any, any>>;
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+/** The most words knowledge_read's `match` accepts; a search hint never emits a longer array. */
+const READ_MATCH_MAX_WORDS = 10;
 const MENTION = /\[\[([^\]]+)\]\]/g;
 /** Misses a note's mention linking may spend beyond its stored mentions (renamed or ambiguous refs). */
 const MENTION_LOOKUP_SLACK = 2;
@@ -342,9 +344,14 @@ function searchTool(host: KnowledgePageToolHost) {
         ),
       );
       const matched = results.some(result => result.type === 'page' && 'line' in result.page);
+      const readWords = knowledgeSearchWords(words);
       const readOn = matched
         ? [
-            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${JSON.stringify(knowledgeSearchWords(words))} }.`,
+            `snippet: each page hit's \`line\` is the first line of its body with a matched word, and \`matchingLines\` how many lines have one. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${
+              readWords.length <= READ_MATCH_MAX_WORDS
+                ? JSON.stringify(readWords)
+                : '["your", "words"] (up to 10 of your search words)'
+            } }.`,
           ]
         : [];
       const more = [
@@ -576,7 +583,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         match: {
           anyOf: [
             { type: 'string', minLength: 1 },
-            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 10 },
+            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: READ_MATCH_MAX_WORDS },
           ],
           description:
             'Like grep: return only the lines that contain this term, or any of these terms (case-insensitive), as numbered lines with the range each covers.',

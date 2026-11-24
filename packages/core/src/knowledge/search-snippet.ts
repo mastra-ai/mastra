@@ -10,6 +10,7 @@ export const KNOWLEDGE_SNIPPET_TOKENS = 60;
 /** Longest heading line a hit shows ahead of its excerpt; a longer one is cut with `…`. */
 const HEADING_CHARS = 120;
 /** Characters of body looked at past a window's start when fitting it to the token budget. */
+// 12 chars per token is a deliberate upper bound for dense text; don't lower it with the token count.
 const WINDOW_SCAN_CHARS = KNOWLEDGE_SNIPPET_TOKENS * 12;
 /** Occurrences of each query word sampled as window anchors. */
 const OCCURRENCES_PER_WORD = 32;
@@ -187,7 +188,13 @@ function headingAbove(body: string, at: number, windowStart: number): string | u
   const lines = new KnowledgeBodyLines(body);
   const line = lines.lineAt(nearest.start);
   const text = body.slice(nearest.start, lines.lineEnd(line));
-  return `${line}│${text.length > HEADING_CHARS ? `${text.slice(0, HEADING_CHARS - 1)}…` : text}`;
+  return `${line}│${
+    text.length > HEADING_CHARS
+      ? `${Array.from(text)
+          .slice(0, HEADING_CHARS - 1)
+          .join('')}…`
+      : text
+  }`;
 }
 
 /** A search hit's view of a page body: an excerpt around the matched words, and where the matches are. */
