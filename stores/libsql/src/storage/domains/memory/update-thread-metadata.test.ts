@@ -86,6 +86,21 @@ describe('MemoryLibSQL.updateThread metadata', () => {
     });
   });
 
+  it('wraps a failing title-only write as UPDATE_THREAD FAILED', async () => {
+    const { MastraError } = await import('@mastra/core/error');
+    const execute = client.execute.bind(client);
+    vi.spyOn(client, 'execute').mockImplementation((async (statement: any) => {
+      if (typeof statement === 'object' && /^UPDATE mastra_threads SET title/.test(statement.sql)) {
+        throw new MastraError({ id: 'INNER', domain: 'STORAGE', category: 'THIRD_PARTY' });
+      }
+      return execute(statement);
+    }) as any);
+
+    await expect(store.updateThread({ id: 'thread-1', title: 'New title' })).rejects.toMatchObject({
+      id: 'MASTRA_STORAGE_LIBSQL_UPDATE_THREAD_FAILED',
+    });
+  });
+
   it('returns {} metadata for a title-only update of a thread with NULL metadata, as before', async () => {
     await client.execute({ sql: `UPDATE mastra_threads SET metadata = NULL WHERE id = ?`, args: ['thread-1'] });
 
