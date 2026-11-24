@@ -38,7 +38,7 @@ export type DataListFit = 'content' | 'container';
  *   and elevation as a card, a popover or a settings container.
  * - `light`: no panel behind the rows; rows sit directly on the page.
  */
-export type DataListVariant = 'default' | 'light';
+export type DataListVariant = 'default' | 'light' | 'flush';
 
 export type DataListDensity = 'default' | 'compact';
 
@@ -182,6 +182,14 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
   default: raisedSurfaceStyle,
   // No panel, so rows rest on the page and only show on hover.
   light: '[--row:var(--background)]',
+  flush:
+    '[--row:transparent] [&_.data-list-row]:rounded-none! [&_.data-list-row>.data-list-sticky-start]:rounded-none!',
+};
+
+const dataListInsetClasses: Record<DataListVariant, string> = {
+  default: 'rounded-xl p-1',
+  light: 'rounded-xl p-1',
+  flush: '',
 };
 
 // The sticky header reads this so it stays opaque while scrolling: the panel
@@ -189,6 +197,7 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
 const dataListVariantBackground: Record<DataListVariant, string> = {
   default: 'var(--card)',
   light: 'var(--background)',
+  flush: 'transparent',
 };
 
 const dataListDensityClasses: Record<DataListDensity, string | undefined> = {
@@ -326,6 +335,7 @@ function DataListBase({
         scrollable && fades.top && dataListTopFadeStyles,
         dataListFitClasses[fit],
         dataListDensityClasses[density],
+        variant === 'flush' && 'gap-y-0',
       )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
@@ -340,7 +350,7 @@ function DataListBase({
       // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
       <ScrollAreaPrimitive.Root
         {...props}
-        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
+        className={cn('w-full', dataListInsetClasses[variant], dataListVariantClasses[variant], className)}
       >
         <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
       </ScrollAreaPrimitive.Root>
@@ -364,7 +374,8 @@ function DataListBase({
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
       className={cn(
-        'flex max-h-full w-full flex-col self-start rounded-xl p-1',
+        'flex max-h-full w-full flex-col self-start',
+        dataListInsetClasses[variant],
         dataListVariantClasses[variant],
         variant === 'default' && dataListWellStyles,
         dataListScrollbarStyles,
@@ -376,7 +387,8 @@ function DataListBase({
         className={cn(
           // `relative` lifts the content above the well. `rounded-lg` (the root's 12px less its 4px
           // inset) clips the square header corners that otherwise cut into the panel's rim.
-          'relative min-h-0 flex-1 basis-auto overscroll-x-none rounded-lg',
+          'relative min-h-0 flex-1 basis-auto overscroll-x-none',
+          variant !== 'flush' && 'rounded-lg',
           // A pinned column draws its own edge (the divider), so nothing fades on the left.
           'has-[.data-list-sticky-start]:[--scroll-area-fade-left:0px]!',
         )}

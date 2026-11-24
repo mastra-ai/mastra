@@ -106,11 +106,9 @@ export function LogDataPanel({
               <InsetSection
                 title="Details"
                 rows={[
-                  { label: 'Time', value: formattedDate, mono: true },
                   {
                     label: 'Level',
-                    value: <span className={cn('uppercase', logLevelTextClass[log.level])}>{log.level}</span>,
-                    mono: true,
+                    value: <span className={cn('capitalize', logLevelTextClass[log.level])}>{log.level}</span>,
                   },
                   ...textRows([
                     ['Entity type', log.entityType],

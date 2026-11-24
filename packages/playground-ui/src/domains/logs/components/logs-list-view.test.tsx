@@ -5,13 +5,19 @@ import type { LogRecord } from '../types';
 import { LogsListView } from './logs-list-view';
 
 const scrollToIndex = vi.fn();
+let visibleCount: number | undefined;
 
 // jsdom has no layout, so the real virtualizer would render zero rows.
 // Render every row instead and spy on scrollToIndex.
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }: { count: number }) => ({
     getVirtualItems: () =>
-      Array.from({ length: count }, (_, index) => ({ index, key: index, start: index * 36, end: (index + 1) * 36 })),
+      Array.from({ length: Math.min(count, visibleCount ?? count) }, (_, index) => ({
+        index,
+        key: index,
+        start: index * 36,
+        end: (index + 1) * 36,
+      })),
     getTotalSize: () => count * 36,
     measureElement: () => {},
     scrollToIndex,
@@ -36,6 +42,7 @@ const row = (i: number) => screen.getByRole('button', { name: new RegExp(`log me
 afterEach(() => {
   cleanup();
   scrollToIndex.mockClear();
+  visibleCount = undefined;
 });
 
 describe('LogsListView keyboard navigation', () => {
@@ -86,7 +93,7 @@ describe('LogsListView stream density', () => {
   ];
   const idMap = new Map(sandboxLines.map((log, i) => [log, `line-${i}`]));
 
-  it('renders plain log lines oldest first without a column header, with fields after the message', () => {
+  it('renders plain log lines in the given order without a column header, with fields after the message', () => {
     render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={vi.fn()} />);
 
     const rows = screen.getAllByRole('button');
@@ -98,30 +105,89 @@ describe('LogsListView stream density', () => {
     expect(screen.queryByText('Message')).toBeNull();
   });
 
-  it('keeps the newest line in view once the logs load', async () => {
-    render(<LogsListView density="stream" logs={sandboxLines} logIdMap={idMap} onLogClick={vi.fn()} />);
+  describe('oldest first, like a terminal', () => {
+    it('opens on the newest line before it loads older logs at the top', async () => {
+      const onFetchNextPage = vi.fn();
+      const props = {
+        density: 'stream',
+        order: 'oldest-first',
+        logs: sandboxLines,
+        logIdMap: idMap,
+        onLogClick: vi.fn(),
+        hasNextPage: true,
+        onFetchNextPage,
+      } as const;
+      visibleCount = 1;
+      const { rerender } = render(<LogsListView {...props} />);
 
-    await waitFor(() => expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'end' }));
+      await waitFor(() => expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'end' }));
+      expect(onFetchNextPage).not.toHaveBeenCalled();
+
+      visibleCount = undefined;
+      rerender(<LogsListView {...props} logs={[...sandboxLines]} />);
+
+      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
+    });
+
+    it('shows that older logs are loading above the lines', () => {
+      render(
+        <LogsListView
+          density="stream"
+          order="oldest-first"
+          logs={sandboxLines}
+          logIdMap={idMap}
+          onLogClick={vi.fn()}
+          hasNextPage
+          isFetchingNextPage
+          onFetchNextPage={vi.fn()}
+        />,
+      );
+
+      const status = screen.getByRole('status');
+      expect(status.textContent).toBe('Loading older logs');
+      const firstLine = screen.getByRole('button', { name: /Memory usage above 80% of limit/ });
+      expect(status.compareDocumentPosition(firstLine)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
   });
 
-  it('loads older logs from a button above the lines', () => {
-    const onFetchNextPage = vi.fn();
-    render(
-      <LogsListView
-        density="stream"
-        logs={sandboxLines}
-        logIdMap={idMap}
-        onLogClick={vi.fn()}
-        hasNextPage
-        onFetchNextPage={onFetchNextPage}
-      />,
-    );
+  describe('newest first, like an audit log', () => {
+    it('loads older logs only once the bottom line is in view', async () => {
+      const onFetchNextPage = vi.fn();
+      const props = {
+        density: 'stream',
+        logs: sandboxLines,
+        logIdMap: idMap,
+        onLogClick: vi.fn(),
+        hasNextPage: true,
+        onFetchNextPage,
+      } as const;
+      visibleCount = 1;
+      const { rerender } = render(<LogsListView {...props} />);
+      expect(onFetchNextPage).not.toHaveBeenCalled();
+      expect(scrollToIndex).not.toHaveBeenCalled();
 
-    const loadOlder = screen.getByRole('button', { name: 'Load older logs' });
-    const firstLine = screen.getByRole('button', { name: /Memory usage above 80% of limit/ });
-    expect(loadOlder.compareDocumentPosition(firstLine)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    fireEvent.click(loadOlder);
-    expect(onFetchNextPage).toHaveBeenCalledOnce();
+      visibleCount = undefined;
+      rerender(<LogsListView {...props} logs={[...sandboxLines]} />);
+
+      await waitFor(() => expect(onFetchNextPage).toHaveBeenCalledOnce());
+    });
+
+    it('shows that older logs are loading below the lines', () => {
+      render(
+        <LogsListView
+          density="stream"
+          logs={sandboxLines}
+          logIdMap={idMap}
+          onLogClick={vi.fn()}
+          hasNextPage
+          isFetchingNextPage
+          onFetchNextPage={vi.fn()}
+        />,
+      );
+
+      const lastLine = screen.getByRole('button', { name: /Process.Start stream ended/ });
+      expect(lastLine.compareDocumentPosition(screen.getByRole('status'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
   });
 
   it('opens the clicked line', () => {

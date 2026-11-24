@@ -76,7 +76,6 @@ describe('LogDataPanel sections', () => {
     render(<LogDataPanel log={plainLine} onClose={vi.fn()} />);
 
     const details = within(screen.getByRole('region', { name: 'Details' }));
-    expect(details.getByText('Time')).toBeTruthy();
     expect(details.getByText('warn')).toBeTruthy();
 
     const fields = within(screen.getByRole('region', { name: 'Fields' }));

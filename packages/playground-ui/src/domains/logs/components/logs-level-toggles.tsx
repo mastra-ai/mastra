@@ -6,6 +6,7 @@ import type { ButtonsGroupProps } from '@/ds/components/ButtonsGroup';
 import { Kbd } from '@/ds/components/Kbd';
 import { logLevelDotClass } from '@/ds/components/LogsDataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
 const LEVEL_LABEL: Record<LogLevel, string> = {
@@ -23,6 +24,7 @@ export type LogsLevelTogglesProps = Omit<ButtonsGroupProps, 'children' | 'onChan
 };
 
 export function LogsLevelToggles({ levels, value, onValueChange, ...props }: LogsLevelTogglesProps) {
+  const modifier = useIsApplePlatform() ? '⌘' : 'Ctrl';
   return (
     <Tooltip>
       <TooltipTrigger
@@ -52,8 +54,9 @@ export function LogsLevelToggles({ levels, value, onValueChange, ...props }: Log
         }
       />
       <TooltipContent side="bottom">
-        Click a level to hide or show it. Hold <Kbd size="xs">⌘</Kbd> or <Kbd size="xs">Ctrl</Kbd> and click to show
-        only that level.
+        <p className="max-w-60 text-pretty">
+          Click a level to hide or show it. Hold <Kbd size="xs">{modifier}</Kbd> and click to show only that level.
+        </p>
       </TooltipContent>
     </Tooltip>
   );
