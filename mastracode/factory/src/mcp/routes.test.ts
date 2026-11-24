@@ -89,7 +89,10 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
   let key = await signingKey('key-1');
   let jwksPath = `${path}/oauth2/jwks`;
   let issuer = '';
-  const outage: Record<'metadata' | 'jwks', false | 'down' | 'hang'> = { metadata: false, jwks: false };
+  const outage: { metadata: false | 'down' | 'hang'; jwks: false | 'down' | 'hang' | 'malformed' } = {
+    metadata: false,
+    jwks: false,
+  };
   const hanging: Array<() => void> = [];
   const discovery: { kind: 'oauth' | 'openid'; issuer?: string } = { kind: 'oauth' };
   hangingResponses.push(() => hanging.splice(0).forEach(end => end()));
@@ -130,7 +133,7 @@ async function startAuthorizationServer({ path = '' }: { path?: string } = {}) {
 
 interface SignOptions {
   issuer?: string;
-  audience?: string | null;
+  audience?: string | string[] | null;
   expiresIn?: string;
 }
 
@@ -438,6 +441,10 @@ describe('Factory MCP server', () => {
       'unknown issuer': await authServer.sign(claims, { issuer: 'https://attacker.example.com' }),
       expired: await authServer.sign(claims, { expiresIn: '-1m' }),
       'not a JWT': 'token-alice-but-opaque',
+      // Also issued for another resource, so it isn't for this endpoint alone.
+      'token for this and another resource': await authServer.sign(claims, {
+        audience: [RESOURCE, 'https://platform.mastra.ai/v1/mcp'],
+      }),
     };
     // A key the authorization server never published, under its issuer.
     const stranger = await startAuthorizationServer();
