@@ -34,9 +34,7 @@ const knowledgeScopeTreeMock = vi.fn(async () => ({
 }));
 const createKnowledgeInspectorMock = vi.fn(async () => ({ getScopeTree: knowledgeScopeTreeMock }));
 const durableAgentMock = { kind: 'durable' };
-const eventedAgentMock = { kind: 'evented' };
 const createDurableAgentMock = vi.fn(() => durableAgentMock);
-const createEventedAgentMock = vi.fn(() => eventedAgentMock);
 
 vi.mock('../knowledge-inspector.js', () => ({
   createKnowledgeInspector: createKnowledgeInspectorMock,
@@ -74,9 +72,7 @@ vi.mock('@mastra/core/coding-agent', () => ({
 
 vi.mock('@mastra/core/agent/durable', () => ({
   createDurableAgent: createDurableAgentMock,
-  createEventedAgent: createEventedAgentMock,
-  isDurableAgent: (agent: unknown) => agent === durableAgentMock || agent === eventedAgentMock,
-  isEventedAgent: (agent: unknown) => agent === eventedAgentMock,
+  isDurableAgent: (agent: unknown) => agent === durableAgentMock,
 }));
 
 const agentConstructorMock = vi.fn();
@@ -711,7 +707,6 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     createDurableAgentMock.mockClear();
-    createEventedAgentMock.mockClear();
     controllerConstructorMock.mockReset();
     controllerOnSessionCreatedMock.mockReset();
     controllerOnSessionDeletedMock.mockReset();
@@ -738,7 +733,6 @@ describe('createMastraCode', () => {
     const result = await createMastraCodeAgentController();
 
     expect(createDurableAgentMock).not.toHaveBeenCalled();
-    expect(createEventedAgentMock).not.toHaveBeenCalled();
     expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
     expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
@@ -824,26 +818,24 @@ describe('createMastraCode', () => {
     }
   });
 
-  it.each([
-    ['durable', createDurableAgentMock, durableAgentMock],
-    ['evented', createEventedAgentMock, eventedAgentMock],
-  ] as const)('wraps the coding agent with the %s implementation', async (selection, factory, wrapper) => {
-    loadSettingsMock.mockReturnValue({ ...createMockSettings(), experimentalAgent: selection });
+  it('wraps the coding agent with the durable implementation', async () => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), experimentalAgent: 'durable' });
     const { createMastraCodeAgentController } = await import('../index.js');
     const result = await createMastraCodeAgentController();
 
-    expect(factory).toHaveBeenCalledWith({ agent: expect.any(Object) });
-    expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(wrapper);
-    expect(result.codeAgent).toBe(wrapper);
+    expect(createDurableAgentMock).toHaveBeenCalledWith({ agent: expect.any(Object) });
+    expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(durableAgentMock);
+    expect(result.codeAgent).toBe(durableAgentMock);
   });
 
   it('lets the environment override the persisted selection', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_AGENT = 'evented';
     loadSettingsMock.mockReturnValue({ ...createMockSettings(), experimentalAgent: 'durable' });
     const { createMastraCodeAgentController } = await import('../index.js');
-    await createMastraCodeAgentController();
+    const result = await createMastraCodeAgentController();
 
-    expect(createEventedAgentMock).toHaveBeenCalledOnce();
+    expect(codeAgentConfig().durable).toEqual({ executionEngine: 'evented' });
+    expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
     expect(createDurableAgentMock).not.toHaveBeenCalled();
   });
 

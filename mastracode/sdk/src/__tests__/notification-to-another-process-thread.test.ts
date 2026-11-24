@@ -11,6 +11,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { isEventedAgent } from '@mastra/core/agent/durable';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import { dispatchDueNotifications } from '@mastra/core/notifications';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -138,6 +139,10 @@ describe.each([undefined, 'durable', 'evented'] as const)('two processes on one 
     await vi.waitFor(() => expect(a.session.run.isRunning()).toBe(false), { timeout: 10_000 });
 
     expect(readMarker()).toEqual(['written in a']);
+    if (experimental === 'evented') {
+      expect(isEventedAgent(a.agent)).toBe(false);
+      expect(a.workflowEvents.mock.calls.some(([event]) => event.type === 'workflow.start')).toBe(true);
+    }
     expect(b.workflowEvents).not.toHaveBeenCalled();
     expect(b.runs).not.toHaveBeenCalled();
     expect(a.errors).toEqual([]);

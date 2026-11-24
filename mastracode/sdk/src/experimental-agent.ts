@@ -1,5 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
-import { createDurableAgent, createEventedAgent, isDurableAgent, isEventedAgent } from '@mastra/core/agent/durable';
+import { isDurableAgent } from '@mastra/core/agent/durable';
 import type { Mastra } from '@mastra/core/mastra';
 
 import { parseExperimentalAgentSetting } from './onboarding/settings.js';
@@ -42,18 +42,13 @@ export function resolveAgentStreamsOff(env: { MASTRACODE_AGENT_STREAMS?: string 
   throw new Error(`Invalid MASTRACODE_AGENT_STREAMS value ${JSON.stringify(value)}. Expected "on", "off", or unset.`);
 }
 
-export function wrapExperimentalAgent(agent: Agent, selection: ExperimentalAgent | null): Agent {
-  if (selection === 'durable') return createDurableAgent({ agent }) as unknown as Agent;
-  if (selection === 'evented') return createEventedAgent({ agent }) as unknown as Agent;
-  return agent;
-}
-
 export function validateExperimentalAgent(
   agent: Agent,
   mastra: Mastra | undefined,
   report: (message: string) => void = console.info,
 ): void {
-  const evented = isEventedAgent(agent);
+  const durable = agent.durable;
+  const evented = typeof durable === 'object' && durable.executionEngine === 'evented';
   if (!evented && !isDurableAgent(agent)) return;
   const selection: ExperimentalAgent = evented ? 'evented' : 'durable';
 
@@ -73,13 +68,15 @@ export function validateExperimentalAgent(
     );
   }
 
-  const engineType = agent.getWorkflow().engineType;
-  const expectedEngine = selection === 'evented' ? 'evented' : 'default';
-  if (engineType !== expectedEngine) {
-    throw new Error(
-      `Experimental agent "${selection}" resolved workflow engine ${JSON.stringify(engineType)} instead of "${expectedEngine}".`,
-    );
+  if (evented) {
+    report('Experimental agent: native evented (workflow engine policy: evented)');
+  } else if (isDurableAgent(agent)) {
+    const engineType = agent.getWorkflow().engineType;
+    if (engineType !== 'default') {
+      throw new Error(
+        `Experimental agent "durable" resolved workflow engine ${JSON.stringify(engineType)} instead of "default".`,
+      );
+    }
+    report(`Experimental agent: durable (workflow engine: ${engineType})`);
   }
-
-  report(`Experimental agent: ${selection} (workflow engine: ${engineType})`);
 }
