@@ -105,6 +105,18 @@ describe('stored per-part token counts', () => {
     expect(Object.values(estimateOf(custom.content.parts[0]!)).some(entry => entry.v === 9)).toBe(false);
   });
 
+  it('a field-defined custom estimator never reads or writes stock stored counts', () => {
+    class Doubled extends TokenCounter {
+      override countString = (value: string): number => super.countString(value) * 2;
+    }
+    const stored = message([{ type: 'text', text }]);
+    new TokenCounter().countMessage(stored);
+    const custom = message([{ type: 'text', text }], 'm2');
+    const expected = new Doubled().countMessage(custom);
+    expect(new Doubled().countMessage(stored)).toBe(expected);
+    expect(Object.values(estimateOf(custom.content.parts[0]!)).some(entry => entry.v === 9)).toBe(false);
+  });
+
   it.each([
     ['a Map', () => new Map([['a', 1]])],
     ['a Buffer', () => Buffer.from('hello world')],

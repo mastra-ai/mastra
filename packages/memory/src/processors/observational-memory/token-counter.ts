@@ -1278,7 +1278,9 @@ async function fetchGoogleAttachmentTokenEstimate(modelId: string, part: Cacheab
 export class TokenCounter {
   private readonly cacheSource: string;
   /** Stored estimates are only for the stock estimator; a subclass overriding countString never reads or writes them. */
-  private readonly usesStoredEstimates: boolean;
+  private get usesStoredEstimates(): boolean {
+    return coreClearsTokenEstimates && this.countString === TokenCounter.prototype.countString;
+  }
   private readonly defaultModelContext?: TokenCounterModelContext;
   private readonly inFlightAttachmentCounts = new Map<string, Promise<number | undefined>>();
   private readonly multimodalToolResultCounts = new WeakMap<object, { resultKey: string; tokens: number }>();
@@ -1291,7 +1293,6 @@ export class TokenCounter {
 
   constructor(options?: TokenCounterOptions) {
     this.cacheSource = `v${TOKEN_ESTIMATE_CACHE_VERSION}:${resolveEstimatorId()}`;
-    this.usesStoredEstimates = coreClearsTokenEstimates && this.countString === TokenCounter.prototype.countString;
     this.defaultModelContext = parseModelContext(options?.model);
   }
 

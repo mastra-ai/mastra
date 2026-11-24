@@ -1592,7 +1592,7 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
       const keysAfterRequest = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
       // Watch the second pass only, so a re-estimate of the call signature is visible.
-      const countString = vi.spyOn(counter, 'countString');
+      const countString = vi.spyOn(TokenCounter.prototype, 'countString');
 
       message.content.parts[0].toolInvocation.state = 'approval-responded';
       counter.countMessage(message);
