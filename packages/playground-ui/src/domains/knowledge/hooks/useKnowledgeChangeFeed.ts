@@ -39,25 +39,25 @@ function sleep(ms: number, signal: AbortSignal) {
   });
 }
 
-/** Runs `refresh` when asked: one at a time, starts at least MIN_REFRESH_GAP_MS apart, asks during one run it once more. */
+/** Runs `refresh` when asked: one at a time, at least MIN_REFRESH_GAP_MS after the previous one ended, asks during one run it once more. */
 function refreshRounds(refresh: () => Promise<unknown>) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running = false;
   let requested = false;
   let stopped = false;
-  let lastStart = Number.NEGATIVE_INFINITY;
+  let lastEnd = Number.NEGATIVE_INFINITY;
   const schedule = () => {
-    timer = setTimeout(run, Math.max(BURST_MS, lastStart + MIN_REFRESH_GAP_MS - Date.now()));
+    timer = setTimeout(run, Math.max(BURST_MS, lastEnd + MIN_REFRESH_GAP_MS - Date.now()));
   };
   const run = async () => {
     timer = undefined;
     requested = false;
     running = true;
-    lastStart = Date.now();
     try {
       await refresh();
     } finally {
       running = false;
+      lastEnd = Date.now();
       if (requested && !stopped) schedule();
     }
   };
@@ -78,8 +78,11 @@ function refreshRounds(refresh: () => Promise<unknown>) {
  * stream is open, so the queries poll only while it isn't.
  *
  * An agent writing continuously sends a notice per write, and each refresh rereads the whole page graph. So one
- * refresh runs at a time, at most one per MIN_REFRESH_GAP_MS, and the notices that arrive meanwhile start a
- * single refresh after it: the server never runs two graph reads for one tab.
+ * refresh runs at a time, each at least MIN_REFRESH_GAP_MS after the previous one ended, and the notices that
+ * arrive meanwhile start a single refresh after it. A read already running, a poll or a refresh from before the
+ * tab was hidden, is joined rather than restarted, since cancelling it in the browser does not stop it on the
+ * server; its answer may predate the change, so one more refresh follows. The server never runs two reads of a
+ * query for one tab.
  *
  * The stream holds an HTTP connection open, and a browser allows about six per host over HTTP/1.1. A hidden tab
  * closes its stream, and reconnects and refreshes when it is shown again.
@@ -92,7 +95,12 @@ export function useKnowledgeChangeFeed(feed: KnowledgeChangeFeed | undefined): b
   useEffect(() => {
     if (!feed || !visible) return;
     const abort = new AbortController();
-    const refresh = refreshRounds(() => queryClient.invalidateQueries(feed.queries));
+    const refresh = refreshRounds(async () => {
+      const answersMayPredateChange = queryClient.isFetching(feed.queries) > 0;
+      // The default `cancelRefetch: true` would start a second read beside the running one.
+      await queryClient.invalidateQueries(feed.queries, { cancelRefetch: false });
+      if (answersMayPredateChange) refresh.request();
+    });
     void (async () => {
       while (!abort.signal.aborted) {
         try {
