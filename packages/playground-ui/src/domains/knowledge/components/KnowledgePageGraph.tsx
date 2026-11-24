@@ -46,7 +46,7 @@ import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPa
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
-import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
+import { KNOWLEDGE_GRAPH_TRANSITION_MS, prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 import { KnowledgePageCard } from './KnowledgePageCard';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
@@ -58,12 +58,10 @@ import { Txt } from '@/ds/components/Txt';
 import './knowledge.css';
 import { IconArrowWallUp } from '@/ds/icons/central/IconArrowWallUp';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
-import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
-import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPin } from '@/ds/icons/central/IconPin';
-import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { GraphCanvas } from '@/ds/primitives/graph-canvas';
+import { GraphZoomControls } from '@/ds/primitives/graph-zoom-controls';
 import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -1628,30 +1626,7 @@ function KnowledgePageGraphInner({
       />
       <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-tree-drawer-inset,0px) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
         <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom>
-          <Button
-            size="icon-sm"
-            tooltip="Zoom out"
-            aria-label="Zoom out"
-            onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
-          >
-            <IconMinusMedium />
-          </Button>
-          <Button
-            size="icon-sm"
-            tooltip="Zoom in"
-            aria-label="Zoom in"
-            onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
-          >
-            <IconPlusMedium />
-          </Button>
-          <Button
-            size="icon-sm"
-            tooltip="Fit view"
-            aria-label="Fit view"
-            onClick={() => fit(fitDuration(prefersMotion()))}
-          >
-            <IconFullscreen1 />
-          </Button>
+          <GraphZoomControls duration={KNOWLEDGE_GRAPH_TRANSITION_MS} onFitView={fit} />
         </ButtonsGroup>
       </div>
     </div>

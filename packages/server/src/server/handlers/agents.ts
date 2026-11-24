@@ -309,20 +309,16 @@ function hasDurableExecution(agent: Agent): boolean {
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
 
-/** Whether the agent comes from a @mastra/core with engine selection (`__hasDurableExecution`). */
-function hasEngineCheck(agent: Agent): boolean {
-  return typeof (agent as unknown as { __hasDurableExecution?: unknown }).__hasDurableExecution === 'function';
+function usesDurableEngine(agent: Agent): boolean | undefined {
+  const native = agent as unknown as { __hasDurableExecution?: () => boolean };
+  return typeof native.__hasDurableExecution === 'function' ? native.__hasDurableExecution() : undefined;
 }
 
-/**
- * Whether the agent is itself an `Agent` running on a core durable engine. The `instanceof` check
- * keeps adapter proxies (Inngest) out: they forward unknown members to the agent they wrap, so the
- * engine check alone reports the wrapped agent's engine, not the adapter's.
- */
-function ownsDurableEngine(agent: Agent): boolean {
-  if (!(agent instanceof Agent)) return false;
-  const native = agent as unknown as { __hasDurableExecution?: () => boolean };
-  return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
+/** A forwarding proxy can expose the wrapped agent's hook without implementing it itself. */
+function ownsRunStreamHook(agent: Agent): boolean {
+  const key = '__subscribeToRunStream';
+  const prototype: object | null = Object.getPrototypeOf(agent);
+  return Object.hasOwn(agent, key) || (prototype !== null && key in prototype);
 }
 
 async function validateDurableToolCallAccess({
@@ -3220,13 +3216,11 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      // Agents running on a core durable engine (native or a core wrapper) subscribe for us so the
-      // client never sees what an execution that lost the run still publishes. An adapter proxy
-      // (Inngest) is not an Agent, so it keeps reading its own transport below whatever engine the
-      // agent it wraps uses. A wrapper from a @mastra/core that predates engine selection has no
-      // engine check at all, so its shape decides.
+      // Inngest forwards unknown methods to its wrapped agent, but publishes on its own bus.
+      // Only use the fence when the observed agent implements the hook. Older core wrappers
+      // predate the engine check and are identified by their durable wrapper shape.
       const fencedAgent =
-        ownsDurableEngine(agent) || (durableAgent && !hasEngineCheck(agent))
+        ownsRunStreamHook(agent) && (usesDurableEngine(agent) ?? durableAgent)
           ? (agent as unknown as DurableAgentLike)
           : undefined;
       // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
