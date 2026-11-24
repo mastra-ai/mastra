@@ -13,6 +13,8 @@ import type {
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import { createThreadBranchError } from '@mastra/core/memory';
+import type { MastraMemory } from '@mastra/core/memory';
 import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -138,7 +140,6 @@ async function resolveSessionResourceId(controller: AgentController<any>, sessio
  * arrives before the session was started fails instead of landing on a thread nobody reads.
  */
 async function getSession(
-  mastra: any,
   controller: AgentController<any>,
   sessionId: string,
   requestContext?: RequestContext,
@@ -182,6 +183,132 @@ async function getExistingSession(
   // thread through the execute-authorized path.
   return getSession(controller, sessionId, requestContext);
 }
+
+async function authorizeControllerThreadAccess({
+  mastra,
+  controller,
+  session,
+  requestContext,
+  threadId,
+  resourceId,
+  permission = MastraFGAPermissions.MEMORY_READ,
+  allowCreate = false,
+}: {
+  mastra: any;
+  controller: AgentController<any>;
+  session?: Session<any>;
+  requestContext: RequestContext;
+  threadId: string;
+  resourceId: string;
+  permission?: Parameters<typeof enforceThreadAccess>[0]['permission'];
+  allowCreate?: boolean;
+}): Promise<MastraMemory | undefined> {
+  const memoryResolvers = controller as AgentController<any> & {
+    resolveSessionMemory?: (session: Session<any>) => Promise<MastraMemory | undefined>;
+    resolveMemoryForRequestContext?: (requestContext: RequestContext) => Promise<MastraMemory | undefined>;
+  };
+  const memory = session
+    ? await memoryResolvers.resolveSessionMemory?.call(controller, session)
+    : await memoryResolvers.resolveMemoryForRequestContext?.call(controller, requestContext);
+  if (!memory) {
+    const storageController = controller as AgentController<any> & {
+      queryThreadById?: (input: { threadId: string }) => Promise<any>;
+      queryThreads?: (input: { resourceId?: string; includeForkedSubagents?: boolean }) => Promise<any[]>;
+    };
+    const thread = storageController.queryThreadById
+      ? await storageController.queryThreadById.call(controller, { threadId })
+      : null;
+    const threads = storageController.queryThreads
+      ? await storageController.queryThreads.call(controller, { resourceId, includeForkedSubagents: true })
+      : thread
+        ? [thread]
+        : [];
+    const threadMetadata = thread?.metadata as Record<string, unknown> | undefined;
+    const hasBranchMetadata = Boolean(threadMetadata && Object.hasOwn(threadMetadata, '__mastra_thread_branch'));
+    const branchMetadata = threadMetadata?.__mastra_thread_branch;
+    if (
+      hasBranchMetadata &&
+      branchMetadata &&
+      typeof branchMetadata === 'object' &&
+      (branchMetadata as { state?: unknown }).state === 'pending'
+    ) {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    const isBranchParticipant =
+      hasBranchMetadata ||
+      threads.some(candidate => {
+        const metadata = (candidate.metadata as Record<string, unknown> | undefined)?.__mastra_thread_branch;
+        return (
+          metadata &&
+          typeof metadata === 'object' &&
+          ((candidate.id === threadId && (metadata as { state?: unknown }).state === 'ready') ||
+            ((metadata as { parentThreadId?: unknown; state?: unknown }).parentThreadId === threadId &&
+              (metadata as { state?: unknown }).state === 'ready'))
+        );
+      });
+    if (isBranchParticipant) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'Thread branching is not supported by the configured memory.',
+      );
+    }
+    if (!thread && !allowCreate) {
+      throw new HTTPException(404, { message: `thread ${threadId} not found` });
+    }
+    try {
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread: thread ?? undefined,
+        effectiveResourceId: resourceId,
+        permission,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 403) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      throw error;
+    }
+    return undefined;
+  }
+
+  const branchState = await inspectVisibleMemoryThread(memory, threadId, { allowCreate });
+  const thread = branchState.state === 'absent' ? null : await memory.getThreadById({ threadId });
+  if (!thread) {
+    if (!allowCreate) {
+      throw new HTTPException(404, { message: `thread ${threadId} not found` });
+    }
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+    return memory;
+  }
+
+  try {
+    const authorize =
+      permission === MastraFGAPermissions.MEMORY_READ ? authorizeMemoryThreadAccess : authorizeThreadBranchTree;
+    await authorize({
+      mastra,
+      requestContext,
+      memory,
+      thread,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 403) {
+      throw new HTTPException(404, { message: 'Thread not found' });
+    }
+    throw error;
+  }
+  return memory;
+}
+
 
 /**
  * Acknowledges a session operation that keeps running after the response is
@@ -1459,7 +1586,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, sessionId, limit, tags }) => {
+  handler: async ({ mastra, controllerId, sessionId, limit, tags, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
@@ -1487,6 +1614,28 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
                 return tagEntries.every(([key, value]) => values[key] === value);
               },
       });
+      const accessibleThreads: typeof threads = [];
+      for (const candidate of threads) {
+        try {
+          await authorizeControllerThreadAccess({
+            mastra,
+            controller,
+            requestContext,
+            threadId: candidate.id,
+            resourceId,
+          });
+          accessibleThreads.push(candidate);
+        } catch (error) {
+          const id = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+          if (
+            (error instanceof HTTPException && (error.status === 403 || error.status === 404)) ||
+            id === 'BRANCH_NOT_FOUND'
+          ) {
+            continue;
+          }
+          throw error;
+        }
+      }
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -1768,11 +1917,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
-      const thread = await controller.queryThreadById({ threadId });
-      if (!thread || (thread.resourceId && thread.resourceId !== resourceId)) {
-        throw new HTTPException(404, { message: 'Thread not found' });
-      }
-      await enforceThreadAccess({
+      const memory = await authorizeControllerThreadAccess({
         mastra,
         controller,
         requestContext,
