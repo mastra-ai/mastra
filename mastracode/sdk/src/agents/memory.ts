@@ -357,6 +357,7 @@ export function getDynamicMemory(
                 canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
+                liveDateHints: false,
                 retrieval: vector ? { vector: true } : true,
                 scope: omScope,
                 // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
