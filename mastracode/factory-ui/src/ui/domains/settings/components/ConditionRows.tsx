@@ -601,7 +601,7 @@ function textOf(value: Row['value']): string {
   return value === undefined ? '' : String(value);
 }
 
-/** Typed values save on Enter or when the field loses focus; Escape puts back the saved value. */
+/** Typed values reach the rule on every keystroke; Enter or leaving the field tidies the display, and Escape puts back the value from before typing. */
 function TextValue({
   row,
   field,
