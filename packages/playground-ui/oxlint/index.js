@@ -218,6 +218,8 @@ const isTextSize = value =>
     option => option.type === 'Literal' && typeof option.value === 'string' && !option.value.startsWith('icon-'),
   );
 
+const setsSize = attribute => attribute.type === 'JSXSpreadAttribute' || attribute.name.name === 'size';
+
 function buttonIconProp(context) {
   const { components = BUTTON_ICON_PROPS } = context.options[0] ?? {};
   const iconImports = new Set();
@@ -235,8 +237,7 @@ function buttonIconProp(context) {
         if (attribute.type === 'JSXAttribute') attributes.set(attribute.name.name, attribute.value);
       // An icon size ignores the props: its child is the glyph. A forwarded or spread size may be one.
       if (attributes.has('size') && !isTextSize(attributes.get('size'))) return;
-      const spread = openingElement.attributes.some(attribute => attribute.type === 'JSXSpreadAttribute');
-      if (spread && !attributes.has('size')) return;
+      if (openingElement.attributes.findLast(setsSize)?.type === 'JSXSpreadAttribute') return;
       const content = contentOf(node);
       for (const prop of components[name]) {
         if (attributes.has(prop)) continue;

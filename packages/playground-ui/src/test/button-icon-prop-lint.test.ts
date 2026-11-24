@@ -24,6 +24,10 @@ tester.run('button-icon-prop', plugin.rules['button-icon-prop'], {
       code: jsx('<Button><IconPlusMedium />{null}{false}{undefined}</Button>'),
     },
     {
+      name: 'allows a button whose spread may replace its size',
+      code: jsx('<Button size="sm" {...props}><IconPlusMedium /> Add</Button>'),
+    },
+    {
       name: 'allows a button whose spread may carry the size',
       code: jsx('<Button {...props}><IconPlusMedium /> Add</Button>'),
     },
