@@ -1332,13 +1332,29 @@ export class AgentController<TState = {}> {
       },
       getStorageById: ({ threadId }) => this.queryThreadById({ threadId }),
       getById: async ({ threadId }) => {
-        const memory = await getConfiguredMemory();
-        const callerThread =
-          memory && typeof memory.getThreadById === 'function' ? await memory.getThreadById({ threadId }) : undefined;
-        // A per-caller memory only holds that caller's rows; controller rows
-        // (the session's own thread, a clone's source) live in controller
-        // storage, so fall back to it rather than reporting the thread missing.
-        const thread = callerThread ?? (await this.queryThreadById({ threadId }));
+        // Thread rows are controller state and persistThreadRow always writes
+        // them to controller storage when it exists, so read them there. The
+        // configured memory resolves the host's memory factory, which can need a
+        // caller the run hasn't bound, so it is asked only when the controller
+        // has no storage or storage refuses a shared-history branch row.
+        const readFromMemory = async () => {
+          const memory = await getConfiguredMemory();
+          return memory && typeof memory.getThreadById === 'function'
+            ? ((await memory.getThreadById({ threadId })) ?? null)
+            : null;
+        };
+        let thread: AgentControllerThread | StorageThreadType | null;
+        if (this.#resolveStorage()) {
+          try {
+            thread = await this.queryThreadById({ threadId });
+          } catch (error) {
+            if ((error as { id?: unknown } | null)?.id !== 'BRANCHING_UNSUPPORTED') throw error;
+            thread = await readFromMemory();
+            if (!thread) throw error;
+          }
+        } else {
+          thread = await readFromMemory();
+        }
         return thread ? { ...thread, title: thread.title ?? undefined } : null;
       },
       listMessages: async ({ threadId, limit }) => {
