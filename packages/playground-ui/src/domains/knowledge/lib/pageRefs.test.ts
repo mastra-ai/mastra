@@ -165,4 +165,21 @@ describe('bodyLinkEdges', () => {
       { source: 'overview', target: 'workflows', kind: 'link', count: 1 },
     ]);
   });
+
+  it('draws the same edges from the counted refs a graph or tree page sends instead of its body', () => {
+    const overview = page('overview', 'docs', {
+      key: 'overview',
+      bodyLinks: [
+        { ref: 'docs:mastra#workflows/suspend-and-resume', count: 1 },
+        { ref: 'suspend', count: 2 },
+        { ref: 'overview', count: 1 },
+        { ref: 'nowhere', count: 1 },
+        { ref: 'docs:mastra#workflows', count: 1 },
+      ],
+    });
+    expect(bodyLinkEdges([docs, workflows, suspend, overview])).toEqual([
+      { source: 'overview', target: 'suspend', kind: 'link', count: 3 },
+      { source: 'overview', target: 'workflows', kind: 'link', count: 1 },
+    ]);
+  });
 });

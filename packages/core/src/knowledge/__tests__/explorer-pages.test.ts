@@ -471,6 +471,47 @@ describe('readKnowledgePageGraph', () => {
   });
 });
 
+describe('graph and tree pages', () => {
+  async function billingWithBody() {
+    const store = new InMemoryKnowledgePageStore();
+    const acme = (
+      await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: host })
+    ).scope;
+    const billing = await store.createPage({
+      parentId: acme.id,
+      name: 'Billing',
+      body: `Disputes go to [[ Refunds ]], then back to [[Refunds]]. Not \`[[Code]]\`, nor [[${'x'.repeat(600)}]].`,
+      provenance: host,
+    });
+    return { store, acme, billing };
+  }
+  const refundsTwice = [{ ref: 'Refunds', count: 2 }];
+
+  it('carry the [[ref]]s their bodies link instead of the bodies', async () => {
+    const { store, acme, billing } = await billingWithBody();
+
+    const graph = await readKnowledgePageGraph(store, { read: 'all' });
+    const level = await listKnowledgeTreeChildren(store, { parentId: acme.id, read: 'all' });
+
+    for (const page of [graph?.pages.find(page => page.id === billing.id), level.pages[0]]) {
+      expect(page).not.toHaveProperty('body');
+      expect(page?.bodyLinks).toEqual(refundsTwice);
+    }
+  });
+
+  it('lose their bodies even when a hosted service on an older core sends them', async () => {
+    const { store, billing } = await billingWithBody();
+    const hosted = Object.assign(store, {
+      readPageGraph: async () => ({ pages: [billing], outsideIds: [], edges: [], pinnedIds: [], truncated: false }),
+    });
+
+    const graph = await readKnowledgePageGraph(hosted, { read: 'all' });
+
+    expect(graph?.pages[0]).not.toHaveProperty('body');
+    expect(graph?.pages[0]?.bodyLinks).toEqual(refundsTwice);
+  });
+});
+
 describe('search and activity', () => {
   it('filters search hits and activity by the read scope', async () => {
     const { store, roadmap, refunds } = await seed();

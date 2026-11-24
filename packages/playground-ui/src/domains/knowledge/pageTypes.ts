@@ -29,7 +29,10 @@ export interface KnowledgePagePayload {
   position: string;
   name: string;
   description?: string;
+  /** Graph and tree pages leave it out and send `bodyLinks` instead (servers before that sent it). */
   body?: string;
+  /** The body's `[[ref]]`s (outside code) and how many times each appears; graph and tree pages. */
+  bodyLinks?: Array<{ ref: string; count: number }>;
   version: number;
   mergedInto?: string;
   createdBy: KnowledgeProvenancePayload;

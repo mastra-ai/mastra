@@ -20,6 +20,7 @@ const page = (
   updatedBy: { author: 'agent:alex' },
   createdAt: at,
   updatedAt: at,
+  bodyLinks: [],
   ...fields,
 });
 

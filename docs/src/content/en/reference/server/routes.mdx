@@ -455,11 +455,11 @@ These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from
 | Method | Path | Description |
 | - | - | - |
 | `GET` | `/api/knowledge` | List the registered Knowledge instances, filtered by FGA when configured |
-| `GET` | `/api/knowledge/:knowledgeKey/tree` | List the root scopes, or the children of `parentId` |
+| `GET` | `/api/knowledge/:knowledgeKey/tree` | List the root scopes, or the children of `parentId`. Pages carry their body's `[[links]]`, not the body |
 | `GET` | `/api/knowledge/:knowledgeKey/pages/:pageId` | Get a page with its ancestors, notes, pin and referenced pages |
 | `GET` | `/api/knowledge/:knowledgeKey/link-counts` | Count the links into and out of each page in `pageId` |
 | `GET` | `/api/knowledge/:knowledgeKey/pages/:pageId/links` | List the links into and out of one page |
-| `GET` | `/api/knowledge/:knowledgeKey/graph` | Get a bounded graph of pages with parent and mention edges and scope grants |
+| `GET` | `/api/knowledge/:knowledgeKey/graph` | Get a bounded graph of pages with parent and mention edges and scope grants. Pages carry their body's `[[links]]`, not the body |
 | `GET` | `/api/knowledge/:knowledgeKey/search` | Search page names, descriptions, bodies and notes |
 | `GET` | `/api/knowledge/:knowledgeKey/activity` | List recent changes, optionally for one scope or page |
 | `GET` | `/api/knowledge/:knowledgeKey/events` | Stream the caller's readable writes as Server-Sent Events. See [Knowledge events](#knowledge-events) |

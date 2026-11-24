@@ -626,6 +626,7 @@ export {
   searchKnowledgeExplorerPages,
 } from './explorer-pages';
 export type {
+  KnowledgeBodyLinkRef,
   KnowledgeGraphScopeGrant,
   KnowledgePageGraph,
   KnowledgePageGraphEdge,
@@ -633,6 +634,7 @@ export type {
   KnowledgePageGraphLimits,
   KnowledgePageGraphStore,
   KnowledgePageLinks,
+  KnowledgePageSummary,
   KnowledgePageView,
   KnowledgeTreeChildren,
   KnowledgeTreePage,

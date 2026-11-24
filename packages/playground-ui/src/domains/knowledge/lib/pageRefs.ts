@@ -125,16 +125,22 @@ export function bodyLinkRefs(body: string): string[] {
   return [...prose.matchAll(WIKILINK)].map(match => match[1] ?? '');
 }
 
+/** The page's `[[ref]]`s and their counts: from its body when loaded, else from the server's `bodyLinks`. */
+function linkedRefs(page: KnowledgePagePayload): Array<{ ref: string; count: number }> {
+  if (page.body !== undefined) return bodyLinkRefs(page.body).map(ref => ({ ref, count: 1 }));
+  return page.bodyLinks ?? [];
+}
+
 /** One `link` edge per page whose body links another loaded page; `count` is how many times. */
 export function bodyLinkEdges(pages: KnowledgePagePayload[]): KnowledgePageEdge[] {
   const index = knowledgePageRefIndex(pages);
   const edges: KnowledgePageEdge[] = [];
   for (const page of pages) {
-    if (!page.body || page.deletedAt || page.mergedInto) continue;
+    if (page.deletedAt || page.mergedInto) continue;
     const counts = new Map<string, number>();
-    for (const ref of bodyLinkRefs(page.body)) {
+    for (const { ref, count } of linkedRefs(page)) {
       const target = index.resolve(ref);
-      if (target && target.id !== page.id) counts.set(target.id, (counts.get(target.id) ?? 0) + 1);
+      if (target && target.id !== page.id) counts.set(target.id, (counts.get(target.id) ?? 0) + count);
     }
     for (const [target, count] of counts) edges.push({ source: page.id, target, kind: 'link', count });
   }

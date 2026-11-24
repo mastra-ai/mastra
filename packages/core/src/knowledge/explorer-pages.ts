@@ -12,10 +12,12 @@ import type {
 import {
   KnowledgeUnsupportedCapabilityError,
   knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
   parseKnowledgePageRef,
 } from '../storage';
 import type { KnowledgeRole } from './declarations';
+import { knowledgeBodyLinkRefs } from './links';
 
 /**
  * Read-only views over the schema-4 page store for browsing UIs (Mastra Studio, Factory).
@@ -97,8 +99,34 @@ async function visibleChildScopes(
   return { scopes, truncated };
 }
 
+/** A `[[ref]]` a page body links, trimmed, and how many times the body links it. */
+export interface KnowledgeBodyLinkRef {
+  ref: string;
+  count: number;
+}
+
+/**
+ * A page as the tree and graph list it: no `body`, which is unbounded, only the `[[ref]]`s it links,
+ * so a UI draws link lines without loading every body. Read the page itself for its body.
+ */
+export type KnowledgePageSummary = Omit<KnowledgePage, 'body'> & {
+  /** Outside code, at most `MAX_KNOWLEDGE_PAGE_BODY_LINKS`; refs longer than a page ref can be are left out. */
+  bodyLinks: KnowledgeBodyLinkRef[];
+};
+
+/** Takes a store page, or a summary a hosted service already made. */
+function summarize({
+  body,
+  bodyLinks,
+  ...page
+}: KnowledgePage & Partial<Pick<KnowledgePageSummary, 'bodyLinks'>>): KnowledgePageSummary {
+  if (bodyLinks) return { ...page, bodyLinks };
+  const refs = [...knowledgeBodyLinkRefs(body)].filter(([ref]) => ref.length <= MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH);
+  return { ...page, bodyLinks: refs.map(([ref, count]) => ({ ref, count })) };
+}
+
 /** A page in one tree level, with how many readable children sit directly under it. */
-export type KnowledgeTreePage = KnowledgePage & {
+export type KnowledgeTreePage = KnowledgePageSummary & {
   /**
    * Readable child pages, plus readable child scopes for a scope. Left out when the store can't count
    * (an adapter older than `countChildPages`), so a UI can tell "none" from "unknown".
@@ -155,12 +183,14 @@ async function withChildCounts(
   pages: KnowledgePage[],
   read: KnowledgeReadScope,
 ): Promise<{ pages: KnowledgeTreePage[]; truncated: boolean }> {
-  if (pages.length === 0 || typeof store.countChildPages !== 'function') return { pages, truncated: false };
+  if (pages.length === 0 || typeof store.countChildPages !== 'function') {
+    return { pages: pages.map(summarize), truncated: false };
+  }
   let counts: Record<string, number>;
   try {
     counts = await store.countChildPages({ parentIds: pages.map(page => page.id), read });
   } catch (error) {
-    if (error instanceof KnowledgeUnsupportedCapabilityError) return { pages, truncated: false };
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return { pages: pages.map(summarize), truncated: false };
     throw error;
   }
   const budget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
@@ -175,7 +205,8 @@ async function withChildCounts(
       capped = childScopes.truncated;
       truncated ||= capped;
     }
-    counted.push(capped ? { ...page, childCount, childCountCapped: true } : { ...page, childCount });
+    const summary = summarize(page);
+    counted.push(capped ? { ...summary, childCount, childCountCapped: true } : { ...summary, childCount });
   }
   return { pages: counted, truncated };
 }
@@ -301,8 +332,8 @@ export interface KnowledgePageGraphEdge {
 }
 
 export interface KnowledgePageGraph {
-  /** Pages in the walk, then readable mentioned pages outside it. */
-  pages: KnowledgePage[];
+  /** Pages in the walk, then readable mentioned pages outside it. Summaries: read a page for its body. */
+  pages: KnowledgePageSummary[];
   /** Ids of `pages` that are outside the walk (mention endpoints only). */
   outsideIds: string[];
   edges: KnowledgePageGraphEdge[];
@@ -375,9 +406,14 @@ type GraphNotes = { notes: Pick<KnowledgeNote, 'pageId' | 'mentions'>[]; truncat
 export interface KnowledgePageGraphStore extends KnowledgePageStore {
   /**
    * The graph this reader would build from `input.read`, so nothing outside it. undefined means the service
-   * lacks this operation. null means the root is missing or unreadable.
+   * lacks this operation. null means the root is missing or unreadable. A service on an older core sends
+   * full pages; the reader summarizes them.
    */
-  readPageGraph?(input: KnowledgePageGraphInput): Promise<KnowledgePageGraph | null | undefined>;
+  readPageGraph?(
+    input: KnowledgePageGraphInput,
+  ): Promise<
+    (Omit<KnowledgePageGraph, 'pages'> & { pages: Array<KnowledgePage | KnowledgePageSummary> }) | null | undefined
+  >;
   /** Apply visibility before limiting mentions. Return truncated if either limit omits results. */
   listGraphNoteMentions?(input: {
     pageIds: string[];
@@ -439,7 +475,7 @@ export async function readKnowledgePageGraph(
   }
   if (store.readPageGraph) {
     const graph = await store.readPageGraph({ ...input, limits });
-    if (graph !== undefined) return graph;
+    if (graph !== undefined) return graph && { ...graph, pages: graph.pages.map(summarize) };
   }
   const { read } = input;
   const rootId = input.rootId ?? null;
@@ -544,7 +580,7 @@ export async function readKnowledgePageGraph(
     truncated ||= batch.truncated;
   }
 
-  return { pages, outsideIds, edges, pinnedIds, truncated };
+  return { pages: pages.map(summarize), outsideIds, edges, pinnedIds, truncated };
 }
 
 export const DEFAULT_KNOWLEDGE_PAGE_SEARCH_LIMIT = 20;
