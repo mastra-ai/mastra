@@ -38,12 +38,12 @@
   --text-display-lg--letter-spacing: -0.01em;
 
   --text-display: 1.375rem; /* 22px — onboarding hero */
-  --text-display--line-height: 127%;
+  --text-display--line-height: 1.75rem;
   --text-display--font-weight: var(--font-weight-medium);
   --text-display--letter-spacing: -0.01em;
 
   --text-title: 1.125rem; /* 18px — page title */
-  --text-title--line-height: 133%;
+  --text-title--line-height: 1.5rem;
   --text-title--font-weight: var(--font-weight-medium);
 
   --text-heading: 1rem; /* 16px — page and panel headings */
@@ -51,11 +51,11 @@
   --text-heading--font-weight: var(--font-weight-medium);
 
   --text-subheading: 0.875rem; /* 14px — sections and cards inside a page */
-  --text-subheading--line-height: 143%;
+  --text-subheading--line-height: 1.25rem;
   --text-subheading--font-weight: var(--font-weight-medium);
 
   --text-body: 0.875rem; /* 14px — prose and descriptions */
-  --text-body--line-height: 143%;
+  --text-body--line-height: 1.25rem;
   --text-body--font-weight: var(--font-weight-normal);
 
   --text-label: 0.8125rem; /* 13px — control labels, nav items, buttons */
