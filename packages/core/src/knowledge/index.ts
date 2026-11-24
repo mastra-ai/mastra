@@ -371,6 +371,12 @@ export class Knowledge extends MastraBase {
     return this.#pins !== false;
   }
 
+  /** Which tool groups `createTools()` and `getInstructions()` include by default. @internal */
+  get __toolGroups(): { read: boolean; write: boolean } {
+    const { read, write } = this.#groups();
+    return { read, write };
+  }
+
   /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
   __principalsKey(context: KnowledgeRunContext): string {
     return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
@@ -379,14 +385,15 @@ export class Knowledge extends MastraBase {
   /**
    * The pinned pages a host-run caller with these principals receives, rendered as an agent run
    * receives them: only pages they can read, within this instance's pin budget. For hosts that serve
-   * Knowledge outside an agent run, alongside {@link Knowledge.createTools} with `principals`.
+   * Knowledge outside an agent run, alongside {@link Knowledge.createTools} with `principals`. Pass the
+   * same `read` as that `createTools` call, so entries name read tools only when the caller has them.
    */
-  async getPinnedContext(options: { principals: readonly string[] }): Promise<PinEntry[]> {
+  async getPinnedContext(options: { principals: readonly string[]; read?: boolean }): Promise<PinEntry[]> {
     const principals = this.#hostPrincipals(options.principals);
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), undefined, { principals });
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups({ read: options.read }).read);
   }
 
   // Only the shape is checked here: whether each principal matches a declared scope type is checked
@@ -402,7 +409,7 @@ export class Knowledge extends MastraBase {
     const budget = this.#pins || resolvePins(true);
     if (!budget) return [];
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
-    return knowledgeDeliveredPins(run, budget);
+    return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
   /** @internal */
