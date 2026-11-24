@@ -1,4 +1,3 @@
-import { decodeKnowledgeTimelineCursor } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 
 export const knowledgePathParams = z.object({
@@ -51,12 +50,9 @@ export const knowledgeTimelineQuerySchema = z.object({
   cursor: z
     .string()
     .refine(value => {
-      try {
-        decodeKnowledgeTimelineCursor(value);
-        return true;
-      } catch {
-        return false;
-      }
+      // Reject malformed cursors at the HTTP boundary without requiring a newer Core value export.
+      const match = /^t(-?\d+)_(.+)$/.exec(value);
+      return match !== null && Number.isSafeInteger(Number(match[1]));
     }, 'Invalid timeline cursor')
     .optional(),
   limit,

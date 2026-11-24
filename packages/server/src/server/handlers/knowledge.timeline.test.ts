@@ -100,7 +100,9 @@ describe('Knowledge timeline route', () => {
     for (const cursor of ['bad', 'tNaN_id', 't9007199254740992_id', 't0_']) {
       expect(knowledgeTimelineQuerySchema.safeParse({ cursor }).success).toBe(false);
     }
-    expect(knowledgeTimelineQuerySchema.safeParse({ cursor: 't0_id' }).success).toBe(true);
+    for (const cursor of ['t0_id', 't-1_entry:with_underscores', 't9007199254740991_id']) {
+      expect(knowledgeTimelineQuerySchema.safeParse({ cursor }).success).toBe(true);
+    }
   });
 
   it('lists deleted entries as body-free tombstones', async () => {
