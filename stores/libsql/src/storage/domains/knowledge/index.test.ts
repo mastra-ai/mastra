@@ -15,6 +15,7 @@ import {
   createKnowledgeHeldScopeTests,
   createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
+  createKnowledgeTimelineTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
@@ -58,6 +59,14 @@ describe('Knowledge Core compatibility', () => {
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHeldScopeTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+
+// One shared database, emptied before each case by the reset that must also empty the timeline tables.
+createKnowledgeTimelineTests(async () => {
+  const store = new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' });
+  await store.init();
+  await store.dangerouslyReset();
+  return store;
+});
 
 describe('through transaction views', () => {
   createKnowledgePageStoreTests(() =>

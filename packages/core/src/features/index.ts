@@ -39,6 +39,7 @@ export const coreFeatures = new Set<string>([
   'knowledge-pages',
   // KnowledgeStorage.importers: importer bookkeeping beside the pages, and its error classes.
   'knowledge-importers',
+  'knowledge-timelines',
   // Experiments can be deleted, including experiments orphaned by dataset
   // deletion, and the deletion cascades to the experiment's observability traces.
   'experiment-deletion',

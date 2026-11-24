@@ -205,6 +205,20 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     });
   }
 
+  /** For the timeline store beside it: the page, deleted or not, whether it has live children, and whether `read` reaches it. */
+  timelinePage(
+    id: string,
+    read: KnowledgeReadScope = 'all',
+  ): { page: KnowledgePage; hasChildren: boolean; readable: boolean } | undefined {
+    const page = this.#pages.get(id);
+    if (!page) return undefined;
+    return {
+      page,
+      hasChildren: this.#children(id).length > 0,
+      readable: !page.deletedAt && this.#pageReadable(page, read),
+    };
+  }
+
   #children(parentId: string | null): KnowledgePage[] {
     return [...this.#pages.values()].filter(page => page.parentId === parentId && !page.deletedAt);
   }
