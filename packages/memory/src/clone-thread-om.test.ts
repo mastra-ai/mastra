@@ -525,5 +525,65 @@ describe('cloneThread – Observational Memory', () => {
       const clonedMessageIds = clonedMessages.messages.map(m => m.id);
       expect(clonedOM!.observedMessageIds!.every(id => clonedMessageIds.includes(id))).toBe(true);
     });
+
+    it('carries the observations into another resource with none of the old messages', async () => {
+      // The controller keeps its thread rows in the same store the memory uses, as Mastra Code does.
+      const storage = new InMemoryStore();
+      memory = new Memory({ storage });
+      await seedThread('src-thread-memory-only', 3);
+      const memoryStore = await getMemoryStore(memory);
+      await memoryStore.updateThread({
+        id: 'src-thread-memory-only',
+        title: 'OM Test Thread',
+        metadata: { projectPath: '/old/home', sandboxAllowedPaths: ['/old/home/worktrees'] },
+      });
+      await seedThreadScopedOM(memoryStore, 'src-thread-memory-only', {
+        activeObservations: '* The old member learned the deploy order',
+        observedMessageIds: ['msg-src-thread-memory-only-0', 'msg-src-thread-memory-only-1'],
+      });
+
+      const controller = new AgentController({
+        id: 'clone-thread-memory-only-test',
+        resourceId: 'new-team-resource',
+        storage,
+        memory: vi.fn().mockResolvedValue(memory),
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [
+          {
+            id: 'default',
+            name: 'Default',
+            default: true,
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'test-agent',
+              instructions: 'You are a test agent.',
+              model: 'openai/gpt-4o',
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'new-team-resource' });
+      const clonedThread = await session.thread.cloneToCurrentResource({
+        threadId: 'src-thread-memory-only',
+        expectedResourceId: resourceId,
+        expectedProjectPath: '/old/home',
+        metadata: { projectPath: '/new/home' },
+        options: { messageFilter: { startDate: new Date('2025-01-01T00:00:00Z') } },
+      });
+
+      expect(clonedThread.resourceId).toBe('new-team-resource');
+      expect(clonedThread.metadata?.projectPath).toBe('/new/home');
+      expect(clonedThread.metadata?.sandboxAllowedPaths).toBeUndefined();
+      expect((await memoryStore.listMessages({ threadId: clonedThread.id })).messages).toEqual([]);
+      const clonedOM = await memoryStore.getObservationalMemory(clonedThread.id, 'new-team-resource');
+      expect(clonedOM!.activeObservations).toBe('* The old member learned the deploy order');
+      expect(clonedOM!.observedMessageIds).toEqual([]);
+      // The old member keeps its own memory and messages.
+      expect((await memoryStore.listMessages({ threadId: 'src-thread-memory-only' })).messages).toHaveLength(3);
+      expect(
+        (await memoryStore.getObservationalMemory('src-thread-memory-only', resourceId))!.observedMessageIds,
+      ).toHaveLength(2);
+    });
   });
 });
