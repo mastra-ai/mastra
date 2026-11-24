@@ -3247,7 +3247,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             if (attempt >= maxRetries) {
-              logger?.debug?.(`Exhausted retries for model ${modelId}, trying next model`, { runId });
+              logger?.debug?.(`Exhausted retries for model ${modelId}`, { runId });
               break;
             }
 

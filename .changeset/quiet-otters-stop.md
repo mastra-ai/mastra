@@ -10,14 +10,15 @@ Added a `fallback` field to the `processAPIError` result. A processor can return
 
 ```ts
 import { classifyProviderError } from '@mastra/core/error';
+import type { Processor } from '@mastra/core/processors';
 
-const stopWhenOutOfCredits: Processor = {
-  id: 'stop-when-out-of-credits',
+const stopOnInvalidRequest: Processor = {
+  id: 'stop-on-invalid-request',
   processAPIError: ({ error }) =>
-    classifyProviderError(error) === 'quota' ? { retry: false, fallback: false } : undefined,
+    classifyProviderError(error) === 'invalid_request' ? { retry: false, fallback: false } : undefined,
 };
 ```
 
-Leaving `fallback` unset keeps today's behaviour.
+Leaving `fallback` unset keeps today's behavior.
 
 Also exported `getRetryAfterMs` and `PROVIDER_FAILURE_KINDS` from `@mastra/core/error`.

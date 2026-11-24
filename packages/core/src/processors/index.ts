@@ -614,7 +614,10 @@ export interface ProcessAPIErrorArgs<TTripwireMetadata = unknown> extends Proces
 export type ProcessAPIErrorResult = {
   /** Whether to retry the LLM call after applying modifications */
   retry: boolean;
-  /** `false` skips the remaining fallback models for this call and reports the original error */
+  /**
+   * `false` skips the remaining fallback models for this call and reports the original error.
+   * Processors after one that returns `retry: true` don't run, so they can't veto.
+   */
   fallback?: boolean;
 };
 
