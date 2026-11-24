@@ -18,4 +18,6 @@ export function setup() {
 export function teardown() {
   const runDir = process.env[ENV];
   if (runDir) fs.rmSync(runDir, { recursive: true, force: true });
+  // Watch mode can restart Vitest in this process; the next setup must create a fresh dir.
+  delete process.env[ENV];
 }
