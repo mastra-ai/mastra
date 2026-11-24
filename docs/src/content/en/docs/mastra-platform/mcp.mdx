@@ -1,6 +1,6 @@
 ---
 title: 'MCP server | Mastra platform'
-description: 'Connect Claude, Codex, or another MCP client to Mastra platform to query traces, logs, metrics, scores, and feedback from chat, and to build dashboards.'
+description: 'Connect Claude, Codex, or another MCP client to Mastra platform to query traces, logs, metrics, scores, and feedback from chat.'
 ---
 
 import Tabs from "@theme/Tabs";
@@ -8,7 +8,7 @@ import TabItem from "@theme/TabItem";
 
 # MCP server on Mastra platform
 
-The Mastra platform MCP server lets an AI assistant read your organization's [Observability](/docs/mastra-platform/observability/overview) data through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Connect it to Claude, Codex, or another MCP client, then ask about your traces, logs, metrics, scores, and feedback in chat. The assistant can also chart the results and save the charts to dashboards on Mastra platform.
+The Mastra platform MCP server lets an AI assistant read your organization's [Observability](/docs/mastra-platform/observability/overview) data through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). Connect it to Claude, Codex, or another MCP client, then ask about your traces, logs, metrics, scores, and feedback in chat.
 
 ## Connect your MCP client
 
@@ -89,7 +89,7 @@ Ask in plain language. The assistant picks the tools and fills in their paramete
 
 - "How many traces failed in the last 24 hours, grouped by agent?"
 - "Which tool calls were slowest this week, and what did they return?"
-- "Chart token cost per model over the last 7 days and add it to the Metrics dashboard."
+- "What was the token cost per model over the last 7 days?"
 
 ## Query one project
 
@@ -99,7 +99,7 @@ By default, tools read data from the whole organization. To query one project, n
 
 ## Available tools
 
-Most tools only read data. The dashboard tools can also create and change dashboards.
+The tools only read data. They can't change anything in your organization.
 
 ### Traces and spans
 
@@ -127,19 +127,6 @@ Most tools only read data. The dashboard tools can also create and change dashbo
 | `analyze_feedback` | Aggregate user feedback as a single value, a breakdown, a time series, or percentiles. |
 | `list_metric_names` | List metric names, a metric's label keys, or a label's values. |
 | `discover_observability` | List the metric names, labels, entities, environments, and tags that the organization or a project records. |
-
-### Dashboards
-
-| Tool | Description |
-| - | - |
-| `show_observability_dashboard` | Show charts as an interactive dashboard in the chat. |
-| `list_dashboards` | List the organization's or a project's dashboards. |
-| `get_dashboard` | Read a dashboard and its cards. |
-| `create_dashboard` | Create a dashboard, optionally with a first card. |
-| `rename_dashboard` | Rename a dashboard or change its description. You can't rename the Metrics dashboard. |
-| `add_dashboard_widget` | Add a card to a dashboard, such as a chart shown with `show_observability_dashboard`. |
-| `update_dashboard_widget` | Replace a card's chart or change its title. |
-| `remove_dashboard_widgets` | Remove cards from a dashboard. |
 
 ### Account
 
