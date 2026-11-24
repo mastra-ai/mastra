@@ -18,6 +18,7 @@ formatDate(date, 'day-time'); // "Nov 24, 2:05 PM" in en-US, "24 Nov, 14:05" in 
 ```ts
 // oxlint.config.ts
 import { recommended } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
 
 export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],

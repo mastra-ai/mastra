@@ -48,6 +48,10 @@ tester.run('date-locale', plugin.rules['date-locale'], {
       name: 'ignores other functions named format',
       code: "import { format } from './money'; format(value, 'MMM d');",
     },
+    {
+      name: 'ignores a local that shadows the date-fns import',
+      code: "import { format } from 'date-fns'; function render(format) { return format(value, 'currency'); }",
+    },
   ],
   invalid: [
     {
@@ -69,6 +73,11 @@ tester.run('date-locale', plugin.rules['date-locale'], {
       name: 'flags date-fns display patterns',
       code: "import { format, formatDate as fmt } from 'date-fns'; format(d, 'MMM d, h:mm a'); fmt(d, 'PP p'); format(d, 'yyyy-MMMM d');",
       errors: errors(3),
+    },
+    {
+      name: 'flags date-fns display patterns through a namespace',
+      code: "import * as dates from 'date-fns'; dates.format(d, 'MMM d');",
+      errors: errors(),
     },
   ],
 });

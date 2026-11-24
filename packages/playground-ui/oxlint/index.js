@@ -509,7 +509,6 @@ const DATE_OPTIONS = new Set(
 const CLOCK_OPTIONS = new Set(['hour12', 'hourCycle']);
 
 function dateLocale(context) {
-  const dateFnsNames = new Set();
   const report = node => context.report({ node, message: DATE_LOCALE_MESSAGE });
   const keyOf = key => (key?.type === 'Identifier' ? key.name : key?.type === 'Literal' ? key.value : undefined);
   const staticString = node => {
@@ -542,10 +541,32 @@ function dateLocale(context) {
     forcedClocks(options).length > 0 ||
     (callee.object.type === 'NewExpression' && callee.object.callee.name === 'Date');
 
+  // The date-fns import specifier a name refers to; a parameter or local of the same name shadows it.
+  const dateFnsSpecifier = identifier => {
+    let scope = context.sourceCode.getScope(identifier);
+    while (scope && !scope.set.has(identifier.name)) scope = scope.upper;
+    const definition = scope?.set.get(identifier.name)?.defs[0];
+    const isDateFns =
+      definition?.type === 'ImportBinding' && ['date-fns', 'date-fns/format'].includes(definition.parent.source.value);
+    return isDateFns ? definition.node : undefined;
+  };
+  const isDateFnsFormatter = callee => {
+    if (callee.type === 'Identifier') {
+      const specifier = dateFnsSpecifier(callee);
+      return specifier?.type === 'ImportSpecifier' && DATE_FNS_FORMATTERS.has(keyOf(specifier.imported));
+    }
+    return (
+      callee.type === 'MemberExpression' &&
+      callee.object.type === 'Identifier' &&
+      DATE_FNS_FORMATTERS.has(keyOf(callee.property)) &&
+      dateFnsSpecifier(callee.object)?.type === 'ImportNamespaceSpecifier'
+    );
+  };
+
   function checkCall(node) {
     const { callee } = node;
     const [first, second] = node.arguments;
-    if (node.type === 'CallExpression' && callee.type === 'Identifier' && dateFnsNames.has(callee.name)) {
+    if (node.type === 'CallExpression' && isDateFnsFormatter(callee)) {
       const pattern = staticString(second);
       if (pattern !== undefined && !DATA_DATE_PATTERN.test(pattern)) report(second);
       return;
@@ -558,13 +579,6 @@ function dateLocale(context) {
   }
 
   return {
-    ImportDeclaration(node) {
-      if (node.source.value !== 'date-fns' && node.source.value !== 'date-fns/format') return;
-      for (const specifier of node.specifiers) {
-        if (specifier.type === 'ImportSpecifier' && DATE_FNS_FORMATTERS.has(keyOf(specifier.imported)))
-          dateFnsNames.add(specifier.local.name);
-      }
-    },
     CallExpression: checkCall,
     NewExpression: checkCall,
     ObjectExpression(node) {
