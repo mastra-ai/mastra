@@ -1,5 +1,27 @@
 # @mastra/client-js
 
+## 1.62.0-alpha.8
+
+### Minor Changes
+
+- Added `durable`, `itemTimeout` and `maxRetries` to `triggerDatasetExperiment()`. ([#31204](https://github.com/mastra-ai/mastra/pull/31204))
+
+  ```typescript
+  await client.triggerDatasetExperiment({
+    datasetId,
+    targetType: 'agent',
+    targetId: 'support-agent',
+    durable: true,
+    itemTimeout: 30_000,
+    maxRetries: 1,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`81ed17c`](https://github.com/mastra-ai/mastra/commit/81ed17ce35e20d03485ca427df44bddab9d9c0cd), [`8b945c5`](https://github.com/mastra-ai/mastra/commit/8b945c5d5f308d49684e89fd8262ecf37e2d198e), [`9e4a5e8`](https://github.com/mastra-ai/mastra/commit/9e4a5e8bbf3f76f84fa7c1fad8acbab6692c704c), [`19f6a57`](https://github.com/mastra-ai/mastra/commit/19f6a57b3adbacdf104d99197ddf5d4491fe7e0c), [`1219d8a`](https://github.com/mastra-ai/mastra/commit/1219d8a6b41b8f9fcf6e4bcfac42df71b3650963), [`62a09d4`](https://github.com/mastra-ai/mastra/commit/62a09d45eb44fcccd544c904b709e161f2289c54), [`400664e`](https://github.com/mastra-ai/mastra/commit/400664ef60612a6667e7e1017c147fd71310b422), [`6795e22`](https://github.com/mastra-ai/mastra/commit/6795e22a64852f6ae67d3d518e18308a27ca8572), [`692ca19`](https://github.com/mastra-ai/mastra/commit/692ca19a7943d24a8607de8414176a690362f3c8)]:
+  - @mastra/core@1.86.0-alpha.8
+
 ## 1.61.2-alpha.7
 
 ### Patch Changes
