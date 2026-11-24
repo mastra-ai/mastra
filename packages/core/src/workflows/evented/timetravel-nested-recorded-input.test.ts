@@ -125,7 +125,7 @@ describe('evented time travel into a nested workflow step', () => {
   it('replays each foreach iteration of a nested workflow from its own recorded run', async () => {
     const item = z.object({ n: z.number() });
     const tagged = z.object({ n: z.number(), tag: z.string() });
-    const inputs: unknown[] = [];
+    const calls: { input: { n: number; tag: string }; runId: string }[] = [];
     let failed = false;
     const prepare = createStep({
       id: 'prepare',
@@ -137,8 +137,8 @@ describe('evented time travel into a nested workflow step', () => {
       id: 'charge',
       inputSchema: tagged,
       outputSchema: tagged,
-      execute: async ({ inputData }) => {
-        inputs.push(inputData);
+      execute: async ({ inputData, runId }) => {
+        calls.push({ input: inputData, runId });
         if (inputData.n === 0 && !failed) {
           failed = true;
           throw new Error('boom');
@@ -164,17 +164,85 @@ describe('evented time travel into a nested workflow step', () => {
     try {
       const run = await mastra.getWorkflow('outer').createRun();
       expect((await withTimeout(run.start({ inputData: [{ n: 0 }, { n: 1 }, { n: 2 }] }))).status).toBe('failed');
-      inputs.length = 0;
+      const recordedRunIds = new Map(calls.map(call => [call.input.n, call.runId]));
+      calls.length = 0;
 
       const result = await withTimeout(run.timeTravel({ step: ['inner', 'charge'] }));
 
       expect(result.status).toBe('success');
-      expect(inputs).toEqual([{ n: 0, tag: 't0' }]);
+      // Every replayed iteration runs in its own recorded child run, with its own recorded input.
+      expect(calls.map(call => call.input.n)).toContain(0);
+      for (const call of calls) {
+        expect(call.input).toEqual({ n: call.input.n, tag: `t${call.input.n}` });
+        expect(call.runId).toBe(recordedRunIds.get(call.input.n));
+      }
       expect(result.status === 'success' && result.result).toEqual([
         { n: 0, tag: 't0' },
         { n: 1, tag: 't1' },
         { n: 2, tag: 't2' },
       ]);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('reuses the recorded child of a single-item foreach when per-iteration ids are missing', async () => {
+    const item = z.object({ n: z.number() });
+    const tagged = z.object({ n: z.number(), tag: z.string() });
+    const calls: { input: unknown; runId: string }[] = [];
+    let failed = false;
+    const prepare = createStep({
+      id: 'prepare',
+      inputSchema: item,
+      outputSchema: tagged,
+      execute: async ({ inputData }) => ({ ...inputData, tag: `t${inputData.n}` }),
+    });
+    const charge = createStep({
+      id: 'charge',
+      inputSchema: tagged,
+      outputSchema: tagged,
+      execute: async ({ inputData, runId }) => {
+        calls.push({ input: inputData, runId });
+        if (!failed) {
+          failed = true;
+          throw new Error('boom');
+        }
+        return inputData;
+      },
+    });
+    const inner = createWorkflow({ id: 'inner', inputSchema: item, outputSchema: tagged })
+      .then(prepare)
+      .then(charge)
+      .commit();
+    const outer = createWorkflow({ id: 'outer', inputSchema: z.array(item), outputSchema: z.array(tagged) })
+      .foreach(inner)
+      .commit();
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      pubsub: new EventEmitterPubSub(),
+      workflows: { outer, inner },
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await mastra.getWorkflow('outer').createRun();
+      expect((await withTimeout(run.start({ inputData: [{ n: 0 }] }))).status).toBe('failed');
+      const recordedRunId = calls[0]!.runId;
+      calls.length = 0;
+
+      // Snapshots written before per-iteration ids existed carry only `nestedRunId`.
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName: 'outer', runId: run.runId }))!;
+      const innerResult = snapshot.context.inner as { metadata: Record<string, unknown> };
+      expect(innerResult.metadata.foreachNestedRunIds).toBeDefined();
+      delete innerResult.metadata.foreachNestedRunIds;
+      await workflowsStore.persistWorkflowSnapshot({ workflowName: 'outer', runId: run.runId, snapshot });
+
+      const result = await withTimeout(run.timeTravel({ step: ['inner', 'charge'] }));
+
+      expect(result.status).toBe('success');
+      expect(calls).toEqual([{ input: { n: 0, tag: 't0' }, runId: recordedRunId }]);
     } finally {
       await mastra.stopWorkers();
     }
