@@ -747,6 +747,13 @@ export const connectSessionSchema = z.object({
    * the vendor Connect UI, so it is an equivalent launch capability.
    */
   sessionToken: z.string().nullish(),
+  /**
+   * Base URL of the vendor API the connect SDK calls with `sessionToken`
+   * (e.g. a self-hosted Nango instead of Nango Cloud). Not a capability, so
+   * the platform returns it for resource-scoped sessions too. Missing from
+   * older platforms, where callers keep the SDK's default host.
+   */
+  apiBaseUrl: z.string().nullish(),
   expiresAt: z.string(),
 });
 

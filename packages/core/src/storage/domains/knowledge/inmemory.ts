@@ -231,6 +231,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       supportsExplicitReset: true,
       supportsPinKinds: true,
       supportsTransactions: true,
+      supportsActivityDateRange: true,
     } as const;
   }
 

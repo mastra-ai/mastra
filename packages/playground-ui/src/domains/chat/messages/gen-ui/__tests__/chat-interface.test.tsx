@@ -134,4 +134,21 @@ describe('the latest interface in a thread', () => {
     expect(screen.getByRole('button', { name: 'Join' }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('textbox', { name: 'Email' }).hasAttribute('disabled')).toBe(true);
   });
+
+  it('keeps what the user entered after the reply to their submission', () => {
+    const send = vi.fn();
+    const withInterface = reply('msg-1', signupPatches);
+    const view = (isRunning: boolean) => (
+      <Chat chat={{ messages: [withInterface], isRunning, send }}>
+        <MessageRow message={withInterface} />
+      </Chat>
+    );
+
+    const { rerender } = render(view(false));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email' }), { target: { value: 'grace@example.com' } });
+    rerender(view(true));
+    rerender(view(false));
+
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Email' }).value).toBe('grace@example.com');
+  });
 });

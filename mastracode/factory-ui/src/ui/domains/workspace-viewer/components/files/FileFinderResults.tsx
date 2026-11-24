@@ -118,7 +118,7 @@ export function FileFinderResults({ workspacePath, finder, changes }: FileFinder
                 <span className="text-muted-foreground max-w-full shrink-0 truncate">
                   <Marked text={path.slice(nameStart)} from={nameStart} matched={matched} />
                 </span>
-                <span className="text-placeholder min-w-0 flex-1 truncate">
+                <span className="text-subtle-foreground min-w-0 flex-1 truncate">
                   <Marked text={path.slice(0, Math.max(0, nameStart - 1))} from={0} matched={matched} />
                 </span>
                 {status ? <ChangeStatusLetter status={status} /> : null}

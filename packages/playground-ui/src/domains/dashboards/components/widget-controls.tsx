@@ -90,7 +90,7 @@ export function AlertMenu({
             <DropdownMenu.Item key={i} disabled>
               <div className="flex min-w-0 flex-col">
                 <span className="truncate">{entry.label}</span>
-                <span className="text-caption text-placeholder">{entry.action.disabled}</span>
+                <span className="text-caption text-subtle-foreground">{entry.action.disabled}</span>
               </div>
             </DropdownMenu.Item>
           ),

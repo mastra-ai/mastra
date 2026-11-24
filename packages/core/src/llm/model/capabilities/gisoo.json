@@ -27,13 +27,13 @@
     "gpt-5.6-terra"
   ],
   "reasoning": {
-    "gpt-5-mini": [
+    "gemini-4-argon": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5.6-sol": [
+    "claude-haiku-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -45,7 +45,13 @@
         "values": ["low", "high"]
       }
     ],
-    "gemini-3.8-flash": [
+    "gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-6-astra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -57,28 +63,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-fable-5-1": [
+    "gpt-5.6-terra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-6-astra": [
+    "gpt-5-mini": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-4-argon": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "gemini-3.1-pro-preview": [
@@ -87,25 +81,31 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-haiku-5-5": [
+    "gemini-3.8-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
     "claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

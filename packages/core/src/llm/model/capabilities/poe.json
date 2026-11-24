@@ -128,43 +128,13 @@
     "openai/gpt-5.5"
   ],
   "reasoning": {
-    "google/gemini-3.7-flash": [
+    "poetools/claude-code": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-pro": [
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      },
       {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "google/gemini-2.5-pro": [
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 32768
-      }
-    ],
-    "google/gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-2.5-flash-lite": [
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
-      }
-    ],
-    "google/gemini-2.5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
+        "type": "budget_tokens"
       }
     ],
     "google/gemini-3.6-flash": [
@@ -173,19 +143,13 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "google/gemini-3.1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "high"]
-      }
-    ],
     "google/gemini-3-flash": [
       {
         "type": "effort",
         "values": ["minimal", "low", "high"]
       }
     ],
-    "google/gemini-3.5-flash": [
+    "google/gemini-3.1-flash-lite": [
       {
         "type": "effort",
         "values": ["minimal", "low", "high"]
@@ -197,10 +161,55 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.4-mini": [
+    "google/gemini-2.5-pro": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 32768
+      }
+    ],
+    "google/gemini-3.7-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "high"]
+      }
+    ],
+    "google/gemini-2.5-flash-lite": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
+      }
+    ],
+    "google/gemini-3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "google/gemini-2.5-flash": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
+      }
+    ],
+    "openai/gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "openai/o1": [
@@ -209,22 +218,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5-codex": [
+    "openai/o3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.4": [
@@ -233,22 +236,28 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "openai/o3": [
+    "openai/o3-pro": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/o1-pro": [
+    "openai/gpt-5-codex": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.5-pro": [
+    "openai/gpt-5.3-codex": [
       {
         "type": "effort",
-        "values": ["medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/o4-mini": [
@@ -257,19 +266,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.2-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.1-codex": [
+    "openai/gpt-5.1-codex-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -281,40 +278,28 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "openai/gpt-5.1-codex-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.2-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "openai/gpt-5.1": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.4-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5-nano": [
+    "openai/gpt-5": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/o3-pro": [
+    "openai/o1-pro": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-5.2": [
@@ -323,7 +308,7 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "openai/o3-mini": [
+    "openai/gpt-5.1-codex": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -335,25 +320,34 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "openai/gpt-5.3-codex": [
+    "openai/gpt-5.2-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.5-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "openai/o3-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.2-codex": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "poetools/claude-code": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "xai/grok-4.20-multi-agent": [
-      {
-        "type": "effort",
-        "values": ["medium", "high"]
       }
     ],
     "xai/grok-3-mini": [
@@ -362,60 +356,36 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "novita/deepseek-v3.2": [
+    "xai/grok-4.20-multi-agent": [
       {
-        "type": "toggle"
-      }
-    ],
-    "novita/kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-4.7-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/kimi-k2-thinking": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-4.7-n": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/minimax-m2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-4.6v": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "novita/glm-4.6": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["medium", "high"]
       }
     ],
     "cerebras/gpt-oss-120b-cs": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-sonnet-4.5": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 31999
+      }
+    ],
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4.1": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 31999
       }
     ],
     "anthropic/claude-haiku-4.5": [
@@ -425,10 +395,22 @@
         "max": 63999
       }
     ],
+    "anthropic/claude-sonnet-4.6": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
     "anthropic/claude-opus-4.6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.5": [
@@ -442,36 +424,54 @@
         "max": 63999
       }
     ],
-    "anthropic/claude-sonnet-4.5": [
+    "novita/glm-4.6": [
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 31999
+        "type": "toggle"
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "novita/glm-4.7-flash": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.1": [
+    "novita/glm-4.7-n": [
       {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 31999
+        "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.8": [
+    "novita/kimi-k2.5": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.7": [
+    "novita/kimi-k2-thinking": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
+      }
+    ],
+    "novita/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/deepseek-v3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/minimax-m2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "novita/glm-4.6v": [
+      {
+        "type": "toggle"
       }
     ]
   }

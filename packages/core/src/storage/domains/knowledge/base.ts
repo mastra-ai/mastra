@@ -27,6 +27,11 @@ export interface KnowledgeStorageCapabilities {
    * ignored and nothing bounds how long a transaction runs.
    */
   enforcesTransactionDeadline?: boolean;
+  /**
+   * `listPageActivity` accepts `since`, `until` and `before` (dated mode). Adapters without it don't
+   * report it, and core refuses dated activity reads on them rather than return unbounded history.
+   */
+  supportsActivityDateRange?: boolean;
 }
 
 /** @experimental */

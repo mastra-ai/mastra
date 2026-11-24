@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.17.1",
+  "version": "0.17.2-alpha.1",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -52,7 +52,8 @@
     "@mastra/core": ">=1.76.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

@@ -8,14 +8,16 @@ import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 afterEach(() => cleanup());
 
 describe('SidebarMeter', () => {
-  it('exposes the tone and keeps grain to the neutral tone', () => {
-    const { container } = render(<SidebarMeter label="Credits" value="$4" status="Credits are low" tone="warning" />);
-
+  it('exposes the tone and blooms only when the card needs attention', () => {
+    const { container, rerender } = render(
+      <SidebarMeter label="Credits" value="$4" status="Credits are low" tone="warning" />,
+    );
     const card = container.querySelector('[data-slot="sidebar-meter"]');
     expect(card?.getAttribute('data-tone')).toBe('warning');
+    expect(container.querySelector('[data-slot="sidebar-meter-bloom"]')).not.toBeNull();
 
-    const bloom = container.querySelector<HTMLElement>('[data-slot="sidebar-meter-bloom"]');
-    expect(bloom?.querySelector('span')).toBeNull();
+    rerender(<SidebarMeter label="Credits" value="$275" status="Auto top-up Off" />);
+    expect(container.querySelector('[data-slot="sidebar-meter-bloom"]')).toBeNull();
   });
 
   it('folds the label away and covers the card with the link when collapsed', () => {

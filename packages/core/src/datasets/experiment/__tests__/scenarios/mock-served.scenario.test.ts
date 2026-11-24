@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recordingTool, runToolMockScenario } from './scenario-helpers';
+import { EXPERIMENT_PATHS, recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
  * BDD scenario: a matching item tool-mock is served instead of running the tool.
@@ -10,11 +10,12 @@ import { recordingTool, runToolMockScenario } from './scenario-helpers';
  * Then the mocked output is served, the real tool never executes, and the
  *      run completes successfully with the call recorded in the report.
  */
-describe('Tool mock scenario: item tool mock served', () => {
+describe.each(EXPERIMENT_PATHS)('Tool mock scenario: item tool mock served (%s)', path => {
   it('serves the mocked output and skips live tool execution', async () => {
     const liveLog: string[] = [];
 
     const { summary, item } = await runToolMockScenario({
+      path,
       tools: { getWeather: recordingTool('getWeather', liveLog) },
       turns: [
         { toolCalls: [{ id: 'c1', toolName: 'getWeather', args: { city: 'Seattle' } }] },
@@ -42,6 +43,7 @@ describe('Tool mock scenario: item tool mock served', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { search: recordingTool('search', liveLog) },
       turns: [{ toolCalls: [{ id: 'c1', toolName: 'search', args: { q: 'mastra', limit: 5 } }] }, { text: 'done' }],
       // Mock declares the keys in the opposite order; strict matching is key-order independent.

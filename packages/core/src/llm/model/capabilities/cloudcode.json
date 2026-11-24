@@ -10,19 +10,19 @@
   ],
   "structuredOutput": ["deepseek-v4.1-flash", "mistral-large-4"],
   "reasoning": {
-    "mistral-large-4": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -34,10 +34,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "mistral-large-4": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

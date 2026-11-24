@@ -10,6 +10,7 @@ import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
+import { setFactoryToolsRole } from './binding-context.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -1551,6 +1552,46 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(moved?.contents).toContain(
       'This card is now in Review, which runs in the review context in another session. Your part is done',
     );
+  });
+
+  it('tells a request whose binding rotated mid-run that its part is done, keeping the role its tools have', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const building = await prepare(storage, 'work', 'issue', { id: 'work', stage: 'execute' });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: new Map([['work', selfReviewWorkBoard]]),
+      storage,
+    });
+    // The builder's request built its tools under the work binding.
+    const builderRequest = requestContext();
+    setFactoryToolsRole(builderRequest, 'work');
+
+    // The builder moves the card to Self-review: the thread's binding rotates to review mid-request.
+    await storage.update({ orgId: 'org-1', id: building.item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const reviewing = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: building.item.id },
+      role: 'review',
+      session: { sessionId: 'resource-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-review',
+      kickoffMessage: null,
+    });
+    expect(reviewing.binding.id).not.toBe(building.binding.id);
+    expect(reviewing.binding.threadId).toBe(building.binding.threadId);
+
+    const stillBuilding = await processor.computeStateSignal(stateArgs(builderRequest));
+    expect(stillBuilding?.contents).toContain('Role: work');
+    expect(stillBuilding?.contents).toContain('runs in the review context in another session. Your part is done');
+
+    // The self-review kickoff starts a fresh request with review tools.
+    const reviewRequest = requestContext();
+    setFactoryToolsRole(reviewRequest, 'review');
+    const selfReview = await processor.computeStateSignal(stateArgs(reviewRequest));
+    expect(selfReview?.contents).toContain('Role: review');
+    expect(selfReview?.contents).not.toContain('Your part is done');
   });
 
   it('keeps a plan session that still works a Planning card planned before Planning ran in work', async () => {

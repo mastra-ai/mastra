@@ -1,6 +1,6 @@
 import type { KnowledgeReadScope, KnowledgeStorage } from '@mastra/core/storage';
 import { knowledgePositionBetween, MAX_KNOWLEDGE_MOVE_PAGES, MAX_KNOWLEDGE_PAGE_DEPTH } from '@mastra/core/storage';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const host = { author: 'host' };
 const alex = { author: 'agent:alex', sourceThreadId: 't1' };
@@ -1260,6 +1260,137 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         // "off" also matches 'Discount 500 off', but 50% (literal) and off both match only the first.
         expect((await ids('off 50%'))[0]).toBe(percent.id);
         expect(await ids('off 50%')).toHaveLength(2);
+      });
+
+      describe('activity date range (stores reporting supportsActivityDateRange)', () => {
+        const dated = () => store.getCapabilities().supportsActivityDateRange === true;
+        /** Writes each event at a chosen wall-clock time; ULIDs stay monotonic, so a step back puts id order against createdAt order. */
+        async function at<T>(ms: number, write: () => Promise<T>): Promise<T> {
+          vi.useFakeTimers({ toFake: ['Date'] });
+          vi.setSystemTime(ms);
+          try {
+            return await write();
+          } finally {
+            vi.useRealTimers();
+          }
+        }
+        // Every test runs at its own, later base time: the reference store's clock never steps back, and
+        // scopes are created just before the base so only the test's own events fall in range.
+        let base = Date.UTC(2030, 0, 1);
+        let T0 = base;
+        beforeEach(() => {
+          base += 10_000_000;
+          T0 = base;
+        });
+        const scopeAt = (address: string) =>
+          at(T0 - 60_000, () => scope(address, address.startsWith('resource:') ? RESOURCE : ORG));
+        const keyed = (events: Array<{ createdAt: Date; id: string }>) =>
+          events.map(event => `${event.createdAt.toISOString()}|${event.id}`);
+        const datedOrder = <E extends { createdAt: Date; id: string }>(events: E[]) =>
+          [...events].sort(
+            (a, b) => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+          );
+
+        it('is inclusive at since and exclusive at until, either bound alone', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const r = read(['org:acme']);
+          // The reference store may stamp the activity row a millisecond after the page, so keep a gap.
+          const before = await at(T0 - 1000, () => page(acme.id, 'before'));
+          const atSince = await at(T0, () => page(acme.id, 'at since'));
+          const inside = await at(T0 + 1000, () => page(acme.id, 'inside'));
+          const atUntil = await at(T0 + 2000, () => page(acme.id, 'at until'));
+          const pages = async (input: { since?: Date; until?: Date }) =>
+            (await store.listPageActivity({ read: r, ...input })).events.map(event => event.pageId);
+          expect(await pages({ since: new Date(T0), until: new Date(T0 + 2000) })).toEqual([inside.id, atSince.id]);
+          expect(await pages({ since: new Date(T0) })).toEqual([atUntil.id, inside.id, atSince.id]);
+          // The scope itself was created before the base.
+          expect(await pages({ until: new Date(T0) })).toEqual([before.id, acme.id]);
+        });
+
+        it('orders dated reads by createdAt then id, and keyset pages through ties and out-of-order ids', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const r = read(['org:acme']);
+          await at(T0 + 5000, () => page(acme.id, 'late'));
+          // Same millisecond: tied createdAt, increasing ids.
+          await at(T0 + 3000, async () => {
+            await page(acme.id, 'tie a');
+            await page(acme.id, 'tie b');
+            await page(acme.id, 'tie c');
+          });
+          // A clock stepped back: the next id sorts after every earlier id but createdAt is older.
+          await at(T0 + 1000, () => page(acme.id, 'stepped back'));
+          await at(T0 + 4000, () => page(acme.id, 'middle'));
+          const since = new Date(T0);
+          const whole = (await store.listPageActivity({ read: r, since, limit: 100 })).events;
+          expect(whole).toHaveLength(6);
+          const stepped = whole.find(event => event.createdAt.getTime() === T0 + 1000);
+          if (stepped) {
+            // The store kept the stepped-back time: its id sorts after every tied id but its createdAt is
+            // older, so id order and dated order really disagree here.
+            const ties = whole.filter(event => event.createdAt.getTime() === T0 + 3000);
+            expect(ties).toHaveLength(3);
+            expect(ties.every(tie => tie.id < stepped.id)).toBe(true);
+          }
+          expect(keyed(whole)).toEqual(keyed(datedOrder(whole)));
+
+          for (const limit of [1, 2, 4]) {
+            const walked: typeof whole = [];
+            let position: { createdAt: Date; id: string } | undefined;
+            for (let guard = 0; guard < 20; guard++) {
+              const { events } = await store.listPageActivity({ read: r, since, limit, before: position });
+              walked.push(...events);
+              if (events.length < limit) break;
+              const last = events[events.length - 1]!;
+              position = { createdAt: last.createdAt, id: last.id };
+            }
+            expect(keyed(walked)).toEqual(keyed(whole));
+          }
+
+          // The store's own cursor works in dated mode too.
+          const firstPage = await store.listPageActivity({ read: r, since, limit: 4 });
+          const secondPage = await store.listPageActivity({ read: r, since, limit: 4, cursor: firstPage.nextCursor });
+          expect(keyed([...firstPage.events, ...secondPage.events])).toEqual(keyed(whole));
+        });
+
+        it('never spends the limit on hidden or out-of-range events', async () => {
+          if (!dated()) return;
+          const acme = await scopeAt('org:acme');
+          const secret = await scopeAt('org:secret');
+          const user = await scopeAt('resource:u1');
+          const visible = await at(T0 + 1000, () => page(acme.id, 'visible'));
+          await at(T0 + 2000, () => page(secret.id, 'hidden page'));
+          await at(T0 + 3000, () =>
+            store.addNote({
+              pageId: visible.id,
+              text: 'private',
+              stampScopeIds: [user.id],
+              mentions: [],
+              provenance: alex,
+            }),
+          );
+          await at(T0 + 4000, () => page(acme.id, 'after until'));
+          const { events } = await store.listPageActivity({
+            read: read(['org:acme']),
+            since: new Date(T0),
+            until: new Date(T0 + 4000),
+            limit: 1,
+          });
+          expect(events.map(event => [event.action, event.pageId])).toEqual([['page-created', visible.id]]);
+        });
+
+        it('refuses a keyset position together with a cursor', async () => {
+          if (!dated()) return;
+          await expect(
+            store.listPageActivity({
+              read: 'all',
+              since: new Date(T0),
+              cursor: 'x',
+              before: { createdAt: new Date(T0), id: 'x' },
+            }),
+          ).rejects.toThrow();
+        });
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {

@@ -183,6 +183,7 @@ export class KnowledgePG extends KnowledgeStorage {
       supportsPinKinds: true,
       supportsTransactions: true,
       enforcesTransactionDeadline: true,
+      supportsActivityDateRange: true,
     } as const;
   }
 
