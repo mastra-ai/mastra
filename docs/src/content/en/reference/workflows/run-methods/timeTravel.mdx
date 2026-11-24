@@ -204,6 +204,13 @@ const result = await run.timeTravel({
       },
     ],
   },
+  {
+    name: 'perStep',
+    type: 'boolean',
+    isOptional: true,
+    description:
+      'Run only the target step, then stop with status `paused`. Use it to continue a run started with `perStep: true` one step at a time. See [Run one step at a time](./start#run-one-step-at-a-time).',
+  },
 ]}
 />
 
