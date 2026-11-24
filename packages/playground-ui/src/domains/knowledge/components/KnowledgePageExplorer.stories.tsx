@@ -5,6 +5,8 @@ import type {
   KnowledgeExplorerPageDetail,
   KnowledgeExplorerQueryState,
   KnowledgeExplorerSource,
+  KnowledgeExplorerTimelineEntry,
+  KnowledgeExplorerTimelineRequest,
   KnowledgeExplorerView,
 } from './KnowledgePageExplorer';
 import { KnowledgePageExplorer } from './KnowledgePageExplorer';
@@ -77,7 +79,65 @@ const gateway = page('gateway', 'projects', {
   key: 'gateway',
   position: 'a1',
 });
-const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway];
+const general = page('general', 'workspace', {
+  name: '#general',
+  key: 'general',
+  position: 'a2',
+  description: 'Messages from the #general Slack channel.',
+});
+const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway, general];
+
+const SLACK = 'importer:slack';
+function entry(
+  externalId: string,
+  hoursAgo: number,
+  name: string,
+  body: string,
+  extra: Partial<KnowledgeExplorerTimelineEntry> = {},
+): KnowledgeExplorerTimelineEntry {
+  return {
+    id: `e-${externalId}`,
+    timelineId: 'general',
+    externalId,
+    occurredAt: HOURS_AGO(hoursAgo),
+    writtenAt: HOURS_AGO(hoursAgo),
+    editedAt: null,
+    deletedAt: null,
+    author: { sourceId: `U-${name}`, name },
+    threadExternalId: null,
+    body,
+    version: 1,
+    writtenBy: SLACK,
+    ...extra,
+  };
+}
+
+const ENTRIES = [
+  entry('1700000400.000100', 1, 'Ana', 'Release notes for 1.84 are drafted; please read them before 3pm.'),
+  entry('1700000300.000200', 2, 'Ben', 'Looks good. One fix: the memory section should mention the new TTL.', {
+    threadExternalId: '1700000100.000100',
+    editedAt: HOURS_AGO(1.5),
+    version: 2,
+  }),
+  entry('1700000200.000300', 3, 'Cleo', '', { deletedAt: HOURS_AGO(2.5), threadExternalId: '1700000100.000100' }),
+  entry('1700000100.000100', 5, 'Ana', 'Thread for 1.84 release notes review.'),
+  entry('1699990000.000100', 30, 'Dev', 'CI is green again after the lease TTL flake fix.'),
+];
+
+function timelineFor(request: KnowledgeExplorerTimelineRequest) {
+  let entries = ENTRIES.filter(
+    item =>
+      (!request.thread || item.threadExternalId === request.thread || item.externalId === request.thread) &&
+      (!request.since || item.occurredAt >= request.since) &&
+      (!request.until || item.occurredAt < request.until) &&
+      (!request.q || item.body.toLowerCase().includes(request.q.toLowerCase())),
+  );
+  if (request.order === 'asc') entries = [...entries].reverse();
+  if (request.q) return { entries, nextCursor: null };
+  const start = request.cursor ? Number(request.cursor) : 0;
+  const page = entries.slice(start, start + 4);
+  return { entries: page, nextCursor: start + 4 < entries.length ? String(start + 4) : null };
+}
 
 const notes: KnowledgeNotePayload[] = [
   {
@@ -108,7 +168,13 @@ function detail(target: KnowledgePagePayload): KnowledgeExplorerPageDetail {
     ancestors.unshift(parent);
     at = parent.parentId;
   }
-  return { page: target, notes: target.id === 'launch' ? notes : [], ancestors, related: pages };
+  return {
+    page: target,
+    notes: target.id === 'launch' ? notes : [],
+    ancestors,
+    related: pages,
+    timeline: target.id === 'general' || undefined,
+  };
 }
 
 const SEARCH_HITS = [
@@ -158,6 +224,7 @@ function source(state: 'ready' | 'loading' | 'error'): KnowledgeExplorerSource {
           },
         ],
       }),
+    useTimeline: (_pageId, requests) => requests.map(request => ok(timelineFor(request))),
   };
 }
 
@@ -217,3 +284,5 @@ export const LongPageName: Story = { args: { view: 'page', pageId: 'gateway' } }
 export const Loading: Story = { args: { view: 'page', pageId: 'launch', state: 'loading' } };
 
 export const PageError: Story = { args: { view: 'page', pageId: 'launch', state: 'error' } };
+
+export const Timeline: Story = { args: { view: 'page', pageId: 'general' } };
