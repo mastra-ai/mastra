@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -20,7 +21,6 @@ import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress, setFactoryToolsRole } from './binding-context.js';
 import { phaseGrantsTool } from './phase-tools.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
@@ -49,7 +49,7 @@ const transitionInputSchema = z
 export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
-  transitionService: Pick<FactoryTransitionService, 'transition'>;
+  boardEngine: FactoryBoardEngine;
   sessions?: FactorySessionSourceLookup;
   boards?: BoardRegistry | ProjectBoardSource;
 }): Promise<IntegrationTools> {
@@ -123,7 +123,7 @@ export async function createFactoryTransitionTools(options: {
         if (!item) throw new Error('Bound Factory work item not found.');
         const board = boardForWorkItem(item);
 
-        const result = await options.transitionService.transition({
+        const result = await options.boardEngine.submitInput({
           orgId: binding.orgId,
           factoryProjectId: binding.factoryProjectId,
           workItemId: binding.workItemId,
@@ -174,7 +174,7 @@ function createReviewVerdictTool(
   options: {
     requestContext: RequestContext;
     storage: WorkItemsStorage;
-    transitionService: Pick<FactoryTransitionService, 'transition'>;
+    boardEngine: FactoryBoardEngine;
     sessions?: FactorySessionSourceLookup;
     boards?: BoardRegistry | ProjectBoardSource;
   },
@@ -220,7 +220,7 @@ function createReviewVerdictTool(
         ) {
           return recordSelfReviewVerdict({
             storage: options.storage,
-            transitionService: options.transitionService,
+            boardEngine: options.boardEngine,
             binding,
             item,
             board: boardId,
@@ -307,7 +307,7 @@ function createReviewVerdictTool(
  */
 async function recordSelfReviewVerdict(input: {
   storage: WorkItemsStorage;
-  transitionService: Pick<FactoryTransitionService, 'transition'>;
+  boardEngine: FactoryBoardEngine;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
   item: Card;
   board: string;
@@ -351,7 +351,7 @@ async function recordSelfReviewVerdict(input: {
   if (!updated) throw new Error('Bound Factory work item not found.');
   if (verdict === 'approve')
     return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt, selfReviewRounds: rounds };
-  const transition = await input.transitionService.transition({
+  const transition = await input.boardEngine.submitInput({
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,
     workItemId: binding.workItemId,

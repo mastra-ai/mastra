@@ -11,6 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardForWorkItem,
@@ -26,7 +27,6 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates, getFactoryToolsRole } from './binding-context.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { workItemSource } from './types.js';
 import type {
   FactoryCommitDecision,
@@ -382,7 +382,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       onBoundThreadRun?: () => void;
       /** Whether a run is going on this thread in this process; its binding stays due for reconcile until it stops. */
       isThreadRunning?: (threadId: string) => boolean;
-      transitionService?: Pick<FactoryTransitionService, 'transition'>;
+      boardEngine?: FactoryBoardEngine;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
         binding: FactoryRunBindingRecord;
@@ -960,10 +960,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       // The bound agent's own tool call carries the same consent as its governed moves.
       consentedBy: `agent:${binding.id}`,
     });
-    if (committed.status !== 'committed' || !this.options.transitionService) return;
+    if (committed.status !== 'committed' || !this.options.boardEngine) return;
     for (const entry of decisions) {
       if (entry.type !== 'transition') continue;
-      await this.options.transitionService.transition({
+      await this.options.boardEngine.submitInput({
         orgId: binding.orgId,
         factoryProjectId: binding.factoryProjectId,
         workItemId: item.id,

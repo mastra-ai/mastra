@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
   boardPhaseOutcomes,
@@ -32,7 +33,7 @@ import type {
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
-import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -106,8 +107,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   intakeEvaluator?: IntakeEvaluator;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
-  /** Governed stage-transition service. Stage moves 503 when absent. */
-  transitionService?: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
+  /** The board engine every stage move goes through. Stage moves 503 when absent. */
+  boardEngine?: FactoryBoardEngine;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   sessionRepository?: (input: {
@@ -433,16 +434,8 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const {
-      audit,
-      workItems,
-      queueHealth,
-      transitionService,
-      startCoordinator,
-      liveSessions,
-      projectSessions,
-      activeRuns,
-    } = this.deps;
+    const { audit, workItems, queueHealth, boardEngine, startCoordinator, liveSessions, projectSessions, activeRuns } =
+      this.deps;
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
         method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
@@ -846,7 +839,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             const created = await createFactoryWorkItem({
               workItems,
               boards: await this.#boards.load(resolved),
-              transitionService,
+              boardEngine,
               intakeRoutes: this.deps.intakeRoutes,
               intakeEvaluator: this.deps.intakeEvaluator,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
@@ -903,11 +896,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const { workItemId } = parsedPath.data;
           const parsed = parseTransitionBody(await readJson(context));
           if (!parsed) return c.json({ error: 'invalid_transition_request' }, 400);
-          if (!transitionService) {
+          if (!boardEngine) {
             return c.json({ error: 'factory_transition_unavailable' }, 503);
           }
           await workItems.ensureReady();
-          const result = await transitionService.transition({
+          const result = await boardEngine.submitInput({
             ...parsed,
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,

@@ -1,6 +1,7 @@
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DispatcherBoardEngine } from '../../board-engine/engine.js';
 import {
   boardRegistryOf,
   createBoardRegistry,
@@ -1390,7 +1391,12 @@ describe('GithubRules', () => {
       branch: 'factory/issue-42',
       baseBranch: 'main',
     });
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      workItems,
+      new DispatcherBoardEngine({ transitionService }),
+      sourceControl,
+    );
     const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -2864,7 +2870,12 @@ describe('GithubRules', () => {
       branch: 'factory/issue-42',
       baseBranch: 'main',
     });
-    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      workItems,
+      new DispatcherBoardEngine({ transitionService }),
+      sourceControl,
+    );
     const prepared = await coordinator.prepare({
       orgId: 'org-1',
       userId: 'user-1',

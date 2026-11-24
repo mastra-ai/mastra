@@ -464,7 +464,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('factory-work-it
       const tools = await createFactoryTransitionTools({
         requestContext: card.context,
         storage: card.workItems,
-        transitionService: { transition: async () => ({ status: 'rejected' }) } as never,
+        boardEngine: { submitInput: async () => ({ status: 'rejected' }) } as never,
         boards: createBoardRegistry(),
       });
       const verdictTool = tools.factory_record_review_verdict as unknown as {

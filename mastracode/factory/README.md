@@ -390,6 +390,23 @@ const releaseBoard = defineBoard({
 
 Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`. When a project [intake route](#status-events-move-existing-cards) on the card's board handles `work_item.closed`, as the default close routes do on Work, the routes decide the move instead and `sourceClosed` is only the fallback.
 
+### Board engine
+
+The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all submitted to the engine as inputs; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each input through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions still reach the transition service through the dispatcher's decision queue.
+
+Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
+
+```typescript
+import { MastraFactory, createDispatcherBoardEngine } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  boardEngine: createDispatcherBoardEngine,
+});
+```
+
+A custom engine implements `submitInput(input)` and answers with the board's verdict (`accepted` or `rejected`). Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior while observing every input.
+
 ### Board tool-result rules
 
 A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:

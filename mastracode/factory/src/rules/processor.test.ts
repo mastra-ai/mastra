@@ -5,6 +5,7 @@ import { createSignal } from '@mastra/core/signals';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -516,7 +517,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         // The tool's result never moves the card by itself.
@@ -588,7 +589,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
@@ -635,7 +636,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -667,7 +668,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [approved()]));
         expect(await stageOf(storage, prepared.item.id)).toEqual([board.stage]);
@@ -708,7 +709,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -795,7 +796,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         return { storage, prepared, transitionService, processor };
       };
@@ -835,7 +836,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
@@ -848,7 +849,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
 
     await processor.processInputStep(
       inputArgs(requestContext(), [
@@ -875,7 +881,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
     const update = storage.update.bind(storage);
     let raced = false;
     vi.spyOn(storage, 'update').mockImplementation(async args => {
@@ -983,7 +994,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       storage,
       boards,
-      transitionService,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
       messageReader: reader as never,
     });
 
@@ -1270,7 +1281,12 @@ describe('FactoryPhaseStateProcessor', () => {
       },
     });
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
     const context = requestContext();
 
     await processor.processInputStep(

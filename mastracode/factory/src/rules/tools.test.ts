@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import type { BoardTransitionPolicy } from '../boards/index.js';
 import { boardRegistryOf, defineBoard, workBoard } from '../boards/index.js';
 import { createPolicyTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -123,7 +124,11 @@ describe('factory_transition_work_item', () => {
       kickoffMessage: null,
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     expect(
       tool.inputSchema.safeParse({ stage: 'shipping', expectedRevision: prepared.item.revision, rationale: 'Ready.' })
@@ -198,27 +203,31 @@ describe('factory_transition_work_item', () => {
     });
 
     await expect(
-      createFactoryTransitionTools({ requestContext: requestContext(), storage, transitionService: service }),
+      createFactoryTransitionTools({
+        requestContext: requestContext(),
+        storage,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+      }),
     ).resolves.toHaveProperty('factory_transition_work_item');
     await expect(
       createFactoryTransitionTools({
         requestContext: requestContext({ threadId: 'other-thread' }),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       }),
     ).resolves.toEqual({});
     await expect(
       createFactoryTransitionTools({
         requestContext: requestContext({ resourceId: 'other-resource' }),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       }),
     ).resolves.toEqual({});
     await expect(
       createFactoryTransitionTools({
         requestContext: requestContext({ orgId: 'other-org' }),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       }),
     ).resolves.toEqual({});
   });
@@ -231,7 +240,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: service,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
     });
 
     expect((tools.factory_transition_work_item as ExecutableTool).requireApproval).toBe(true);
@@ -258,8 +267,13 @@ describe('factory_transition_work_item', () => {
     });
     expect(triaging).toMatchObject({ status: 'accepted' });
     const context = requestContext();
-    const tool = (await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service }))
-      .factory_transition_work_item as ExecutableTool & { description: string };
+    const tool = (
+      await createFactoryTransitionTools({
+        requestContext: context,
+        storage,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+      })
+    ).factory_transition_work_item as ExecutableTool & { description: string };
     // Tools follow the phase, not the role: triage's routing guidance lives in the factory-triage skill.
     expect(tool.description).not.toContain('classification');
     expect(tool.description).toContain('factory-phase signal');
@@ -282,7 +296,11 @@ describe('factory_transition_work_item', () => {
       const prepared = await prepareBoundItem(storage, 'github-issue', role);
       const context = requestContext();
       const tool = (
-        await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service })
+        await createFactoryTransitionTools({
+          requestContext: context,
+          storage,
+          boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+        })
       ).factory_transition_work_item as ExecutableTool;
       const input = {
         stage: 'canceled',
@@ -312,7 +330,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      transitionService: { transition },
+      boardEngine: { submitInput: transition },
     });
 
     const result = await execute(
@@ -351,7 +369,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      transitionService: { transition },
+      boardEngine: { submitInput: transition },
     });
 
     const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -368,7 +386,11 @@ describe('factory_transition_work_item', () => {
     const prepared = await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+    });
     await expect(
       execute(tools.factory_transition_work_item as ExecutableTool, requestContext({ threadId: 'other-thread' }), {
         stage: 'planning',
@@ -419,7 +441,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: service,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       boards: createTriageWorkRegistry(),
     });
     const tool = tools.factory_transition_work_item as ExecutableTool;
@@ -447,7 +469,7 @@ describe('factory_transition_work_item', () => {
       createFactoryTransitionTools({
         requestContext: requestContext(),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
         boards: createTriageWorkRegistry(),
       }),
     ).resolves.toEqual({});
@@ -468,7 +490,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      transitionService: { transition },
+      boardEngine: { submitInput: transition },
     });
 
     // Handing planning its turn in the live session rotates the binding row.
@@ -514,7 +536,11 @@ describe('factory_transition_work_item', () => {
     await prepareBoundItem(storage);
     const service = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+    });
 
     await storage.prepareRunStart({
       orgId: 'org-1',
@@ -558,7 +584,11 @@ describe('factory_transition_work_item', () => {
       ),
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
 
     await expect(
@@ -579,7 +609,11 @@ describe('factory_transition_work_item', () => {
       boards: createPolicyTestRegistry(policy),
     });
     const context = requestContext();
-    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
+    });
     const tool = tools.factory_transition_work_item as ExecutableTool;
     const input = { stage: 'planning', expectedRevision: 1, rationale: 'Investigation complete.' };
 
@@ -598,7 +632,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: context,
       storage,
-      transitionService: { transition } as never,
+      boardEngine: { submitInput: transition } as never,
     });
 
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
@@ -632,7 +666,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: { transition } as never,
+        boardEngine: { submitInput: transition } as never,
         boards: olderWork,
       });
 
@@ -657,7 +691,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: { transition } as never,
+        boardEngine: { submitInput: transition } as never,
         boards: olderWork,
       });
 
@@ -709,7 +743,7 @@ describe('factory_transition_work_item', () => {
         createFactoryTransitionTools({
           requestContext: requestContext(),
           storage,
-          transitionService: { transition: vi.fn() } as never,
+          boardEngine: { submitInput: vi.fn() } as never,
           ...(boards ? { boards } : {}),
         });
 
@@ -745,7 +779,7 @@ describe('factory_transition_work_item', () => {
         const tools = await createFactoryTransitionTools({
           requestContext: context,
           storage,
-          transitionService: { transition: vi.fn() } as never,
+          boardEngine: { submitInput: vi.fn() } as never,
         });
         await storage.update({ orgId: 'org-1', id, userId: 'user-1', patch: { stages: ['intake'] } });
 
@@ -813,7 +847,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: { transition: vi.fn() } as never,
+        boardEngine: { submitInput: vi.fn() } as never,
       });
 
       await expect(
@@ -853,7 +887,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: { transition: vi.fn() } as never,
+        boardEngine: { submitInput: vi.fn() } as never,
       });
 
       await execute(tools.factory_record_review_verdict as ExecutableTool, context, {
@@ -893,7 +927,9 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+        boardEngine: new DispatcherBoardEngine({
+          transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+        }),
       });
 
       await expect(
@@ -955,7 +991,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage,
-        transitionService: { transition: vi.fn() } as never,
+        boardEngine: { submitInput: vi.fn() } as never,
       });
 
       // Done grants no tools, so the reviewer's session loses the verdict tool with the move.
@@ -969,7 +1005,7 @@ describe('factory_transition_work_item', () => {
       const workTools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage,
-        transitionService: { transition: vi.fn() } as never,
+        boardEngine: { submitInput: vi.fn() } as never,
       });
       expect(workTools).not.toHaveProperty('factory_record_review_verdict');
 
@@ -978,7 +1014,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: requestContext(),
         storage: reviewStorage,
-        transitionService: { transition: vi.fn() } as never,
+        boardEngine: { submitInput: vi.fn() } as never,
       });
       const schema = (tools.factory_record_review_verdict as ExecutableTool).inputSchema;
       expect(
@@ -1007,7 +1043,7 @@ describe('factory_transition_work_item', () => {
       const tools = await createFactoryTransitionTools({
         requestContext: context,
         storage,
-        transitionService: { transition } as never,
+        boardEngine: { submitInput: transition } as never,
         sessions,
       });
 
@@ -1041,7 +1077,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: crashResumedContext(setState),
       storage,
-      transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      boardEngine: { submitInput: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId: vi.fn(async () => Promise.reject(new Error('sessions down'))) },
     });
 
@@ -1062,7 +1098,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: crashResumedContext(setState),
       storage,
-      transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      boardEngine: { submitInput: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
       sessions: { getBySessionId },
     });
 
@@ -1084,7 +1120,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: crashResumedContext(setState),
       storage,
-      transitionService: service,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
     });
 
     expect(tools).toHaveProperty('factory_transition_work_item');
@@ -1105,7 +1141,7 @@ describe('factory_transition_work_item', () => {
       createFactoryTransitionTools({
         requestContext: crashResumedContext(setState, { threadId: 'other-thread' }),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       }),
     ).resolves.toEqual({});
     expect(setState).not.toHaveBeenCalled();
@@ -1139,7 +1175,7 @@ describe('factory_transition_work_item', () => {
       createFactoryTransitionTools({
         requestContext: crashResumedContext(vi.fn(async () => {})),
         storage,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
       }),
     ).resolves.toEqual({});
   });
@@ -1151,7 +1187,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: service,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
     });
     const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
 
@@ -1174,7 +1210,7 @@ describe('factory_transition_work_item', () => {
     const tools = await createFactoryTransitionTools({
       requestContext: requestContext(),
       storage,
-      transitionService: service,
+      boardEngine: new DispatcherBoardEngine({ transitionService: service }),
     });
     const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
 
