@@ -192,11 +192,11 @@ describe('formatMoment', () => {
 describe('formatLogLineTimestamp', () => {
   const at = '2026-11-24T23:25:51.256Z';
 
-  it('splits a log time into its day, its 24-hour time and its milliseconds', () => {
+  it('splits a log time into its day, its 24-hour time and its hundredths of a second', () => {
     expect(formatLogLineTimestamp(at, { locale: 'en-US', timeZone: 'UTC' })).toEqual({
       day: 'Nov 24',
       time: '23:25:51',
-      fraction: '.256',
+      fraction: '.25',
     });
   });
 
@@ -204,7 +204,7 @@ describe('formatLogLineTimestamp', () => {
     expect(formatLogLineTimestamp(at, { locale: 'de-DE', timeZone: 'UTC' })).toEqual({
       day: '24. Nov.',
       time: '23:25:51',
-      fraction: ',256',
+      fraction: ',25',
     });
   });
 

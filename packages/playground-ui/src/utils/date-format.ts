@@ -49,7 +49,7 @@ const PRESET_OPTIONS = {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    fractionalSecondDigits: 3,
+    fractionalSecondDigits: 2,
     hourCycle: 'h23',
   },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
