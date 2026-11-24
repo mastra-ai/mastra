@@ -1821,10 +1821,12 @@ export class FactoryDecisionDispatcher {
             label: 'Factory skill run',
             runStillActive,
             storedRunEnd: async () => {
-              const ended = await readThreadRunEnd(session, binding.threadId, deliveryId);
-              if (ended) return ended.reason;
+              // The ledger first: a run's end is recorded before it leaves the ledger, so once the
+              // ledger read misses it, the end read after it cannot.
               const open = await listThreadOpenRuns(session, binding.threadId);
               const entry = open.find(run => run.kickoffId === deliveryId);
+              const ended = await readThreadRunEnd(session, binding.threadId, deliveryId);
+              if (ended) return ended.reason;
               return entry && isOpenRunLiveElsewhere(entry, this.#ownerId) ? 'running' : undefined;
             },
             stopRequested,

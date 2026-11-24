@@ -4110,6 +4110,58 @@ describe('FactoryDecisionDispatcher', () => {
         vi.useRealTimers();
       }
     });
+    it('settles from the end the other process records between its two storage reads', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+      try {
+        const { storage, session, dispatcher, binding, kickoffId } = await remoteRun('remote-end-between-reads');
+
+        const dispatch = dispatcher.runOnce();
+        await vi.advanceTimersByTimeAsync(0);
+        await session.thread.setSetting({
+          key: FACTORY_OPEN_RUNS_SETTING,
+          value: [
+            {
+              kickoffId,
+              bindingId: binding.id,
+              role: binding.role,
+              startedBy: 'factory-rule-dispatcher',
+              orgId: binding.orgId,
+              factoryProjectId: binding.factoryProjectId,
+              workItemId: binding.workItemId,
+              sessionId: binding.sessionId,
+              threadId: binding.threadId,
+              branch: binding.branch,
+              ownerId: 'worker-2',
+              heartbeatAt: Date.now() + FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs - 1_000,
+            },
+          ],
+        });
+        // The other worker finishes right after the dispatcher's first read: it records the end,
+        // then drops the run from the ledger.
+        const read = session.thread.getSettingOn.getMockImplementation()!;
+        let finished = false;
+        session.thread.getSettingOn.mockImplementation(async (args: { threadId: string; key: string }) => {
+          const value = await read(args);
+          if (!finished && (args.key === FACTORY_OPEN_RUNS_SETTING || args.key === FACTORY_RUN_ENDS_SETTING)) {
+            finished = true;
+            await session.thread.setSetting({
+              key: FACTORY_RUN_ENDS_SETTING,
+              value: [{ kickoffId, reason: 'complete', endedAt: Date.now() }],
+            });
+            await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: [] });
+          }
+          return value;
+        });
+        await vi.advanceTimersByTimeAsync(FACTORY_DISPATCH_CONSTANTS.runRegistryHeartbeatMs);
+        await dispatch;
+
+        expect(finished).toBe(true);
+        expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   it('fails a wake dispatch terminally when the terminal event is not observed', async () => {
