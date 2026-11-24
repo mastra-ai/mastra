@@ -171,6 +171,7 @@ export { IconLayoutGrid1 } from './IconLayoutGrid1';
 export { IconLibrary } from './IconLibrary';
 export { IconLightBulbSimple } from './IconLightBulbSimple';
 export { IconLineChart1 } from './IconLineChart1';
+export { IconLineChart2 } from './IconLineChart2';
 export { IconLinebreak } from './IconLinebreak';
 export { IconListAdd } from './IconListAdd';
 export { IconListBullets } from './IconListBullets';

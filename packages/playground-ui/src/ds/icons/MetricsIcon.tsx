@@ -1,4 +1,4 @@
 import type { LucideProps } from 'lucide-react';
-import { IconLineChart1 } from '@/ds/icons/central/IconLineChart1';
+import { IconLineChart2 } from '@/ds/icons/central/IconLineChart2';
 
-export const MetricsIcon = (props: LucideProps) => <IconLineChart1 className="size-icon-md" {...props} />;
+export const MetricsIcon = (props: LucideProps) => <IconLineChart2 className="size-icon-md" {...props} />;
