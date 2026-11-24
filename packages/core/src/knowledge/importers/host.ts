@@ -41,9 +41,19 @@ export type KnowledgeImporterRunStart =
        * whole number.
        */
       maxFlushBytes?: number;
+      /** What this host takes. Absent from hosts older than contract 2: treat as `{ contract: 1, timelines: false }`. */
+      capabilities?: KnowledgeImporterCapabilities;
     }
   /** Another run of the binding is going; the host recorded this one as skipped. */
   | { status: 'skipped'; runId: string };
+
+/** What a host takes, sent with each run start so an importer knows before its first flush. @experimental */
+export interface KnowledgeImporterCapabilities {
+  /** The importer contract version; 2 adds capabilities and the `unsupported` refusal. */
+  contract: number;
+  /** Takes `entry` and `removeEntry` ops. */
+  timelines: boolean;
+}
 
 /**
  * A run's binding as a host hands it over. The runner picks the definition by `importer`, checks
@@ -78,6 +88,8 @@ export interface KnowledgeImporterRunBinding {
  * - After a run ends (finished, canceled or expired) a new seq is refused, while an exact replay
  *   of a committed seq still returns its receipt.
  * - Run counts are summed from flush receipts.
+ * - A run start carries `capabilities`. A flush with ops the host doesn't take is refused whole as
+ *   `unsupported` before anything applies, so neither its ops nor its state commit and its seq stays free.
  *
  * Refusals throw `KnowledgeImporterHostConflictError`. Any other host failure throws
  * `KnowledgeImporterHostError` with the HTTP status when there is one: the runner resends the same
@@ -108,7 +120,9 @@ export type KnowledgeImporterHostConflictCode =
   /** The run has ended, been canceled, expired or never started. */
   | 'run_not_active'
   /** A finish replay that differs from the recorded finish. */
-  | 'finish_mismatch';
+  | 'finish_mismatch'
+  /** The flush holds ops this host doesn't take (timeline ops on a host without timelines). Nothing was applied. */
+  | 'unsupported';
 
 /** A host refused a flush or a finish (409 over HTTP). Retrying the same request won't help. @experimental */
 export class KnowledgeImporterHostConflictError extends Error {
@@ -248,7 +262,7 @@ function wellFormed(value: string): string {
   return value;
 }
 
-type FieldKind = 'string' | 'nonEmpty' | 'nullableString' | 'links' | 'aliases';
+type FieldKind = 'string' | 'nonEmpty' | 'nullableString' | 'links' | 'aliases' | 'author';
 
 const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   sourceId: { kind: 'nonEmpty', required: true },
@@ -256,6 +270,15 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   title: { kind: 'string', required: true },
   parent: { kind: 'nullableString' },
   fallbackParent: { kind: 'nonEmpty' },
+};
+
+const ENTRY_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
+  externalId: { kind: 'nonEmpty', required: true },
+  occurredAt: { kind: 'nonEmpty', required: true },
+  editedAt: { kind: 'nonEmpty' },
+  author: { kind: 'author' },
+  body: { kind: 'string', required: true },
+  threadExternalId: { kind: 'nonEmpty' },
 };
 
 const ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
@@ -319,6 +342,9 @@ function checkFields<T>(
           ),
         );
         break;
+      case 'author':
+        out[key] = checkFields(field, { sourceId: { kind: 'nonEmpty', required: true }, name: { kind: 'string' } }, at);
+        break;
     }
   }
   return { ...out } as T;
@@ -352,8 +378,26 @@ export function parseKnowledgeImporterFlushBody(body: { ops: unknown; state?: un
         if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
         return { op: 'remove', sourceId: checkString(op.sourceId, `${where}.sourceId`, true) };
       }
+      case 'entry': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'timeline' && key !== 'entry');
+        if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
+        return {
+          op: 'entry',
+          timeline: checkString(op.timeline, `${where}.timeline`, true),
+          entry: checkFields(op.entry, ENTRY_FIELDS, `${where}.entry`),
+        };
+      }
+      case 'removeEntry': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'timeline' && key !== 'externalId');
+        if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
+        return {
+          op: 'removeEntry',
+          timeline: checkString(op.timeline, `${where}.timeline`, true),
+          externalId: checkString(op.externalId, `${where}.externalId`, true),
+        };
+      }
       default:
-        throw new TypeError(`${where}.op must be "upsert", "declare" or "remove".`);
+        throw new TypeError(`${where}.op must be "upsert", "declare", "remove", "entry" or "removeEntry".`);
     }
   });
   if (body.state === undefined || body.state === null) return { ops };

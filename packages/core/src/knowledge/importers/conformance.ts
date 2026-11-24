@@ -78,6 +78,35 @@ export function importerHostConformance(
       },
     ],
     [
+      'advertises its contract version and whether it takes timelines when a run starts',
+      async t => {
+        const run = await t.start();
+        const caps = run.capabilities;
+        check(caps, 'a run start carries capabilities');
+        check(
+          Number.isInteger(caps.contract) && caps.contract >= 2,
+          `capabilities.contract is 2 or later, got ${caps.contract}`,
+        );
+        check(typeof caps.timelines === 'boolean', 'capabilities.timelines is a boolean');
+      },
+    ],
+    [
+      'refuses a flush with timeline ops whole, as unsupported, when it takes no timelines',
+      async t => {
+        const run = await t.start();
+        if (run.capabilities?.timelines) return;
+        const ops = [upsert('a'), entry('a', '1')];
+        await refused(() => t.flush(run, 1, ops, { cursor: 'after-entries' }), 409, 'unsupported');
+        await refused(() => t.flush(run, 1, [removeEntry('a', '1')]), 409, 'unsupported');
+        // Nothing of the refused flush committed: seq 1 is still free and the state didn't move.
+        const next = await t.flush(run, 1, [upsert('b')]);
+        check(next.seq === 1 && next.created === 1, 'after an unsupported refusal, seq 1 is still the next seq');
+        await t.finish(run, { lastSeq: 1 });
+        const after = await t.start();
+        check(after.state.cursor === undefined, 'state sent with an unsupported flush never commits');
+      },
+    ],
+    [
       'refuses a seq gap',
       async t => {
         const run = await t.start();
@@ -273,6 +302,18 @@ function session({ host, bindingId }: KnowledgeImporterHostConformanceFixture): 
 const upsert = (sourceId: string): KnowledgeImporterOp => ({
   op: 'upsert',
   item: { sourceId, title: sourceId.toUpperCase(), body: `body of ${sourceId}` },
+});
+
+const entry = (timeline: string, externalId: string): KnowledgeImporterOp => ({
+  op: 'entry',
+  timeline,
+  entry: { externalId, occurredAt: '2026-11-23T22:13:20.123Z', body: `entry ${externalId}` },
+});
+
+const removeEntry = (timeline: string, externalId: string): KnowledgeImporterOp => ({
+  op: 'removeEntry',
+  timeline,
+  externalId,
 });
 
 function check(condition: unknown, message: string): asserts condition {
