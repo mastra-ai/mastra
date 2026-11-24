@@ -24,6 +24,7 @@ export default defineConfig({
     },
   },
   test: {
+    globalSetup: [path.resolve(__dirname, 'vitest.registry-guard-global.ts')],
     projects: [
       {
         define: {

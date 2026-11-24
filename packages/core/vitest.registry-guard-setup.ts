@@ -4,7 +4,7 @@
 // 0 providers) and into the user's ~/.cache/mastra, which every Mastra project on the machine reads
 // in dev mode. Two layers stop that from coming back:
 //
-// 1. HOME (USERPROFILE on Windows) points at a per-worker temp dir, so os.homedir() and with it the
+// 1. HOME (USERPROFILE on Windows) points at a per-worker throwaway dir, so os.homedir() and with it the
 //    registry cache resolve away from the real ~/.cache/mastra. This prevents rather than detects:
 //    the real cache is shared with other Mastra processes (mastra dev, Mastra Code) that refresh it
 //    on their own schedule, so watching it would fail unrelated tests whenever one of them does.
@@ -29,10 +29,13 @@ type GuardState = {
 // Once per worker, before any test can mock fs or change the environment.
 const g = globalThis as { __mastraRegistryFileGuard?: GuardState };
 const state = (g.__mastraRegistryFileGuard ??= ((): GuardState => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-core-test-home-'));
+  // Not under os.tmpdir(): the seatbelt sandbox allows writes to temp dirs, and its tests expect
+  // writes to the home directory to be blocked.
+  const homesDir = path.join(__dirname, 'node_modules', '.cache', 'test-homes');
+  fs.mkdirSync(homesDir, { recursive: true });
+  const home = fs.mkdtempSync(path.join(homesDir, 'home-'));
   process.env.HOME = home;
   process.env.USERPROFILE = home;
-  process.on('exit', () => fs.rmSync(home, { recursive: true, force: true }));
   return { lstatSync: fs.lstatSync, readdirSync: fs.readdirSync };
 })());
 
