@@ -129,10 +129,11 @@ export interface ConnectEventEnvelope {
 
 /**
  * A provider event from a project's `connect` topic, with its payload as
- * received: any integration, any event type, verified or not.
+ * received: any provider, any event type, verified or not.
  */
 export interface UntypedConnectEvent extends ConnectEventEnvelope {
-  integrationId: string;
+  /** The provider that sent the event, such as `github`. */
+  provider: string;
   eventType: string;
   /** The raw provider body, parsed from JSON. */
   payload: unknown;
@@ -147,14 +148,14 @@ export interface UntypedConnectEvent extends ConnectEventEnvelope {
   unverified: boolean;
 }
 
-type IntegrationOf<Payloads> = Extract<keyof Payloads, string>;
-type EventTypeOf<Payloads, I extends keyof Payloads> = Extract<keyof Payloads[I], string>;
+type ProviderOf<Payloads> = Extract<keyof Payloads, string>;
+type EventTypeOf<Payloads, P extends keyof Payloads> = Extract<keyof Payloads[P], string>;
 
-/** A Connect integration id with typed event payloads. */
-export type ConnectEventIntegration = IntegrationOf<ConnectEventPayloads>;
+/** A provider with typed event payloads. */
+export type ConnectEventProvider = ProviderOf<ConnectEventPayloads>;
 
-/** An event type of `I` with a typed payload. */
-export type ConnectEventType<I extends ConnectEventIntegration> = EventTypeOf<ConnectEventPayloads, I>;
+/** An event type of provider `P` with a typed payload. */
+export type ConnectEventType<P extends ConnectEventProvider> = EventTypeOf<ConnectEventPayloads, P>;
 
 /**
  * A verified, parsed event whose payload is typed from the provider's
@@ -162,25 +163,25 @@ export type ConnectEventType<I extends ConnectEventIntegration> = EventTypeOf<Co
  * the provider documents it sends.
  */
 export interface TypedConnectEvent<
-  I extends ConnectEventIntegration,
-  E extends ConnectEventType<I>,
+  P extends ConnectEventProvider,
+  E extends ConnectEventType<P>,
 > extends ConnectEventEnvelope {
-  integrationId: I;
+  provider: P;
   eventType: E;
-  payload: ConnectEventPayloads[I][E];
+  payload: ConnectEventPayloads[P][E];
   payloadParseError?: undefined;
   unverified: false;
 }
 
 /**
- * The typed events of integration `I` and event types `E`, one union member
+ * The typed events of provider `P` and event types `E`, one union member
  * per event type, so checking `eventType` narrows `payload`.
  */
-export type ConnectEventOf<I extends ConnectEventIntegration, E extends ConnectEventType<I> = ConnectEventType<I>> =
-  E extends ConnectEventType<I> ? TypedConnectEvent<I, E> : never;
+export type ConnectEventOf<P extends ConnectEventProvider, E extends ConnectEventType<P> = ConnectEventType<P>> =
+  E extends ConnectEventType<P> ? TypedConnectEvent<P, E> : never;
 
-/** Every typed event, discriminated by `integrationId` and then `eventType`. */
-export type KnownConnectEvent = { [I in ConnectEventIntegration]: ConnectEventOf<I> }[ConnectEventIntegration];
+/** Every typed event, discriminated by `provider` and then `eventType`. */
+export type KnownConnectEvent = { [P in ConnectEventProvider]: ConnectEventOf<P> }[ConnectEventProvider];
 
 /**
  * A provider event from a project's `connect` topic. Narrow it with
@@ -190,7 +191,7 @@ export type KnownConnectEvent = { [I in ConnectEventIntegration]: ConnectEventOf
 export type ConnectEvent = KnownConnectEvent | UntypedConnectEvent;
 
 /**
- * Whether `event` is a verified, parsed `eventType` event of `integrationId`,
+ * Whether `event` is a verified, parsed `eventType` event of `provider`,
  * narrowing its payload to the provider's documented shape. Unverified events
  * and payloads that weren't JSON never match.
  *
@@ -206,12 +207,12 @@ export type ConnectEvent = KnownConnectEvent | UntypedConnectEvent;
  * }
  * ```
  */
-export function isConnectEvent<I extends ConnectEventIntegration, E extends ConnectEventType<I>>(
+export function isConnectEvent<P extends ConnectEventProvider, E extends ConnectEventType<P>>(
   event: UntypedConnectEvent,
-  integrationId: I,
+  provider: P,
   eventType: E | readonly E[],
-): event is ConnectEventOf<I, E> {
-  if (event.unverified || event.payloadParseError || event.integrationId !== integrationId) return false;
+): event is ConnectEventOf<P, E> {
+  if (event.unverified || event.payloadParseError || event.provider !== provider) return false;
   return typeof eventType === 'string'
     ? event.eventType === eventType
     : (eventType as readonly string[]).includes(event.eventType);
@@ -692,7 +693,7 @@ export interface ConnectEventsOptions extends EventsClientOptions, Omit<Subscrib
  *   onGap: () => resyncFromProviders(),
  * });
  * for await (const event of events) {
- *   await handle(event.integrationId, event.eventType, event.payload);
+ *   await handle(event.provider, event.eventType, event.payload);
  * }
  * ```
  */
@@ -777,7 +778,8 @@ function toConnectEvent(event: TopicEvent): ConnectEvent {
     id: event.id,
     timestamp: event.timestamp,
     connectionId: fields.connectionId ?? '',
-    integrationId: fields.integrationId ?? '',
+    // The events service calls it `integrationId`.
+    provider: fields.integrationId ?? '',
     eventType: fields.eventType ?? '',
     sourceEventId: fields.sourceEventId || null,
     payload,

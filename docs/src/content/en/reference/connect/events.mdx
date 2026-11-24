@@ -135,19 +135,19 @@ Returns an iterator of `ConnectEvent`. A `ConnectEvents` can be iterated once. C
 
 ## ConnectEvent
 
-Each event carries these fields. Until you narrow it, `integrationId` and `eventType` are strings and `payload` is `unknown`.
+Each event carries these fields. Until you narrow it, `provider` and `eventType` are strings and `payload` is `unknown`.
 
 <PropertiesTable
   content={[
   { name: 'id', type: 'string', description: 'The event id, which is also the cursor to resume after it.' },
   { name: 'timestamp', type: 'number', description: 'When the event was stored, in milliseconds since the epoch.' },
   { name: 'connectionId', type: 'string', description: 'The connection the provider sent the webhook for.' },
-  { name: 'integrationId', type: 'string', description: "The connection's integration, such as `github`." },
+  { name: 'provider', type: 'string', description: 'The provider that sent the event, such as `github`.' },
   {
     name: 'eventType',
     type: 'string',
     description:
-      "The provider's event type, as the platform identified it. See [Typed payloads](#typed-payloads) for each integration's format.",
+      "The provider's event type, as the platform identified it. See [Typed payloads](#typed-payloads) for each provider's format.",
   },
   {
     name: 'sourceEventId',
@@ -177,20 +177,20 @@ Each event carries these fields. Until you narrow it, `integrationId` and `event
 ## isConnectEvent()
 
 ```typescript
-function isConnectEvent(event, integrationId, eventType): boolean
+function isConnectEvent(event, provider, eventType): boolean
 ```
 
-Returns `true` when `event` is a verified, parsed event of `integrationId` whose `eventType` is `eventType`, or one of them when you pass an array. TypeScript then narrows `event.payload` to the provider's documented shape. Unverified events and payloads that weren't JSON never match.
+Returns `true` when `event` is a verified, parsed event of `provider` whose `eventType` is `eventType`, or one of them when you pass an array. TypeScript then narrows `event.payload` to the provider's documented shape. Unverified events and payloads that weren't JSON never match.
 
-When you pass several event types, check `event.eventType` to narrow `event.payload` to one of them. An integration or event type without typed payloads is a compile error.
+When you pass several event types, check `event.eventType` to narrow `event.payload` to one of them. A provider or event type without typed payloads is a compile error.
 
 Payloads aren't validated at runtime. The types describe what the provider documents it sends, so a provider can still send a field the types don't list, or omit one.
 
 ## Typed payloads
 
-`ConnectEventPayloads` maps each integration id to its event types and their payload types. They're built from each provider's published contract:
+`ConnectEventPayloads` maps each provider to its event types and their payload types. They're built from each provider's published contract:
 
-| Integration | `eventType` format | Example | Contract |
+| Provider | `eventType` format | Example | Contract |
 | - | - | - | - |
 | `clerk` | The body's `type` | `user.created` | Clerk's Backend API description and SDK webhook types |
 | `elevenlabs` | The body's `type` | `post_call_transcription` | ElevenLabs' OpenAPI description and post-call webhook docs |
@@ -214,7 +214,7 @@ Payloads aren't validated at runtime. The types describe what the provider docum
 
 HubSpot, Outlook and SendGrid send events in batches. Connect delivers each item as its own event, so a payload is one notification.
 
-Each integration's map is also exported, such as `GithubWebhookPayloads`, so you can name a payload type in your own code:
+Each provider's map is also exported, such as `GithubWebhookPayloads`, so you can name a payload type in your own code:
 
 ```typescript
 import type { GithubWebhookPayloads } from '@mastra/connect'
@@ -222,7 +222,7 @@ import type { GithubWebhookPayloads } from '@mastra/connect'
 type PullRequestOpened = GithubWebhookPayloads['pull_request.opened']
 ```
 
-To type events of another integration, extend `ConnectEventPayloads`. To type more events of a typed integration, extend its map:
+To type events of another provider, extend `ConnectEventPayloads`. To type more events of a typed provider, extend its map:
 
 ```typescript title="src/connect-events.d.ts"
 import type { SlackEventCallback } from '@mastra/connect'

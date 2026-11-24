@@ -42,11 +42,11 @@ export type {
 export type { SlackEventCallback } from './slack.js';
 
 /**
- * Provider webhook payload types, by integration id and then Connect event
+ * Provider webhook payload types, by provider and then Connect event
  * type, built from each provider's published contract.
  *
- * Add an integration by declaration merging. Add events to an integration
- * whose payload map is an interface, such as `SlackWebhookPayloads`, the
+ * Add a provider by declaration merging. Add events to a provider whose
+ * payload map is an interface, such as `SlackWebhookPayloads`, the
  * same way.
  *
  * @example

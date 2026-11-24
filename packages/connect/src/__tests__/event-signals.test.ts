@@ -1,0 +1,300 @@
+import type { ServerResponse } from 'node:http';
+
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
+import type { SignalProviderTarget } from '@mastra/core/signals';
+import { InMemoryStore } from '@mastra/core/storage';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ConnectEventSignals } from '../event-signals.js';
+import type { ConnectEventSignalsOptions, ConnectEventFilter } from '../event-signals.js';
+import { event, eventsServer, ready, startStream } from './events-server.js';
+
+const servers: Array<{ close(): Promise<void> }> = [];
+const providers: ConnectEventSignals<any, any>[] = [];
+
+beforeEach(() => {
+  for (const name of [
+    'MASTRA_EVENTS_API_URL',
+    'MASTRA_PLATFORM_REGION',
+    'MASTRA_PROJECT_ID',
+    'MASTRA_PLATFORM_ACCESS_TOKEN',
+    'MASTRA_PLATFORM_SECRET_KEY',
+  ]) {
+    vi.stubEnv(name, '');
+  }
+});
+
+afterEach(async () => {
+  for (const provider of providers.splice(0)) provider.stop();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  await Promise.all(servers.splice(0).map(s => s.close()));
+});
+
+/** Persist notifications without waking the thread, so no model runs. */
+const ops: SignalProviderTarget = { threadId: 'ops', resourceId: 'team-ops', ifIdle: { behavior: 'persist' } };
+
+interface Delivery {
+  provider: string;
+  eventType: string;
+  payload?: unknown;
+  rawPayload?: string;
+  connectionId?: string;
+  sourceEventId?: string;
+  unverified?: boolean;
+}
+
+function fields(delivery: Delivery): Record<string, string> {
+  return {
+    connectionId: delivery.connectionId ?? 'conn_1',
+    integrationId: delivery.provider,
+    eventType: delivery.eventType,
+    payload: delivery.rawPayload ?? JSON.stringify(delivery.payload ?? {}),
+    ...(delivery.sourceEventId ? { sourceEventId: delivery.sourceEventId } : {}),
+    ...(delivery.unverified ? { unverified: 'true' } : {}),
+  };
+}
+
+/** A local events service that streams `deliveries` on the first connection, then holds it open. */
+async function eventsService(deliveries: Delivery[]) {
+  const streams: ServerResponse[] = [];
+  const s = await eventsServer([
+    (_req, res) => {
+      streams.push(res);
+      startStream(res);
+      res.write(ready('10'));
+      deliveries.forEach((delivery, index) => res.write(event(String(11 + index), fields(delivery))));
+    },
+    (_req, res) => {
+      streams.push(res);
+      startStream(res);
+      res.write(ready('100'));
+    },
+  ]);
+  servers.push(s);
+  return { ...s, streams };
+}
+
+function model() {
+  const prompts: unknown[] = [];
+  const mock = new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      prompts.push(prompt);
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'text-start' as const, id: 't' },
+          { type: 'text-delta' as const, id: 't', delta: 'Looking into it.' },
+          { type: 'text-end' as const, id: 't' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          },
+        ]),
+      };
+    },
+  });
+  return { mock, prompts };
+}
+
+/** An agent on a real Mastra with in-memory storage, listening through `signals`. */
+function opsAgent<const F extends ConnectEventFilter | undefined = undefined, U extends boolean = false>(
+  url: string,
+  options: Omit<ConnectEventSignalsOptions<F, U>, 'accessToken' | 'projectId' | 'eventsUrl'>,
+) {
+  const signals = new ConnectEventSignals<F, U>({
+    accessToken: 'tok_secret',
+    projectId: 'proj_1',
+    eventsUrl: url,
+    reconnectDelayMs: 5,
+    ...options,
+  } as ConnectEventSignalsOptions<F, U>);
+  providers.push(signals);
+  const { mock, prompts } = model();
+  const agent = new Agent({ id: 'ops', name: 'Ops', instructions: 'Triage events.', model: mock, signals: [signals] });
+  const mastra = new Mastra({ agents: { ops: agent }, logger: false, storage: new InMemoryStore() });
+  async function notifications(threadId = ops.threadId) {
+    const store = await mastra.getStorage()!.getStore('notifications');
+    const records = await store!.listNotifications({ threadId });
+    return records.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+  return { signals, agent, mastra, prompts, notifications };
+}
+
+const prOpened = { action: 'opened', number: 7, pull_request: { title: 'Fix login' } };
+
+describe('ConnectEventSignals', () => {
+  it('notifies the agent of the events it asked for, once each, and nothing else', async () => {
+    const service = await eventsService([
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, sourceEventId: 'd-1' },
+      { provider: 'github', eventType: 'push', payload: { ref: 'refs/heads/main' } },
+      { provider: 'posthog', eventType: '$pageview', payload: {} },
+      // Forged or unreadable deliveries never reach the agent.
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, unverified: true },
+      { provider: 'github', eventType: 'pull_request.opened', rawPayload: '{not json' },
+      // The provider redelivered the same webhook.
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, sourceEventId: 'd-1' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } } },
+    ]);
+    const { notifications } = opsAgent(service.url, {
+      events: { github: ['pull_request.opened'], linear: true },
+      target: ops,
+    });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(2));
+    // The last event delivered; give a duplicate time to land if it would.
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const records = await notifications();
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({
+      source: 'connect',
+      kind: 'github:pull_request.opened',
+      summary: 'github pull_request.opened',
+      payload: prOpened,
+      dedupeKey: 'connect:github:d-1',
+      agentId: 'ops',
+      resourceId: 'team-ops',
+      // The redelivery updates this notification instead of adding one.
+      metadata: expect.objectContaining({
+        connectionId: 'conn_1',
+        eventId: expect.any(String),
+        provider: 'github',
+        eventType: 'pull_request.opened',
+      }),
+    });
+    expect(records[1]).toMatchObject({ kind: 'linear:Issue.create', payload: { data: { id: 'iss_1' } } });
+  });
+
+  it('sends every verified event when no filter is given', async () => {
+    const service = await eventsService([
+      { provider: 'posthog', eventType: '$pageview', payload: { distinct_id: 'u1' } },
+      { provider: 'github', eventType: 'push', payload: { ref: 'refs/heads/main' }, unverified: true },
+      { provider: 'jira', eventType: 'jira:issue_created', rawPayload: 'not json' },
+    ]);
+    const { notifications } = opsAgent(service.url, { target: ops });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(2));
+    expect((await notifications()).map(record => [record.kind, record.payload])).toEqual([
+      ['posthog:$pageview', { distinct_id: 'u1' }],
+      ['jira:jira:issue_created', 'not json'],
+    ]);
+  });
+
+  it('routes each event to its own thread, with the notification the app wrote', async () => {
+    const service = await eventsService([
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, connectionId: 'conn_acme' },
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, connectionId: 'conn_ignored' },
+      { provider: 'linear', eventType: 'Issue.create', payload: {}, connectionId: 'conn_acme' },
+    ]);
+    const { notifications, mastra } = opsAgent(service.url, {
+      events: { github: ['pull_request.opened'], linear: true },
+      target: event =>
+        event.connectionId === 'conn_ignored'
+          ? undefined
+          : {
+              threadId: `${event.provider}:${event.connectionId}`,
+              resourceId: 'team-ops',
+              ifIdle: { behavior: 'persist' },
+            },
+      notification: event =>
+        event.provider === 'github'
+          ? { summary: `PR ${event.payload.action}: ${event.payload.pull_request.title}`, priority: 'high' }
+          : undefined,
+    });
+
+    const errors = vi.spyOn(mastra.getLogger(), 'error');
+
+    await vi.waitFor(async () => expect(await notifications('linear:conn_acme')).toHaveLength(1));
+    // Dropping an event on purpose isn't a delivery failure.
+    expect(errors).not.toHaveBeenCalled();
+    expect(await notifications('github:conn_acme')).toEqual([
+      expect.objectContaining({
+        summary: 'PR opened: Fix login',
+        priority: 'high',
+        kind: 'github:pull_request.opened',
+      }),
+    ]);
+    expect(await notifications('github:conn_ignored')).toEqual([]);
+    expect(await notifications('linear:conn_acme')).toEqual([
+      expect.objectContaining({ summary: 'linear Issue.create', kind: 'linear:Issue.create' }),
+    ]);
+  });
+
+  it('delivers unverified events, marked as such, only when asked to', async () => {
+    const service = await eventsService([
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } }, unverified: true },
+    ]);
+    const { notifications } = opsAgent(service.url, {
+      events: { linear: ['Issue.create'] },
+      includeUnverified: true,
+      target: ops,
+    });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(1));
+    expect((await notifications())[0]).toMatchObject({
+      summary: 'linear Issue.create (unverified)',
+      metadata: expect.objectContaining({ unverified: true }),
+    });
+  });
+
+  it('keeps delivering after one event fails', async () => {
+    const service = await eventsService([
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'bad' } } },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'good' } } },
+    ]);
+    const { notifications } = opsAgent(service.url, {
+      target: event => {
+        if ((event.payload as { data: { id: string } }).data.id === 'bad') throw new Error('no thread for this');
+        return ops;
+      },
+    });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(1));
+    expect((await notifications())[0]!.payload).toEqual({ data: { id: 'good' } });
+  });
+
+  it('wakes the idle agent with the event', async () => {
+    const service = await eventsService([
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened, sourceEventId: 'd-1' },
+    ]);
+    const { prompts } = opsAgent(service.url, {
+      target: { threadId: 'ops', resourceId: 'team-ops' },
+      notification: () => ({ summary: 'PR opened: Fix login' }),
+    });
+
+    await vi.waitFor(() => expect(prompts).toHaveLength(1), { timeout: 5_000 });
+    expect(JSON.stringify(prompts[0])).toContain('PR opened: Fix login');
+  });
+
+  it('stops listening when stopped, and listens again when started', async () => {
+    const service = await eventsService([]);
+    const { signals } = opsAgent(service.url, { target: ops });
+    await vi.waitFor(() => expect(service.streams).toHaveLength(1));
+
+    signals.stop();
+    await vi.waitFor(() => expect(service.streams[0]!.destroyed || service.streams[0]!.writableEnded).toBe(true));
+
+    signals.start();
+    await vi.waitFor(() => expect(service.streams).toHaveLength(2));
+  });
+
+  it('lets the agent start without platform credentials, and says why it is not listening', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const signals = new ConnectEventSignals({ target: ops });
+    providers.push(signals);
+    const { mock } = model();
+
+    const agent = new Agent({ id: 'ops', name: 'Ops', instructions: 'x', model: mock, signals: [signals] });
+
+    expect(agent.id).toBe('ops');
+    expect(logged).toHaveBeenCalledWith(
+      'Connect event signals could not subscribe',
+      expect.objectContaining({ error: expect.objectContaining({ code: 'missing_access_token' }) }),
+    );
+  });
+});

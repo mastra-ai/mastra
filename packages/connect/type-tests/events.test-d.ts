@@ -18,13 +18,13 @@ declare const event: ConnectEvent;
 declare const events: ConnectEvents;
 expectTypeOf(events).toExtend<AsyncIterable<ConnectEvent>>();
 
-// Without narrowing, the payload is unknown: an event may be any integration's,
+// Without narrowing, the payload is unknown: an event may be any provider's,
 // unverified, or not JSON.
 expectTypeOf(event.payload).toBeUnknown();
 
 // One event type narrows the payload to its documented shape.
 if (isConnectEvent(event, 'github', 'pull_request.opened')) {
-  expectTypeOf(event.integrationId).toEqualTypeOf<'github'>();
+  expectTypeOf(event.provider).toEqualTypeOf<'github'>();
   expectTypeOf(event.unverified).toEqualTypeOf<false>();
   expectTypeOf(event.payload.action).toEqualTypeOf<'opened'>();
   expectTypeOf(event.payload.pull_request.number).toBeNumber();
@@ -137,12 +137,12 @@ if (isConnectEvent(event, 'supabase', ['INSERT', 'DELETE'])) {
   }
 }
 
-// Unknown integrations and event types are compile errors.
-// @ts-expect-error not a typed integration
-isConnectEvent(event, 'not-an-integration', 'x');
+// Unknown providers and event types are compile errors.
+// @ts-expect-error not a typed provider
+isConnectEvent(event, 'not-a-provider', 'x');
 // @ts-expect-error not a GitHub event type
 isConnectEvent(event, 'github', 'Issue.create');
-// @ts-expect-error event types belong to the integration they're checked with
+// @ts-expect-error event types belong to the provider they're checked with
 isConnectEvent(event, 'linear', ['Issue.create', 'pull_request.opened']);
 
 // Every typed GitHub event, discriminated by `eventType`.
