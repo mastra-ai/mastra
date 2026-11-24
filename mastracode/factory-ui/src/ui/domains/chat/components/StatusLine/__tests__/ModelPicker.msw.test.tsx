@@ -23,8 +23,9 @@ import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
 import { ChangeModelAction, ModelPicker } from '../ModelPicker';
 import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
-import { FactoryFallbackModels } from '../../../../settings/components/models/defaults/FactoryDefaultModel';
-import { PersonalFallbackModels } from '../../../../settings/components/models/defaults/PersonalDefaultModelPicker';
+import { FactoryFallbackModels } from '../../../../settings/components/models/defaults/FactoryFallbackModels';
+import { PersonalFallbackModels } from '../../../../settings/components/models/defaults/PersonalFallbackModels';
+import { typeIntoAddFallback } from '../../../../settings/components/models/defaults/__tests__/fallback-models-test-utils';
 
 /** Opens the model picker and returns its thinking section, named by level and origin. */
 async function openThinking(
@@ -36,16 +37,6 @@ async function openThinking(
   await waitFor(() => expect(trigger).toBeEnabled(), options);
   if (trigger.getAttribute('aria-expanded') !== 'true') await user.click(trigger);
   return screen.findByRole('group', { name }, options);
-}
-
-async function addFallbackByTyping(user: UserEvent, modelId: string) {
-  const add = await screen.findByRole('combobox', { name: 'Add fallback' });
-  await waitFor(() => expect(add).toBeEnabled());
-  await user.click(add);
-  await user.type(await screen.findByPlaceholderText('Search models'), modelId);
-  const custom = await screen.findByRole('option', { name: `Use “${modelId}”` });
-  fireEvent.pointerDown(custom, { pointerType: 'mouse' });
-  fireEvent.click(custom, { detail: 1 });
 }
 
 async function openSessionPicker(user: UserEvent) {
@@ -531,7 +522,7 @@ describe('ModelPicker', () => {
     await openSessionPicker(user);
     expect(await waitFor(() => fallbackBadges(haiku))).toEqual([]);
     await closeSessionPicker(user);
-    await addFallbackByTyping(user, haiku);
+    await typeIntoAddFallback(user, haiku);
     await waitForMutationsIdle(client);
 
     expect(sessionPolicy.fallbackModelIds).toEqual([haiku]);
@@ -579,7 +570,7 @@ describe('ModelPicker', () => {
     await openSessionPicker(user);
     expect(await waitFor(() => fallbackBadges(mini))).toEqual([]);
     await closeSessionPicker(user);
-    await addFallbackByTyping(user, mini);
+    await typeIntoAddFallback(user, mini);
     await waitForMutationsIdle(client);
 
     expect(sessionPolicy.fallbackModelIds).toEqual([mini]);

@@ -34,33 +34,24 @@ export function useSetDefaultModel() {
 
 type PersonalDefaultField = Exclude<keyof DefaultModelResponse, 'modelId'>;
 
-function useSetPersonalDefault<F extends PersonalDefaultField>(
-  field: F,
-  path: string,
-  onSaved?: () => Promise<unknown>,
-) {
+function useSetPersonalDefault<F extends PersonalDefaultField>(field: F, path: string) {
   const { client } = useApiConfig();
+  const queryClient = useQueryClient();
   return useOptimisticFieldWrite<DefaultModelResponse, F, Pick<DefaultModelResponse, F>>({
     queryKey: queryKeys.defaultModel(),
     field,
     write: value => client.put<Pick<DefaultModelResponse, F>>(path, { [field]: value }),
     savedValue: saved => saved[field],
-    onSaved,
+    onSaved: () => queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
   });
 }
 
 export function useSetDefaultThinkingLevel() {
-  const queryClient = useQueryClient();
-  return useSetPersonalDefault('thinkingLevel', '/web/config/default-model/thinking', () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
-  );
+  return useSetPersonalDefault('thinkingLevel', '/web/config/default-model/thinking');
 }
 
 export function useSetDefaultFallbackModels() {
-  const queryClient = useQueryClient();
-  return useSetPersonalDefault('fallbackModelIds', '/web/config/default-model/fallbacks', () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
-  );
+  return useSetPersonalDefault('fallbackModelIds', '/web/config/default-model/fallbacks');
 }
 
 export interface ApplyDefaultModelResponse {

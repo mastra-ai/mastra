@@ -8,12 +8,10 @@ import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
-  useSetFactoryFallbackModelsMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
 import { FactoryThinkingControl } from './FactoryThinkingControl';
-import { FallbackModelsEditor } from './FallbackModelsEditor';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
@@ -81,22 +79,5 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
         />
       )}
     </>
-  );
-}
-
-export function FactoryFallbackModels({ factoryId }: { factoryId: string }) {
-  const projectQuery = useFactoryProjectQuery(factoryId);
-  const modelsQuery = useAvailableModelsQuery({ scope: 'org' });
-  const setFallbackModels = useSetFactoryFallbackModelsMutation(factoryId);
-
-  return (
-    <FallbackModelsEditor
-      value={setFallbackModels.pendingOr(projectQuery.data?.fallbackModelIds ?? [])}
-      primaryModelId={projectQuery.data?.defaultModelId ?? null}
-      models={modelsQuery.data}
-      disabled={projectQuery.isPending}
-      error={setFallbackModels.error?.message}
-      onChange={next => setFallbackModels.mutate(next)}
-    />
   );
 }

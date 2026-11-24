@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
-import { PersonalFallbackModels } from '../PersonalDefaultModelPicker';
+import { PersonalFallbackModels } from '../PersonalFallbackModels';
 import {
   GEMINI,
   GPT,

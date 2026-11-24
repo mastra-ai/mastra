@@ -10,8 +10,6 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import { ModelCombobox } from '../../ModelCombobox';
 
-type MoveDirection = 'up' | 'down';
-
 function moved(ids: string[], from: number, to: number): string[] {
   const next = [...ids];
   const [id] = next.splice(from, 1);
@@ -36,7 +34,7 @@ export function FallbackModelsEditor({
   onChange,
 }: {
   value: string[];
-  primaryModelId: string | null;
+  primaryModelId: string | undefined;
   models: AvailableModelOption[] | undefined;
   disabled?: boolean;
   error?: string;
@@ -46,20 +44,18 @@ export function FallbackModelsEditor({
   const addId = `${baseId}-add`;
   const rowId = (modelId: string) => `${baseId}-${modelId}`;
   const [announcement, setAnnouncement] = useState('');
-  // A reordered row's DOM node can be moved, which blurs it; its move button takes focus back once it lands.
-  const pendingFocus = useRef<{ modelId: string; direction: MoveDirection; index: number } | null>(null);
-  const replacedRowFocus = useRef<string | null>(null);
+  // Rows are keyed by model, so a reorder can move the focused node and blur it; focus lands once the row is in place.
+  const focusTarget = useRef<{ elementId: string; modelId: string; index: number }>(undefined);
   const groupRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    const modelId = replacedRowFocus.current;
-    const row = modelId ? document.getElementById(rowId(modelId)) : null;
-    if (!row) return;
-    replacedRowFocus.current = null;
-    row.focus();
-  });
+    const target = focusTarget.current;
+    if (!target || value[target.index] !== target.modelId) return;
+    focusTarget.current = undefined;
+    document.getElementById(target.elementId)?.focus();
+  }, [value]);
 
-  const optionsFor = (current: string | null) =>
+  const optionsFor = (current?: string) =>
     (models ?? []).filter(model => model.id === current || (model.id !== primaryModelId && !value.includes(model.id)));
   const accepts = (next: string) => Boolean(next) && next !== primaryModelId && !value.includes(next);
   const addCaption = !primaryModelId
@@ -70,21 +66,15 @@ export function FallbackModelsEditor({
 
   const move = (from: number, to: number) => {
     if (to < 0 || to >= value.length) return;
-    pendingFocus.current = { modelId: value[from], direction: to < from ? 'up' : 'down', index: to };
+    const modelId = value[from];
+    focusTarget.current = { elementId: `${rowId(modelId)}-${to < from ? 'up' : 'down'}`, modelId, index: to };
     onChange(moved(value, from, to));
-    setAnnouncement(`${formatModelName(value[from])} moved to position ${to + 1}`);
-  };
-
-  const focusAfterMove = (node: HTMLElement | null, modelId: string, index: number, direction: MoveDirection) => {
-    const target = pendingFocus.current;
-    if (!node || target?.modelId !== modelId || target.direction !== direction || target.index !== index) return;
-    pendingFocus.current = null;
-    node.focus();
+    setAnnouncement(`${formatModelName(modelId)} moved to position ${to + 1}`);
   };
 
   const replace = (index: number, next: string) => {
     if (!accepts(next)) return;
-    replacedRowFocus.current = next;
+    focusTarget.current = { elementId: rowId(next), modelId: next, index };
     onChange(value.map((existing, at) => (at === index ? next : existing)));
     setAnnouncement(`${formatModelName(next)} is now fallback ${index + 1}`);
   };
@@ -123,7 +113,7 @@ export function FallbackModelsEditor({
                   disabled={disabled}
                 />
                 <Button
-                  ref={node => focusAfterMove(node, id, index, 'up')}
+                  id={`${rowId(id)}-up`}
                   variant="ghost"
                   size="icon-sm"
                   tooltip={`Move fallback ${index + 1} up`}
@@ -134,7 +124,7 @@ export function FallbackModelsEditor({
                   <ArrowUp />
                 </Button>
                 <Button
-                  ref={node => focusAfterMove(node, id, index, 'down')}
+                  id={`${rowId(id)}-down`}
                   variant="ghost"
                   size="icon-sm"
                   tooltip={`Move fallback ${index + 1} down`}
@@ -174,7 +164,7 @@ export function FallbackModelsEditor({
         <div>
           <ModelCombobox
             id={addId}
-            models={optionsFor(null)}
+            models={optionsFor()}
             value=""
             onValueChange={add}
             placeholder={

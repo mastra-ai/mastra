@@ -5,9 +5,10 @@ import { useState } from 'react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { FactoryDefaultModel, FactoryFallbackModels } from '../defaults/FactoryDefaultModel';
+import { FactoryDefaultModel } from '../defaults/FactoryDefaultModel';
+import { FactoryFallbackModels } from '../defaults/FactoryFallbackModels';
 import { PersonalDefaultModel } from '../defaults/PersonalDefaultModel';
-import { PersonalFallbackModels } from '../defaults/PersonalDefaultModelPicker';
+import { PersonalFallbackModels } from '../defaults/PersonalFallbackModels';
 import { ProviderList } from '../providers/ProviderList';
 import { DefaultsCard } from './DefaultsCard';
 import { LaneCard, LaneSource } from './LaneCard';
