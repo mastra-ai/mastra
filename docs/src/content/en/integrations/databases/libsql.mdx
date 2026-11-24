@@ -167,6 +167,6 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 
 ## Observability
 
-libSQL supports observability and is ideal for local development. Use the `realtime` [tracing strategy](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies) for immediate visibility while debugging.
+libSQL supports observability and is ideal for local development. It supports the `batch-with-updates` (preferred) and `insert-only` [tracing strategies](/docs/observability/integrations/exporters/mastra-storage#tracing-strategies). Use `batch-with-updates` to see in-progress traces while debugging. If you set an unsupported strategy such as `realtime`, the exporter logs a warning and uses `batch-with-updates`.
 
 For production environments with higher trace volumes, consider using [PostgreSQL](/integrations/databases/postgresql) or [ClickHouse via composite storage](/reference/storage/composite#specialized-storage-for-observability).
