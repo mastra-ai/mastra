@@ -79,11 +79,24 @@ const MOVED_PAGE: Record<string, (input: any) => string> = {
   mergePages: (input: { sourceId: string }) => input.sourceId,
 };
 
+/** Each view {@link emitKnowledgeChanges} returned, to the store it wraps. */
+const wrapped = new WeakMap<KnowledgeStorage, KnowledgeStorage>();
+
 /**
- * Wraps `storage` so each page-store write in {@link WRITES} calls `emit` after it resolves. Every
- * other member passes through, bound to the real store so adapters' private fields keep working.
- * Nothing extra happens while `listening()` is false. Describing or emitting an event never fails a
- * write that committed: errors go to `onError`.
+ * The adapter's own store or transaction view under one {@link emitKnowledgeChanges} returned, for
+ * helpers that find a view by identity (`pgKnowledgeTransactionClient`). Writes through it emit nothing.
+ */
+export function unwrapKnowledgeStorage(storage: KnowledgeStorage): KnowledgeStorage {
+  return wrapped.get(storage) ?? storage;
+}
+
+/**
+ * Wraps `storage` so each page-store write in {@link WRITES} calls `emit` after it resolves. Writes
+ * on a `transaction` view are held until that transaction commits and dropped if it rolls back; a
+ * nested `transaction` hands its writes to the outer one when it succeeds. Every other member passes
+ * through, bound to the real store so adapters' private fields keep working. Nothing extra happens
+ * while `listening()` is false. Describing or emitting an event never fails a write that committed:
+ * errors go to `onError`.
  */
 export function emitKnowledgeChanges(
   storage: KnowledgeStorage,
@@ -91,10 +104,29 @@ export function emitKnowledgeChanges(
   listening: () => boolean,
   onError: (error: unknown) => void,
 ): KnowledgeStorage {
-  return new Proxy(storage, {
+  const view = new Proxy(storage, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
+      if (property === 'transaction') {
+        return async (operation: (tx: KnowledgeStorage) => Promise<unknown>, ...rest: unknown[]) => {
+          const held: Change[] = [];
+          const result = await value.call(
+            target,
+            (tx: KnowledgeStorage) =>
+              operation(emitKnowledgeChanges(tx, change => held.push(change), listening, onError)),
+            ...rest,
+          );
+          for (const change of held) {
+            try {
+              emit(change);
+            } catch (error) {
+              onError(error);
+            }
+          }
+          return result;
+        };
+      }
       const describe = typeof property === 'string' ? WRITES[property] : undefined;
       if (!describe) return value.bind(target);
       const moved = typeof property === 'string' ? MOVED_PAGE[property] : undefined;
@@ -119,4 +151,6 @@ export function emitKnowledgeChanges(
       };
     },
   });
+  wrapped.set(view, storage);
+  return view;
 }

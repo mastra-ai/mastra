@@ -85,6 +85,47 @@ describe('Knowledge change events', () => {
     expect(summary()).toEqual(['page:create']);
   });
 
+  it('reports writes in a getStorage() transaction once it commits, and none it rolled back', async () => {
+    const { knowledge, call, events, summary } = setup();
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Billing' });
+    events.length = 0;
+    const store = await knowledge.getStorage();
+    const scope = (await store.getScopesByAddress(['org:acme']))[0]!;
+    const create = (tx: typeof store, name: string) =>
+      tx.createPage({ parentId: scope.id, name, provenance: { author: 'host' } });
+
+    let seenInside: string[] = ['not run'];
+    const committed = await store.transaction(async tx => {
+      const page = await create(tx, 'Committed');
+      seenInside = summary();
+      return page;
+    });
+    expect(seenInside).toEqual([]);
+    expect(events).toMatchObject([{ kind: 'page', op: 'create', pageId: committed.id, scopeId: scope.id }]);
+
+    events.length = 0;
+    await expect(
+      store.transaction(async tx => {
+        await create(tx, 'Rolled back');
+        throw new Error('undo');
+      }),
+    ).rejects.toThrow('undo');
+    expect(events).toEqual([]);
+
+    const outer = await store.transaction(async tx => {
+      const page = await create(tx, 'Outer');
+      await tx
+        .transaction(async inner => {
+          await create(inner, 'Inner');
+          throw new Error('undo inner');
+        })
+        .catch(() => {});
+      return page;
+    });
+    expect(events).toMatchObject([{ kind: 'page', op: 'create', pageId: outer.id }]);
+    expect(events).toHaveLength(1);
+  });
+
   it('says where a moved or merged-away page was before', async () => {
     const { call, events } = setup();
     const billing = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Billing' });
