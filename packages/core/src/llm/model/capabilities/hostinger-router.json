@@ -27,13 +27,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "claude-sonnet-5": [
-      {
-        "type": "toggle"
-      },
+    "kimi-k3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "claude-sonnet-4.5": [
@@ -41,15 +38,18 @@
         "type": "toggle"
       }
     ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "claude-haiku-4.5": [
       {
         "type": "toggle"
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-opus-5": [

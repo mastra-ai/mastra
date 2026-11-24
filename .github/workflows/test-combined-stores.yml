@@ -389,6 +389,22 @@ jobs:
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
 
+      # The DuckDB vector tests run `INSTALL vss`, which downloads the extension unless it is already
+      # in DuckDB's extension directory. A stalled download takes DuckDB about 120 s to give up, past
+      # the tests' 60 s hook timeout, so restore the directory and download only on a cache miss.
+      - name: Resolve DuckDB version
+        id: duckdb
+        if: ${{ contains(needs.setup.outputs.light_stores, '"duckdb"') }}
+        working-directory: stores/duckdb
+        run: echo "version=$(node -p "require('@duckdb/node-api/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache DuckDB extensions
+        if: ${{ steps.duckdb.outputs.version != '' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.duckdb/extensions
+          key: duckdb-extensions-${{ runner.os }}-${{ runner.arch }}-${{ steps.duckdb.outputs.version }}
+
       # Each store runs its own `test` script and vitest config, four at a time.
       # --no-bail runs every store; the summary at the end names any that failed.
       - name: Run light store tests

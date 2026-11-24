@@ -359,13 +359,10 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
             const eventsBefore = driver.events.length;
             await driver.redeliverEvent(original);
 
-            if (bodyKind === 'step') {
-              // A step body replays like any failed step, which republishes workflow.fail.
-              await expect.poll(failures).toBe(failuresBefore + 1);
-            } else {
-              // The nested replay sees the ended run and publishes nothing.
-              expect(driver.events.slice(eventsBefore).map(event => event.type)).toEqual(['workflow.end']);
-            }
+            // The replay sees the ended run and publishes nothing: the only event is the replay itself.
+            // The run's failure was stored by its own workflow.fail, whose redelivery would finish it.
+            expect(driver.events.slice(eventsBefore).map(event => event.type)).toEqual([original.type]);
+            expect(failures()).toBe(failuresBefore);
             expect(bodyCalls).toBe(1);
             expect(conditionCalls).toBe(1);
             const store = (await storage.getStore('workflows'))!;

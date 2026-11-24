@@ -100,9 +100,8 @@ function GroupedWithModel({ model, options, initial, unavailableReason }: Groupe
   const [value, setValue] = useState(initial);
   return (
     <ButtonsGroup size="sm" aria-label="Model and thinking">
-      <Button variant="ghost" size="sm">
+      <Button iconEnd={<IconChevronDownMedium />} variant="ghost" size="sm">
         {model}
-        <IconChevronDownMedium aria-hidden size={12} />
       </Button>
       <ThinkingLevelPicker
         options={options}

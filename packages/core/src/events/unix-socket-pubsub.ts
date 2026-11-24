@@ -322,6 +322,20 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameB
   });
 }
 
+/**
+ * Delivers events between processes on one host over a Unix domain socket. One
+ * process is elected broker and the others connect to it; when the broker
+ * exits, the rest elect a new one. Leases are files next to the socket.
+ *
+ * It carries streams, signals and thread leases between local processes, such
+ * as several Mastra Code sessions on one machine.
+ *
+ * It is not a transport for evented workflows or evented agents spread over
+ * several processes. The broker is one of those processes and keeps no list of
+ * the events each consumer holds, so the step a stopped process was running is
+ * never handed to another one. Use a pubsub that redelivers unacknowledged
+ * events for that.
+ */
 export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly socketPath: string;
   readonly #leaseDirectory: string;

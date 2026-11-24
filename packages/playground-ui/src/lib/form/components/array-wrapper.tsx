@@ -19,6 +19,7 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
         </Txt>
         {!readOnly && (
           <Button
+            icon={<IconPlusMedium />}
             ref={addButtonRef}
             type="button"
             variant="ghost"
@@ -26,7 +27,6 @@ export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) 
             aria-label={`Add ${label} item`}
             onClick={onAddItem}
           >
-            <IconPlusMedium />
             Add item
           </Button>
         )}

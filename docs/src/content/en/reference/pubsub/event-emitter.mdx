@@ -13,6 +13,8 @@ Use it for single-process applications. For delivery across processes on one hos
 
 Because it's in-process, events aren't persisted and aren't shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
 
+Evented workflows and agents run on `EventEmitterPubSub` in one process, which suits local development and tests. To run them on several instances, use a backend that redelivers unacknowledged events. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
+
 ## Usage example
 
 `EventEmitterPubSub` is used automatically when you don't configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.

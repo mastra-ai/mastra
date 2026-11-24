@@ -1,6 +1,7 @@
 import type { Card } from '../storage/domains/work-items/base.js';
 import { workItemBranchSource } from '../work-item-branch.js';
 import { isPullRequestCard } from './change-requests.js';
+import { closingLinksIn } from './closing-pull-requests.js';
 import { relatedCardIndex } from './related-cards.js';
 import type { PullRequestFacts } from './related-cards.js';
 
@@ -19,7 +20,16 @@ const relatedByList = new WeakMap<readonly Card[], (card: Card) => Card[]>();
 export function relatedCardsIn(list: readonly Card[]): (card: Card) => Card[] {
   let relatedTo = relatedByList.get(list);
   if (!relatedTo) {
-    relatedTo = relatedCardIndex(list, CARD_PULL_REQUESTS);
+    const byBranch = relatedCardIndex(list, CARD_PULL_REQUESTS);
+    // A card holding a pull request also relates to the other cards of issues it closes.
+    const closing = closingLinksIn(list);
+    const position = new Map(list.map((card, index) => [card, index]));
+    relatedTo = card => {
+      const linked = closing.linkedCards(card);
+      const related = byBranch(card);
+      if (linked.length === 0) return related;
+      return [...new Set([...related, ...linked])].toSorted((a, b) => position.get(a)! - position.get(b)!);
+    };
     relatedByList.set(list, relatedTo);
   }
   return relatedTo;

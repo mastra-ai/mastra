@@ -5,6 +5,7 @@ import {
   confirm,
   findModifiedFiles,
   isDirectExecution,
+  listHandwrittenFiles,
   providerDir,
   readManifest,
   updateProviderIndex,
@@ -42,10 +43,15 @@ export async function removeProvider({ localId, yes }: RemoveProviderOptions): P
 
   const manifest = readManifest(localId);
   const modifiedFiles = manifest ? findModifiedFiles(localId, manifest) : [];
+  const handwrittenFiles = listHandwrittenFiles(destination, manifest);
+  const handwritten =
+    handwrittenFiles.length > 0
+      ? ` It also deletes ${handwrittenFiles.length} hand-written file${handwrittenFiles.length === 1 ? '' : 's'} (${handwrittenFiles.join(', ')}).`
+      : '';
   const message = manifest
     ? modifiedFiles.length > 0
-      ? `Provider '${localId}' has ${modifiedFiles.length} modified generated file${modifiedFiles.length === 1 ? '' : 's'} (${modifiedFiles.join(', ')}). Delete it anyway?`
-      : `Remove provider '${localId}' generated from '${manifest.providerId}'?`
+      ? `Provider '${localId}' has ${modifiedFiles.length} modified generated file${modifiedFiles.length === 1 ? '' : 's'} (${modifiedFiles.join(', ')}).${handwritten} Delete it anyway?`
+      : `Remove provider '${localId}' generated from '${manifest.providerId}'?${handwritten}`
     : `Provider '${localId}' has no generator manifest. Delete the entire directory anyway?`;
 
   if (!(await confirm(message, yes))) {

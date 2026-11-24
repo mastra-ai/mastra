@@ -49,6 +49,9 @@ const RULE_ROWS: RuleRow[] = [
   ['mastra/sidebar-duplicate-id', 'sidebar', 'error', 'A doc ID appears more than once in the reference sidebar.'],
   ['mastra/sidebar-reference-item', 'sidebar', 'warn', 'A reference sidebar item has an unknown type, or a property the sort fixer would drop.'],
   ['mastra/sidebar-new-tag-stale', 'sidebar', 'warn', 'A sidebar `new` tag was added more than 30 days ago.'],
+  ['mastra/external-sidebar-invalid', 'sidebar', 'error', 'The `sidebars.js` of a directory in `.github/docs-sync.json` is missing or fails to load.'],
+  ['mastra/external-sidebar-unlinked-page', 'sidebar', 'error', 'A page in a directory synced to an external site is not linked from that directory\'s `sidebars.js`.'],
+  ['mastra/external-sidebar-missing-doc', 'sidebar', 'error', 'The `sidebars.js` of a synced directory lists a doc ID that has no page.'],
   // structure
   ['mastra/single-h1', 'structure', 'warn', 'The page must have exactly one `#` heading.'],
   ['mastra/code-block-lang', 'structure', 'warn', 'A fenced code block has no language, e.g. ` ```typescript `.'],
@@ -56,6 +59,10 @@ const RULE_ROWS: RuleRow[] = [
   ['mastra/internal-link', 'links', 'warn', 'An internal link points to a route that does not exist.'],
   ['mastra/redirected-link', 'links', 'warn', 'An internal link points to a redirect source. The fix rewrites it to the destination.', true],
   ['mastra/no-self-host-url', 'links', 'warn', 'A link uses `https://mastra.ai/...` for a docs route. The fix rewrites it to a root-relative path.', true],
+  ['mastra/external-manifest-invalid', 'links', 'error', '`.github/docs-sync.json` is not valid JSON, has an invalid entry, or names a missing `source` directory.'],
+  ['mastra/external-internal-link', 'links', 'error', 'A link in a synced directory does not resolve to a page in that directory. Links use the external site\'s routes.'],
+  ['mastra/external-anchor', 'links', 'error', 'A link in a synced directory points to a heading ID that does not exist on the linked page.'],
+  ['mastra/external-mdx-parse', 'links', 'error', 'A page in a synced directory is not valid MDX, so its links and anchors were not checked.'],
   // prose
   ['mastra/bare-url', 'prose', 'warn', 'A URL appears as plain text instead of a Markdown link.'],
   ['mastra/vale-unavailable', 'prose', 'error', 'Vale is not installed or failed to start, so prose was not checked. Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose.'],

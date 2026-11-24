@@ -55,13 +55,13 @@ export function CreateFactoryPalette({
       <div className="flex shrink-0 items-center gap-3">
         {onBack && (
           <Button
+            icon={<IconArrowLeft />}
             variant="ghost"
             size="sm"
             onMouseDown={event => event.preventDefault()}
             onClick={onBack}
             aria-label="Go back to previous step"
           >
-            <IconArrowLeft aria-hidden="true" />
             Back
           </Button>
         )}
@@ -76,9 +76,14 @@ export function CreateFactoryPalette({
           {title}
         </Txt>
         {onSkip && (
-          <Button variant="ghost" size="sm" onMouseDown={event => event.preventDefault()} onClick={onSkip}>
+          <Button
+            iconEnd={<IconArrowRight />}
+            variant="ghost"
+            size="sm"
+            onMouseDown={event => event.preventDefault()}
+            onClick={onSkip}
+          >
             Skip
-            <IconArrowRight aria-hidden="true" />
           </Button>
         )}
         <ol className="flex shrink-0 gap-1" aria-label={`Step ${stepIndex + 1} of ${CREATE_FACTORY_STEPS.length}`}>
