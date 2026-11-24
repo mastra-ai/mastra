@@ -1,8 +1,18 @@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
 import { isOpActiveInProcess } from './operation-registry';
 import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
+import { waitWithAbort } from './wait-with-abort';
+
+/** The buffered-reflection op that owns a reflection boundary and cycle. */
+export interface ReflectionBufferOwner {
+  /** The generation the op buffers for. */
+  recordId: string;
+  /** Another writer retired `recordId` while the op was still running. */
+  retired: boolean;
+}
 
 /**
  * Manages the static buffering state machine for async observation and reflection.
@@ -24,10 +34,40 @@ export class BufferingCoordinator {
   static asyncBufferingOps = new Map<string, Promise<void>>();
 
   /**
+   * Observation buffer ops that may still append a buffered chunk.
+   * Key format: "obs:{lockKey}"
+   * Value: Promise that resolves once the op has persisted its chunk (or ended without one)
+   *
+   * Above the threshold→blockAfter band, activation waits (bounded) on this phase so the chunk
+   * activates instead of being re-observed by the sync pass. It is not needed for safety: storage
+   * keeps a chunk appended during activation. An op stays in asyncBufferingOps through its
+   * post-persist work (indexing, thread title), which activation never waits for.
+   */
+  static pendingChunkWrites = new Map<string, Promise<void>>();
+
+  /**
    * Track the last token boundary at which we started buffering.
    * Key format: "obs:{lockKey}" or "refl:{lockKey}"
    */
   static lastBufferedBoundary = new Map<string, number>();
+
+  /**
+   * The buffer op that set the observation boundary, if one did. Any other write (an activation
+   * reset, another op) replaces or clears it, so an op that outlived it never writes its boundary
+   * back. Key format: "obs:{lockKey}"
+   */
+  static observationBoundaryOwners = new Map<string, symbol>();
+
+  /** Set the observation boundary; `owner` is the buffer op setting it, if any. */
+  static setObservationBoundary(bufferKey: string, tokens: number, owner?: symbol): void {
+    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
+    if (owner) BufferingCoordinator.observationBoundaryOwners.set(bufferKey, owner);
+    else BufferingCoordinator.observationBoundaryOwners.delete(bufferKey);
+  }
+
+  static ownsObservationBoundary(bufferKey: string, owner: symbol): boolean {
+    return BufferingCoordinator.observationBoundaryOwners.get(bufferKey) === owner;
+  }
 
   /**
    * Track the timestamp cursor for buffered messages.
@@ -41,6 +81,94 @@ export class BufferingCoordinator {
    */
   static reflectionBufferCycleIds = new Map<string, string>();
 
+  /**
+   * The buffered-reflection op that set the reflection boundary and cycle, and the generation
+   * it buffers for. Key format: "refl:{lockKey}"
+   */
+  static reflectionBufferOwners = new Map<string, ReflectionBufferOwner>();
+
+  /** Set the reflection boundary for a new buffered-reflection op on generation `recordId`. */
+  static startReflectionBuffer(bufferKey: string, tokens: number, recordId: string): ReflectionBufferOwner {
+    const owner: ReflectionBufferOwner = { recordId, retired: false };
+    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
+    BufferingCoordinator.reflectionBufferOwners.set(bufferKey, owner);
+    return owner;
+  }
+
+  /** Drop this process's reflection boundary, cycle, and owner. */
+  static clearReflectionBuffer(bufferKey: string): void {
+    BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+    BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
+    BufferingCoordinator.reflectionBufferOwners.delete(bufferKey);
+  }
+
+  /**
+   * Another writer retired generation `recordId`, so a buffer this process prepared for it can
+   * never activate. Its boundary and cycle are dropped now, or, while the op that set them is
+   * still running (it may be awaiting its `onReflectionEnd` hook), when that op finishes. State
+   * owned by a newer generation is kept.
+   */
+  static retireReflectionBuffer(bufferKey: string, recordId: string): void {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (owner && owner.recordId !== recordId) return;
+    if (owner && BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+      return;
+    }
+    BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
+
+  /**
+   * Reconcile this process's reflection buffer state against an observed head record.
+   * Whenever `head.id` differs from `owner.recordId`, confirm against a fresh storage read started
+   * after `owner` existed (never trusting `generationCount`, which resets to 0 after `clear()`):
+   * only retire/clear when storage's live head is no longer `owner.recordId`.
+   */
+  static async reconcileReflectionBufferHead(
+    bufferKey: string,
+    headId: string,
+    readLiveHead: () => Promise<ObservationalMemoryRecord | null>,
+  ): Promise<void> {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (!owner || owner.recordId === headId) return;
+
+    const ownerRecordId = owner.recordId;
+    const live = await readLiveHead();
+    // Re-check ownership after awaiting: a newer op may have replaced `owner` meanwhile.
+    if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner || owner.recordId !== ownerRecordId) {
+      return;
+    }
+    if (live?.id === ownerRecordId) return;
+    if (BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+      return;
+    }
+    BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
+
+  /**
+   * Take the buffered-reflection cycle id for generation `recordId` and release its
+   * coordinator state after its buffer activates. State owned by another generation
+   * is left untouched.
+   */
+  static consumeReflectionBuffer(bufferKey: string, recordId: string): string | undefined {
+    const owner = BufferingCoordinator.reflectionBufferOwners.get(bufferKey);
+    if (owner && owner.recordId !== recordId) return undefined;
+    const cycleId = BufferingCoordinator.reflectionBufferCycleIds.get(bufferKey);
+    if (owner && BufferingCoordinator.asyncBufferingOps.has(bufferKey)) {
+      owner.retired = true;
+    } else {
+      BufferingCoordinator.clearReflectionBuffer(bufferKey);
+    }
+    return cycleId;
+  }
+
+  /** Called when the op that started as `owner` finishes; completes a deferred retirement. */
+  static finishReflectionBuffer(bufferKey: string, owner: ReflectionBufferOwner): void {
+    if (BufferingCoordinator.reflectionBufferOwners.get(bufferKey) !== owner) return;
+    if (owner.retired) BufferingCoordinator.clearReflectionBuffer(bufferKey);
+  }
+
   constructor(opts: {
     observationConfig: ResolvedObservationConfig;
     reflectionConfig: ResolvedReflectionConfig;
@@ -52,10 +180,7 @@ export class BufferingCoordinator {
   }
 
   getLockKey(threadId: string | null | undefined, resourceId: string | null | undefined): string {
-    if (this.scope === 'resource' && resourceId) {
-      return `resource:${resourceId}`;
-    }
-    return `thread:${threadId ?? 'unknown'}`;
+    return getOMLockKey(this.scope, threadId, resourceId);
   }
 
   isAsyncObservationEnabled(): boolean {
@@ -79,6 +204,22 @@ export class BufferingCoordinator {
   }
 
   /**
+   * Mark an observation buffer op as able to append a chunk. Call the returned release
+   * function once it no longer can; releasing more than once is a no-op.
+   */
+  static trackChunkWrite(bufferKey: string): () => void {
+    let resolve!: () => void;
+    const pending = new Promise<void>(r => (resolve = r));
+    BufferingCoordinator.pendingChunkWrites.set(bufferKey, pending);
+    return () => {
+      if (BufferingCoordinator.pendingChunkWrites.get(bufferKey) === pending) {
+        BufferingCoordinator.pendingChunkWrites.delete(bufferKey);
+      }
+      resolve();
+    };
+  }
+
+  /**
    * Clean up static maps for a thread/resource to prevent memory leaks.
    */
   cleanupStaticMaps(threadId: string, resourceId?: string | null, activatedMessageIds?: string[]): void {
@@ -90,15 +231,18 @@ export class BufferingCoordinator {
       // Partial cleanup after activation: clear stale boundary/time state for
       // the observation buffer key so the next buffer cycle isn't suppressed.
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
     } else {
       // Full cleanup: remove all static state for this thread
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(reflBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(obsBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(reflBufKey);
       BufferingCoordinator.reflectionBufferCycleIds.delete(reflBufKey);
+      BufferingCoordinator.reflectionBufferOwners.delete(reflBufKey);
     }
   }
 
@@ -117,7 +261,9 @@ export class BufferingCoordinator {
     if (record.isBufferingObservation) {
       if (isOpActiveInProcess(record.id, 'bufferingObservation')) return false;
       omDebug(`[OM:shouldTriggerAsyncObs] isBufferingObservation=true but stale, clearing`);
-      storage?.setBufferingObservationFlag(record.id, false)?.catch(() => {});
+      if (storage) {
+        void runOMCommit(lockKey, () => storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
+      }
     }
 
     const bufferKey = this.getObservationBufferKey(lockKey);
@@ -151,8 +297,9 @@ export class BufferingCoordinator {
     resourceId: string | null | undefined,
     scope: 'thread' | 'resource',
     timeoutMs = 30000,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
-    const lockKey = scope === 'resource' && resourceId ? `resource:${resourceId}` : `thread:${threadId ?? 'unknown'}`;
+    const lockKey = getOMLockKey(scope, threadId, resourceId);
     const obsKey = `obs:${lockKey}`;
     const reflKey = `refl:${lockKey}`;
 
@@ -168,12 +315,15 @@ export class BufferingCoordinator {
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      await Promise.race([
-        Promise.allSettled(promises).then(() => undefined),
-        new Promise<void>(resolve => {
-          timeoutId = setTimeout(resolve, timeoutMs);
-        }),
-      ]);
+      await waitWithAbort(
+        Promise.race([
+          Promise.allSettled(promises).then(() => undefined),
+          new Promise<void>(resolve => {
+            timeoutId = setTimeout(resolve, timeoutMs);
+          }),
+        ]),
+        abortSignal,
+      );
     } finally {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);

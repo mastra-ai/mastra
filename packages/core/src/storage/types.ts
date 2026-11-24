@@ -48,6 +48,11 @@ export interface WorkflowRun {
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;
+  /**
+   * Set to 2 for runs stored as a header plus entries. Absent for v1 runs.
+   * @experimental
+   */
+  storageVersion?: 2;
 }
 
 export type PaginationInfo = {
@@ -188,6 +193,17 @@ export type StorageListWorkflowRunsInput = {
    */
   threadId?: string;
   status?: WorkflowRunStatus;
+  /**
+   * When true, callers only need run metadata. Adapters MAY reduce each run's
+   * snapshot to `{ status, timestamp, parentWorkflow?: { workflowId, runId } }`
+   * to avoid loading the full snapshot. A reduced snapshot has no `context` or
+   * any other snapshot field, and leaves out `status` or `timestamp` when the
+   * run has none. `parentWorkflow` is present only when the run's parent has
+   * both IDs, and is never `null`. Every other run field is unchanged.
+   * Adapters that ignore this return full snapshots; every adapter that
+   * supports run fencing reduces them.
+   */
+  summary?: boolean;
 };
 
 export type StorageListThreadsInput = {
@@ -331,10 +347,11 @@ export interface StorageToolConfig {
 /**
  * Per-MCP-client tool configuration stored in agent snapshots.
  * Specifies which tools from an MCP client are enabled and their overrides.
- * When `tools` is omitted, all tools from the MCP client/server are included.
+ * An empty `tools` map (`{}`) includes all tools from the MCP client/server.
+ * When `tools` is omitted, no tools are included.
  */
 export interface StorageMCPClientToolsConfig {
-  /** When omitted, all tools from the source are included. */
+  /** `{}` includes all tools from the source; when omitted, no tools are included. */
   tools?: Record<string, StorageToolConfig>;
 }
 
@@ -401,6 +418,15 @@ export interface StorageModelConfig {
   maxCompletionTokens?: number;
   /** Additional provider-specific options */
   [key: string]: unknown;
+}
+
+/** Serializable model fallback entry stored in agent snapshots. */
+export interface StorageModelListEntry {
+  id: string;
+  provider: string;
+  modelId: string;
+  enabled: boolean;
+  maxRetries: number;
 }
 
 /**
@@ -471,14 +497,11 @@ export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
  * Serializable subset of `AgentDurableOption` that can be persisted on a stored
  * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
  * intentionally excluded — they are inherited from the Mastra instance at
- * hydration time. `id`/`name` are excluded because a stored agent's durable
- * wrapper must keep the agent's own id/name to stay addressable.
+ * hydration time. This controls resumable streams, not durable execution.
  */
 export type StorageDurableConfig =
   | boolean
   | {
-      /** Maximum steps for the durable agentic loop. */
-      maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
       cleanupTimeoutMs?: number;
     };
@@ -496,6 +519,8 @@ export interface StorageAgentSnapshotType {
   instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) — static or conditional on request context */
   model: StorageConditionalField<StorageModelConfig>;
+  /** Ordered model fallback list owned by Studio for opted-in code agents. */
+  modelList?: StorageModelListEntry[];
   /** Tool keys with optional per-tool config — static or conditional on request context */
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */
@@ -520,8 +545,8 @@ export interface StorageAgentSnapshotType {
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
   outputProcessors?: StorageConditionalField<StoredProcessorGraph>;
-  /** Memory configuration object — static or conditional on request context */
-  memory?: StorageConditionalField<SerializedMemoryConfig>;
+  /** Memory reference (registered memory id) or inline config — static or conditional on request context */
+  memory?: StorageConditionalField<StorageMemoryRef>;
   /** Scorer keys with optional sampling config — static or conditional on request context */
   scorers?: StorageConditionalField<Record<string, StorageScorerConfig>>;
   /** Map of stored MCP client IDs to their tool configurations — static or conditional on request context */
@@ -628,7 +653,7 @@ export type StorageUpdateAgentInput = {
   status?: 'draft' | 'published' | 'archived';
 } & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
-    memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    memory?: StorageConditionalField<StorageMemoryRef> | null;
     /** Browser configuration (inline ref), or null to disable browser */
     browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
@@ -700,7 +725,7 @@ export type StorageListAgentsResolvedOutput = PaginationInfo & {
 /** Instruction block discriminated union, stored in agent snapshots */
 export type AgentInstructionBlock =
   | { type: 'text'; content: string }
-  | { type: 'prompt_block_ref'; id: string }
+  | { type: 'prompt_block_ref'; id: string; rules?: RuleGroup }
   | { type: 'prompt_block'; content: string; rules?: RuleGroup };
 
 /** Condition operators for rule evaluation */
@@ -1211,8 +1236,18 @@ export interface ObservationalMemoryHistoryOptions {
   from?: Date;
   /** Only return records created at or before this date */
   to?: Date;
-  /** Number of records to skip (for pagination) */
+  /** Number of records to skip after filtering and ordering (for pagination) */
   offset?: number;
+  /** Match the literal canonical `<observation-group id="..."` prefix in active or buffered observations. */
+  groupId?: string;
+  /** Only return generations strictly before this generation count. */
+  beforeGeneration?: number;
+  /** Only return generations strictly after this generation count. */
+  afterGeneration?: number;
+  /** Generation ordering. Defaults to DESC (newest first). */
+  sortDirection?: 'ASC' | 'DESC';
+  /** Only return the record with this ID, if it belongs to the requested thread or resource. */
+  recordId?: string;
 }
 
 export interface ObservationalMemoryRecord {
@@ -1242,6 +1277,14 @@ export interface ObservationalMemoryRecord {
   originType: ObservationalMemoryOriginType;
   /** Generation counter - incremented each time a reflection creates a new record */
   generationCount: number;
+  /**
+   * Liveness marker. `null`/absent means this record is live (it is the head for its
+   * thread or resource). When a reflection creates the next generation, this record's
+   * `supersededBy` is set to the successor's id in the same atomic step, and it is never
+   * cleared. A superseded record is frozen: lifecycle writes aimed at it are redirected
+   * to the head or rejected, never applied to it.
+   */
+  supersededBy?: string | null;
 
   // Observation content
   /**
@@ -1283,6 +1326,13 @@ export interface ObservationalMemoryRecord {
    * to separate reflected vs unreflected observations.
    */
   reflectedObservationLineCount?: number;
+  /**
+   * Set to `true` only on the generation `swapBufferedReflectionToActive` creates when it checked,
+   * in the same atomic step, that the stored `bufferedReflection` and
+   * `reflectedObservationLineCount` were still the caller's snapshot. Never persisted; absent on
+   * every other read and on records from adapters that do not make that check.
+   */
+  bufferedReflectionVerified?: boolean;
 
   /**
    * Message IDs observed in the current generation.
@@ -1371,7 +1421,16 @@ export interface UpdateActiveObservationsInput {
    * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
    */
   observedTimezone?: string;
+  /**
+   * The `activeObservations` text this commit was composed from. When provided, the
+   * write is applied only if the stored text still equals it exactly; otherwise nothing
+   * is written and the result is `{ applied: false, reason: 'conflict' }`. When omitted,
+   * the write is last-write-wins.
+   */
+  expectedActiveObservations?: string;
 }
+
+export type { UpdateActiveObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for updating buffered observations.
@@ -1385,6 +1444,8 @@ export interface UpdateBufferedObservationsInput {
   /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
   lastBufferedAtTime?: Date;
 }
+
+export type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for swapping buffered observations to active.
@@ -1462,6 +1523,11 @@ export interface SwapBufferedToActiveResult {
   suggestedContinuation?: string;
   /** Current task from the most recent activated chunk (if any) */
   currentTask?: string;
+  /**
+   * True when the target record was superseded by a newer generation. Nothing was
+   * written and nothing was activated; the caller should re-read the head and retry.
+   */
+  retired?: boolean;
 }
 
 /**
@@ -1489,21 +1555,45 @@ export interface UpdateBufferedReflectionInput {
  * and appends any unreflected observations that were added after the reflection started.
  */
 export interface SwapBufferedReflectionToActiveInput {
+  /**
+   * The caller's snapshot. When it carries a `bufferedReflection`, the swap applies only if the
+   * stored `bufferedReflection` and `reflectedObservationLineCount` still equal the snapshot's;
+   * otherwise nothing is created and the stored record is returned. A generation created after
+   * that check is returned with `bufferedReflectionVerified: true`.
+   */
   currentRecord: ObservationalMemoryRecord;
   /**
    * Token count for the combined new activeObservations (bufferedReflection + unreflected).
    * Computed by the processor using its token counter before calling the adapter.
    */
   tokenCount: number;
+  /**
+   * Id for the new generation. When provided, the caller can tell whether its reflection
+   * was applied: it was iff the returned record's id equals `newRecordId`. If
+   * `currentRecord` was already superseded, nothing is created and the head is returned.
+   */
+  newRecordId?: string;
 }
 
 /**
- * Input for creating a reflection generation (creates a new record, archives the old one)
+ * Input for creating a reflection generation (creates a new record, archives the old one).
+ *
+ * The new generation is built from the **stored** state of `currentRecord.id`, not from the
+ * snapshot: buffered observation chunks are moved to it (in order), and the cursor, buffering
+ * markers, flags, and counters are carried over. If observations were appended to the stored
+ * text after the snapshot was taken (activation), they are kept after the reflection. If the
+ * stored text was rewritten in any other way, nothing is created and the stored record is
+ * returned. If `currentRecord` was superseded, nothing is created and the head is returned.
  */
 export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+  /**
+   * Id for the new generation. When provided, the caller can tell whether its reflection
+   * was applied: it was iff the returned record's id equals `newRecordId`.
+   */
+  newRecordId?: string;
 }
 
 /**
@@ -2247,6 +2337,18 @@ export type StorageWorkspaceRef =
   | { type: 'inline'; config: StorageWorkspaceSnapshotType }
   | { type: 'provider'; provider: string; config: Record<string, unknown> };
 
+/**
+ * Memory reference configuration stored in agent snapshots.
+ * - `{ type: 'id', memoryId }` references a Memory instance registered on Mastra
+ *   (looked up by registry key first, then by the instance's own id).
+ * - `{ type: 'inline', config }` builds a new Memory from serialized config.
+ * - An untagged `SerializedMemoryConfig` is the legacy inline form and behaves like `inline`.
+ */
+export type StorageMemoryRef =
+  | { type: 'id'; memoryId: string }
+  | { type: 'inline'; config: SerializedMemoryConfig }
+  | SerializedMemoryConfig;
+
 // ============================================
 // Workflow Storage Types
 // ============================================
@@ -2270,6 +2372,12 @@ export interface UpdateWorkflowStateOptions {
     spanId?: string;
     parentSpanId?: string;
   };
+  /** When an agent resume claimed this suspended run. See `WorkflowRunState.resumeClaimedAt`. */
+  resumeClaimedAt?: number;
+  /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
+  resumeLeasedClaimAt?: number;
+  /** What an agent resume claims this run with. See `WorkflowRunState.resumeClaimIntent`. */
+  resumeClaimIntent?: WorkflowRunState['resumeClaimIntent'];
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a
@@ -2789,6 +2897,11 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
    * treated as "no filter" (matches all datasets), not "match none".
    */
   targetIds?: string[];
+  /**
+   * Only return datasets with these IDs. Unlike `targetIds`, an empty array
+   * matches no datasets.
+   */
+  datasetIds?: string[];
   /**
    * Substring match on dataset `name`, case-insensitive.
    */

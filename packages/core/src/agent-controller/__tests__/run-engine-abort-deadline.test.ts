@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AgentThreadLeaseLostError } from '../../agent/thread-stream-runtime';
 import { RequestContext } from '../../request-context';
 import { Workspace } from '../../workspace';
 import { LocalFilesystem } from '../../workspace/filesystem/local-filesystem';
@@ -34,6 +35,7 @@ function createHarness() {
     },
     buildStreamOptions: async () => ({}),
     buildSharedRunOptions: () => ({}),
+    resolveModeActiveTools: () => undefined,
     buildToolsets: async () => ({}),
     buildRequestContext: async requestContext => requestContext ?? new RequestContext(),
     persistTokenUsage: vi.fn(async () => {}),
@@ -152,6 +154,33 @@ describe('SessionRunEngine — abort deadline', () => {
     expect(events.filter(event => event.type === 'agent_end')).toEqual([
       { type: 'agent_end', reason: 'aborted' },
       { type: 'agent_end', reason: 'complete' },
+    ]);
+  });
+
+  it('Given a subscribed run stopped by a memory failure, Then its end names the memory failure and the next run ends plainly', async () => {
+    const { engine, events, session } = createHarness();
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({ type: 'text-start', payload: { id: 't1' }, runId: 'run-1' });
+        yield chunk({
+          type: 'data-om-observation-failed',
+          data: { cycleId: 'c1', operationType: 'observation', error: 'insufficient_quota', durationMs: 5 },
+          runId: 'run-1',
+        } as unknown as StreamChunk);
+        yield chunk({ type: 'text-start', payload: { id: 't2' }, runId: 'run-2' });
+        session.run.requestAbort();
+        yield chunk({ type: 'abort', payload: {}, runId: 'run-2' });
+      })(),
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'agent_end')).toEqual([
+      { type: 'agent_end', reason: 'aborted', abortReason: 'memory-failure' },
+      { type: 'agent_end', reason: 'aborted' },
     ]);
   });
 
@@ -339,6 +368,39 @@ describe('SessionRunEngine — abort deadline', () => {
     ]);
     expect(events.filter(event => event.type === 'agent_start')).toHaveLength(2);
     expect(session.run.isRunning()).toBe(false);
+  });
+
+  it('Given a suspended run whose lease watch fires, Then it preserves the pending suspension', async () => {
+    const { engine, events, session } = createHarness();
+    session.suspensions.register({
+      toolCallId: 'call-1',
+      runId: 'run-1',
+      toolName: 'ask_user',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
+
+    const subscription = {
+      stream: (async function* () {
+        yield chunk({
+          type: 'error',
+          payload: { error: new AgentThreadLeaseLostError('run-1') },
+          runId: 'run-1',
+        });
+      })(),
+      activeRunId: () => null,
+      abort: () => true,
+      unsubscribe: vi.fn(),
+    };
+    session.stream.attach({ subscription, key: 'thread-1' });
+
+    await engine.processSubscribedThreadStream(subscription);
+
+    expect(events.filter(event => event.type === 'error')).toEqual([
+      { type: 'error', error: new AgentThreadLeaseLostError('run-1') },
+    ]);
+    expect(events.filter(event => event.type === 'tool_suspension_cancelled')).toEqual([]);
+    expect(session.suspensions.hasPending()).toBe(true);
   });
 
   it('Given a stream that reacts to the abort signal in time, Then the deadline never fires', async () => {

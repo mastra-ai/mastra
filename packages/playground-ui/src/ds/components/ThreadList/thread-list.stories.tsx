@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -10,6 +10,8 @@ import {
   ThreadListNewItem,
   ThreadListSeparator,
 } from './thread-list';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const initialThreads = [
   'Compare vector databases for semantic search',
@@ -35,7 +37,7 @@ function ThreadListPreview({ embedded = false }: { embedded?: boolean }) {
     <div className="h-96 w-80">
       <ThreadList embedded={embedded}>
         <ThreadListNewItem render={<a href="#new" />}>
-          <PlusIcon />
+          <IconPlusMedium />
           New thread
         </ThreadListNewItem>
         <ThreadListSeparator />
@@ -67,7 +69,7 @@ export const Default: Story = {
 
 export const Embedded: Story = {
   render: () => (
-    <div className="border-border1 bg-surface2 rounded-xl border p-3">
+    <div className="rounded-xl border border-border bg-background p-3">
       <ThreadListPreview embedded />
     </div>
   ),
@@ -78,6 +80,35 @@ export const Empty: Story = {
     <div className="h-56 w-80">
       <ThreadList>
         <ThreadListEmpty>Your conversations will appear here.</ThreadListEmpty>
+      </ThreadList>
+    </div>
+  ),
+};
+
+export const WithActions: Story = {
+  render: () => (
+    <div className="h-96 w-80">
+      <ThreadList>
+        <ThreadListItems>
+          {initialThreads.map(thread => (
+            <ThreadListItem
+              key={thread}
+              actions={
+                <DropdownMenu>
+                  <DropdownMenu.Trigger aria-label={`Actions for ${thread}`}>
+                    <IconDotGrid1x3Vertical />
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="end">
+                    <DropdownMenu.Item>Rename</DropdownMenu.Item>
+                    <DropdownMenu.Item variant="destructive">Delete</DropdownMenu.Item>
+                  </DropdownMenu.Content>
+                </DropdownMenu>
+              }
+            >
+              <span className="block truncate">{thread}</span>
+            </ThreadListItem>
+          ))}
+        </ThreadListItems>
       </ThreadList>
     </div>
   ),

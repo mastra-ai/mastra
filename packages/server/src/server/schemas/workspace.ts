@@ -33,7 +33,7 @@ const coercedBooleanSchema = z.preprocess(value => {
 // =============================================================================
 
 export const fsPathParams = z.object({
-  path: z.string().describe('File or directory path (URL encoded)'),
+  path: z.string().describe('File or directory path'),
 });
 
 export const workspaceIdPathParams = z.object({
@@ -221,6 +221,10 @@ export const workspaceInfoResponseSchema = z.object({
   capabilities: z
     .object({
       hasFilesystem: z.boolean(),
+      hasDynamicFilesystem: z
+        .boolean()
+        .optional()
+        .describe('True when the filesystem comes from a resolver, so file routes cannot browse it'),
       hasSandbox: z.boolean(),
       canBM25: z.boolean(),
       canVector: z.boolean(),
@@ -257,6 +261,10 @@ const workspaceItemSchema = z.object({
   agentName: z.string().optional(),
   capabilities: z.object({
     hasFilesystem: z.boolean(),
+    hasDynamicFilesystem: z
+      .boolean()
+      .optional()
+      .describe('True when the filesystem comes from a resolver, so file routes cannot browse it'),
     hasSandbox: z.boolean(),
     canBM25: z.boolean(),
     canVector: z.boolean(),
@@ -277,11 +285,11 @@ export const listWorkspacesResponseSchema = z.object({
 // =============================================================================
 
 export const skillNamePathParams = workspaceIdPathParams.extend({
-  skillName: z.string().describe('Skill name identifier'),
+  skillName: z.string().min(1).describe('Skill name identifier'),
 });
 
 export const skillReferencePathParams = skillNamePathParams.extend({
-  referencePath: z.string().describe('Reference file path (URL encoded)'),
+  referencePath: z.string().min(1).describe('Reference file path'),
 });
 
 // Optional query param for disambiguating same-named skills

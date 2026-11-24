@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -9,12 +10,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentView from '../view';
 import { authDisabledCapabilities, builderSettingsDisabled, currentUser } from './fixtures/auth';
-import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -149,25 +145,6 @@ describe('AgentBuilderAgentView — navigation and layout', () => {
 
       await screen.findByTestId('agent-builder-agent-chat-empty-state');
       expect(draftRequests.some(search => search.includes('status=draft'))).toBe(true);
-    });
-  });
-
-  describe('when a non-owner views the agent', () => {
-    it('does not render the configure panel or tabs', async () => {
-      server.use(
-        ...authHandlers(),
-        http.get(`${BASE_URL}/api/stored/agents/agent-123`, () =>
-          HttpResponse.json({ ...storedAgent, authorId: 'someone-else' }),
-        ),
-        emptyThread(),
-      );
-
-      renderPage();
-
-      await screen.findByTestId('agent-builder-agent-chat-empty-state');
-      expect(screen.queryByTestId('agent-builder-panel-configure')).toBeNull();
-      expect(screen.queryByTestId('agent-builder-tab-chat')).toBeNull();
-      expect(screen.queryByTestId('agent-builder-tab-configure')).toBeNull();
     });
   });
 

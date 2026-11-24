@@ -35,7 +35,8 @@ workflow.sleep(5000)
       {
         name: 'id',
         type: 'string',
-        description: 'Stable entry id. Overrides the generated sleep step id.',
+        description:
+          'Stable entry id. Overrides the generated sleep step id. The generated id is `sleep_<workflowId>_<n>`, where `n` starts at the number of `.sleep()` and `.sleepUntil()` calls before this one and moves up past any id already in use. If the workflow is already registered with a Mastra instance that has a custom `idGenerator` when `.sleep()` is called, that generator produces the part after `sleep_` instead. Adding or removing a sleep changes the ids of later unnamed sleeps.',
         isOptional: true,
       },
       {

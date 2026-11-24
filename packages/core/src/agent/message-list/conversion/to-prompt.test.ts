@@ -136,19 +136,33 @@ describe('aiV5PromptToAIV7Prompt tool-result content', () => {
       // mediaType is required on V4 file parts — defaulted for image parts.
       {
         type: 'file',
-        data: { type: 'url', url: 'https://example.com/radar.png' },
+        data: { type: 'url', url: new URL('https://example.com/radar.png') },
         mediaType: 'image/jpeg',
         providerOptions: { p: { keep: true } },
       },
-      { type: 'file', data: { type: 'url', url: 'https://example.com/report.pdf' }, mediaType: 'application/pdf' },
+      {
+        type: 'file',
+        data: { type: 'url', url: new URL('https://example.com/report.pdf') },
+        mediaType: 'application/pdf',
+      },
     ]);
+  });
+
+  it('converts unparseable urls to text parts instead of throwing', () => {
+    const result = aiV5PromptToAIV7Prompt(toolResultPrompt([{ type: 'image-url', url: 'not a url' }]));
+
+    expect(firstOutputValue(result)).toEqual([{ type: 'text', text: 'not a url' }]);
   });
 
   it('defaults file-url parts without a mediaType to application/octet-stream', () => {
     const result = aiV5PromptToAIV7Prompt(toolResultPrompt([{ type: 'file-url', url: 'https://example.com/blob' }]));
 
     expect(firstOutputValue(result)).toEqual([
-      { type: 'file', data: { type: 'url', url: 'https://example.com/blob' }, mediaType: 'application/octet-stream' },
+      {
+        type: 'file',
+        data: { type: 'url', url: new URL('https://example.com/blob') },
+        mediaType: 'application/octet-stream',
+      },
     ]);
   });
 
@@ -158,7 +172,7 @@ describe('aiV5PromptToAIV7Prompt tool-result content', () => {
     );
 
     expect(firstOutputValue(result)).toEqual([
-      { type: 'file', data: { type: 'url', url: 'https://example.com/radar.png' }, mediaType: 'image/jpeg' },
+      { type: 'file', data: { type: 'url', url: new URL('https://example.com/radar.png') }, mediaType: 'image/jpeg' },
     ]);
   });
 
@@ -171,8 +185,12 @@ describe('aiV5PromptToAIV7Prompt tool-result content', () => {
     );
 
     expect(firstOutputValue(result)).toEqual([
-      { type: 'file', data: { type: 'url', url: 'HTTPS://example.com/radar.png' }, mediaType: 'image/png' },
-      { type: 'file', data: { type: 'url', url: 'HTTP://example.com/report.pdf' }, mediaType: 'application/pdf' },
+      { type: 'file', data: { type: 'url', url: new URL('HTTPS://example.com/radar.png') }, mediaType: 'image/png' },
+      {
+        type: 'file',
+        data: { type: 'url', url: new URL('HTTP://example.com/report.pdf') },
+        mediaType: 'application/pdf',
+      },
     ]);
   });
 });

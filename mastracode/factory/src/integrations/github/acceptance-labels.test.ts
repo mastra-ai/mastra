@@ -42,9 +42,6 @@ async function setup(metadata: Record<string, unknown>, source: 'issue' | 'pull-
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'user-1',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const removeIssueLabel = vi.fn().mockResolvedValue(undefined);
   const github = { removeIssueLabel } as unknown as GithubIntegration;

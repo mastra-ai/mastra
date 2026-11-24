@@ -1,4 +1,5 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { reviewCommands } from './chat/commands';
 import { Button } from '@/ds/components/Button';
 import {
@@ -63,11 +64,11 @@ export function CommandComposer({
           {...commandMenu.inputProps}
           ref={inputRef}
           aria-label="Message"
-          placeholder="Type / for commands…"
+          placeholder="Type / for commands"
           onKeyDown={handleComposerKeyDown}
         />
         <ComposerActions>
-          <Txt variant="ui-sm" role="status">
+          <Txt variant="caption" role="status">
             {submitted ? `Submitted: ${submitted}` : 'Ready'}
           </Txt>
           <Button type="submit" disabled={!value.trim()}>

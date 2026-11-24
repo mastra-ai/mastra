@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest';
+import { NO_OBSERVABILITY_STORAGE_CAPABILITIES } from '../handlers/observability-shared';
+import { observabilityStorageCapabilitiesSchema } from './system';
+
+describe('observabilityStorageCapabilitiesSchema', () => {
+  it('treats omitted search capabilities from older servers as unavailable', () => {
+    const {
+      traceQueryAggregatedRoots: _roots,
+      spanQueryTokenSearch: _span,
+      traceQueryTokenSearch: _trace,
+      traceAggregateTokenSearch: _traceAggregate,
+      spanAggregateTokenSearch: _spanAggregate,
+      ...legacyCapabilities
+    } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      traceQueryAggregatedRoots: false,
+      spanQueryTokenSearch: false,
+      traceQueryTokenSearch: false,
+      traceAggregateTokenSearch: false,
+      spanAggregateTokenSearch: false,
+    });
+  });
+
+  it('treats an omitted span context capability from an older server as unavailable', () => {
+    const { spanQueryContextFields: _, ...legacyCapabilities } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+    expect(observabilityStorageCapabilitiesSchema.parse(legacyCapabilities)).toMatchObject({
+      spanQueryContextFields: false,
+    });
+  });
+
+  it('keeps the trace retention a store reports', () => {
+    const parsed = observabilityStorageCapabilitiesSchema.parse({
+      ...NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+      traceRetentionDays: 180,
+    });
+
+    expect(parsed.traceRetentionDays).toBe(180);
+  });
+
+  it('leaves trace retention out when a store does not report one', () => {
+    const parsed = observabilityStorageCapabilitiesSchema.parse(NO_OBSERVABILITY_STORAGE_CAPABILITIES);
+
+    expect(parsed).not.toHaveProperty('traceRetentionDays');
+  });
+
+  it.each([0, -1, 1.5])('rejects a trace retention of %s days', traceRetentionDays => {
+    expect(
+      observabilityStorageCapabilitiesSchema.safeParse({
+        ...NO_OBSERVABILITY_STORAGE_CAPABILITIES,
+        traceRetentionDays,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+it('treats missing duration ordering support from an older server as unavailable', () => {
+  const { spanQueryDurationSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryDurationSort).toBe(false);
+});
+
+it('treats missing model/provider ordering support from an older server as unavailable', () => {
+  const { spanQueryModelProviderSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryModelProviderSort).toBe(false);
+});

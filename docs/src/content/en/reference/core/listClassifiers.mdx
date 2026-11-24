@@ -1,0 +1,40 @@
+---
+title: 'Reference: listClassifiers() | Core'
+description: 'The listClassifiers() method returns all classifiers that have been registered with the Mastra instance.'
+packages:
+  - '@mastra/core'
+---
+
+# listClassifiers()
+
+The `listClassifiers()` method returns all classifiers that have been registered with the Mastra instance, keyed by registration key.
+
+## Usage example
+
+```typescript
+import { mastra } from './mastra'
+
+const classifiers = mastra.listClassifiers()
+
+for (const [key, classifier] of Object.entries(classifiers)) {
+  console.log(key, classifier.id)
+}
+```
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'classifiers',
+    type: 'Record<string, Classifier>',
+    description: 'All registered classifiers keyed by registration key.',
+  },
+]}
+/>
+
+## Related
+
+- [getClassifier()](/reference/core/getClassifier): Get a classifier by its registration key
+- [getClassifierById()](/reference/core/getClassifierById): Get a classifier by its id property
+- [Classifier](/reference/classifier/classifier)

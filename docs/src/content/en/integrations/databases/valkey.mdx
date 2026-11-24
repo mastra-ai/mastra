@@ -2,7 +2,6 @@
 title: "Valkey | Database"
 description: "Configure Valkey storage and caching for Mastra through the GLIDE client, including authentication, connection options, persistence, and cleanup."
 packages:
-  - "@mastra/core"
   - "@mastra/memory"
   - "@mastra/valkey"
 ---
@@ -11,7 +10,7 @@ packages:
 
 The Valkey storage implementation provides persistent storage and server-side caching through the [Valkey GLIDE](https://github.com/valkey-io/valkey-glide) client. Use it when your deployment runs Valkey or needs GLIDE features such as native Valkey configuration and authentication.
 
-Use [`@mastra/redis`](/integrations/databases/redis) for Redis deployments that use the official `redis` client. The packages are tested independently against their respective servers.
+Use [`@mastra/redis`](/integrations/databases/redis) for Redis deployments that use the official `redis` client. Each package is tested independently against its own server.
 
 ## Installation
 
@@ -50,6 +49,8 @@ const storage = new ValkeyStore({
 ```
 
 For an existing `GlideClient`, connect it before passing it to `ValkeyStore`. The caller remains responsible for closing injected clients.
+
+`ValkeyStore` needs a standalone Valkey server. Valkey Cluster and `GlideClusterClient` aren't supported.
 
 ## Constructor parameters
 

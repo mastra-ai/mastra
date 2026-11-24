@@ -1,0 +1,44 @@
+[
+  {
+    "monitorId": "acme",
+    "profile": {
+      "name": "Acme",
+      "interests": ["pricing", "product_feature"]
+    },
+    "sources": [
+      {
+        "id": "pricing",
+        "label": "Pricing",
+        "url": "https://acme.example/pricing",
+        "kind": "pricing"
+      },
+      {
+        "id": "changelog",
+        "label": "Changelog",
+        "url": "https://acme.example/changelog",
+        "kind": "changelog"
+      },
+      {
+        "id": "docs",
+        "label": "Docs",
+        "url": "https://acme.example/docs",
+        "kind": "documentation"
+      }
+    ]
+  },
+  {
+    "monitorId": "contoso",
+    "profile": {
+      "name": "Contoso",
+      "interests": ["pricing"]
+    },
+    "sources": [
+      {
+        "id": "pricing",
+        "label": "Pricing",
+        "url": "https://contoso.example/pricing",
+        "kind": "pricing"
+      }
+    ]
+  }
+]

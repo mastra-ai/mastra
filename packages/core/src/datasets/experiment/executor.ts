@@ -4,14 +4,18 @@ import type { MessageListInput } from '../../agent/message-list';
 import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { VersionOverrides } from '../../mastra/types';
-import { resolveObservabilityContext } from '../../observability';
+import { EntityType, getOrCreateSpan, resolveObservabilityContext, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
-import type { ToolHooks } from '../../tools/types';
+import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import { loadStepResults } from '../../workflows/run-journal';
+import { agentModelLabel } from './agent-model';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
+import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -20,11 +24,11 @@ import { ToolMockMatcher } from './tool-mocks';
 interface AgentGenerateResult {
   text?: string;
   object?: unknown;
-  toolCalls?: unknown[];
-  toolResults?: unknown[];
-  sources?: unknown[];
-  files?: unknown[];
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  toolCalls?: Record<string, unknown>[];
+  toolResults?: Record<string, unknown>[];
+  sources?: Record<string, unknown>[];
+  files?: Record<string, unknown>[];
+  usage?: Record<string, unknown>;
   reasoningText?: string;
   traceId?: string;
   error?: Error;
@@ -82,12 +86,14 @@ async function executeScorer(
       console.warn(`Scorer ${scorer.id} returned invalid score: ${result.score}`);
     }
 
+    const output: ScorerExperimentOutput = {
+      score,
+      reason: typeof result.reason === 'string' ? result.reason : null,
+      ...(result.notScorable ? { notScorable: result.notScorable } : {}),
+    };
+
     return {
-      output: {
-        score,
-        reason: typeof result.reason === 'string' ? result.reason : null,
-        ...(result.notScorable ? { notScorable: result.notScorable } : {}),
-      },
+      output,
       error: null,
       traceId: null, // Scorers don't produce traces
     };
@@ -126,6 +132,8 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
+    /** Per-call model override (agent targets only). */
+    agentModel?: MastraModelConfig;
     /** Item-level static tool mocks (agent targets only). */
     toolMocks?: ItemToolMock[];
     /** Handling for agent tool calls not declared in `toolMocks`. */
@@ -157,10 +165,11 @@ export async function executeTarget(
           assignedTraceId => {
             traceId = assignedTraceId;
           },
+          options?.agentModel,
         );
         break;
       case 'workflow':
-        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext);
+        executionPromise = executeWorkflow(target as Workflow, item, options?.requestContext, options?.experimentId);
         break;
       case 'scorer':
         executionPromise = executeScorer(target as MastraScorer<any, any, any, any>, item);
@@ -232,11 +241,13 @@ async function executeAgent(
   toolMocks?: ItemToolMock[],
   unmockedToolPolicy?: UnmockedToolPolicy,
   onTraceIdAssigned?: (traceId: string) => void,
+  agentModel?: MastraModelConfig,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
-  const model = await agent.getModel({ requestContext: reqCtx });
+  // generateLegacy() has no per-call model, so an override always runs through generate().
+  const useLegacy = !agentModel && !isSupportedLanguageModel(await agent.getModel({ requestContext: reqCtx }));
 
   // Both generate() and generateLegacy() return different types (FullOutput vs GenerateTextResult)
   // but share the fields we extract. Cast input to MessageListInput at the boundary.
@@ -305,12 +316,19 @@ async function executeAgent(
   onTraceIdAssigned?.(assignedTraceId);
   const tracingOptions = {
     traceId: assignedTraceId,
-    ...(experimentId ? { metadata: { experimentId } } : {}),
+    ...(experimentId || agentModel
+      ? {
+          metadata: {
+            ...(experimentId ? { experimentId } : {}),
+            ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
+          },
+        }
+      : {}),
   };
 
   let rawResult: unknown;
   try {
-    rawResult = isSupportedLanguageModel(model)
+    rawResult = !useLegacy
       ? await agent.generate(input, {
           scorers: {},
           returnScorerData: true,
@@ -319,6 +337,7 @@ async function executeAgent(
           ...(reqCtx ? { requestContext: reqCtx } : {}),
           tracingOptions,
           ...(versions ? { versions } : {}),
+          ...(agentModel ? { model: agentModel } : {}),
           ...(mockHooks ? { hooks: mockHooks } : {}),
           ...(mockConcurrency ?? {}),
         })
@@ -359,7 +378,7 @@ async function executeAgent(
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals
-  const trimmedOutput = {
+  const trimmedOutput: AgentExperimentOutput = {
     text: result.text,
     object: result.object,
     toolCalls: result.toolCalls,
@@ -369,7 +388,8 @@ async function executeAgent(
     usage: result.usage,
     reasoningText: result.reasoningText,
     traceId,
-    error: result.error ?? null,
+    // Error instances serialize to {} — persist the readable parts explicitly
+    error: result.error ? { message: result.error.message, stack: result.error.stack } : null,
   };
 
   return {
@@ -431,6 +451,7 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
       // 2. Mock matcher.
       const resolution = matcher.resolve(context.toolName, context.input);
       if (resolution.kind === 'serve') {
+        recordMockedToolCallSpan(context, resolution.output, true);
         await userHooks?.afterToolCall?.({ ...context, output: resolution.output });
         return { proceed: false, output: resolution.output };
       }
@@ -439,8 +460,10 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
         // the item fails deterministically via the catch path. Short-circuit the
         // tool here too so the mis-called tool never runs live even before the
         // abort propagates.
+        const output = { error: resolution.code };
+        recordMockedToolCallSpan(context, output, false);
         mockAbort.abort(new Error(`Tool mock failure for "${context.toolName}" (${resolution.code})`));
-        return { proceed: false, output: { error: resolution.code } };
+        return { proceed: false, output };
       }
 
       // 3. `live` — fall through to the real tool.
@@ -451,6 +474,33 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
     // mocks invoke it manually above, since they short-circuit the real tool.
     afterToolCall: userHooks?.afterToolCall,
   };
+}
+
+/**
+ * Record a `tool_call` span for a tool call the mock matcher short-circuited.
+ *
+ * The real tool never runs, so `CoreToolBuilder` never opens its span and the
+ * trace would show only model steps. This span mirrors the builder's shape and
+ * is flagged `mocked: true` so trace readers can tell a mock-intercepted call
+ * (served, mismatched, exhausted or denied) from a live call. Without a current
+ * span (observability off) nothing is recorded.
+ */
+function recordMockedToolCallSpan(context: ToolHookContext, output: unknown, success: boolean): void {
+  const invocation = context.context as MastraToolInvocationOptions | undefined;
+  const toolSpan = getOrCreateSpan({
+    type: SpanType.TOOL_CALL,
+    name: `tool: '${context.toolName}'`,
+    input: context.input,
+    entityType: EntityType.TOOL,
+    entityId: context.toolName,
+    entityName: context.toolName,
+    attributes: { toolType: 'tool', toolCallId: invocation?.toolCallId, mocked: true },
+    // Inherit the model step's policy so `InternalSpans.TOOL` hides mocked spans like live ones.
+    tracingPolicy: invocation?.tracingContext?.currentSpan?.tracingPolicy,
+    tracingContext: invocation?.tracingContext,
+    requestContext: invocation?.requestContext,
+  });
+  toolSpan?.end({ output, attributes: { success } });
 }
 
 /**
@@ -506,17 +556,22 @@ async function executeWorkflow(
     resumeData?: unknown;
   },
   requestContext?: Record<string, unknown>,
+  experimentId?: string,
 ): Promise<ExecutionResult> {
   const reqCtx: RequestContext | undefined = requestContext
     ? new RequestContext(Object.entries(requestContext))
     : undefined;
   const observabilityContext = resolveObservabilityContext({});
+  // Root workflow span metadata is inherited by child spans and metrics, so
+  // tagging start and every resume ties the whole run to the experiment.
+  const tracingOptions = experimentId ? { tracingOptions: { metadata: { experimentId } } } : {};
 
   const run = await workflow.createRun({ disableScorers: true });
   let result = await run.start({
     inputData: item.input,
     ...(reqCtx ? { requestContext: reqCtx } : {}),
     ...observabilityContext,
+    ...tracingOptions,
   });
 
   // Auto-resume loop: if the workflow suspends and resume data is provided,
@@ -556,11 +611,12 @@ async function executeWorkflow(
         step: stepToResume,
         ...(reqCtx ? { requestContext: reqCtx } : {}),
         ...observabilityContext,
+        ...tracingOptions,
       });
     }
   }
 
-  return handleWorkflowResult(result);
+  return handleWorkflowResult({ ...result, steps: await loadStepResults(result.steps) });
 }
 
 /**

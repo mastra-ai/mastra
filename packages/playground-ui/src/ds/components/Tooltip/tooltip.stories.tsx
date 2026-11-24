@@ -1,7 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Info, SaveIcon } from 'lucide-react';
 import { Button } from '../Button';
+import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
+import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Tooltip> = {
   title: 'Elements/Tooltip',
@@ -21,17 +25,11 @@ const meta: Meta<typeof Tooltip> = {
 export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
-const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="bg-muted text-ui-xs leading-ui-xs text-muted-foreground ml-1 inline-flex items-center justify-center rounded-sm px-1.5 py-0.5 font-mono">
-    {children}
-  </kbd>
-);
-
 export const Default: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Hover me</Button>
+        <Button>Hover me</Button>
       </TooltipTrigger>
       <TooltipContent>This is a tooltip</TooltipContent>
     </Tooltip>
@@ -42,13 +40,12 @@ export const WithKeyboardShortcut: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="icon-md" aria-label="Save changes">
-          <SaveIcon />
+        <Button size="icon-md" aria-label="Save changes">
+          <IconFloppyDisk1 />
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        Save changes
-        <KbdHint>S</KbdHint>
+        <ShortcutHint label="Save changes" shortcut="S" />
       </TooltipContent>
     </Tooltip>
   ),
@@ -58,8 +55,8 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="hover:bg-surface2 rounded p-1" aria-label="More information">
-          <Info className="text-muted-foreground size-4" />
+        <button className="rounded p-1 hover:bg-fill-subtle" aria-label="More information">
+          <IconCircleInfo className="size-4 text-muted-foreground" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>
@@ -67,10 +64,112 @@ export const WithIcon: Story = {
   ),
 };
 
+export const InfoTooltipDefault: Story = {
+  render: () => (
+    <div className="flex items-center gap-1">
+      <span className="text-label text-foreground">Version</span>
+      <InfoTooltip aria-label="Version information" side="bottom" align="start">
+        Each save creates a version you can switch back to.
+      </InfoTooltip>
+    </div>
+  ),
+};
+
+export const InfoTooltipRichContent: Story = {
+  render: () => (
+    <InfoTooltip aria-label="What is trace intelligence?" contentClassName="max-w-sm space-y-3 p-4">
+      <p>Every trace is analyzed for signals, and similar traces are clustered into themes.</p>
+      <p className="text-muted-foreground">Snapshots show how themes appear, grow, and fade.</p>
+    </InfoTooltip>
+  ),
+};
+
+const illustrativeTraffic = [
+  { runs: 100, failures: 5 },
+  { runs: 100, failures: 5 },
+  { runs: 100, failures: 85 },
+];
+const errorRates = illustrativeTraffic.map(member => member.failures / member.runs);
+const threshold = 0.5;
+const combinedRate =
+  illustrativeTraffic.reduce((sum, member) => sum + member.failures, 0) /
+  illustrativeTraffic.reduce((sum, member) => sum + member.runs, 0);
+
+const Members = () => (
+  <span className="flex gap-1">
+    {errorRates.map((rate, index) => (
+      <span
+        key={index}
+        className={cn('size-2.5 rounded-full', rate > threshold ? 'bg-destructive-indicator' : 'bg-success-indicator')}
+      />
+    ))}
+  </span>
+);
+
+const Level = ({ rate }: { rate: number }) => (
+  <span className="relative flex h-10 w-2.5">
+    <span className="flex w-full items-end overflow-hidden rounded-xs bg-border">
+      <span
+        className={cn('w-full', rate > threshold ? 'bg-destructive-indicator' : 'bg-muted-foreground')}
+        style={{ height: `${rate * 100}%` }}
+      />
+    </span>
+    <span className="absolute -inset-x-1 border-t-2 border-foreground" style={{ bottom: `${threshold * 100}%` }} />
+  </span>
+);
+
+export const InfoTooltipIllustrated: Story = {
+  render: () => (
+    <div className="flex items-center gap-1">
+      <span className="text-label text-foreground">Alert for</span>
+      <InfoTooltip aria-label="About alerting for each" variant="illustrated">
+        <InfoTooltip.Panel title="All traffic" caption="One failing server can be hidden by healthy ones.">
+          <Members />
+          <Level rate={combinedRate} />
+        </InfoTooltip.Panel>
+        <InfoTooltip.Panel title="Each server" caption="The failing server gets its own alert.">
+          <Members />
+          <span className="flex gap-1">
+            {errorRates.map((rate, index) => (
+              <Level key={index} rate={rate} />
+            ))}
+          </span>
+        </InfoTooltip.Panel>
+      </InfoTooltip>
+    </div>
+  ),
+};
+
+export const InfoTooltipIllustratedAtEdge: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <div className="flex items-center gap-1 p-2">
+      <span className="text-label text-foreground">Alert for a long noun like evaluation scorer</span>
+      <InfoTooltip aria-label="About alerting for each evaluation scorer" variant="illustrated">
+        <InfoTooltip.Panel
+          title="All traffic"
+          caption="One failing evaluation scorer can be hidden by many healthy evaluation scorers."
+        >
+          <Members />
+          <Level rate={combinedRate} />
+        </InfoTooltip.Panel>
+        <InfoTooltip.Panel title="Each evaluation scorer" caption="The failing evaluation scorer gets its own alert.">
+          <Members />
+          <span className="flex gap-1">
+            {errorRates.map((rate, index) => (
+              <Level key={index} rate={rate} />
+            ))}
+          </span>
+        </InfoTooltip.Panel>
+      </InfoTooltip>
+    </div>
+  ),
+};
+
 export const UsingRenderProp: Story = {
   render: () => (
     <Tooltip>
-      <TooltipTrigger render={<Button variant="outline">Render prop</Button>} />
+      <TooltipTrigger render={<Button>Render prop</Button>} />
       <TooltipContent>
         Uses Base UI&apos;s native <code>render</code> prop instead of <code>asChild</code>.
       </TooltipContent>
@@ -84,9 +183,7 @@ export const AllSides: Story = {
       {(['top', 'right', 'bottom', 'left'] as const).map(side => (
         <Tooltip key={side}>
           <TooltipTrigger asChild>
-            <Button variant="outline" className="capitalize">
-              {side}
-            </Button>
+            <Button className="capitalize">{side}</Button>
           </TooltipTrigger>
           <TooltipContent side={side}>Tooltip on {side}</TooltipContent>
         </Tooltip>
@@ -99,7 +196,7 @@ export const TopSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Top tooltip</Button>
+        <Button>Top tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="top">Tooltip on top</TooltipContent>
     </Tooltip>
@@ -110,7 +207,7 @@ export const RightSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Right tooltip</Button>
+        <Button>Right tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="right">Tooltip on right</TooltipContent>
     </Tooltip>
@@ -121,7 +218,7 @@ export const BottomSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Bottom tooltip</Button>
+        <Button>Bottom tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">Tooltip on bottom</TooltipContent>
     </Tooltip>
@@ -132,7 +229,7 @@ export const LeftSide: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Left tooltip</Button>
+        <Button>Left tooltip</Button>
       </TooltipTrigger>
       <TooltipContent side="left">Tooltip on left</TooltipContent>
     </Tooltip>
@@ -143,7 +240,7 @@ export const LongContent: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline">Hover for details</Button>
+        <Button>Hover for details</Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-50">
         This is a longer tooltip that contains more detailed information about the element.

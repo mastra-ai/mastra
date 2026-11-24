@@ -1,9 +1,21 @@
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 
+import { z } from 'zod/v4';
 import { WORKSPACE_TOOLS } from '../../constants';
 import type { CommandResult } from '../../sandbox';
+import { LocalSandbox } from '../../sandbox/local-sandbox';
 import { Workspace } from '../../workspace';
-import { executeCommandInputSchema, executeCommandTool, executeCommandWithBackgroundTool } from '../execute-command';
+import {
+  executeCommandInputSchema,
+  executeCommandTool,
+  executeCommandWithBackgroundSchema,
+  executeCommandWithBackgroundTool,
+  executeCommandWithDescriptionAndBackgroundSchema,
+  executeCommandWithDescriptionSchema,
+} from '../execute-command';
 import { getProcessOutputTool } from '../get-process-output';
 import { killProcessTool } from '../kill-process';
 import {
@@ -15,6 +27,7 @@ import {
   sandboxToModelOutput,
   DEFAULT_TAIL_LINES,
 } from '../output-helpers';
+import type { BackgroundProcessExitMeta, BackgroundProcessMeta } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mock Helpers
@@ -328,6 +341,124 @@ describe('execute_command tool', () => {
         }),
       );
     });
+
+    it('logs and swallows a synchronous throw from the onExit callback', async () => {
+      const onExit = vi.fn(() => {
+        throw new Error('callback boom');
+      });
+      const handle = createMockHandle({ pid: '42' });
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Background process onExit callback threw',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
+    it('logs and swallows a rejected wait() without invoking onExit', async () => {
+      const onExit = vi.fn();
+      const handle = createMockHandle({ pid: '42' });
+      handle.wait.mockRejectedValue(new Error('observe boom'));
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Failed to observe background process exit',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(onExit).not.toHaveBeenCalled();
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
+
+    it('logs and swallows a rejected async onExit callback', async () => {
+      const onExit = vi.fn(async () => {
+        throw new Error('async callback boom');
+      });
+      const handle = createMockHandle({ pid: '42' });
+      const sandbox = createMockSandbox({
+        processes: {
+          spawn: vi.fn().mockResolvedValue(handle),
+        },
+      });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            backgroundProcesses: { onExit },
+          },
+        },
+      });
+      const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn(), trackException: vi.fn() } as any;
+      workspace.__setLogger(logger);
+
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+        await vi.waitFor(() =>
+          expect(logger.error).toHaveBeenCalledWith(
+            'Background process onExit callback threw',
+            expect.objectContaining({ pid: '42' }),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        expect(onExit).toHaveBeenCalledTimes(1);
+        expect(unhandled).toHaveLength(0);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    });
   });
 });
 
@@ -368,6 +499,32 @@ describe('get_process_output tool', () => {
     const result = await getProcessOutputTool.execute({ pid: '11' }, ctx);
     expect(result).toBe('(no output yet)');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'returns once a background command exits, even while a child it left behind holds its output open',
+    async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-exit-'));
+      const workspace = new Workspace({ sandbox: new LocalSandbox({ workingDirectory: dir }) });
+      await workspace.init();
+      try {
+        const started = await executeCommandWithBackgroundTool.execute!(
+          { command: 'sleep 30 & echo started', background: true },
+          { workspace } as any,
+        );
+        const pid = String(started).match(/PID: (.+)\)/)![1]!;
+
+        const result = await getProcessOutputTool.execute!({ pid, waitSeconds: 30 }, { workspace } as any);
+
+        expect(result).toBe(
+          'started\n\n\nThe command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.\nExit code: 0',
+        );
+      } finally {
+        await workspace.destroy();
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    },
+    15_000,
+  );
 
   it('returns not found for unknown PID', async () => {
     const sandbox = createMockSandbox({
@@ -432,6 +589,23 @@ describe('get_process_output tool', () => {
     const result = await getProcessOutputTool.execute({ pid: '12' }, ctx);
     expect(result).toContain('lots of output here');
     expect(result).toContain('Exit code: 0');
+  });
+
+  it('tells the model when the handle dropped the start of its output', async () => {
+    const handle = Object.assign(createMockHandle({ pid: '13', stdout: 'newest output\n', stderr: '', exitCode: 0 }), {
+      stdoutDroppedBytes: 4096,
+      stderrDroppedBytes: 0,
+    });
+    const sandbox = createMockSandbox({
+      processes: {
+        get: vi.fn().mockResolvedValue(handle),
+      },
+    });
+    const ctx = createContext(sandbox);
+    const result = await getProcessOutputTool.execute({ pid: '13' }, ctx);
+    expect(result).toContain('[stdout: the first 4096 bytes were dropped;');
+    expect(result).toContain('newest output');
+    expect(result).not.toContain('[stderr:');
   });
 
   it('labels stdout and stderr when both present', async () => {
@@ -526,6 +700,34 @@ describe('get_process_output tool', () => {
       expect(executeCommandInputSchema.safeParse({ command: 'ls', tail: -5 }).success).toBe(true);
     });
 
+    it('execute_command has no description arg by default', () => {
+      expect(Object.keys(z.toJSONSchema(executeCommandInputSchema).properties ?? {})).not.toContain('description');
+      expect(Object.keys(z.toJSONSchema(executeCommandWithBackgroundSchema).properties ?? {})).not.toContain(
+        'description',
+      );
+    });
+
+    it('execute_command description variants require a leading description', () => {
+      for (const schema of [executeCommandWithDescriptionSchema, executeCommandWithDescriptionAndBackgroundSchema]) {
+        const json = z.toJSONSchema(schema);
+        expect(Object.keys(json.properties ?? {})[0]).toBe('description');
+        expect(json.required).toContain('description');
+        expect(schema.safeParse({ command: 'ls' }).success).toBe(false);
+        expect(schema.safeParse({ command: 'ls', description: '' }).success).toBe(false);
+        expect(schema.safeParse({ command: 'ls', description: null }).success).toBe(false);
+        expect(schema.parse({ command: 'ls', description: 'Listing the project root' }).description).toBe(
+          'Listing the project root',
+        );
+      }
+      expect(
+        executeCommandWithDescriptionAndBackgroundSchema.parse({
+          command: 'npm run dev',
+          description: 'Starting the dev server',
+          background: true,
+        }).background,
+      ).toBe(true);
+    });
+
     it('get_process_output rejects a fractional tail', () => {
       expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: 2.5 }).success).toBe(false);
       expect(getProcessOutputTool.inputSchema.safeParse({ pid: '1', tail: '2.5' }).success).toBe(false);
@@ -538,8 +740,8 @@ describe('get_process_output tool', () => {
     });
   });
 
-  describe('wait param', () => {
-    it('blocks until process exits when wait: true', async () => {
+  describe('waitSeconds param', () => {
+    it('waits for the process to exit when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '15',
         stdout: 'final output\n',
@@ -556,13 +758,13 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '15', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '15', waitSeconds: 30 }, ctx);
       expect(handle.wait).toHaveBeenCalled();
       expect(result).toContain('final output');
       expect(result).toContain('Exit code: 0');
     });
 
-    it('returns output for exited process when wait: true', async () => {
+    it('returns output for exited process when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '16',
         stdout: 'build complete\nDone in 2.3s\n',
@@ -575,10 +777,352 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '16', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '16', waitSeconds: 30 }, ctx);
       expect(result).toContain('build complete');
       expect(result).toContain('Done in 2.3s');
     });
+  });
+});
+
+describe('background processes killed by an aborted run', () => {
+  const abortNote =
+    'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
+
+  async function setup(
+    opts: {
+      onExit?: (meta: BackgroundProcessExitMeta) => void;
+      onStdout?: (data: string, meta: BackgroundProcessMeta) => void;
+    } = {},
+  ) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-abort-'));
+    const sandbox = new LocalSandbox({ workingDirectory: dir });
+    const workspace = new Workspace({
+      sandbox,
+      tools:
+        opts.onExit || opts.onStdout
+          ? {
+              [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+                backgroundProcesses: { onExit: opts.onExit, onStdout: opts.onStdout },
+              },
+            }
+          : undefined,
+    });
+    await workspace.init();
+    // Capture handles from spawn(): `get()` would prune a process that already exited.
+    const spawn = vi.spyOn(sandbox.processes!, 'spawn');
+    const start = async (command: string, abortSignal?: AbortSignal, context?: Record<string, unknown>) => {
+      const started = await executeCommandWithBackgroundTool.execute!({ command, background: true }, {
+        workspace,
+        abortSignal,
+        ...(context ?? {
+          runId: 'run-1',
+          agent: {
+            agentId: 'agent-1',
+            toolCallId: 'call-1',
+            threadId: 'thread-1',
+            resourceId: 'user-1',
+            messages: [],
+          },
+        }),
+      } as any);
+      const pid = String(started).match(/PID: (.+)\)/)![1]!;
+      const handle = await spawn.mock.results.at(-1)!.value;
+      return { pid, handle };
+    };
+    const read = (pid: string, opts: { waitSeconds?: number; abortSignal?: AbortSignal } = {}) =>
+      getProcessOutputTool.execute!({ pid, waitSeconds: opts.waitSeconds }, {
+        workspace,
+        abortSignal: opts.abortSignal,
+      } as any);
+    const cleanup = async () => {
+      await workspace.destroy();
+      await fs.rm(dir, { recursive: true, force: true });
+    };
+    return { start, read, cleanup, sandbox, workspace };
+  }
+
+  it('explains the exit when the run that spawned the process was aborted', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start('echo started; sleep 30', controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      controller.abort();
+      await handle.wait();
+
+      expect(await read(pid)).toBe(`started\n\n\n${abortNote}\nExit code: ${handle.exitCode}`);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('explains the exit when the run waiting on the process was aborted', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const controller = new AbortController();
+      const reading = read(pid, { waitSeconds: 30, abortSignal: controller.signal });
+      controller.abort();
+
+      expect(await reading).toBe(`started\n\n\n${abortNote}\nExit code: ${handle.exitCode}`);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns the output so far and says it is still running when the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const startedAt = Date.now();
+      const result = await read(pid, { waitSeconds: 1 });
+
+      expect(result).toBe(
+        'started\n\n\nStill running after waiting 1s. Call get_process_output again to keep waiting, or kill_process to stop it.',
+      );
+      expect(Date.now() - startedAt).toBeLessThan(5_000);
+      expect(handle.exitCode).toBeUndefined();
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('says a quiet process is still running when the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid } = await start('sleep 30');
+
+      expect(await read(pid, { waitSeconds: 1 })).toBe(
+        '(no output yet)\n\nStill running after waiting 1s. Call get_process_output again to keep waiting, or kill_process to stop it.',
+      );
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('returns as soon as the process exits, before the wait runs out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid } = await start('echo started; sleep 1; echo finished');
+
+      const startedAt = Date.now();
+      const result = await read(pid, { waitSeconds: 30 });
+
+      expect(result).toBe('started\nfinished\n\n\nExit code: 0');
+      expect(Date.now() - startedAt).toBeLessThan(15_000);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('leaves the process running when the run is aborted after the wait ran out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const controller = new AbortController();
+      await read(pid, { waitSeconds: 1, abortSignal: controller.signal });
+      controller.abort();
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      expect(handle.exitCode).toBeUndefined();
+      expect(await read(pid)).toBe('started\n');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('keeps a single wait on the process however many reads run out', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('sleep 30');
+      const wait = vi.spyOn(handle, 'wait');
+
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+      await read(pid, { waitSeconds: 1 });
+
+      expect(wait).toHaveBeenCalledTimes(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('stops the process when a later read is aborted while it waits', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('echo started; sleep 30');
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+      await read(pid, { waitSeconds: 1 });
+
+      const controller = new AbortController();
+      const reading = read(pid, { waitSeconds: 30, abortSignal: controller.signal });
+      controller.abort();
+
+      expect(await reading).toContain('Exit code:');
+      expect(handle.killedByAbort).toBe(true);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('explains the exit of an aborted process that printed nothing', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start('sleep 30', controller.signal);
+
+      controller.abort();
+      await handle.wait();
+
+      expect(await read(pid)).toBe(`${abortNote}\nExit code: ${handle.exitCode}`);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('reports the exit code of a process that exited without printing anything', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const { pid, handle } = await start('exit 4');
+      await handle.wait();
+
+      expect(await read(pid)).toBe('Exit code: 4');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('does not explain an abort for a process that exited before the run was aborted', async () => {
+    const { start, read, cleanup } = await setup();
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start('echo done; exit 3', controller.signal);
+      await handle.wait();
+
+      controller.abort();
+
+      expect(await read(pid)).toBe('done\n\n\nExit code: 3');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // `node -e` instead of shell syntax so these run under both sh and cmd.exe.
+  const longRunning = `node -e "console.log('started'); setInterval(() => {}, 1000)"`;
+
+  it('tells onExit which run started the process and that the abort killed it', async () => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(longRunning, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      controller.abort();
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+
+      expect(exits[0]).toMatchObject({
+        pid,
+        toolCallId: 'call-1',
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        runId: 'run-1',
+        killedByAbort: true,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    {
+      when: 'an agent without an id',
+      context: {
+        runId: 'run-1',
+        agent: { agentId: '', toolCallId: 'call-1', threadId: 'thread-1', resourceId: 'user-1', messages: [] },
+      },
+      expected: { agentId: undefined, threadId: 'thread-1', resourceId: 'user-1', runId: 'run-1' },
+    },
+    {
+      when: 'a direct call with top-level ids',
+      context: { runId: 'wf-run-1', threadId: 'thread-2', resourceId: 'user-2' },
+      expected: { agentId: undefined, threadId: 'thread-2', resourceId: 'user-2', runId: 'wf-run-1' },
+    },
+  ])('tells onStdout and onExit who started the process from $when', async ({ context, expected }) => {
+    const outputs: BackgroundProcessMeta[] = [];
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup } = await setup({
+      onStdout: (_data, meta) => void outputs.push(meta),
+      onExit: meta => void exits.push(meta),
+    });
+    try {
+      const { pid } = await start(`node -e "console.log('started')"`, undefined, context);
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+
+      expect(outputs.length).toBeGreaterThan(0);
+      for (const meta of [outputs[0]!, exits[0]!]) {
+        expect(meta).toMatchObject({ pid, ...expected });
+        expect(meta.agentId).toBeUndefined();
+      }
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    {
+      when: 'exits on its own',
+      command: `node -e "console.log('started'); setTimeout(() => process.exit(3), 100)"`,
+      stop: async () => {},
+    },
+    {
+      when: 'is stopped with kill_process',
+      command: longRunning,
+      stop: async (pid: string, workspace: Workspace) => {
+        await killProcessTool.execute!({ pid }, { workspace } as any);
+      },
+    },
+  ])('does not report an abort to onExit when the process $when', async ({ command, stop }) => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup, workspace } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(command, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      await stop(pid, workspace);
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+      controller.abort();
+
+      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('does not explain an abort for a process stopped with kill_process', async () => {
+    const { start, cleanup, workspace } = await setup();
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start('echo started; sleep 30', controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'));
+
+      const killed = await killProcessTool.execute!({ pid }, { workspace } as any);
+      controller.abort();
+
+      expect(killed).not.toContain('Process aborted');
+      expect(handle.killedByAbort).toBe(false);
+    } finally {
+      await cleanup();
+    }
   });
 });
 
@@ -632,9 +1176,12 @@ describe('kill_process tool', () => {
         kill: vi.fn().mockResolvedValue(false),
       },
     });
-    const ctx = createContext(sandbox);
+    const custom = vi.fn();
+    const ctx = { ...createContext(sandbox), writer: { custom } };
     const result = await killProcessTool.execute({ pid: '99999' }, ctx);
     expect(result).toContain('was not found or had already exited');
+    // An unknown process has no exit, so chats must not show one (they read -1 as `exit -1`).
+    expect(custom.mock.calls.map(([chunk]) => chunk.type)).not.toContain('data-sandbox-exit');
   });
 
   it('returns not found when process already exited', async () => {

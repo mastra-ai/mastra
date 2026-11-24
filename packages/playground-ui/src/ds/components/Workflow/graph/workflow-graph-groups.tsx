@@ -1,7 +1,7 @@
 import { useViewport } from '@xyflow/react';
 import type { Node } from '@xyflow/react';
-import { GitFork } from 'lucide-react';
 import { Badge } from '@/ds/components/Badge';
+import { IconFork } from '@/ds/icons/central/IconFork';
 
 export interface WorkflowGraphGroup {
   id: string;
@@ -30,11 +30,11 @@ export function WorkflowGraphGroups({ nodes, groups }: { nodes: Node[]; groups: 
         return (
           <div
             key={group.id}
-            className="border-neutral3/25 bg-neutral3/3 absolute rounded-xl border border-dashed"
+            className="absolute rounded-xl border border-dashed border-muted-foreground/25 bg-muted-foreground/3"
             style={{ transform: `translate(${left}px, ${top}px)`, width: right - left, height: bottom - top }}
           >
-            <div className="text-ui-xs text-muted-foreground flex items-center gap-2 px-5 py-4">
-              <Badge size="xs" variant="blue" emphasis="muted" icon={<GitFork aria-hidden />}>
+            <div className="flex items-center gap-2 px-5 py-4 text-meta text-muted-foreground">
+              <Badge size="xs" variant="blue" emphasis="subtle" icon={<IconFork aria-hidden />}>
                 {group.label}
               </Badge>
               <span>{group.description}</span>

@@ -94,12 +94,12 @@ export const WithLabel: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([50]);
     return (
-      <div className="flex w-[280px] flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span id="volume-label" className="text-ui-md text-foreground">
+          <span id="volume-label" className="text-body text-foreground">
             Volume
           </span>
-          <span className="text-ui-md text-muted-foreground tabular-nums">{value[0]}%</span>
+          <span className="text-body text-muted-foreground tabular-nums">{value[0]}%</span>
         </div>
         <Slider aria-labelledby="volume-label" value={value} max={100} step={1} onValueChange={setValue} />
       </div>
@@ -121,10 +121,10 @@ export const PriceRange: Story = {
   render: () => {
     const [value, setValue] = useState<number[]>([200, 800]);
     return (
-      <div className="flex w-[280px] flex-col gap-2">
+      <div className="flex w-70 flex-col gap-2">
         <div className="flex justify-between">
-          <span className="text-ui-md text-foreground">Price range</span>
-          <span className="text-ui-md text-muted-foreground tabular-nums">
+          <span className="text-body text-foreground">Price range</span>
+          <span className="text-body text-muted-foreground tabular-nums">
             ${value[0]} – ${value[1]}
           </span>
         </div>
@@ -153,21 +153,21 @@ export const Vertical: Story = {
 
 export const States: Story = {
   render: () => (
-    <div className="flex w-[280px] flex-col gap-6">
+    <div className="flex w-70 flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <span className="text-ui-md text-foreground">Default</span>
+        <span className="text-body text-foreground">Default</span>
         <Slider defaultValue={[40]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-ui-md text-foreground">Range</span>
+        <span className="text-body text-foreground">Range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-ui-md text-foreground">Disabled</span>
+        <span className="text-body text-foreground">Disabled</span>
         <Slider defaultValue={[50]} max={100} step={1} disabled />
       </div>
       <div className="flex flex-col gap-2">
-        <span className="text-ui-md text-foreground">Disabled range</span>
+        <span className="text-body text-foreground">Disabled range</span>
         <Slider defaultValue={[20, 80]} max={100} step={1} disabled />
       </div>
     </div>

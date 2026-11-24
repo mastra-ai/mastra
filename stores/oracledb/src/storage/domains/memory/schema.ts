@@ -52,6 +52,7 @@ export const OM_LAST_BUFFERED_AT_TOKENS = '"lastBufferedAtTokens"';
 export const OM_LAST_BUFFERED_AT_TIME = '"lastBufferedAtTime"';
 export const OM_CREATED_AT = '"createdAt"';
 export const OM_UPDATED_AT = '"updatedAt"';
+export const OM_SUPERSEDED_BY = '"supersededBy"';
 
 export async function initMemorySchema(ctx: MemoryContext): Promise<void> {
   await ctx.db.withConnection(async connection => {
@@ -59,7 +60,50 @@ export async function initMemorySchema(ctx: MemoryContext): Promise<void> {
     // deployments see a consistent Oracle session throughout initialization.
     await createTables(ctx, connection);
     await createIndexes(ctx, connection);
+    await backfillObservationalMemorySupersededBy(ctx, connection);
   });
+}
+
+/**
+ * Retire every live observational memory row that sorts after its key's canonical head
+ * (`generationCount DESC, createdAt ASC, id ASC`), marking it superseded by the head. Rows
+ * retired by older adapter versions (which never set `supersededBy`) become frozen. Idempotent.
+ * One statement: the head's ordering key is part of the condition, so a row created by a
+ * concurrent rollover (higher generation) never matches, and a row locked by one is
+ * re-evaluated after it commits.
+ */
+export async function backfillObservationalMemorySupersededBy(
+  ctx: MemoryContext,
+  connection: Connection,
+): Promise<void> {
+  const om = table(ctx, TABLE_OBSERVATIONAL_MEMORY);
+  const heads = `
+    SELECT ${OM_LOOKUP_KEY} AS head_key, id AS head_id, ${OM_GENERATION_COUNT} AS head_gen, ${OM_CREATED_AT} AS head_created
+    FROM (
+      SELECT ${OM_LOOKUP_KEY}, id, ${OM_GENERATION_COUNT}, ${OM_CREATED_AT},
+        ROW_NUMBER() OVER (PARTITION BY ${OM_LOOKUP_KEY} ORDER BY ${OM_GENERATION_COUNT} DESC, ${OM_CREATED_AT} ASC, id ASC) AS rn
+      FROM ${om}
+      WHERE ${OM_LOOKUP_KEY} IN (
+        SELECT ${OM_LOOKUP_KEY} FROM ${om} WHERE ${OM_SUPERSEDED_BY} IS NULL GROUP BY ${OM_LOOKUP_KEY} HAVING COUNT(*) > 1
+      )
+    )
+    WHERE rn = 1`;
+  await connection.execute(
+    `UPDATE ${om} r
+       SET r.${OM_SUPERSEDED_BY} = (SELECT h.head_id FROM (${heads}) h WHERE h.head_key = r.${OM_LOOKUP_KEY})
+     WHERE r.${OM_SUPERSEDED_BY} IS NULL
+       AND EXISTS (
+         SELECT 1 FROM (${heads}) h
+         WHERE h.head_key = r.${OM_LOOKUP_KEY}
+           AND (
+             r.${OM_GENERATION_COUNT} < h.head_gen
+             OR (r.${OM_GENERATION_COUNT} = h.head_gen AND r.${OM_CREATED_AT} > h.head_created)
+             OR (r.${OM_GENERATION_COUNT} = h.head_gen AND r.${OM_CREATED_AT} = h.head_created AND r.id > h.head_id)
+           )
+       )`,
+    {},
+    { autoCommit: true },
+  );
 }
 
 export async function clearAllMemoryTables(ctx: MemoryContext): Promise<void> {
@@ -160,7 +204,8 @@ async function createTables(ctx: MemoryContext, connection: Connection): Promise
       ${OM_LAST_BUFFERED_AT_TIME} TIMESTAMP WITH TIME ZONE,
       metadata JSON,
       ${OM_CREATED_AT} TIMESTAMP WITH TIME ZONE NOT NULL,
-      ${OM_UPDATED_AT} TIMESTAMP WITH TIME ZONE NOT NULL
+      ${OM_UPDATED_AT} TIMESTAMP WITH TIME ZONE NOT NULL,
+      ${OM_SUPERSEDED_BY} VARCHAR2(512)
     )`,
     [-955],
   );
@@ -206,6 +251,7 @@ async function ensureObservationalMemoryColumns(ctx: MemoryContext, connection: 
     { name: 'metadata', type: 'JSON' },
     { name: OM_CREATED_AT, type: 'TIMESTAMP WITH TIME ZONE' },
     { name: OM_UPDATED_AT, type: 'TIMESTAMP WITH TIME ZONE' },
+    { name: OM_SUPERSEDED_BY, type: 'VARCHAR2(512)' },
   ];
 
   for (const column of columns) {

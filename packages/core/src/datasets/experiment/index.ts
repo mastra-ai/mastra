@@ -3,19 +3,21 @@ import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { assertAgentModelTarget, withAgentModelMetadata } from './agent-model';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
 import { resolveTarget } from './resolve-target';
+import { executeWithRetries } from './retries';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  flushForTrajectoryScorers,
   resolveScorers,
   resolveStepScorers,
   runScorersForItem,
   runStepScorersForItem,
 } from './scorer';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -48,8 +50,11 @@ type ExperimentItem = {
 
 // Re-export types and helpers
 export type {
+  AgentExperimentOutput,
   DataItem,
   ExperimentConfig,
+  ExperimentResultOutput,
+  ScorerExperimentOutput,
   ExperimentHookArgs,
   ExperimentHookItem,
   ExperimentItemHookArgs,
@@ -59,8 +64,10 @@ export type {
   ItemWithScores,
   ItemResult,
   ScorerResult,
+  StartExperimentAsyncConfig,
   StartExperimentConfig,
 } from './types';
+export { EXPERIMENT_NOT_DURABLE } from './durable';
 export type {
   ExperimentEvent,
   ExperimentEventObserver,
@@ -304,6 +311,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
+    assertAgentModelTarget(config);
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -344,6 +352,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           requestContext: mergedRequestContext,
           experimentId,
           versions,
+          agentModel: config.agentModel,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
           unmockedToolPolicy:
             targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
@@ -413,7 +422,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         id: experimentId,
         name,
         description,
-        metadata,
+        metadata: withAgentModelMetadata(metadata, config.agentModel),
         provenance,
         experimentSetId: grouping?.experimentSetId,
         comparisonId: grouping?.comparisonId,
@@ -526,11 +535,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           }
 
           // Compose per-item signal (timeout + run-level abort)
-          let itemSignal: AbortSignal | undefined = executionSignal;
-          if (itemTimeout) {
-            const timeoutSignal = AbortSignal.timeout(itemTimeout);
-            itemSignal = executionSignal ? AbortSignal.any([executionSignal, timeoutSignal]) : timeoutSignal;
-          }
+          const timeoutSignal = itemTimeout ? AbortSignal.timeout(itemTimeout) : undefined;
+          const itemSignal =
+            executionSignal && timeoutSignal
+              ? AbortSignal.any([executionSignal, timeoutSignal])
+              : (timeoutSignal ?? executionSignal);
 
           // Per-item setup runs once (not per retry attempt) inside this
           // concurrency slot. A failing setup is deterministic from the
@@ -558,38 +567,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           // Resolve item scorer configuration before executing the target. Invalid item
           // references are deterministic and therefore skip both target execution and retries.
-          let retryCount = 0;
           const preflightError = scorerConfigError ?? beforeEachError;
-          let execResult: ExecutionResult = preflightError
-            ? { output: null, error: preflightError, traceId: null }
-            : await execFn(itemWithMetadataSnapshot(), itemSignal);
-
-          while (execResult.error && !preflightError && retryCount < maxRetries) {
-            // Don't retry abort errors
-            if (execResult.error.message.toLowerCase().includes('abort')) break;
-
-            // Don't retry deterministic tool-mock failures — the matcher state cannot
-            // change between attempts, so retrying would always fail identically.
-            if (
-              execResult.error.code === TOOL_MOCK_MISMATCH ||
-              execResult.error.code === TOOL_MOCK_EXHAUSTED ||
-              execResult.error.code === TOOL_MOCK_NOT_DECLARED
-            ) {
-              break;
-            }
-
-            retryCount++;
-            const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
-            const jitter = delay * 0.2 * Math.random();
-            await new Promise(r => setTimeout(r, delay + jitter));
-
-            // Re-check cancellation before retry
-            if (executionSignal?.aborted) {
-              throw new DOMException('Aborted', 'AbortError');
-            }
-
-            execResult = await execFn(itemWithMetadataSnapshot(), itemSignal);
-          }
+          const { execResult, retryCount } = preflightError
+            ? { execResult: { output: null, error: preflightError, traceId: null }, retryCount: 0 }
+            : await executeWithRetries(() => execFn(itemWithMetadataSnapshot(), itemSignal), {
+                maxRetries,
+                cancelSignal: executionSignal,
+                timeoutSignal,
+              });
 
           const itemCompletedAt = new Date();
 
@@ -625,6 +610,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   }
                 : undefined;
 
+            await flushForTrajectoryScorers(mastra, itemScorers, execResult.traceId);
             const flatScores = await runScorersForItem(
               itemScorers,
               itemWithMetadataSnapshot(),

@@ -1,3 +1,5 @@
+import { isMacPlatform } from '@/lib/platform';
+
 /**
  * Map of key bindings to handlers.
  *
@@ -18,9 +20,6 @@ export type ParsedKeyCombo = {
   alt: boolean;
   key: string;
 };
-
-const isMacPlatform = () =>
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '');
 
 export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
   const parsed: ParsedKeyCombo = { meta: false, ctrl: false, shift: false, alt: false, key: '' };
@@ -132,7 +131,11 @@ export const isKeyboardConsumer = (target: EventTarget | null): boolean =>
  * like `mod+k` are safe to intercept from anywhere.
  */
 const isTypingInConsumer = (event: KeyboardEvent) =>
-  !event.metaKey && !event.ctrlKey && !event.altKey && isKeyboardConsumer(event.target);
+  event.target !== event.currentTarget &&
+  !event.metaKey &&
+  !event.ctrlKey &&
+  !event.altKey &&
+  isKeyboardConsumer(event.target);
 
 const sameCombo = (a: ParsedKeyCombo, b: ParsedKeyCombo) =>
   a.key === b.key && a.meta === b.meta && a.ctrl === b.ctrl && a.shift === b.shift && a.alt === b.alt;
@@ -154,6 +157,10 @@ export type KeyboardLayer = {
   depth: number;
   bindings: UseKeydownArgs;
   shouldHandle?: (event: KeyboardEvent) => boolean;
+  /** When `true`, unmodified keys fire even while focus is in a field or widget. */
+  insideFields?: boolean;
+  /** When `false`, auto-repeated keydowns from a held key don't fire handlers. */
+  repeat?: boolean;
 };
 
 type ResolvedBinding = {
@@ -216,7 +223,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
     return [...resolved.values()];
   };
 
-  const accepts = (layer: KeyboardLayer, event: KeyboardEvent) => !layer.shouldHandle || layer.shouldHandle(event);
+  const accepts = (layer: KeyboardLayer, event: KeyboardEvent) =>
+    (layer.insideFields === true || !isTypingInConsumer(event)) && (!layer.shouldHandle || layer.shouldHandle(event));
 
   const handleKeydown = (event: KeyboardEvent) => {
     // IME boundary events can report 229 while isComposing is false.
@@ -225,8 +233,6 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
       reset();
       return;
     }
-    const isAncestorShortcut = event.target !== event.currentTarget;
-    if (isAncestorShortcut && isTypingInConsumer(event)) return;
 
     const bindings = resolveBindings();
     const now = Date.now();
@@ -246,6 +252,8 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
           if (!step || !hasPrefix(steps, pending.matched) || !matchesCombo(event, step)) continue;
           if (!accepts(layer, event)) return;
           event.preventDefault();
+          // A held key neither advances nor completes a `repeat: false` sequence.
+          if (event.repeat && layer.repeat === false) return;
           if (stepIndex === steps.length - 1) {
             reset();
             handler();
@@ -276,6 +284,7 @@ export const createKeyboardDispatcher = (): KeyboardDispatcher => {
       if (steps.length === 1 && first && matchesCombo(event, first)) {
         if (!accepts(layer, event)) return;
         event.preventDefault();
+        if (event.repeat && layer.repeat === false) return;
         handler();
         return;
       }

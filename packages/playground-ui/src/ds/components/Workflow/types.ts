@@ -30,7 +30,7 @@ export type WorkflowCardCondition =
 
 export interface WorkflowStepCardViewProps {
   label: string;
-  nodeKind?: 'step' | 'agent' | 'tool' | 'map' | 'delay' | 'wait-until';
+  nodeKind?: 'step' | 'agent' | 'tool' | 'classifier' | 'map' | 'delay' | 'wait-until';
   onSelect?: () => void;
   body?: ReactNode;
   initiallyOpen?: boolean;

@@ -5,24 +5,31 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconChatBubble7 } from '@mastra/playground-ui/icons/central/IconChatBubble7';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save, X } from 'lucide-react';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useAgentVersions } from '@mastra/react/hooks/agents';
 import { useMemo, useState, useCallback } from 'react';
-
-import { useAgentVersions } from '../../hooks/use-agent-versions';
 
 interface AgentPlaygroundVersionBarProps {
   agentId: string;
@@ -44,17 +51,6 @@ interface AgentPlaygroundVersionBarProps {
   onOpenPr?: () => Promise<void>;
   /** Whether the user is viewing a previous (non-latest) version that can be published */
   isViewingPreviousVersion?: boolean;
-}
-
-function formatTimestamp(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 export function AgentPlaygroundVersionBar({
@@ -83,6 +79,7 @@ export function AgentPlaygroundVersionBar({
   const { data } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   const versions = useMemo(() => data?.versions ?? [], [data?.versions]);
@@ -96,17 +93,19 @@ export function AgentPlaygroundVersionBar({
       versions.map(v => {
         const isPublished = v.id === activeVersionId;
         const isDraftVersion = activeVersionNumber !== undefined && v.versionNumber > activeVersionNumber;
+        const versionName = `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber}`;
+        const createdAt = formatDate(v.createdAt, 'date-time');
 
         return {
           value: v.id,
-          label: `${isCodeSourceAgent ? 'Save' : 'v'}${v.versionNumber} - ${formatTimestamp(v.createdAt)}`,
+          label: createdAt ? `${versionName} (${createdAt})` : versionName,
           description: v.changeMessage || undefined,
           end: isCodeSourceAgent ? (
-            <Badge variant={isPublished ? 'green' : 'blue'}>{isPublished ? 'Current' : 'Saved'}</Badge>
+            <Badge variant={isPublished ? 'success' : 'info'}>{isPublished ? 'Current' : 'Saved'}</Badge>
           ) : isPublished ? (
-            <Badge variant="green">Published</Badge>
+            <Badge variant="success">Published</Badge>
           ) : isDraftVersion ? (
-            <Badge variant="blue">Draft</Badge>
+            <Badge variant="info">Draft</Badge>
           ) : undefined,
         };
       }),
@@ -116,6 +115,7 @@ export function AgentPlaygroundVersionBar({
   const currentValue = selectedVersionId ?? latestVersion?.id ?? '';
 
   const saveDisabled = readOnly || !isDirty || isSavingDraft || isPublishing;
+  const codeSaveDisabled = readOnly || (!isDirty && !hasDraft) || isSavingDraft || isPublishing;
   const versionInfoText = isCodeSourceAgent
     ? 'Code mode saves write override JSON to filesystem-backed editor storage. This dropdown shows saved override snapshots for this agent.'
     : "Changes are saved as draft versions. When you're ready, publish a version to make it the active configuration used in production.";
@@ -130,49 +130,39 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="border-border1 bg-surface3 flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
             value={currentValue}
             onValueChange={onVersionSelect}
-            placeholder="Select version..."
+            placeholder="Select version"
             variant="ghost"
             className="min-w-0 flex-1"
           />
         ) : (
-          <Txt variant="ui-xs" className="text-muted-foreground">
+          <Txt variant="meta" tone="muted">
             {isCodeSourceAgent ? 'No filesystem saves yet' : 'No versions yet'}
           </Txt>
         )}
 
-        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" />}
 
-        <Tooltip>
-          <TooltipTrigger
-            aria-label="Version information"
-            className="text-muted-foreground hover:text-foreground shrink-0 rounded-sm transition-colors focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
-          >
-            <Icon size="sm">
-              <Info />
-            </Icon>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-56">
-            {versionInfoText}
-          </TooltipContent>
-        </Tooltip>
+        <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
+          {versionInfoText}
+        </InfoTooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {readOnly && <Badge variant="yellow">Read-only</Badge>}
-          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="blue">Unpublished</Badge>}
+          {readOnly && <Badge variant="warning">Read-only</Badge>}
+          {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
     actionBar: (
-      <div className="border-border1 bg-surface3 flex items-center justify-end border-t px-3 py-2">
+      <div className="flex items-center justify-end border-t border-border bg-card px-3 py-2">
         {showCodeModeActions ? (
-          <ButtonsGroup className="flex-wrap justify-end">
-            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<Download />}>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="default" size="md" onClick={() => void onDownloadJson?.()} icon={<IconArrowInbox />}>
               Download JSON
             </Button>
             {canOpenPr ? (
@@ -181,56 +171,43 @@ export function AgentPlaygroundVersionBar({
                 size="md"
                 onClick={() => void onOpenPr?.()}
                 title={openPrTitle}
-                icon={<GitPullRequest />}
+                icon={<IconPullRequest />}
               >
                 Open PR
               </Button>
             ) : (
-              <Button variant="primary" size="md" onClick={() => void onSaveDraft()} disabled={saveDisabled}>
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="sm">
-                      <Save />
-                    </Icon>
-                    Save to filesystem
-                  </>
-                )}
+              <Button
+                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
+                variant="primary"
+                size="md"
+                onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
+                disabled={codeSaveDisabled}
+              >
+                {isSavingDraft ? 'Saving…' : 'Save to filesystem'}
               </Button>
             )}
-          </ButtonsGroup>
+          </div>
         ) : readOnly && !isViewingPreviousVersion ? null : (
-          <ButtonsGroup className="flex-wrap justify-end">
-            <ButtonsGroup spacing="close">
-              <Button variant="default" size="md" onClick={() => onSaveDraft()} disabled={saveDisabled}>
-                {isSavingDraft ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Saving&hellip;
-                  </>
-                ) : (
-                  <>
-                    <Icon size="sm">
-                      <Save />
-                    </Icon>
-                    Save New Version
-                  </>
-                )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <ButtonsGroup>
+              <Button
+                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
+                variant="default"
+                onClick={() => onSaveDraft()}
+                disabled={saveDisabled}
+              >
+                {isSavingDraft ? 'Saving…' : 'Save new version'}
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" size="md" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown className="size-3.5" />
+                  <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
+                    <IconChevronDownMedium />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={() => setShowMessageDialog(true)}>
-                    <Icon size="sm">
-                      <MessageSquare />
+                    <Icon size="xs">
+                      <IconChatBubble7 />
                     </Icon>
                     Save with message
                   </DropdownMenu.Item>
@@ -239,6 +216,7 @@ export function AgentPlaygroundVersionBar({
             </ButtonsGroup>
 
             <Button
+              icon={isPublishing ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               size="md"
               onClick={onPublish}
@@ -248,38 +226,23 @@ export function AgentPlaygroundVersionBar({
                   : readOnly || !hasDraft || isPublishing || isSavingDraft
               }
             >
-              {isPublishing ? (
-                <>
-                  <Spinner className="size-3.5" />
-                  Publishing&hellip;
-                </>
-              ) : (
-                <>
-                  <Icon size="sm">
-                    <Check />
-                  </Icon>
-                  {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
-                </>
-              )}
+              {isPublishing ? 'Publishing…' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
             </Button>
-          </ButtonsGroup>
+          </div>
         )}
 
-        {/* Change message dialog */}
-        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog} pending={isSavingDraft}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Save New Version</DialogTitle>
               <DialogDescription>Add a message to describe the changes in this version.</DialogDescription>
             </DialogHeader>
-            <DialogBody className="py-1">
-              <div className="grid gap-2">
-                <Label htmlFor="change-message">Change message</Label>
+            <DialogBody>
+              <Field>
+                <FieldLabel>Change message</FieldLabel>
                 <Input
-                  id="change-message"
-                  placeholder="Describe what changed..."
+                  placeholder="Describe what changed"
                   value={changeMessage}
-                  className="focus:ring-white/50"
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
@@ -289,21 +252,11 @@ export function AgentPlaygroundVersionBar({
                   disabled={isSavingDraft}
                   autoFocus
                 />
-              </div>
+              </Field>
             </DialogBody>
-            <DialogFooter className="px-4">
-              <Button icon={<X />} variant="default" size="sm" onClick={() => setShowMessageDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={handleSaveWithMessage}
-                disabled={isSavingDraft}
-                icon={<Save />}
-              >
-                Save Version
-              </Button>
+            <DialogFooter>
+              <DialogCancel>Cancel</DialogCancel>
+              <DialogAction onConfirm={handleSaveWithMessage}>Save version</DialogAction>
             </DialogFooter>
           </DialogContent>
         </Dialog>

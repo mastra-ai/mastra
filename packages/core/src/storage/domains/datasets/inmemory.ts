@@ -71,6 +71,10 @@ function toDatasetRecord(record: InternalDatasetRecord): DatasetRecord {
     inputSchema: record.inputSchema ?? undefined,
     groundTruthSchema: record.groundTruthSchema ?? undefined,
     requestContextSchema: record.requestContextSchema ?? undefined,
+    tags: record.tags ?? undefined,
+    targetType: record.targetType ?? undefined,
+    targetIds: record.targetIds ?? undefined,
+    scorerIds: record.scorerIds ?? undefined,
   };
 }
 
@@ -193,10 +197,13 @@ export class DatasetsInMemory extends DatasetsStorage {
     let datasets = Array.from(this.db.datasets.values());
 
     if (args.filters) {
-      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
+      const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, datasetIds, name } =
+        args.filters;
       const nameLower = name?.toLowerCase();
       const targetIdsSet = targetIds && targetIds.length > 0 ? new Set(targetIds) : undefined;
+      const datasetIdsSet = datasetIds ? new Set(datasetIds) : undefined;
       datasets = datasets.filter(d => {
+        if (datasetIdsSet && !datasetIdsSet.has(d.id)) return false;
         if (organizationId !== undefined && d.organizationId !== organizationId) return false;
         if (projectId !== undefined && d.projectId !== projectId) return false;
         if (candidateKey !== undefined && d.candidateKey !== candidateKey) return false;

@@ -12,10 +12,10 @@
 - list:
   - listitem:
     - link "weatherInfo":
-      - /url: /agents/weather-agent/tools/weatherInfo
+      - /url: /agents/weather-agent/threads/new?tool=weatherInfo
   - listitem:
     - link "simpleMcpTool":
-      - /url: /agents/weather-agent/tools/simpleMcpTool
+      - /url: /agents/weather-agent/threads/new?tool=simpleMcpTool
 - heading "Workflows 1" [level=3]
 - link "Workflows documentation":
   - /url: https://mastra.ai/en/docs/workflows/overview

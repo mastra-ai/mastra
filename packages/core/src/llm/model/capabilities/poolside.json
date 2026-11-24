@@ -1,3 +1,20 @@
 {
-  "temperature": ["poolside/laguna-m.1", "poolside/laguna-s-2.1", "poolside/laguna-xs-2.1"]
+  "temperature": ["poolside/laguna-m.1", "poolside/laguna-s-2.1", "poolside/laguna-xs-2.1"],
+  "reasoning": {
+    "poolside/laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "poolside/laguna-xs-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "poolside/laguna-m.1": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

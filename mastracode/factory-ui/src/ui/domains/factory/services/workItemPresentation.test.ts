@@ -3,13 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { genericExternalWorkItemUrl } from './workItemPresentation';
 
 describe('genericExternalWorkItemUrl', () => {
-  it('leaves pull request links to the review-specific header action', () => {
-    expect(
-      genericExternalWorkItemUrl({
-        source: 'github-pr',
-        url: 'https://github.com/mastra-ai/mastra/pull/20384',
-      }),
-    ).toBeUndefined();
+  it.each([
+    ['github-pr' as const, 'https://github.com/mastra-ai/mastra/pull/20384'],
+    ['gitlab-pr' as const, 'https://gitlab.com/rhys-group1/app/-/merge_requests/7'],
+  ])('leaves %s links to the review-specific header action', (source, url) => {
+    expect(genericExternalWorkItemUrl({ source, url })).toBeUndefined();
   });
 
   it.each([

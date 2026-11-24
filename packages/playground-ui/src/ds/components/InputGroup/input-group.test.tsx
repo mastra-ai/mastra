@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
+import { Field } from '../Field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText } from './input-group';
 
 afterEach(() => {
   cleanup();
@@ -21,15 +22,74 @@ const getInput = () => {
   return input;
 };
 
-const expectOnlyGuardedHoverBorder = (className: string) => {
-  const hoverBorderTokens = className
-    .split(/\s+/)
-    .filter(token => token.includes('hover') && token.includes('border-foreground/45'));
+describe('InputGroupAddon variants', () => {
+  it.each([
+    { align: 'inline-start', padding: 'pl' },
+    { align: 'inline-end', padding: 'pr' },
+  ] as const)('removes the gap and outside inset only for flush $align addons', ({ align, padding }) => {
+    render(
+      <>
+        <InputGroup>
+          <InputGroupInput aria-label="Default input" />
+          <InputGroupAddon align={align} aria-label="Default addon">
+            <InputGroupButton>Default action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <InputGroup>
+          <InputGroupInput aria-label="Flush input" />
+          <InputGroupAddon align={align} variant="flush" aria-label="Flush addon">
+            <InputGroupButton>Flush action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>,
+    );
 
-  expect(hoverBorderTokens).toEqual(['[&:hover:not(:focus-within):not(:has(:disabled))]:border-foreground/45']);
-  expect(className).toContain('focus-within:border-foreground/60');
-  expect(className).not.toContain('hover:border-foreground/45');
-};
+    const defaultAddon = screen.getByRole('group', { name: 'Default addon' });
+    const flushAddon = screen.getByRole('group', { name: 'Flush addon' });
+    const defaultClasses = defaultAddon.className.split(/\s+/);
+    const flushClasses = flushAddon.className.split(/\s+/);
+
+    expect(defaultAddon.getAttribute('data-variant')).toBe('default');
+    expect(defaultClasses).toEqual(
+      expect.arrayContaining(['gap-2', `${padding}-[calc(var(--control-px)-2px)]`, `has-[>button]:${padding}-[3px]`]),
+    );
+    expect(defaultClasses).not.toContain('[&>button]:mx-0');
+
+    expect(flushAddon.getAttribute('data-variant')).toBe('flush');
+    expect(flushClasses).toEqual(
+      expect.arrayContaining(['gap-0', `${padding}-0`, `has-[>button]:${padding}-0`, '[&>button]:mx-0']),
+    );
+    expect(flushClasses).not.toContain('gap-2');
+    expect(flushClasses).not.toContain(`${padding}-[calc(var(--control-px)-2px)]`);
+    expect(flushClasses).not.toContain(`has-[>button]:${padding}-[3px]`);
+  });
+
+  it.each(['block-start', 'block-end'] as const)('keeps %s spacing when flush is selected', align => {
+    render(
+      <>
+        <InputGroup>
+          <InputGroupInput aria-label="Default input" />
+          <InputGroupAddon align={align} aria-label="Default addon">
+            <InputGroupButton>Default action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <InputGroup>
+          <InputGroupInput aria-label="Flush input" />
+          <InputGroupAddon align={align} variant="flush" aria-label="Flush addon">
+            <InputGroupButton>Flush action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>,
+    );
+
+    const defaultAddon = screen.getByRole('group', { name: 'Default addon' });
+    const flushAddon = screen.getByRole('group', { name: 'Flush addon' });
+    expect(flushAddon.getAttribute('data-variant')).toBe('flush');
+    expect(flushAddon.className).toBe(defaultAddon.className);
+    expect(flushAddon.className.split(/\s+/)).toEqual(expect.arrayContaining(['gap-2', 'px-3']));
+    expect(flushAddon.className.split(/\s+/)).not.toContain('[&>button]:mx-0');
+  });
+});
 
 describe('InputGroup', () => {
   it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {
@@ -44,7 +104,7 @@ describe('InputGroup', () => {
     // The root carries an explicit, border-box height. This is the fix for the group
     // rendering ~2px taller than a same-size Select trigger (previously the height lived
     // only on the inner control, so the root's own border was added on top).
-    expect(getWrapper().className).toContain('h-form-md');
+    expect(getWrapper().className).toContain('h-control-md');
     expect(getInput().className).toContain('flex-1');
   });
 
@@ -55,13 +115,13 @@ describe('InputGroup', () => {
       </InputGroup>,
     );
     // Root height for the size...
-    expect(getWrapper().className).toContain('h-form-lg');
+    expect(getWrapper().className).toContain('h-control-lg');
     // ...and the control is sized to the root's content box (token minus the 1px borders)
     // via the parent's data-size (no React context). This keeps it from shrinking to the
     // line-height when the group goes vertical, and from overflowing the root inline —
     // which would let a flex-column parent grow the group 2px past a sibling control.
-    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-form-lg)-2px)]');
-    expect(getInput().className).not.toContain('h-form-lg');
+    expect(getInput().className).toContain('group-data-[size=lg]/input-group:h-[calc(var(--spacing-control-lg)-2px)]');
+    expect(getInput().className).not.toContain('h-control-lg');
   });
 
   it('block-start mode: control keeps a form height (no collapse) and the root height goes auto', () => {
@@ -77,20 +137,20 @@ describe('InputGroup', () => {
         <InputGroupInput placeholder="name@example.com" />
       </InputGroup>,
     );
-    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-form-md)-2px)]');
+    expect(getInput().className).toContain('group-data-[size=md]/input-group:h-[calc(var(--spacing-control-md)-2px)]');
     expect(getWrapper().className).toContain('has-[>[data-align=block-start]]:h-auto');
   });
 
   it('the root does NOT expose a zero min-width (would let it collapse to ~0 inside a flex group)', () => {
     render(
-      <InputGroup variant="outline">
+      <InputGroup>
         <InputGroupInput placeholder="x" />
       </InputGroup>,
     );
     // Root fills via `flex-1` + `w-full` and keeps its `min-width:auto` content floor.
     const cls = getWrapper().className;
     expect(cls).toContain('flex-1');
-    expect(cls).not.toContain('min-w-0');
+    expect(cls.split(/\s+/)).not.toContain('min-w-0');
   });
 
   it('wrapper has the flex-col + flex-none + w-full overrides needed for block-start mode', () => {
@@ -142,37 +202,15 @@ describe('InputGroup', () => {
     );
   });
 
-  it('aria-invalid on control turns wrapper into error state via :has', () => {
+  it('an invalid field marks the control, which turns the wrapper into its error state via :has', () => {
     render(
-      <InputGroup>
-        <InputGroupInput placeholder="x" error />
-      </InputGroup>,
+      <Field invalid>
+        <InputGroup>
+          <InputGroupInput placeholder="x" />
+        </InputGroup>
+      </Field>,
     );
     expect(getInput().getAttribute('aria-invalid')).toBe('true');
-    expect(getWrapper().className).toContain('has-[[aria-invalid=true]]:border-destructive');
-  });
-
-  it('still renders the filled surface for a call site on the removed filled variant', () => {
-    render(
-      <InputGroup variant="filled">
-        <InputGroupInput placeholder="x" />
-      </InputGroup>,
-    );
-
-    expect(getWrapper().className).toContain('bg-foreground/10');
-  });
-
-  it('supports an outline variant without an initial filled background', () => {
-    render(
-      <InputGroup variant="outline">
-        <InputGroupInput placeholder="x" />
-      </InputGroup>,
-    );
-
-    const wrapperClass = getWrapper().className;
-    expect(wrapperClass).toContain('bg-transparent');
-    expect(wrapperClass).toContain('rounded-full');
-    expect(wrapperClass).not.toContain('bg-foreground/10');
   });
 
   it('suppresses both native number spinners (WebKit + Firefox) and the WebKit search clear button', () => {
@@ -187,47 +225,5 @@ describe('InputGroup', () => {
     expect(cls).toContain('[&::-webkit-inner-spin-button]:appearance-none');
     expect(cls).toContain('[&[type=number]]:[appearance:textfield]');
     expect(cls).toContain('[&::-webkit-search-cancel-button]:appearance-none');
-  });
-
-  it('prioritizes the focus border over hover for the outline variant', () => {
-    render(
-      <InputGroup variant="outline">
-        <InputGroupInput placeholder="outline" />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    // Focused border brightens to a neutral tone (no green accent), and the hover border
-    // is guarded so it cannot override focus when the group is focused and hovered.
-    expectOnlyGuardedHoverBorder(cls);
-    expect(cls).not.toContain('ring-accent1');
-  });
-
-  it('carries the default variant hover in the fill, leaving its border alone', () => {
-    render(
-      <InputGroup>
-        <InputGroupInput placeholder="default" />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
-    expect(cls).toContain('focus-within:border-foreground/60');
-    expect(cls.split(/\s+/).filter(token => token.includes('hover') && token.includes('border-'))).toEqual([]);
-  });
-
-  it('leaves a group muted on hover while it wraps a disabled control', () => {
-    render(
-      <InputGroup>
-        <InputGroupInput placeholder="disabled" disabled />
-      </InputGroup>,
-    );
-    const cls = getWrapper().className;
-
-    // The wrapper is a div, so `:disabled` never matches it. Both hover surfaces
-    // have to ask about descendants or they repaint over the disabled treatment.
-    expect(cls).toContain('has-[:disabled]:bg-muted');
-    expect(cls).toContain('not-has-[:disabled]:hover:bg-foreground/14');
-    expect(cls).not.toContain(' hover:bg-foreground/14');
   });
 });

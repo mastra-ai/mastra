@@ -29,9 +29,7 @@ describe('ThreadList', () => {
     );
 
     const nav = screen.getByRole('navigation', { name: 'Threads' });
-    expect(nav.className).toContain('bg-surface3');
     expect(nav.className).toContain('rounded-studio-panel');
-    expect(nav.className).toContain('border-border1/50');
     expect(getParent(nav).className).toContain('pl-2');
   });
 
@@ -43,9 +41,7 @@ describe('ThreadList', () => {
     );
 
     const nav = screen.getByRole('navigation', { name: 'Threads' });
-    expect(nav.className).not.toContain('bg-surface3');
     expect(nav.className).not.toContain('rounded-studio-panel');
-    expect(nav.className).not.toContain('border-border1/50');
     expect(getParent(nav).className).not.toContain('pl-2');
     expect(nav.className).toContain('overflow-y-auto');
   });
@@ -68,22 +64,6 @@ describe('ThreadListItem', () => {
     assert(contentBoundary, 'Expected content boundary');
     expect(contentBoundary.className).toContain('min-w-0');
     expect(contentBoundary.className).toContain('flex-1');
-  });
-
-  it('marks the active thread and leaves the others plain', () => {
-    render(
-      <>
-        <ThreadListItem as="a" href="/threads/one" isActive>
-          Active thread
-        </ThreadListItem>
-        <ThreadListItem as="a" href="/threads/two">
-          Other thread
-        </ThreadListItem>
-      </>,
-    );
-
-    expect(screen.getByRole('link', { name: 'Active thread' }).className).toContain('bg-surface4');
-    expect(screen.getByRole('link', { name: 'Other thread' }).className).not.toContain('bg-surface4');
   });
 
   it('offers no delete affordance, and no room for one, without a handler', () => {
@@ -121,6 +101,42 @@ describe('ThreadListItem', () => {
     );
 
     expect(screen.getByRole('button', { name: 'delete thread' })).toBeTruthy();
+  });
+
+  describe('when actions are provided', () => {
+    it('renders the actions without following the thread link', () => {
+      const onClick = vi.fn();
+      const onAction = vi.fn();
+      render(
+        <ThreadListItem
+          as="a"
+          href="/threads/one"
+          onClick={onClick}
+          actions={
+            <button type="button" onClick={onAction}>
+              Thread actions
+            </button>
+          }
+        >
+          A thread
+        </ThreadListItem>,
+      );
+
+      screen.getByRole('button', { name: 'Thread actions' }).click();
+
+      expect(onAction).toHaveBeenCalledTimes(1);
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('reserves right padding for the actions', () => {
+      render(
+        <ThreadListItem as="a" href="/threads/one" actions={<button type="button">Thread actions</button>}>
+          A thread
+        </ThreadListItem>,
+      );
+
+      expect(screen.getByRole('link', { name: 'A thread' }).className).toContain('pr-9');
+    });
   });
 
   it('keeps a caller class alongside its own', () => {

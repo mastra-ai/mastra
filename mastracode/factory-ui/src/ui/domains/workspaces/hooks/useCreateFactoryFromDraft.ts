@@ -1,11 +1,11 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
-import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
-import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
+import { useSaveIntakeBindingMutation, useSaveIntakeSelectionMutation } from '../../../../hooks/useIntakeConfig';
+import { fetchIntakeConfig, IntakeBindingConflictError, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
 import type { CreateFactoryDraft } from './useCreateFactoryFlow';
@@ -34,30 +34,38 @@ export function useCreateFactoryFromDraft({
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
-  const applyOMDefaults = useApplyProviderOMDefaults();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveLinearSelection = useSaveIntakeSelectionMutation('linear');
+  const saveJiraSelection = useSaveIntakeSelectionMutation('jira');
 
   const feedProject = async (input: {
     integrationId: 'linear' | 'jira';
     sourceId: string;
     factoryProjectId: string;
   }) => {
-    await saveIntakeBinding.mutateAsync({
-      integrationId: input.integrationId,
-      sourceId: input.sourceId,
-      factoryProjectId: input.factoryProjectId,
-      // A fresh Factory only has its built-in boards; issues belong on Work.
-      board: 'work',
-    });
+    try {
+      await saveIntakeBinding.mutateAsync({
+        integrationId: input.integrationId,
+        sourceId: input.sourceId,
+        factoryProjectId: input.factoryProjectId,
+      });
+    } catch (error) {
+      // A Jira project already feeding another factory with all its issues is not taken over; the
+      // new factory is still created and can take a labelled slice from Settings › Work Intake.
+      if (!(error instanceof IntakeBindingConflictError)) throw error;
+      toast.warning('This Jira project already feeds another factory', {
+        description: 'Add a label filter in Settings › Work Intake to route some of its issues here.',
+      });
+      return;
+    }
     const config = await fetchIntakeConfig(baseUrl);
     const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
     if (selection === config[input.integrationId]) return;
-    await saveIntakeConfig.mutateAsync({ ...config, [input.integrationId]: selection });
+    await (input.integrationId === 'linear' ? saveLinearSelection : saveJiraSelection).mutateAsync(selection);
   };
 
   return useMutation({
-    mutationFn: async ({ providerId, modelId }: { providerId: string; modelId: string }) => {
+    mutationFn: async ({ modelId }: { modelId: string }) => {
       if (!draft?.name || !draft.repository) throw new Error('Start over from the name step.');
 
       const factory = draft.factoryId
@@ -72,9 +80,12 @@ export function useCreateFactoryFromDraft({
 
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        applyOMDefaults.mutateAsync({ providerId, factoryModelId: modelId, factoryId: factory.id }),
         draft.linearProjectId
-          ? feedProject({ integrationId: 'linear', sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+          ? feedProject({
+              integrationId: 'linear',
+              sourceId: draft.linearProjectId,
+              factoryProjectId: factory.id,
+            })
           : undefined,
         draft.jiraProjectId
           ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id })
@@ -82,6 +93,7 @@ export function useCreateFactoryFromDraft({
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await onCreated(factory);
+      return factory;
     },
   });
 }

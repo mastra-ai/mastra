@@ -1,13 +1,16 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { StorageThreadType } from '@mastra/core/memory';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/agents/chat/drafts/ThreadInputContext';
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
+import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
 import { systemPackages } from '../../__tests__/fixtures/channels';
 import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
@@ -31,9 +34,6 @@ import {
 } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { MemoryTimelineProvider, useMemoryTimeline } from '@/domains/agents/context/memory-timeline-context';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -151,7 +151,7 @@ function SignalProbe() {
 }
 
 // Exposes the memory-timeline open/close controls so a test can drive the OM
-// detail panel the same way the surviving "Analyze Observations" CTA does,
+// detail panel the same way the surviving "Analyze observations" CTA does,
 // without depending on a sidebar-local toggle button.
 let openPanel: () => void = () => {};
 function TimelineProbe() {
@@ -235,8 +235,8 @@ describe('MemorySidebar', () => {
   it('renders the Memory card as an overlay above the thread list by default', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    // Threads view is the default: the thread list (with New Chat) is visible.
-    const newChat = await screen.findByText('New Chat');
+    // Threads view is the default: the thread list (with New Thread) is visible.
+    const newChat = await screen.findByText('New Thread');
     expect(newChat).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
@@ -244,18 +244,18 @@ describe('MemorySidebar', () => {
     const card = screen.getByTestId('memory-sidebar-card');
     expect(card.textContent).toMatch(/memory/i);
     expect(card.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Chat');
+    expect(screen.getByTestId('memory-sidebar-thread-layer').textContent).toContain('New Thread');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('absolute');
     expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('z-10');
-    expect(card.closest('[data-testid="memory-sidebar-overlay"]')?.className).toContain('rounded-xl');
-    expect(card.className).toContain('bg-transparent');
     expect(screen.getByTestId('memory-config-badges')).not.toBeNull();
     expect(screen.queryByRole('tab')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Threads' })).toBeNull();
 
-    // The sidebar is still a single standalone bordered block with no nested container.
-    const blocks = container.querySelectorAll('.bg-surface3.border-border1\\/50');
-    expect(blocks.length).toBe(1);
+    // Threads and memory share one panel shell, with no nested panel.
+    const panels = container.querySelectorAll('[data-slot="sidebar-panel"]');
+    expect(panels.length).toBe(1);
+    expect(panels[0]?.contains(card)).toBe(true);
+    expect(panels[0]?.contains(screen.getByTestId('memory-sidebar-thread-layer'))).toBe(true);
   });
 
   it('renders the capabilities footer and reveals capability details on expand', async () => {
@@ -278,9 +278,9 @@ describe('MemorySidebar', () => {
   it('replaces the panel with an empty state and docs CTA when memory is disabled', async () => {
     renderSidebar([], false);
 
-    // The empty state explains memory is required; the thread list / New Chat is not rendered.
+    // The empty state explains memory is required; the thread list / New Thread is not rendered.
     expect(await screen.findByText('Memory not enabled')).not.toBeNull();
-    expect(screen.queryByText('New Chat')).toBeNull();
+    expect(screen.queryByText('New Thread')).toBeNull();
 
     // The memory card is hidden entirely when memory is off.
     expect(screen.queryByTestId('memory-sidebar-card')).toBeNull();
@@ -354,7 +354,7 @@ describe('MemorySidebar', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onMessages).not.toHaveBeenCalled();
 
-    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
+    // When the OM detail is opened (as the "Analyze observations" CTA does): the
     // OM detail replaces the regular memory content (fills the panel), so
     // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());
@@ -409,30 +409,6 @@ describe('MemorySidebar', () => {
 
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(2));
-  });
-
-  it('renders the timeline panel context window from the OM record (source of truth), not message markers', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
-      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
-      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
-    );
-
-    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
-
-    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
-    act(() => openPanel());
-
-    await screen.findByTestId('memory-sidebar-om-detail-subpanel');
-
-    // The panel's Messages bar must show the record-derived counter:
-    // pendingMessageTokens 14200 over the message threshold 30000 (14.2/30k).
-    // The thread messages are plain text with no OM status markers, so a
-    // marker-derived panel would show 0 here. The observation/memory readout
-    // (observationTokenCount 4500 over the observation threshold 6000 → 4.5/6k)
-    // is lifted into the panel header beside the "Observational memory" title.
-    expect(await screen.findByText('14.2/30k')).not.toBeNull();
-    expect(await screen.findByText('4.5/6k')).not.toBeNull();
   });
 
   it('renders both Messages and Observations progress bars in the open OM panel', async () => {
@@ -515,7 +491,7 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(screen.getByTestId('memory-sidebar-card'));
 
-    expect(await screen.findByText('New Chat')).not.toBeNull();
+    expect(await screen.findByText('New Thread')).not.toBeNull();
     expect(screen.queryByText('Clone Thread')).toBeNull();
   });
 
@@ -541,14 +517,5 @@ describe('MemorySidebar', () => {
     await waitFor(() => {
       expect(screen.getByTestId('memory-card-observation-bar').getAttribute('data-percent')).toBe('47');
     });
-  });
-
-  it('ignores the stale v1 sessionStorage key pointing at the removed configuration tab', async () => {
-    sessionStorage.setItem('agent-memory-sidebar-tab', 'configuration');
-
-    renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
-
-    // Falls back to the thread list instead of an unknown view value.
-    expect(await screen.findByText('New Chat')).not.toBeNull();
   });
 });

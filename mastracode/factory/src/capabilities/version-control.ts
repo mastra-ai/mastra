@@ -1,3 +1,4 @@
+import type { FactoryRepositoryAccess } from '@mastra/core/workspace';
 import type {
   SourceControlInstallation,
   SourceControlRepository,
@@ -19,9 +20,15 @@ export interface RepositoryInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface RepositoryAccess {
-  cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string };
+export type RepositoryAccess = FactoryRepositoryAccess;
+/** One credential for a set of repositories, plus each repository's own access under it. */
+export type RepositoriesAccess = RepositoryAccess & {
+  /** Keyed by repository id: that repository's clone URL with the shared credential. */
+  repositories?: Record<string, RepositoryAccess>;
+};
+export interface RepositoryTarget {
+  connection: IntegrationConnection;
+  sourceId: string;
 }
 
 export type PullRequestState = 'open' | 'closed';
@@ -221,6 +228,9 @@ export type CreateReviewCommentInput = CreateReviewCommentBase &
 
 export type UpdateReviewCommentInput = UpdatePullRequestCommentInput;
 export type DeleteReviewCommentInput = DeletePullRequestCommentInput;
+export interface ResolveReviewThreadInput extends DeleteReviewCommentInput {
+  resolved: boolean;
+}
 
 export interface RequestedReviewers {
   users: string[];
@@ -230,6 +240,33 @@ export interface RequestedReviewers {
 export interface UpdateReviewersInput extends PullRequestRef {
   users?: string[];
   teams?: string[];
+}
+
+export type CommitCheckStatus = 'in-progress' | 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped';
+
+export interface PublishCommitCheckInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  /** Full commit SHA the check is attached to. */
+  headSha: string;
+  /** Source branch of the change request; GitLab needs it to show the status on the merge request. */
+  ref?: string;
+  /** Stable check name; publishing again with the same name updates the existing check. */
+  name: string;
+  status: CommitCheckStatus;
+  title: string;
+  summary: string;
+  /** Optional long-form details (Markdown) such as per-command results. */
+  details?: string;
+  actingUserId?: string;
+}
+
+export interface CommitCheck {
+  id: string;
+  name: string;
+  headSha: string;
+  status: CommitCheckStatus;
+  url: string | null;
 }
 
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
@@ -245,7 +282,17 @@ export interface VersionControl {
     installationId: string;
     repositories: RepositoryInput[];
   }): Promise<SourceControlRepository[]>;
+  /** Resolve the provider-owned reference for a durably registered repository. */
+  getRepositoryTarget(input: { orgId: string; repositoryId: string }): Promise<RepositoryTarget>;
   getRepositoryAccess(input: { orgId: string; repositoryId: string }): Promise<RepositoryAccess>;
+  /**
+   * One credential that reaches every listed repository, for providers whose
+   * per-repository tokens would otherwise leave `gh` blind to the rest of an
+   * environment. Resolves `undefined` when the provider cannot cover the set
+   * (several installations, more repositories than one token allows); the
+   * caller then falls back to `getRepositoryAccess` for the primary.
+   */
+  getRepositoriesAccess?(input: { orgId: string; repositoryIds: string[] }): Promise<RepositoriesAccess | undefined>;
   listPullRequests(input: ListPullRequestsInput): Promise<PullRequestPage>;
   getPullRequest(input: PullRequestRef): Promise<PullRequest | null>;
   createPullRequest(input: CreatePullRequestInput): Promise<PullRequest>;
@@ -263,6 +310,8 @@ export interface VersionControl {
   submitReview(input: SubmitReviewInput): Promise<Review>;
   dismissReview(input: DismissReviewInput): Promise<Review>;
   deletePendingReview(input: ReviewRef): Promise<void>;
+  /** Optional because not every provider exposes resolvable review threads. */
+  resolveReviewThread?(input: ResolveReviewThreadInput): Promise<void>;
   listReviewComments(input: ListReviewCommentsInput): Promise<ReviewCommentPage>;
   createReviewComment(input: CreateReviewCommentInput): Promise<ReviewComment>;
   updateReviewComment(input: UpdateReviewCommentInput): Promise<ReviewComment>;
@@ -270,4 +319,6 @@ export interface VersionControl {
   listRequestedReviewers(input: PullRequestRef): Promise<RequestedReviewers>;
   requestReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
+  /** Optional because not every provider (or connection type) can publish commit checks. */
+  publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
 }

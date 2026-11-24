@@ -1,20 +1,29 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
   SettingsDescription,
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsListHeader,
+  SettingsNoticeRow,
+  SettingsFieldsetRow,
   SettingsGroup,
   SettingsHeader,
   SettingsRow,
+  SettingsSkeleton,
   SettingsTitle,
 } from './index';
+import { Form } from '@/ds/components/Form';
+import { Input } from '@/ds/components/Input';
+import { Switch } from '@/ds/components/Switch';
 
 afterEach(cleanup);
 
 describe('Settings', () => {
-  it('uses the semantic card surface and Marvin text hierarchy', () => {
+  it('uses the Marvin text hierarchy and row layout', () => {
     render(
       <SettingsGroup>
         <SettingsHeader action={<button type="button">Save</button>}>
@@ -27,16 +36,10 @@ describe('Settings', () => {
       </SettingsGroup>,
     );
 
-    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-header-sm');
-    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-foreground');
-    expect(screen.getByText('Stored in this browser.').classList).toContain('text-ui-sm');
-    expect(screen.getByText('Stored in this browser.').classList).toContain('text-muted-foreground');
-    expect(screen.getByText('Theme').classList).toContain('text-ui-md');
-    expect(screen.getByText('Theme').classList).toContain('text-foreground');
-    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-ui-sm');
-    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-muted-foreground');
-    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('bg-card');
-    expect(document.querySelector('[data-slot="settings-container"]')?.classList).toContain('border-border');
+    expect(screen.getByRole('heading', { name: 'General' }).classList).toContain('text-subheading');
+    expect(screen.getByText('Stored in this browser.').classList).toContain('text-caption');
+    expect(screen.getByText('Theme').classList).toContain('text-label');
+    expect(screen.getByText('Color scheme for the interface').classList).toContain('text-caption');
     expect(document.querySelector('[data-slot="settings-row"]')?.classList).toContain('sm:flex-row');
     expect(document.querySelector('header')?.classList).toContain('sm:items-center');
   });
@@ -72,13 +75,13 @@ describe('Settings', () => {
   describe('when a row labels an editable setting', () => {
     it('keeps the control accessible and includes its edited value in form data', () => {
       render(
-        <form aria-label="Connection settings">
+        <Form aria-label="Connection settings">
           <SettingsContainer>
-            <SettingsRow label="API prefix" description="Applied to API requests." htmlFor="prefix">
-              <input id="prefix" name="apiPrefix" defaultValue="/api" />
+            <SettingsRow label="API prefix" description="Applied to API requests.">
+              <Input name="apiPrefix" defaultValue="/api" />
             </SettingsRow>
           </SettingsContainer>
-        </form>,
+        </Form>,
       );
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '/custom-api' } });
@@ -86,6 +89,72 @@ describe('Settings', () => {
       expect(
         new FormData(screen.getByRole<HTMLFormElement>('form', { name: 'Connection settings' })).get('apiPrefix'),
       ).toBe('/custom-api');
+    });
+
+    it('toggles a switch when its label is clicked', () => {
+      render(
+        <SettingsRow label="Notifications">
+          <Switch />
+        </SettingsRow>,
+      );
+
+      fireEvent.click(screen.getByText('Notifications'));
+
+      expect(screen.getByRole('switch', { name: 'Notifications' }).getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
+  describe('when a setting is required', () => {
+    it('announces the requirement in the control name', () => {
+      render(
+        <SettingsRow label="Model" required>
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByText('*', { selector: '[aria-hidden]' })).toBeTruthy();
+      expect(screen.getByRole('textbox', { name: /^Model\s*\(required\)$/ })).toBeTruthy();
+    });
+  });
+
+  describe('when a setting has an error', () => {
+    it('shows the message as an alert the control can describe itself with', () => {
+      render(
+        <SettingsRow label="Model" errorMsg="Choose the model this agent runs on.">
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.getByRole('alert').textContent).toBe('Choose the model this agent runs on.');
+      const control = screen.getByRole('textbox', { name: 'Model' });
+      expect(control.getAttribute('aria-invalid')).toBe('true');
+      expect(control.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
+    });
+
+    it.each([false, ''])('renders no alert when the message is %j', errorMsg => {
+      render(
+        <SettingsRow label="Model" errorMsg={errorMsg}>
+          <Input />
+        </SettingsRow>,
+      );
+
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('when one row holds several controls', () => {
+    it('names the group by the row and keeps each control apart', () => {
+      render(
+        <SettingsFieldsetRow label="Add label route" description="Pick a label and a board.">
+          <Input aria-label="Label" />
+          <Input aria-label="Board" />
+        </SettingsFieldsetRow>,
+      );
+
+      screen.getByRole('group', { name: 'Add label route', description: 'Pick a label and a board.' });
+      const label = screen.getByRole('textbox', { name: 'Label' });
+      const board = screen.getByRole('textbox', { name: 'Board' });
+      expect(label.id).not.toBe(board.id);
     });
   });
 
@@ -100,6 +169,132 @@ describe('Settings', () => {
       expect(screen.getByText('View only:')).toBeTruthy();
       expect(screen.getByText('Viewer')).toBeTruthy();
       expect(screen.queryByRole('textbox')).toBeNull();
+    });
+  });
+
+  describe('where a row places its control', () => {
+    function rowOf(label: string) {
+      return screen.getByText(label).closest('[data-slot="settings-row"]');
+    }
+
+    it('puts it beside the label by default, and under it when placed below', () => {
+      render(
+        <>
+          <SettingsRow label="Name">
+            <Input aria-label="Name" />
+          </SettingsRow>
+          <SettingsRow label="Email" controlPlacement="below">
+            <Input aria-label="Email" />
+          </SettingsRow>
+        </>,
+      );
+
+      expect(rowOf('Name')?.getAttribute('data-orientation')).toBe('responsive');
+      expect(rowOf('Email')?.getAttribute('data-orientation')).toBe('vertical');
+    });
+  });
+
+  describe('when a title has info', () => {
+    it('describes the title with it', () => {
+      render(
+        <SettingsGroup>
+          <SettingsHeader>
+            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          </SettingsHeader>
+        </SettingsGroup>,
+      );
+
+      screen.getByRole('heading', { name: 'General' });
+      expect(screen.getByText('General').closest('[aria-describedby]')).toBeTruthy();
+      expect(screen.getByText('Stored in this browser.')).toBeTruthy();
+    });
+  });
+
+  describe('when a list sits in a container', () => {
+    function renderList(onAdd: () => void = () => {}) {
+      return render(
+        <SettingsContainer>
+          <SettingsListHeader
+            action={
+              <button type="button" onClick={onAdd}>
+                Add account
+              </button>
+            }
+          >
+            1 account
+          </SettingsListHeader>
+          <SettingsItem title="mastra-ai" description="GitHub" />
+        </SettingsContainer>,
+      );
+    }
+
+    it('shows the count and action in a header above the items', () => {
+      const { container } = renderList();
+
+      const list = within(container);
+      const count = list.getByText('1 account');
+      list.getByRole('button', { name: 'Add account' });
+      expect(
+        count.compareDocumentPosition(list.getByText('mastra-ai')) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('runs the header action', () => {
+      let added = 0;
+      renderList(() => (added += 1));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add account' }));
+
+      expect(added).toBe(1);
+    });
+
+    it('keeps a truncated title readable in full on hover', () => {
+      renderList();
+
+      expect(screen.getByText('mastra-ai').getAttribute('title')).toBe('mastra-ai');
+    });
+
+    it('shows an empty list as its empty text and action', () => {
+      const { container } = render(
+        <SettingsContainer>
+          <SettingsEmptyRow action={<button type="button">Add header</button>}>No request headers</SettingsEmptyRow>
+        </SettingsContainer>,
+      );
+
+      const list = within(container);
+      list.getByText('No request headers');
+      list.getByRole('button', { name: 'Add header' });
+    });
+  });
+
+  describe('when a list has notices and other controls', () => {
+    it('shows them in the list, and renders nothing for an empty notice row', () => {
+      const { container } = render(
+        <SettingsContainer>
+          <SettingsListHeader action={<button type="button">Refresh</button>}>2 accounts</SettingsListHeader>
+          <SettingsNoticeRow>Couldn’t load accounts</SettingsNoticeRow>
+          <SettingsNoticeRow data-testid="empty-notices" />
+        </SettingsContainer>,
+      );
+
+      const list = within(container);
+      list.getByText('Couldn’t load accounts');
+      list.getByRole('button', { name: 'Refresh' });
+      expect(screen.getByTestId('empty-notices').textContent).toBe('');
+    });
+  });
+
+  describe('SettingsSkeleton', () => {
+    it('announces one loading status with the requested number of hidden placeholder rows', () => {
+      render(
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading members" variant="item" rows={3} />
+        </SettingsContainer>,
+      );
+
+      const status = screen.getByRole('status', { name: 'Loading members' });
+      expect(status.children).toHaveLength(3);
+      for (const row of status.children) expect(row.getAttribute('aria-hidden')).toBe('true');
     });
   });
 });

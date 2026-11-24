@@ -1,12 +1,21 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { ActivityItem, ReasoningActivity } from '@mastra/playground-ui/components/ai/activity';
+import {
+  hasToolArguments,
+  presentTool,
+  stringifyToolValue,
+  ToolCallArguments,
+  ToolCallOutput,
+} from '@mastra/playground-ui/components/ai/tool-call';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card } from '@mastra/playground-ui/components/Card';
+import { Code } from '@mastra/playground-ui/components/Code';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { MessageMetadata } from '@mastra/playground-ui/domains/chat';
-import { ReasoningStreamingLine } from '@mastra/playground-ui/domains/chat/messages/reasoning-streaming-line';
 import { MessageText } from '@mastra/playground-ui/domains/chat/messages/renderers/message-text';
 import {
   WarningStatusRenderer,
@@ -19,25 +28,25 @@ import {
   isUserSignalType,
   toReactiveSignalData,
 } from '@mastra/playground-ui/domains/chat/messages/signal-data';
+import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
+import { IconAlignmentLeft } from '@mastra/playground-ui/icons/central/IconAlignmentLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
-import {
-  AlertTriangle,
-  AlignLeft,
-  Check,
-  ChevronRight,
-  FileText,
-  Globe,
-  Loader2,
-  RefreshCw,
-  Wrench,
-  Zap,
-  GlobeLockIcon,
-  Building,
-} from 'lucide-react';
+import { GlobeLockIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -57,7 +66,6 @@ import {
   SET_AGENT_TOOLS_TOOL_NAME,
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
-import { ProviderLogo } from '@/domains/llm';
 
 interface MessageRowProps {
   message: MastraDBMessage;
@@ -81,33 +89,29 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
-      <Txt variant="ui-sm" className="text-foreground pb-2" as="div">
-        Approval required for <span className="text-foreground font-mono">{toolName}</span>
+    <ToolCard testId="agent-builder-chat-tool-approval" className="border-transparent bg-muted">
+      <Txt as="p" variant="caption" tone="ink" className="pb-2">
+        Approval required for <InlineCode>{toolName}</InlineCode>
       </Txt>
       <div className="flex items-center gap-2">
         <Button
+          icon={pending === 'approve' ? <IconLoadingCircle className="animate-spin" /> : <IconCheckmark2Medium />}
           variant="default"
           onClick={handleApprove}
           disabled={decided}
           data-testid="agent-builder-chat-tool-approve"
           aria-label={`Approve ${toolName}`}
         >
-          <Icon>{pending === 'approve' ? <Loader2 className="animate-spin" /> : <Check />}</Icon>
           Approve
         </Button>
         <Button
+          icon={pending === 'decline' ? <IconLoadingCircle className="animate-spin" /> : undefined}
           variant="ghost"
           onClick={handleDecline}
           disabled={decided}
           data-testid="agent-builder-chat-tool-decline"
           aria-label={`Decline ${toolName}`}
         >
-          {pending === 'decline' && (
-            <Icon>
-              <Loader2 className="animate-spin" />
-            </Icon>
-          )}
           Decline
         </Button>
       </div>
@@ -137,7 +141,7 @@ const toReactiveSignalMessage = (message: MastraDBMessage): MastraDBMessage | nu
       ...message.content,
       parts: [{ type: 'data-signal', data }],
     },
-  } as MastraDBMessage;
+  };
 };
 
 const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
@@ -212,14 +216,14 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   if (dbMessage === null) return null;
 
-  const metadata = message.content.metadata as MessageMetadata | undefined;
+  const metadata = message.content.metadata;
 
   const renderers: MessageRenderers = {
     Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} metadata={metadata} />,
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <ReasoningStreamingLine text="Reasoning..." />;
+      return <ReasoningActivity text="" streaming />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -265,26 +269,18 @@ export const Txtmessage = ({
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <Txt
-          variant="ui-md"
-          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-          as="div"
-        >
+        <div className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
           <MarkdownRenderer className="text-black">{txt}</MarkdownRenderer>
-        </Txt>
+        </div>
       </div>
     );
   }
 
   if (role === 'assistant' || role === 'system') {
     return (
-      <Txt
-        variant="ui-md"
-        className="text-muted-foreground max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
-        as="div"
-      >
+      <div className="max-w-[80%] text-muted-foreground [&_li]:!my-0 [&_ol]:!space-y-1 [&_p]:!whitespace-normal [&_ul]:!space-y-1">
         <MessageText text={txt} metadata={metadata} externalLinkTarget={role === 'assistant' ? 'window' : undefined} />
-      </Txt>
+      </div>
     );
   }
 
@@ -294,21 +290,22 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="border-accent6/40 bg-accent6/5 flex max-w-[80%] flex-col gap-3 p-4"
+      className="flex max-w-[80%] flex-col gap-3 border-warning-edge bg-warning-subtle p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
+        <IconExclamationTriangle className="mt-0.5 size-icon-md shrink-0 text-warning-foreground" aria-hidden />
         <div className="flex min-w-0 flex-col gap-1">
-          <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
+          <Txt as="p" variant="subheading" tone="ink">
             Something went wrong while building the agent.
           </Txt>
           <Txt
-            variant="ui-sm"
-            className="text-muted-foreground break-words"
-            as="div"
+            as="p"
+            variant="caption"
+            tone="muted"
             data-testid="agent-builder-chat-error-summary"
+            className="break-words"
           >
             {error.summary}
           </Txt>
@@ -323,25 +320,29 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
                 variant="default"
                 onClick={onRetry}
                 data-testid="agent-builder-chat-error-retry"
-                icon={<RefreshCw aria-hidden />}
+                icon={<IconArrowRotateClockwise aria-hidden />}
               >
                 Try again
               </Button>
             )}
             <CollapsibleTrigger
-              className="text-muted-foreground hover:text-foreground text-ui-md underline-offset-2 hover:underline"
+              className={cn(
+                'underline-offset-2 hover:underline',
+                quietTextHover,
+                controlStateColorTransition,
+                'text-body',
+              )}
               data-testid="agent-builder-chat-error-details-trigger"
             >
               Details
             </CollapsibleTrigger>
           </div>
           <CollapsibleContent>
-            <pre
-              className="text-muted-foreground bg-surface1 text-ui-sm max-h-48 overflow-auto rounded-md p-2 break-all whitespace-pre-wrap"
+            <Code
+              className="max-h-48 overflow-auto rounded-md bg-nested p-2 text-caption break-all whitespace-pre-wrap text-muted-foreground"
               data-testid="agent-builder-chat-error-details"
-            >
-              {error.details}
-            </pre>
+              code={error.details}
+            />
           </CollapsibleContent>
         </Collapsible>
       ) : (
@@ -351,7 +352,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
               variant="default"
               onClick={onRetry}
               data-testid="agent-builder-chat-error-retry"
-              icon={<RefreshCw aria-hidden />}
+              icon={<IconArrowRotateClockwise aria-hidden />}
             >
               Try again
             </Button>
@@ -378,66 +379,26 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-const safeStringify = (value: unknown): string => {
-  if (value === undefined) return '';
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
 const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
-  const inputJson = safeStringify(input);
-  const outputJson = safeStringify(output);
-  const hasOutput = outputJson.length > 0;
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, input);
+  const outputText = output === undefined ? undefined : stringifyToolValue(output);
+  const hasBody = hasToolArguments({ toolName, args: input }) || Boolean(outputText);
 
   return (
-    <ToolCard testId="agent-builder-chat-generic-tool">
-      <Collapsible>
-        <CollapsibleTrigger
-          className="group flex w-full items-center gap-2 text-left"
-          data-testid="agent-builder-chat-generic-tool-trigger"
-        >
-          <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
-            <Wrench className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-            <Txt variant="ui-sm" className="text-foreground" as="span">
-              Executing <span className="text-foreground font-mono">{toolName}</span>
-            </Txt>
-          </span>
-          <ChevronRight
-            className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
-            aria-hidden
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-              <div className="border-border1/60 border-b px-2 py-1">
-                <Txt variant="ui-sm" className="text-muted-foreground" as="div">
-                  Input
-                </Txt>
-              </div>
-              <pre className="text-foreground text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
-                {inputJson || '{}'}
-              </pre>
-            </div>
-            {hasOutput ? (
-              <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
-                <div className="border-border1/60 border-b px-2 py-1">
-                  <Txt variant="ui-sm" className="text-muted-foreground" as="div">
-                    Output
-                  </Txt>
-                </div>
-                <pre className="text-foreground text-ui-sm m-0 max-h-[320px] overflow-auto p-3 break-words whitespace-pre-wrap">
-                  {outputJson}
-                </pre>
-              </div>
-            ) : null}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </ToolCard>
+    <ActivityItem
+      data-testid="agent-builder-chat-generic-tool"
+      icon={<ToolIcon aria-hidden />}
+      label={label}
+      detail={detail}
+      aria-label={label}
+    >
+      {hasBody && (
+        <>
+          <ToolCallArguments toolName={toolName} args={input} />
+          {outputText && <ToolCallOutput text={outputText} />}
+        </>
+      )}
+    </ActivityItem>
   );
 };
 
@@ -452,22 +413,22 @@ export const ToolCard = ({
 }) => (
   <Card
     data-testid={testId}
-    className={cn(
-      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
-      className,
-    )}
+    className={cn('max-w-[80%] animate-in bg-background/60 p-3 duration-300 fade-in slide-in-from-left-2', className)}
   >
     {children}
   </Card>
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="animate-in fade-in slide-in-from-right-4 flex max-w-full min-w-0 items-start gap-2 duration-500 ease-out">
+  <div className="flex max-w-full min-w-0 animate-in items-start gap-2 duration-500 ease-out fade-in slide-in-from-right-4">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
-    <Txt variant="ui-md" className="text-muted-foreground min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="text-foreground font-semibold">{value}</strong>
+    <Txt tone="muted" as="p" variant="body" className="min-w-0 flex-1 truncate">
+      {label}{' '}
+      <Txt as="strong" variant="subheading" tone="ink">
+        {value}
+      </Txt>
     </Txt>
   </div>
 );
@@ -478,7 +439,7 @@ const MessageSetAgentName = () => {
 
   if (!name) return null;
 
-  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent name:" value={name} />;
+  return <SkillToolLine icon={<IconAlignmentLeft />} label="Setting the agent name:" value={name} />;
 };
 
 const MessageSetAgentDescription = () => {
@@ -487,7 +448,7 @@ const MessageSetAgentDescription = () => {
 
   if (!description) return null;
 
-  return <SkillToolLine icon={<AlignLeft />} label="Setting the agent description:" value={description} />;
+  return <SkillToolLine icon={<IconAlignmentLeft />} label="Setting the agent description:" value={description} />;
 };
 
 const MessageSetAgentInstructions = () => {
@@ -496,7 +457,7 @@ const MessageSetAgentInstructions = () => {
 
   if (!instructions) return null;
 
-  return <SkillToolLine icon={<FileText />} label="Setting the agent instructions:" value={instructions} />;
+  return <SkillToolLine icon={<IconFileText />} label="Setting the agent instructions:" value={instructions} />;
 };
 
 const MessageSetAgentTools = () => {
@@ -519,7 +480,7 @@ const MessageSetAgentTools = () => {
   const enabled = availableAgentTools.filter(t => t.isChecked);
   const value = enabled.length === 0 ? 'none' : enabled.map(t => t.name).join(', ');
 
-  return <SkillToolLine icon={<Wrench />} label="Enabling tools:" value={value} />;
+  return <SkillToolLine icon={<IconMaintenance />} label="Enabling tools:" value={value} />;
 };
 
 const MessageSetAgentSkills = () => {
@@ -529,7 +490,7 @@ const MessageSetAgentSkills = () => {
   const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
   const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
 
-  return <SkillToolLine icon={<Zap />} label="Enabling skills:" value={value} />;
+  return <SkillToolLine icon={<IconZap />} label="Enabling skills:" value={value} />;
 };
 
 const MessageSetAgentModel = () => {
@@ -553,7 +514,7 @@ const MessageSetAgentBrowserEnabled = () => {
 
   return (
     <SkillToolLine
-      icon={browserEnabled ? <Globe /> : <GlobeLockIcon />}
+      icon={browserEnabled ? <IconGlobe /> : <GlobeLockIcon />}
       label="Browser access"
       value={browserEnabled ? 'enabled' : 'disabled'}
     />
@@ -566,7 +527,7 @@ const MessageSetAgentWorkspaceId = () => {
 
   if (!workspaceId) return null;
 
-  return <SkillToolLine icon={<Building />} label="Setting workspace to" value={workspaceId} />;
+  return <SkillToolLine icon={<IconBuildings />} label="Setting workspace to" value={workspaceId} />;
 };
 
 interface SkillToolProps {
@@ -574,5 +535,5 @@ interface SkillToolProps {
 }
 
 const SkillTool = ({ name }: SkillToolProps) => (
-  <SkillToolLine icon={<Zap />} label="Using super-powers:" value={name} />
+  <SkillToolLine icon={<IconZap />} label="Using super-powers:" value={name} />
 );

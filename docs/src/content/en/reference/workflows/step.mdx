@@ -11,7 +11,7 @@ import TabItem from "@theme/TabItem";
 # Step class
 
 The Step class defines individual units of work within a workflow, encapsulating execution logic, data validation, and input/output handling.
-It can take either a tool or an agent as a parameter to automatically create a step from them.
+It can take a tool, agent, or configured classifier as a parameter to automatically create a step from it.
 
 ## Usage example
 
@@ -128,6 +128,7 @@ You can create a step directly from an agent. The step will use the agent's name
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 import { testAgent } from '../agents/test-agent'
+import { createStep } from '@mastra/core/workflows'
 
 const agentStep = createStep(testAgent)
 // inputSchema: { prompt: string }
@@ -139,6 +140,9 @@ const agentStep = createStep(testAgent)
 Pass `structuredOutput` to have the agent return typed structured data:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const articleSchema = z.object({
   title: z.string(),
   summary: z.string(),
@@ -171,6 +175,49 @@ const agentStep = createStep(testAgent, {
   },
 ]}
 />
+
+## Creating steps from classifiers
+
+Pass a [`Classifier`](/reference/classifier/classifier) with constructor-configured questions to `createStep()`. By default, the classifier evaluates the complete `inputData`. Use `state` to select a JSON value from the step context.
+
+```typescript title="src/mastra/workflows/ticket-triage.ts"
+import { Classifier } from '@mastra/core/classifier'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
+import { createStep } from '@mastra/core/workflows'
+
+const router = new Classifier({
+  id: 'ticket-router',
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
+  questions: {
+    route: {
+      type: 'choice',
+      criteria: {
+        billing: 'Billing, invoices, and payments',
+        support: 'Account access and product help',
+        other: 'Anything else',
+      },
+    },
+    urgent: { type: 'boolean' },
+  },
+})
+
+const classifyTicket = createStep(router, {
+  maxRetries: 2,
+  retries: 1,
+})
+```
+
+The typed step output is JSON-safe:
+
+- `answers.route.choice` is the selected choice literal.
+- `answers.urgent.probability` is the probability that the boolean answer is `true`, not a thresholded boolean.
+- Choice and score answers may include distributions.
+- A question the decision model refused is `{ type: 'refusal' }` and has no `choice`, `score`, or `probability`.
+- `usage` contains normalized token usage.
+
+`maxRetries` controls classifier model-call retries. `retries` controls workflow step retries. Classifier warnings, response metadata, and raw provider data aren't included in workflow output.
+
+A classifier without constructor-configured questions can't be used as a workflow step. The step evaluates its complete input. Add a preceding `.map()` call when the workflow needs to select or reshape that input.
 
 ## Constructor parameters
 
@@ -258,9 +305,16 @@ const agentStep = createStep(testAgent, {
             description: 'Access to Mastra services (agents, tools, etc.)',
           },
           {
+            name: 'getStepResultAsync',
+            type: '(step: Step | string) => Promise<any>',
+            description:
+              "Function to access results from other steps. Resolves to the step's output, or `null` if the step hasn't completed successfully.",
+          },
+          {
             name: 'getStepResult',
             type: '(step: Step | string) => any',
-            description: 'Function to access results from other steps',
+            description:
+              'Deprecated. Use `await getStepResultAsync(step)` instead. `getStepResult` will be removed in a future major release.',
           },
           {
             name: 'getInitData',
@@ -269,20 +323,32 @@ const agentStep = createStep(testAgent, {
           },
           {
             name: 'suspend',
-            type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>',
+            type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string | string[] }) => Promise<void>',
             description: 'Function to pause workflow execution',
           },
           {
             name: 'state',
             type: 'z.infer<TState>',
             description:
-              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema. Reading it in a run stored with `storageVersion: 2` throws; use `await getState()` instead.",
+          },
+          {
+            name: 'getState',
+            type: '(keys?: string[]) => Promise<z.infer<TState>>',
+            description:
+              "Resolves to the current workflow state, including this step's own `setState` changes. Pass top-level keys to get only those keys. Works on every engine and storage version.",
           },
           {
             name: 'setState',
-            type: '(state: z.infer<TState>) => void',
+            type: '(state: z.infer<TState>) => Promise<void>',
             description:
-              "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
+              "Replaces the step's pending state with the value you pass, which is validated on its own against the step's `stateSchema`, so it must contain every field that schema requires. Top-level keys you leave out keep their current value. A second call in the same step replaces the first. On the evented engine, `setState` instead merges the keys you pass into the state without validating them, and a second call adds to the first. Await it, so the update is applied before the step returns and a validation error fails the step.",
+          },
+          {
+            name: 'updateState',
+            type: '(state: Partial<z.infer<TState>>) => Promise<void>',
+            description:
+              "Merges the top-level keys it's given into the workflow state and validates the merged state against the step's `stateSchema`. Pass only the keys that change: spreading a state you read earlier can overwrite changes that parallel steps made. A key set to `undefined` is removed. Await it, so the update is applied before the step returns and a validation error fails the step.",
           },
           {
             name: 'runId',
@@ -292,7 +358,6 @@ const agentStep = createStep(testAgent, {
           {
             name: 'requestContext',
             type: 'RequestContext',
-            isOptional: true,
             description: 'Request Context for dependency injection and contextual information.',
           },
           {
@@ -300,7 +365,13 @@ const agentStep = createStep(testAgent, {
             type: 'number',
             description:
               'The retry count for this specific step, it automatically increases each time the step is retried',
+          },
+          {
+            name: 'metrics',
+            type: 'MetricsContext',
             isOptional: true,
+            description:
+              "Emits custom metrics correlated with this step, such as `metrics?.emit('orders_processed', 1, { status: 'ok' })`. A no-op when observability isn't configured. See the [MetricsContext reference](/reference/observability/metrics/metrics-context).",
           },
         ],
       },

@@ -6,6 +6,9 @@ import type { Config } from '@docusaurus/types'
 import type { Options as PresetOptions, ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
+import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs'
+import * as GATEWAY_API from './scripts/gateway-api/constants'
+import { createGatewayApiPageMD } from './scripts/gateway-api/markdown'
 import { normalizeSiteSectionRoot, SITE_SECTION_ROOTS } from './src/utils/canonical-url'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
@@ -14,7 +17,22 @@ const SHARED_REMARK_PLUGINS = [
   [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
 ] as const
 const ADMONITIONS_CONFIG = {
-  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta'],
+  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta', 'alpha'],
+}
+
+// Search and "Ask AI" silently disappear when their credentials are missing at
+// build time, and the build still succeeds. Fail production deploys instead so
+// a dropped env var (e.g. filtered out by turbo) can't ship unnoticed.
+// CI, preview and local builds may legitimately run without these secrets.
+const REQUIRED_PRODUCTION_ENV = ['ALGOLIA_APP_ID', 'ALGOLIA_SEARCH_API_KEY', 'KAPA_INTEGRATION_ID', 'KAPA_GROUP_ID']
+if (process.env.VERCEL_ENV === 'production') {
+  const missing = REQUIRED_PRODUCTION_ENV.filter(name => !process.env[name])
+  if (missing.length > 0) {
+    throw new Error(
+      `Production docs build is missing required env vars: ${missing.join(', ')}. ` +
+        'Set them in Vercel and make sure they are listed in docs/turbo.json.',
+    )
+  }
 }
 
 // The Kapa "Ask AI" chat requires an integrationId at build time. Only
@@ -60,13 +78,15 @@ const config: Config = {
       removeLegacyPostBuildHeadAttribute: true,
     },
     faster: true,
+    // No page shows git last-update dates, so skip reading git history. With
+    // `faster`, Docusaurus otherwise runs a full-history `git log` at build
+    // time, which stalls in blob-less CI clones while git fetches old files.
+    experimental_vcs: false,
   },
   // Custom fields for HubSpot and Analytics
   customFields: {
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
-    hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
-    mastraWebsite: process.env.MASTRA_WEBSITE,
     // Analytics
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
@@ -74,13 +94,29 @@ const config: Config = {
   },
   plugins: [
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
-    [require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
     [
       '@docusaurus/plugin-vercel-analytics',
       {
         debug: false,
         mode: 'auto',
       },
+    ],
+    [
+      // Only adds the `gen-api-docs` CLI, which scripts/gateway-api/generate.ts runs.
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: 'openapi',
+        docsPluginId: 'classic',
+        config: {
+          [GATEWAY_API.PLUGIN_ID]: {
+            specPath: GATEWAY_API.SPEC_OUTPUT,
+            outputDir: GATEWAY_API.PAGES_DIR,
+            template: 'scripts/gateway-api/template.mustache',
+            markdownGenerators: { createApiPageMD: createGatewayApiPageMD },
+            showInfoPage: false,
+          },
+        },
+      } satisfies OpenApiPlugin.Options,
     ],
     [
       '@docusaurus/plugin-content-docs',
@@ -172,7 +208,7 @@ const config: Config = {
       } satisfies AlgoliaPluginOptions,
     ],
   ],
-  themes: ['@docusaurus/theme-mermaid', ...kapaThemes],
+  themes: ['@docusaurus/theme-mermaid', 'docusaurus-theme-openapi-docs', ...kapaThemes],
   presets: [
     [
       'classic',

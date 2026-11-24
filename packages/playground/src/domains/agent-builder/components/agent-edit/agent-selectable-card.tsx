@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
 
@@ -38,15 +38,15 @@ export const AgentSelectableCard = ({
   const agentColor = useAgentColor();
 
   const containerStyle: CSSProperties = {
-    ['--agent-color-bg' as string]: agentColor.background,
-    ...(isSelected ? { borderColor: agentColor.background } : null),
+    ['--agent-color-bg' as string]: agentColor.tint,
+    ...(isSelected ? { borderColor: agentColor.tint } : null),
   };
 
   const checkStyle: CSSProperties | undefined = isSelected
     ? {
-        borderColor: agentColor.background,
-        backgroundColor: agentColor.background,
-        color: agentColor.foreground,
+        borderColor: agentColor.tint,
+        backgroundColor: agentColor.tint,
+        color: 'var(--background)',
       }
     : undefined;
 
@@ -55,9 +55,9 @@ export const AgentSelectableCard = ({
       data-testid={testId}
       style={containerStyle}
       className={cn(
-        'flex w-full flex-col gap-2 rounded-lg border bg-surface3 p-4 transition-colors',
-        'focus-visible:!border-[var(--agent-color-bg)] focus-within:!border-[var(--agent-color-bg)]',
-        isSelected ? 'bg-surface4' : 'border-border1',
+        'flex w-full flex-col gap-2 rounded-lg border bg-card p-4 transition-colors',
+        'focus-within:!border-[var(--agent-color-bg)] focus-visible:!border-[var(--agent-color-bg)]',
+        isSelected ? 'bg-muted' : 'border-border',
         disabled && 'opacity-60',
       )}
     >
@@ -75,11 +75,11 @@ export const AgentSelectableCard = ({
       >
         {icon}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Txt variant="ui-md" className="text-foreground truncate font-medium">
+          <Txt variant="subheading" tone="ink" className="truncate">
             {title}
           </Txt>
           {subtitle && (
-            <Txt variant="ui-sm" className="text-muted-foreground truncate">
+            <Txt variant="caption" tone="muted" className="truncate">
               {subtitle}
             </Txt>
           )}
@@ -90,10 +90,10 @@ export const AgentSelectableCard = ({
           style={checkStyle}
           className={cn(
             'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
-            !isSelected && 'border-border1 bg-transparent',
+            !isSelected && 'border-border bg-transparent',
           )}
         >
-          {isSelected && <Check className="h-3 w-3" />}
+          {isSelected && <IconCheckmark2Medium className="size-icon-xs" />}
         </span>
       </button>
       {footer}

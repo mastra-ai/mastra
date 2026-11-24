@@ -1,24 +1,34 @@
-import {
-  ArrowLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-  ListFilterPlus,
-  X,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ButtonHTMLAttributes } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
+import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { MENU_SIDE_OFFSET, menuEmptyClass, menuItemClass, menuItemTrailingIconClass } from '@/ds/primitives/menu-item';
+import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import {
+  MENU_SIDE_OFFSET,
+  menuEmptyClass,
+  menuItemButtonClass,
+  menuItemTrailingIconClass,
+} from '@/ds/primitives/menu-item';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI), so the highlight rides on `:focus`.
-const filterItemFocusClass = 'focus:bg-neutral6/5 focus:text-foreground';
+// Plain <button>s navigated with roving focus (not Base UI).
+const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
+  <button type="button" role="menuitem" data-filter-item="" ref={ref} {...props} />
+));
+FilterMenuButton.displayName = 'FilterMenuButton';
 
 export type PropertyFilterCreatorProps = {
   fields: PropertyFilterField[];
@@ -54,7 +64,7 @@ export function PropertyFilterCreator({
   fields,
   tokens,
   onTokensChange,
-  label = 'Add Filter',
+  label = 'Add filter',
   disabled,
   size,
   onStartTextFilter,
@@ -158,12 +168,12 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
+        <Button size={size} disabled={disabled} icon={<IconFilter2 />}>
           {label}
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        align="end"
+        align="start"
         sideOffset={MENU_SIDE_OFFSET}
         className={cn('w-64', selectedField ? 'p-3' : 'p-1')}
         initialFocus={false}
@@ -181,13 +191,13 @@ export function PropertyFilterCreator({
               <button
                 type="button"
                 aria-label="Back to properties"
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
-                <ArrowLeftIcon className="size-4" />
+                <IconArrowLeft className="size-icon-md" />
               </button>
-              <FilterIcon className="text-muted-foreground size-4 shrink-0" />
-              <span className="text-ui-sm text-muted-foreground">{`${selectedField.label} · is`}</span>
+              <IconFilter1 className="size-icon-md shrink-0 text-muted-foreground" />
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
@@ -212,89 +222,89 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              {visibleFields.length > 0 ? (
-                visibleFields.map(f => {
-                  const used = singleUseFieldIds.has(f.id);
-                  if (f.kind === 'pick-multi') {
+              <>
+                {visibleFields.length > 0 ? (
+                  visibleFields.map(f => {
+                    const used = singleUseFieldIds.has(f.id);
+                    if (f.kind === 'pick-multi') {
+                      return (
+                        <PickMultiMenuItem
+                          key={f.id}
+                          field={f}
+                          tokens={tokens}
+                          onChange={replacePickMultiToken}
+                          open={openPickMultiFieldId === f.id}
+                          onToggle={togglePickMulti}
+                          onClose={closePickMulti}
+                        />
+                      );
+                    }
                     return (
-                      <PickMultiMenuItem
+                      <FilterMenuButton
                         key={f.id}
-                        field={f}
-                        tokens={tokens}
-                        onChange={replacePickMultiToken}
-                        open={openPickMultiFieldId === f.id}
-                        onToggle={togglePickMulti}
-                        onClose={closePickMulti}
-                      />
+                        className={cn(menuItemButtonClass, 'group')}
+                        disabled={used}
+                        onClick={() => {
+                          setError(undefined);
+                          if (f.kind === 'text') {
+                            onTokensChange([...tokens, { fieldId: f.id, value: '' }]);
+                            onStartTextFilter?.(f.id);
+                            skipCloseFocusRef.current = true;
+                            setOpen(false);
+                            return;
+                          }
+                          setFieldId(f.id);
+                        }}
+                      >
+                        <span className="truncate">{f.label}</span>
+                        {used ? (
+                          <span className="ml-auto text-muted-foreground">In use</span>
+                        ) : (
+                          <span
+                            className={cn(
+                              menuItemTrailingIconClass,
+                              'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
+                            )}
+                          >
+                            <IconPlusMedium />
+                          </span>
+                        )}
+                      </FilterMenuButton>
                     );
-                  }
-                  return (
-                    <button
-                      key={f.id}
-                      type="button"
-                      role="menuitem"
-                      data-filter-item=""
-                      className={cn(menuItemClass, 'group', filterItemFocusClass)}
-                      disabled={used}
-                      onClick={() => {
-                        setError(undefined);
-                        if (f.kind === 'text') {
-                          onTokensChange([...tokens, { fieldId: f.id, value: '' }]);
-                          onStartTextFilter?.(f.id);
-                          skipCloseFocusRef.current = true;
-                          setOpen(false);
-                          return;
-                        }
-                        setFieldId(f.id);
-                      }}
-                    >
-                      <span className="truncate">{f.label}</span>
-                      {used ? (
-                        <span className="text-muted-foreground ml-auto">In use</span>
-                      ) : (
-                        <span
-                          className={cn(
-                            menuItemTrailingIconClass,
-                            'text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100',
-                          )}
-                        >
-                          <PlusIcon />
-                        </span>
-                      )}
-                    </button>
-                  );
-                })
-              ) : (
-                <div className={menuEmptyClass}>No matching property.</div>
-              )}
+                  })
+                ) : (
+                  <div className={menuEmptyClass}>No matching property.</div>
+                )}
+              </>
             </div>
           )}
 
           {selectedField && (
-            <Combobox
-              multiple
-              options={selectedField.options ?? []}
-              value={multiValue}
-              onValueChange={v => {
-                setMultiValue(v);
-                setError(undefined);
-              }}
-              placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-              searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
-              emptyText={selectedField.emptyText ?? 'No option found.'}
-              size="md"
-              name={`property-filter-${selectedField.id}`}
-              aria-label={selectedField.label}
-              error={error}
-            />
+            <Field invalid={Boolean(error)}>
+              <Combobox
+                multiple
+                options={selectedField.options ?? []}
+                value={multiValue}
+                onValueChange={v => {
+                  setMultiValue(v);
+                  setError(undefined);
+                }}
+                placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
+                emptyText={selectedField.emptyText ?? 'No option found.'}
+                size="md"
+                aria-label={selectedField.label}
+              />
+              <FieldError>{error}</FieldError>
+            </Field>
           )}
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<IconCrossMedium />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button icon={<ListFilterPlus />} variant="outline" size="md" onClick={commit}>
+              <Button icon={<IconFilter2 />} size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>
@@ -335,11 +345,8 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
       }}
     >
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          role="menuitem"
-          data-filter-item=""
-          className={cn(menuItemClass, filterItemFocusClass)}
+        <FilterMenuButton
+          className={menuItemButtonClass}
           onKeyDown={e => {
             if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
             if (!open) onToggle(field.id);
@@ -352,14 +359,14 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-muted-foreground" />}
+          {open && <IconChevronRightMedium className="text-muted-foreground" />}
           <span className="truncate">{field.label}</span>
           {!open && (
             <span className={cn(menuItemTrailingIconClass, 'text-muted-foreground')}>
-              <ChevronRightIcon />
+              <IconChevronRightMedium />
             </span>
           )}
-        </button>
+        </FilterMenuButton>
       </PopoverTrigger>
       <PopoverContent
         ref={contentRef}

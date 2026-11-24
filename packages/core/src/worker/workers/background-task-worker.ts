@@ -18,6 +18,8 @@ type StaticToolLike = {
 export interface BackgroundTaskWorkerConfig {
   globalConcurrency?: number;
   perAgentConcurrency?: number;
+  /** Per-owner overrides of `perAgentConcurrency`, keyed by the task's `agentId`. */
+  perOwnerConcurrency?: Record<string, number>;
   backpressure?: 'queue' | 'reject' | 'fallback-sync';
   defaultTimeoutMs?: number;
 }
@@ -65,6 +67,7 @@ export class BackgroundTaskWorker extends MastraWorker {
       mode: 'worker',
       globalConcurrency: this.#config.globalConcurrency,
       perAgentConcurrency: this.#config.perAgentConcurrency,
+      perOwnerConcurrency: this.#config.perOwnerConcurrency,
       backpressure: this.#config.backpressure,
       defaultTimeoutMs: this.#config.defaultTimeoutMs,
     });

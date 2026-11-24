@@ -141,4 +141,44 @@ describe('deployer browser session probe', () => {
     const defaultBody = defaultResponse.status === 200 ? await defaultResponse.json().catch(() => null) : null;
     expect(defaultBody).not.toEqual({ hasSession: false, screencastAvailable: false });
   });
+
+  it('forwards an explicitly configured CORS origin as the browser stream origin allowlist', async () => {
+    const setupBrowserStreamMock = vi.fn().mockResolvedValue({ injectWebSocket: () => {}, registry: {} });
+    vi.doMock('@mastra/hono', async () => {
+      const actual = await vi.importActual<typeof MastraHono>('@mastra/hono');
+      return {
+        ...actual,
+        setupBrowserStream: setupBrowserStreamMock,
+      };
+    });
+
+    const { createHonoServer } = await import('../index');
+    const mastra = new Mastra({ logger: false, server: { cors: { origin: 'https://studio.example.com' } } });
+    await createHonoServer(mastra, { tools: {} });
+
+    expect(setupBrowserStreamMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ allowedOrigins: 'https://studio.example.com' }),
+    );
+  });
+
+  it('leaves the browser stream origin allowlist unset when no CORS origin is configured', async () => {
+    const setupBrowserStreamMock = vi.fn().mockResolvedValue({ injectWebSocket: () => {}, registry: {} });
+    vi.doMock('@mastra/hono', async () => {
+      const actual = await vi.importActual<typeof MastraHono>('@mastra/hono');
+      return {
+        ...actual,
+        setupBrowserStream: setupBrowserStreamMock,
+      };
+    });
+
+    const { createHonoServer } = await import('../index');
+    // The deployer reflects the request origin by default, so an unconfigured
+    // install must not be turned into a restrictive allowlist.
+    const mastra = new Mastra({ logger: false, server: { cors: { credentials: true } } });
+    await createHonoServer(mastra, { tools: {} });
+
+    const config = setupBrowserStreamMock.mock.calls[0]![1];
+    expect(config.allowedOrigins).toBeUndefined();
+  });
 });

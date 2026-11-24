@@ -11,8 +11,9 @@ export function findLastCompletedObservationBoundary(message: MastraDBMessage): 
 
   // Search from the end to find the most recent end marker
   for (let i = parts.length - 1; i >= 0; i--) {
-    const part = parts[i] as { type?: string };
-    if (part?.type === 'data-om-observation-end') {
+    const part = parts[i] as { type?: string; data?: { operationType?: string } };
+    // Reflection markers live on the user message but do not observe its parts.
+    if (part?.type === 'data-om-observation-end' && part.data?.operationType !== 'reflection') {
       return i;
     }
   }
@@ -167,13 +168,77 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
     return unobservedParts;
   }
 
-  const preservedCalls = parts.slice(0, endMarkerIndex).filter(part => {
-    const id = getToolInvocationId(part, 'call');
-    return id !== undefined && unobservedResultIds.has(id);
-  });
+  // A kept call has to travel with the signed reasoning block it was decided in.
+  // Providers reject (or re-bill) a replayed tool call whose thinking signature was
+  // pruned, and the prune would otherwise drop that block as "observed" (GRWTH-1926).
+  const preserved: MastraDBMessage['content']['parts'] = [];
+  let pendingReasoning: number[] = [];
+  let toolSinceReasoning = false;
+  let keptAnything = false;
 
-  return preservedCalls.length > 0 ? [...preservedCalls, ...unobservedParts] : unobservedParts;
+  for (let i = 0; i < endMarkerIndex; i++) {
+    const part = parts[i]!;
+    const id = getToolInvocationId(part, 'call');
+    if (id !== undefined && unobservedResultIds.has(id)) {
+      for (const index of pendingReasoning) preserved.push(parts[index]!);
+      pendingReasoning = [];
+      toolSinceReasoning = true;
+      preserved.push(part);
+      keptAnything = true;
+      continue;
+    }
+    // Only reasoning from the same step as a kept call is replayed; a file, image or other
+    // part in between means the block belongs to an already-observed step. Text does not end
+    // the run: a step writes its thinking, then text, then the call, and pruning the block out
+    // of that turn leaves the call at the start of the turn, which Anthropic rejects. A sibling
+    // call from the same step does not end the block either: parallel calls share one signed
+    // run, and only the one whose result is still pending survives the prune. A sibling that
+    // already completed is stored in result state, so tool invocations in any state keep it.
+    // A step marker or a new signed run after a tool invocation starts a later step, whose
+    // calls must not inherit the earlier step's signature.
+    if (part?.type === 'reasoning' && hasReplayableReasoningMetadata(part)) {
+      if (toolSinceReasoning) pendingReasoning = [];
+      toolSinceReasoning = false;
+      pendingReasoning.push(i);
+      continue;
+    }
+    if (part?.type === 'tool-invocation') {
+      toolSinceReasoning = true;
+      continue;
+    }
+    if (part?.type === 'step-start') {
+      if (toolSinceReasoning) pendingReasoning = [];
+      continue;
+    }
+    if (part?.type === 'text') continue;
+    pendingReasoning = [];
+  }
+
+  return keptAnything ? [...preserved, ...unobservedParts] : unobservedParts;
 }
+
+/**
+ * Reasoning part metadata a provider can replay (a signature, redacted payload, item id).
+ * Mirrors `hasReplayableReasoningMetadata` in `@mastra/core`'s message-list utils.
+ */
+function hasReplayableReasoningMetadata(part: { type?: string; providerMetadata?: unknown }): boolean {
+  const metadata = part.providerMetadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  return Object.values(metadata as Record<string, unknown>).some(
+    value =>
+      !!value &&
+      typeof value === 'object' &&
+      REPLAYABLE_REASONING_KEYS.some(key => key in (value as Record<string, unknown>)),
+  );
+}
+
+const REPLAYABLE_REASONING_KEYS = [
+  'signature',
+  'redactedData',
+  'itemId',
+  'reasoningEncryptedContent',
+  'thoughtSignature',
+];
 
 /**
  * Get the messages Observational Memory is allowed to work with.
@@ -247,12 +312,12 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      messageList.removeByIds(messagesToRemove, { pruned: true });
     }
 
     const unobserved = getUnobservedPartsPreservingToolCallPairs(markerMessage);
     if (unobserved.length === 0) {
-      if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
+      if (markerMessage.id) messageList.removeByIds([markerMessage.id], { pruned: true });
     } else if (unobserved.length < (markerMessage.content?.parts?.length ?? 0)) {
       markerMessage.content.parts = unobserved;
     }
@@ -292,12 +357,14 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      messageList.removeByIds(messagesToRemove, { pruned: true });
     }
   }
 }
 
-export function getBufferedChunks(record: ObservationalMemoryRecord | null | undefined): BufferedObservationChunk[] {
+export function getBufferedChunks(
+  record: Pick<ObservationalMemoryRecord, 'bufferedObservationChunks'> | null | undefined,
+): BufferedObservationChunk[] {
   if (!record?.bufferedObservationChunks) return [];
   if (Array.isArray(record.bufferedObservationChunks)) return record.bufferedObservationChunks;
   if (typeof record.bufferedObservationChunks === 'string') {

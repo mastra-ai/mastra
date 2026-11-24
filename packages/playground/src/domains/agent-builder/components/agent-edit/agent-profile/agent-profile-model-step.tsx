@@ -1,15 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-
-import { ArrowRightIcon } from 'lucide-react';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { Models } from './models';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
-import { ProviderLogo } from '@/domains/llm/components/provider-logo';
-import { cleanProviderId } from '@/domains/llm/utils';
 import { startViewTransition } from '@/lib/routing';
 
 interface ActiveModelBadgeProps {
@@ -48,11 +45,8 @@ export const AgentProfileModelStep = () => {
       }
       contentClassName="overflow-hidden"
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <ArrowRightIcon />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >

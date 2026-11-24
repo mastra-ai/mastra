@@ -1,0 +1,215 @@
+/*
+ * Material: what a surface and a control's edge are made of, in both themes.
+ * Everything here is an alpha of `--fill-tint` — the one declaration that flips
+ * per theme — or an elevation drawn from it.
+ */
+
+:root {
+  /*
+   * Fill ladder — one language for anything sitting ABOVE its parent surface.
+   * Rungs are alphas of `--fill-tint`: light catching a dark surface, shade landing on a light one. The alphas are per
+   * theme too, since shade on white carries more weight than light on near-black.
+   *
+   * fill         press on a raised control, its open rung, and press on a transparent
+   *              base; also the rest fill of a raised container
+   * fill-hover   hover on a rest fill; rest of a selection control (checkbox,
+   *              switch, radio), which sits one rung up from field-sized surfaces
+   * fill-active  press / open / selected; selection-control hover
+   * fill-subtle  state layer on a transparent base: ghost hover, row hover, and
+   *              disabled fills
+   * fill-strong  selection-control press
+   */
+  --fill-tint: 97.02%;
+  --fill-subtle: oklch(var(--fill-tint) 0 0 / 8%);
+  --fill: oklch(var(--fill-tint) 0 0 / 8%);
+  --fill-hover: oklch(var(--fill-tint) 0 0 / 8%);
+  --fill-active: oklch(var(--fill-tint) 0 0 / 8%);
+  --fill-strong: oklch(var(--fill-tint) 0 0 / 20%);
+
+  /*
+   * Opaque ladder — the states of a control that IS a colour rather than a rung
+   * layered on the surface behind it: the primary and destructive buttons.
+   * The ladder above cannot serve them. Its rungs are alphas, and a filled
+   * control that answers a pointer by thinning its own fill lets the card text,
+   * the list row or the image it covers read through it — the one thing a
+   * filled control promises not to do, and the louder the state the wider the
+   * window. Each rung is instead the opaque twin of the alpha it replaces: the
+   * same colour mixed toward `--background` by the same amount, in sRGB
+   * because that is the space a browser composites alpha in. The canvas is the
+   * reference surface, so the match is exact there and drifts on a card,
+   * sidebar or popover by the few levels those surfaces sit apart — measured
+   * at most 4 of 255, below a perceptible step.
+   *
+   * Both tones resolve from the semantic roles in `theme.css`, so a theme flip
+   * carries the whole ladder with it.
+   */
+  --fill-inverse: var(--foreground);
+  --fill-inverse-hover: color-mix(in srgb, var(--foreground) 75%, var(--background));
+  --fill-inverse-active: color-mix(in srgb, var(--foreground) 60%, var(--background));
+  --fill-inverse-disabled: color-mix(in srgb, var(--foreground) 45%, var(--background));
+
+  --fill-destructive: var(--red-600);
+  --fill-destructive-hover: var(--red-700);
+  --fill-destructive-active: var(--red-800);
+  --fill-destructive-disabled: var(--red-soft-900);
+  --fill-destructive-foreground: var(--red-50);
+  --fill-destructive-disabled-foreground: var(--red-soft-300);
+
+  /*
+   * Boundary ladder — the four states of a control's 1px edge, as alphas of
+   * `--fill-tint` so an edge reads the same on any surface and in either theme.
+   *
+   * border         rim of a filled control and content divider
+   *                (raised surfaces use `--surface-rim` below)
+   * border-strong  the only affordance of a transparent control (outline
+   *                button/field at rest, selection control at rest)
+   * border-hover   hover on either of those. Deliberately nearer rest than focus: it
+   *                answers a pointer, and a pointer is not an event. Sitting midway
+   *                between the two (31%) made an outline control read as focused
+   *                under the cursor and left focus with nowhere louder to go.
+   * border-focus   focus, and the one rung that stays per-theme: it is authored
+   *                at the lowest alpha still clearing WCAG 1.4.11 (3:1 against
+   *                the fill it sits on) — 3.3:1 here, 3.2:1 in light at 50%.
+   *                Shade carries less weight than light at equal alpha, so
+   *                matching dark's 40% in light would drop it under the floor,
+   *                and raising dark to 50% reads as a highlight, not a focus.
+   */
+  --border: oklch(var(--fill-tint) 0 0 / 8%);
+  /* The line between rows of the same kind, inset to their content. */
+  --separator: oklch(var(--fill-tint) 0 0 / 6%);
+  --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
+  --border-hover: oklch(var(--fill-tint) 0 0 / 25%);
+  --border-focus: oklch(var(--fill-tint) 0 0 / 40%);
+
+  /* Opaque twin of `--fill` over `--background`, for a scrolling panel whose
+   * sticky parts cannot let rows show through. Keep the two in sync: a panel and
+   * a resting control side by side on the canvas must read as one material. */
+  --surface-panel: oklch(0.2686 0 0);
+
+  --surface-overlay-soft: var(--fill-subtle);
+  --surface-overlay-strong: var(--gray-alpha-2);
+
+  --scrim: oklch(0% 0 0deg / 75%);
+
+  /*
+   * Two elevations, because there are two distances: a surface in the flow
+   * (card, field, list panel, settings container, app frame) and a detached
+   * overlay (popover, dropdown, dialog, drawer, tooltip).
+   *
+   * These are the drop layers only. The `shadow-raised` / `shadow-overlay`
+   * utilities in `components.css` assemble rim + drops on the element
+   * itself, which is what lets a state repaint the rim: a custom property
+   * holding `var(--surface-rim)` would be substituted here, on the root, and
+   * every descendant would inherit the finished string.
+   *
+   * The rim is its own token, not `--border`, so a surface's edge and the dividers inside it can move apart.
+   * `border-surface-rim` exposes the same color for CSS borders, including a
+   * frame header that meets the inset rim. Do not add opacity at call sites.
+   *
+   * Focus moves that one edge to `--border-focus` instead of adding a
+   * `border` beside it, which would read as two lines — and is why a field and
+   * a card can be the same material. Hover does not touch it: the rim is the
+   * loudest part of a borderless surface, so a pointer wash goes through
+   * `--surface-tint` (see `components.css`) and leaves the boundary alone.
+   *
+   * The rim is inset, so it cannot be clipped: the app frame and every
+   * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface
+   * sitting flush inside one is shaved off entirely. The cost is the mirror
+   * case — a child flush against the edge paints over it. MainCard uses a
+   * border for its rim so full-bleed pages can fill the rounded frame.
+   *
+   * In-flow surfaces keep the bleed short for the same reason. The drops fall
+   * outside the box and a scroller does clip those, so a tile reaching further
+   * than its clearance has its shadow sliced along the container edge.
+   *
+   * A detached surface carries a stronger rim than one in the flow: it has to separate from whatever it covers.
+   */
+  --inset-rim: oklch(100% 0 0deg / 7%);
+  --surface-rim: oklch(var(--fill-tint) 0 0 / 8%);
+  --overlay-rim: oklch(var(--fill-tint) 0 0 / 12%);
+  --elevation-raised: 0 0 #0000;
+  --dialog: var(--card);
+  /* A field on the page is the card color; inside a card or dialog it is a light tint of what it sits on. */
+  --field-on-page: var(--card);
+  --field-on-surface: color-mix(in srgb, oklch(var(--fill-tint) 0 0) 3%, var(--card));
+  --field-on-nested: oklch(var(--fill-tint) 0 0 / 3%);
+  --field-rim: oklch(var(--fill-tint) 0 0 / 8%);
+  /* Edge of a control made of segments. */
+  --control-rim: var(--border);
+  --field-hover-on-page: var(--fill-subtle);
+  --field-open-on-page: var(--fill);
+  --field-hover-on-surface: var(--fill-subtle);
+  --field-open-on-surface: var(--fill);
+  --elevation-overlay:
+    0 3px 8px oklch(0% 0 0deg / 12%), 0 2px 5px oklch(0% 0 0deg / 12%), 0 1px 1px oklch(0% 0 0deg / 12%);
+  --elevation-dialog: var(--elevation-overlay);
+}
+
+html.light {
+  /* Shade instead of light, at the same alphas: the whole fill and boundary
+   * ladder re-resolves from here. */
+  --fill-tint: 22.64%;
+  --fill-subtle: oklch(var(--fill-tint) 0 0 / 4%);
+  --fill: oklch(var(--fill-tint) 0 0 / 6%);
+  --fill-hover: oklch(var(--fill-tint) 0 0 / 6%);
+  --fill-active: oklch(var(--fill-tint) 0 0 / 8%);
+  --fill-strong: oklch(var(--fill-tint) 0 0 / 16%);
+  /* A step softer than text: solid black is heavy on white. */
+  --fill-inverse: oklch(0.2891 0 0);
+  --fill-inverse-hover: oklch(0.36 0 0);
+  --fill-inverse-active: oklch(0.41 0 0);
+  --fill-destructive-disabled: var(--red-300);
+  --fill-destructive-disabled-foreground: var(--red-50);
+  /* Shade carries less weight than light at equal alpha, so focus needs a
+   * higher one here to hold its 3:1 floor against the fill it sits on. */
+  --border-focus: oklch(var(--fill-tint) 0 0 / 50%);
+  /* Opaque twin of the light `--fill` over `--background`. */
+  --surface-panel: oklch(0.9431 0 0);
+
+  --scrim: oklch(20.8% 0 0deg / 45%);
+
+  --inset-rim: oklch(0% 0 0deg / 8%);
+  --elevation-raised: 0 1px 2px oklch(0% 0 0deg / 4%);
+  --field-rim: oklch(var(--fill-tint) 0 0 / 9%);
+  --control-rim: oklch(var(--fill-tint) 0 0 / 12%);
+  /* The field's own tint already took part of the way. */
+  --field-hover-on-surface: oklch(var(--fill-tint) 0 0 / 1.5%);
+  --field-open-on-surface: oklch(var(--fill-tint) 0 0 / 2.5%);
+  --elevation-overlay:
+    0 6px 18px oklch(0% 0 0deg / 2%), 0 3px 9px oklch(0% 0 0deg / 4%), 0 1px 1px oklch(0% 0 0deg / 4%);
+  --elevation-dialog:
+    0 1px 2px oklch(0% 0 0deg / 4%), 0 8px 24px oklch(0% 0 0deg / 6%), 0 24px 64px oklch(0% 0 0deg / 12%);
+}
+
+@theme {
+  --color-scrim: var(--scrim);
+  --color-surface-overlay-soft: var(--surface-overlay-soft);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
+}
+
+/* Inline so a utility resolves var(--token) on the styled element and honors a
+   per-element override. */
+@theme inline {
+  --color-surface-panel: var(--surface-panel);
+  --color-fill-subtle: var(--fill-subtle);
+  --color-fill: var(--fill);
+  --color-fill-hover: var(--fill-hover);
+  --color-fill-active: var(--fill-active);
+  --color-fill-strong: var(--fill-strong);
+  --color-fill-inverse: var(--fill-inverse);
+  --color-fill-inverse-hover: var(--fill-inverse-hover);
+  --color-fill-inverse-active: var(--fill-inverse-active);
+  --color-fill-inverse-disabled: var(--fill-inverse-disabled);
+  --color-fill-destructive: var(--fill-destructive);
+  --color-fill-destructive-hover: var(--fill-destructive-hover);
+  --color-fill-destructive-active: var(--fill-destructive-active);
+  --color-fill-destructive-disabled: var(--fill-destructive-disabled);
+  --color-fill-destructive-foreground: var(--fill-destructive-foreground);
+  --color-fill-destructive-disabled-foreground: var(--fill-destructive-disabled-foreground);
+  --color-surface-rim: var(--surface-rim);
+  --color-border: var(--border);
+  --color-separator: var(--separator);
+  --color-border-strong: var(--border-strong);
+  --color-border-hover: var(--border-hover);
+  --color-border-focus: var(--border-focus);
+}

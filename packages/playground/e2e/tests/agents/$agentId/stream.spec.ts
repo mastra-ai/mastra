@@ -13,7 +13,7 @@ let context: BrowserContext;
  * for that transition so subsequent assertions run against the correct thread.
  */
 async function fillAndSend(page: Page, message: string) {
-  const chatInput = page.getByPlaceholder('Enter your message...');
+  const chatInput = page.getByPlaceholder('Enter your message');
   const sendButton = page.getByRole('button', { name: 'Send' });
 
   await chatInput.click();

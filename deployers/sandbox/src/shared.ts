@@ -61,11 +61,12 @@ export async function runInSandbox(
   }
   // Run via `sh -c` (argv style): providers pass `command` straight to their
   // exec API as an executable, so a raw script string with spaces would fail.
-  const result = await sandbox.executeCommand(
-    'sh',
-    ['-c', script],
-    opts?.timeout ? { timeout: opts.timeout } : undefined,
-  );
+  // Scripts here bound their own output (e.g. `head -c` before base64), and
+  // dropping the oldest bytes would corrupt the leading size line and base64.
+  const result = await sandbox.executeCommand('sh', ['-c', script], {
+    ...(opts?.timeout ? { timeout: opts.timeout } : {}),
+    maxRetainedBytes: Infinity,
+  });
   if (!result.success && !opts?.allowFailure) {
     // Never echo the full script back: it can contain secrets (env values)
     // or entire base64 upload chunks. Use the label or a bounded excerpt.
@@ -131,7 +132,9 @@ export async function tailServerLog(sandbox: WorkspaceSandbox, remoteDir: string
  * Poll `${url}${path}` until the server responds. Any HTTP status below 500
  * counts as "the server is up" — gateway errors (502/503) mean nothing is
  * listening on the port, and 410 is what some providers (e.g. Vercel) return
- * from their edge when the sandbox itself is stopped.
+ * from their edge when the sandbox itself is stopped. Responses a provider's
+ * edge marks as its own (`x-vercel-error`, `x-mastra-preview-error`) don't
+ * count either.
  */
 export async function waitForHealthy(
   url: string,
@@ -146,8 +149,10 @@ export async function waitForHealthy(
     try {
       const res = await fetch(new URL(path, url), { signal: AbortSignal.timeout(intervalMs * 5) });
       // A provider-edge error header means the response came from the sandbox
-      // infrastructure (stopped/unreachable VM), not from the Mastra server.
-      const providerError = res.status === 410 || res.headers.has('x-vercel-error');
+      // infrastructure (stopped/unreachable VM, or a private port turning the
+      // caller away), not from the Mastra server.
+      const providerError =
+        res.status === 410 || res.headers.has('x-vercel-error') || res.headers.has('x-mastra-preview-error');
       if (res.status < 500 && !providerError) {
         return true;
       }

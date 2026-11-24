@@ -1,7 +1,7 @@
 // AUTO-GENERATED from rhysbalevicius/integration-templates @ c4fb0d5d5b2c — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addAlertTagsTool } from './tools/add-alert-tags.js';
 import { connectFollowUpExternalIssueTool } from './tools/connect-follow-up-external-issue.js';
 import { createActionTool } from './tools/create-action.js';
@@ -139,5 +139,5 @@ export function createIncidentIoTools(options?: ProviderToolsOptions) {
     incident_io_update_incident_timeline_item: updateIncidentTimelineItemTool(platformProxy),
     incident_io_update_incident: updateIncidentTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

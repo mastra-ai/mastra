@@ -1,48 +1,116 @@
 import * as React from 'react';
-import { DayPicker } from 'react-day-picker';
+import { DayPicker, getDefaultClassNames } from 'react-day-picker';
+import type { ChevronProps, DayButton } from 'react-day-picker';
+import { IconChevronLeftMedium } from '@/ds/icons/central/IconChevronLeftMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { cn } from '@/lib/utils';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
-export function DatePicker({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+/**
+ * A month grid for picking a day or a range of days. Ranges read as one continuous band:
+ * the ends are solid inverse pills and the days between sit on a quiet fill that runs
+ * edge to edge, rounding off where a week starts or ends.
+ */
+export function DatePicker({ className, classNames, showOutsideDays = true, components, ...props }: CalendarProps) {
+  const defaults = getDefaultClassNames();
+
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn('p-3', className)}
+      className={cn('w-full p-3 [--cell-size:--spacing(8)]', className)}
       classNames={{
-        months: 'flex flex-col space-y-4 sm:space-y-0 ',
-        month: 'space-y-4 text-ui-sm ',
-        caption: 'flex justify-between pt-1 items-center pl-2',
-        caption_label: 'text-foreground font-medium',
-        nav: 'flex items-center',
-        nav_button_previous:
-          'flex size-7 items-center justify-center rounded-md bg-transparent p-0 text-muted-foreground hover:bg-neutral6/5 hover:text-foreground',
-        nav_button_next:
-          'flex size-7 items-center justify-center rounded-md bg-transparent p-0 text-muted-foreground hover:bg-neutral6/5 hover:text-foreground',
-        dropdown_month: 'w-full border-collapse space-y-1',
-        weeknumber: 'flex',
-        day: cn(
-          'relative p-0 text-center focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-neutral6/10 [&:has([aria-selected].day-outside)]:bg-neutral6/5 [&:has([aria-selected].day-range-end)]:rounded-r-md',
-          props.mode === 'range'
-            ? '[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md'
-            : '[&:has([aria-selected])]:rounded-md',
-          'size-8 p-0 font-normal hover:bg-neutral6/5 aria-selected:opacity-100',
+        // Width lives on className alone so a caller's width class can replace it.
+        root: defaults.root,
+        months: cn('relative flex flex-col gap-6 sm:flex-row', defaults.months),
+        month: cn('flex w-full flex-col gap-2', defaults.month),
+        // The nav overlays the caption row, so a two-month grid gets one ‹ on the far
+        // left and one › on the far right, with each month's name centred above it.
+        nav: cn(
+          'pointer-events-none absolute inset-x-0 top-0 flex h-(--cell-size) items-center justify-between',
+          defaults.nav,
         ),
-        day_range_start: 'day-range-start rounded-l-md',
-        day_range_end: 'day-range-end rounded-r-md',
-        day_selected: cn(
-          'bg-neutral6! text-surface1! hover:bg-neutral6/90! focus:bg-neutral6/90! focus:text-surface1!',
-          props.mode !== 'range' && 'rounded-md',
+        button_previous: cn(navButton, defaults.button_previous),
+        button_next: cn(navButton, defaults.button_next),
+        month_caption: cn('flex h-(--cell-size) items-center justify-center', defaults.month_caption),
+        caption_label: cn('text-label text-foreground select-none', defaults.caption_label),
+        month_grid: cn('w-full border-collapse', defaults.month_grid),
+        weekdays: cn('flex', defaults.weekdays),
+        weekday: cn(
+          'flex size-(--cell-size) grow items-center justify-center text-caption text-muted-foreground select-none',
+          defaults.weekday,
         ),
-        day_today: 'bg-neutral6/10 text-foreground',
-        day_outside:
-          'day-outside text-muted-foreground opacity-50 aria-selected:bg-neutral6/5 aria-selected:text-muted-foreground aria-selected:opacity-30',
-        day_disabled: 'text-muted-foreground opacity-50',
-        day_range_middle: 'aria-selected:bg-neutral6/10 aria-selected:text-foreground',
-        day_hidden: 'invisible',
-        head_cell: 'text-ui-xs text-muted-foreground',
+        week: cn('mt-0.5 flex w-full', defaults.week),
+        day: cn('group/day relative size-(--cell-size) grow p-0 text-center select-none', defaults.day),
+        // The band is painted on the cells, behind the day buttons: half a cell behind
+        // each end, a full cell behind the days between, rounded at the week's edges and
+        // where the month ends (next to a hidden spill-over day).
+        range_start: cn(
+          'bg-linear-to-r from-transparent from-50% to-fill to-50% last:bg-none [&.rdp-range_end]:bg-none [&:has(+.rdp-hidden)]:bg-none',
+          defaults.range_start,
+        ),
+        range_middle: cn(
+          'bg-fill first:rounded-l-full last:rounded-r-full [&:has(+.rdp-hidden)]:rounded-r-full [.rdp-hidden+&]:rounded-l-full',
+          defaults.range_middle,
+        ),
+        range_end: cn(
+          'bg-linear-to-l from-transparent from-50% to-fill to-50% first:bg-none [.rdp-hidden+&]:bg-none',
+          defaults.range_end,
+        ),
+        today: defaults.today,
+        outside: defaults.outside,
+        disabled: defaults.disabled,
+        hidden: cn('invisible', defaults.hidden),
         ...classNames,
       }}
+      components={{
+        Chevron: CalendarChevron,
+        DayButton: CalendarDayButton,
+        ...components,
+      }}
+      {...props}
+    />
+  );
+}
+
+const navButton = cn(
+  'pointer-events-auto flex size-(--cell-size) items-center justify-center rounded-full text-muted-foreground',
+  'not-aria-disabled:hover:bg-fill-subtle not-aria-disabled:hover:text-foreground',
+  'focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none',
+  'aria-disabled:opacity-40',
+);
+
+function CalendarChevron({ orientation, className }: ChevronProps) {
+  const Icon = orientation === 'left' ? IconChevronLeftMedium : IconChevronRightMedium;
+  return <Icon className={cn('size-4', className)} />;
+}
+
+function CalendarDayButton({ className, day: _day, modifiers, ...props }: React.ComponentProps<typeof DayButton>) {
+  const ref = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    if (modifiers.focused) ref.current?.focus();
+  }, [modifiers.focused]);
+
+  const isEnd = modifiers.range_start || modifiers.range_end;
+  const isSolid = modifiers.selected && (isEnd || !modifiers.range_middle);
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      data-today={modifiers.today || undefined}
+      className={cn(
+        'relative mx-auto flex size-(--cell-size) items-center justify-center rounded-full text-body-sm text-foreground',
+        'outline-none focus-visible:ring-2 focus-visible:ring-border-focus',
+        'not-disabled:hover:bg-fill-hover',
+        // Today: a dot under the number, so it never competes with a selection.
+        'data-today:after:absolute data-today:after:bottom-1 data-today:after:size-1 data-today:after:rounded-full data-today:after:bg-current',
+        modifiers.outside && 'text-subtle-foreground',
+        isSolid &&
+          'bg-fill-inverse font-medium text-background not-disabled:hover:bg-fill-inverse-hover data-today:after:bg-background',
+        modifiers.disabled && 'cursor-not-allowed text-subtle-foreground',
+        className,
+      )}
       {...props}
     />
   );

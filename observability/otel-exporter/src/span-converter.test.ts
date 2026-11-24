@@ -10,6 +10,7 @@ import type {
   AgentRunAttributes,
   ToolCallAttributes,
   MCPToolCallAttributes,
+  MCPServerRequestAttributes,
   WorkflowRunAttributes,
   WorkflowStepAttributes,
 } from '@mastra/core/observability';
@@ -48,13 +49,53 @@ describe('SpanConverter', () => {
     converter = new SpanConverter({
       packageName: '@mastra/otel-exporter',
       serviceName: 'test-service',
-      format: 'GenAI_v1_38_0',
+      format: 'GenAI_v1_41_0',
     });
   });
 
   // =============================================================================
   // SPAN NAMING CONVENTIONS
   // =============================================================================
+  describe('Span links', () => {
+    const baseSpan = {
+      id: '1111111111111111',
+      traceId: '22222222222222222222222222222222',
+      type: SpanType.GENERIC,
+      startTime: new Date(),
+      endTime: new Date(),
+      isEvent: false,
+      isRootSpan: true,
+    } as const;
+
+    it('exports span links as remote OpenTelemetry links', async () => {
+      const span: ExportedSpan<SpanType.GENERIC> = {
+        ...baseSpan,
+        name: 'served-request',
+        links: [{ traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' }],
+      };
+
+      const result = await converter.convertSpan(span);
+
+      expect(result.links).toEqual([
+        {
+          context: {
+            traceId: '0af7651916cd43dd8448eb211c80319c',
+            spanId: 'b7ad6b7169203331',
+            traceFlags: 1,
+            isRemote: true,
+          },
+        },
+      ]);
+      expect(result.parentSpanContext).toBeUndefined();
+    });
+
+    it('exports no links for a span without links', async () => {
+      const span: ExportedSpan<SpanType.GENERIC> = { ...baseSpan, name: 'plain' };
+
+      expect((await converter.convertSpan(span)).links).toEqual([]);
+    });
+  });
+
   describe('Span Naming Conventions', () => {
     it('should format LLM generation span names correctly', async () => {
       const span: ExportedSpan<SpanType.MODEL_INFERENCE> = {
@@ -300,6 +341,26 @@ describe('SpanConverter', () => {
       const result = await converter.convertSpan(span);
       expect(result.kind).toBe(SpanKind.CLIENT);
     });
+
+    it('should use SERVER for MCP server requests', async () => {
+      const span: ExportedSpan<SpanType.MCP_SERVER_REQUEST> = {
+        id: 'span-1',
+        traceId: 'trace-1',
+        name: 'tools/call lookup',
+        type: SpanType.MCP_SERVER_REQUEST,
+        startTime: new Date(),
+        endTime: new Date(),
+        isEvent: false,
+        isRootSpan: true,
+        attributes: {
+          mcpMethod: 'tools/call',
+          mcpServer: 'server-1',
+        } as MCPServerRequestAttributes,
+      };
+
+      const result = await converter.convertSpan(span);
+      expect(result.kind).toBe(SpanKind.SERVER);
+    });
   });
 
   // =============================================================================
@@ -332,7 +393,7 @@ describe('SpanConverter', () => {
 
       expect(attrs['gen_ai.usage.input_tokens']).toBe(100);
       expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
-      expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(20);
+      expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(20);
       expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(30);
 
       // Should NOT have old naming
@@ -440,8 +501,8 @@ describe('SpanConverter', () => {
       expect(attrs['gen_ai.request.top_k']).toBe(40);
       expect(attrs['gen_ai.request.presence_penalty']).toBe(0.1);
       expect(attrs['gen_ai.request.frequency_penalty']).toBe(0.2);
-      expect(attrs['gen_ai.request.stop_sequences']).toBe('["\\\\n","END"]');
-      expect(attrs['gen_ai.response.finish_reasons']).toBe('["stop"]');
+      expect(attrs['gen_ai.request.stop_sequences']).toEqual(['\\n', 'END']);
+      expect(attrs['gen_ai.response.finish_reasons']).toEqual(['stop']);
     });
 
     it('should include all OTEL Gen AI semantic conventions', async () => {
@@ -614,6 +675,9 @@ describe('SpanConverter', () => {
         entityId: 'test',
         attributes: {
           availableTools: ['tool1', 'tool2'],
+          instructions: 'Be brief.',
+          model: 'grok-4',
+          provider: 'x-ai',
         } as AgentRunAttributes,
       };
 
@@ -621,7 +685,14 @@ describe('SpanConverter', () => {
       const attrs = result.attributes;
 
       expect(attrs['gen_ai.agent.id']).toBe('test');
-      expect(attrs['gen_ai.tool.definitions']).toBe('["tool1","tool2"]');
+      expect(attrs['gen_ai.provider.name']).toBe('x_ai');
+      expect(JSON.parse(attrs['gen_ai.system_instructions'] as string)).toEqual([
+        { type: 'text', content: 'Be brief.' },
+      ]);
+      expect(JSON.parse(attrs['gen_ai.tool.definitions'] as string)).toEqual([
+        { type: 'function', name: 'tool1' },
+        { type: 'function', name: 'tool2' },
+      ]);
     });
   });
 
@@ -648,7 +719,13 @@ describe('SpanConverter', () => {
       const attrs = result.attributes;
 
       expect(attrs['gen_ai.input.messages']).toBe('What is the capital of France?');
-      expect(attrs['gen_ai.output.messages']).toBe('The capital of France is Paris.');
+      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual([
+        {
+          role: 'assistant',
+          parts: [{ type: 'text', content: 'The capital of France is Paris.' }],
+          finish_reason: 'unknown',
+        },
+      ]);
       expect(attrs['mastra.input']).toBeUndefined();
       expect(attrs['mastra.output']).toBeUndefined();
       expect(attrs['gen_ai.prompt']).toBeUndefined();
@@ -701,10 +778,13 @@ describe('SpanConverter', () => {
           role: 'assistant',
         },
       ]);
-      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual({
-        content: 'How can I help?',
-        role: 'assistant',
-      });
+      expect(JSON.parse(attrs['gen_ai.output.messages'] as string)).toEqual([
+        {
+          role: 'assistant',
+          parts: [{ type: 'text', content: '{"content":"How can I help?","role":"assistant"}' }],
+          finish_reason: 'unknown',
+        },
+      ]);
     });
 
     it('should include both generic and specific input/output attributes for LLM spans', async () => {

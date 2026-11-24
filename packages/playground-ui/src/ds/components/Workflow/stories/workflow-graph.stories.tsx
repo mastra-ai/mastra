@@ -46,7 +46,7 @@ export const Parallel: Story = {
     nodes: parallelNodes,
     edges: parallelEdges,
     groups: [
-      { id: 'load-context', label: 'Parallel', description: '2 paths · Run together', nodeIds: ['orders', 'tickets'] },
+      { id: 'load-context', label: 'Parallel', description: '2 paths run together', nodeIds: ['orders', 'tickets'] },
     ],
   },
 };
@@ -66,7 +66,7 @@ export const WithOverlay: Story = {
       <WorkflowCanvasInsetContext.Provider value={280}>
         <GraphExample {...args} />
       </WorkflowCanvasInsetContext.Provider>
-      <aside className="border-border1 bg-surface2 text-ui-sm text-foreground absolute inset-y-0 left-0 w-[280px] border-r p-4">
+      <aside className="absolute inset-y-0 left-0 w-70 border-r border-border bg-background p-4 text-caption text-foreground">
         Run input panel
       </aside>
     </div>

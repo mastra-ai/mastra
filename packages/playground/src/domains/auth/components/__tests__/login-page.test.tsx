@@ -11,10 +11,6 @@ import { LoginPage } from '../login-page';
 import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -74,46 +70,6 @@ describe('LoginPage UI parity for /login and /signup', () => {
     cleanup();
   });
 
-  it('renders the login-page testid on the outer container for /login', async () => {
-    mockCapabilities(credentialsCapabilities);
-    renderLogin();
-
-    const root = await screen.findByTestId('login-page');
-    expect(root).toBeTruthy();
-  });
-
-  it('renders the login-page testid on the outer container for /signup', async () => {
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-
-    const root = await screen.findByTestId('login-page');
-    expect(root).toBeTruthy();
-  });
-
-  it('does not wrap content in a bordered card on either route', async () => {
-    mockCapabilities(credentialsCapabilities);
-    const { unmount } = renderLogin();
-
-    const loginRoot = await screen.findByTestId('login-page');
-    const loginInner = loginRoot.firstElementChild as HTMLElement;
-    expect(loginInner.className).not.toMatch(/rounded-lg/);
-    expect(loginInner.className).not.toMatch(/border-border1/);
-    expect(loginInner.className).not.toMatch(/bg-surface2/);
-    expect(loginInner.className).not.toMatch(/\bp-8\b/);
-
-    unmount();
-    cleanup();
-
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-    const signUpRoot = await screen.findByTestId('login-page');
-    const signUpInner = signUpRoot.firstElementChild as HTMLElement;
-    expect(signUpInner.className).not.toMatch(/rounded-lg/);
-    expect(signUpInner.className).not.toMatch(/border-border1/);
-    expect(signUpInner.className).not.toMatch(/bg-surface2/);
-    expect(signUpInner.className).not.toMatch(/\bp-8\b/);
-  });
-
   it('shows the sign in heading on /login by default', async () => {
     mockCapabilities(credentialsCapabilities);
     renderLogin();
@@ -126,26 +82,6 @@ describe('LoginPage UI parity for /login and /signup', () => {
     renderSignUp();
 
     expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeTruthy();
-  });
-
-  it('uses the same outer container className on /login and /signup', async () => {
-    mockCapabilities(credentialsCapabilities);
-    const { unmount } = renderLogin();
-    const loginRoot = await screen.findByTestId('login-page');
-    const loginOuterClass = loginRoot.className;
-    const loginInnerClass = (loginRoot.firstElementChild as HTMLElement).className;
-
-    unmount();
-    cleanup();
-
-    mockCapabilities(credentialsCapabilities);
-    renderSignUp();
-    const signUpRoot = await screen.findByTestId('login-page');
-    const signUpOuterClass = signUpRoot.className;
-    const signUpInnerClass = (signUpRoot.firstElementChild as HTMLElement).className;
-
-    expect(signUpOuterClass).toBe(loginOuterClass);
-    expect(signUpInnerClass).toBe(loginInnerClass);
   });
 
   it('renders only the credentials form when capability is credentials-only', async () => {
@@ -232,5 +168,44 @@ describe('LoginPage UI parity for /login and /signup', () => {
         delete window.MASTRA_STUDIO_BASE_PATH;
       }
     });
+  });
+});
+
+describe('LoginPage password manager autofill', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const expectNoIgnoreHints = (input: HTMLElement) => {
+    expect(input.hasAttribute('data-1p-ignore')).toBe(false);
+    expect(input.hasAttribute('data-lpignore')).toBe(false);
+    expect(input.hasAttribute('data-bwignore')).toBe(false);
+    expect(input.hasAttribute('data-form-type')).toBe(false);
+    expect(input.hasAttribute('data-protonpass-ignore')).toBe(false);
+  };
+
+  it('opts the sign in fields into credential autofill on /login', async () => {
+    mockCapabilities(credentialsCapabilities);
+    renderLogin();
+
+    const email = await screen.findByLabelText(/^Email/);
+    const password = screen.getByLabelText(/^Password/);
+    expect(email.getAttribute('autocomplete')).toBe('email');
+    expect(password.getAttribute('autocomplete')).toBe('current-password');
+    expectNoIgnoreHints(email);
+    expectNoIgnoreHints(password);
+  });
+
+  it('opts the sign up fields into new-account autofill on /signup', async () => {
+    mockCapabilities(credentialsCapabilities);
+    renderSignUp();
+
+    const name = await screen.findByLabelText(/^Name/);
+    const email = screen.getByLabelText(/^Email/);
+    const password = screen.getByLabelText(/^Password/);
+    expect(name.getAttribute('autocomplete')).toBe('name');
+    expect(email.getAttribute('autocomplete')).toBe('email');
+    expect(password.getAttribute('autocomplete')).toBe('new-password');
+    [name, email, password].forEach(expectNoIgnoreHints);
   });
 });

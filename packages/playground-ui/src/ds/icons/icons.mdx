@@ -1,0 +1,71 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as IconStories from './icons.stories';
+
+<Meta of={IconStories} />
+
+# Icons
+
+Interface icons come from [Central Icons](https://iconists.co/central) in one style: round, outlined, 2px corners, 2px stroke. Brand and product logos, such as `OpenAIIcon` or `AgentIcon`, stay as their own components. `lucide-react` remains only where Central has no matching glyph, and for filled icons such as a favorited star, because a filled glyph would need a second Central style.
+
+Each Central icon is its own module. Wrap it in `Icon` for the standard sizes.
+
+```tsx
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+<Icon size="sm">
+  <IconMagnifyingGlass />
+</Icon>;
+```
+
+Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+
+<Canvas of={IconStories.CentralIcons} />
+
+## Sizing
+
+An icon takes its size from where it sits. Buttons, menus, inputs, badges and the other design system components size the icons inside them, so an icon placed there needs no size of its own. Anywhere else, wrap it in `Icon size` or give it a `size-icon-*` class.
+
+| Size | Token          | Box  |
+| ---- | -------------- | ---- |
+| `xs` | `size-icon-xs` | 14px |
+| `sm` | `size-icon-sm` | 16px |
+| `md` | `size-icon-md` | 18px |
+| `lg` | `size-icon-lg` | 22px |
+
+Don't set `size`, `width`, `height` or a size class such as `size-4` on an icon. The `playground-ui/icon-size-from-parent` lint rule reports it. It allows a size relative to the surrounding text (`size-[1em]`) and a size computed from data.
+
+The boxes are 2px larger than they were with Lucide because Central leaves more room around each drawing. At these sizes a Central icon draws as large as the Lucide icon it replaced. Icons that already fill their box keep their drawn size: product icons such as `AgentIcon` draw on a canvas 1/8 larger, and Lucide icons, brand logos and product marks sit 1px in from each edge.
+
+### Optical inset
+
+A few Central shapes run edge to edge, so in the same box they draw about 20% larger than everything else: plain arrows, the `•••` and `⋮` dots, the menu bars, undo, percent, the bar chart, infinity, the graduation cap, the laptop and the toggle. `opticalInset` in `central/central-icons.json` pads these icons' grid on every side, in grid units, so they draw at the same visual size as the rest. The box and the layout don't change. Padding the grid would also thin the line, so the generator thickens these icons' stroke by the same factor (2.5 units at an inset of 3): every icon draws with the same line weight. Otherwise the drawing stays as Central ships it.
+
+The inset is set per shape family, and every icon in a family shares it, so an arrow pointing up right is the same size as one pointing down left. A family gets an inset when it draws more than 15% larger than its peers.
+
+To add one, put the icon's name and inset in `opticalInset` and rerun the generator. It checks that every name is in the set, and `central-icons.test.tsx` checks that each generated icon uses its inset and keeps the set's line weight.
+
+## Adding an icon
+
+This is for Mastra team members. The icons are committed to the repo, so installing, building, and releasing need no license key. Only adding or updating icons does.
+
+1. Find the icon in the [Central icon list](https://iconists.co/central) or the Central Figma library, and note its name, such as `IconArrowRight`.
+2. Get Mastra's Central Icons license key from the `CENTRAL MASTRA` item in 1Password.
+3. From `packages/playground-ui`, run the generator with the key and the names to add:
+
+   ```bash
+   CENTRAL_LICENSE_KEY=<key> pnpm icons:central IconArrowRight IconCalendar
+   ```
+
+   It checks the key with Central, installs the pinned package in a temporary directory, writes one module per icon to `src/ds/icons/central/`, and adds the names to `central-icons.json`. Run it with no names to regenerate the current set, for example after raising `version` in `central-icons.json`.
+
+4. Commit `src/ds/icons/central/`. Don't edit the generated files by hand.
+5. Platform picks up new icons when it bumps `@mastra/playground-ui`. Add Platform's icons here too, never in the Platform repo.
+
+## License
+
+Central Icons are not covered by this package's Apache-2.0 license. Mastra uses them under its Central Icons Enterprise license. See [CENTRAL-ICONS-LICENSE.md](https://github.com/mastra-ai/mastra/blob/main/packages/playground-ui/CENTRAL-ICONS-LICENSE.md) and Iconists' [license terms](https://iconists.co/license).
+
+- Only add icons from this one style, and only icons a screen uses.
+- Never offer the icons on their own, such as an icon set, a download, or a copy-SVG gallery.
+- Never commit the license key or put it in CI. Nothing in CI needs it.

@@ -95,6 +95,40 @@ describe('OrchestrationWorker', () => {
     });
   });
 
+  it('renews the delivery lease while a long event is handled, then acks', async () => {
+    vi.useFakeTimers();
+    try {
+      const { WorkflowEventProcessor } = await import('../workflows/evented/workflow-event-processor');
+      let finish!: () => void;
+      const handleSpy = vi
+        .spyOn(WorkflowEventProcessor.prototype, 'handle')
+        .mockImplementation(() => new Promise(r => (finish = () => r({ ok: true }))));
+
+      worker = new OrchestrationWorker({ leaseRenewIntervalMs: 100 });
+      deps.mastra = { getWorkflow: vi.fn(), getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+      await worker.init(deps);
+      await worker.start();
+      const cb = deps._pubsub.subscribe.mock.calls[0]![1];
+
+      const ack = vi.fn().mockResolvedValue(undefined);
+      const extend = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue(undefined);
+      cb({ id: 'e1', type: 'workflow.step.run', runId: 'r1', data: {}, createdAt: new Date() }, ack, vi.fn(), extend);
+
+      await vi.advanceTimersByTimeAsync(350);
+      expect(extend).toHaveBeenCalledTimes(3);
+      expect(ack).not.toHaveBeenCalled();
+
+      finish();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(ack).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(extend).toHaveBeenCalledTimes(3);
+      handleSpy.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('stop unsubscribes and is idempotent', async () => {
     worker = new OrchestrationWorker();
     const mastra = { getWorkflow: vi.fn(), getLogger: vi.fn().mockReturnValue(deps._logger) } as any;

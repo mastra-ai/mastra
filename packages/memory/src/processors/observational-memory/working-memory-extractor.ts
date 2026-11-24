@@ -1,8 +1,39 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import { toStandardSchema } from '@mastra/core/schema';
+import type { PublicSchema } from '@mastra/core/schema';
+import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
+import { stripNullsFromOptional } from '../../tools/working-memory';
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
+
+/**
+ * The structured-output schema for this extractor stays generic because every structured extractor shares one
+ * response object: a strict working-memory schema there would make one invalid document fail every sibling
+ * extractor. The configured schema is enforced here instead, with its own validator, before anything is stored.
+ * Like the working memory tool, nulls in optional fields are treated as "not provided" rather than as invalid.
+ */
+async function validateAgainstConfiguredSchema(schema: PublicSchema, value: unknown): Promise<unknown> {
+  const standardSchema = toStandardSchema(schema);
+  const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'input' }) as Record<string, unknown>;
+  const result = await standardSchema['~standard'].validate(stripNullsFromOptional(value, jsonSchema));
+  if (!result.issues) {
+    return result.value;
+  }
+
+  const details = result.issues
+    .map(issue => {
+      const path = issue.path?.map(segment => String(typeof segment === 'object' ? segment.key : segment)).join('.');
+      return path ? `${path}: ${issue.message}` : issue.message;
+    })
+    .join('; ');
+  throw new Error(`Working memory update does not match the configured schema, so it was not saved: ${details}`);
+}
+
+function isEmptyPlainObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
 
 async function getWorkingMemoryDetails(context: ExtractorRuntimeContext): Promise<{
   template?: string;
@@ -60,39 +91,54 @@ function buildWorkingMemoryInstructions(details: Awaited<ReturnType<typeof getWo
 
 export class WorkingMemoryExtractor extends Extractor<string | Record<string, unknown> | null> {
   constructor() {
-    super({
-      name: 'Working Memory',
-      includePreviousExtraction: false,
-      metadataKeyPath: false,
-      retryStructuredExtractionOnEmptyObject: true,
-      instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
-      schema: async context => {
-        const details = await getWorkingMemoryDetails(context);
-        return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+    super(
+      {
+        name: 'Working Memory',
+        includePreviousExtraction: false,
+        metadataKeyPath: false,
+        retryStructuredExtractionOnEmptyObject: true,
+        instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
+        schema: async context => {
+          const details = await getWorkingMemoryDetails(context);
+          return details.usesSchema ? z.union([z.record(z.string(), z.unknown()), z.null()]) : undefined;
+        },
+        onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
+          const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
+          const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
+          const configuredSchema = config.workingMemory?.schema;
+
+          let document: unknown = current;
+          if (configuredSchema) {
+            // An empty object carries no update (some providers, e.g. Gemini, can only emit `{}` for the generic
+            // record schema), and storing it would wipe the existing working memory.
+            if (current === null || isEmptyPlainObject(current)) {
+              return undefined;
+            }
+            document = await validateAgainstConfiguredSchema(configuredSchema, current);
+            // Validation drops nulls in optional fields, so `{"name": null}` can become `{}`.
+            if (document === null || isEmptyPlainObject(document)) {
+              return undefined;
+            }
+          }
+
+          const workingMemory = typeof document === 'string' ? document : (JSON.stringify(document) ?? '');
+          if (!workingMemory.trim()) {
+            return undefined;
+          }
+
+          await memory!.updateWorkingMemory({
+            threadId,
+            resourceId,
+            workingMemory,
+            memoryConfig,
+          });
+
+          return document as Record<string, unknown> | string;
+        },
       },
-      onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
-        const memoryConfig = parseMemoryRequestContext(requestContext)?.memoryConfig;
-        const config = memory!.getMergedThreadConfig(memoryConfig ?? {});
-        const isSchemaWorkingMemory = Boolean(config.workingMemory?.schema);
-
-        if (isSchemaWorkingMemory && current === null) {
-          return undefined;
-        }
-
-        const workingMemory = typeof current === 'string' ? current : (JSON.stringify(current) ?? '');
-        if (!workingMemory.trim()) {
-          return undefined;
-        }
-
-        await memory!.updateWorkingMemory({
-          threadId,
-          resourceId,
-          workingMemory,
-          memoryConfig,
-        });
-
-        return current;
-      },
-    });
+      false,
+      // Markdown working memory must always be written back, or a change the Observer noticed is lost (#25350).
+      true,
+    );
   }
 }

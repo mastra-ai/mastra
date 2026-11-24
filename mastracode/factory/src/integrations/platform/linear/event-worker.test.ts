@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type {
   LinearEventLogEntry,
@@ -90,9 +90,12 @@ function createDeps(pubsub: unknown = {}): WorkerDeps {
  * event worker only dispatches to projects that already have a work item for
  * the incoming Linear issue's source key, so callers seed the expected links.
  */
-function stubWorkItems(links: Record<string, string[]> = {}): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'list'> {
+function stubWorkItems(
+  links: Record<string, string[]> = {},
+): Pick<import('../../../storage/domains/work-items/base.js').WorkItemsStorage, 'listShared' | 'copyLegacyCards'> {
   return {
-    list: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
+    copyLegacyCards: async () => {},
+    listShared: async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) => {
       const sourceKeys = links[`${orgId}:${factoryProjectId}`] ?? [];
       return sourceKeys.map(key => ({
         id: `item-${key}`,
@@ -127,10 +130,15 @@ function createWorker(input: {
   // dispatch. Behavioral scoping tests override this to prove filtering.
   const defaultLinks: Record<string, string[]> = {};
   for (const project of projects) {
-    defaultLinks[`${project.orgId}:${project.id}`] = ['linear:ENG-1', 'linear:ENG-2', 'linear:ENG-42', 'linear:ENG-100'];
+    defaultLinks[`${project.orgId}:${project.id}`] = [
+      'linear:ENG-1',
+      'linear:ENG-2',
+      'linear:ENG-42',
+      'linear:ENG-100',
+    ];
   }
   return new PlatformLinearEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     linear: {
       listWorkspaces: async () => input.workspaces ?? [{ linearWorkspaceId: 'workspace-1' }],
     },
@@ -444,10 +452,10 @@ describe('PlatformLinearEventWorker', () => {
     });
 
     const worker = new PlatformLinearEventWorker({
-      client: new PlatformApiClient({
+      client: createPlatformConnectClient({
         baseUrl,
         accessToken,
-        fetchImpl: async () => {
+        fetch: async () => {
           throw new Error('fetch must not be called in reconcile-only mode');
         },
       }),
@@ -487,7 +495,7 @@ describe('PlatformLinearEventWorker', () => {
     });
 
     const worker = new PlatformLinearEventWorker({
-      client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+      client: createPlatformConnectClient({ baseUrl, accessToken, fetch: fetchImpl }),
       linear: { listWorkspaces: async () => [{ linearWorkspaceId: 'workspace-1' }] } as never,
       storage: settings.storage,
       projects: { listAll } as never,

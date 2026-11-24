@@ -1,12 +1,12 @@
 /**
  * Streaming shell output component for the shell passthrough (! command).
- * Shows a bordered box with live stdout/stderr and a status footer.
+ * A tool-style block: "● $ command" with live stdout/stderr on a shaded panel below.
  */
 
 import { Text } from '@earendil-works/pi-tui';
 import { theme } from '../theme.js';
-import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { statusDot, toolBlock } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_LINES = 200;
@@ -69,23 +69,11 @@ export class ShellStreamComponent extends WidthAwareContainer {
   protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
-    const border = (char: string) => theme.bold(theme.fg('accent', char));
-    const maxLineWidth = termWidth - 6;
-
     const done = this.exitCode !== undefined;
-    const statusIcon = done
-      ? this.exitCode === 0
-        ? theme.fg('success', ' ✓')
-        : theme.fg('error', ' ✗')
-      : theme.fg('muted', ' ⋯');
-
+    const failed = done && this.exitCode !== 0;
     const durationStr = done ? theme.fg('muted', ` ${formatDuration(Date.now() - this.startTime)}`) : '';
-    const footerText = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('accent', this.command)}${durationStr}${statusIcon}`;
+    const title = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('toolArgs', this.command)}${durationStr}${failed ? theme.fg('error', ' ✗') : ''}`;
 
-    // Top border
-    this.addChild(new Text(border('╭──'), 0, 0));
-
-    // Output lines with left border
     const displayLines = [...this.lines];
     // Include trailing partial if still streaming
     if (this.trailingPartial && !done) {
@@ -94,35 +82,25 @@ export class ShellStreamComponent extends WidthAwareContainer {
     // Remove leading empty lines
     while (displayLines.length > 0 && displayLines[0] === '') displayLines.shift();
 
-    if (displayLines.length > 0) {
-      const maxVisible = this.expanded ? MAX_LINES : COLLAPSED_LINES;
-      const truncated = displayLines.length > maxVisible;
-      const visibleLines = truncated ? displayLines.slice(-maxVisible) : displayLines;
-
-      const borderedLines = visibleLines.map(line => {
-        const truncatedLine = truncateAnsi(line, maxLineWidth);
-        return border('│') + ' ' + truncatedLine;
-      });
-
-      if (truncated) {
-        const remaining = displayLines.length - maxVisible;
-        const action = this.expanded ? 'collapse' : 'expand';
-        borderedLines.push(border('│') + ' ' + theme.fg('muted', `... ${remaining} more lines (Ctrl+E to ${action})`));
-      }
-
-      const displayOutput = borderedLines.join('\n');
-      if (displayOutput.trim()) {
-        this.addChild(new Text(displayOutput, 0, 0));
-      }
+    const maxVisible = this.expanded ? MAX_LINES : COLLAPSED_LINES;
+    const truncated = displayLines.length > maxVisible;
+    const output = (truncated ? displayLines.slice(-maxVisible) : displayLines).map(line =>
+      theme.fg('toolOutput', line),
+    );
+    if (truncated) {
+      const remaining = displayLines.length - maxVisible;
+      const action = this.expanded ? 'collapse' : 'expand';
+      output.unshift(
+        theme.fg('dim', `… ${remaining} earlier lines · `) +
+          theme.fg('muted', 'ctrl+e') +
+          theme.fg('dim', ` to ${action}`),
+      );
     }
+    if (failed) output.push(theme.fg('error', `Exit code: ${this.exitCode}`));
 
-    // Bottom border with command info
-    this.addChild(new Text(`${border('╰──')} ${footerText}`, 0, 0));
-
-    // Show exit code if non-zero
-    if (done && this.exitCode !== 0) {
-      this.addChild(new Text(theme.fg('error', `  Exit code: ${this.exitCode}`), 0, 0));
-    }
+    const dot = statusDot(done ? (failed ? 'error' : 'done') : 'running');
+    const hasOutput = output.some(line => line.trim());
+    this.addChild(new Text(toolBlock(dot, title, hasOutput ? output : [], termWidth).join('\n'), 0, 0));
 
     this.invalidate();
   }

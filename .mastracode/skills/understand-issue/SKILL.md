@@ -1,248 +1,155 @@
 ---
 name: understand-issue
-description: Collaboratively investigate a GitHub issue or bug — trace history, understand architecture, diagnose root cause
+description: Investigate a GitHub issue or reported bug the way a seasoned maintainer would — form an independent model before reading the thread's theories, trace the mechanism and history, verify the diagnosis, and return a concise briefing with a verdict and fix direction. Use for triage, root-cause analysis, or re-investigation.
 metadata:
   goal: true
 ---
 
 # Understand Issue
 
-Collaboratively investigate a GitHub issue or reported bug — trace the history of related code, understand the architecture involved, and work with the user to diagnose whether the issue is valid and what's actually causing it. Both you and the user should walk away with genuine understanding, not just a guess.
+Investigate the issue as a maintainer deciding what is actually wrong and what should happen next. Help the human understand it without turning the investigation into a walkthrough. Run uninterrupted to a concise front page, then stay available inside the goal until the human says the investigation is finished.
 
-Do not produce walls of text. Responses should be short, dense, and information-dense. Minimize fluff. Be direct.
+The issue follows `ARGUMENTS:` at the end of the objective. If absent, infer it from the conversation or the checked-out branch name (`fix/1234`, `issue-567`, `gh-890`). If no issue can be resolved and no bug is described, ask once.
 
-**Pacing:** Phases 1–3 are research — do them all proactively without stopping for user input. The first pause is Phase 4 (Diagnosis), where you present your findings and opinion for collaborative validation. Don't pause before that.
+## What matters
 
-**Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
+1. **Independent model before the thread's theories.** Understand the symptom and form your own hypothesis from the code before reading commenters' diagnoses, workarounds, or linked fix attempts. The gap between your model and theirs exposes anchoring in both directions.
+2. **Depth proportional to stakes.** Data loss, security, silent misbehavior, wide blast radius, and uncertainty determine how hard to look—not a fixed checklist.
+3. **Verify the diagnosis.** Read code deeply and run the smallest useful probe. A diagnosis needs real evidence and pointers; a plausible story is not evidence.
+4. **A verdict, not a survey.** Say what the issue is and what causes it. Do not present a menu of candidates when the evidence supports one.
+5. **Complete, not padded.** Everything you established or still suspect is in the briefing; length follows from findings, never the other way around. Lead with what matters most and cut narration, not conclusions. Preserve supporting detail in one record file for follow-up questions.
 
-## Phase 1: Identify the Issue
+## Investigation record
 
-Figure out what we're investigating.
+Use one ignored file: `.mastracode/scratch/issues/<owner>-<repo>-<n>.md`. Never stage or commit it.
 
-1. Parse the issue input and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists and read it first. Treat it as caller-provided context, follow its handoff instructions, and update that same file with findings before returning to the caller. Do not treat the working file as the final user-facing output. If the file does not exist, tell the user and end.
-3. Never post comments without explicit approval.
+Start the record with a short **Own model**:
 
-The user may provide:
+- the symptom as reported, in your words;
+- how the relevant code currently works;
+- your hypothesis for the cause;
+- what evidence would confirm or kill it.
 
-- A GitHub issue number or URL → pull metadata with `gh issue view <number> --json title,body,labels,comments,assignees,state,author`
-- A description of a bug or unexpected behavior with no GitHub issue
-- Nothing — if no issue number is given, check the current branch name (`git branch --show-current`). If it contains what looks like an issue number (e.g. `fix/1234`, `issue-567`, `bug/gh-890`, `feat/add-thing-1234`), extract it and use `gh issue view <number>` to confirm it exists. If it resolves, use it. If not, move on.
+Append the investigation beneath it and leave it unchanged afterward. Capture decisive evidence as you work so it survives context compression—a ledger, not command transcripts. Use `references/templates.md` as an example, not a schema.
 
-If it's unclear which issue or what the bug is, ask the user to clarify. Don't guess.
+## 1. Build your own model
 
-### People
+Resolve the issue with the minimal recipe in `references/recipes.md`. The metadata tells you whether the thread has anything to anchor you: comment count and cross-referenced PRs.
 
-Identify everyone involved and gauge their context depth:
+**If the thread has comments or linked PRs**, form your model before reading them. Use only the issue title, body, reproduction, error text, and the current code on the default branch; do not consult `mastra_expert` or another source that may already hold a diagnosis. Other people's theories are cheap to read later and expensive to un-read—a maintainer's "I think it's X" tends to become the investigation. Write the model, then open the thread.
 
-- **Issue author**: Who opened it? Check their merged PR count (`gh pr list --author <user> --state merged --limit 100 --json number --jq length`) and issue count (`gh issue list --author <user> --state all --limit 100 --json number --jq length`). A first-time reporter vs a core contributor frames how you read the issue — a contributor likely knows the internals, a new user may be describing symptoms of a different root cause.
-- **Commenters**: Read all comments on the issue thread. For anyone who suggested a cause, workaround, or diagnosis, check their merged PR count too. A maintainer's "I think this is related to X" is a strong lead worth tracing. A user's "me too" with a slightly different repro might reveal a broader pattern.
-- **Assignees**: Note who (if anyone) is assigned and whether they've commented.
+**If the thread is empty**, there is nothing to seal. Investigate directly and write the model whenever you have one; it still records what you believed before verification.
 
-### Issue summary
+Either way: start from the symptom, find the entry point, trace the mechanism to where the observed behavior is produced, and identify every area that could contribute—shared state, upstream data, configuration, callers, ordering. Stop when you can name a hypothesis and the evidence that would settle it.
 
-Note (internally, don't pause here):
+If the report is too thin to trace (no symptom, no surface, no version), say so in the front page and draft the exact questions to ask—but still investigate whatever can be investigated.
 
-- What's the reported problem?
-- Reproduction steps (if any)
-- Expected vs actual behavior
-- Any error messages, logs, or screenshots
-- **Thread leads**: If commenters suggested causes, workarounds, or related code paths, note each one — these are investigation leads for Phase 3
+## 2. Read the thread and prior art
 
-### Issue quality gate
+Read every comment, linked PR, and related issue. Then:
 
-- Is the issue clear enough to investigate? Does it have enough detail to act on?
-- Are there reproduction steps, or at least a clear description of the symptom?
-- Is the expected behavior stated?
+- Treat proposed causes and workarounds as hypotheses to test, not conclusions to repeat. A maintainer's lead deserves tracing; it does not deserve deference.
+- Note "me too" reports with different repros—they may reveal a broader mechanism or a different bug sharing a symptom.
+- Search open and closed issues and PRs for the same symptom under other words. A closed fix for the same symptom means regression or incomplete fix; say which.
+- Check whether an in-flight PR already addresses it.
 
-If the issue is too vague to investigate meaningfully, stop and say so — offer to investigate anyway, draft a comment asking for more info, or stop. Otherwise, move straight to Phase 2 without pausing.
+Author context (first-time reporter vs. core contributor) informs where you look first, never whether you trust the report.
 
-## Phase 2: Related Issues & Prior Work
+## 3. Diagnose like a maintainer
 
-Before diving into code, check whether this has been seen before.
+Use these questions where they apply. They shape judgment; they are not rows to fill.
 
-- Search for related issues: `gh issue list --search "<keywords>" --json number,title,state,labels --limit 20`
-- Check closed issues too — this might be a regression: `gh issue list --search "<keywords>" --state closed --json number,title,state,labels --limit 20`
-- Look for related PRs that touched the same area: `gh pr list --search "<keywords>" --state all --json number,title,state --limit 20`
+- **Is the issue what it claims to be?** Genuine bug, working as designed, configuration or usage error, documentation gap, or XY problem (asking for X while needing Y). Decide, with evidence.
+- **Where does the state first go wrong?** Trace backward from the symptom to the first point where a value, ordering, or assumption is incorrect. The display site is rarely the cause.
+- **What does the code assume, and where is that enforced?** Bugs live where an assumption from one area is violated by another.
+- **Who else is affected?** Callers, sibling paths, and other features on the same primitive. A fix at one site may leave the same defect elsewhere.
+- **Why does the code look like this?** Distinguish an accident from a decision before proposing to change it.
+- **What changed?** If it used to work, find the commit; a regression has a specific cause, not a vague one.
+- **Is the reproduction faithful?** Reporter repros often include incidental steps. Find the minimal condition that triggers it.
+- **What would fixing it correctly require?** Name the change and where it belongs. Note when the obvious patch would treat the symptom.
+- **Am I anchored by the thread?** Ask whether you would reach this diagnosis given only the code and symptom.
 
-Note what you find — you'll present it alongside Phase 3 results. If something looks like a clear regression or duplicate, note it prominently. Don't stop here — move straight to Phase 3.
+Open deeper branches when the mechanism crosses them:
 
-## Phase 3: Initial Investigation
+- async/stream/event/lifecycle → ordering, races, duplicate or missing calls, teardown;
+- serialized state → old data under new code, partial migrations, mixed versions;
+- input/network/filesystem boundary → validation, encoding, path, and secret handling;
+- platform behavior → timezone, locale, paths, case, Windows, no-network;
+- configuration → defaults, precedence, and merge order;
+- cross-package contract → version skew between packages.
 
-Now trace from the symptom into the codebase. Start from what the issue describes (error messages, unexpected behavior, specific features) and search for related code.
+## 4. Recover history when it can change the diagnosis
 
-1. Search for error messages, function names, component names, or keywords from the issue
-2. Trace the code paths involved — follow the execution flow from entry point to the area where things go wrong
-3. Identify **all potentially contributing areas** — not just the obvious one. Think about: shared state, upstream data, configuration, race conditions, edge cases in callers
+History answers whether the current behavior is an accident or a decision, and when a regression entered. Run a light pass when the code's rationale is unclear or the behavior is old and stable. Go deep on a regression, a revert, repeated churn, "because/workaround/don't/see #" comments, or a test named after a past bug.
 
-### Deep context on each area
+Use blame, `git log -S`, originating PRs, and linked issues. End with the implication for this issue. "Nothing notable" is a valid result. Recipes live in `references/recipes.md`.
 
-For each contributing area you identify, build real understanding _now_ — don't defer it to Phase 4. You need to answer three questions per area before presenting it:
+Once the thread is open, `mastra_expert` may help orient you on Mastra-specific history. Verify its leads yourself; it is not required.
 
-**1. Why does this code exist?** What problem was it originally written to solve? What was the codebase like before it was added?
+## 5. Verify the diagnosis
 
-- `git log --oneline -20 -- <file>` — recent commit history
-- `git log --oneline --all -20 -- <file>` — cross-branch activity
-- `git blame` on the specific relevant lines — who wrote this, when, and what commit message explains why
-- Read linked PRs/issues from commit messages to understand the original motivation
-- Look at the PR descriptions and discussions, not just commit titles
+Choose the smallest verification that could falsify it:
 
-**2. How does it fit architecturally?** What are its relationships with other code?
+- Deterministic mechanism: code reasoning is sufficient. Do not pretend to have executed what you read.
+- Uncertain mechanism: write a minimal probe (test or script) that isolates the condition and shows the wrong behavior. Prefer a probe in a disposable worktree over editing the live checkout; remove any probe you add.
+- Regression: identify the commit and explain why it changed the behavior; bisect only when reasoning cannot settle it.
+- Working-as-designed or config verdicts: point to the enforcing code and the documentation (or its absence).
 
-- What calls it? What does it call? Trace callers and callees.
-- What data flows through it and where does that data come from?
-- What contracts or interfaces does it depend on or expose?
-- Are there other features or systems that share the same underlying primitives (config, state, instances)?
+Never claim a reproduction you did not run. Never keep a diagnosis after contrary evidence resolves it.
 
-**3. How do the areas relate to each other?** The contributing areas aren't isolated — understand how they interact:
+## 6. Decide and brief
 
-- Do they share state, config objects, or instances?
-- Does one area's design assume something about another area's behavior?
-- Did changes in one area break assumptions in another?
-- Map the dependency/data flow between areas
+Verdicts: **bug / regression of `<sha or #pr>` / working as designed / configuration or usage / docs gap / duplicate of #N / cannot determine — needs `<specific info>`**.
 
-You should understand the full story before presenting it. The user needs to see not just "this code exists" but "this code was written N months ago to solve X, was last changed by Y to fix Z, the current design assumes W, and it connects to area 2 because they share the same config instance."
+State the diagnosis as a claim with its mechanism and evidence. Do not present a candidate list when the evidence supports one cause; present candidates only when it genuinely does not, and then say which you favor and what would decide it. A question to the reporter is allowed only when the answer could change the verdict—and it must be a specific, answerable question, not a hedge.
 
-Present the contributing areas you've found, with history, architecture, and how they interrelate. Then move straight to Phase 4 — don't pause here.
+State the fix direction as a request: the pointer, what should change, and why the obvious patch would or would not suffice. Note secondary work (docs, other affected sites, missing test) explicitly rather than folding it in.
 
-## Phase 4: Diagnosis
+Write the rest of the record for the human. Lead with the mechanism and diagnosis, then include only useful context: evidence, relevant history, related issues, hunks to read, and decisions that genuinely need the human. Omit empty sections. No self-audit or process narration.
 
-This is the critical phase. You've done the research — now form an opinion and present it for collaborative validation. The goal is to jointly determine: **is this issue what it appears to be, and what's actually causing it?**
+Then post the front page in chat. It should make the result understandable quickly and leave nothing out that the human would have to ask for:
 
-### First: is the issue itself valid?
+- issue and verdict;
+- one-line mechanism (symptom ← cause);
+- fix direction with real pointers, including secondary work;
+- what was verified versus trusted, and any suspicion left unverified with what would settle it;
+- any genuine human decision or reporter question;
+- the record path and context-specific offers.
 
-Before diagnosing the technical cause, assess whether the issue is correctly framed. Consider:
+This is a content contract, not a template. There is no line budget. Cut narration, process, and self-audit—never conclusions. Omit what does not apply. Offers follow from the diagnosis—draft an issue comment, draft a request-for-info comment, or start a fix—and zero offers is fine.
 
-- **XY problem**: Is the reporter asking for X but actually needs Y? Does the real problem live somewhere else entirely?
-- **Configuration / user error**: Is this working as designed and the user just needs to configure it differently?
-- **Documentation gap**: Does the behavior make sense but the docs don't explain it, leading to confusion?
-- **Working as designed**: Is this intentional behavior that the reporter didn't expect?
-- **Genuine bug**: Is the code actually doing something wrong?
+After posting, go to `waiting`. Answer follow-up questions from the record without reposting the summary. The goal ends only when the user explicitly says the investigation is finished.
 
-State your assessment clearly. If you think the issue is misframed, say so with evidence.
+## Re-investigation
 
-### Then: what's causing it?
+Read the existing record first. The own model already exists; do not recreate it. Inspect only what changed—new comments, new commits on the default branch, new linked PRs—and report whether the diagnosis stands, changes, or is resolved. If nothing changed, say so briefly and wait.
 
-**If the cause is clear** (one obvious chain of causality), say so directly:
+## Tone and issue comments
 
-```text
-Based on the investigation, I think this is [genuine bug / config issue / docs gap / XY problem].
+Apply this to the local briefing and to any drafted or posted GitHub comment. **Before drafting or posting anything to GitHub, load the `gh-review` skill** and follow it: the diagnosis is stated as a claim, the fix is a required change, and nothing is hedged or deferred.
 
-Here's what's happening: [concise explanation of the causal chain, grounded in the code and history you traced].
+- Discuss code and evidence, not the reporter or commenters.
+- State the diagnosis plainly. "This is a bug in X because Y" beats "could this be related to X?"
+- Give every claim a pointer and a reason.
+- Ask a question only when the answer could change the verdict; state what you believe first, then ask.
+- Drop a diagnosis immediately when shown contrary evidence—no face-saving.
+- Match explanation depth to the reader without lowering the evidence bar.
+- Keep posted comments to the diagnosis, evidence, and next step—other contributors will read them.
 
-[areas with history context, showing how they connect]
+Never post comments, push commits, open issues, or create other GitHub artifacts without the user explicitly saying to post. Show the draft; wait for the go.
 
-Do you agree?
+## Judge criteria
 
-A) Yes, that matches what I'm seeing
-B) I'm not fully convinced — I think [specific part] might be different
-C) I don't agree — I think the cause is more in the direction of [X]
-D) I need to see more evidence before I can form an opinion
-```
+Judge investigation quality, not ritual. Open the record, inspect the front page, and spot-check evidence where needed. Send the executor back only when a substantive invariant fails:
 
-**If there's genuine ambiguity** (multiple plausible causes, or you're not sure), present the candidates and let the user help narrow it down:
+- the thread had comments or linked PRs and the own model was not recorded before they were read;
+- depth was unreasonable for the stakes, or the diagnosis lacks enough evidence;
+- an established cause is presented as a question, possibility, or candidate list instead of a verdict;
+- the fix direction lacks a real pointer or would treat the symptom without saying so;
+- the verdict contradicts the evidence, or a "cannot determine" verdict does not name the specific missing information;
+- the front page omits a conclusion or unverified suspicion the investigator had, or what is needed to understand the decision;
+- the record is insufficient to support follow-up questions;
+- a drafted or posted GitHub comment hedges the diagnosis or marks the fix optional;
+- something was posted or pushed without approval.
 
-```text
-I see [N] possible explanations for this:
-
-1. **[area/explanation]** — [history + architecture context]. This would mean [implication].
-2. **[area/explanation]** — [history + architecture context]. This would mean [implication].
-
-I'm leaning toward [N] because [reason], but I'm not confident. What's your read?
-
-A) I think it's [1] — let's dig deeper there
-B) I think it's [2] — let's dig deeper there
-C) I think it's something else — [user explains]
-D) I need to see more code before I can tell
-```
-
-### Key principle
-
-Form your own opinion first, but ask the user for theirs before asserting. "I've formed my opinion but I'd like to hear yours first" is fine. Don't be a pushover — if the user disagrees with your assessment and you have evidence, push back respectfully.
-
-## Phase 5: Deep Exploration (Interactive Loop, if needed)
-
-If Phase 4 didn't resolve the diagnosis — either because there's genuine ambiguity, the user disagrees, or more evidence is needed — explore specific areas interactively.
-
-For each area:
-
-1. Read the code carefully — what it does, why, edge cases, contracts
-2. Check test coverage for the relevant paths
-3. Form a hypothesis and present it with evidence
-
-```text
-This area was last changed in [commit] to fix [issue]. The current code assumes [X] but the reported bug suggests [Y] is happening instead.
-
-A) That sounds like the cause — dig deeper here
-B) Show me the test coverage for this path
-C) What changed recently that could have broken this assumption?
-D) I don't think this is it — let's try a different direction
-E) I want to look at something specific — let me tell you where
-```
-
-Tailor options to what's actually relevant. If multiple areas are interacting to cause the issue, say so.
-
-Repeat until the cause is clear and agreed upon.
-
-## Phase 6: Understanding Quality Gate
-
-Before wrapping up, check that the investigation actually produced understanding — not just a surface-level guess.
-
-Present a concise summary of what you've learned:
-
-- The likely root cause (or top candidates if uncertain)
-- The evidence supporting each hypothesis
-- What's still unknown or uncertain
-- How the contributing areas interact (if multiple are involved)
-
-Then check:
-
-```text
-A) That matches my understanding — write it up
-B) I'm not convinced about [specific part] — let's revisit
-C) I think the cause is actually different — let me explain
-D) I don't have enough understanding yet — keep exploring
-```
-
-Only move to the write-up after the user confirms they genuinely understand the issue.
-
-## Phase 7: Understanding File
-
-If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, write `.artifacts/understand-issue/UNDERSTANDING.md` in the workspace root.
-
-Capture:
-
-- **Issue**: what was reported (number, title, symptoms)
-- **Contributing areas**: each area investigated, with file paths and relevant history
-- **Root cause analysis**: what's likely causing the issue, with evidence
-- **How we got here**: the history that led to this state — what changed, when, and why
-- **Open questions**: anything still uncertain
-- **Related issues/PRs**: links to related prior work found in Phase 2
-
-Present the key findings to the user interactively before finalizing the file.
-
-## Phase 8: Share to GitHub (Optional)
-
-If `--working-file` is present, skip this phase by default and return to the caller.
-
-Otherwise, offer to post the analysis to the GitHub issue:
-
-```text
-A) Post a summary of this analysis as an issue comment
-B) I'll handle it myself
-C) This issue needs more info first — help me draft a comment asking for clarification
-```
-
-If the user chooses to post, draft the comment and present it for review before posting. Use `gh issue comment <number> --body "<comment>"`. Keep it concise and useful — other contributors will read this. Focus on the root cause analysis and evidence, not the full investigation narrative.
-
-If the GitHub API rate limit is low (`gh api rate_limit --jq '.rate'`), use the REST API fallback: `gh api repos/{owner}/{repo}/issues/{number}/comments -f body="<comment>"`.
-
-## Behavior Rules
-
-- **Be skeptical.** Don't jump to conclusions. Present evidence and let the user evaluate.
-- **Trace, don't guess.** Follow actual code paths and git history. Don't hypothesize without looking.
-- **Multiple causes are valid.** Issues often involve multiple interacting areas — don't force a single root cause if the evidence doesn't support it.
-- **Short responses.** Dense information, lettered options, no filler.
-- **Hypothesis-driven.** Each area exploration should end with a clear hypothesis that the user can confirm, reject, or refine.
-- **The user drives.** They pick which areas to explore and when they've understood enough. Don't push them through a fixed sequence.
-- **Form your own opinion** but present evidence first and ask the user what they think before sharing your conclusion.
+Do **not** bounce for section order, labels, exact fields, word counts, omitted empty sections, the executor's chosen commands, or formatting when the meaning is clear. Do not require a reproduction, history search, or offer merely because one could exist.

@@ -1,0 +1,233 @@
+import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
+import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+
+import type { InstalledPhaseInfo } from '../../../api/types';
+import type { FactoryDecisionSummary } from './services/decisions';
+
+/** A card has one status row, so every announcement it could make resolves to one of these. */
+export type BoardCardStatus =
+  | { kind: 'idle' }
+  | { kind: 'waiting'; label: string; decisionId: string }
+  /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
+  | { kind: 'held'; label: string }
+  | { kind: 'busy'; label: string }
+  | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
+
+export type BoardCardOwner =
+  | { kind: 'free' }
+  | { kind: 'you'; progressLabel: string }
+  | { kind: 'automation'; progressLabel: string }
+  | { kind: 'session' };
+
+export interface BoardCardState {
+  status: BoardCardStatus;
+  owner: BoardCardOwner;
+  wick?: SessionRowStatus;
+}
+
+export interface BoardCardStateInput {
+  /** Run a rule parked on this card, held until someone releases it. */
+  proposal?: { label: string; decisionId: string };
+  /** Destination of an in-flight stage move. */
+  moving?: { stage: string; label: string; completes?: boolean };
+  /** Status text for the window between the click and the session mutation. */
+  preparing?: string;
+  retryRequested?: boolean;
+  /** Rule effect the server is still working through, or gave up on. */
+  decision?: FactoryDecisionSummary;
+  /** The effect's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
+  /** Why the server refused the last move. */
+  transitionReason?: string;
+  /** The card's marker: the status its row in the sidebar shows. */
+  sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
+  /** Triage left the card in Intake for a person to decide on. */
+  held?: boolean;
+}
+
+const FREE: BoardCardOwner = { kind: 'free' };
+const SESSION: BoardCardOwner = { kind: 'session' };
+
+/**
+ * One pass over the card's inputs, freshest intent first: your own in-flight
+ * click outranks a refused move, which outranks what the server is doing on its
+ * own, which outranks a person's pending call. A live or parked session holds
+ * the card over any queued effect.
+ */
+export function boardCardState(input: BoardCardStateInput): BoardCardState {
+  const { decision, sessionStatus, transitionReason } = input;
+  const request = yourRequest(input);
+  if (request !== undefined) {
+    return {
+      status: { kind: 'busy', label: request.statusLabel },
+      owner: { kind: 'you', progressLabel: request.progressLabel },
+      wick: sessionStatus,
+    };
+  }
+  const automation =
+    decision !== undefined
+      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      : input.queuePosition !== undefined
+        ? queuedOnCard(input.queuePosition)
+        : undefined;
+  const refusedMove: BoardCardStatus | undefined =
+    transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
+  return {
+    status: refusedMove ?? automation?.status ?? statusWhenNothingInFlight(input),
+    owner: input.sessionHolds ? SESSION : (automation?.owner ?? FREE),
+    wick: sessionStatus,
+  };
+}
+
+export { BUSY_CARD_MOVE_REFUSAL } from '@mastra/factory/boards/busy-card';
+
+export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
+  return ownerKind === 'free';
+}
+
+export function canMoveTo(
+  ownerKind: BoardCardOwner['kind'],
+  phaseKind: InstalledPhaseInfo['kind'] | undefined,
+): boolean {
+  if (ownerKind === 'you') return false;
+  return canStartRun(ownerKind) || !phaseMayStartRun(phaseKind);
+}
+
+function sessionIsLive(sessionStatus: SessionRowStatus | undefined): boolean {
+  return sessionStatus === 'initializing' || sessionStatus === 'working';
+}
+
+function yourRequest(input: BoardCardStateInput): { statusLabel: string; progressLabel: string } | undefined {
+  const { moving } = input;
+  if (moving) {
+    const statusLabel = moving.completes ? `Marking ${moving.label.toLowerCase()}…` : `Moving to ${moving.label}…`;
+    return { statusLabel, progressLabel: 'Moving…' };
+  }
+  if (input.preparing !== undefined) return { statusLabel: input.preparing, progressLabel: 'Starting…' };
+  if (input.retryRequested) return { statusLabel: 'Retrying…', progressLabel: 'Retrying…' };
+  return undefined;
+}
+
+function automationOnCard(
+  decision: FactoryDecisionSummary,
+  sessionStatus: SessionRowStatus | undefined,
+  queuePosition: number | undefined,
+): { status?: BoardCardStatus; owner: BoardCardOwner } {
+  const copy = automationCopy(decision);
+  const detail = decision.lastError ?? undefined;
+  if (decision.status === 'failed') {
+    return {
+      status: {
+        kind: 'error',
+        label: copy.failed,
+        ...(decision.canRetry ? { retryDecisionId: decision.id } : {}),
+        detail,
+      },
+      owner: FREE,
+    };
+  }
+  // The server retries a failure on its own, so it offers no button.
+  if (retriesAfterFailure(decision)) {
+    return {
+      status: { kind: 'error', label: `${copy.failed}. Retrying…`, detail },
+      owner: { kind: 'automation', progressLabel: 'Retrying…' },
+    };
+  }
+  if (queuePosition !== undefined) return queuedOnCard(queuePosition);
+  const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
+  if (runAnnouncedByWick(decision, sessionStatus)) return { owner };
+  return { status: { kind: 'busy', label: copy.busy }, owner };
+}
+
+function queuedOnCard(position: number): { status: BoardCardStatus; owner: BoardCardOwner } {
+  return {
+    status: { kind: 'busy', label: `Queued (#${position})` },
+    owner: { kind: 'automation', progressLabel: 'Queued' },
+  };
+}
+
+function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {
+  if (sessionIsLive(input.sessionStatus)) return { kind: 'idle' };
+  // A held card's live question is the maintainer's decision, even when a run
+  // has been suggested for it: the card cannot start that run until it is accepted.
+  if (input.held) {
+    return { kind: 'held', label: 'Held for your go-ahead' };
+  }
+  if (input.proposal) {
+    return { kind: 'waiting', label: input.proposal.label, decisionId: input.proposal.decisionId };
+  }
+  return { kind: 'idle' };
+}
+
+/** The system a linked card is synced with, named the way that system names the thing. */
+function linkedSourceName(source: FactoryDecisionSummary['source']): string {
+  switch (source) {
+    case 'github-issue':
+      return 'GitHub issue';
+    case 'github-pr':
+      return 'GitHub pull request';
+    case 'gitlab-issue':
+      return 'GitLab issue';
+    case 'gitlab-pr':
+      return 'GitLab merge request';
+    case 'linear-issue':
+      return 'Linear issue';
+    default:
+      // Every linked-card decision carries its source; only a manual card would land here.
+      return 'card';
+  }
+}
+
+function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'>): {
+  busy: string;
+  failed: string;
+  progressLabel: string;
+} {
+  switch (decision.type) {
+    case 'invokeSkill':
+      return {
+        busy: 'Starting an automated run…',
+        failed: 'Automated run could not start',
+        progressLabel: 'Starting…',
+      };
+    case 'transition':
+      return { busy: 'Moving this card automatically…', failed: 'Automatic move failed', progressLabel: 'Moving…' };
+    case 'upsertLinkedWorkItem': {
+      const source = linkedSourceName(decision.source);
+      return { busy: `Syncing ${source}…`, failed: `Couldn't sync ${source}`, progressLabel: 'Syncing…' };
+    }
+    case 'sendMessage':
+    case 'notify':
+      return {
+        busy: 'Notifying the session…',
+        failed: 'Session could not be notified',
+        progressLabel: 'Notifying…',
+      };
+    default:
+      return { busy: 'Automation is working on this card…', failed: 'Automation failed', progressLabel: 'Working…' };
+  }
+}
+
+/**
+ * The lease outlives kickoff until the dispatcher sees the run end: shown as a row it would double
+ * the wick for the whole run and linger on a card the agent already moved to Done.
+ */
+function runAnnouncedByWick(
+  decision: Pick<FactoryDecisionSummary, 'type' | 'status'>,
+  sessionStatus: SessionRowStatus | undefined,
+): boolean {
+  return decision.type === 'invokeSkill' && decision.status === 'leased' && sessionIsLive(sessionStatus);
+}
+
+/**
+ * `retry` alone does not mean anything went wrong: a linked-card decision that
+ * already succeeded is deliberately reset to `retry` when its card is
+ * rematerialized, so the card gets re-filed. That replay has no attempt behind
+ * it and no error, and calling it a failure makes the board cry wolf. A real
+ * failure has been tried at least once, or left an error to show.
+ */
+function retriesAfterFailure(decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>): boolean {
+  return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
+}

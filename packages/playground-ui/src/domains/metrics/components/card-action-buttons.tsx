@@ -1,43 +1,59 @@
-import { EyeIcon, LogsIcon } from 'lucide-react';
-import { Button } from '../../../ds/components/Button/Button';
-import type { LinkComponent } from '../../../ds/types/link-component';
+import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
+import { TraceIcon } from '../../../ds/icons/TraceIcon';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { LogsIcon } from '@/ds/icons/LogsIcon';
 
 type CardActionButtonProps = {
-  /** Pre-built drilldown URL (typically from `useDrilldown().getTracesHref(...)`). */
-  href: string;
-  /** Override how the underlying anchor is rendered — pass a router-aware Link
-   *  to keep navigation in-app. Defaults to `<a>`. */
-  LinkComponent?: LinkComponent;
+  onClick: () => void;
 };
 
-/** Icon link in a MetricsCard top bar that opens the Traces page pre-filtered
- *  to whatever dimensions the card knows about. */
-export function OpenInTracesButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
+/** Icon button in a MetricsCard top bar that opens the Traces page pre-filtered
+ *  to whatever dimensions the card knows about. Waits for the card's hover. */
+export function OpenInTracesButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button
-      render={<LinkComponent href={href} />}
-      variant="ghost"
-      size="icon-md"
-      tooltip="View in Traces"
-      aria-label="View in Traces"
-    >
-      <EyeIcon />
-    </Button>
+    <MetricsCard.Action label="View in traces" className={onCardHover} onClick={onClick}>
+      <TraceIcon />
+    </MetricsCard.Action>
   );
 }
 
-/** Icon link in a MetricsCard top bar that opens the Logs page scoped to
- *  errors for the card's current dimensions. */
-export function OpenErrorsInLogsButton({ href, LinkComponent = 'a' }: CardActionButtonProps) {
+/** Icon button in a MetricsCard top bar that opens the Logs page scoped to
+ *  errors for the card's current dimensions. Waits for the card's hover. */
+export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button
-      render={<LinkComponent href={href} />}
-      variant="ghost"
-      size="icon-md"
-      tooltip="View errors in Logs"
-      aria-label="View errors in Logs"
-    >
+    <MetricsCard.Action label="View errors in logs" className={onCardHover} onClick={onClick}>
       <LogsIcon />
-    </Button>
+    </MetricsCard.Action>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Logs page scoped to
+ *  the card's current dimensions, whatever their status. Waits for the card's hover. */
+export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <MetricsCard.Action label="View in logs" className={onCardHover} onClick={onClick}>
+      <LogsIcon />
+    </MetricsCard.Action>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Spans page scoped to
+ *  the card's current dimensions. Waits for the card's hover. */
+export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
+  return (
+    <MetricsCard.Action label="View in spans" className={onCardHover} onClick={onClick}>
+      <IconCodeTree />
+    </MetricsCard.Action>
+  );
+}
+
+/** Icon button in a MetricsCard top bar that opens the Threads page scoped to
+ *  the card's current dimensions. Waits for the card's hover. */
+export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
+  return (
+    <MetricsCard.Action label="View in threads" className={onCardHover} onClick={onClick}>
+      <IconChatBubbles />
+    </MetricsCard.Action>
   );
 }

@@ -28,12 +28,12 @@ describe('JudgeDisplayComponent', () => {
     });
   });
 
-  it('labels judge feedback as Goal and keeps the box aligned', () => {
+  it('labels judge feedback as Goal and keeps the card rows aligned', () => {
     const component = new JudgeDisplayComponent(
       {
         decision: 'continue',
         reason:
-          'This is a long reason that should wrap instead of stretching the box past the right border and making the terminal render jagged.',
+          'This is a long reason that should wrap instead of stretching the card past the terminal width and making the terminal render jagged.',
       },
       2,
       20,
@@ -65,6 +65,35 @@ describe('JudgeDisplayComponent', () => {
     expect(rendered).toContain('(1/20)');
   });
 
+  it('strips terminal control sequences from a judge-failure reason', () => {
+    const component = new JudgeDisplayComponent(
+      { decision: 'paused', reason: 'Scorer failed\x1b[2J\x1b]0;pwned\x07\nboom' },
+      1,
+      20,
+    );
+
+    const raw = component.render(WIDTH).join('\n');
+    const lines = renderPlain(component).filter(line => line.trim().length > 0);
+
+    expect(raw).not.toContain('\x1b[2J');
+    expect(raw).not.toContain('\x1b]0;');
+    expect(lines.join('\n')).toContain('Scorer failed');
+    expect(lines.join('\n')).toContain('boom');
+    expect(new Set(lines.map(line => line.length)).size).toBe(1);
+  });
+
+  it('strips terminal control sequences from judge activity lines', () => {
+    const component = new JudgeDisplayComponent(null, 1, 20);
+    component.addActivity('grep "x\x1b[2J\x1b]0;pwned\x07\ny"');
+
+    const raw = component.render(WIDTH).join('\n');
+    const lines = renderPlain(component).filter(line => line.trim().length > 0);
+
+    expect(raw).not.toContain('\x1b[2J');
+    expect(raw).not.toContain('\x1b]0;');
+    expect(new Set(lines.map(line => line.length)).size).toBe(1);
+  });
+
   it('renders user-blocked goals as waiting instead of continue', () => {
     const component = new JudgeDisplayComponent(
       {
@@ -94,7 +123,9 @@ describe('JudgeDisplayComponent', () => {
 
     expect(activityIndex).toBeGreaterThan(-1);
     expect(reasonIndex).toBe(activityIndex + 2);
-    expect(separator).toMatch(/^\s*│\s+│\s*$/);
+    // The separator is a bare left-bar row.
+    expect(separator?.trimEnd()).toBe('▎');
+    expect(lines.every(line => line.startsWith('▎'))).toBe(true);
   });
 });
 

@@ -9,11 +9,11 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
-    alwaysBundle: ['@internal/storage-test-utils'],
+    alwaysBundle: ['@internal/core', '@internal/storage-test-utils'],
+    neverBundle: ['@mastra/core'],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/core']));
   },
 });

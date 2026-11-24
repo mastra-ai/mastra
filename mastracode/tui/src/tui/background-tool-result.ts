@@ -1,5 +1,15 @@
-const BACKGROUND_TOOL_TASK_ID_PATTERN = /^Background task started\. Task ID: ([^.\s]+)/;
+import { z } from 'zod';
 
-export function parseBackgroundToolTaskId(result: string): string | undefined {
-  return BACKGROUND_TOOL_TASK_ID_PATTERN.exec(result)?.[1];
+const backgroundTaskMetadataSchema = z.object({
+  mastra: z.object({
+    backgroundTask: z.object({
+      taskId: z.string().min(1),
+      status: z.enum(['running', 'completed', 'failed']),
+    }),
+  }),
+});
+
+export function getBackgroundToolMetadata(providerMetadata: unknown) {
+  const parsed = backgroundTaskMetadataSchema.safeParse(providerMetadata);
+  return parsed.success ? parsed.data.mastra.backgroundTask : undefined;
 }

@@ -76,12 +76,100 @@ describe('BaseResource', () => {
     });
   });
 
+  it('should NOT retry 501 Not Implemented errors', async () => {
+    await runRetryTest({
+      statusCode: 501,
+      contentType: 'application/json',
+      responseBody: { error: 'Not Implemented' },
+      expectedRequestCount: 1, // The server lacks the capability; retrying cannot succeed
+    });
+  });
+
+  it('should NOT retry trace query execution timeouts', async () => {
+    await runRetryTest({
+      statusCode: 504,
+      contentType: 'application/json',
+      responseBody: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT', message: 'Trace query timed out' },
+      expectedRequestCount: 1, // The same query would hit the same timeout budget again
+    });
+  });
+
+  it('should retry plain 504 Gateway Timeout errors', async () => {
+    await runRetryTest({
+      statusCode: 504,
+      contentType: 'text/plain',
+      responseBody: 'Gateway Timeout',
+      expectedRequestCount: 3, // Initial request + 2 retries
+    });
+  });
+
+  it('should retry 504 errors with an unrelated error code', async () => {
+    await runRetryTest({
+      statusCode: 504,
+      contentType: 'application/json',
+      responseBody: { code: 'UPSTREAM_TIMEOUT' },
+      expectedRequestCount: 3, // Initial request + 2 retries
+    });
+  });
+
   it('should retry 5xx server errors and eventually reject', async () => {
     await runRetryTest({
       statusCode: 500,
       contentType: 'text/plain',
       responseBody: 'Internal Server Error',
       expectedRequestCount: 3, // Initial request + 2 retries
+    });
+  });
+
+  describe('method-aware retry defaults', () => {
+    const respondWith500 = () => {
+      server.on('request', (req, res) => {
+        requestCount++;
+        req.resume(); // Drain the body so the failing response is not blocked by unread input
+        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        res.end('Internal Server Error');
+      });
+    };
+
+    it.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
+      'does not repeat a %s after a server-side failure without an explicit retry count',
+      async method => {
+        respondWith500();
+        const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+        await expect(defaultResource.request('/write', { method, body: { action: 'apply' } })).rejects.toBeInstanceOf(
+          Error,
+        );
+        expect(requestCount).toBe(1);
+      },
+    );
+
+    it('keeps the default retry count for read methods', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(defaultResource.request('/read', { method: 'GET' })).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(4); // Initial request + 3 default retries
+    });
+
+    it('preserves an explicit client retry count for writes', async () => {
+      respondWith500();
+      const retryingResource = new BaseResource({ baseUrl: serverUrl, retries: 2, backoffMs: 0 });
+
+      await expect(
+        retryingResource.request('/write', { method: 'POST', body: { action: 'apply' } }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(3); // Initial request + 2 configured retries
+    });
+
+    it('lets a per-request retry count opt a write back in', async () => {
+      respondWith500();
+      const defaultResource = new BaseResource({ baseUrl: serverUrl, backoffMs: 0 });
+
+      await expect(
+        defaultResource.request('/write', { method: 'POST', body: { action: 'apply' }, retries: 1 }),
+      ).rejects.toBeInstanceOf(Error);
+      expect(requestCount).toBe(2); // Initial request + 1 per-request retry
     });
   });
 
@@ -235,6 +323,37 @@ describe('BaseResource', () => {
 
     // Assert: Verify request succeeded using global fetch
     expect(result).toEqual({ success: true });
+  });
+
+  // Fetch joins header names that differ only in case into "a, b". (#28667)
+  it('lets request headers replace client and default headers of any casing', async () => {
+    server.on('request', (req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          authorization: req.headers.authorization,
+          contentType: req.headers['content-type'],
+          client: req.headers['x-client'],
+        }),
+      );
+    });
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      headers: { Authorization: 'Bearer client-token', 'X-Client': 'kept' },
+    });
+
+    const result = await customResource.request('/test', {
+      method: 'POST',
+      body: {},
+      headers: { authorization: 'Bearer request-token', 'Content-Type': 'application/vnd.example+json' },
+    });
+
+    expect(result).toEqual({
+      authorization: 'Bearer request-token',
+      contentType: 'application/vnd.example+json',
+      client: 'kept',
+    });
   });
 
   describe('abort signals', () => {

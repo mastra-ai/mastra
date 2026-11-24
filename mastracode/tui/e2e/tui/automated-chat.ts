@@ -8,6 +8,7 @@ export const automatedChatScenario: McE2eScenario = {
   description: 'Submit one prompt to real Mastra Code and assert the AIMock-backed model response appears.',
   testName: 'submits an automated chat prompt to real Mastra Code',
   useOpenAIModel: true,
+  enableTitleGeneration: true,
   aimockFixture: 'automated-chat.json',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
@@ -28,7 +29,7 @@ export const automatedChatScenario: McE2eScenario = {
     await runtime.waitForScreenText(/MC automated chat smoke response/i, terminal);
     await runtime.waitForScreenText(/MC automated chat title/i, terminal, 10_000);
     runtime.printScreen('after automated prompt', terminal);
-    expect(terminal.serialize().view.match(/▐build▌/g) ?? []).toHaveLength(1);
+    expect(terminal.serialize().view.match(/\bbuild · /g) ?? []).toHaveLength(1);
 
     terminal.submit('/thread');
     await runtime.waitForScreenText(/Title: MC automated chat title/i, terminal);

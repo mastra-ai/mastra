@@ -9,7 +9,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Provider, ModelForProvider, ModelRouterModelId } from '../index.js';
 import { getCapabilityFileName } from './capability-file.js';
-import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
+import type { ProviderCapabilityFile } from './capability-file.js';
+import type { ModelReasoningOption, ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
@@ -21,7 +22,7 @@ import type { ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
-export type { AttachmentCapabilities } from './gateways/base.js';
+export type { AttachmentCapabilities, ModelReasoningOption } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
@@ -29,9 +30,13 @@ interface RegistryData {
   version: string;
 }
 
+// On disk the registry has no top-level `models` map (registry files written by
+// older versions may still have one); it is derived from `providers[*].models` on load.
+type RegistryFileData = Omit<RegistryData, 'models'> & { models?: Record<string, string[]> };
+
 // JSON imports widen string literals to `string`, so fields like
 // `modelOverrides[*].shape` don't match their literal-union types.
-const staticRegistry = staticRegistryJson as RegistryData;
+const staticRegistry = staticRegistryJson as RegistryFileData;
 
 /**
  * Check if running in offline/air-gapped mode.
@@ -55,12 +60,14 @@ function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<stri
   return enabledGatewayIds;
 }
 
-function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: Set<string>): RegistryData {
+function sanitizeRegistryDataForRuntime(data: RegistryFileData, enabledGatewayIds: Set<string>): RegistryData {
   const providers = Object.fromEntries(
     Object.entries(data.providers).filter(([, config]) => enabledGatewayIds.has(config.gateway)),
   );
 
-  const models = Object.fromEntries(Object.entries(data.models).filter(([providerId]) => providerId in providers));
+  const models = Object.fromEntries(
+    Object.entries(providers).map(([providerId, config]) => [providerId, config.models]),
+  );
 
   return {
     ...data,
@@ -71,6 +78,11 @@ function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: S
 
 // In-memory cache for dynamic loading mode
 let registryData: RegistryData | null = null;
+
+// Static mode: the bundled registry never changes, so its filtered view only depends on which
+// gateways are enabled. That set is recomputed on every read because gateway enablement can
+// depend on env vars and custom gateways can be registered at any time.
+let filteredStaticRegistry: { enabledGatewayKey: string; data: RegistryData } | null = null;
 
 // Cache file helpers (dev mode only)
 // Use functions so we don't call os.homedir() at top level, which
@@ -254,16 +266,25 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
 
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
+    const enabledGatewayKey = JSON.stringify([...enabledGatewayIds].sort());
+    if (filteredStaticRegistry?.enabledGatewayKey !== enabledGatewayKey) {
+      filteredStaticRegistry = {
+        enabledGatewayKey,
+        data: sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds),
+      };
+    }
+    return filteredStaticRegistry.data;
+  }
+
+  // Dynamic loading mode: check in-memory cache first. The registry proxy calls this on every
+  // property access, so the disk sync below must only run when the data actually gets (re)loaded.
+  // In-process refreshes reset registryData, so they still sync and reload.
+  if (registryData) {
+    return registryData;
   }
 
   // Dynamic loading mode: sync global cache to local before loading
   syncGlobalCacheToLocal();
-
-  // Dynamic loading mode: check in-memory cache first
-  if (registryData) {
-    return registryData;
-  }
 
   // Dynamic loading mode: load from file system for live updates
   const packageRoot = getPackageRoot();
@@ -282,7 +303,7 @@ function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGat
   for (const jsonPath of possiblePaths) {
     try {
       const content = fs.readFileSync(jsonPath, 'utf-8');
-      const parsed = JSON.parse(content) as RegistryData;
+      const parsed = JSON.parse(content) as RegistryFileData;
       registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
       return registryData;
     } catch (err) {
@@ -441,13 +462,7 @@ export function getRegisteredProviders(): string[] {
 // Provider capabilities (per-model attachment / modality metadata)
 // ---------------------------------------------------------------------------
 
-interface ProviderCapabilityFile {
-  attachment?: string[];
-  temperature?: string[];
-  structuredOutput?: string[];
-}
-
-type CapabilityDimension = keyof ProviderCapabilityFile;
+type CapabilityDimension = 'attachment' | 'temperature' | 'structuredOutput';
 
 const providerCapCaches: Record<CapabilityDimension, Map<string, string[] | null>> = {
   attachment: new Map(),
@@ -480,10 +495,11 @@ const PROVIDER_ALIASES: Record<string, string> = {
 };
 
 /** Bedrock model-id region prefixes (cross-region inference profiles). */
-const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au)\./;
+const BEDROCK_REGION_PREFIX = /^(global|us-gov|us|eu|apac|jp|au|in)\./;
 
 /** Underlying vendor segment carried by fully-qualified Bedrock model ids. */
-const BEDROCK_VENDOR_SEGMENT = /^(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek)\.(.+)$/;
+const BEDROCK_VENDOR_SEGMENT =
+  /^(?!openai\.gpt-oss-)(anthropic|xai|meta|amazon|cohere|mistral|ai21|deepseek|openai)\.(.+)$/;
 
 /** Fallback vendor lookup for short Bedrock ids (`claude-sonnet-5`) that omit the vendor. */
 const BEDROCK_VENDOR_BY_PREFIX: Array<[RegExp, string]> = [
@@ -679,6 +695,55 @@ function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDim
   return directSupport;
 }
 
+function loadReasoningByModel(provider: string): Record<string, ModelReasoningOption[]> | undefined {
+  const useDynamicLoading = GatewayRegistry.getInstance()['useDynamicLoading'];
+  return loadProviderCapabilityFile(provider, useDynamicLoading)?.reasoning;
+}
+
+type ReasoningSource = { provider: string; modelId: string };
+
+function splitNestedModelId(modelId: string): ReasoningSource | undefined {
+  const delimiter = modelId.indexOf('/');
+  if (delimiter <= 0 || delimiter === modelId.length - 1) return undefined;
+  return { provider: modelId.substring(0, delimiter), modelId: modelId.substring(delimiter + 1) };
+}
+
+function reasoningSourcesInPrecedence(provider: string, modelId: string): ReasoningSource[] {
+  if (provider === 'aws-bedrock') {
+    const { vendor, shortId } = resolveBedrockVendorModel(modelId);
+    return [
+      { provider, modelId },
+      { provider, modelId: shortId },
+      ...(vendor ? [{ provider: vendor, modelId: shortId }] : []),
+    ];
+  }
+  const nested = splitNestedModelId(modelId);
+  if (!nested) return [{ provider, modelId }];
+  return [{ provider, modelId }, { provider: `${provider}/${nested.provider}`, modelId: nested.modelId }, nested];
+}
+
+function sourceAnswersForModel({ provider, modelId }: ReasoningSource): boolean {
+  const reasoningByModel = loadReasoningByModel(provider);
+  if (!reasoningByModel) return false;
+  return Object.hasOwn(reasoningByModel, modelId) || providerListsModel(provider, modelId);
+}
+
+/**
+ * The reasoning controls a model accepts: effort values, a token budget, or an on/off toggle.
+ * Returns `[]` when the provider data lists the model without reasoning controls, and `undefined`
+ * when no provider data describes the model. The first source that publishes reasoning data and
+ * lists the model answers for it: the provider itself, then a gateway's per-provider data, then
+ * the nested or Bedrock vendor's data.
+ */
+export function getModelReasoningOptions(modelRouterId: string): ModelReasoningOption[] | undefined {
+  const parsed = parseModelString(modelRouterId);
+  if (!parsed.provider) return undefined;
+  const provider = PROVIDER_ALIASES[parsed.provider] ?? parsed.provider;
+  const answeringSource = reasoningSourcesInPrecedence(provider, parsed.modelId).find(sourceAnswersForModel);
+  if (!answeringSource) return undefined;
+  return loadReasoningByModel(answeringSource.provider)?.[answeringSource.modelId] ?? [];
+}
+
 /** @internal Reset capability caches. For testing only. */
 export function _resetCapabilityCaches(): void {
   for (const cache of Object.values(providerCapCaches)) cache.clear();
@@ -829,6 +894,7 @@ export class GatewayRegistry {
         attachmentCapabilities,
         temperatureCapabilities,
         structuredOutputCapabilities,
+        reasoningCapabilities,
         failedGateways,
       } = await fetchProvidersFromGateways(gateways);
 
@@ -855,6 +921,9 @@ export class GatewayRegistry {
           attachmentCapabilities,
           temperatureCapabilities,
           structuredOutputCapabilities,
+          reasoningCapabilities,
+          // The global cache is shared with older @mastra/core versions, which require the top-level `models` map.
+          { includeModelsKey: true },
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
@@ -873,6 +942,7 @@ export class GatewayRegistry {
         attachmentCapabilities,
         temperatureCapabilities,
         structuredOutputCapabilities,
+        reasoningCapabilities,
       );
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 

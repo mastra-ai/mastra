@@ -1,33 +1,40 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
+
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package, Search, X } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
 import {
   useBuilderRegistryPreview,
   useInstallBuilderRegistrySkill,
   usePopularBuilderRegistrySkills,
   useSearchBuilderRegistry,
 } from '@/domains/agent-builder/hooks/use-builder-registries';
-
-// =============================================================================
-// Helpers
-// =============================================================================
 
 /**
  * Parse a registry skill's `topSource` field to extract owner/repo. Mirrors
@@ -45,16 +52,12 @@ function parseSkillSource(topSource: string): { owner: string; repo: string } | 
   let cleaned = topSource.replace(/^https?:\/\//, '').replace(/^github\.com\//, '');
   const parts = cleaned.split('/').filter(Boolean);
   if (parts.length < 2) return null;
-  return { owner: parts[0]!, repo: parts[1]! };
+  return { owner: parts[0], repo: parts[1] };
 }
 
 function getSkillUniqueId(skill: BuilderRegistrySkillSummary): string {
   return `${skill.topSource}/${skill.name}`;
 }
-
-// =============================================================================
-// Component
-// =============================================================================
 
 export interface BuilderAddSkillDialogProps {
   open: boolean;
@@ -151,8 +154,6 @@ export function BuilderAddSkillDialog({
       onOpenChange(false);
     } catch (err: any) {
       const message: string = err?.message ?? 'Install failed';
-      // Detect 409 from the stringified error body. The collision case is the
-      // only one we need to upgrade into a navigation hint.
       if (/409/.test(message) || /already exists/i.test(message)) {
         onCollision?.(selectedSkill.name);
         setInstallError('A skill with this name already exists. Open the existing skill instead.');
@@ -175,8 +176,8 @@ export function BuilderAddSkillDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[80vh] max-w-4xl flex-col">
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={installMutation.isPending}>
+      <DialogContent size="xl" className="h-[80vh]">
         <DialogHeader>
           <DialogTitle>Browse {registryLabel}</DialogTitle>
           <DialogDescription>
@@ -184,34 +185,30 @@ export function BuilderAddSkillDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
-          <div className="relative">
-            <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
-            <Input
-              placeholder={`Search ${registryLabel}...`}
-              value={searchQuery}
-              onChange={e => handleSearch(e.target.value)}
-              className="pl-9"
-              data-testid="builder-add-skill-search"
-            />
-          </div>
+        <DialogBody layout="fill">
+          <SearchInput
+            label={`Search ${registryLabel}`}
+            placeholder={`Search ${registryLabel}`}
+            value={searchQuery}
+            onValueChange={handleSearch}
+            data-testid="builder-add-skill-search"
+          />
 
           <div className="flex min-h-0 flex-1 gap-4">
-            {/* Skills list */}
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-muted-foreground text-ui-sm mb-2 font-medium tracking-wide uppercase">
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
                 {hasSearchResults ? 'Search results' : 'Popular skills'}
-              </div>
-              <ScrollArea className="border-border1 flex-1 rounded-lg border">
+              </Txt>
+              <ScrollArea className="flex-1 rounded-lg border border-border">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-5">
-                    <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                    <Spinner className="text-muted-foreground" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-muted-foreground flex flex-col items-center justify-center py-5">
-                    <Package className="mb-2 h-8 w-8" />
-                    <p className="text-ui-md">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
-                  </div>
+                  <EmptyState
+                    iconSlot={<IconPackage />}
+                    titleSlot={hasSearchResults ? 'No skills found' : 'No skills available'}
+                  />
                 ) : (
                   <div className="space-y-1 p-2">
                     {displaySkills.map(skill => {
@@ -223,27 +220,37 @@ export function BuilderAddSkillDialog({
                           key={skillUniqueId}
                           onClick={() => setSelectedSkill(skill)}
                           className={cn(
-                            'w-full text-left px-3 py-2 rounded-md transition-colors',
-                            'hover:bg-surface4',
-                            selectedUniqueId === skillUniqueId && 'bg-surface5 border border-accent1',
+                            'w-full rounded-md px-3 py-2 text-left',
+                            'hover:bg-fill-subtle',
+                            selectedUniqueId === skillUniqueId && 'border border-border-strong bg-fill-hover',
                           )}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-foreground text-ui-md truncate font-medium">{skill.name}</span>
+                                <Txt as="span" variant="subheading" tone="ink" className="truncate">
+                                  {skill.name}
+                                </Txt>
                                 {isInstalled && (
-                                  <span className="bg-accent1/20 text-accent1 text-ui-xs inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium">
-                                    <Check className="h-2.5 w-2.5" />
+                                  <Txt
+                                    as="span"
+                                    variant="meta"
+                                    className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
+                                  >
+                                    <IconCheckmark2Medium className="size-icon-xs" />
                                     Installed
-                                  </span>
+                                  </Txt>
                                 )}
                               </div>
-                              <div className="text-muted-foreground text-ui-sm truncate">{skill.topSource}</div>
+                              <Txt as="p" variant="caption" tone="muted" className="truncate">
+                                {skill.topSource}
+                              </Txt>
                             </div>
-                            <div className="text-muted-foreground text-ui-sm flex shrink-0 items-center gap-1">
-                              <Download className="h-3 w-3" />
-                              <span>{skill.installs.toLocaleString()}</span>
+                            <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
+                              <IconArrowInbox className="size-icon-xs" />
+                              <Txt as="span" variant="caption">
+                                {skill.installs.toLocaleString()}
+                              </Txt>
                             </div>
                           </div>
                         </button>
@@ -254,30 +261,32 @@ export function BuilderAddSkillDialog({
               </ScrollArea>
             </div>
 
-            {/* Preview pane */}
-            <div className="border-border1 flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border">
+            <div className="flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border border-border">
               {!selectedSkill ? (
-                <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
-                  <Package className="mb-2 h-8 w-8" />
-                  <p className="text-ui-md">Select a skill to preview</p>
-                </div>
+                <EmptyState className="flex-1" iconSlot={<IconPackage />} titleSlot="Select a skill to preview" />
               ) : (
                 <>
-                  <div className="border-border1 bg-surface3 border-b p-4">
+                  <div className="border-b border-border bg-card p-4">
                     <div className="flex items-start gap-3">
-                      <div className="bg-surface5 rounded-lg p-2">
-                        <SkillIcon className="text-muted-foreground h-5 w-5" />
+                      <div className="rounded-lg bg-muted p-2">
+                        <SkillIcon className="size-icon-lg text-muted-foreground" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="text-foreground text-ui-md truncate font-semibold">{selectedSkill.name}</h3>
-                        <div className="text-muted-foreground text-ui-sm mt-1 flex items-center gap-3">
+                        <Txt as="h3" variant="subheading" tone="ink" className="truncate">
+                          {selectedSkill.name}
+                        </Txt>
+                        <div className="mt-1 flex items-center gap-3 text-muted-foreground">
                           <span className="flex items-center gap-1">
-                            <GithubIcon className="h-3 w-3" />
-                            {selectedSkill.topSource}
+                            <GithubIcon className="size-icon-xs" />
+                            <Txt as="span" variant="caption" className="block">
+                              {selectedSkill.topSource}
+                            </Txt>
                           </span>
                           <span className="flex items-center gap-1">
-                            <Download className="h-3 w-3" />
-                            {selectedSkill.installs.toLocaleString()} installs
+                            <IconArrowInbox className="size-icon-xs" />
+                            <Txt as="span" variant="caption" className="block">
+                              {selectedSkill.installs.toLocaleString()} installs
+                            </Txt>
                           </span>
                         </div>
                       </div>
@@ -286,10 +295,10 @@ export function BuilderAddSkillDialog({
                           href={githubUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          className={cn(quietTextHover, controlStateColorTransition)}
                           title="View on GitHub"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <IconSquareArrowTopRight className="size-icon-md" />
                         </a>
                       )}
                     </div>
@@ -297,7 +306,7 @@ export function BuilderAddSkillDialog({
 
                   {isLoadingPreview ? (
                     <div className="flex flex-1 items-center justify-center">
-                      <Loader2 className="text-muted-foreground h-6 w-6 animate-spin" />
+                      <Spinner className="text-muted-foreground" />
                     </div>
                   ) : previewContent ? (
                     <ScrollArea className="flex-1">
@@ -306,54 +315,26 @@ export function BuilderAddSkillDialog({
                       </div>
                     </ScrollArea>
                   ) : (
-                    <div className="text-muted-foreground flex flex-1 flex-col items-center justify-center">
-                      <Package className="mb-2 h-8 w-8" />
-                      <p className="text-ui-md">Preview unavailable</p>
-                    </div>
+                    <EmptyState className="flex-1" iconSlot={<IconPackage />} titleSlot="Preview unavailable" />
                   )}
                 </>
               )}
             </div>
           </div>
 
-          {selectedSkill && (
-            <div className="border-border1 flex flex-col gap-3 border-t pt-4">
-              {installError && (
-                <div className="text-ui-md rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-400">
-                  {installError}
-                </div>
-              )}
-              <div className="flex items-center justify-end gap-2">
-                <Button icon={<X />} variant="default" onClick={() => handleOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleInstall}
-                  disabled={!parsedSource || installMutation.isPending || isSelectedInstalled}
-                  data-testid="builder-install-skill-button"
-                >
-                  {installMutation.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Installing...
-                    </>
-                  ) : isSelectedInstalled ? (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Already installed
-                    </>
-                  ) : (
-                    <>
-                      <Download className="mr-2 h-4 w-4" />
-                      Install
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
+          {installError && <Notice variant="destructive">{installError}</Notice>}
         </DialogBody>
+
+        <DialogFooter>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction
+            onConfirm={handleInstall}
+            disabled={!parsedSource || isSelectedInstalled}
+            data-testid="builder-install-skill-button"
+          >
+            {installMutation.isPending ? 'Installing...' : isSelectedInstalled ? 'Already installed' : 'Install'}
+          </DialogAction>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

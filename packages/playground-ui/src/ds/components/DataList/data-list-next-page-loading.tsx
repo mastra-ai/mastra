@@ -22,7 +22,7 @@ export function DataListNextPageLoading({
       ref={setEndOfListElement}
       // Zero-height when idle so it adds no trailing space below the last row;
       // IntersectionObserver still fires for a zero-area target at the viewport edge.
-      className={cn('col-span-full -mt-px flex justify-center text-ui-md text-muted-foreground opacity-50', {
+      className={cn('col-span-full -mt-px flex justify-center text-body text-muted-foreground opacity-50', {
         'py-4': isLoading,
       })}
     >

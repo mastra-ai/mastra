@@ -35,7 +35,7 @@ test.describe('Scorer detail page', () => {
     test('hides the entity filter dropdown', async ({ page }) => {
       await page.goto('/scorers/response-quality');
 
-      await expect(page.locator('main').getByRole('combobox')).toHaveCount(0);
+      await expect(page.locator('[data-slot="page-layout-action-row"]').getByRole('combobox')).toHaveCount(0);
     });
   });
 
@@ -54,7 +54,7 @@ test.describe('Scorer detail page', () => {
 
       await page.goto('/scorers/response-quality?entity=weather-agent');
 
-      const entityFilter = page.locator('main').getByRole('combobox').first();
+      const entityFilter = page.locator('[data-slot="page-layout-action-row"]').getByRole('combobox').first();
       await expect(entityFilter).toBeVisible();
       await expect(entityFilter).toContainText('Weather Agent');
     });

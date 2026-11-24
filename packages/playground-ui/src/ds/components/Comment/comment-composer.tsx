@@ -1,4 +1,3 @@
-import { ArrowUp } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 
@@ -6,6 +5,7 @@ import { useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import type { InputGroupButtonProps, InputGroupInputProps } from '@/ds/components/InputGroup';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
@@ -22,12 +22,6 @@ const composerSize: Record<CommentVariant, ControlSize> = {
   thread: 'md',
 };
 
-const composerInputVariant: Record<CommentVariant, 'default' | 'outline'> = {
-  default: 'outline',
-  embed: 'default',
-  thread: 'outline',
-};
-
 export interface CommentComposerInputProps extends InputGroupInputProps {
   /** Layout classes for the surrounding InputGroup. */
   groupClassName?: string;
@@ -39,7 +33,7 @@ export const CommentComposerInput = forwardRef<HTMLInputElement, CommentComposer
     const variant = useCommentVariant();
 
     return (
-      <InputGroup size={composerSize[variant]} variant={composerInputVariant[variant]} className={groupClassName}>
+      <InputGroup size={composerSize[variant]} className={groupClassName}>
         <InputGroupInput ref={ref} data-slot="comment-composer-input" {...props} />
         {children}
       </InputGroup>
@@ -54,7 +48,7 @@ export const CommentComposerSend = forwardRef<HTMLButtonElement, CommentComposer
   ({ 'aria-label': ariaLabel = 'Send comment', type = 'submit', ...props }, ref) => (
     <InputGroupAddon align="inline-end">
       <InputGroupButton ref={ref} data-slot="comment-composer-send" type={type} aria-label={ariaLabel} {...props}>
-        <ArrowUp />
+        <IconArrowUp />
       </InputGroupButton>
     </InputGroupAddon>
   ),

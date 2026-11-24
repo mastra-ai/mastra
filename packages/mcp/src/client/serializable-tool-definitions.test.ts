@@ -33,6 +33,7 @@ async function setupTestServer() {
   mcpServer.registerTool(
     'greet',
     {
+      title: 'Greeter Tool',
       description: 'A simple greeting tool',
       inputSchema: z.object({ name: z.string().describe('Name to greet').default('World') }),
       annotations: { title: 'Greeter', readOnlyHint: true },
@@ -102,6 +103,7 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       expect(Object.keys(definitions).sort()).toEqual(['greet', 'measure']);
       expect(definitions.greet.description).toBe('A simple greeting tool');
+      expect(definitions.greet.title).toBe('Greeter Tool');
       expect(definitions.greet.annotations).toMatchObject({ title: 'Greeter', readOnlyHint: true });
       expect(definitions.measure.outputSchema).toBeDefined();
 
@@ -130,6 +132,8 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       expect(hydrated.id).toBe(discovered.id);
       expect(hydrated.description).toBe(discovered.description);
+      expect(hydrated.title).toBe('Greeter Tool');
+      expect(hydrated.title).toBe(discovered.title);
       // Schema wrappers compare by identity, so compare the schema they carry.
       expect(JSON.stringify(hydrated.inputSchema)).toEqual(JSON.stringify(discovered.inputSchema));
       expect((hydrated as any).mcp).toEqual((discovered as any).mcp);
@@ -332,6 +336,31 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
       const tools = await mcp.toolsFromDefinitions({ definitions: cached });
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
+    });
+
+    it('skips cached definitions with an invalid input schema and keeps their siblings (issue #23731)', async () => {
+      const definitions = await createClient().listToolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions));
+      cached.weather.broken = {
+        ...cached.weather.greet,
+        name: 'broken',
+        inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+      };
+
+      const tools = await mcp.toolsFromDefinitions({ definitions: cached });
+
+      expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
+    });
+
+    it('rejects explicit hydration of a definition with an invalid input schema without connecting', async () => {
+      const definitions = await createClient().listToolDefinitions();
+      const broken = { ...definitions.weather.greet, inputSchema: { type: 'object', properties: { coin: ['x'] } } };
+      const worker = createClient();
+
+      await expect(
+        worker.toolFromDefinition({ serverName: 'weather', definition: broken as any }),
+      ).rejects.toMatchObject({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' });
+      expect((worker as any).mcpClientsById.get('weather')?.isConnected).toBeFalsy();
     });
   });
 });

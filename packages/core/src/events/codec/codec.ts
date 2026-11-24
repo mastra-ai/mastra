@@ -16,7 +16,8 @@ import type { Envelope } from './tags';
  * in tagged envelopes that the decoder can reconstruct.
  *
  * Functions and symbols are dropped (parity with JSON.stringify). Cycles are
- * replaced with null at the second visit. NaN/Infinity become null. Honors
+ * replaced with null at recurrence; shared (non-cyclic) references are encoded
+ * at every occurrence. NaN/Infinity become null. Honors
  * user `toJSON()` methods on plain objects.
  */
 export function encode(value: unknown): unknown {
@@ -32,7 +33,21 @@ export function encode(value: unknown): unknown {
   return walk(value, new WeakSet());
 }
 
+// `seen` holds only the objects on the current path from the root, so a
+// shared reference reached through two different keys is not mistaken for a
+// cycle.
 function walk(v: unknown, seen: WeakSet<object>): unknown {
+  if (v === null || typeof v !== 'object') return walkValue(v, seen);
+  if (seen.has(v)) return null;
+  seen.add(v);
+  try {
+    return walkValue(v, seen);
+  } finally {
+    seen.delete(v);
+  }
+}
+
+function walkValue(v: unknown, seen: WeakSet<object>): unknown {
   if (v === undefined) return { [CODEC_TAG]: 'Undefined' } satisfies Envelope;
   if (v === null) return null;
 
@@ -55,8 +70,6 @@ function walk(v: unknown, seen: WeakSet<object>): unknown {
     return { [CODEC_TAG]: 'Error', v: serializeError(v) } satisfies Envelope;
   }
   if (v instanceof Map) {
-    if (seen.has(v)) return null;
-    seen.add(v);
     const entries: Array<[unknown, unknown]> = [];
     for (const [k, val] of v.entries()) {
       entries.push([walk(k, seen), walk(val, seen)]);
@@ -64,23 +77,16 @@ function walk(v: unknown, seen: WeakSet<object>): unknown {
     return { [CODEC_TAG]: 'Map', v: entries } satisfies Envelope;
   }
   if (v instanceof Set) {
-    if (seen.has(v)) return null;
-    seen.add(v);
     const values: unknown[] = [];
     for (const x of v) values.push(walk(x, seen));
     return { [CODEC_TAG]: 'Set', v: values } satisfies Envelope;
   }
 
   if (Array.isArray(v)) {
-    if (seen.has(v)) return null;
-    seen.add(v);
     return v.map(x => walk(x, seen));
   }
 
   if (t === 'object') {
-    if (seen.has(v as object)) return null;
-    seen.add(v as object);
-
     // Honor toJSON() — matches JSON.stringify behavior. Skip for plain objects
     // that already carry a literal CODEC_TAG key (defensive: do not let user
     // data masquerade as an envelope through toJSON).

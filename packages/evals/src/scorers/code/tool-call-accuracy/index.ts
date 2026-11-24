@@ -11,21 +11,13 @@ function checkToolOrder(actualTools: string[], expectedOrder: string[], strictMo
     return JSON.stringify(actualTools) === JSON.stringify(expectedOrder);
   }
 
-  const expectedIndices: number[] = [];
+  let searchFrom = 0;
   for (const expectedTool of expectedOrder) {
-    const index = actualTools.indexOf(expectedTool);
+    const index = actualTools.indexOf(expectedTool, searchFrom);
     if (index === -1) {
       return false;
     }
-    expectedIndices.push(index);
-  }
-
-  for (let i = 1; i < expectedIndices.length; i++) {
-    const currentIndex = expectedIndices[i];
-    const prevIndex = expectedIndices[i - 1];
-    if (currentIndex !== undefined && prevIndex !== undefined && currentIndex <= prevIndex) {
-      return false;
-    }
+    searchFrom = index + 1;
   }
 
   return true;

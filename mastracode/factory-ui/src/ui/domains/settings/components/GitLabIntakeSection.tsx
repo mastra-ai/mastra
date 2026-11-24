@@ -1,0 +1,107 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useGitLabProjectsQuery } from '../../../../hooks/useGitLabData';
+import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
+import type { GitLabStatus } from '../../factory/services/gitlab';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
+import type { IntakeSectionProps } from './IntakeProviderCard';
+import { RoutedSourcePicker } from './IntakeSourceRouting';
+import { groupGitLabProjectsByAccount } from './intakeSourceGroups';
+import {
+  AddPlatformAccountButton,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+
+export function GitLabIntakeSection({
+  config,
+  listed,
+  statusQuery,
+}: IntakeSectionProps & { statusQuery: UseQueryResult<GitLabStatus> }) {
+  const selection = useIntakeSelection('gitlab');
+  const factories = useFactoriesQuery().data ?? [];
+  const status = statusQuery.data;
+  const statusUnavailable = statusQuery.isError || status?.reason === 'unavailable';
+  const configured = Boolean(status?.enabled && status.configured);
+  const projectsQuery = useGitLabProjectsQuery(configured);
+  const authError = isGitLabAuthError(projectsQuery.error);
+  const reauthRequired = isGitLabReauthRequired(status);
+  const platformManaged = status?.connections !== undefined;
+  const projects = projectsQuery.data ?? [];
+  const description = connectionDescription();
+  function connectionDescription() {
+    if (statusUnavailable) return "Couldn't load GitLab status.";
+    if (reauthRequired) return 'A GitLab account needs to be reconnected.';
+    if (authError)
+      return platformManaged
+        ? 'GitLab rejected a connected account. Reauthorize it from Manage to resume syncing.'
+        : 'GitLab rejected the configured access token. Ask the operator to check it.';
+    if (!configured)
+      return platformManaged
+        ? 'Connect GitLab to sync issues from this organization.'
+        : 'GitLab is not configured on this server. Configure a GitLab access token to enable it.';
+    return undefined;
+  }
+  return (
+    <IntakeProviderCard
+      name="GitLab"
+      icon={<SettingsIntegrationIcon provider="gitlab" />}
+      account={status?.accounts?.join(', ')}
+      listed={listed}
+      connection={
+        platformManaged &&
+        (listed ? (
+          <>
+            {status?.mode === 'platform' && (status.connections?.length ?? 0) > 0 && (
+              <>
+                <AddPlatformAccountButton provider="gitlab" />
+                <AddPlatformAccountButton provider="gitlab-self-hosted" buttonLabel="Add self-hosted" />
+              </>
+            )}
+            <PlatformConnectionActions provider="gitlab" connections={status?.connections ?? []} />
+          </>
+        ) : (
+          <>
+            <PlatformConnectButton provider="gitlab" />
+            <PlatformConnectButton provider="gitlab-self-hosted" buttonLabel="Connect self-hosted" />
+          </>
+        ))
+      }
+      description={description}
+      action={
+        statusUnavailable && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
+            Retry
+          </Button>
+        )
+      }
+    >
+      {configured && !authError && (
+        <RoutedSourcePicker
+          integrationId="gitlab"
+          routingLabel="GitLab"
+          factories={factories}
+          label="GitLab projects"
+          addLabel="Add project"
+          itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
+          groups={groupGitLabProjectsByAccount(projects)}
+          selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
+          saving={selection.saving}
+          loading={projectsQuery.isPending}
+          error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}
+          onRetry={() => void projectsQuery.refetch()}
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
+        />
+      )}
+    </IntakeProviderCard>
+  );
+}

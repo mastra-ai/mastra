@@ -327,6 +327,42 @@ describe('SentryExporter', () => {
     });
   });
 
+  describe('Span links', () => {
+    const startLink = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+    const lateLink = { traceId: '1af7651916cd43dd8448eb211c80319c', spanId: 'c7ad6b7169203331' };
+
+    it('starts the Sentry span with links to spans in other traces', async () => {
+      const span: any = createMockSpan({
+        id: 'request-span',
+        name: 'tools/call echo',
+        type: SpanType.GENERIC,
+        isRoot: true,
+      });
+      span.links = [startLink, { traceId: 'abc', spanId: 'def' }];
+
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      expect(SentryMock.startInactiveSpan.mock.calls[0][0].links).toEqual([
+        { context: { ...startLink, traceFlags: 1 } },
+      ]);
+    });
+
+    it('adds links set after the span started before it ends', async () => {
+      mockSpan.addLinks = vi.fn();
+      const span: any = createMockSpan({ id: 'tool-span', name: 'tool', type: SpanType.GENERIC, isRoot: true });
+      span.links = [startLink];
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...span, links: [startLink, lateLink], endTime: new Date() },
+      });
+
+      expect(mockSpan.addLinks).toHaveBeenCalledWith([{ context: { ...lateLink, traceFlags: 1 } }]);
+      expect(mockSpan.end).toHaveBeenCalled();
+    });
+  });
+
   describe('Span Operation Types', () => {
     it.each([
       [SpanType.AGENT_RUN, true, 'gen_ai.invoke_agent'],
@@ -375,6 +411,7 @@ describe('SentryExporter', () => {
           model: 'gpt-4',
           provider: 'openai',
           streaming: false,
+          finishReason: 'stop',
           usage: {
             inputTokens: 10,
             outputTokens: 5,
@@ -384,6 +421,7 @@ describe('SentryExporter', () => {
             temperature: 0.7,
             maxOutputTokens: 100,
             topP: 0.9,
+            stopSequences: ['END'],
           },
         },
       });
@@ -402,6 +440,8 @@ describe('SentryExporter', () => {
           'gen_ai.request.temperature': 0.7,
           'gen_ai.request.max_tokens': 100,
           'gen_ai.request.top_p': 0.9,
+          'gen_ai.request.stop_sequences': '["END"]',
+          'gen_ai.response.finish_reasons': '["stop"]',
           'gen_ai.request.stream': false,
           'gen_ai.response.streaming': false,
         }),
@@ -469,7 +509,7 @@ describe('SentryExporter', () => {
 
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
-          'gen_ai.usage.reasoning_tokens': 1000,
+          'gen_ai.usage.reasoning.output_tokens': 1000,
         }),
       );
     });
@@ -559,7 +599,11 @@ describe('SentryExporter', () => {
         expect.objectContaining({
           'gen_ai.agent.name': 'support-agent',
           'gen_ai.system_instructions': 'Help customers with support requests',
-          'gen_ai.tool.definitions': '["search","calculator","email"]',
+          'gen_ai.tool.definitions': JSON.stringify([
+            { type: 'function', name: 'search' },
+            { type: 'function', name: 'calculator' },
+            { type: 'function', name: 'email' },
+          ]),
         }),
       );
     });
@@ -972,7 +1016,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read.input_tokens', 20);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_creation.input_tokens', 10);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning_tokens', 30);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning.output_tokens', 30);
     });
 
     it('should isolate token usage per AGENT_RUN (no cascading to parent agents)', async () => {

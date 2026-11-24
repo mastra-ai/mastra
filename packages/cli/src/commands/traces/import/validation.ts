@@ -20,6 +20,9 @@ const traceImportSpanSchema = z
     spanType: z
       .string()
       .refine((value): value is TraceImportSpanType => spanTypes.has(value), 'Unknown Mastra span type'),
+    entityType: z.string().min(1).optional(),
+    entityId: z.string().min(1).optional(),
+    entityName: z.string().min(1).optional(),
     startedAt: timestampSchema,
     endedAt: timestampSchema,
     isEvent: z.boolean(),

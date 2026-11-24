@@ -1,4 +1,4 @@
-import type { ObservationModelContext, ResolvedActivationTTL } from './types';
+import type { ObservationModelContext, ParsedActivationTTLMap, ResolvedActivationTTL } from './types';
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -26,12 +26,45 @@ function getOpenAIPromptCacheRetention(
     : undefined;
 }
 
+function isActivationTTLMap(
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
+): activateAfterIdle is ParsedActivationTTLMap {
+  return typeof activateAfterIdle === 'object' && activateAfterIdle !== null;
+}
+
+/** The configured TTL for marker payloads. Per-provider maps are omitted; markers only carry scalar values. */
+export function getMarkerActivationTTL(
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
+): ResolvedActivationTTL | undefined {
+  return isActivationTTLMap(activateAfterIdle) ? undefined : activateAfterIdle;
+}
+
+/** A map entry applies when its key equals the model's provider before the first `.`, lowercased. */
+function resolveActivationTTLMapEntry(
+  activateAfterIdle: ParsedActivationTTLMap,
+  modelContext?: ObservationModelContext,
+): ResolvedActivationTTL | false | undefined {
+  const providerKey = normalize(modelContext?.provider).split('.')[0];
+  if (providerKey && Object.hasOwn(activateAfterIdle.providers, providerKey)) {
+    return activateAfterIdle.providers[providerKey];
+  }
+  return activateAfterIdle.default;
+}
+
 export function resolveActivationTTL(
-  activateAfterIdle: ResolvedActivationTTL | undefined,
+  activateAfterIdle: ResolvedActivationTTL | ParsedActivationTTLMap | undefined,
   modelContext?: ObservationModelContext,
 ): number | undefined {
-  if (activateAfterIdle !== 'auto') {
-    return activateAfterIdle;
+  const ttl = isActivationTTLMap(activateAfterIdle)
+    ? resolveActivationTTLMapEntry(activateAfterIdle, modelContext)
+    : activateAfterIdle;
+
+  if (ttl === undefined || ttl === false) {
+    return undefined;
+  }
+
+  if (ttl !== 'auto') {
+    return ttl;
   }
 
   return resolveAutoActivationTTL(modelContext);

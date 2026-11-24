@@ -1,3 +1,4 @@
+import { selectMenuRow } from './menu-navigation.js';
 import type { McE2eScenario } from './types.js';
 
 export const settingsApiKeysNavigationScenario = {
@@ -12,11 +13,7 @@ export const settingsApiKeysNavigationScenario = {
 
     await runtime.waitForScreenText(/Settings/i, terminal, 8_000);
 
-    for (let i = 0; i < 10; i++) {
-      terminal.write('\x1b[B');
-    }
-    await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
-    terminal.write('\r');
+    await selectMenuRow(terminal, /API Keys/i);
 
     await runtime.waitForScreenText(/API Keys/i, terminal, 8_000);
     await runtime.waitForScreenText(/No key configured\. Press Enter to add one\.|Enter add\/update/i, terminal, 8_000);

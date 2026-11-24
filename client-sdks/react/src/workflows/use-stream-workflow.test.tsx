@@ -35,6 +35,9 @@ function streamResponse() {
     send(type: string, payload: Record<string, unknown> = {}) {
       controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ type, payload })}\x1e`));
     },
+    sendCustomEvent(type: string, data: unknown) {
+      controller.enqueue(new TextEncoder().encode(`${JSON.stringify({ type, data })}\x1e`));
+    },
     close: () => controller.close(),
     error: (error: Error) => controller.error(error),
   };
@@ -115,6 +118,29 @@ describe('useStreamWorkflow stream ownership', () => {
     });
     expect(result.current.streamResult).toMatchObject({ status: 'paused', steps: { first: { status: 'success' } } });
     expect(result.current.isStreaming).toBe(false);
+  });
+
+  it('keeps observing a running run through custom writer events', async () => {
+    const { result, streams, invoke } = renderWorkflow();
+    const remote = streamResponse();
+    streams.set('running', remote.response);
+    let observation!: Promise<void>;
+    act(() => {
+      observation = invoke('observe', 'running');
+    });
+    await act(async () => {
+      remote.send('workflow-step-start', { id: 'emit', status: 'running' });
+      remote.sendCustomEvent('data-progress', { percent: 50 });
+      remote.send('workflow-step-result', { id: 'emit', status: 'success', output: { ok: true } });
+      remote.send('workflow-finish', { workflowStatus: 'success' });
+      remote.close();
+      await observation;
+    });
+    expect(result.current.streamResult).toMatchObject({
+      status: 'success',
+      result: { ok: true },
+      steps: { emit: { status: 'success' } },
+    });
   });
 
   it('continues observing a paused run and preserves opaque outputs, custom IDs and metadata', async () => {

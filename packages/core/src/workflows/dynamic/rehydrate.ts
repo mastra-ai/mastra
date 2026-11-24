@@ -5,7 +5,7 @@
  * missing — better to surface the failure at load time than at run time.
  */
 import type { Mastra } from '../../mastra';
-import { cloneWorkflow, createWorkflow } from '../create';
+import { cloneWorkflow, createEventedWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { Step } from '../step';
@@ -57,7 +57,9 @@ export interface RehydratedWorkflow {
  * keywords. Forwarded to `jsonSchemaToZod` for every schema on the definition
  * (top-level + per-step `agent.outputSchema`). See `JsonSchemaToZodOptions`.
  */
-export type RehydrateWorkflowOptions = JsonSchemaToZodOptions;
+export type RehydrateWorkflowOptions = JsonSchemaToZodOptions & {
+  engineType?: 'default' | 'evented';
+};
 
 export async function rehydrateWorkflow(
   def: DynamicWorkflowGraph,
@@ -79,14 +81,14 @@ export async function rehydrateWorkflow(
     requestContextSchema: requestContextSchema as any,
   };
 
+  const factory = opts?.engineType === 'evented' ? createEventedWorkflow : createWorkflow;
   let wf;
   if (def.schedule === undefined) {
-    wf = createWorkflow(baseParams);
+    wf = factory(baseParams);
   } else {
     try {
-      // Presence of `schedule` promotes the workflow to the evented engine,
-      // which validates the cron expression(s) at construction time.
-      wf = createWorkflow({ ...baseParams, schedule: def.schedule as any });
+      // The cron expression(s) are validated at construction time.
+      wf = factory({ ...baseParams, schedule: def.schedule as any });
     } catch (error) {
       // A bad stored schedule shouldn't sink the whole workflow: degrade to
       // an unscheduled workflow and surface the problem.
@@ -94,7 +96,7 @@ export async function rehydrateWorkflow(
       opts.onUnsupported?.(
         `Ignoring invalid stored schedule config: ${error instanceof Error ? error.message : String(error)}`,
       );
-      wf = createWorkflow(baseParams);
+      wf = factory(baseParams);
     }
   }
 
@@ -115,6 +117,7 @@ function applyGraphEntry(
   switch (entry.type) {
     case 'agent':
     case 'tool':
+    case 'classifier':
       wf.__pushStepFlowEntry(rehydrateSingleEntry(entry, mastra, schemaOpts), entry);
       return;
     case 'mapping': {
@@ -314,6 +317,23 @@ function rehydrateSingleEntry(
         );
       }
       return { type: 'tool', id: entry.id, toolId: entry.toolId, tool, options: rebuildToolOptions(entry) };
+    }
+    case 'classifier': {
+      let classifier;
+      try {
+        classifier = mastra.getClassifierById(entry.classifierId);
+      } catch {
+        throw new Error(
+          `Dynamic workflow references classifier "${entry.classifierId}" which is not registered on this Mastra instance.`,
+        );
+      }
+      return {
+        type: 'classifier',
+        id: entry.id,
+        classifierId: entry.classifierId,
+        classifier,
+        options: entry.options,
+      };
     }
     case 'step': {
       const { id } = entry.step;

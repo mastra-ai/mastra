@@ -7,8 +7,6 @@ import DatasetsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { agents } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
-import { RouteHeaderActionsProvider } from '@/lib/route-header';
-import { RouteHeaderActionsSlot } from '@/lib/route-header/route-header-actions';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -58,13 +56,10 @@ const renderPage = (initialEntry: string) =>
   renderWithProviders(
     <TooltipProvider>
       <TestLinkProvider>
-        <RouteHeaderActionsProvider>
-          <RouteHeaderActionsSlot />
-          <Routes>
-            <Route path="/datasets" element={<DatasetsPage />} />
-          </Routes>
-          <LocationProbe />
-        </RouteHeaderActionsProvider>
+        <Routes>
+          <Route path="/datasets" element={<DatasetsPage />} />
+        </Routes>
+        <LocationProbe />
       </TestLinkProvider>
     </TooltipProvider>,
     { router: { initialEntries: [initialEntry] } },
@@ -87,15 +82,15 @@ describe('Datasets page — target filter from URL', () => {
     setupHandlers();
     renderPage('/datasets?targetType=agent&targetId=nobody');
 
-    expect(await screen.findByRole('button', { name: /reset/i })).toBeDefined();
+    expect(await screen.findByRole('group', { name: 'Datasets filters' })).toBeDefined();
     expect(screen.queryByText('Agent dataset')).toBeNull();
   });
 
-  it('clears the target params when filters are reset', async () => {
+  it('clears both target params when the Target type chip is removed', async () => {
     setupHandlers();
     renderPage('/datasets?targetType=agent&targetId=agent-1');
 
-    fireEvent.click(await screen.findByRole('button', { name: /reset/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Target type filter' }));
 
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/datasets'));
     expect(await screen.findByText('Other dataset')).toBeDefined();

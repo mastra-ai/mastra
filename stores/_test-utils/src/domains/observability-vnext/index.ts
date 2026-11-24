@@ -1,3 +1,6 @@
+export * from './outcome-fields';
+export * from './span-aggregate';
+export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
 
@@ -12,9 +15,12 @@ import {
   planTraceQuery,
   planTraceQueryObservedFields,
   planTraceQueryValues,
+  TraceQueryCursorError,
 } from '@mastra/core/storage';
 import type {
+  TraceQueryTenantScope,
   CreateFeedbackRecord,
+  CreateMetricRecord,
   CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
@@ -22,8 +28,11 @@ import type {
 } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VNEXT_BASE_DATE, makeSpan } from './data';
-import { TRACE_QUERY_DISCOVERY_FIXTURE_DATA, TRACE_QUERY_DISCOVERY_TIME_RANGE } from './trace-query-discovery';
+import { createOutcomeFieldTests } from './outcome-fields';
+import { TIMING_FIELDS, timingValue } from './timing-fields';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import {
+  collectTraceQueryPages,
   normalizeTraceQueryResponse,
   THREAD_QUERY_CONFORMANCE_CASES,
   THREAD_QUERY_FIXTURE_DATA,
@@ -34,7 +43,12 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
-import type { TraceQueryFixtureData } from './trace-query';
+import type { ThreadQueryConformanceCase, TraceQueryConformanceCase, TraceQueryFixtureData } from './trace-query';
+import {
+  TRACE_QUERY_DISCOVERY_FIXTURE_DATA,
+  TRACE_QUERY_DISCOVERY_TIME_RANGE,
+  TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE,
+} from './trace-query-discovery';
 
 export interface ObservabilityVNextCapabilities {
   /**
@@ -62,6 +76,8 @@ export interface ObservabilityVNextCapabilities {
   traceQuerySpanWriteModel?: 'event-sourced' | 'completion-only';
   /** Whether feedback value predicates distinguish numbers from numeric-looking strings. Defaults to true. */
   traceQueryStrictFeedbackValueTypes?: boolean;
+  /** Whether concurrent replacements atomically preserve feedback identity. Defaults to true. */
+  concurrentFeedbackIdentity?: boolean;
 }
 
 export interface CreateObservabilityVNextTestsOptions {
@@ -111,38 +127,58 @@ export interface CreateObservabilityVNextTestsOptions {
  * materialized views) so the assertion isn't racey. Adapters with synchronous
  * reads (InMemory, DuckDB) satisfy the predicate on the first call.
  */
+/**
+ * How a completion-only store receives root versions. By default each trace gets its current root
+ * once. `superseded-first` and `current-first` write every completed version of a root, in that
+ * order, as an exporter that re-exports a resumed run would (a store that never merges them must
+ * still read the current one).
+ */
+export type TraceRootVersionWrites = 'current-only' | 'superseded-first' | 'current-first';
+
 function traceQueryFixtureForWriteModel(
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites,
 ) {
   if (writeModel !== 'completion-only') {
     return { spans: data.spans, relatedSpans: [], scores: data.scores, feedback: data.feedback };
   }
 
   const roots = new Map<string | null, TraceQueryFixtureData['spans'][number]>();
+  const superseded: TraceQueryFixtureData['spans'] = [];
   const spans = new Map<string, TraceQueryFixtureData['spans'][number]>();
   for (const span of data.spans) {
     if (span.parentSpanId === null) {
+      const previous = roots.get(span.traceId);
+      if (previous && !previous.isPending) superseded.push(previous);
       roots.set(span.traceId, span);
     } else {
       spans.set(`${span.traceId}\u0000${span.spanId}`, span);
     }
   }
 
+  const current = [...roots.values()].filter(root => !root.isPending);
   return {
-    spans: [...roots.values()].filter(root => !root.isPending),
-    relatedSpans: [...spans.values()],
+    spans:
+      rootVersions === 'superseded-first'
+        ? [...superseded, ...current]
+        : rootVersions === 'current-first'
+          ? [...current, ...superseded]
+          : current,
+    // Completion-only writers never see a span before it ends.
+    relatedSpans: [...spans.values()].filter(span => !span.isPending),
     scores: data.scores,
     feedback: data.feedback,
   };
 }
 
-async function writeTraceQueryFixture(
+export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites = 'current-only',
 ) {
-  const fixture = traceQueryFixtureForWriteModel(data, writeModel);
+  const fixture = traceQueryFixtureForWriteModel(data, writeModel, rootVersions);
   const records: CreateSpanRecord[] = [...fixture.spans, ...fixture.relatedSpans]
     .filter(span => span.traceId !== null)
     .map(span => ({
@@ -163,6 +199,26 @@ async function writeTraceQueryFixture(
       parentEntityVersionId: span.parentEntityVersionId,
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
+      organizationId: span.organizationId,
+      serviceName: span.serviceName ?? null,
+      // Spans carry execution provenance as `source`; stores expose it as `executionSource`.
+      source: span.executionSource ?? null,
+      runId: span.runId ?? null,
+      userId: span.userId ?? null,
+      sessionId: span.sessionId ?? null,
+      experimentId: span.experimentId ?? null,
+      requestId: span.requestId ?? null,
+      parentEntityType: (span.parentEntityType ?? null) as EntityType | null,
+      parentEntityId: span.parentEntityId ?? null,
+      parentEntityName: span.parentEntityName ?? null,
+      rootEntityType: (span.rootEntityType ?? null) as EntityType | null,
+      rootEntityId: span.rootEntityId ?? null,
+      rootEntityName: span.rootEntityName ?? null,
+      model: span.model ?? null,
+      provider: span.provider ?? null,
+      timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+      timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+      tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
@@ -185,6 +241,8 @@ async function writeTraceQueryFixture(
         entityVersionId: score.entityVersionId,
         parentEntityVersionId: score.parentEntityVersionId,
         rootEntityVersionId: score.rootEntityVersionId,
+        organizationId: score.organizationId ?? undefined,
+        resourceId: score.resourceId ?? undefined,
         timestamp,
         createdAt: timestamp,
         updatedAt: null,
@@ -208,10 +266,51 @@ async function writeTraceQueryFixture(
         entityVersionId: feedback.entityVersionId,
         parentEntityVersionId: feedback.parentEntityVersionId,
         rootEntityVersionId: feedback.rootEntityVersionId,
+        organizationId: feedback.organizationId ?? undefined,
+        resourceId: feedback.resourceId ?? undefined,
         metadata: null,
       },
     });
   }
+}
+
+/**
+ * Writes a trace-aggregate fixture: the trace-query fixture plus its token metric rows.
+ * The n-th copy of each `metricId` goes in batch n, so duplicates always arrive in
+ * separate inserts (ClickHouse writes each insert as its own part, which is what an
+ * exporter retry produces).
+ */
+export async function writeTraceAggregateFixture(
+  storage: ObservabilityStorage,
+  data: TraceAggregateFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+  rootVersions: TraceRootVersionWrites = 'current-only',
+) {
+  await writeTraceQueryFixture(storage, data, writeModel, rootVersions);
+
+  const batches: CreateMetricRecord[][] = [];
+  const copies = new Map<string, number>();
+  for (const metric of data.metrics ?? []) {
+    const copy = copies.get(metric.metricId) ?? 0;
+    copies.set(metric.metricId, copy + 1);
+    (batches[copy] ??= []).push({
+      metricId: metric.metricId,
+      timestamp: new Date(metric.timestamp),
+      name: metric.name,
+      value: metric.value,
+      traceId: metric.traceId,
+      spanId: metric.spanId,
+      provider: metric.provider,
+      model: metric.model,
+      estimatedCost: metric.estimatedCost,
+      costUnit: metric.costUnit,
+      costMetadata: metric.costMetadata,
+      organizationId: metric.organizationId,
+      resourceId: metric.resourceId,
+      labels: {},
+    });
+  }
+  for (const metrics of batches) await storage.batchCreateMetrics({ metrics });
 }
 
 async function waitFor<T>(
@@ -249,33 +348,45 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       }
     });
 
+    const runsConformanceCase = (testCase: TraceQueryConformanceCase | ThreadQueryConformanceCase) =>
+      !(testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) &&
+      (testCase.requiresFeature === undefined || storage.getFeatures()?.includes(testCase.requiresFeature) === true);
+
     it('reports observability strategy preference', () => {
       expect(storage.observabilityStrategy?.preferred).toBe(capabilities.preferredStrategy);
     });
 
     if (capabilities.traceQueryDiscovery) {
-      const observedFields = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        search?: string;
-        limit?: number;
-      }) => {
+      const observedFields = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryFieldsArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized));
+        return storage.getTraceQueryObservedFields(planTraceQueryObservedFields(normalized, { scope }));
       };
-      const values = async (args: {
-        predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
-        path: string;
-        search?: string;
-        limit?: number;
-      }) => {
+      const values = async (
+        args: {
+          predicateScope: 'trace' | 'spans' | 'scores' | 'feedback';
+          path: string;
+          search?: string;
+          limit?: number;
+          timeRange?: { from: string; to: string };
+        },
+        scope?: TraceQueryTenantScope,
+      ) => {
         const normalized = parseGetTraceQueryValuesArgs({
           timeRange: TRACE_QUERY_DISCOVERY_TIME_RANGE,
           ...args,
         });
-        return storage.getTraceQueryValues(planTraceQueryValues(normalized));
+        return storage.getTraceQueryValues(planTraceQueryValues(normalized, { scope }));
       };
 
       const writeDiscoveryFixture = () =>
@@ -344,6 +455,18 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           values: [{ value: 'production', count: 2 }],
           valuesTruncated: true,
         });
+        // Root span name/type come from current qualified roots only: no superseded, pending, or child spans.
+        await expect(values({ predicateScope: 'trace', path: 'spanType' })).resolves.toEqual({
+          values: [
+            { value: 'agent_run', count: 2 },
+            { value: 'workflow_run', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'name', search: 'SYNC' })).resolves.toEqual({
+          values: [{ value: 'nightly-sync', count: 1 }],
+          valuesTruncated: false,
+        });
         await expect(values({ predicateScope: 'spans', path: 'model' })).resolves.toEqual({
           values: [
             { value: 'claude-sonnet-4-6', count: 2 },
@@ -367,6 +490,33 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       });
 
+      it('applies the trusted tenant scope to field and value discovery', async () => {
+        await writeDiscoveryFixture();
+        const timeRange = TRACE_QUERY_DISCOVERY_SCOPED_TIME_RANGE;
+        await expect(values({ predicateScope: 'trace', path: 'environment', timeRange })).resolves.toEqual({
+          values: [
+            { value: 'scoped-a-env', count: 1 },
+            { value: 'scoped-b-env', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(
+          values({ predicateScope: 'trace', path: 'environment', timeRange }, { organizationId: 'org-a' }),
+        ).resolves.toEqual({ values: [{ value: 'scoped-a-env', count: 1 }], valuesTruncated: false });
+        await expect(
+          values(
+            { predicateScope: 'trace', path: 'environment', timeRange },
+            { organizationId: 'org-a', resourceId: 'project-2' },
+          ),
+        ).resolves.toEqual({ values: [], valuesTruncated: false });
+        await expect(
+          observedFields({ predicateScope: 'trace', timeRange }, { organizationId: 'org-b' }),
+        ).resolves.toEqual({
+          observedFields: [expect.objectContaining({ path: 'metadata.tenantB', occurrences: 1 })],
+          observedFieldsTruncated: false,
+        });
+      });
+
       it('treats value search wildcard characters as literal substring text', async () => {
         await writeDiscoveryFixture();
         await expect(
@@ -376,17 +526,195 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           valuesTruncated: false,
         });
       });
+
+      it('discovers tag values with per-trace counts from current qualified roots', async () => {
+        await writeDiscoveryFixture();
+        await expect(values({ predicateScope: 'trace', path: 'tags' })).resolves.toEqual({
+          values: [
+            { value: 'beta', count: 2 },
+            { value: 'alpha', count: 1 },
+          ],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', search: 'ALP' })).resolves.toEqual({
+          values: [{ value: 'alpha', count: 1 }],
+          valuesTruncated: false,
+        });
+        await expect(values({ predicateScope: 'trace', path: 'tags', limit: 1 })).resolves.toEqual({
+          values: [{ value: 'beta', count: 2 }],
+          valuesTruncated: true,
+        });
+      });
     }
 
     if (capabilities.traceQuery) {
+      it('matches advanced predicate conformance when polling trace deltas', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const cases = TRACE_QUERY_CONFORMANCE_CASES.filter(
+            testCase => !testCase.request.group && runsConformanceCase(testCase),
+          );
+          const requests = await Promise.all(
+            cases.map(async testCase => {
+              const request = {
+                timeRange: testCase.request.timeRange,
+                where: testCase.request.where,
+                mode: 'delta' as const,
+                limit: 2,
+              };
+              const bootstrap = await storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest(request), { scope: testCase.scope }),
+              );
+              if (!('delta' in bootstrap)) throw new Error('Expected delta');
+              return { testCase, request, after: bootstrap.deltaCursor };
+            }),
+          );
+          await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
+          for (const { testCase, request, after } of requests) {
+            const expected = testCase.expected.map(row => ('traceId' in row ? row.traceId : '')).sort();
+            const result = await waitFor(
+              async () => {
+                let cursor = after;
+                const ids: string[] = [];
+                for (let page = 0; page < 20; page++) {
+                  const batch = await storage.queryTraces(
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: cursor }), { scope: testCase.scope }),
+                  );
+                  if (!('delta' in batch)) throw new Error('Expected delta');
+                  ids.push(...batch.traces.map(trace => trace.traceId));
+                  cursor = batch.deltaCursor;
+                  if (!batch.delta.hasMore) return ids.sort();
+                }
+                throw new Error('Delta pagination did not terminate');
+              },
+              ids => JSON.stringify(ids) === JSON.stringify(expected),
+            );
+            expect(result, testCase.name).toEqual(expected);
+          }
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('hands numbered trace pages to delta polling and drains matching completed roots', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const predicate = {
+            op: 'and' as const,
+            args: [
+              { op: 'exists' as const, path: 'threadId' },
+              {
+                op: 'not' as const,
+                arg: { op: 'eq' as const, left: { path: 'traceId' }, right: { literal: 'excluded' } },
+              },
+            ],
+          };
+          const query = (fields: Partial<TraceQueryRequest>) =>
+            storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where: predicate, ...fields })));
+          const page = await query({ pagination: { page: 0, perPage: 2 } });
+          if (!('pagination' in page)) throw new Error('Expected numbered page');
+          expect(page.traces).toEqual([]);
+          expect(page.deltaCursor).toBeTruthy();
+          const bootstrap = await query({ mode: 'delta' });
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          expect(bootstrap.traces).toEqual([]);
+          expect(bootstrap.delta).toEqual({ limit: 10, hasMore: false });
+
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const rows = ['delta-a', 'delta-b', 'delta-c'].map((traceId, i) => ({
+            ...template,
+            traceId,
+            spanId: traceId,
+            cursorId: 100 + i,
+            threadId: 'delta-thread',
+          }));
+          await writeTraceQueryFixture(
+            storage,
+            {
+              spans: [{ ...rows[0]!, traceId: 'excluded', spanId: 'excluded', name: 'excluded' }, ...rows],
+              scores: [],
+              feedback: [],
+            },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const first = await waitFor(
+            () => query({ mode: 'delta', after: page.deltaCursor, limit: 2 }),
+            result => 'delta' in result && result.traces.length === 2,
+          );
+          if (!('delta' in first)) throw new Error('Expected delta');
+          expect(first.delta).toEqual({ limit: 2, hasMore: true });
+          const second = await query({ mode: 'delta', after: first.deltaCursor, limit: 2 });
+          if (!('delta' in second)) throw new Error('Expected delta');
+          expect(second.delta.hasMore).toBe(false);
+          expect([...first.traces, ...second.traces].map(trace => trace.traceId).sort()).toEqual([
+            'delta-a',
+            'delta-b',
+            'delta-c',
+          ]);
+          const empty = await query({ mode: 'delta', after: second.deltaCursor });
+          if (!('delta' in empty)) throw new Error('Expected delta');
+          expect(empty.traces).toEqual([]);
+          expect(empty.delta.hasMore).toBe(false);
+
+          // A child write does not constitute a new root/completion candidate.
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...rows[0]!, spanId: 'child', parentSpanId: rows[0]!.spanId }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const childPoll = await query({ mode: 'delta', after: empty.deltaCursor });
+          expect('traces' in childPoll && childPoll.traces).toEqual([]);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
+      it('returns a root completed after the delta bootstrap', async () => {
+        const feature = 'observability-delta-polling';
+        const wasEnabled = coreFeatures.has(feature);
+        coreFeatures.add(feature);
+        try {
+          const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
+          const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+          const root = { ...template, traceId: 'delta-completion', spanId: 'delta-completion' };
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [{ ...root, isPending: true, endedAt: null }], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const bootstrap = await storage.queryTraces(
+            planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta' })),
+          );
+          if (!('delta' in bootstrap)) throw new Error('Expected delta');
+          await writeTraceQueryFixture(
+            storage,
+            { spans: [root], scores: [], feedback: [] },
+            capabilities.traceQuerySpanWriteModel,
+          );
+          const poll = await waitFor(
+            () =>
+              storage.queryTraces(
+                planTraceQuery(parseTraceQueryRequest({ timeRange, mode: 'delta', after: bootstrap.deltaCursor })),
+              ),
+            result => 'traces' in result && result.traces.length === 1,
+          );
+          expect('traces' in poll && poll.traces.map(trace => trace.traceId)).toEqual(['delta-completion']);
+        } finally {
+          if (!wasEnabled) coreFeatures.delete(feature);
+        }
+      });
+
       it('matches the shared advanced trace-query conformance cases without merge assistance', async () => {
         await writeTraceQueryFixture(storage, TRACE_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of TRACE_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
-          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request));
+          if (!runsConformanceCase(testCase)) continue;
+          const plan = planTraceQuery(parseTraceQueryRequest(testCase.request), { scope: testCase.scope });
           const response = await storage.queryTraces(plan);
           expect(normalizeTraceQueryResponse(response), testCase.name).toEqual(testCase.expected);
         }
@@ -477,7 +805,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         );
         const empty = await storage.queryTraces(emptyPlan);
         if (!('traces' in empty) || !('pagination' in empty)) throw new Error('Expected paginated traces');
-        expect(empty).toEqual({
+        expect(empty).toMatchObject({
           traces: [],
           pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
         });
@@ -603,10 +931,8 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         await writeTraceQueryFixture(storage, THREAD_QUERY_FIXTURE_DATA, capabilities.traceQuerySpanWriteModel);
 
         for (const testCase of THREAD_QUERY_CONFORMANCE_CASES) {
-          if (testCase.requiresStrictFeedbackValueTypes && capabilities.traceQueryStrictFeedbackValueTypes === false) {
-            continue;
-          }
-          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request));
+          if (!runsConformanceCase(testCase)) continue;
+          const plan = planThreadQuery(parseQueryThreadsInput(testCase.request), { scope: testCase.scope });
           const response = await storage.queryThreads(plan);
           expect(response.threads, testCase.name).toEqual(testCase.expected);
         }
@@ -2022,6 +2348,289 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    if (capabilities.traceQuery) {
+      describe.each(TIMING_FIELDS)('$field', ({ field, sortFeature }) => {
+        describe('on traces', () => {
+          const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+          const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+          const traceTtfc = async (where?: TraceQueryRequest['where']) => {
+            const response = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, where })));
+            if (!('traces' in response)) throw new Error('Expected traces');
+            return Object.fromEntries(response.traces.map(trace => [trace.traceId, trace[field]]));
+          };
+
+          beforeEach(async () => {
+            const span = (traceId: string, spanId: string, value: number | null, extra = {}) =>
+              makeSpan({ traceId, spanId, ...timingValue(field, value), ...extra });
+            await storage.batchCreateSpans({
+              records: [
+                // The root agent answers at 300 ms; its own generation and a nested agent never replace that.
+                span('ttfc-agent', 'agent-root', 300),
+                span('ttfc-agent', 'agent-generation', 320, {
+                  parentSpanId: 'agent-root',
+                  spanType: SpanType.MODEL_GENERATION,
+                }),
+                span('ttfc-agent', 'nested-agent', 50, { parentSpanId: 'agent-root' }),
+                // A workflow root never streams, even when an agent inside it does.
+                span('ttfc-workflow', 'workflow-root', null, { spanType: SpanType.WORKFLOW_RUN }),
+                span('ttfc-workflow', 'workflow-agent', 200, { parentSpanId: 'workflow-root' }),
+                span('ttfc-zero', 'zero-root', 0),
+              ],
+            });
+            if (flushPendingMerges) await flushPendingMerges(storage);
+          });
+
+          it("returns the root span's value, null when the root never streamed", async () => {
+            expect(await traceTtfc()).toEqual({ 'ttfc-agent': 300, 'ttfc-workflow': null, 'ttfc-zero': 0 });
+          });
+
+          it('filters by the root value, counting zero as a value and missing as empty', async () => {
+            const path = { path: field };
+            expect(Object.keys(await traceTtfc({ op: 'gt', left: path, right: { literal: 100 } }))).toEqual([
+              'ttfc-agent',
+            ]);
+            expect(Object.keys(await traceTtfc({ op: 'eq', left: path, right: { literal: 0 } }))).toEqual([
+              'ttfc-zero',
+            ]);
+            expect(Object.keys(await traceTtfc({ op: 'exists', path: field })).sort()).toEqual([
+              'ttfc-agent',
+              'ttfc-zero',
+            ]);
+            expect(Object.keys(await traceTtfc({ op: 'notExists', path: field }))).toEqual(['ttfc-workflow']);
+          });
+
+          it('returns the value in numbered pages and delta polls', async () => {
+            const page = await storage.queryTraces(
+              planTraceQuery(parseTraceQueryRequest({ timeRange, pagination: { page: 0, perPage: 10 } })),
+            );
+            if (!('traces' in page)) throw new Error('Expected traces');
+            expect(Object.fromEntries(page.traces.map(trace => [trace.traceId, trace[field]]))).toEqual({
+              'ttfc-agent': 300,
+              'ttfc-workflow': null,
+              'ttfc-zero': 0,
+            });
+
+            const feature = 'observability-delta-polling';
+            const wasEnabled = coreFeatures.has(feature);
+            coreFeatures.add(feature);
+            try {
+              const request = { timeRange, mode: 'delta' as const, limit: 10 };
+              const bootstrap = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+              if (!('delta' in bootstrap)) throw new Error('Expected delta');
+              await storage.batchCreateSpans({
+                records: [makeSpan({ traceId: 'ttfc-late', spanId: 'late-root', ...timingValue(field, 75) })],
+              });
+              if (flushPendingMerges) await flushPendingMerges(storage);
+              const polled = await waitFor(
+                async () => {
+                  const batch = await storage.queryTraces(
+                    planTraceQuery(parseTraceQueryRequest({ ...request, after: bootstrap.deltaCursor })),
+                  );
+                  if (!('delta' in batch)) throw new Error('Expected delta');
+                  return batch.traces.map(trace => [trace.traceId, trace[field]]);
+                },
+                rows => rows.length > 0,
+              );
+              expect(polled).toEqual([['ttfc-late', 75]]);
+            } finally {
+              if (!wasEnabled) coreFeatures.delete(feature);
+            }
+          });
+
+          it("filters by any span's value", async () => {
+            const fast = await traceTtfc({
+              spans: { some: { op: 'lt', left: { path: field }, right: { literal: 100 } } },
+            });
+            expect(Object.keys(fast).sort()).toEqual(['ttfc-agent', 'ttfc-zero']);
+          });
+        });
+
+        describe('sort on traces', () => {
+          const at = (ms: number) => new Date(VNEXT_BASE_DATE.getTime() + ms);
+          const timeRange = { from: at(-60_000).toISOString(), to: at(60_000).toISOString() };
+          // Ties break by traceId; empty values sort last in both directions.
+          const expected = {
+            asc: [
+              'sort-zero',
+              'sort-fast',
+              'sort-fraction',
+              'sort-tie-a',
+              'sort-tie-b',
+              'sort-empty-a',
+              'sort-empty-b',
+            ],
+            desc: [
+              'sort-tie-a',
+              'sort-tie-b',
+              'sort-fraction',
+              'sort-fast',
+              'sort-zero',
+              'sort-empty-a',
+              'sort-empty-b',
+            ],
+          };
+          const orderBy = (direction: 'asc' | 'desc') => [{ field, direction }];
+
+          beforeEach(async () => {
+            const root = (traceId: string, value: number | null, offsetMs: number) =>
+              makeSpan({ traceId, spanId: `${traceId}-root`, ...timingValue(field, value), startedAt: at(offsetMs) });
+            await storage.batchCreateSpans({
+              records: [
+                root('sort-tie-b', 300, 1000),
+                root('sort-empty-b', null, 2000),
+                root('sort-fraction', 120.5, 3000),
+                root('sort-tie-a', 300, 4000),
+                root('sort-zero', 0, 5000),
+                root('sort-empty-a', null, 6000),
+                root('sort-fast', 50, 7000),
+                // Only the root's value counts, never a child's.
+                makeSpan({
+                  traceId: 'sort-empty-a',
+                  spanId: 'sort-empty-a-child',
+                  parentSpanId: 'sort-empty-a-root',
+                  ...timingValue(field, 1),
+                  startedAt: at(6000),
+                }),
+              ],
+            });
+            if (flushPendingMerges) await flushPendingMerges(storage);
+          });
+
+          it('advertises the sort', () => {
+            expect(storage.getFeatures()).toContain(sortFeature);
+          });
+
+          it.each(['asc', 'desc'] as const)('pages %s with empty values last at every page size', async direction => {
+            for (const limit of [1, 2, 3, 7]) {
+              const pages = await collectTraceQueryPages(request => storage.queryTraces(planTraceQuery(request)), {
+                timeRange,
+                orderBy: orderBy(direction),
+                page: { limit },
+              });
+              expect(pages, `limit ${limit}`).toEqual(expected[direction].map(traceId => ({ traceId })));
+            }
+          });
+
+          it.each(['asc', 'desc'] as const)('numbers pages %s in the same order', async direction => {
+            const traceIds: string[] = [];
+            for (let page = 0; page < 4; page++) {
+              const response = await storage.queryTraces(
+                planTraceQuery(
+                  parseTraceQueryRequest({ timeRange, orderBy: orderBy(direction), pagination: { page, perPage: 2 } }),
+                ),
+              );
+              if (!('traces' in response)) throw new Error('Expected traces');
+              traceIds.push(...response.traces.map(trace => trace.traceId));
+            }
+            expect(traceIds).toEqual(expected[direction]);
+          });
+
+          it('resumes after an empty value and rejects the cursor once the sort changes', async () => {
+            const request = { timeRange, orderBy: orderBy('asc'), page: { limit: 6 } };
+            const first = await storage.queryTraces(planTraceQuery(parseTraceQueryRequest(request)));
+            if (!('page' in first) || !('traces' in first)) throw new Error('Expected a keyset trace page');
+            expect(first.traces.at(-1)).toMatchObject({ traceId: 'sort-empty-a', [field]: null });
+            const after = first.page.next!;
+            const rest = await storage.queryTraces(
+              planTraceQuery(parseTraceQueryRequest({ ...request, page: { limit: 6, after } })),
+            );
+            expect('traces' in rest && rest.traces.map(trace => trace.traceId)).toEqual(['sort-empty-b']);
+
+            for (const changed of [orderBy('desc'), [{ field: 'startedAt' as const, direction: 'asc' as const }]]) {
+              expect(() =>
+                planTraceQuery(parseTraceQueryRequest({ ...request, orderBy: changed, page: { limit: 6, after } })),
+              ).toThrowError(TraceQueryCursorError);
+            }
+          });
+        });
+      });
+    }
+
+    describe('native span fields', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'initial-run',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const unset = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+      // Read through getTrace: it collapses a span's start and end rows the same
+      // way on every store, where getSpan may return either row before they merge.
+      const readSpan = async (spanId: string) => {
+        const trace = await storage.getTrace({ traceId: 'native-fields' });
+        const span = trace?.spans.find(candidate => candidate.spanId === spanId);
+        if (!span) throw new Error(`span ${spanId} was not stored`);
+        return span;
+      };
+
+      it('round-trips supplied values and reads unset ones as null', async () => {
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'native-fields', spanId: 'set', ...fields }),
+            makeSpan({ traceId: 'native-fields', spanId: 'unset', ...unset }),
+            // Records built by a core version that predates the fields leave them out.
+            makeSpan({ traceId: 'native-fields', spanId: 'missing' }),
+          ],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        expect(await readSpan('set')).toMatchObject(fields);
+        expect(await readSpan('unset')).toMatchObject(unset);
+        const missing = await readSpan('missing');
+        for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
+          expect(missing[key] ?? null).toBeNull();
+        }
+      });
+
+      it('adds the outcome on the ended write, which re-sends the fields written at start', async () => {
+        const started = { model: 'gpt-6.1-sol', provider: 'openai' };
+        await storage.createSpan({
+          span: makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', endedAt: null, ...started }),
+        });
+        await storage.batchCreateSpans({
+          records: [makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', ...started, outcome: 'success' })],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        const span = await readSpan('lifecycle');
+        expect(span).toMatchObject({ ...started, outcome: 'success' });
+        expect(span.stopReason ?? null).toBeNull();
+      });
+
+      if (capabilities.traceQuery) {
+        it('reads model and provider from attributes when the columns are empty', async () => {
+          // Rows written before the columns existed are never backfilled, so a
+          // span read must agree with trace-query filters and span-query results,
+          // which fall back to the model-call attributes. Span-query filters read
+          // only the columns.
+          await storage.batchCreateSpans({
+            records: [
+              makeSpan({
+                traceId: 'native-fields',
+                spanId: 'legacy',
+                spanType: SpanType.MODEL_GENERATION,
+                attributes: { model: 'gpt-6.1-sol', provider: 'openai', outcome: 'ignored' },
+              }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          const span = await readSpan('legacy');
+          expect(span).toMatchObject({ model: 'gpt-6.1-sol', provider: 'openai' });
+          expect(span.outcome ?? null).toBeNull();
+        });
+      }
+    });
+
+    if (capabilities.traceQuery) {
+      createOutcomeFieldTests({ getStorage: () => storage, flushPendingMerges, refreshDiscovery });
+    }
+
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
         await storage.createSpan({
@@ -3050,6 +3659,52 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           ).toEqual([
             ['trace-a', 10],
             ['trace-c', 30],
+          ]);
+        });
+      });
+
+      describe('when a batch of experiment IDs is filtered', () => {
+        it('returns token totals and cost for each selected experiment', async () => {
+          const tokenMetric = (
+            metricId: string,
+            experimentId: string,
+            name: string,
+            value: number,
+            estimatedCost: number,
+          ) => ({
+            metricId,
+            timestamp: new Date('2026-01-01T03:00:00Z'),
+            name,
+            value,
+            experimentId,
+            estimatedCost,
+            costUnit: 'usd',
+            labels: {},
+          });
+          await storage.batchCreateMetrics({
+            metrics: [
+              tokenMetric('exp-a-in', 'exp-a', 'mastra_model_total_input_tokens', 100, 0.25),
+              tokenMetric('exp-a-out', 'exp-a', 'mastra_model_total_output_tokens', 40, 0.5),
+              tokenMetric('exp-b-in', 'exp-b', 'mastra_model_total_input_tokens', 300, 0.75),
+              tokenMetric('exp-c-in', 'exp-c', 'mastra_model_total_input_tokens', 700, 1.25),
+            ],
+          });
+
+          const result = await storage.getMetricBreakdown({
+            name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+            groupBy: ['experimentId', 'name'],
+            aggregation: 'sum',
+            filters: { experimentIds: ['exp-a', 'exp-c'] },
+          });
+
+          expect(
+            result.groups
+              .map(group => [group.dimensions.experimentId, group.dimensions.name, group.value, group.estimatedCost])
+              .sort((left, right) => `${left[0]}:${left[1]}`.localeCompare(`${right[0]}:${right[1]}`)),
+          ).toEqual([
+            ['exp-a', 'mastra_model_total_input_tokens', 100, 0.25],
+            ['exp-a', 'mastra_model_total_output_tokens', 40, 0.5],
+            ['exp-c', 'mastra_model_total_input_tokens', 700, 1.25],
           ]);
         });
       });
@@ -4104,6 +4759,117 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     });
 
+    describe('feedback (explicit replacement)', () => {
+      const original = {
+        feedbackId: 'replacement-feedback',
+        traceId: 'replacement-trace',
+        timestamp: new Date('2026-11-11T12:00:00.123Z'),
+        feedbackType: 'thumbs',
+        feedbackSource: 'user',
+        value: 1,
+        comment: 'old',
+        feedbackUserId: 'author',
+        organizationId: 'org',
+        resourceId: 'resource',
+      };
+
+      it('keeps a replacement after delayed individual and batched creates', async () => {
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        await storage.replaceFeedback({
+          feedback: { ...original, value: -1, comment: null, reviewStatus: 'reviewed' },
+        });
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        await storage.batchCreateFeedback({ feedbacks: [original, original], onConflict: 'ignore' });
+        const assertCurrent = async () => {
+          expect(await storage.getFeedbackById(original.feedbackId)).toMatchObject({
+            ...original,
+            value: -1,
+            comment: null,
+            reviewStatus: 'reviewed',
+          });
+          const listed = await storage.listFeedback({});
+          expect(listed.feedback).toHaveLength(1);
+          expect(listed.pagination?.total).toBe(1);
+          expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(1);
+          expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'sum' })).value).toBe(-1);
+        };
+        await assertCurrent();
+        if (flushPendingMerges) {
+          await flushPendingMerges(storage);
+          await assertCurrent();
+        }
+        // Legacy direct storage upserts remain available.
+        await storage.createFeedback({ feedback: { ...original, value: 3 } });
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(3);
+      });
+
+      it('ignores duplicate IDs with different timestamps in individual and batch creates', async () => {
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        const retry = { ...original, timestamp: new Date('2026-11-12T12:00:00.123Z'), value: -1 };
+        await storage.createFeedback({ feedback: retry, onConflict: 'ignore' });
+        await storage.batchCreateFeedback({ feedbacks: [retry], onConflict: 'ignore' });
+        expect((await storage.listFeedback({})).feedback).toEqual([expect.objectContaining(original)]);
+        expect((await storage.getFeedbackAggregate({ feedbackType: 'thumbs', aggregation: 'count' })).value).toBe(1);
+      });
+
+      if (capabilities.concurrentFeedbackIdentity !== false) {
+        it.each([
+          { traceId: 'other-trace' },
+          { timestamp: new Date('2026-11-12T12:00:00.123Z') },
+          { organizationId: 'other-org' },
+          { resourceId: 'other-resource' },
+        ])('only accepts one identity for concurrent replacements of a missing record: %j', async change => {
+          const attempts = await Promise.all(
+            Array.from({ length: 20 }, async (_, attempt) => {
+              const first = { ...original, feedbackId: `${original.feedbackId}-${attempt}` };
+              const records = [first, { ...first, ...change, value: -1 }];
+              const results = await Promise.allSettled(records.map(feedback => storage.replaceFeedback({ feedback })));
+              return { records, results };
+            }),
+          );
+          for (const { records, results } of attempts) {
+            expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+            const winner = records[results.findIndex(result => result.status === 'fulfilled')];
+            expect(await storage.getFeedbackById(records[0]!.feedbackId)).toMatchObject(winner!);
+          }
+          expect((await storage.listFeedback({ pagination: { perPage: 100 } })).feedback).toHaveLength(20);
+        });
+      }
+
+      it('clears an omitted replacement author without using the trace user or metadata', async () => {
+        await storage.createFeedback({ feedback: original });
+        await storage.replaceFeedback({
+          feedback: {
+            ...original,
+            feedbackUserId: undefined,
+            userId: 'trace-user',
+            metadata: { userId: 'metadata-user' },
+          },
+        });
+        expect(await storage.getFeedbackById(original.feedbackId)).toMatchObject({
+          feedbackUserId: null,
+          userId: 'trace-user',
+        });
+      });
+
+      it('accepts a full replacement before the create arrives', async () => {
+        await storage.replaceFeedback({ feedback: { ...original, value: -1 } });
+        await storage.createFeedback({ feedback: original, onConflict: 'ignore' });
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(-1);
+      });
+
+      it.each([
+        { traceId: 'different-trace' },
+        { timestamp: new Date('2026-11-12T12:00:00.123Z') },
+        { organizationId: 'other-org' },
+        { resourceId: 'other-resource' },
+      ])('rejects a replacement that changes identity: %j', async change => {
+        await storage.createFeedback({ feedback: original });
+        await expect(storage.replaceFeedback({ feedback: { ...original, ...change } })).rejects.toThrow();
+        expect((await storage.getFeedbackById(original.feedbackId))?.value).toBe(1);
+      });
+    });
+
     describe('feedback (create + list)', () => {
       it('creates and lists feedback', async () => {
         await storage.createFeedback({
@@ -4330,6 +5096,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           // Compare against the input so a lossy read mapper cannot hide missing fields.
           const before = await storage.listFeedback({ filters: { traceId: feedback.traceId } });
           expect(before.feedback).toMatchObject([feedback]);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(feedback);
 
           const updated = await storage.updateFeedbackReviewStatus({
             feedbackId: feedback.feedbackId,
@@ -4337,6 +5104,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           });
           const expected = { ...feedback, reviewStatus: 'reviewed' };
           expect(updated).toMatchObject(expected);
+          expect(await storage.getFeedbackById(feedback.feedbackId)).toMatchObject(expected);
 
           // Append-only stores (ClickHouse) implement the update as a replacement
           // row; the read side must still expose a single, latest version.
@@ -4345,6 +5113,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
           expect(result.pagination?.total).toBe(1);
         },
       );
+
+      it('returns null when retrieving a missing feedback record', async () => {
+        expect(await storage.getFeedbackById('feedback-does-not-exist')).toBeNull();
+      });
 
       it('throws when updating reviewStatus of a missing feedback record', async () => {
         await expect(
@@ -4708,6 +5480,35 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         const result = await storage.listScores({ filters: { traceId: 'trace-retry-score' } });
         expect(result.scores).toHaveLength(1);
         expect(result.scores[0]!.scoreId).toBe('score-retry-1');
+      });
+
+      it.each(['single', 'batch'])('keeps span user separate from feedback author in %s writes', async method => {
+        for (const feedbackUserId of ['reviewer', null]) {
+          const feedback = {
+            feedbackId: `identity-${feedbackUserId}`,
+            traceId: 'identity-trace',
+            timestamp: new Date('2026-01-01T00:00:00Z'),
+            feedbackType: 'thumbs',
+            value: 1,
+            userId: 'span-user',
+            feedbackUserId,
+            metadata: { userId: 'metadata-user' },
+          };
+          if (method === 'single') await storage.createFeedback({ feedback });
+          else await storage.batchCreateFeedback({ feedbacks: [feedback] });
+        }
+        const { feedback } = await storage.listFeedback({ filters: { traceId: 'identity-trace' } });
+        expect(feedback).toHaveLength(2);
+        expect(feedback).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              feedbackId: 'identity-reviewer',
+              userId: 'span-user',
+              feedbackUserId: 'reviewer',
+            }),
+            expect.objectContaining({ feedbackId: 'identity-null', userId: 'span-user', feedbackUserId: null }),
+          ]),
+        );
       });
 
       it('re-inserting the same feedbackId does not throw or duplicate', async () => {

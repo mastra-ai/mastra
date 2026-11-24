@@ -3,83 +3,40 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Form } from '../Form';
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
-import type { ButtonVariant } from './Button';
+import type { ButtonSize } from './Button';
 
 afterEach(() => {
   cleanup();
 });
 
 describe('Button', () => {
-  it('uses semantic neutral roles with distinct interaction states', () => {
+  it('transitions color alone, not every property', () => {
     const baseClasses = buttonVariants().split(' ');
     expect(baseClasses).toEqual(
       expect.arrayContaining([
-        'transition-[background-color,border-color,color]',
+        'transition-[color]',
+        'duration-fast',
         'motion-reduce:transition-none',
         'aria-disabled:pointer-events-none',
       ]),
     );
     expect(baseClasses).not.toContain('transition-all');
-
-    const variants: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'outline'];
-    const expectedClasses = {
-      default: [
-        'new-theme',
-        'border-border',
-        'bg-foreground/10',
-        'text-foreground',
-        'not-disabled:hover:bg-foreground/14',
-        'not-disabled:active:bg-foreground/18',
-        'aria-disabled:bg-muted',
-      ],
-      primary: [
-        'bg-foreground',
-        'text-background',
-        'not-disabled:hover:bg-foreground/75',
-        'not-disabled:active:bg-foreground/60',
-        'aria-disabled:bg-foreground/45',
-      ],
-      destructive: [
-        'not-disabled:hover:bg-destructive/80',
-        'not-disabled:active:bg-destructive/70',
-        'aria-disabled:bg-destructive/45',
-      ],
-      'destructive-ghost': [
-        'not-disabled:hover:bg-destructive/20',
-        'not-disabled:active:bg-destructive/30',
-        'aria-disabled:text-destructive/50',
-      ],
-      ghost: [
-        'text-muted-foreground',
-        'not-disabled:hover:bg-foreground/4',
-        'not-disabled:active:bg-foreground/10',
-        'aria-disabled:bg-transparent',
-      ],
-      outline: [
-        'border-foreground/18',
-        'bg-transparent',
-        'text-foreground',
-        'not-disabled:hover:border-foreground/30',
-        'not-disabled:hover:bg-foreground/4',
-        'not-disabled:active:bg-foreground/10',
-        'aria-disabled:border-border',
-      ],
-    } satisfies Record<ButtonVariant, string[]>;
-
-    for (const variant of variants) {
-      const classes = buttonVariants({ variant }).split(' ');
-      expect(classes).toEqual(expect.arrayContaining(expectedClasses[variant]));
-    }
   });
 
-  // Base UI renders `type="button"` when the prop is absent. Keeping the attribute off
-  // preserves the native `submit` default, so a form button that never set a type keeps
-  // submitting instead of silently going inert.
-  it('leaves type off so a form button keeps the native submit default', () => {
-    render(<Button>Save</Button>);
-    expect(screen.getByRole('button', { name: 'Save' }).hasAttribute('type')).toBe(false);
+  // A filled variant covers what is behind it — card text, a list row, the pill it is
+  // stacked over. Answering a state by dropping its own alpha (`bg-foreground/75`) turns
+  // the button into a window exactly when the pointer arrives, so every state resolves to
+  // an opaque rung instead. Translucent variants are excluded on purpose: `ghost` has
+  // no fill of its own and is a state layer by design.
+  it.each(['primary', 'destructive'] as const)('keeps the %s fill opaque in every state', variant => {
+    const alphaModified = buttonVariants({ variant })
+      .split(' ')
+      .filter(className => /(^|:)bg-[\w-]+\/\d+$/.test(className));
+
+    expect(alphaModified).toEqual([]);
   });
 
   it('preserves an explicit submit type', () => {
@@ -99,7 +56,6 @@ describe('Button', () => {
     const link = screen.getByRole('link', { name: 'Agents' });
     expect(link.getAttribute('href')).toBe('/agents');
     expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.className).toContain('new-theme');
   });
 
   it('prefers render over the deprecated as API', () => {
@@ -112,22 +68,14 @@ describe('Button', () => {
     expect(screen.getByRole('link', { name: 'Agents' }).getAttribute('href')).toBe('/new');
   });
 
-  it('composes with links through render', () => {
-    render(<Button render={<a href="/docs" />}>Read docs</Button>);
-    const link = screen.getByRole('link', { name: 'Read docs' });
-    expect(link.getAttribute('href')).toBe('/docs');
-    expect(link.className).toContain('new-theme');
-  });
-
   // One icon step per control step. Before this, the same nominal size rendered a
   // 20px, 16px, or 15.39px icon depending on whether it arrived as an icon-mode
   // child, the `icon` prop, or a bare SVG.
   it.each([
-    ['xs', 'icon-xs', 'h-icon-sm'],
-    ['sm', 'icon-sm', 'h-icon-smd'],
-    ['md', 'icon-md', 'h-icon-default'],
-    ['lg', 'icon-lg', 'h-icon-lg'],
-  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize, expected) => {
+    ['sm', 'icon-sm'],
+    ['md', 'icon-md'],
+    ['lg', 'icon-lg'],
+  ] as const)('sizes the %s icon the same through every path', (textSize, iconSize) => {
     const { container } = render(
       <>
         <Button size={iconSize} aria-label="icon mode">
@@ -139,9 +87,91 @@ describe('Button', () => {
       </>,
     );
 
-    for (const slot of container.querySelectorAll('span[class*="h-icon"]')) {
-      expect(slot.className).toContain(expected);
+    const slots = [...container.querySelectorAll('span[class*="size-icon"]')];
+    expect(slots).toHaveLength(2);
+    expect(new Set(slots.map(slot => slot.className)).size).toBe(1);
+  });
+
+  describe('iconEnd prop', () => {
+    it('renders the icon inside an <Icon> slot after the label', () => {
+      render(
+        <Button iconEnd={<svg data-testid="arrow" />} size="sm">
+          Open portal
+        </Button>,
+      );
+
+      const button = screen.getByRole('button', { name: 'Open portal' });
+      const slot = button.querySelector('[data-slot="button-icon-end"]');
+      expect(slot?.contains(screen.getByTestId('arrow'))).toBe(true);
+      expect(button.lastElementChild).toBe(slot);
+    });
+
+    it('is ignored in icon-mode sizes', () => {
+      render(
+        <Button size="icon-md" iconEnd={<svg data-testid="ignored" />} aria-label="Close">
+          <svg data-testid="child" />
+        </Button>,
+      );
+      expect(screen.queryByTestId('ignored')).toBeNull();
+    });
+  });
+
+  describe('link variant', () => {
+    function RouterLink({ to, ...props }: { to: string; className?: string; children?: React.ReactNode }) {
+      return <a href={to} {...props} />;
     }
+
+    it('renders a router link with its label in its own slot', () => {
+      render(
+        <Button variant="link" render={<RouterLink to="/usage" />}>
+          View usage
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'View usage' });
+      expect(link.getAttribute('href')).toBe('/usage');
+      expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('View usage');
+    });
+
+    it('keeps the label before a trailing icon', () => {
+      render(
+        <Button variant="link" render={<a href="#" />} iconEnd={<svg data-testid="arrow" />}>
+          Open billing portal
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Open billing portal' });
+      expect(link.firstElementChild?.getAttribute('data-slot')).toBe('button-label');
+      expect(link.lastElementChild?.contains(screen.getByTestId('arrow'))).toBe(true);
+    });
+
+    it('renders an icon-mode size as a text link rather than an icon button', () => {
+      render(
+        <Button variant="link" size="icon-sm" render={<a href="#" />}>
+          Docs
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Docs' });
+      expect(link.hasAttribute('data-shape')).toBe(false);
+      expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('Docs');
+    });
+
+    it('keeps a disabled link an anchor with its href', () => {
+      render(
+        <Button variant="link" disabled render={<a href="/usage" />}>
+          View usage
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'View usage' });
+      expect(link.getAttribute('href')).toBe('/usage');
+      expect(link.getAttribute('aria-disabled')).toBe('true');
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(clickEvent);
+      expect(clickEvent.defaultPrevented).toBe(true);
+    });
   });
 
   describe('icon prop', () => {
@@ -185,6 +215,32 @@ describe('Button', () => {
         </TooltipProvider>,
       );
       expect(screen.getByRole('button', { name: 'Add' }).getAttribute('aria-label')).toBeNull();
+    });
+
+    it('names an icon-only button from its tooltip when the size is forwarded as a text size', () => {
+      const size: ButtonSize = 'sm';
+      render(
+        <TooltipProvider>
+          <Button size={size} tooltip="Close panel">
+            <svg />
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Close panel' })).toBeTruthy();
+    });
+
+    it('keeps the visible label as the name when the label sits inside a fragment', () => {
+      render(
+        <TooltipProvider>
+          <Button tooltip="More options">
+            <>
+              <svg />
+              Save
+            </>
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
     });
   });
 
@@ -237,9 +293,9 @@ describe('Button', () => {
     it('submits its form when no type is set, as a native button does', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button>Save</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -248,9 +304,9 @@ describe('Button', () => {
     it('does not submit when the caller opts out with type="button"', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button type="button">Cancel</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onSubmit).not.toHaveBeenCalled();
@@ -279,7 +335,6 @@ describe('Button', () => {
       const cls = screen.getByRole('link', { name: 'Docs' }).className;
       expect(cls).toContain('custom-link');
       expect(cls).toContain('from-caller');
-      expect(cls).toContain('new-theme');
     });
 
     it('detects a router link by its `to` prop', () => {
@@ -299,7 +354,6 @@ describe('Button', () => {
       expect(link.getAttribute('href')).toBeNull();
       expect(link.getAttribute('aria-disabled')).toBe('true');
       expect(link.className).toContain('aria-disabled:pointer-events-none');
-      expect(link.className).toContain('aria-disabled:bg-muted');
       fireEvent.click(link);
       expect(onClick).not.toHaveBeenCalled();
       expect(fireEvent.keyDown(link, { key: 'Enter' })).toBe(false);
@@ -338,52 +392,5 @@ describe('Button', () => {
       );
       expect(seen.prefetch).toBe(false);
     });
-  });
-
-  // Signal state with colour, not opacity: an opacity wash dims against whatever sits
-  // behind the control, and it left icon-only buttons with no hover response at all.
-  it.each(['default', 'outline'] as const)(
-    'moves the %s icon from muted to full on hover, labelled or not',
-    variant => {
-      const { container } = render(
-        <>
-          <Button variant={variant} icon={<svg data-testid="labelled" />}>
-            label
-          </Button>
-          <Button variant={variant} size="icon-md" aria-label="alone">
-            <svg />
-          </Button>
-        </>,
-      );
-
-      for (const button of container.querySelectorAll('button')) {
-        expect(button.className).toContain('[&_svg]:text-muted-foreground');
-        expect(button.className).toContain('not-disabled:hover:[&_svg]:text-foreground');
-      }
-    },
-  );
-
-  // Ghost dims its whole label, so the glyph inherits the same move without a
-  // separate rule. Asserting the inherited path keeps a redundant class off the recipe.
-  it('moves the ghost icon by dimming the whole control', () => {
-    render(
-      <Button variant="ghost" icon={<svg />}>
-        label
-      </Button>,
-    );
-
-    const cls = screen.getByRole('button').className;
-    expect(cls).toContain('text-muted-foreground');
-    expect(cls).toContain('not-disabled:hover:text-foreground');
-  });
-
-  it.each(['primary', 'destructive'] as const)('leaves the %s glyph colour alone', variant => {
-    render(
-      <Button variant={variant} icon={<svg />}>
-        label
-      </Button>,
-    );
-
-    expect(screen.getByRole('button').className).not.toContain('[&_svg]:text-muted-foreground');
   });
 });

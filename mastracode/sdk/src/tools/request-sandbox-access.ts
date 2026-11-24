@@ -45,11 +45,11 @@ export const requestSandboxAccessTool = createTool({
         | undefined;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
+      const projectRoot = agentControllerCtx?.getState()?.projectPath ?? process.cwd();
       const expanded = expandTilde(requestedPath);
-      const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
+      const absolutePath = path.isAbsolute(expanded) ? expanded : path.resolve(projectRoot, expanded);
 
       // Check if already allowed
-      const projectRoot = process.cwd();
       const allowedPaths = getAllowedPathsFromContext(context);
       if (isPathAllowed(absolutePath, projectRoot, allowedPaths)) {
         return {
@@ -107,12 +107,11 @@ export const requestSandboxAccessTool = createTool({
           content: `Access granted: "${absolutePath}" has been added to allowed paths. You can now access files in this directory.`,
           isError: false,
         };
-      } else {
-        return {
-          content: `Access denied: The user declined access to "${absolutePath}".`,
-          isError: false,
-        };
       }
+      return {
+        content: `Access denied: The user declined access to "${absolutePath}".`,
+        isError: false,
+      };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {

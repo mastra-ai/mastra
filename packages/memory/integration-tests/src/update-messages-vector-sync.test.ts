@@ -131,15 +131,17 @@ describe('updateMessages should sync vector database (Issue #6195)', () => {
       ],
     });
 
-    // Step 4: Verify the vector was replaced (different ID)
+    // Step 4: Verify the row was replaced in place: row ids are derived from the message id, so the
+    // edit leaves one row under the same id holding the new text.
     const vectorsAfter = await vector.query({
       indexName: 'memory_messages_384',
       queryVector: new Array(384).fill(0.01),
       topK: 100,
     });
-    const vectorIdAfter = vectorsAfter[0]?.id;
-    expect(vectorIdAfter).toBeDefined();
-    expect(vectorIdAfter).not.toBe(vectorIdBefore); // Vector was deleted and recreated
+    expect(vectorsAfter).toHaveLength(1);
+    expect(vectorsAfter[0]?.id).toBe(vectorIdBefore);
+    expect(vectorsAfter[0]?.id).toBe(originalMessage.id);
+    expect(vectorsAfter[0]?.metadata?.content).toBe(updatedContent);
 
     // Step 5: Verify "quantum physics" query now has LOW score (doesn't match pasta content)
     const physicsResultsAfter = await vector.query({

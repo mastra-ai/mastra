@@ -1,11 +1,17 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
+import { IconBlocks } from '@mastra/playground-ui/icons/central/IconBlocks';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
+import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
-import { useLinkComponent } from '@/lib/framework';
 
 interface MobileLink {
   name: string;
@@ -17,22 +23,22 @@ const agentsLink: MobileLink = { name: 'Agents', url: '/agent-builder/agents', i
 const skillsLink: MobileLink = {
   name: 'Skills',
   url: '/agent-builder/skills',
-  icon: <Blocks className="size-5" />,
+  icon: <IconBlocks className="size-icon-lg" />,
 };
 const favoritesLink: MobileLink = {
   name: 'Favorites',
   url: '/agent-builder/favorite',
-  icon: <StarIcon className="size-5" />,
+  icon: <IconStar className="size-icon-lg" />,
 };
 const libraryLink: MobileLink = {
   name: 'Library',
   url: '/agent-builder/library',
-  icon: <LibraryIcon className="size-5" />,
+  icon: <IconLibrary className="size-icon-lg" />,
 };
 const infrastructureLink: MobileLink = {
   name: 'Infra',
   url: '/agent-builder/infrastructure',
-  icon: <ServerCogIcon className="size-5" />,
+  icon: <IconServer className="size-icon-lg" />,
 };
 
 export function AgentBuilderMobileBottomBar() {
@@ -61,7 +67,7 @@ export function AgentBuilderMobileBottomBar() {
   return (
     <nav
       aria-label="Primary"
-      className="border-border1 bg-surface1/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-sidebar/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
         {links.map(link => {
@@ -71,16 +77,23 @@ export function AgentBuilderMobileBottomBar() {
               <Link
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
-                className={`duration-normal ease-out-custom text-ui-sm relative flex flex-col items-center justify-center gap-1 py-2 transition-colors ${
+                className={cn(
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                  'relative flex flex-col items-center justify-center gap-1 py-2',
+                  controlStateColorTransition,
                   isActive
-                    ? 'text-icon6 before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
-                    : 'text-icon3 hover:text-icon6'
-                }`}
+                    ? 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
+                    : 'hover:text-foreground',
+                )}
               >
                 <span className="flex size-6 items-center justify-center" aria-hidden="true">
-                  {link.icon}
+                  <Txt as="span" variant="caption" className="block">
+                    {link.icon}
+                  </Txt>
                 </span>
-                <span className="leading-none">{link.name}</span>
+                <Txt as="span" variant="caption">
+                  {link.name}
+                </Txt>
               </Link>
             </li>
           );

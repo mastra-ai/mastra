@@ -1,8 +1,7 @@
-import { PlusIcon } from 'lucide-react';
-
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorAddButtonProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorAddButton({
@@ -16,18 +15,18 @@ export function EnvironmentVariablesEditorAddButton({
 
   return (
     <div className={cn('flex items-center gap-2', className)} {...props}>
-      <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
       <Button
         type="button"
         variant="ghost"
         size="sm"
         disabled={disabled}
         onClick={() => editor.appendRow()}
-        icon={<PlusIcon />}
+        icon={<IconPlusMedium />}
       >
-        {children ?? 'Add Variable'}
+        {children ?? 'Add variable'}
       </Button>
-      <span aria-hidden="true" className="bg-border1 h-px flex-1" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
     </div>
   );
 }

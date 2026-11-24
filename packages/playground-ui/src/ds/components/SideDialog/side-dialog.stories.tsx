@@ -1,11 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EyeIcon, FileInputIcon, HashIcon, ListTreeIcon, PencilIcon, TagIcon, Trash2Icon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { Section } from '../Section';
 import { TextAndIcon } from '../Text';
 import { SideDialog } from './side-dialog';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const meta: Meta<typeof SideDialog> = {
   title: 'Layout/SideDialog',
@@ -39,7 +44,7 @@ const items = [
 const NESTED_LEVEL_OPEN_DELAY_MS = 220;
 
 const Field = ({ label, value }: { label: string; value: string }) => (
-  <div className="text-ui-md flex justify-between gap-4">
+  <div className="flex justify-between gap-4 text-body">
     <span className="text-muted-foreground">{label}</span>
     <span className="text-foreground">{value}</span>
   </div>
@@ -58,7 +63,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Side Dialog</Button>
+      <Button onClick={() => setIsOpen(true)}>Open side dialog</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -68,7 +73,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> {item.id}
+            <IconHashtag /> {item.id}
           </TextAndIcon>
           |
           <SideDialog.Nav
@@ -76,16 +81,10 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
             onNext={index < items.length - 1 ? () => setIndex(index + 1) : undefined}
           />
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm">
-              <Icon>
-                <PencilIcon />
-              </Icon>
+            <Button icon={<IconPencil />} size="sm">
               Edit
             </Button>
-            <Button variant="outline" size="sm">
-              <Icon>
-                <Trash2Icon />
-              </Icon>
+            <Button icon={<TrashIcon />} size="sm">
               Delete
             </Button>
           </div>
@@ -94,17 +93,17 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <EyeIcon /> {item.name}
+              <IconEyeOpen /> {item.name}
             </SideDialog.Heading>
             <TextAndIcon>
-              <HashIcon /> {item.id}
+              <IconHashtag /> {item.id}
             </TextAndIcon>
           </SideDialog.Header>
 
           <Section>
             <Section.Header>
               <Section.Heading>
-                <FileInputIcon /> Overview
+                <IconFileArrowRightIn /> Overview
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -117,7 +116,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
           <Section>
             <Section.Header>
               <Section.Heading>
-                <TagIcon /> Metadata
+                <IconTag /> Metadata
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -178,12 +177,8 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
   return (
     <div className="p-8">
       <div className="flex gap-2">
-        <Button onClick={() => openDepth(2)}>Open Nested Level 2</Button>
-        {depth === 3 && (
-          <Button variant="outline" onClick={() => openDepth(3)}>
-            Open Nested Level 3
-          </Button>
-        )}
+        <Button onClick={() => openDepth(2)}>Open nested level 2</Button>
+        {depth === 3 && <Button onClick={() => openDepth(3)}>Open nested level 3</Button>}
       </div>
 
       <SideDialog
@@ -195,11 +190,11 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> item_a1b2c3
+            <IconHashtag /> item_a1b2c3
           </TextAndIcon>
           <div className="ml-auto">
-            <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
-              Open Trace
+            <Button size="sm" onClick={() => setIsLevel2Open(true)}>
+              Open trace
             </Button>
           </div>
         </SideDialog.Top>
@@ -207,17 +202,17 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <EyeIcon /> Refund request
+              <IconEyeOpen /> Refund request
             </SideDialog.Heading>
             <TextAndIcon>
-              <HashIcon /> level 1
+              <IconHashtag /> level 1
             </TextAndIcon>
           </SideDialog.Header>
 
           <Section>
             <Section.Header>
               <Section.Heading>
-                <FileInputIcon /> Overview
+                <IconFileArrowRightIn /> Overview
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -230,14 +225,14 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
           <Section>
             <Section.Header>
               <Section.Heading>
-                <ListTreeIcon /> Linked trace
+                <IconCodeTree /> Linked trace
               </Section.Heading>
             </Section.Header>
             <div className="flex items-center justify-between gap-4">
               <TextAndIcon>
-                <HashIcon /> trace_72f19
+                <IconHashtag /> trace_72f19
               </TextAndIcon>
-              <Button variant="outline" size="sm" onClick={() => setIsLevel2Open(true)}>
+              <Button size="sm" onClick={() => setIsLevel2Open(true)}>
                 Open
               </Button>
             </div>
@@ -252,12 +247,12 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
           >
             <SideDialog.Top>
               <TextAndIcon>
-                <HashIcon /> trace_72f19
+                <IconHashtag /> trace_72f19
               </TextAndIcon>
               {depth === 3 && (
                 <div className="ml-auto">
-                  <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
-                    Open Span
+                  <Button size="sm" onClick={() => setIsLevel3Open(true)}>
+                    Open span
                   </Button>
                 </div>
               )}
@@ -266,10 +261,10 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
             <SideDialog.Content>
               <SideDialog.Header>
                 <SideDialog.Heading>
-                  <ListTreeIcon /> Retrieval trace
+                  <IconCodeTree /> Retrieval trace
                 </SideDialog.Heading>
                 <TextAndIcon>
-                  <HashIcon /> level 2
+                  <IconHashtag /> level 2
                 </TextAndIcon>
               </SideDialog.Header>
 
@@ -288,14 +283,14 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                 <Section>
                   <Section.Header>
                     <Section.Heading>
-                      <TagIcon /> Span payload
+                      <IconTag /> Span payload
                     </Section.Heading>
                   </Section.Header>
                   <div className="flex items-center justify-between gap-4">
                     <TextAndIcon>
-                      <HashIcon /> span_embed_query
+                      <IconHashtag /> span_embed_query
                     </TextAndIcon>
-                    <Button variant="outline" size="sm" onClick={() => setIsLevel3Open(true)}>
+                    <Button size="sm" onClick={() => setIsLevel3Open(true)}>
                       Open
                     </Button>
                   </div>
@@ -312,17 +307,17 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                 >
                   <SideDialog.Top>
                     <TextAndIcon>
-                      <HashIcon /> span_embed_query
+                      <IconHashtag /> span_embed_query
                     </TextAndIcon>
                   </SideDialog.Top>
 
                   <SideDialog.Content>
                     <SideDialog.Header>
                       <SideDialog.Heading>
-                        <TagIcon /> Embedding query payload
+                        <IconTag /> Embedding query payload
                       </SideDialog.Heading>
                       <TextAndIcon>
-                        <HashIcon /> level 3
+                        <IconHashtag /> level 3
                       </TextAndIcon>
                     </SideDialog.Header>
 
@@ -364,7 +359,7 @@ const SideDialogWithCodeDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open with Code Section</Button>
+      <Button onClick={() => setIsOpen(true)}>Open with code section</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -373,14 +368,14 @@ const SideDialogWithCodeDemo = () => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> customer-support
+            <IconHashtag /> customer-support
           </TextAndIcon>
         </SideDialog.Top>
 
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <ListTreeIcon /> Customer Support Agent
+              <IconCodeTree /> Customer Support Agent
             </SideDialog.Heading>
           </SideDialog.Header>
 
@@ -399,7 +394,8 @@ const SideDialogWithCodeDemo = () => {
             codeStr={`{
   "name": "customer-support",
   "model": "gpt-4",
-  "temperature": 0.7
+  "temperature": 0.7,
+  "instructions": "You are a support agent.\\nKeep answers short."
 }`}
           />
         </SideDialog.Content>
@@ -417,7 +413,7 @@ const ConfirmationDialogDemo = () => {
 
   return (
     <div className="p-8">
-      <Button onClick={() => setIsOpen(true)}>Open Confirmation</Button>
+      <Button onClick={() => setIsOpen(true)}>Open confirmation</Button>
       <SideDialog
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
@@ -427,14 +423,12 @@ const ConfirmationDialogDemo = () => {
       >
         <SideDialog.Content>
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <h3 className="text-ui-lg text-foreground mb-2 font-medium">Confirm deletion?</h3>
-            <p className="text-ui-md text-muted-foreground mb-6">
+            <h3 className="mb-2 text-heading text-foreground">Confirm deletion?</h3>
+            <p className="mb-6 text-body text-muted-foreground">
               This action cannot be undone. The agent will be permanently deleted.
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setIsOpen(false)}>
-                Cancel
-              </Button>
+              <Button onClick={() => setIsOpen(false)}>Cancel</Button>
               <Button onClick={() => setIsOpen(false)}>Delete</Button>
             </div>
           </div>

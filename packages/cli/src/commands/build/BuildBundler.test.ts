@@ -93,6 +93,19 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('getEntry', () => {
+    it('recovers active workflow runs during production startup', async () => {
+      const { BuildBundler } = await import('./BuildBundler');
+      const entry = (new BuildBundler() as any).getEntry();
+
+      expect(entry).toContain("mastra.recoveryConfig?.workflows !== 'off'");
+      expect(entry).toContain('mastra.restartAllActiveWorkflowRuns()');
+      expect(entry).toContain("mastra.recoveryConfig?.durableAgents === 'auto'");
+      expect(entry).toContain('mastra.recoverAllDurableAgents()');
+      expect(entry).toContain('await Promise.all(recoveries)');
+    });
+  });
+
   describe('bundle', () => {
     it('does not execute worker introspection outside environment deploys', async () => {
       const { BuildBundler } = await import('./BuildBundler');
@@ -146,11 +159,11 @@ describe('BuildBundler', () => {
       });
     });
 
-    it('preserves an explicit externals list and dynamic packages', async () => {
+    it('preserves configured externals and dynamic packages for additive externalization', async () => {
       const { Bundler } = await import('@mastra/deployer/bundler');
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['dynamic-package'],
+        dynamicPackages: ['existing-package', 'dynamic-package'],
       });
       const { BuildBundler } = await import('./BuildBundler');
       const bundler = new BuildBundler();
@@ -159,7 +172,7 @@ describe('BuildBundler', () => {
 
       expect(options).toEqual({
         externals: ['@duckdb/node-bindings', 'existing-package'],
-        dynamicPackages: ['dynamic-package'],
+        dynamicPackages: ['existing-package', 'dynamic-package'],
       });
     });
 

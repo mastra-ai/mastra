@@ -28,7 +28,7 @@ export const useDataListKeyboard = <T extends HTMLElement = HTMLDivElement>({
   const internalRef = useRef<T | null>(null);
   const containerRef = externalRef ?? internalRef;
   // useTableKeydown only reads from the ref, so widening to HTMLElement is safe.
-  const table = useTableKeydown({ ...args, containerRef: containerRef as RefObject<HTMLElement | null> });
+  const table = useTableKeydown({ ...args, containerRef: containerRef });
 
   return { containerRef, ...table };
 };

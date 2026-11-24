@@ -3,6 +3,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { MockMemory } from '../../memory/mock';
 import { PrefillErrorHandler } from '../../processors/prefill-error-handler';
+import { ProviderHistoryCompat } from '../../processors/provider-history-compat';
+import { DEFAULT_MAX_PROCESSOR_RETRIES } from '../../processors/retry-budget';
+import { StreamErrorRetryProcessor } from '../../processors/stream-error-retry-processor';
 import { Agent } from '../agent';
 
 /**
@@ -253,13 +256,18 @@ describe('PrefillErrorHandler Recovery', () => {
         errorProcessors: [{ id: 'retry-cap-observer', processAPIError: exhaustedHandler }],
       });
 
-      const result = await agent.generate('Continue the conversation');
+      // The processor always asks to retry, so the implicit safety cap is what
+      // makes this terminal — and the original API error surfaces rather than
+      // an empty result.
+      await expect(agent.generate('Continue the conversation')).rejects.toThrow(
+        'This model does not support assistant message prefill',
+      );
 
-      expect(result.text).toBe('');
-      expect(result.steps).toHaveLength(5);
-      expect(callCount).toBe(5);
-      expect(seenRetryCounts).toEqual([0, 1, 2, 3, 4]);
-      expect(exhaustedHandler).toHaveBeenCalledTimes(5);
+      // 1 initial attempt + DEFAULT_MAX_PROCESSOR_RETRIES retries.
+      expect(callCount).toBe(DEFAULT_MAX_PROCESSOR_RETRIES + 1);
+      expect(seenRetryCounts).toEqual([0, 1, 2, 3]);
+      // processAPIError still runs on the final attempt, it just can't retry.
+      expect(exhaustedHandler).toHaveBeenCalledTimes(DEFAULT_MAX_PROCESSOR_RETRIES + 1);
     });
 
     it('should persist exactly one error part once the error-processor retry budget is exhausted', async () => {
@@ -401,7 +409,16 @@ describe('PrefillErrorHandler Recovery', () => {
           { model: exhaustedPrimary, maxRetries: 0, id: 'primary' },
           { model: secondary, maxRetries: 0, id: 'secondary' },
         ],
-        errorProcessors: [{ id: 'retry-secondary-error', processAPIError }],
+        // This case pins where a caller processor's retry lands relative to fallback models. The
+        // agent adds the shared stability defaults unless their ids are present, so the list names
+        // all three with neutral instances (no retry budget) to keep the caller's processor the only
+        // one that retries.
+        errorProcessors: [
+          { id: 'retry-secondary-error', processAPIError },
+          new ProviderHistoryCompat(),
+          new StreamErrorRetryProcessor({ maxRetries: 0 }),
+          new PrefillErrorHandler(),
+        ],
       });
 
       const result = await agent.generate('Hello');

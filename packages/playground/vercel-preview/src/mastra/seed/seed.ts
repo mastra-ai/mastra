@@ -34,10 +34,10 @@ async function runSeed(now: number): Promise<void> {
   if (memory) {
     try {
       for (const thread of data.threads) {
-        await memory.saveThread({ thread: thread as Parameters<typeof memory.saveThread>[0]['thread'] });
+        await memory.saveThread({ thread: thread });
       }
       await memory.saveMessages({
-        messages: data.messages as Parameters<typeof memory.saveMessages>[0]['messages'],
+        messages: data.messages,
       });
     } catch (err) {
       console.error('[studio-preview] failed to seed memory:', err);
@@ -73,7 +73,7 @@ async function runSeed(now: number): Promise<void> {
   if (scores) {
     try {
       for (const score of data.scores) {
-        await scores.saveScore(score as Parameters<typeof scores.saveScore>[0]);
+        await scores.saveScore(score);
       }
     } catch (err) {
       console.error('[studio-preview] failed to seed scores:', err);
@@ -84,11 +84,11 @@ async function runSeed(now: number): Promise<void> {
   if (datasets) {
     try {
       for (const { dataset, items } of data.datasets) {
-        const record = await datasets.createDataset(dataset as Parameters<typeof datasets.createDataset>[0]);
+        const record = await datasets.createDataset(dataset);
         if (record?.id) {
           await datasets.batchInsertItems({
             datasetId: record.id,
-            items: items as Parameters<typeof datasets.batchInsertItems>[0]['items'],
+            items: items,
           });
         }
       }

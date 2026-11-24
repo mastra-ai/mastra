@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { createInstructionBlock } from '../agent-edit-page/utils/form-validation';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
-import { AgentCMSBlocks } from './agent-cms-blocks';
+import { AgentCMSBlocks } from '.';
 
 const meta: Meta<typeof AgentCMSBlocks> = {
   title: 'Domain/Agents/AgentCMSBlocks',
@@ -71,12 +71,12 @@ const InteractiveExample = () => {
   return (
     <div className="w-[800px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content" schema={complexSchema} />
       </TooltipProvider>
 
-      <div className="bg-surface2 mt-4 rounded-lg p-3">
-        <p className="text-muted-foreground text-ui-sm mb-2">Current state:</p>
-        <pre className="text-foreground text-ui-sm whitespace-pre-wrap">{JSON.stringify(items, null, 2)}</pre>
+      <div className="mt-4 rounded-lg bg-background p-3">
+        <p className="mb-2 text-caption text-muted-foreground">Current state:</p>
+        <pre className="text-caption whitespace-pre-wrap text-foreground">{JSON.stringify(items, null, 2)}</pre>
       </div>
     </div>
   );
@@ -95,7 +95,7 @@ const EmptyExample = () => {
         <AgentCMSBlocks
           items={items}
           onChange={setItems}
-          placeholder="Add your first content block..."
+          placeholder="Add your first content block"
           schema={complexSchema}
         />
       </TooltipProvider>
@@ -115,7 +115,7 @@ const SingleBlockExample = () => {
   return (
     <div className="w-[500px]">
       <TooltipProvider>
-        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
+        <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content" schema={complexSchema} />
       </TooltipProvider>
     </div>
   );

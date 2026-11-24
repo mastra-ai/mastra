@@ -1,5 +1,8 @@
-import { TriangleAlert, X, RotateCcw } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 
 export function SignalsErrorState({
   message,
@@ -11,18 +14,25 @@ export function SignalsErrorState({
   onClear?: () => void;
 }) {
   return (
-    <section className="border-border1 bg-surface2 m-4 rounded-lg border p-6 lg:m-6" role="alert">
+    <section className="m-4 rounded-lg bg-nested p-6 lg:m-6" role="alert">
       <div className="flex items-start gap-3">
-        <TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-red-500" />
+        <IconExclamationTriangle
+          aria-hidden="true"
+          className="mt-0.5 size-icon-lg shrink-0 text-destructive-foreground"
+        />
         <div>
-          <h1 className="text-ui-md text-foreground font-semibold">{message}</h1>
-          <p className="text-ui-sm text-muted-foreground mt-1">Check the connection and try again.</p>
+          <Txt as="h1" variant="subheading" tone="ink">
+            {message}
+          </Txt>
+          <Txt variant="caption" tone="muted" className="mt-1">
+            Check the connection and try again.
+          </Txt>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button icon={<RotateCcw />} onClick={onRetry} size="sm" type="button" variant="outline">
+            <Button icon={<IconArrowRotateCounterClockwise />} onClick={onRetry} size="sm" type="button">
               Retry
             </Button>
             {onClear ? (
-              <Button icon={<X />} onClick={onClear} size="sm" type="button" variant="ghost">
+              <Button icon={<IconCrossMedium />} onClick={onClear} size="sm" type="button" variant="ghost">
                 Clear filter
               </Button>
             ) : null}

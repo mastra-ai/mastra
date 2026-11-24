@@ -1,4 +1,4 @@
-# GitHub PR Code Review Agent
+# GitHub PR Code Review
 
 An AI-powered code review agent built with [Mastra](https://mastra.ai/) that analyzes any GitHub pull request and returns detailed feedback directly in chat. It uses a structured workflow, workspace skills for review standards, observational memory for managing context across large PRs, and adaptive review depth based on PR size.
 

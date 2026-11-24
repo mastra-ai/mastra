@@ -1,67 +1,47 @@
-import { ThreadTraceDetails, ThreadTraceDetailsActions, ThreadTraceDetailsHeader } from './thread-trace-details';
-import { ThreadTraceList } from './thread-trace-list';
-import { ThreadTraceLoadMoreSentinel } from './thread-trace-load-more-sentinel';
-import {
-  ThreadTraceMessages,
-  ThreadTraceMessagesHeader,
-  ThreadTraceTab,
-  ThreadTraceTabContent,
-  ThreadTraceTabList,
-} from './thread-trace-messages';
-import { ThreadTraceRail } from './thread-trace-rail';
 import { ThreadTraceRoot } from './thread-trace-root';
 import { ThreadTraceRow } from './thread-trace-row';
-import { ThreadTraceSpanPanel } from './thread-trace-span-panel';
+import { ThreadTraceSpanDetail } from './thread-trace-span-detail';
 import { ThreadTraceSpans } from './thread-trace-spans';
+import { ThreadTraceEmpty, ThreadTraceError, ThreadTraceLoading } from './thread-trace-states';
+import { ThreadTraceTraceLink, ThreadTraceTurnMessages } from './thread-trace-turn';
 
 /**
- * A memory thread rendered as its traces: one row per agent turn (oldest first), with the
- * messages on the left and the span tree on the right. Clicking a span opens its detail panel on
- * the side so the conversation stays readable. Every part takes `className` and spreads the rest
- * of its props, so the layout can be restyled from the call site.
+ * A memory thread rendered as its traces: one row per agent turn (oldest first), with the active view on
+ * the left and the span tree on the right. Clicking a span opens the root's `spanDetail` slot beside the
+ * turns so the conversation stays readable. Layout parts (`ThreadTrace`, `ThreadTrace.Row`) place named
+ * slots; leaf parts draw the data they are given. Nothing fetches, so any transport can feed it. Before
+ * the turns are known, render `ThreadTrace.Loading`, `ThreadTrace.Empty` or `ThreadTrace.Error` instead.
  *
  * @example
- * <ThreadTrace traceIds={ids} anchorTraceId={anchor}>
- *   <ThreadTrace.List>
- *     <ThreadTrace.Rail turns={turns} />
- *     <ThreadTrace.LoadMoreSentinel ref={setEndOfListElement} />
- *     {ids.map((traceId, i) => (
- *       <ThreadTrace.Row key={traceId} traceId={traceId}>
- *         <ThreadTrace.Messages>
- *           <ThreadTrace.MessagesHeader>
- *             <ThreadTrace.TabList>
- *               <ThreadTrace.Tab value="messages">Messages</ThreadTrace.Tab>
- *             </ThreadTrace.TabList>
- *           </ThreadTrace.MessagesHeader>
- *           <ThreadTrace.TabContent value="messages">…</ThreadTrace.TabContent>
- *         </ThreadTrace.Messages>
- *         <ThreadTrace.Details>
- *           <ThreadTrace.DetailsHeader>
- *             <ThreadTrace.DetailsActions>…</ThreadTrace.DetailsActions>
- *           </ThreadTrace.DetailsHeader>
- *           <ThreadTrace.Spans />
- *         </ThreadTrace.Details>
- *       </ThreadTrace.Row>
- *     ))}
- *   </ThreadTrace.List>
- *   <ThreadTrace.SpanPanel />
+ * <ThreadTrace
+ *   traceIds={ids}
+ *   onLoadOlder={fetchOlderPage}
+ *   selectedSpan={selected}
+ *   onSelectedSpanChange={setSelected}
+ *   spanDetail={<ThreadTrace.SpanDetail span={selectedSpanRecord} />}
+ * >
+ *   {turns.map((turn, i) => (
+ *     <ThreadTrace.Row
+ *       key={turn.traceId}
+ *       traceId={turn.traceId}
+ *       label={`Turn ${i + 1}`}
+ *       link={<ThreadTrace.TraceLink />}
+ *       messages={<ThreadTrace.TurnMessages spans={turn.spans} />}
+ *       feedback={<FeedbackThread feedbackData={feedbackByTraceId[turn.traceId]} onSubmit={submit} />}
+ *       spans={<ThreadTrace.Spans spans={turn.spans} />}
+ *     />
+ *   ))}
  * </ThreadTrace>
  */
 export const ThreadTrace = Object.assign(ThreadTraceRoot, {
-  List: ThreadTraceList,
-  Rail: ThreadTraceRail,
-  LoadMoreSentinel: ThreadTraceLoadMoreSentinel,
   Row: ThreadTraceRow,
-  Messages: ThreadTraceMessages,
-  MessagesHeader: ThreadTraceMessagesHeader,
-  TabList: ThreadTraceTabList,
-  Tab: ThreadTraceTab,
-  TabContent: ThreadTraceTabContent,
-  Details: ThreadTraceDetails,
-  DetailsHeader: ThreadTraceDetailsHeader,
-  DetailsActions: ThreadTraceDetailsActions,
   Spans: ThreadTraceSpans,
-  SpanPanel: ThreadTraceSpanPanel,
+  SpanDetail: ThreadTraceSpanDetail,
+  TurnMessages: ThreadTraceTurnMessages,
+  TraceLink: ThreadTraceTraceLink,
+  Loading: ThreadTraceLoading,
+  Empty: ThreadTraceEmpty,
+  Error: ThreadTraceError,
 });
 
 export { useThreadTrace } from './thread-trace-context';
@@ -70,21 +50,8 @@ export { useThreadTraceRow } from './thread-trace-row-context';
 export type { ThreadTraceRowContextValue } from './thread-trace-row-context';
 export { THREAD_TRACE_MESSAGES_TAB } from './thread-trace-row';
 export type { ThreadTraceRootProps } from './thread-trace-root';
-export type { ThreadTraceListProps } from './thread-trace-list';
-export type { ThreadTraceRailProps } from './thread-trace-rail';
-export type { ThreadTraceLoadMoreSentinelProps } from './thread-trace-load-more-sentinel';
 export type { ThreadTraceRowProps } from './thread-trace-row';
-export type {
-  ThreadTraceMessagesProps,
-  ThreadTraceMessagesHeaderProps,
-  ThreadTraceTabListProps,
-  ThreadTraceTabProps,
-  ThreadTraceTabContentProps,
-} from './thread-trace-messages';
-export type {
-  ThreadTraceDetailsProps,
-  ThreadTraceDetailsHeaderProps,
-  ThreadTraceDetailsActionsProps,
-} from './thread-trace-details';
 export type { ThreadTraceSpansProps } from './thread-trace-spans';
-export type { ThreadTraceSpanPanelProps } from './thread-trace-span-panel';
+export type { ThreadTraceSpanDetailProps } from './thread-trace-span-detail';
+export type { ThreadTraceErrorProps } from './thread-trace-states';
+export type { ThreadTraceTraceLinkProps, ThreadTraceTurnMessagesProps } from './thread-trace-turn';

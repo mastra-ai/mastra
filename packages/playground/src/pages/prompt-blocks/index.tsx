@@ -1,19 +1,27 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
+import { navCrumb } from '@/domains/navigation/crumbs';
 import { useStoredPromptBlocks, PromptsList, NoPromptBlocksInfo } from '@/domains/prompt-blocks';
 import { PromptBlocksHeaderCreateAction } from '@/domains/prompt-blocks/prompt-blocks-header-actions';
+
+const crumbs = [navCrumb('/prompts')];
 
 const PROMPT_BLOCKS_PER_PAGE = 50;
 const PROMPT_BLOCKS_SORT_KEYS = ['updatedAt'] as const;
 
 export default function PromptBlocks() {
+  const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const canCreate = !isCmsLoading && isCmsAvailable;
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,51 +66,66 @@ export default function PromptBlocks() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Prompts</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="prompt blocks" />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Prompts</h1>
+        <PermissionDenied variant="fill" resource="prompt blocks" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load prompt blocks" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Prompts</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load prompt blocks"
+          descriptionSlot={error.message}
+        />
+      </PageLayout>
     );
   }
 
   if (promptBlocks.length === 0 && !isLoading && page === 0) {
     return (
-      <NoDataPageLayout>
-        <NoPromptBlocksInfo />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">Prompts</h1>
+        <NoPromptBlocksInfo canCreate={canCreate} />
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
-      <PromptBlocksHeaderCreateAction />
-      <PageLayout.TopArea>
-        <PageLayout.Row align="center" stack="responsive">
-          <div className="max-w-120 flex-1">
-            <ListSearch
-              onSearch={handleSearchChange}
-              label="Filter prompts"
-              placeholder="Filter by name or description"
-            />
-          </div>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
+    <PageLayout
+      variant="page"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      headerActions={<PromptBlocksHeaderCreateAction />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={handleSearchChange}
+                label="Search prompts"
+                placeholder="Search by name or description"
+              />
+            </div>
+          </ActionRow.Start>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">Prompts</h1>
       <PromptsList
         promptBlocks={promptBlocks}
         isLoading={isLoading}

@@ -1,6 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { Page } from '@playwright/test';
 import { test, expect } from '@playwright/test';
+import { mockTraceQueryCapabilities } from '../__utils__/mock-trace-query-capabilities';
 import { resetStorage } from '../__utils__/reset-storage';
 
 /**
@@ -27,6 +28,7 @@ test.afterEach(async ({ page }) => {
 });
 
 async function mockSystemPackages(page: Page, observabilityEnabled: boolean) {
+  await mockTraceQueryCapabilities(page);
   await page.route('**/api/system/packages', async route => {
     await route.fulfill({
       status: 200,
@@ -60,14 +62,14 @@ test.describe('Agent observability tabs', () => {
       await mockTraceLists(page, query => (traceQuery = query));
 
       await page.goto('/agents/weather-agent/overview');
-      await page.getByRole('tab', { name: 'Traces' }).click();
+      await page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: 'Traces' }).click();
 
       // The traces tab navigates to /agents/:id/traces; the page then enriches the URL
       // with scope filter params, so we assert the path without anchoring on $.
       await expect(page).toHaveURL(/\/agents\/weather-agent\/traces(\?|$)/);
-      // With the scope filters pre-applied the empty-state copy comes from the list
-      // view ("filters applied" variant), not the standalone NoTracesInfo screen.
-      await expect(page.getByText(/No traces found for applied filters/i)).toBeVisible();
+      // Agent scope does not count as a user-applied content filter; the explorer
+      // shows its time-range empty state when the scoped query returns no traces.
+      await expect(page.getByRole('heading', { name: 'No traces for the last 7 days' })).toBeVisible();
       await expect
         .poll(() => traceQuery?.where, { message: 'trace query is scoped to agent' })
         .toEqual({
@@ -85,11 +87,14 @@ test.describe('Agent observability tabs', () => {
       await mockSystemPackages(page, false);
 
       await page.goto('/agents/weather-agent/overview');
-      await page
-        .locator('[data-base-ui-tooltip-trigger]')
-        .filter({ has: page.getByRole('tab', { name: 'Traces' }) })
-        .hover();
-      await expect(page.getByRole('tooltip').getByText('Add @mastra/observability to enable this tab.')).toBeVisible();
+
+      const agentViews = page.getByRole('navigation', { name: 'Agent views' });
+      const tracesButton = agentViews.getByRole('button', { name: 'Traces' });
+      await expect(tracesButton).toBeDisabled();
+      await expect(agentViews.getByRole('link', { name: 'Traces' })).toHaveCount(0);
+
+      await tracesButton.hover();
+      await expect(page.getByRole('tooltip')).toContainText('Add @mastra/observability to enable Traces.');
     });
   });
 

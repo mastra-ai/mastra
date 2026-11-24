@@ -61,6 +61,18 @@ describe('listTracesLight on a store without a dedicated implementation', () => 
     expect(row.inputPreview).toBe('summarize this thread');
   });
 
+  it('returns stored previews that look like JSON as the stored text', async () => {
+    const store = createStore();
+    await store.init();
+    await store.stores.observability.batchCreateSpans({
+      records: [{ ...rootSpan, input: {}, output: { ok: true }, inputPreview: '{}', outputPreview: '{"ok":true}' }],
+    });
+
+    const result = await store.stores.observability.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+
+    expect(result.spans[0]).toMatchObject({ inputPreview: '{}', outputPreview: '{"ok":true}' });
+  });
+
   it('keeps the pagination metadata callers page with', async () => {
     const store = createStore();
     await store.init();

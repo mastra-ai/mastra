@@ -20,10 +20,11 @@ import {
   TABLE_SCHEDULE_TRIGGERS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSchemaName, schemaNamePrefix } from '../../../shared/schema-name';
 import type { DbClient } from '../../client';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { resolveTargets, runPrune } from '../../retention';
 
 function getSchemaName(schema?: string) {
@@ -73,6 +74,8 @@ function rowToSchedule(row: Record<string, any>): Schedule {
   if (metadata !== undefined) schedule.metadata = metadata;
   if (row.owner_type != null) schedule.ownerType = String(row.owner_type) as Schedule['ownerType'];
   if (row.owner_id != null) schedule.ownerId = String(row.owner_id);
+  if (row.run_at != null) schedule.runAt = Number(row.run_at);
+  if (row.end_at != null) schedule.endAt = Number(row.end_at);
   return schedule;
 }
 
@@ -131,6 +134,11 @@ export class SchedulesPG extends SchedulesStorage {
       tableName: TABLE_SCHEDULES,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_SCHEDULES,
+      schema: TABLE_SCHEMAS[TABLE_SCHEDULES],
+      ifNotExists: ['run_at', 'end_at'],
+    });
     await this.#db.createTable({
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
@@ -149,7 +157,7 @@ export class SchedulesPG extends SchedulesStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(SchedulesPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -198,7 +206,7 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return SchedulesPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -230,7 +238,7 @@ export class SchedulesPG extends SchedulesStorage {
 
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     statements.push(
@@ -263,7 +271,7 @@ export class SchedulesPG extends SchedulesStorage {
   }
 
   #table(tableName: typeof TABLE_SCHEDULES | typeof TABLE_SCHEDULE_TRIGGERS): string {
-    const schema = parseSqlIdentifier(this.#schema, 'schema name');
+    const schema = parseSchemaName(this.#schema);
     return getTableName(tableName, getSchemaName(schema));
   }
 
@@ -288,6 +296,8 @@ export class SchedulesPG extends SchedulesStorage {
         metadata: schedule.metadata ?? null,
         owner_type: schedule.ownerType ?? null,
         owner_id: schedule.ownerId ?? null,
+        run_at: schedule.runAt ?? null,
+        end_at: schedule.endAt ?? null,
       },
     });
     return schedule;
@@ -373,13 +383,15 @@ export class SchedulesPG extends SchedulesStorage {
     if ('status' in patch && patch.status !== undefined) push('status = ?', patch.status);
     if ('nextFireAt' in patch && patch.nextFireAt !== undefined) push('next_fire_at = ?', patch.nextFireAt);
     if ('target' in patch && patch.target !== undefined) {
-      push('target = ?::jsonb', JSON.stringify(patch.target));
+      push('target = ?::jsonb', toPgJson(patch.target));
     }
     if ('metadata' in patch) {
-      push('metadata = ?::jsonb', patch.metadata != null ? JSON.stringify(patch.metadata) : null);
+      push('metadata = ?::jsonb', patch.metadata != null ? toPgJson(patch.metadata) : null);
     }
     if ('ownerType' in patch) push('owner_type = ?', (patch.ownerType as string | undefined) ?? null);
     if ('ownerId' in patch) push('owner_id = ?', (patch.ownerId as string | undefined) ?? null);
+    if ('runAt' in patch) push('run_at = ?', patch.runAt ?? null);
+    if ('endAt' in patch) push('end_at = ?', patch.endAt ?? null);
 
     push('updated_at = ?', Date.now());
 
@@ -407,12 +419,13 @@ export class SchedulesPG extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     const result = await this.#client.query(
       `UPDATE ${this.#table(TABLE_SCHEDULES)}
-       SET next_fire_at = $1, last_fire_at = $2, last_run_id = $3, updated_at = $4
+       SET next_fire_at = $1, last_fire_at = $2, last_run_id = $3, updated_at = $4, status = COALESCE($8, status)
        WHERE id = $5 AND next_fire_at = $6 AND status = $7`,
-      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active'],
+      [newNextFireAt, lastFireAt, lastRunId, Date.now(), id, expectedNextFireAt, 'active', newStatus ?? null],
     );
     return (result.rowCount ?? 0) > 0;
   }

@@ -1,6 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ArrowRightIcon, CheckIcon, LibraryIcon, Plus } from 'lucide-react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -32,11 +35,8 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       title="Add to your library"
       description="Adding your agent to the library makes it visible to everyone in your workspace, so teammates can discover it, try it out, and copy it as a starting point for their own agents."
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <ArrowRightIcon />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >
@@ -45,18 +45,18 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-muted-foreground">
-          <LibraryIcon />
+          <IconLibrary />
         </Icon>
         {isInLibrary ? (
-          <p className="text-placeholder flex items-center gap-2" data-testid="agent-builder-library-added">
+          <p className="flex items-center gap-2 text-subtle-foreground" data-testid="agent-builder-library-added">
             <Icon>
-              <CheckIcon />
+              <IconCheckmark2Medium />
             </Icon>
             Added to your library
           </p>
         ) : (
           <Button
-            icon={<Plus />}
+            icon={<IconPlusMedium />}
             variant="primary"
             onClick={() => requestChange('public')}
             disabled={isStreaming}
@@ -65,8 +65,8 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
             Add to library
           </Button>
         )}
-        <p className="text-muted-foreground max-w-md">
-          You can change this at any time from the agent&apos;s visibility settings — adding to the library now is
+        <p className="max-w-md text-muted-foreground">
+          You can change this at any time in the agent&apos;s visibility settings. Adding to the library now is
           optional.
         </p>
         {dialog}

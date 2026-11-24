@@ -1,9 +1,9 @@
-import { describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import { SpanDetailsView } from '../span-details-view';
+import { getSpanChanges } from '../span-outcome.utils';
 import { ALL_SPAN_FIXTURES } from './__tests__/fixtures/span-payloads';
 import type { SpanRecord } from './__tests__/fixtures/span-payloads';
 import { SpanErrorRenderer } from './span-error-renderer';
@@ -11,6 +11,10 @@ import { SpanInputRenderer } from './span-input-renderers';
 import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
+import { SpanProcessorMutations } from './span-processor-mutations';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@/ds/icons/central/IconFileArrowRightOut';
+import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
 const FIXTURE_NAMES = Object.keys(ALL_SPAN_FIXTURES) as FixtureName[];
@@ -24,10 +28,10 @@ export default meta;
 
 function Cell({ title, tag, children }: { title: string; tag: string | undefined; children: ReactNode }) {
   return (
-    <div className="border-border1 flex min-w-0 flex-col gap-2 rounded-lg border p-3">
-      <div className="text-ui-xs text-placeholder flex items-center justify-between tracking-widest uppercase">
+    <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between text-meta tracking-widest text-placeholder uppercase">
         <span>{title}</span>
-        <code className="text-muted-foreground font-mono normal-case">{tag ?? 'undefined'}</code>
+        <code className="font-mono text-muted-foreground normal-case">{tag ?? 'undefined'}</code>
       </div>
       {children}
     </div>
@@ -47,7 +51,7 @@ export const InputRenderers: StoryObj = {
           <Cell key={name} title={name} tag={describeSpanInput(asCoreSpan(span))?.type}>
             <SpanPayloadSection
               title="Input"
-              icon={<FileInputIcon />}
+              icon={<IconFileArrowRightIn />}
               raw={span.input}
               hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
             >
@@ -69,7 +73,7 @@ export const OutputRenderers: StoryObj = {
           <Cell key={name} title={name} tag={describeSpanOutput(asCoreSpan(span))?.type}>
             <SpanPayloadSection
               title="Output"
-              icon={<FileOutputIcon />}
+              icon={<IconFileArrowRightOut />}
               raw={span.output}
               hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
             >
@@ -86,7 +90,7 @@ export const ErrorRenderer: StoryObj = {
   render: () => (
     <Grid>
       <Cell title="errorSpan" tag="error">
-        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error}>
+        <SpanPayloadSection title="Error" raw={ALL_SPAN_FIXTURES.errorSpan.error} framed={false}>
           <SpanErrorRenderer span={ALL_SPAN_FIXTURES.errorSpan} />
         </SpanPayloadSection>
       </Cell>
@@ -102,7 +106,7 @@ function Both({ span }: { span: SpanRecord }) {
     <div className="flex max-w-3xl flex-col gap-3">
       <SpanPayloadSection
         title="Input"
-        icon={<FileInputIcon />}
+        icon={<IconFileArrowRightIn />}
         raw={span.input}
         hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
       >
@@ -110,7 +114,7 @@ function Both({ span }: { span: SpanRecord }) {
       </SpanPayloadSection>
       <SpanPayloadSection
         title="Output"
-        icon={<FileOutputIcon />}
+        icon={<IconFileArrowRightOut />}
         raw={span.output}
         hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
       >
@@ -186,6 +190,62 @@ export const CompactSpanDetails: StoryObj<FixtureArgs> = {
     return (
       <div className="h-[80vh] max-w-xl">
         <SpanDetailsView spanId={span.spanId} span={span} onClose={() => {}} />
+      </div>
+    );
+  },
+};
+
+const PROCESSOR_FIXTURES = [
+  'processorInputSpan',
+  'processorSystemMutationSpan',
+  'processorClearedMessagesSpan',
+  'malformedProcessorSpan',
+  'processorTripwireSpan',
+  'processorToolResultSpan',
+  'processorOutputStreamSpan',
+  'processorInputStepSpan',
+  'processorRequestErrorSpan',
+  'legacyProcessorSpan',
+] as const satisfies readonly FixtureName[];
+
+/** Widths the span panel is read at: a phone drawer, a tablet split, a desktop panel. */
+const PANEL_WIDTHS = [
+  { label: 'Mobile', className: 'w-90' },
+  { label: 'Tablet', className: 'w-160' },
+  { label: 'Desktop', className: 'w-240' },
+];
+
+export const ProcessorChanges: StoryObj = {
+  render: () => (
+    <Grid>
+      {PROCESSOR_FIXTURES.map(name => {
+        const span = ALL_SPAN_FIXTURES[name];
+        const changes = getSpanChanges(span);
+        return (
+          <Cell key={name} title={name} tag={changes.length > 0 ? 'changes' : 'none'}>
+            <SpanPayloadSection title="Changes" raw={changes}>
+              <SpanProcessorMutations span={span} />
+            </SpanPayloadSection>
+          </Cell>
+        );
+      })}
+    </Grid>
+  ),
+};
+
+export const ProcessorSpanAtPanelWidths: StoryObj<FixtureArgs> = {
+  args: { fixture: 'processorInputSpan' },
+  argTypes: { fixture: { control: 'select', options: PROCESSOR_FIXTURES } },
+  render: ({ fixture }) => {
+    const span = ALL_SPAN_FIXTURES[fixture];
+    return (
+      <div className="flex flex-wrap items-start gap-4">
+        {PANEL_WIDTHS.map(width => (
+          <div key={width.label} className={cn('flex h-[80vh] flex-col gap-2', width.className)}>
+            <div className="text-meta tracking-widest text-placeholder uppercase">{width.label}</div>
+            <SpanDataPanelView traceId={span.traceId} spanId={span.spanId} span={span} />
+          </div>
+        ))}
       </div>
     );
   },

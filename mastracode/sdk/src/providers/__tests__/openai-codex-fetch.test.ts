@@ -81,6 +81,19 @@ describe('OpenAI Codex OAuth fetch', () => {
     expect(responsesMock).toHaveBeenCalledWith('gpt-5-codex-mini');
   });
 
+  it('keeps a requested Fast tier when NODE_ENV or VITEST is set', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('VITEST', 'true');
+
+    const { openaiCodexProvider } = await import('../openai-codex.js');
+    const model = openaiCodexProvider('gpt-6.2-sol', { serviceTier: 'fast' }) as unknown as {
+      middleware: Array<{ transformParams?: (options: { params: Record<string, unknown> }) => Promise<any> }>;
+    };
+    const transformed = await model.middleware[0]!.transformParams!({ params: {} });
+
+    expect(transformed.providerOptions.openai.serviceTier).toBe('priority');
+  });
+
   it('injects Codex request provider options and removes topP when temperature is set', async () => {
     const { createCodexMiddleware } = await import('../openai-codex.js');
     const middleware = createCodexMiddleware('high');
@@ -104,5 +117,39 @@ describe('OpenAI Codex OAuth fetch', () => {
       store: false,
       reasoningEffort: 'high',
     });
+  });
+});
+
+describe('createReasoningEffortMiddleware', () => {
+  it('returns undefined when reasoning effort is unset', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    expect(createReasoningEffortMiddleware('my-provider', undefined)).toBeUndefined();
+  });
+
+  it('injects reasoningEffort under the given provider key', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('my-provider', 'high');
+    expect(middleware).toBeDefined();
+
+    const params = { providerOptions: { 'my-provider': { existing: 'preserved' } } };
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.['my-provider']).toEqual({
+      existing: 'preserved',
+      reasoningEffort: 'high',
+    });
+  });
+
+  it('does not inject Codex-only options and preserves unrelated providers', async () => {
+    const { createReasoningEffortMiddleware } = await import('../openai-codex.js');
+    const middleware = createReasoningEffortMiddleware('openai', 'low');
+    const params = { providerOptions: { anthropic: { effort: 'low' } } };
+
+    const transformed = await middleware!.transformParams!({ params } as any);
+
+    expect(transformed.providerOptions?.openai).toEqual({ reasoningEffort: 'low' });
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('instructions');
+    expect(transformed.providerOptions?.openai).not.toHaveProperty('store');
+    expect(transformed.providerOptions?.anthropic).toEqual({ effort: 'low' });
   });
 });

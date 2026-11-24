@@ -1,10 +1,12 @@
-import { Hash, ToggleLeft, Type } from 'lucide-react';
 import * as React from 'react';
 
 import type { RuleValueInputProps } from './types';
 import { Input } from '@/ds/components/Input/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
+import { IconFontStyle } from '@/ds/icons/central/IconFontStyle';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconToggle } from '@/ds/icons/central/IconToggle';
 import { cn } from '@/lib/utils';
 
 /**
@@ -88,13 +90,13 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
   return (
     <div className={cn('relative', className)}>
       <Icon
-        size="sm"
-        className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2"
+        size="xs"
+        className="pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2 text-muted-foreground"
       >
-        <ToggleLeft />
+        <IconToggle />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
-        <SelectTrigger className="bg-surface4 pl-7" size="sm">
+        <SelectTrigger className="bg-muted pl-7" size="sm">
           <SelectValue placeholder="Select value" />
         </SelectTrigger>
         <SelectContent>
@@ -127,15 +129,15 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
-        <Hash />
+      <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
+        <IconHashtag />
       </Icon>
       <Input
         type="number"
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}
-        className="bg-surface4 min-w-35 pl-7"
+        className="min-w-35 bg-muted pl-7"
         size="sm"
       />
     </div>
@@ -157,14 +159,14 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
-        <Type />
+      <Icon size="xs" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-muted-foreground">
+        <IconFontStyle />
       </Icon>
       <Input
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter value'}
-        className="bg-surface4 min-w-35 pl-7"
+        className="min-w-35 bg-muted pl-7"
         size="sm"
       />
     </div>
@@ -194,7 +196,7 @@ const ArrayValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholde
       value={displayValue}
       onChange={handleChange}
       placeholder={placeholder || 'Enter values (comma-separated)'}
-      className={cn('min-w-40 bg-surface4', className)}
+      className={cn('min-w-40 bg-muted', className)}
       size="sm"
     />
   );

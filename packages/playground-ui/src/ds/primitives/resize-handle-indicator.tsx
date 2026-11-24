@@ -9,8 +9,8 @@ const indicatorVariants = cva(
   {
     variants: {
       variant: {
-        line: 'new-theme h-3/4 w-px bg-linear-to-b from-transparent via-foreground/30 to-transparent opacity-0',
-        pill: 'new-theme h-10 w-0.5 rounded-full bg-foreground/30',
+        line: 'h-3/4 w-px bg-linear-to-b from-transparent via-foreground/30 to-transparent opacity-0',
+        pill: 'h-10 w-0.5 rounded-full bg-foreground/30',
       },
     },
     defaultVariants: {

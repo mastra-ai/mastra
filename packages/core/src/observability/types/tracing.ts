@@ -11,7 +11,14 @@ import type { MessageListInput } from '../../agent/message-list/types';
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload, StepTripwireData } from '../../stream/types';
+import type {
+  LanguageModelUsage,
+  ProviderMetadata,
+  StepStartPayload,
+  StepFinishPayload,
+  ChunkType,
+  StepTripwireData,
+} from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
@@ -24,6 +31,7 @@ import type {
 } from './core';
 import type { FeedbackInput } from './feedback';
 import type { CostContext } from './metrics';
+import type { SpanOutcomeFields, SpanTermination } from './outcome';
 import type { ScoreInput } from './scores';
 
 // ============================================================================
@@ -38,6 +46,8 @@ export enum SpanType {
   AGENT_RUN = 'agent_run',
   /** Scorer execution */
   SCORER_RUN = 'scorer_run',
+  /** Classifier evaluation */
+  CLASSIFIER_EVALUATION = 'classifier_evaluation',
   /** Individual scorer pipeline step */
   SCORER_STEP = 'scorer_step',
   /** Generic span for custom operations */
@@ -52,6 +62,8 @@ export enum SpanType {
   MODEL_CHUNK = 'model_chunk',
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
   /** Input or Output Processor execution */
   PROCESSOR_RUN = 'processor_run',
   /** Function/tool execution with inputs, outputs, errors */
@@ -162,6 +174,21 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
   /** The resolved agent version ID used for this execution */
   resolvedVersionId?: string;
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string;
+  /** Provider of `model`, taken from the same model object */
+  provider?: string;
+  /** The agent signal that started this run, when the run input was a signal */
+  signal?: {
+    id: string;
+    type: string;
+    tagName?: string;
+    attributes?: Record<string, string | number | boolean | null>;
+  };
   /** Tripwire abort details when a processor triggered a tripwire */
   tripwireAbort?: {
     /** Abort reason */
@@ -173,6 +200,17 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+  /**
+   * When the run's model streamed its first chunk; copied from the first
+   * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
+   */
+  completionStartTime?: Date;
+  /**
+   * Milliseconds from the start of the MODEL_INFERENCE that streamed the run's first
+   * chunk to that chunk; copied the same way as `completionStartTime`. Absent when no
+   * chunk was streamed.
+   */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -185,6 +223,23 @@ export interface ScorerRunAttributes extends AIBaseAttributes {
   targetScope?: ScorerTargetScope;
   targetEntityType?: EntityType;
   scorerDefinition?: DefinitionSource;
+}
+
+/**
+ * Classifier evaluation attributes
+ */
+export interface ClassifierEvaluationAttributes extends AIBaseAttributes {
+  classifierId?: string;
+  modelId?: string;
+  provider?: string;
+  questionCount?: number;
+  questionTypes?: string[];
+  maxRetries?: number;
+  attemptCount?: number;
+  retryCount?: number;
+  durationMs?: number;
+  usage?: UsageStats;
+  errorType?: string;
 }
 
 /**
@@ -272,14 +327,16 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   provider?: string;
   /**
    * Definitions of the tools made available to the model for this generation,
-   * captured once per generation. Per-step tool names (after `activeTools`
-   * filtering) live on MODEL_INFERENCE spans as `availableTools`.
+   * captured once per generation. The definitions sent on each provider call
+   * (after per-step changes) live on MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Whether one or more model steps omitted a primary token count */
+  usageIncomplete?: boolean;
   /** Estimated cost context, when provided directly by an SDK or provider */
   costContext?: CostContext;
   /** Model parameters */
@@ -306,6 +363,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the generation's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
   /** Unique identifier for the response */
@@ -322,6 +381,14 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
 export interface ModelStepAttributes extends AIBaseAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number;
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string;
+  /** Provider of `model`, taken from the same model object */
+  provider?: string;
   /** Token usage statistics */
   usage?: UsageStats;
   /** Reason this step finished (stop, tool-calls, length, etc.) */
@@ -330,6 +397,10 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+  /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
+  completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the step's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -362,6 +433,8 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Milliseconds from this inference's start to its first streamed chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Result warnings */
   warnings?: Record<string, any>;
   /** Actual model used in the response (may differ from request model) */
@@ -374,6 +447,12 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   providerOptions?: Record<string, unknown>;
   /** Names of tools made available to the model on this inference call */
   availableTools?: string[];
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, JSON-schema parameters), after per-step changes from
+   * processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[];
   /**
    * How the model was instructed to choose tools: 'auto', 'none', 'required',
    * or a specific tool selection. Distinguishes "model could have called a
@@ -405,6 +484,8 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   toolCallId?: string;
   success?: boolean;
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean;
 }
 
 /**
@@ -461,6 +542,30 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   toolCallId?: string;
   /** Whether tool execution was successful */
   success?: boolean;
+}
+
+/**
+ * MCP Server Request attributes
+ */
+export interface MCPServerRequestAttributes extends AIBaseAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string;
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string;
+  /** Configured MCPServer name */
+  mcpServer: string;
+  /** Configured MCPServer version */
+  serverVersion?: string;
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string;
+  /** Client implementation name, when the client reported one */
+  clientName?: string;
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string;
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string;
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string;
 }
 
 /**
@@ -525,11 +630,45 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
   skillCount?: number;
   /** Format the catalog was rendered in (inject only) */
   skillFormat?: string;
+  /** Configured catalog-injection option; `false` means no catalog was rendered (inject only) */
+  injectCatalog?: boolean;
   /** Skill the operation targeted (activate / read) */
   skillName?: string;
   /** Whether the operation succeeded */
   success?: boolean;
 }
+
+/**
+ * Pipeline phase a processor span is created for. One value per site where a
+ * processor executor creates a span, so a processor that runs in more than one
+ * phase can name, describe and narrow each of them separately.
+ *
+ * Re-exported from `@mastra/core/processors` as `ProcessorSpanPhase`; it lives
+ * here because `ProcessorPipelineAttributes` records it and observability types
+ * cannot import from `processors`.
+ */
+export type ProcessorSpanPhase =
+  | 'input'
+  | 'inputStep'
+  | 'llmRequest'
+  | 'llmResponse'
+  | 'output'
+  | 'outputStep'
+  | 'toolResult'
+  | 'requestError';
+
+/**
+ * Phase recorded on a processor span, and the discriminant its payloads narrow
+ * on.
+ *
+ * Finer-grained than `ProcessorSpanPhase`, which collapses the two output hooks
+ * into one `'output'` because a processor naming its span does not care which
+ * ran. A reader does: `outputStream` records chunk counts and accumulated text,
+ * `outputResult` records messages and a summarized result. One value for both
+ * would leave the payload ambiguous, which is the whole reason this attribute
+ * exists.
+ */
+export type ProcessorSpanPayloadPhase = Exclude<ProcessorSpanPhase, 'output'> | 'outputStream' | 'outputResult';
 
 /**
  * Attributes recorded for every processor the processor runner executes,
@@ -549,10 +688,22 @@ export interface ProcessorPipelineAttributes {
   /** Processor index in the agent */
   processorIndex?: number;
   /**
+   * Pipeline phase the span was created for. The discriminant a reader narrows
+   * a processor span's payloads on: `entityType` cannot serve, because
+   * `llmRequest`/`llmResponse` share `INPUT_PROCESSOR` and
+   * `outputStep`/`requestError` share `OUTPUT_STEP_PROCESSOR`.
+   *
+   * Absent on spans recorded before this attribute existed, which is why the
+   * typed payload views fall back to the untyped shape rather than assuming a
+   * phase.
+   */
+  processorPhase?: ProcessorSpanPayloadPhase;
+  /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk of the stream. Only set on output stream processor spans. The
-   * span's own duration covers the whole stream, model latency included, so
-   * this is what separates a slow processor from a slow model.
+   * span's own duration covers its step, from the first chunk to the step's
+   * end with model latency and tool calls included, so this is what separates
+   * a slow processor from the rest of the step.
    */
   hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
@@ -895,6 +1046,7 @@ export interface GraphActionAttributes extends AIBaseAttributes {
 export interface SpanTypeMap {
   [SpanType.AGENT_RUN]: AgentRunAttributes;
   [SpanType.SCORER_RUN]: ScorerRunAttributes;
+  [SpanType.CLASSIFIER_EVALUATION]: ClassifierEvaluationAttributes;
   [SpanType.SCORER_STEP]: ScorerStepAttributes;
   [SpanType.WORKFLOW_RUN]: WorkflowRunAttributes;
   [SpanType.MODEL_GENERATION]: ModelGenerationAttributes;
@@ -905,6 +1057,7 @@ export interface SpanTypeMap {
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
   [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
+  [SpanType.MCP_SERVER_REQUEST]: MCPServerRequestAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;
   [SpanType.WORKFLOW_CONDITIONAL]: WorkflowConditionalAttributes;
@@ -939,10 +1092,11 @@ export type AnySpanAttributes = SpanTypeMap[keyof SpanTypeMap];
 /**
  * Output recorded on `AGENT_RUN`, `MODEL_GENERATION` and `MODEL_STEP` spans
  * when the run stops before the span's own result exists: a durable run
- * suspended, or the caller aborted.
+ * suspended, the caller aborted, or the process running a durable run stopped
+ * and the run was recovered elsewhere.
  */
 export interface InterruptedSpanOutput {
-  status: 'suspended' | 'aborted';
+  status: 'suspended' | 'aborted' | 'interrupted';
   /** Why the run stopped */
   reason?: string;
   /** Tool that suspended the run */
@@ -1061,11 +1215,128 @@ export interface ModelStepResult {
 /** Output recorded on `MODEL_STEP` spans. `MODEL_INFERENCE` spans record a `ModelStepResult` only. */
 export type ModelStepOutput = ModelStepResult | InterruptedSpanOutput;
 
+/** Model a processor saw or swapped in, summarized to the fields worth tracing. */
+export interface ProcessorModelSummary {
+  modelId?: string;
+  provider?: string;
+  specificationVersion?: string;
+}
+
+/** A tool as a processor span records it. */
+export interface ProcessorToolSummary {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+/** A tool named in `activeTools`, resolved against the tool registry where possible. */
+export interface ProcessorActiveToolSummary {
+  id: string;
+  name: string;
+}
+
+/** The step's tool choice as a processor span records it. */
+export interface ProcessorToolChoiceSummary {
+  type: string;
+  tool?: ProcessorActiveToolSummary;
+}
+
+/**
+ * Messages and system messages a processor changed. Both executors omit a key
+ * when the processor left it untouched, so an absent key means "unchanged"
+ * rather than "empty" — the diff is the point, not the full list again.
+ */
+export interface ProcessorMessageChanges {
+  messages?: unknown[];
+  systemMessages?: unknown[];
+}
+
+/** The model-call configuration an `inputStep` processor saw. */
+interface ProcessorStepConfig {
+  model?: ProcessorModelSummary;
+  tools?: ProcessorToolSummary[];
+  toolChoice?: ProcessorToolChoiceSummary;
+  activeTools?: ProcessorActiveToolSummary[];
+}
+
+/**
+ * `input` payload a processor span records, per phase.
+ *
+ * Every member is what the executors actually write today; a field either
+ * executor omits conditionally is optional here. `llmRequest`, `llmResponse`
+ * and `requestError` come from the legacy runner only — the processor workflow
+ * has no step for them.
+ */
+export interface ProcessorRunInputByPhase {
+  input: { messages: unknown[]; systemMessages?: unknown[]; retryCount?: number };
+  inputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    messageId?: string;
+    retryCount?: number;
+  } & ProcessorStepConfig;
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: { messages: unknown[]; result?: Record<string, unknown>; retryCount?: number };
+  outputStep: {
+    messages: unknown[];
+    systemMessages?: unknown[];
+    stepNumber?: number;
+    finishReason?: string;
+    text?: string;
+    toolCalls?: unknown[];
+    retryCount?: number;
+  };
+  toolResult: {
+    stepNumber?: number;
+    toolName?: string;
+    toolCallId?: string;
+    providerExecuted?: boolean;
+    retryCount?: number;
+  };
+  llmRequest: { prompt?: unknown; stepNumber?: number; retryCount?: number };
+  llmResponse: { stepNumber?: number; retryCount?: number; fromCache?: boolean; chunkCount?: number };
+  requestError: { messages: unknown[]; error: string; stepNumber?: number; messageId?: string; retryCount?: number };
+}
+
+/**
+ * `output` payload a processor span records, per phase.
+ *
+ * Most phases record only what the processor changed, so an absent key means
+ * unchanged. The output-stream hook is the exception: it has no message list to
+ * diff, so it records the chunk totals it produced.
+ */
+export interface ProcessorRunOutputByPhase {
+  input: ProcessorMessageChanges;
+  inputStep: { messageId?: string; retryCount?: number } & ProcessorMessageChanges & ProcessorStepConfig;
+  /** The processor workflow records only `totalChunks`; the legacy runner also records the text. */
+  outputStream: { totalChunks: number; accumulatedText?: string };
+  outputResult: ProcessorMessageChanges;
+  outputStep: ProcessorMessageChanges;
+  toolResult: ProcessorMessageChanges;
+  llmRequest: ProcessorMessageChanges;
+  llmResponse: ProcessorMessageChanges;
+  requestError: ProcessorMessageChanges;
+}
+
+/** `input` of a processor span before its phase is known. */
+export type ProcessorRunInput = ProcessorRunInputByPhase[ProcessorSpanPayloadPhase];
+
+/** `output` of a processor span before its phase is known. */
+export type ProcessorRunOutput = ProcessorRunOutputByPhase[ProcessorSpanPayloadPhase];
+
 /**
  * Span types whose `input` Mastra writes itself with a fixed shape. Every
  * other span type keeps `any`, as before: tool arguments, workflow data and
  * the like are caller-defined, `MODEL_CHUNK` multiplexes several chunk shapes
  * on one span type, and `GENERIC` is the escape hatch for custom spans.
+ *
+ * `PROCESSOR_RUN` is absent on purpose. Three executors emit processor spans —
+ * the legacy runner, the processor workflow, and the Inngest workflow — and they
+ * record different shapes, so a mapped type here would type the write side
+ * against a contract two of them do not meet. The read side is where the shape
+ * is known: `describeSpanInput` / `describeSpanOutput` narrow a payload by the
+ * phase the span recorded, and fall back to JSON when it recorded none.
  */
 export interface SpanInputMap {
   [SpanType.AGENT_RUN]: AgentRunInput;
@@ -1133,9 +1404,20 @@ export interface SpanErrorInfo {
 }
 
 /**
+ * A reference to a span in another trace. Unlike a parent, a link does not put
+ * the two spans in the same trace: each trace keeps its own root and summary.
+ */
+export interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string;
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string;
+}
+
+/**
  * Base Span interface
  */
-interface BaseSpan<TType extends SpanType> {
+interface BaseSpan<TType extends SpanType> extends SpanOutcomeFields {
   /** Unique span identifier */
   id: string;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
@@ -1162,14 +1444,20 @@ interface BaseSpan<TType extends SpanType> {
   tags?: string[];
   /** Input passed at the start of the span */
   input?: SpanInput<TType>;
+  /** Optional display previews. Empty strings are intentional; nullish values request generation. */
+  inputPreview?: string | null;
+  outputPreview?: string | null;
+  errorPreview?: string | null;
   /** Output generated at the end of the span */
   output?: SpanOutput<TType>;
   /** Error information if span failed */
   errorInfo?: SpanErrorInfo;
   /** Snapshot of the RequestContext */
   requestContext?: Record<string, any>;
-  /** Is an event span? (event occurs at startTime, has no endTime) */
+  /** Is an event span? (point-in-time: endTime equals startTime) */
   isEvent: boolean;
+  /** Spans in other traces this span is related to, such as the span that sent a request this span serves */
+  links?: SpanLink[];
 }
 
 /**
@@ -1196,6 +1484,8 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;
+  /** Record a local failure without changing outcome, payload or completion. Older implementations may omit this. */
+  recordError?(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void;
 
   /** Update span attributes */
   update(options: UpdateSpanOptions<TType>): void;
@@ -1237,6 +1527,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
+
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  snapshot(): SpanSnapshot<TType> | undefined;
 
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
@@ -1327,7 +1620,16 @@ export interface BridgeSpanContext {
  */
 export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
   /** Create a ModelSpanTracker for tracking model execution steps and chunks */
-  createTracker(): IModelSpanTracker | undefined;
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined;
+}
+
+export interface ModelSpanTrackerOptions {
+  /**
+   * The AGENT_RUN span that owns this generation. Only the agent's main loop
+   * passes it, so the first chunk's `completionStartTime` lands on that span
+   * and never on an outer agent's run (nested agents, title generation).
+   */
+  agentRunSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**
@@ -1343,8 +1645,31 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
   externalParentSpanId?: string;
+  /**
+   * Native span fields, stored in their own columns alongside `externalParentSpanId`.
+   * An unset field is stored as null.
+   */
+  /** Span id of the initial invocation a resumed execution continues (unset on the initial execution) */
+  resumedFromSpanId?: string;
+  /**
+   * Requested model id, filled at export from this span's own `attributes.model`; the live span does not carry it.
+   * Set together with `provider` only when both attributes are non-empty strings, otherwise neither is set.
+   */
+  model?: string;
+  /** Provider paired with `model`, from this span's own `attributes.provider` */
+  provider?: string;
+  /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
+  timeToFirstTokenMs?: number;
+  /** Failures originating directly on this span, excluding propagated/descendant failures. Unset when unknown. */
+  errorCount?: number;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
+  /**
+   * `TRUE` on every span of a run that the caller attached under an existing
+   * span with `tracingOptions.nestUnderParent`. The run does not own the
+   * trace, so exporters must not write trace-level fields from its spans.
+   */
+  nestedUnderParent?: boolean;
   /**
    * Tags for this trace (only present on root spans).
    * Tags are string labels used to categorize and filter traces.
@@ -1356,7 +1681,49 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
  * Exported Span interface, used for tracing exporters.
  * This is the format sent to ObservabilityExporter implementations.
  */
-export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {}
+export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
+  /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
+  isInternal?: boolean;
+  /**
+   * Version of the span's own entity: declared for it, or inherited from a parent of the same entity.
+   * Omitted when it only inherited another entity's version through `metadata.entityVersionId`.
+   */
+  entityVersionId?: string;
+  /** Service name from the span's `metadata.serviceName`, else the Observability config's `serviceName` */
+  serviceName?: string;
+  /**
+   * Entity of the nearest ancestor span that is not internal or excluded. Omitted when there is none.
+   * Independent of `includeInternalSpans`, so it can skip the span `parentSpanId` points to.
+   */
+  parentEntityType?: EntityType;
+  parentEntityId?: string;
+  parentEntityName?: string;
+  /** Omitted when the parent entity has no version of its own, even if it inherited one from an ancestor */
+  parentEntityVersionId?: string;
+  /**
+   * Entity of the top span in this process's parent chain (the span's own entity when it is that span).
+   * For a trace continued from another service, this is the local root, not the distributed trace's root.
+   * Internal spans are not skipped.
+   */
+  rootEntityType?: EntityType;
+  rootEntityId?: string;
+  rootEntityName?: string;
+  rootEntityVersionId?: string;
+}
+
+/**
+ * A span saved between durable steps, for `rebuildSpan()`. Extends the exported
+ * form with runtime state that exporters do not need, so spans created under
+ * the rebuilt span keep honouring the trace's `requestContextKeys`,
+ * `hideInput` and `hideOutput`.
+ */
+export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
+  /** @internal Local occurrences already accounted for; retained across durable reconstruction. */
+  errorOccurrenceIds?: string[];
+  traceState?: TraceState;
+  /** Version of the span's own entity, `null` when it has none. Absent in snapshots from older versions. */
+  ownEntityVersionId?: string | null;
+}
 
 /**
  * Options for ending a model generation span
@@ -1379,6 +1746,7 @@ export interface ModelInferenceContext {
   parameters?: ModelInferenceAttributes['parameters'];
   providerOptions?: ModelInferenceAttributes['providerOptions'];
   availableTools?: ModelInferenceAttributes['availableTools'];
+  tools?: ModelInferenceAttributes['tools'];
   toolChoice?: ModelInferenceAttributes['toolChoice'];
   responseFormat?: ModelInferenceAttributes['responseFormat'];
 }
@@ -1389,7 +1757,19 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
+  /**
+   * When the first inference seen by this tracker streamed its first chunk.
+   * Durable execution reads it per step and carries it to the final
+   * `endGeneration`, since that step uses a fresh tracker.
+   */
+  getCompletionStartTime?(): Date | undefined;
+  /** Track provider chunks and completion in their original stream order. */
+  wrapInferenceStream?<T extends { pipeThrough: Function }>(stream: T): T;
+  /** Time to first token of the first inference seen by this tracker; carried the same way. */
+  getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
+  /** @internal Record a chunk after the runtime has applied output processors. */
+  recordChunk?<OUTPUT>(chunk: ChunkType<OUTPUT>): void;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
 
@@ -1397,13 +1777,30 @@ export interface IModelSpanTracker {
    * Open the MODEL_INFERENCE span for the current step. Call this immediately
    * before invoking the model so the span's startTime excludes input processor
    * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Pass the prompt (`inputMessages`) so the span records what this call sent.
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
+  /** Close the current attempt without ending the generation or agent. */
+  endAttempt?(termination: SpanTermination): void;
+
+  /**
+   * End the open MODEL_INFERENCE span as interrupted, keeping the MODEL_STEP open.
+   * Called when a queued signal cancels the model request so its replacement
+   * opens its own inference span under the same step.
+   */
+  interruptInference?(termination?: SpanTermination): void;
+
+  /**
+   * End the open MODEL_INFERENCE span as failed, keeping the MODEL_STEP open.
+   * Called when a model call fails and a retry or fallback model will open its
+   * own inference span under the same step.
+   */
+  failInference?(error: Error): void;
 
   /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
-   * (parameters, providerOptions, availableTools, toolChoice, responseFormat).
+   * (parameters, providerOptions, availableTools, tools, toolChoice, responseFormat).
    * Call after input processors have finalised the tool set, just before
    * `startInference()`; the next inference span snapshots this context.
    */
@@ -1420,7 +1817,7 @@ export interface IModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+  exportCurrentStep(): SpanSnapshot<SpanType.MODEL_STEP> | undefined;
 
   /**
    * Get the pending step finish payload (captured when defer mode is enabled).
@@ -1544,7 +1941,7 @@ export interface RecordedTrace {
 // Span Create/Update/Error Option Types
 // ============================================================================
 
-interface CreateBaseOptions<TType extends SpanType> {
+interface CreateBaseOptions<TType extends SpanType> extends SpanOutcomeFields {
   /** Span attributes */
   attributes?: SpanTypeMap[TType];
   /** Span metadata */
@@ -1563,6 +1960,8 @@ interface CreateBaseOptions<TType extends SpanType> {
   tracingPolicy?: TracingPolicy;
   /** Request Context for metadata extraction */
   requestContext?: RequestContext;
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[];
 }
 
 /**
@@ -1603,6 +2002,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    * Only used for root spans without a parent.
    */
   externalParentSpanId?: string;
+  /** Native resume linkage, restored by rebuildSpan. */
+  resumedFromSpanId?: string;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created
@@ -1617,6 +2018,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
  * Options for starting new spans
  */
 export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOptions<TType> {
+  /** @internal Reuse the sampling decision when starting a resumed execution in an existing trace. */
+  samplingDecision?: boolean;
   /**
    * Options passed when using a custom sampler strategy
    */
@@ -1631,6 +2034,8 @@ export interface StartSpanOptions<TType extends SpanType> extends CreateSpanOpti
 export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Input data */
   input?: SpanInput<TType>;
+  /** Span id of the initial invocation this resumed execution continues */
+  resumedFromSpanId?: string;
   /**
    * Start time for this span.
    * Used when a span is created after the work it represents began
@@ -1641,14 +2046,14 @@ export interface ChildSpanOptions<TType extends SpanType> extends CreateBaseOpti
 
 /**
  * Options for new child events
- * Event spans have no input, and no endTime
+ * Event spans have no input, and their endTime equals their startTime
  */
 export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOptions<TType> {
   /** Output data */
   output?: SpanOutput<TType>;
 }
 
-interface UpdateBaseOptions<TType extends SpanType> {
+interface UpdateBaseOptions<TType extends SpanType> extends SpanOutcomeFields {
   /** Span attributes */
   attributes?: Partial<SpanTypeMap[TType]>;
   /** Span metadata */
@@ -1680,6 +2085,8 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
 
 /** Options for recording an error on a span. */
 export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Explicitly identify a new failure or a propagated report when Error/cause identity is insufficient. */
+  origin?: 'new' | 'propagated';
   /** The error associated with the issue */
   error: MastraError | Error;
   /** End the span when true */
@@ -1692,8 +2099,37 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
   endTree?: boolean;
 }
 
+/** What a suspending run saves so that its resume continues the same invocation. Persisted in workflow snapshots. */
+export interface ResumeTracingContext {
+  traceId?: string;
+  /** Span the resumed root span attaches under (its parentSpanId) */
+  spanId?: string;
+  parentSpanId?: string;
+  /**
+   * Initial invocation of this run, exported by each resume as `resumedFromSpanId`.
+   * Snapshots from older versions lack it, so readers fall back to `spanId`.
+   */
+  resumedFromSpanId?: string;
+  /** External parent of the suspended invocation, kept by a resume that gives none of its own */
+  externalParentSpanId?: string;
+  /**
+   * Whether the suspended invocation was sampled. Workflow runs save it (see
+   * `getWorkflowResumeTracingContext`) and their resumes repeat the decision instead of sampling
+   * again. Agent runs and snapshots from older versions lack it, so those resumes decide as before.
+   */
+  sampled?: boolean;
+  /**
+   * Trace-level state of the suspended invocation. A resume keeps its hidden input/output and keys
+   * where the resume call sets none of its own.
+   */
+  traceState?: TraceState;
+}
+
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
-export interface GetOrCreateSpanOptions<TType extends SpanType> {
+export interface GetOrCreateSpanOptions<TType extends SpanType> extends SpanOutcomeFields {
+  /** @internal Original trace state and sampling decision for a resumed execution. */
+  traceState?: TraceState;
+  samplingDecision?: boolean;
   type: TType;
   name: string;
   entityType?: EntityType;
@@ -1707,9 +2143,17 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   tracingContext?: TracingContext;
   requestContext?: RequestContext;
   mastra?: Mastra;
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[];
+  /**
+   * Saved context of the run this call resumes. Together with `tracingOptions`
+   * it decides the trace, the parent, `resumedFromSpanId` and `externalParentSpanId`.
+   */
+  resumeFrom?: ResumeTracingContext;
   /**
    * Span id of the suspended span a resumed run links back to. It is a Mastra
    * span within the trace, so it becomes the new root span's parent.
+   * @deprecated Use `resumeFrom`, which also sets the resumed span's `resumedFromSpanId` and external parent.
    */
   resumedFromSpanId?: string;
 }
@@ -1769,12 +2213,23 @@ export interface TraceState {
    * When true, output data will be hidden from all spans in this trace.
    */
   hideOutput?: boolean;
+  /**
+   * When true, this run was attached under an existing span with
+   * `tracingOptions.nestUnderParent` and does not own the trace.
+   */
+  nestedUnderParent?: boolean;
 }
 
 /**
  * Options passed when starting a new agent or workflow execution
  */
 export interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string;
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>;
   /**
@@ -1795,6 +2250,15 @@ export interface TracingOptions {
    * external tracing but is not treated as a parent within Mastra storage.
    */
   parentSpanId?: string;
+  /**
+   * Set to true together with `parentSpanId` to attach this run as a child of
+   * that span inside the existing trace, for example an LLM judge under the
+   * run it scores. Exporters then keep the trace's own name, input, output,
+   * and tags instead of replacing them with this run's. Leave unset when
+   * `parentSpanId` points at a span from your own tracing system: there the
+   * Mastra run is the top of the trace. Ignored without a valid `traceId` and `parentSpanId`.
+   */
+  nestUnderParent?: boolean;
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces

@@ -2,7 +2,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '@mastra/code-sdk/utils/plans';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({
+  approvePlanFile: vi.fn(async () => undefined),
+  switchModeWithPack: vi.fn(async () => undefined),
+}));
+vi.mock('@mastra/code-sdk/utils/plans', async importOriginal => ({
+  ...(await importOriginal<typeof import('@mastra/code-sdk/utils/plans')>()),
+  approvePlanFile: mocks.approvePlanFile,
+}));
+vi.mock('../../model-packs/apply.js', () => ({ switchModeWithPack: mocks.switchModeWithPack }));
+
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
@@ -21,6 +32,11 @@ function createTmpProjectWithPlan(title: string, plan: string, filename = getPla
   fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
   return projectPath;
 }
+
+beforeEach(() => {
+  mocks.approvePlanFile.mockClear();
+  mocks.switchModeWithPack.mockClear();
+});
 
 afterEach(() => {
   while (tmpProjects.length) {
@@ -133,12 +149,59 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
+describe('handleAskQuestion PermissionResult hook', () => {
+  it('reports an answered question', async () => {
+    const { ctx, state } = createCtx();
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+    const options = [{ label: 'Yes' }, { label: 'No' }];
+
+    const promise = handleAskQuestion(ctx, 'q1', 'Continue?', options);
+    expect(runPermissionResult).not.toHaveBeenCalled();
+    state.activeInlineQuestion!.handleInput('\r');
+    await promise;
+
+    expect(runPermissionResult).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith('ask_question', 'q1', 'ask_user', 'answered', {
+      question: 'Continue?',
+      options,
+      selectionMode: undefined,
+    });
+  });
+
+  it('reports a skipped question as dismissed', async () => {
+    const { ctx, state } = createCtx();
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+
+    const promise = handleAskQuestion(ctx, 'q1', 'Continue?', [{ label: 'Yes' }, { label: 'No' }]);
+    state.activeInlineQuestion!.handleInput('\x1b');
+    await promise;
+
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q1', resumeData: '(skipped)' });
+    expect(runPermissionResult).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith(
+      'ask_question',
+      'q1',
+      'ask_user',
+      'dismissed',
+      expect.objectContaining({ question: 'Continue?' }),
+    );
+  });
+});
+
+const PLAN_GOAL = { id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5', objective: 'plan' };
+
 function createPlanApprovalCtx(projectPath?: string) {
   const sendSignal = vi.fn().mockReturnValue({
     id: 'sig-1',
     type: 'system-reminder',
     accepted: Promise.resolve({ accepted: true, runId: 'run-1' }),
   });
+  const listeners = new Set<(event: any) => void>();
+  const emitSessionEvent = (event: any) => {
+    for (const listener of [...listeners]) listener(event);
+  };
   const state = {
     ...createMockState({
       session: {
@@ -147,6 +210,10 @@ function createPlanApprovalCtx(projectPath?: string) {
         respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
         abort: vi.fn(),
         sendSignal,
+        subscribe: vi.fn((listener: (event: any) => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        }),
       },
     }),
     goalManager: {
@@ -165,7 +232,6 @@ function createPlanApprovalCtx(projectPath?: string) {
     ui: { requestRender: vi.fn(), setFocus: vi.fn(), hasOverlay: vi.fn(() => false) },
     editor: {},
     pendingSubmitPlanComponents: new Map(),
-    planStartedGoalId: undefined,
   } as any;
   const ctx = {
     state,
@@ -173,9 +239,10 @@ function createPlanApprovalCtx(projectPath?: string) {
     showError: vi.fn(),
     addUserMessage: vi.fn(),
     fireMessage: vi.fn(),
-    startGoal: vi.fn().mockResolvedValue(undefined),
+    setGoal: vi.fn().mockResolvedValue(PLAN_GOAL),
+    sendGoalReminder: vi.fn().mockResolvedValue(undefined),
   } as unknown as EventHandlerContext;
-  return { state, ctx, sendSignal };
+  return { state, ctx, sendSignal, listeners, emitSessionEvent };
 }
 
 async function renderPlanApproval(ctx: EventHandlerContext, state: any, planPath = PLAN_PATH) {
@@ -187,21 +254,34 @@ async function renderPlanApproval(ctx: EventHandlerContext, state: any, planPath
 }
 
 describe('handlePlanApproval goal mode', () => {
-  it('approves the plan and hands the title+plan objective off to the normal /goal flow', async () => {
+  function deferredResume(state: any) {
+    let releaseResume!: () => void;
+    const resume = new Promise<void>(resolve => {
+      releaseResume = resolve;
+    });
+    state.session.respondToToolSuspension = vi.fn().mockReturnValue(resume);
+    return releaseResume;
+  }
+
+  it('replaces the goal with the title+plan objective before resuming the approved run', async () => {
     const projectPath = createTmpProjectWithPlan('Ship it', '1. Build\n2. Test');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
 
-    const promise = handlePlanApproval(ctx, 'plan-1', '.mastracode/plans/ship-it.md');
-    // The handler reads the plan from disk asynchronously before creating the
-    // component, so wait for it to be added to the chat container.
-    for (let i = 0; i < 10 && state.chatContainer.children.length === 0; i++) {
-      await new Promise(r => setTimeout(r, 5));
-    }
-    const component = state.chatContainer.children[0];
-
-    await (component as any).onGoal();
+    const { promise, component } = await renderPlanApproval(ctx, state, '.mastracode/plans/ship-it.md');
+    await (component as any).onApprove();
     await promise;
 
+    expect(ctx.setGoal).toHaveBeenCalledTimes(1);
+    expect(ctx.setGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
+    expect(mocks.switchModeWithPack).toHaveBeenCalledWith(ctx, 'build');
+    expect(mocks.switchModeWithPack.mock.invocationCallOrder[0]).toBeLessThan(
+      (state.session.respondToToolSuspension as any).mock.invocationCallOrder[0],
+    );
+    // An already-active goal would otherwise judge the resumed run, which
+    // carries on into implementing the plan.
+    expect((ctx.setGoal as any).mock.invocationCallOrder[0]).toBeLessThan(
+      (state.session.respondToToolSuspension as any).mock.invocationCallOrder[0],
+    );
     expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({
       toolCallId: 'plan-1',
       resumeData: {
@@ -212,30 +292,20 @@ describe('handlePlanApproval goal mode', () => {
       },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
-    // `startGoal` is invoked with the title+plan as the objective and the
-    // default trigger — it owns sending the canonical goal-reminder signal
-    // via `controller.sendSignal`, so the handler does not also send one.
-    expect(ctx.startGoal).toHaveBeenCalledTimes(1);
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
     expect(state.session.sendSignal).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe('goal-123');
   });
 
-  it('releases the event queue while waiting for the plan resume before starting the goal', async () => {
+  it('delivers the goal reminder into the resumed run once the approval result is recorded', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
-    const { state, ctx } = createPlanApprovalCtx(projectPath);
-    let releaseResume!: () => void;
-    const resume = new Promise<void>(resolve => {
-      releaseResume = resolve;
-    });
-    state.session.respondToToolSuspension = vi.fn().mockReturnValue(resume);
+    const { state, ctx, emitSessionEvent, listeners } = createPlanApprovalCtx(projectPath);
+    const releaseResume = deferredResume(state);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-    const approval = (component as any).onGoal();
+    const approval = (component as any).onApprove();
 
     await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
     let handlerResolved = false;
@@ -243,33 +313,153 @@ describe('handlePlanApproval goal mode', () => {
       handlerResolved = true;
     });
     await new Promise(resolve => setTimeout(resolve, 0));
+    // The event queue is released so the resumed run renders as it streams.
     expect(handlerResolved).toBe(true);
-    expect(ctx.startGoal).not.toHaveBeenCalled();
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+
+    // Another tool finishing is not the approval result.
+    emitSessionEvent({ type: 'tool_end', toolCallId: 'other-tool' });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+
+    emitSessionEvent({ type: 'tool_end', toolCallId: 'plan-1' });
+    // Sent while the resumed run is still going — not after it ends.
+    await vi.waitFor(() => expect(ctx.sendGoalReminder).toHaveBeenCalledWith(PLAN_GOAL, { persistIfIdle: true }));
+    expect(listeners.size).toBe(0);
 
     releaseResume();
     await approval;
     await promise;
 
-    expect(ctx.startGoal).toHaveBeenCalledWith('# Test Plan\n\nBuild the feature', 'Goal cancelled.');
-    expect(state.planStartedGoalId).toBe('goal-123');
+    expect(ctx.sendGoalReminder).toHaveBeenCalledTimes(1);
+    expect(ctx.setGoal).toHaveBeenCalledTimes(1);
   });
 
-  it('does not set planStartedGoalId if startGoal does not set a goal', async () => {
+  it('does not send the goal reminder when the resumed run ends without recording the approval', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
-    const { state, ctx } = createPlanApprovalCtx(projectPath);
-    state.goalManager.getGoal = vi.fn(() => undefined);
+    const { state, ctx, emitSessionEvent, listeners } = createPlanApprovalCtx(projectPath);
+    const releaseResume = deferredResume(state);
 
     const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    const approval = (component as any).onApprove();
 
-    await (component as any).onGoal();
+    await vi.waitFor(() => expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1));
+    emitSessionEvent({ type: 'error', error: new Error('resume failed') });
+    releaseResume();
+    await approval;
     await promise;
 
-    expect(ctx.startGoal).toHaveBeenCalledTimes(1);
-    expect(state.planStartedGoalId).toBeUndefined();
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('stops waiting for the approval result when the resume settles first', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
+    await promise;
+
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('falls back to a plain approval when no goal is set', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+    (ctx.setGoal as any).mockResolvedValue(null);
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
+    await promise;
+
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.session.subscribe).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(0);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+  });
+
+  it('still resumes the approved plan when setting the goal throws', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+    (ctx.setGoal as any).mockRejectedValue(new Error('storage unavailable'));
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
+    await promise;
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to set goal: storage unavailable');
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.session.subscribe).not.toHaveBeenCalled();
+    expect(listeners.size).toBe(0);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+  });
+
+  it('approves without setting a goal in Factory mode', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    state.local = undefined;
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    const rendered = component.render(80).join('\n');
+    expect(rendered).toContain('switch to Build mode and implement');
+    expect(rendered).not.toContain('as a goal');
+    await (component as any).onApprove();
+    await promise;
+
+    expect(ctx.setGoal).not.toHaveBeenCalled();
+    expect(ctx.showError).not.toHaveBeenCalled();
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+  });
+
+  it('stops waiting for the approval result when the resume rejects', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
+    state.session.respondToToolSuspension = vi.fn().mockRejectedValue(new Error('resume failed'));
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await expect((component as any).onApprove()).rejects.toThrow('resume failed');
+    await promise;
+
+    expect(listeners.size).toBe(0);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
   });
 });
 
 describe('handlePlanApproval regular approval', () => {
+  it('restores the approval prompt when approval cannot switch to the build model', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    state.hookManager = { runPermissionResult };
+    mocks.switchModeWithPack.mockRejectedValueOnce(new Error('model persistence failed'));
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to start plan: model persistence failed');
+    expect(state.activeInlinePlanApproval).toBe(component);
+    expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
+    expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(state.session.state.set).not.toHaveBeenCalled();
+    expect(state.previousPlanSnapshot).toBeDefined();
+    expect(mocks.approvePlanFile).not.toHaveBeenCalled();
+    expect(runPermissionResult).not.toHaveBeenCalled();
+
+    mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
+    await (component as any).onApprove();
+    await promise;
+
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.previousPlanSnapshot).toBeUndefined();
+    expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
+      path: PLAN_PATH,
+    });
+  });
+
   it('activates an existing streamed submit_plan component in place', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
@@ -287,7 +477,8 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
     expect(state.ui.setFocus).toHaveBeenCalledWith(streamedComponent);
     expect(state.chatContainer.invalidate).not.toHaveBeenCalled();
-    expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
+    expect(streamedComponent.render(80).join('\n')).toContain('as a goal');
+    expect(streamedComponent.render(80).join('\n')).not.toContain('Use as /goal');
     // #20398: the notification now fires at event receipt in the subscription
     // listener, not inside the queued handler.
     expect(ctx.notify).not.toHaveBeenCalled();
@@ -318,9 +509,10 @@ describe('handlePlanApproval regular approval', () => {
     await promise;
   });
 
-  it('approves the plan without sending a handoff signal', async () => {
+  it('approves the plan without sending a handoff signal when no goal could be set', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, sendSignal } = createPlanApprovalCtx(projectPath);
+    (ctx.setGoal as any).mockResolvedValue(null);
     const runPermissionResult = vi.fn().mockResolvedValue(undefined);
     state.hookManager = { runPermissionResult };
 
@@ -345,9 +537,8 @@ describe('handlePlanApproval regular approval', () => {
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
     expect(sendSignal).not.toHaveBeenCalled();
-    // Regular approval should not enter goal mode or set the return flag.
-    expect(ctx.startGoal).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeUndefined();
+    expect(ctx.setGoal).toHaveBeenCalledTimes(1);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
   });
 
   it('rejects the plan by resuming with a rejection then aborting the run host-side', async () => {
@@ -474,23 +665,20 @@ describe('handlePlanApproval with a command overlay open (#21139)', () => {
     expect(state.pendingFocus).toBe(component);
   });
 
-  it.each([['onApprove'], ['onGoal'], ['onReject']])(
-    'does not force editor focus on %s while an overlay is open',
-    async method => {
-      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
-      const { state, ctx } = createPlanApprovalCtx(projectPath);
-      state.ui.hasOverlay.mockReturnValue(true);
+  it.each([['onApprove'], ['onReject']])('does not force editor focus on %s while an overlay is open', async method => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    state.ui.hasOverlay.mockReturnValue(true);
 
-      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-      state.ui.setFocus.mockClear();
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    state.ui.setFocus.mockClear();
 
-      await (component as any)[method]();
-      await promise;
+    await (component as any)[method]();
+    await promise;
 
-      expect(state.ui.setFocus).not.toHaveBeenCalled();
-      expect(state.pendingFocus).toBeUndefined();
-    },
-  );
+    expect(state.ui.setFocus).not.toHaveBeenCalled();
+    expect(state.pendingFocus).toBeUndefined();
+  });
 
   it('keeps the no-overlay behavior: arrival focuses the approval, approve focuses the editor', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');

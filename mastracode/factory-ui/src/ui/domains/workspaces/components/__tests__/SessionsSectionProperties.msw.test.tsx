@@ -1,0 +1,258 @@
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { FactoryUserSession } from '../../services/user-sessions';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
+import {
+  closeSessionProperties,
+  openSessionProperties,
+  openSessionProperty,
+  pickSessionProperty,
+  sessionPropertiesTrigger,
+} from './fixtures/sessionProperties';
+
+const projectRepositoryId = 'repo-1';
+
+const sessions: FactoryUserSession[] = [
+  {
+    id: 'row-mine',
+    sessionId: 'session-mine',
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-me',
+    owner: { id: 'user-me', name: 'Romain' },
+    visibility: 'org',
+    title: 'Fix authentication',
+    branch: 'user/fix-auth',
+    baseBranch: 'main',
+    sandboxId: 'sandbox-1',
+    sandboxWorkdir: '/workspace/mine',
+    materializedAt: '2026-09-04T10:00:00.000Z',
+    createdAt: '2026-09-04T09:00:00.000Z',
+    updatedAt: '2026-09-04T11:00:00.000Z',
+  },
+  {
+    id: 'row-working',
+    sessionId: 'session-working',
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-grace',
+    owner: { id: 'user-grace', name: 'Grace Hopper' },
+    visibility: 'org',
+    title: 'Improve compiler output',
+    branch: 'user/compiler-output',
+    baseBranch: 'main',
+    sandboxId: 'sandbox-2',
+    sandboxWorkdir: '/workspace/working',
+    materializedAt: '2026-09-04T10:00:00.000Z',
+    createdAt: '2026-09-04T08:00:00.000Z',
+    updatedAt: '2026-09-04T10:30:00.000Z',
+  },
+  {
+    id: 'row-initializing',
+    sessionId: 'session-initializing',
+    projectRepositoryId,
+    orgId: 'org-1',
+    userId: 'user-grace',
+    owner: { id: 'user-grace', name: 'Grace Hopper' },
+    visibility: 'org',
+    title: 'Prepare release',
+    branch: 'user/release',
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: '2026-09-04T09:30:00.000Z',
+    updatedAt: '2026-09-04T10:00:00.000Z',
+  },
+];
+
+beforeEach(() => {
+  window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({
+        authEnabled: true,
+        authenticated: true,
+        user: { userId: 'user-me', name: 'Romain', email: 'romain@example.com' },
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: 'factory-1',
+            name: 'Mastra',
+            repositories: [
+              listedRepository(projectRepositoryId, 'mastra-ai/mastra', {
+                branch: 'main',
+              }),
+            ],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: [
+          { runId: 'run-working', resourceId: 'session-working', threadId: 'session-working' },
+          { runId: 'run-initializing', resourceId: 'session-initializing', threadId: 'session-initializing' },
+        ],
+      }),
+    ),
+  );
+});
+
+afterEach(() => {
+  delete window.__MASTRACODE_CONFIG__;
+});
+
+async function renderSection({ waitForIdle = true } = {}) {
+  const { client } = renderWithProviders(
+    <MemoryRouter initialEntries={['/factories/factory-1']}>
+      <ChatSessionContext.Provider value={testChatSession('factory-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
+    </MemoryRouter>,
+  );
+  if (waitForIdle) await waitForMutationsIdle(client);
+}
+
+const sessionRowLabels = () =>
+  screen
+    .getAllByRole('link', { name: /^(Fix authentication|Improve compiler output|Prepare release)$/ })
+    .map(row => row.getAttribute('aria-label'));
+
+describe('Sessions properties', () => {
+  it("opens on every owner's sessions in one ungrouped list, with nothing changed", async () => {
+    const user = userEvent.setup();
+    await renderSection();
+
+    const all = await screen.findByRole('region', { name: 'All sessions' });
+    expect(await within(all).findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(within(all).getByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
+    expect(screen.getAllByRole('region', { name: /sessions$/ })).toHaveLength(1);
+    expect(sessionPropertiesTrigger()).toBeInTheDocument();
+
+    await openSessionProperties(user);
+    expect(screen.getByRole('menuitem', { name: /^Owner\s*All owners$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Source\s*All sources$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Group\s*None$/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Reset to default' })).toHaveAttribute('aria-disabled', 'true');
+    await closeSessionProperties(user);
+  });
+
+  it('lists a Slack session among the others, and narrows the list to Slack with the Source filter', async () => {
+    const slackSession: FactoryUserSession = {
+      ...sessions[0],
+      id: 'row-slack',
+      sessionId: 'session-slack',
+      userId: 'user-grace',
+      owner: { id: 'user-grace', name: 'Grace Hopper' },
+      title: 'Answer the deploy question',
+      branch: 'slack/1794960854.774509',
+      updatedAt: '2026-09-04T11:30:00.000Z',
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
+        HttpResponse.json({ sessions: [...sessions, slackSession] }),
+      ),
+    );
+    const user = userEvent.setup();
+    await renderSection();
+
+    const all = await screen.findByRole('region', { name: 'All sessions' });
+    expect(await within(all).findByRole('link', { name: 'Answer the deploy question' })).toBeInTheDocument();
+    expect(within(all).getByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Source', 'Slack');
+
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'Fix authentication' })).not.toBeInTheDocument());
+    expect(within(screen.getByRole('region', { name: 'All sessions' })).getAllByRole('link')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'Answer the deploy question' })).toBeInTheDocument();
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('mastracode.sessionFilters') ?? '{}')).toEqual({ source: 'slack' });
+
+    await pickSessionProperty(user, 'Source', 'User');
+
+    expect(await screen.findByRole('link', { name: 'Fix authentication' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Answer the deploy question' })).not.toBeInTheDocument();
+  });
+
+  it('says so when the viewer owns no sessions and picks Mine', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
+        HttpResponse.json({ sessions: sessions.filter(session => session.userId !== 'user-me') }),
+      ),
+    );
+    const user = userEvent.setup();
+    await renderSection();
+
+    expect(await screen.findByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Owner', 'Mine');
+
+    expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
+  });
+
+  it('filters by a specific owner and deduplicates owner choices', async () => {
+    const user = userEvent.setup();
+    await renderSection();
+
+    await pickSessionProperty(user, 'Owner', 'Grace Hopper');
+
+    expect(await screen.findByRole('link', { name: 'Improve compiler output' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Fix authentication' })).not.toBeInTheDocument();
+    });
+
+    await openSessionProperty(user, 'Owner');
+    expect(screen.getAllByRole('menuitemradio', { name: 'Grace Hopper' })).toHaveLength(1);
+    await closeSessionProperties(user);
+  });
+
+  it('uses the existing status precedence and shows a filtered-empty state', async () => {
+    const user = userEvent.setup();
+    await renderSection();
+
+    await pickSessionProperty(user, 'Status', 'Initializing');
+
+    expect(await screen.findByRole('link', { name: 'Prepare release' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Improve compiler output' })).not.toBeInTheDocument();
+
+    await pickSessionProperty(user, 'Owner', 'Mine');
+
+    expect(await screen.findByText('No sessions match these filters')).toHaveAttribute('role', 'status');
+  });
+
+  it('lists sessions by activity with pinned first, and resets a chosen sort', async () => {
+    localStorage.setItem('mastracode.pinnedSessions', JSON.stringify(['session-working']));
+    const user = userEvent.setup();
+    await renderSection();
+
+    await screen.findByRole('link', { name: 'Improve compiler output' });
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
+
+    await pickSessionProperty(user, 'Sort', 'Last updated');
+
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Fix authentication', 'Prepare release']);
+    expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
+
+    await openSessionProperties(user);
+    await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
+
+    await waitFor(() => expect(sessionPropertiesTrigger()).toBeInTheDocument());
+    expect(sessionRowLabels()).toEqual(['Improve compiler output', 'Prepare release', 'Fix authentication']);
+  });
+});

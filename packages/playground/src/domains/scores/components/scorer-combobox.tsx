@@ -1,9 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useScorers } from '../hooks/use-scorers';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ScorerComboboxProps {
   value?: string;
@@ -15,6 +15,7 @@ export interface ScorerComboboxProps {
   disabled?: boolean;
   variant?: ComboboxProps['variant'];
   size?: ComboboxProps['size'];
+  popupWidth?: ComboboxProps['popupWidth'];
   'aria-label'?: string;
   align?: ComboboxProps['align'];
 }
@@ -22,13 +23,14 @@ export interface ScorerComboboxProps {
 export function ScorerCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a scorer...',
-  searchPlaceholder = 'Search scorers...',
+  placeholder = 'Select a scorer',
+  searchPlaceholder = 'Search scorers',
   emptyText = 'No scorers found.',
   className,
   disabled = false,
   variant,
   size,
+  popupWidth,
   'aria-label': ariaLabel,
   align,
 }: ScorerComboboxProps) {
@@ -67,6 +69,7 @@ export function ScorerCombobox({
       disabled={disabled || isLoading || isError}
       variant={variant}
       size={size}
+      popupWidth={popupWidth}
       aria-label={ariaLabel}
       align={align}
     />

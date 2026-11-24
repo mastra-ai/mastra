@@ -91,14 +91,14 @@ describe('agent suggested prompts', () => {
       renderPage();
 
       expect(await screen.findByTestId('thread-history-skeleton')).not.toBeNull();
-      expect(screen.queryByText('How can I help you today?')).toBeNull();
+      expect(screen.queryByTestId('thread-welcome')).toBeNull();
       expect(screen.queryByRole('button', { name: SUGGESTED_PROMPT })).toBeNull();
 
       messagesGate.release();
 
       const suggestedPrompt = await screen.findByRole('button', { name: SUGGESTED_PROMPT });
-      expect(suggestedPrompt.classList.contains('h-auto')).toBe(true);
-      expect(screen.getByText('How can I help you today?')).not.toBeNull();
+      expect(suggestedPrompt).not.toBeNull();
+      expect(screen.getByTestId('thread-welcome')).not.toBeNull();
       expect(screen.queryByTestId('thread-history-skeleton')).toBeNull();
     });
   });

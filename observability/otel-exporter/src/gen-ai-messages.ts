@@ -32,6 +32,8 @@ type GenAIMessagePart =
 type GenAIMessage = {
   role: string;
   parts: GenAIMessagePart[];
+  /** Required on output messages, absent on input messages. */
+  finish_reason?: string;
 };
 
 /**
@@ -93,77 +95,105 @@ const isMastraMessage = (m: unknown): m is MastraMessage => {
  * @returns a jsonified string that contains messages adhering to the OpenTelemetry gen_ai.input.messages and gen_ai.output.messages schema.
  * If parsing fails at any step, the original inputOutputString is returned unmodified.
  */
-export const convertMastraMessagesToGenAIMessages = (inputOutputString: string): string => {
+const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage => {
+  const parts: GenAIMessagePart[] = Array.isArray(m.content)
+    ? m.content.map((c): GenAIMessagePart => {
+        switch (c.type) {
+          case 'text':
+            return { type: 'text', content: c.text };
+          case 'tool-call':
+            return { type: 'tool_call', id: c.toolCallId, name: c.toolName, arguments: JSON.stringify(c.input) };
+          case 'tool-result':
+            return {
+              type: 'tool_call_response',
+              id: c.toolCallId,
+              name: c.toolName,
+              response: JSON.stringify(c.output.value),
+            };
+        }
+      })
+    : [{ type: 'text', content: m.content }];
+  return withFinishReason({ role: m.role, parts }, finishReason);
+};
+
+/**
+ * Model output as recorded on MODEL_STEP / MODEL_INFERENCE spans: `{ text, toolCalls }`.
+ * A tool-only step has `text: ''` and one or more tool calls.
+ */
+type MastraModelOutput = {
+  text?: unknown;
+  toolCalls?: unknown;
+};
+
+const toGenAIOutputMessage = (output: MastraModelOutput, finishReason?: string): GenAIMessage => {
+  const parts: GenAIMessagePart[] = [];
+  const toolCalls = Array.isArray(output.toolCalls) ? output.toolCalls : [];
+  const text = typeof output.text === 'string' ? output.text : undefined;
+  // Keep the text part unless it is empty and the step was tool-only.
+  if (text !== undefined && (text.length > 0 || toolCalls.length === 0)) {
+    parts.push({ type: 'text', content: text });
+  }
+  for (const call of toolCalls) {
+    if (typeof call !== 'object' || call == null) continue;
+    const c = call as { toolCallId?: unknown; toolName?: unknown; args?: unknown; input?: unknown };
+    parts.push({
+      type: 'tool_call',
+      id: String(c.toolCallId ?? ''),
+      name: String(c.toolName ?? ''),
+      arguments: JSON.stringify(c.args ?? c.input),
+    });
+  }
+  return withFinishReason({ role: 'assistant', parts }, finishReason);
+};
+
+const withFinishReason = (message: GenAIMessage, finishReason: string | undefined): GenAIMessage =>
+  finishReason === undefined ? message : { ...message, finish_reason: finishReason };
+
+/** Returns `undefined` when the value is not in a shape that maps to messages. */
+const convert = (inputOutputString: string, finishReason?: string): string | undefined => {
   try {
     const parsedIO = JSON.parse(inputOutputString) as unknown;
-    if (typeof parsedIO !== 'object' || parsedIO == null || (!('messages' in parsedIO) && !('text' in parsedIO))) {
-      // inputOutputString fails initial type guard, just return it
-      return inputOutputString;
+    if (typeof parsedIO !== 'object' || parsedIO == null) {
+      return undefined;
     }
-    // if the IO simply contains a text string, return a single text message
-    // formatted as a gen_ai assistant message, assuming its an assistant response
-    if ('text' in parsedIO) {
-      return JSON.stringify([
-        {
-          role: 'assistant',
-          parts: [{ type: 'text', content: parsedIO.text as string }],
-        } satisfies GenAIMessage,
-      ]);
+    // A bare message list: the shallow prompt preview recorded on
+    // MODEL_STEP / MODEL_INFERENCE spans.
+    if (Array.isArray(parsedIO)) {
+      return parsedIO.every(isMastraMessage)
+        ? JSON.stringify(parsedIO.map(m => toGenAIMessage(m, finishReason)))
+        : undefined;
+    }
+    // Model output `{ text, toolCalls }` becomes one assistant message with a
+    // text part and a tool_call part per tool call.
+    if ('text' in parsedIO || 'toolCalls' in parsedIO) {
+      return JSON.stringify([toGenAIOutputMessage(parsedIO as MastraModelOutput, finishReason)]);
     }
     // if the IO contains messages, convert them to gen_ai messages
-    if (Array.isArray(parsedIO.messages)) {
+    if ('messages' in parsedIO && Array.isArray(parsedIO.messages)) {
       return JSON.stringify(
-        (parsedIO.messages as unknown[]).map(m => {
-          if (!isMastraMessage(m)) {
-            return m;
-          }
-          const role = m.role;
-          let parts: GenAIMessagePart[] = [];
-          if (Array.isArray(m.content)) {
-            parts = m.content.map(c => {
-              switch (c.type) {
-                case 'text':
-                  return {
-                    type: 'text',
-                    content: c.text,
-                  };
-                case 'tool-call':
-                  return {
-                    type: 'tool_call',
-                    id: c.toolCallId,
-                    name: c.toolName,
-                    arguments: JSON.stringify(c.input),
-                  };
-                case 'tool-result':
-                  return {
-                    type: 'tool_call_response',
-                    id: c.toolCallId,
-                    name: c.toolName,
-                    response: JSON.stringify(c.output.value),
-                  };
-                default:
-                  return c;
-              }
-            });
-          } else {
-            parts = [
-              {
-                type: 'text',
-                content: m.content,
-              },
-            ];
-          }
-          return {
-            role,
-            parts,
-          } satisfies GenAIMessage;
-        }),
+        (parsedIO.messages as unknown[]).map(m => (isMastraMessage(m) ? toGenAIMessage(m, finishReason) : m)),
       );
     }
-    // we've failed type-guards, just return original I/O string
-    return inputOutputString;
+    return undefined;
   } catch {
-    // silently fallback to original I/O string
-    return inputOutputString;
+    return undefined;
   }
 };
+
+// Mastra records AI SDK finish reasons. The output messages schema spells these two differently.
+const GENAI_FINISH_REASONS: Record<string, string> = { 'tool-calls': 'tool_call', 'content-filter': 'content_filter' };
+
+/**
+ * Convert model output to `gen_ai.output.messages`. Each output message must carry a
+ * `finish_reason`, so an unrecorded reason is sent as `unknown`, as Mastra's loop does.
+ */
+export const convertMastraOutputToGenAIMessages = (outputString: string, finishReason: string | undefined): string => {
+  const reason = finishReason ? (GENAI_FINISH_REASONS[finishReason] ?? finishReason) : 'unknown';
+  return (
+    convert(outputString, reason) ??
+    JSON.stringify([withFinishReason({ role: 'assistant', parts: [{ type: 'text', content: outputString }] }, reason)])
+  );
+};
+
+export const convertMastraMessagesToGenAIMessages = (inputString: string): string =>
+  convert(inputString) ?? inputString;

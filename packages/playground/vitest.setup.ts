@@ -1,61 +1,32 @@
-import React from 'react';
+import { configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
+import type {} from 'vitest/jsdom';
 
 import { server } from './src/test/msw-server';
 
-// @base-ui's ScrollArea (wrapped by playground-ui's ScrollArea) schedules a
-// deferred viewport measurement state update via requestAnimationFrame after
-// mount. In jsdom that update lands after the synchronous test body, producing
-// noisy "An update to ScrollAreaRoot was not wrapped in act(...)" warnings, and
-// jsdom can't meaningfully measure overflow anyway. The component is a purely
-// presentational scroll container with no business logic to assert, so we swap
-// it for a plain div that preserves the public API (className, viewPortClassName,
-// viewportRef, children). Tests still see their content; the overlay-scrollbar
-// internals are simply not exercised.
-vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
-  const ScrollArea = React.forwardRef<
-    HTMLDivElement,
-    {
-      children?: React.ReactNode;
-      className?: string;
-      viewPortClassName?: string;
-      viewportRef?: React.Ref<HTMLDivElement>;
-      maxHeight?: string | number;
-      autoScroll?: boolean;
-      orientation?: 'vertical' | 'horizontal' | 'both';
-      scrollButtons?: unknown;
-      mask?: unknown;
-      showMask?: unknown;
-    }
-  >(
-    (
-      {
-        children,
-        className,
-        viewPortClassName,
-        viewportRef,
-        // ScrollArea-specific props are intentionally dropped so they never leak
-        // onto the underlying DOM node as unknown attributes.
-        maxHeight: _maxHeight,
-        autoScroll: _autoScroll,
-        orientation: _orientation,
-        scrollButtons: _scrollButtons,
-        mask: _mask,
-        showMask: _showMask,
-        ...props
-      },
-      ref,
-    ) => {
-      return React.createElement(
-        'div',
-        { ref, className, 'data-testid': 'scroll-area', ...props },
-        React.createElement('div', { ref: viewportRef, className: viewPortClassName }, children),
-      );
-    },
-  );
-  ScrollArea.displayName = 'ScrollArea';
-  return { ScrollArea };
+// The last test can leave library work queued: React Query delivers observer notifications in a
+// setTimeout(0) batch, and recharts (used by playground-ui charts) notifies on the next animation frame
+// with a 100ms setTimeout fallback. jsdom is torn down right after the last hook, so on a loaded CI
+// worker those callbacks reach react-dom without a `window` and fail the shard with an unhandled error.
+// Drain them first: the next jsdom frame runs every rAF callback queued before it, or, if a test left
+// jsdom's frame clock stalled, a 100ms timer queued after recharts' own fallback fires after it. A
+// zero-delay timer turn then runs the setTimeout(0) callbacks queued before it.
+afterAll(async () => {
+  if (typeof jsdom === 'undefined') return;
+  vi.useRealTimers();
+  let frameFallback: ReturnType<typeof setTimeout> | undefined;
+  await new Promise(resolve => {
+    jsdom.window.requestAnimationFrame(resolve);
+    frameFallback = setTimeout(resolve, 100);
+  });
+  clearTimeout(frameFallback);
+  await new Promise(resolve => setTimeout(resolve));
 });
+
+// Full-suite runs share CPU across workers; the 1s default makes waitFor flaky under load.
+configure({ asyncUtilTimeout: 3000 });
+
+vi.mock('@mastra/playground-ui/components/ScrollArea', () => import('@/test/mock-scroll-area'));
 
 // React reads this global to decide whether `act(...)` is supported. Vitest's
 // jsdom environment does not set it, so manual `act(...)` calls (outside of
@@ -85,6 +56,12 @@ if (typeof globalThis.window !== 'undefined' && !window.matchMedia) {
 // jsdom does not implement Element.prototype.scrollTo
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+// jsdom does not implement Element.prototype.scrollIntoView, which cmdk calls on the
+// selected item when a command list (e.g. the composer model picker) opens.
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // jsdom does not implement Element.prototype.getAnimations, used by Radix UI
@@ -130,7 +107,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

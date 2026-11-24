@@ -1,17 +1,38 @@
+import { queryOptions, skipToken } from '@tanstack/react-query';
+
+/** Which source-control provider serves the subscriptions route. */
+export type ChangeRequestProvider = 'github' | 'gitlab';
+
 export interface PullRequestSubscription {
   id: string;
   repoFullName: string;
   pullRequestNumber: number;
   status: 'open' | 'closed' | 'merged';
+  /** Absent on older servers. */
+  updatedAt?: string;
   url: string;
 }
 
 export function pullRequestSubscriptionsQueryKey(
-  resourceId: string,
+  sessionId: string,
   threadId: string | undefined,
-  projectPath?: string,
+  provider: ChangeRequestProvider = 'github',
 ) {
-  return ['github', 'subscriptions', resourceId, threadId, projectPath] as const;
+  return [provider, 'subscriptions', sessionId, threadId] as const;
+}
+
+export function pullRequestSubscriptionsQuery(
+  baseUrl: string,
+  sessionId: string,
+  threadId: string | undefined,
+  provider: ChangeRequestProvider,
+  enabled: boolean,
+) {
+  return queryOptions({
+    queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
+    queryFn:
+      enabled && threadId ? () => listPullRequestSubscriptions(baseUrl, sessionId, threadId, provider) : skipToken,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -31,19 +52,23 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
     Number.isInteger(value.pullRequestNumber) &&
     value.pullRequestNumber > 0 &&
     isPullRequestStatus(value.status) &&
+    (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
     typeof value.url === 'string'
   );
 }
 
+/**
+ * Change-request subscriptions for a thread. GitHub and GitLab serve the same
+ * wire shape from their own routes, so the provider only picks the route.
+ */
 export async function listPullRequestSubscriptions(
   baseUrl: string,
-  resourceId: string,
+  sessionId: string,
   threadId: string,
-  projectPath?: string,
+  provider: ChangeRequestProvider = 'github',
 ): Promise<PullRequestSubscription[]> {
-  const params = new URLSearchParams({ resourceId, threadId });
-  if (projectPath) params.set('scope', projectPath);
-  const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
+  const params = new URLSearchParams({ sessionId, threadId });
+  const response = await fetch(`${baseUrl}/web/${provider}/subscriptions?${params}`, { credentials: 'include' });
   if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
 
   const body: unknown = await response.json();

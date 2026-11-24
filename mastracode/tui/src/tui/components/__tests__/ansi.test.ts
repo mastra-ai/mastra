@@ -48,6 +48,13 @@ describe('truncateAnsi', () => {
     expect(visibleWidth(stripAnsi(out))).toBe(5);
   });
 
+  it('measures emoji ZWJ sequences as a single grapheme', () => {
+    const text = '👩‍💻👩‍💻👩‍💻 RECEIVED FULL MESSAGE';
+
+    expect(truncateAnsi(text, visibleWidth(text))).toBe(text);
+    expect(stripAnsi(truncateAnsi(text, 6))).toBe('👩‍💻👩‍💻…');
+  });
+
   it('preserves ANSI sequences while truncating wide characters by terminal display width', () => {
     const out = truncateAnsi(`\x1b[31m${'界'.repeat(4)}\x1b[0m`, 5);
 

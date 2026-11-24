@@ -16,6 +16,21 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
  */
 export type PubSubDeliveryMode = 'pull' | 'push';
 
+/**
+ * The event bus behind workflow execution, streams, signals, background tasks
+ * and schedules.
+ *
+ * Mastra decides how to behave from the capability getters below
+ * (`deliversAcrossProcesses`, `redeliversUnacked`, `supportedModes`, ...), never
+ * from which transport class the instance is. An implementation states what its
+ * transport does by overriding them.
+ *
+ * Evented workflows and evented agents can run on any implementation inside one
+ * process. Running them on several processes needs a pubsub that redelivers
+ * unacknowledged events and a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ */
 export abstract class PubSub {
   abstract publish(
     topic: string,
@@ -56,6 +71,32 @@ export abstract class PubSub {
   }
 
   /**
+   * Delete a single run's retained entries from a topic: every entry published
+   * with `runId`. Used to drop a thread run's entries once storage holds it, so
+   * retained transports (e.g. Redis Streams) stay bounded without touching
+   * entries of other runs.
+   *
+   * Default implementation is a no-op: transports that don't retain anything
+   * per topic have nothing to trim. Same best-effort contract as `clearTopic`.
+   *
+   * @param topic - The topic to trim
+   * @param options.runId - The run whose entries to delete
+   * @param options.producedBefore - Only delete entries whose `data.producedAt`
+   *   is at or before this epoch ms and that aren't `data.pinned`. Used to drop
+   *   the parts of a run that storage already holds while the run continues.
+   * @param options.retainTerminalEvents - Preserve final run-completed, run-failed,
+   *   and run-aborted events, plus run-registered authority metadata, so subscribers
+   *   can recover outcomes without output and reject superseded executions.
+   *   Completion events with status suspended are not final and may be trimmed.
+   */
+  trimTopic(
+    _topic: string,
+    _options: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
    * Delivery modes this PubSub implementation supports.
    *
    * Defaults to `['pull']` for backward compatibility — third-party
@@ -88,6 +129,49 @@ export abstract class PubSub {
    */
   get supportsOffsets(): boolean {
     return false;
+  }
+
+  /**
+   * Whether an event published here can reach a subscriber in another process.
+   * Defaults to `true`, so an implementation is treated as a shared transport
+   * unless it says otherwise: runs are fenced against other processes, and
+   * shutdown detaches from the evented runs other processes may still execute
+   * instead of stopping them.
+   *
+   * Return `false` only when every subscriber lives in the publishing process.
+   * Mastra then skips that cross-process coordination.
+   */
+  get deliversAcrossProcesses(): boolean {
+    return true;
+  }
+
+  /**
+   * Whether a message delivered to a consumer that neither acks nor nacks it
+   * (for example because its process died) is delivered again to a consumer of
+   * the same group once the broker considers it abandoned. Defaults to `false`.
+   *
+   * Workflow recovery leaves the evented runs on such a pubsub to the broker:
+   * the message of the step a dead worker held is redelivered, so no recovery
+   * pass restarts the run. The broker's abandonment threshold must be at least
+   * 30 s, the evented step fence a dead worker leaves behind; a redelivery that
+   * arrives before the fence expires is dropped as a duplicate.
+   *
+   * Evented workflows and agents that run on several processes need `true`
+   * here. Without it, no other worker picks up the step a stopped worker held.
+   */
+  get redeliversUnacked(): boolean {
+    return false;
+  }
+
+  /**
+   * Whether a subscriber that attaches after events were published on `topic`
+   * can still read them (`getHistory`, a replaying subscribe). A publisher that
+   * sends changes against its earlier events resends the whole state when it
+   * can't. Defaults to {@link supportsOffsets}.
+   * @internal
+   */
+  __replaysTopic(_topic: string): boolean {
+    return this.supportsOffsets;
   }
 
   /**
@@ -139,6 +223,35 @@ export abstract class PubSub {
       this.onUnsupportedOffset(offset);
     }
     return this.subscribeWithReplay(topic, cb);
+  }
+
+  /**
+   * The underlying delivery transport, unwrapped through decorators.
+   *
+   * Decorators that delegate delivery (e.g. `CachingPubSub`) override this to
+   * return their inner's raw bus. The `mastra.pubsub` proxy forwards the call
+   * to its target, so it also unwraps transparently. Used to detect when two
+   * PubSub references are backed by the same transport (e.g. an agent's custom
+   * pubsub that is also the Mastra-level bus) so a bridge between them doesn't
+   * double-deliver.
+   * @internal
+   */
+  __rawBus(): PubSub {
+    return this;
+  }
+
+  /**
+   * Identity probe that sees through binding decorators.
+   *
+   * The `mastra.pubsub` proxy binds every method to its target, so calling
+   * `__self()` on the proxy returns the underlying PubSub instance. Used where
+   * reference equality must hold across the proxy (e.g. `CachingPubSub`
+   * refusing to follow itself). Unlike `__rawBus`, this does NOT unwrap
+   * delegating decorators — a `CachingPubSub` returns itself, not its inner.
+   * @internal
+   */
+  __self(): PubSub {
+    return this;
   }
 }
 
@@ -216,6 +329,17 @@ export interface LeaseProvider {
    * silent caller-side fallback.
    */
   transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
+
+  /**
+   * Optional. Returns `true` when `error`, thrown by one of the methods above,
+   * proves the backend is refusing every client, not just this one (e.g. Redis
+   * replaying its dataset after a restart answers `LOADING` to everybody). No
+   * other owner can be granted a lease meanwhile, so a caller whose lease
+   * lapsed may keep waiting for the backend instead of treating it as lost.
+   * Any other error, including a connection failure that may affect only this
+   * caller, must return `false`.
+   */
+  isUnavailableToAll?(error: unknown): boolean;
 }
 
 /**

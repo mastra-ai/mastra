@@ -1,5 +1,7 @@
 import { createServer } from 'node:http';
+import type { ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { MCPServerIcon } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import type { Client } from '@modelcontextprotocol/client';
 import { CLIENT_CAPABILITIES_META_KEY } from '@modelcontextprotocol/server';
@@ -61,12 +63,22 @@ function makeServer(journal: { writes: number; rounds: string[] }) {
   });
 }
 
-/** A 2025-era Streamable HTTP server: it only understands the legacy handshake and the shared verbs. */
-async function legacyServer() {
+/**
+ * A 2025-era Streamable HTTP server: it only understands the legacy handshake and the shared verbs.
+ * With `pushStream`, a GET opens the standalone SSE stream legacy servers push notifications on.
+ */
+async function legacyServer({ pushStream = false }: { pushStream?: boolean } = {}) {
   const methods: string[] = [];
   const httpMethods: string[] = [];
+  const streams: ServerResponse[] = [];
   const httpServer = createServer(async (req, res) => {
     httpMethods.push(req.method ?? '');
+    if (req.method === 'GET' && pushStream) {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      res.flushHeaders();
+      streams.push(res);
+      return;
+    }
     if (req.method !== 'POST') {
       res.writeHead(405).end();
       return;
@@ -84,7 +96,14 @@ async function legacyServer() {
         return reply({
           protocolVersion: '2025-11-25',
           capabilities: { tools: {} },
-          serverInfo: { name: 'legacy', version: '1' },
+          serverInfo: {
+            name: 'legacy',
+            title: 'Legacy Server',
+            version: '1',
+            description: 'A server that only speaks 2025-11-25',
+            websiteUrl: 'https://legacy.example.com',
+            icons: [{ src: 'https://legacy.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'] }],
+          },
         });
       case 'notifications/initialized':
         return res.writeHead(202).end();
@@ -107,6 +126,11 @@ async function legacyServer() {
     url,
     methods,
     httpMethods,
+    /** Pushes a notification on every open standalone SSE stream and returns how many streams were open. */
+    notify: (method: string) => {
+      for (const stream of streams) stream.write(`data: ${JSON.stringify({ jsonrpc: '2.0', method })}\n\n`);
+      return streams.length;
+    },
     close: async () => {
       httpServer.closeAllConnections();
       await new Promise<void>(resolve => httpServer.close(() => resolve()));
@@ -464,6 +488,17 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
     expect(await tools.legacyEcho!.execute!({ text: 'hi' })).toMatchObject({ content: [{ type: 'text', text: 'legacy: hi' }] });
   });
 
+  it('keeps the announced serverInfo only while connected', async () => {
+    client = new InternalMastraMCPClient({ name: 'identity', server: { url: legacy.url } });
+    expect(client.serverInfo).toBeUndefined();
+
+    await client.connect();
+    expect(client.serverInfo).toMatchObject({ name: 'legacy', title: 'Legacy Server', version: '1' });
+
+    await client.disconnect();
+    expect(client.serverInfo).toBeUndefined();
+  });
+
   it('refuses the facilities the legacy revision lacks instead of emulating them', async () => {
     client = new InternalMastraMCPClient({ name: 'auto-listen', server: { url: legacy.url } });
     await client.connect();
@@ -473,6 +508,72 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
     );
     expect(legacy.methods).not.toContain('resources/subscribe');
     expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('registers list-changed handlers without opening subscriptions/listen', async () => {
+    client = new InternalMastraMCPClient({ name: 'list-changed', server: { url: legacy.url } });
+    await client.connect();
+
+    await expect(client.setToolListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    await expect(client.setPromptListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    await expect(client.setResourceListChangedNotificationHandler(() => {})).resolves.toBeUndefined();
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+    expect(legacy.methods).not.toContain('resources/subscribe');
+  });
+
+  it('reconnects with list-changed interest without failing to restore subscriptions/listen', async () => {
+    const errors: LogMessage[] = [];
+    client = new InternalMastraMCPClient({
+      name: 'list-changed-reconnect',
+      server: {
+        url: legacy.url,
+        logger: message => {
+          if (message.level === 'error') errors.push(message);
+        },
+      },
+    });
+    await client.connect();
+    await client.setToolListChangedNotificationHandler(() => {});
+    await client.disconnect();
+    await client.connect();
+
+    expect(errors.some(e => e.message.includes('Failed to restore subscriptions/listen after connecting'))).toBe(false);
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('still refuses resource subscriptions after a list-changed handler is registered', async () => {
+    client = new InternalMastraMCPClient({ name: 'mixed-interest', server: { url: legacy.url } });
+    await client.connect();
+    await client.setToolListChangedNotificationHandler(() => {});
+
+    await expect(client.subscribeResource('policy://public')).rejects.toThrow(
+      "subscriptions/listen needs MCP 2026-07-28, but server 'mixed-interest' negotiated 2025-11-25",
+    );
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('delivers list_changed pushed on the standalone SSE stream to the handler', async () => {
+    await legacy.close();
+    legacy = await legacyServer({ pushStream: true });
+    client = new InternalMastraMCPClient({ name: 'push', server: { url: legacy.url } });
+    await client.connect();
+    const changed = new Promise<void>(resolve => {
+      void client!.setToolListChangedNotificationHandler(resolve);
+    });
+
+    await vi.waitFor(() => expect(legacy.httpMethods).toContain('GET'));
+    await vi.waitFor(() => expect(legacy.notify('notifications/tools/list_changed')).toBeGreaterThan(0));
+    await changed;
+    expect(legacy.methods).not.toContain('subscriptions/listen');
+  });
+
+  it('resolves tools.onListChanged on MCPClient for a legacy server', async () => {
+    const mcpClient = new MCPClient({ id: 'legacy-on-list-changed', servers: { older: { url: legacy.url } } });
+    try {
+      await expect(mcpClient.tools.onListChanged('older', () => {})).resolves.toBeUndefined();
+    } finally {
+      await mcpClient.disconnect();
+    }
   });
 
   it("skips the probe when pinned to 'legacy'", async () => {
@@ -502,6 +603,59 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
       expect(mcpClient.getServerProtocolVersions()).toEqual({ current: undefined, older: undefined });
       await mcpClient.listTools();
       expect(mcpClient.getServerProtocolVersions()).toEqual({ current: '2026-07-28', older: '2025-11-25' });
+    } finally {
+      await mcpClient.disconnect();
+      await served.close();
+    }
+  });
+
+  it('reports the identity each server announced on MCPClient, and forgets it on disconnect', async () => {
+    const served = await serveHTTP(makeServer({ writes: 0, rounds: [] }));
+    const mcpClient = new MCPClient({
+      id: 'server-info',
+      servers: { current: { url: served.url }, older: { url: legacy.url } },
+    });
+    try {
+      expect(mcpClient.getServerInfo()).toEqual({ current: undefined, older: undefined });
+      await mcpClient.listTools();
+      expect(mcpClient.getServerInfo()).toEqual({
+        current: expect.objectContaining({ name: 'Lifecycle Server', version: '1.0.0' }),
+        older: {
+          name: 'legacy',
+          title: 'Legacy Server',
+          version: '1',
+          description: 'A server that only speaks 2025-11-25',
+          websiteUrl: 'https://legacy.example.com',
+          icons: [{ src: 'https://legacy.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'] }],
+        },
+      });
+      await mcpClient.disconnect();
+      expect(mcpClient.getServerInfo()).toEqual({ current: undefined, older: undefined });
+    } finally {
+      await mcpClient.disconnect();
+      await served.close();
+    }
+  });
+
+  it('receives the full identity an MCPServer is configured with', async () => {
+    const icons: MCPServerIcon[] = [
+      { src: 'https://identity.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'], theme: 'light' },
+      { src: 'https://identity.example.com/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'], theme: 'dark' },
+    ];
+    const identity = {
+      name: 'identity-server',
+      version: '3.1.0',
+      title: 'Identity Server',
+      description: 'Announces every Implementation field',
+      websiteUrl: 'https://identity.example.com',
+      icons,
+    };
+    const served = await serveHTTP(new MCPServer({ ...identity, tools: {} }));
+    const mcpClient = new MCPClient({ id: 'full-identity', servers: { identity: { url: served.url } } });
+    try {
+      await mcpClient.listTools();
+      expect(mcpClient.getServerProtocolVersions()).toEqual({ identity: '2026-07-28' });
+      expect(mcpClient.getServerInfo()).toEqual({ identity });
     } finally {
       await mcpClient.disconnect();
       await served.close();

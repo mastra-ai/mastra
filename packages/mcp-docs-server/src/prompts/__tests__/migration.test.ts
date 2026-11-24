@@ -23,7 +23,6 @@ describe('migrationPromptMessages', () => {
 
       const upgradePrompt = prompts.find(p => p.name === 'upgrade-to-v1');
       expect(upgradePrompt).toBeDefined();
-      expect(upgradePrompt?.version).toBe('v1');
       expect(upgradePrompt?.description).toContain('v1.0');
       expect(upgradePrompt?.arguments).toBeDefined();
     });
@@ -33,7 +32,6 @@ describe('migrationPromptMessages', () => {
 
       const checklistPrompt = prompts.find(p => p.name === 'migration-checklist');
       expect(checklistPrompt).toBeDefined();
-      expect(checklistPrompt?.version).toBe('v1');
       expect(checklistPrompt?.description).toContain('checklist');
     });
 

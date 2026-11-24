@@ -1,6 +1,8 @@
 import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
 
+import { sourceMetadata } from './boardItems';
+import { githubAvatarUrl } from './githubAvatar';
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './services/audit';
 import type { WorkItem } from './services/workItems';
 
@@ -26,34 +28,35 @@ function metadataString(source: Record<string, unknown>, key: string): string | 
 }
 
 /**
- * Best-effort creator attribution for external items. GitHub issues/PRs expose
- * the opener under `metadata.author`; Linear issues store the reporter under
- * `metadata.creator`/`metadata.linearCreator`. GitHub also gives us an avatar
- * URL directly from `github.com/<login>.png` — Linear doesn't publish a stable
- * public avatar URL, so those fall through to initials.
+ * Best-effort creator attribution for external items. GitHub exposes a stable
+ * public avatar URL; GitLab and Linear names fall through to initials.
  */
 function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
   if (item.source === 'github-issue' || item.source === 'github-pr') {
-    const author = metadataString(item.metadata, 'author');
+    const author = metadataString(sourceMetadata(item), 'author');
     if (!author) return undefined;
     return {
       id: `github:${author}`,
       name: author,
-      avatarUrl: `https://github.com/${encodeURIComponent(author)}.png?size=64`,
+      avatarUrl: githubAvatarUrl(author),
     };
   }
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
+    const author = metadataString(sourceMetadata(item), 'author');
+    return author ? { id: `gitlab:${author}`, name: author } : undefined;
+  }
   if (item.source === 'linear-issue') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'linearCreator');
-    if (!creator) return undefined;
-    return { id: `linear:${creator}`, name: creator };
+    const creator =
+      metadataString(sourceMetadata(item), 'creator') ?? metadataString(sourceMetadata(item), 'linearCreator');
+    return creator ? { id: `linear:${creator}`, name: creator } : undefined;
   }
   if (item.source === 'jira-issue') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
+    const creator = metadataString(sourceMetadata(item), 'creator') ?? metadataString(sourceMetadata(item), 'author');
     if (!creator) return undefined;
     return { id: `jira:${creator}`, name: creator };
   }
   if (item.source === 'incidentio-follow-up') {
-    const creator = metadataString(item.metadata, 'creator') ?? metadataString(item.metadata, 'author');
+    const creator = metadataString(sourceMetadata(item), 'creator') ?? metadataString(sourceMetadata(item), 'author');
     if (!creator) return undefined;
     return { id: `incidentio:${creator}`, name: creator };
   }
@@ -61,24 +64,33 @@ function externalCreatorProfile(item: WorkItem): AuditActorProfile | undefined {
 }
 
 /**
- * Best-effort current-assignee attribution for Linear issues. When present the
- * card treats the assignee as the "last worker" (they own the issue right
- * now), and the timeline gets a separate `assigned` event so the reporter and
- * assignee are both visible.
+ * Best-effort current-assignee attribution for GitLab and Linear issues. The
+ * assignee is the current owner and is also represented in the activity rail.
  */
 function externalAssigneeProfile(item: WorkItem): AuditActorProfile | undefined {
+  if (item.source === 'gitlab-issue' || item.source === 'gitlab-pr') {
+    const assignees = sourceMetadata(item).assignees;
+    const assignee =
+      metadataString(sourceMetadata(item), 'assignee') ??
+      (Array.isArray(assignees)
+        ? assignees.find(value => typeof value === 'string' && value.trim())?.trim()
+        : undefined);
+    return assignee ? { id: `gitlab:${assignee}`, name: assignee } : undefined;
+  }
   if (item.source === 'linear-issue') {
-    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'linearAssignee');
+    const assignee =
+      metadataString(sourceMetadata(item), 'assignee') ?? metadataString(sourceMetadata(item), 'linearAssignee');
     if (!assignee) return undefined;
     return { id: `linear:${assignee}`, name: assignee };
   }
   if (item.source === 'jira-issue') {
-    const assignee = metadataString(item.metadata, 'assignee');
+    const assignee = metadataString(sourceMetadata(item), 'assignee');
     if (!assignee) return undefined;
     return { id: `jira:${assignee}`, name: assignee };
   }
   if (item.source === 'incidentio-follow-up') {
-    const assignee = metadataString(item.metadata, 'assignee') ?? metadataString(item.metadata, 'incidentioAssignee');
+    const assignee =
+      metadataString(sourceMetadata(item), 'assignee') ?? metadataString(sourceMetadata(item), 'incidentioAssignee');
     if (!assignee) return undefined;
     return { id: `incidentio:${assignee}`, name: assignee };
   }
@@ -154,15 +166,6 @@ function latestStageWorker(item: WorkItem): { actorId: string; occurredAt: strin
   }, undefined);
 }
 
-export function workItemHumanActorIds(item: WorkItem): string[] {
-  const actorIds = [
-    item.createdBy,
-    ...item.stageHistory.flatMap(entry => [entry.by, entry.exitedBy]),
-    ...Object.values(item.sessions).map(session => session.startedBy),
-  ].filter(isHumanActorId);
-  return [...new Set(actorIds)];
-}
-
 export function workItemActivity(item: WorkItem, page: AuditEventPage | undefined): WorkItemActivity {
   const actors = page?.actors ?? {};
   const auditEvents = page?.events.filter(event => targetsWorkItem(event, item.id)) ?? [];
@@ -203,9 +206,4 @@ export function workItemActivity(item: WorkItem, page: AuditEventPage | undefine
   // the current assignee ("who owns this now") over the reporter/opener.
   const externalFallback = assignee ?? creator;
   return { events, extraActors, ...(externalFallback ? { lastWorker: externalFallback } : {}) };
-}
-
-/** Comments render as themselves; the audit row each one also writes would show it twice. */
-export function timelineEvents(activity: WorkItemActivity): AuditEvent[] {
-  return activity.events.filter(event => !event.action.includes('.comment_'));
 }

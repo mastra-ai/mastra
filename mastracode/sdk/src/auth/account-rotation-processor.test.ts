@@ -9,7 +9,7 @@
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { TripWire } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -24,8 +24,8 @@ import { setCredentialStoreProvider } from '../agents/credential-resolver.js';
 import { createRequestScopedCredentialStore } from '../agents/model.js';
 import {
   ACCOUNT_SWITCH_PART_TYPE,
-  PACK_FALLBACK_PART_TYPE,
-  PACK_FALLBACK_STATE_KEY,
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   accountSwitchNoticeText,
@@ -136,13 +136,108 @@ function makeArgs(overrides: Partial<Record<string, any>> = {}) {
 }
 
 afterEach(() => {
+  setCredentialStoreProvider(undefined);
   vi.restoreAllMocks();
   while (tempDirs.length) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }
 });
 
+const CODEX_URL = 'https://chatgpt.com/backend-api/codex/responses';
+
+/**
+ * A response body that fails after HTTP 200, as the AI SDK reports it
+ * (provider-utils `wrapResponseBodyStream` + `handleFetchError`), here at the
+ * ChatGPT Codex 900 s stream cut.
+ */
+function streamCutError(): Error {
+  const socket = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' });
+  const terminated = new TypeError('terminated', { cause: socket });
+  return Object.assign(new Error('Failed to process successful response', { cause: terminated }), {
+    name: 'AI_APICallError',
+    statusCode: 200,
+    url: CODEX_URL,
+    isRetryable: true,
+  });
+}
+
+/** The error frame the Codex backend sends before closing a stream at 900 s (openai/codex#51886). */
+const STREAM_LIMIT_FRAME = {
+  type: 'error',
+  sequence_number: 29810,
+  error: {
+    type: 'server_error',
+    code: 'request_timeout',
+    message: 'stream error: stream disconnected before completion: stream closed before response.completed',
+    param: null,
+  },
+};
+
 describe('classifyRotationError (locked Q7 taxonomy)', () => {
+  it('classifies a stream cut after HTTP 200 as a stream cut, not an outage', () => {
+    expect(classifyRotationError(streamCutError())).toEqual({ kind: 'stream-cut' });
+    expect(classifyRotationError(new Error('provider request failed', { cause: streamCutError() }))).toEqual({
+      kind: 'stream-cut',
+    });
+  });
+
+  it('classifies the Codex request_timeout stream frame as a stream cut', () => {
+    expect(classifyRotationError(STREAM_LIMIT_FRAME)).toEqual({ kind: 'stream-cut' });
+  });
+
+  it('classifies the request_timeout frame as @ai-sdk/openai raises it, despite its derived 504', async () => {
+    const OUTPUT_FRAME = {
+      type: 'response.output_text.delta',
+      content_index: 0,
+      delta: 'Partial output.',
+      item_id: 'msg-1',
+      logprobs: [],
+      output_index: 0,
+      sequence_number: 1,
+    };
+    const providerError = async (frames: Array<Record<string, unknown>>) => {
+      const { createOpenAI } = await import('@ai-sdk/openai');
+      const openai = createOpenAI({
+        apiKey: 'test-key',
+        fetch: async () =>
+          new Response(frames.map(frame => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(''), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      });
+      try {
+        const { stream } = await openai.responses('gpt-5.4').doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+        });
+        for await (const chunk of stream) {
+          if (chunk.type === 'error') return chunk.error;
+        }
+      } catch (error) {
+        return error;
+      }
+      throw new Error('Expected the stream to fail');
+    };
+
+    // After output the frame arrives as a stream error chunk; before any output the provider throws it.
+    const midStream = await providerError([OUTPUT_FRAME, STREAM_LIMIT_FRAME]);
+    const beforeOutput = await providerError([STREAM_LIMIT_FRAME]);
+    expect(midStream).toMatchObject({ code: 'request_timeout', statusCode: 504 });
+    expect(beforeOutput).toMatchObject({ statusCode: 504, data: STREAM_LIMIT_FRAME });
+    expect(classifyRotationError(midStream)).toEqual({ kind: 'stream-cut' });
+    expect(classifyRotationError(beforeOutput)).toEqual({ kind: 'stream-cut' });
+  });
+
+  it('keeps hopping on network failures and 5xx that never got a response', () => {
+    const refused = new Error('fetch failed', {
+      cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:443'), { code: 'ECONNREFUSED' }),
+    });
+    expect(classifyRotationError(refused)).toEqual({ kind: 'hop' });
+    expect(classifyRotationError(apiError(502, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
+    expect(classifyRotationError(apiError(504, { url: CODEX_URL }))).toEqual({ kind: 'hop' });
+    expect(classifyRotationError({ type: 'error', error: { type: 'server_error', message: 'boom' } })).toEqual({
+      kind: 'hop',
+    });
+  });
   it('rejects prototype-chain names as account-switch reasons', () => {
     expect(isAccountSwitchReason('toString')).toBe(false);
     expect(isAccountSwitchReason('constructor')).toBe(false);
@@ -164,6 +259,13 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(new Error('You have exceeded your usage limit for Claude Max'))).toEqual({
       kind: 'rotate',
       reason: 'quota-exhausted',
+    });
+  });
+
+  it('rotates on a rate limit a provider reports as a plain 400', () => {
+    expect(classifyRotationError(apiError(400, { message: 'Rate limit exceeded' }))).toEqual({
+      kind: 'rotate',
+      reason: 'rate-limit',
     });
   });
 
@@ -215,6 +317,52 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(wrapper)).toEqual(expected);
   });
 
+  it.each([
+    [
+      'an authentication error named only in the body',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+      }),
+      { kind: 'rotate', reason: 'auth-failed' },
+    ],
+    [
+      'a usage limit named only in the body detail',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"detail":"You have hit your usage limit for this plan."}',
+      }),
+      { kind: 'rotate', reason: 'quota-exhausted' },
+    ],
+    [
+      'a rate-limit stream frame',
+      { type: 'error', error: { type: 'rate_limit_error', message: 'This account has exceeded its rate limit.' } },
+      { kind: 'rotate', reason: 'rate-limit' },
+    ],
+    [
+      'an overloaded stream frame',
+      { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      { kind: 'hop' },
+    ],
+  ] as const)('reads %s through the shared provider reader', (_label, error, expected) => {
+    expect(classifyRotationError(error)).toEqual(expected);
+  });
+
+  it.each([
+    [429, { kind: 'rotate', reason: 'rate-limit' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [503, { kind: 'hop' }],
+  ] as const)('keeps classifying a numeric status %d', (status, expected) => {
+    expect(classifyRotationError(Object.assign(new Error('request failed'), { status }))).toEqual(expected);
+  });
+
+  it.each([
+    [503, { kind: 'hop' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [404, { kind: 'never' }],
+  ] as const)('lets a numeric status %d outrank usage-limit wording', (status, expected) => {
+    const error = Object.assign(new Error('Your weekly limit has been reached'), { status });
+    expect(classifyRotationError(error)).toEqual(expected);
+  });
+
   it('classifies a nested ProviderAuthRequiredError', () => {
     const wrapper = new Error('provider request failed', { cause: new ProviderAuthRequiredError('Login required') });
     expect(classifyRotationError(wrapper)).toEqual({ kind: 'rotate', reason: 'auth-failed' });
@@ -225,6 +373,9 @@ describe('provider attribution', () => {
   it('maps built-in OpenAI model ids to the Codex OAuth provider', () => {
     expect(providerFromModelId('openai/gpt-5.6-sol')).toBe('openai-codex');
     expect(providerFromModelId('mastracode/openai/gpt-5.6-sol')).toBe('openai-codex');
+    expect(providerFromModelId('kimi-code-plan-cn/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('mastracode/kimi-for-coding/k3')).toBe('kimi-for-coding');
+    expect(providerFromModelId('kimi-code-plan-global/k3')).toBeUndefined();
   });
 
   it('reads rewritten requestUrl fields and rejects lookalike hosts', () => {
@@ -258,6 +409,49 @@ describe('provider attribution', () => {
 });
 
 describe('AccountRotationProcessor.processAPIError', () => {
+  it('retries a cut stream on the same account and never declares a persistent outage', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 64 });
+    const emitEvent = vi.fn();
+    const requestContext = { get: (key: string) => (key === 'controller' ? { emitEvent } : undefined) };
+    const args = makeArgs({ error: Object.assign(streamCutError(), { url: ANTHROPIC_URL }), requestContext });
+
+    // MAX_STREAM_CUT_RETRIES (2) same-account retries, then the error surfaces.
+    const MAX_STREAM_CUT_RETRIES = 2;
+    const results = [];
+    for (let attempt = 0; attempt < MAX_STREAM_CUT_RETRIES + 1; attempt++) {
+      results.push(await processor.processAPIError({ ...args, retryCount: attempt + 1 } as any));
+    }
+
+    expect(results).toEqual([
+      ...Array.from({ length: MAX_STREAM_CUT_RETRIES }, () => ({ retry: true })),
+      { retry: false },
+    ]);
+    // No account was switched or marked unavailable, and no fallback was announced.
+    expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(readAuthJson(seeded.authPath)[`accounts:${seeded.accountA.id}`]).toMatchObject({ active: true });
+    expect(args.rotateResponseMessageId).toHaveBeenCalledTimes(MAX_STREAM_CUT_RETRIES);
+    expect(emitEvent).toHaveBeenCalledTimes(MAX_STREAM_CUT_RETRIES);
+    expect(emitEvent.mock.calls.map(([event]) => event.message).join('\n')).not.toMatch(/persistent outage/i);
+  });
+
+  it('gives each model step its own stream-cut budget', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 64 });
+    const args = makeArgs({ error: Object.assign(streamCutError(), { url: ANTHROPIC_URL }) });
+    const cut = (stepNumber: number, retryCount: number) =>
+      processor.processAPIError({ ...args, stepNumber, retryCount } as any);
+
+    // Step 0 spends its whole budget and then succeeds on the last retry.
+    expect([await cut(0, 0), await cut(0, 1)]).toEqual([{ retry: true }, { retry: true }]);
+    // A later step's cut shares the request's processor state but still gets its retries.
+    expect([await cut(1, 0), await cut(1, 1), await cut(1, 2)]).toEqual([
+      { retry: true },
+      { retry: true },
+      { retry: false },
+    ]);
+  });
+
   it.each([429, 402])(
     'rotates to the next account on %d, persists the switch part, swaps the slot',
     async statusCode => {
@@ -612,1094 +806,358 @@ describe('AccountRotationProcessor.processAPIError', () => {
   });
 });
 
-describe('AccountStartNoticeProcessor.processInput', () => {
-  function makeInputArgs(overrides: Partial<Record<string, any>> = {}) {
-    return {
-      state: {} as Record<string, unknown>,
-      messages: [],
-      messageList: { marker: 'message-list' },
-      systemMessages: [],
-      writer: { custom: vi.fn(async () => {}) },
-      requestContext: {
-        get: (key: string) =>
-          key === 'controller' ? { session: { modelId: 'mastracode/anthropic/claude-fable-5' } } : undefined,
-      },
-      ...overrides,
-    };
-  }
+function makeRouteContext(options: {
+  modelId: string;
+  entries: Array<{ id: string; label: string; modelId: string; accountId?: string; memoryModelId?: string }>;
+  threadId?: string;
+}) {
+  const state: Record<string, unknown> = { modelRoute: { entries: options.entries } };
+  const persisted: Record<string, unknown> = {};
+  const order: string[] = [];
+  const requestContext = new RequestContext();
+  const setThreadSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
+    order.push('setting');
+    persisted[key] = value;
+  });
+  const setState = vi.fn(async (updates: Record<string, unknown>) => {
+    order.push('state');
+    Object.assign(state, updates);
+  });
+  const emitEvent = vi.fn();
+  requestContext.set('controller', {
+    session: { modelId: options.modelId, modeId: 'build' },
+    threadId: options.threadId ?? 'thread-1',
+    getState: () => state,
+    setThreadSetting,
+    setState,
+    emitEvent,
+  });
+  return { requestContext, state, persisted, order, setThreadSetting, setState, emitEvent };
+}
 
-  it('emits the start notice once when the active account is not the first entry', async () => {
+function makeInputArgs(requestContext: RequestContext) {
+  return {
+    state: {} as Record<string, unknown>,
+    messageList: [],
+    systemMessages: [],
+    writer: { custom: vi.fn(async () => {}) },
+    requestContext,
+  };
+}
+
+describe('AccountStartNoticeProcessor model routes', () => {
+  it('selects the route entry account before the request starts', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'primary',
+          label: 'Primary',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountB.id,
+        },
+      ],
+    });
+    const args = makeInputArgs(route.requestContext);
+
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as never);
+
+    expect(getRequestAccountSelection(route.requestContext, PROVIDER)).toBe(seeded.accountB.id);
+    expect((args.state as Record<string, unknown>).startNoticeEmitted).toBe(true);
+  });
+
+  it('fails closed when the route pins a missing account', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'primary',
+          label: 'Primary',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: 'anthropic:missing',
+        },
+      ],
+    });
+    const args = makeInputArgs(route.requestContext);
+
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as never);
+
+    expect(isRequestAccountRoutingExhausted(route.requestContext, PROVIDER)).toBe(true);
+    expect(createRequestScopedCredentialStore(seeded.storage, route.requestContext).get(PROVIDER)).toBeUndefined();
+  });
+
+  it('keeps the active account without announcing it when no model route is supplied', async () => {
     const seeded = await makeTwoAccountStorage();
     seeded.storage.activateAccount(PROVIDER, seeded.accountB.id);
-    const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
-    const args = makeInputArgs();
-
-    await processor.processInput(args as any);
-
-    expect(args.writer.custom).toHaveBeenCalledTimes(1);
-    const part = args.writer.custom.mock.calls[0][0];
-    expect(part.type).toBe('data-mastracode-account-switch');
-    expect(part.data).toMatchObject({
-      provider: PROVIDER,
-      from: null,
-      to: { id: seeded.accountB.id, label: 'Account B' },
-      reason: 'starting-on-account',
-    });
-
-    // Once per request: a second call on the same state emits nothing more.
-    await processor.processInput(args as any);
-    expect(args.writer.custom).toHaveBeenCalledTimes(1);
-  });
-
-  it('stays silent when the first account is active or the pool has one account', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
-    const args = makeInputArgs();
-    await processor.processInput(args as any);
-    expect(args.writer.custom).not.toHaveBeenCalled();
-
-    const noModel = makeInputArgs({
-      requestContext: { get: () => undefined },
-    });
-    await processor.processInput(noModel as any);
-    expect(noModel.writer.custom).not.toHaveBeenCalled();
-  });
-
-  it('A14: a targeted route attempts its named account even when thread metadata carries a legacy exhausted mark', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: {
-          activeModelPackId: 'anthropic',
-          packAccountPreferences: {
-            anthropic: { 'anthropic/claude-fable-5': seeded.accountA.id },
-          },
-        },
-      }),
-      'utf-8',
-    );
-    const controllerState = {
-      activeModelPackId: 'anthropic',
-      mastracodeAccountRoutingExhausted: {
-        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
-      },
-    };
     const requestContext = new RequestContext();
     requestContext.set('controller', {
       session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
+      getState: () => ({}),
     });
-    const args = makeInputArgs({ requestContext });
-    const processor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
+    const args = makeInputArgs(requestContext);
 
-    // A14: the persisted per-thread set is gone, so a stale mark cannot abort
-    // the turn. The route names A and A is attempted; the pin still forbids
-    // spending the healthy sibling's quota, so B is never activated.
-    await processor.processInput(args as any);
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).not.toBe(seeded.accountB.id);
-  });
+    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as never);
 
-  it('A12: a targeted route never activates a sibling account and its failure goes to the fallback chain', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const accountC = await addThirdAccount(seeded.storage);
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: {
-          activeModelPackId: 'anthropic',
-          packFallbacks: { anthropic: 'custom:Fallback' },
-          packAccountPreferences: {
-            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
-          },
-        },
-      }),
-      'utf-8',
-    );
-    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
-      setState: async (updates: Record<string, unknown>) => {
-        controllerState = { ...controllerState, ...updates };
-      },
-      setThreadSetting: vi.fn(async () => {}),
-    });
-    const inputArgs = makeInputArgs({ requestContext });
-    const startProcessor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
-    await startProcessor.processInput(inputArgs as any);
-
-    const errorArgs = makeArgs({
-      state: inputArgs.state,
-      writer: inputArgs.writer,
-      requestContext,
-    });
-    const rotationProcessor = new AccountRotationProcessor({
-      credentialStore: seeded.storage,
-      maxProcessorRetries: 22,
-    });
-    // The targeted account failed: the route hops to the fallback chain rather
-    // than rotating, so core advances to the next pack model.
-    const result = await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never);
-    expect(result.retry).toBe(false);
-
-    const switchedTo = inputArgs.writer.custom.mock.calls
-      .map(call => call[0])
-      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
-      .map(part => part.data.to.id);
-    // Only the request-start activation of the target — never account A or C.
-    expect(switchedTo).toEqual([seeded.accountB.id]);
-    expect(switchedTo).not.toContain(seeded.accountA.id);
-    expect(switchedTo).not.toContain(accountC.id);
-    // The pool is announced unavailable so the hop is visible, flagged
-    // exclusive: only the pinned account was consulted (A12).
-    const unavailable = inputArgs.writer.custom.mock.calls
-      .map(call => call[0])
-      .find(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to === null);
-    expect(unavailable?.data).toMatchObject({ reason: 'pool-exhausted', exclusive: true });
-    expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (pool exhausted)');
-  });
-
-  it('A12: a pin on another provider’s route does not make this provider exclusive', async () => {
-    // The session resolves to a pinned Anthropic route, but the request that
-    // failed carries a Kimi URL: during a cascade the URL can still describe the
-    // session model, so the pin belongs to an unrelated route. Kimi has a
-    // healthy sibling and must be allowed to rotate onto it — treating the
-    // failure as exclusive would skip rotation and blame a provider that has no
-    // pin.
-    const seeded = await makeTwoAccountStorage();
-    const kimiA = await seeded.storage.addAccount(
-      KIMI_PROVIDER,
-      { access: 'kimi-token-a', refresh: 'kimi-refresh-a', expires: FUTURE },
-      { label: 'Kimi Account A' },
-    );
-    const kimiB = await seeded.storage.addAccount(
-      KIMI_PROVIDER,
-      { access: 'kimi-token-b', refresh: 'kimi-refresh-b', expires: FUTURE },
-      { label: 'Kimi Account B' },
-    );
-    seeded.storage.activateAccount(KIMI_PROVIDER, kimiA.id);
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: {
-          activeModelPackId: 'anthropic',
-          packAccountPreferences: {
-            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
-          },
-        },
-      }),
-      'utf-8',
-    );
-    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
-      setState: async (updates: Record<string, unknown>) => {
-        controllerState = { ...controllerState, ...updates };
-      },
-      setThreadSetting: vi.fn(async () => {}),
-    });
-
-    const errorArgs = makeArgs({ requestContext, state: {} });
-    const rotationProcessor = new AccountRotationProcessor({
-      credentialStore: seeded.storage,
-      maxProcessorRetries: 22,
-    });
-    const result = await rotationProcessor.processAPIError({
-      ...errorArgs,
-      error: apiError(429, { url: 'https://api.kimi.com/coding/v1/messages' }),
-    } as never);
-
-    expect(result.retry).toBe(true);
-    const switchParts = errorArgs.writer.custom.mock.calls
-      .map(call => call[0])
-      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE);
-    expect(switchParts).toHaveLength(1);
-    expect(switchParts[0].data).toMatchObject({
-      provider: KIMI_PROVIDER,
-      reason: 'rate-limit',
-      to: { id: kimiB.id, label: 'Kimi Account B' },
-    });
-    // No pool-unavailable part: Kimi was never declared exhausted, and the
-    // Anthropic pin was not allowed to speak for it.
-    expect(switchParts.some(part => part.data.to === null)).toBe(false);
-  });
-
-  it('A12: a pinned route failing with a persistent outage reads as pinned, not pool-wide', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: {
-          activeModelPackId: 'anthropic',
-          packFallbacks: { anthropic: 'custom:Fallback' },
-          packAccountPreferences: {
-            anthropic: { 'anthropic/claude-fable-5': seeded.accountB.id },
-          },
-        },
-      }),
-      'utf-8',
-    );
-    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
-      setState: async (updates: Record<string, unknown>) => {
-        controllerState = { ...controllerState, ...updates };
-      },
-      setThreadSetting: vi.fn(async () => {}),
-    });
-
-    const errorArgs = makeArgs({ requestContext, state: {} });
-    const rotationProcessor = new AccountRotationProcessor({
-      credentialStore: seeded.storage,
-      maxProcessorRetries: 22,
-    });
-    const result = await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(503) } as never);
-    expect(result.retry).toBe(false);
-
-    const unavailable = errorArgs.writer.custom.mock.calls
-      .map(call => call[0])
-      .find(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to === null);
-    // The sibling subscription was never consulted, so the notice must not
-    // report the whole provider pool as unavailable.
-    expect(unavailable?.data).toMatchObject({ reason: 'persistent-outage', exclusive: true });
-    expect(accountSwitchNoticeText(unavailable!.data)).toBe('Pinned Anthropic account unavailable (persistent outage)');
-  });
-
-  it('A14: an Automatic route resumes at the persisted active account and walks insertion order from there', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const accountC = await addThirdAccount(seeded.storage);
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: {
-          activeModelPackId: 'anthropic',
-          packAccountPreferences: {},
-        },
-      }),
-      'utf-8',
-    );
-    let controllerState: Record<string, unknown> = { activeModelPackId: 'anthropic' };
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
-      setState: async (updates: Record<string, unknown>) => {
-        controllerState = { ...controllerState, ...updates };
-      },
-      setThreadSetting: vi.fn(async () => {}),
-    });
-    const inputArgs = makeInputArgs({ requestContext });
-    const startProcessor = new AccountStartNoticeProcessor({ credentialStore: seeded.storage });
-    await startProcessor.processInput(inputArgs as any);
-
-    const errorArgs = makeArgs({
-      state: inputArgs.state,
-      writer: inputArgs.writer,
-      requestContext,
-    });
-    const rotationProcessor = new AccountRotationProcessor({
-      credentialStore: seeded.storage,
-      maxProcessorRetries: 22,
-    });
-    expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
-    expect((await rotationProcessor.processAPIError({ ...errorArgs, error: apiError(429) } as never)).retry).toBe(true);
-
-    // A14: `Automatic` resumes at the persisted active account (C, activated by
-    // the third `addAccount`) and walks insertion order from there, so the turn
-    // is announced as starting on C and rotation then visits A and B. Starting
-    // at A instead would re-try the account the cursor last moved past.
-    const parts = inputArgs.writer.custom.mock.calls
-      .map(call => call[0])
-      .filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE && part.data.to)
-      .map(part => ({ to: part.data.to.id, reason: part.data.reason }));
-    expect(parts).toEqual([
-      { to: accountC.id, reason: 'starting-on-account' },
-      { to: seeded.accountA.id, reason: 'rate-limit' },
-      { to: seeded.accountB.id, reason: 'rate-limit' },
-    ]);
-  });
-
-  it('A14: a legacy persisted exhausted-route mark no longer aborts the turn at input', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { activeModelPackId: 'anthropic', packAccountPreferences: {} },
-      }),
-      'utf-8',
-    );
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => ({
-        activeModelPackId: 'anthropic',
-        mastracodeAccountRoutingExhausted: {
-          anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id, seeded.accountB.id] },
-        },
-      }),
-    });
-    const args = makeInputArgs({ requestContext });
-
-    // A14: every account marked exhausted by an older build is ignored — the
-    // request runs, so a real provider error can reach the error lane and the
-    // configured fallback chain is reachable. Previously this threw here.
-    await expect(
-      new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(args as any),
-    ).resolves.toBe(args.messageList);
-    expect(args.writer.custom).not.toHaveBeenCalled();
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
-  });
-
-  it('A14: a legacy persisted exhausted mark does not stop Automatic rotation', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { activeModelPackId: 'anthropic', packAccountPreferences: {} },
-      }),
-      'utf-8',
-    );
-    let controllerState: Record<string, unknown> = {
-      activeModelPackId: 'anthropic',
-      mastracodeAccountRoutingExhausted: {
-        anthropic: { 'anthropic/claude-fable-5': [seeded.accountA.id] },
-      },
-    };
-    const setState = vi.fn(async (updates: Record<string, unknown>) => {
-      controllerState = { ...controllerState, ...updates };
-    });
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId: 'anthropic/claude-fable-5', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => controllerState,
-      setState,
-      setThreadSetting: vi.fn(async () => {}),
-      isThreadActive: () => false,
-    });
-    const inputArgs = makeInputArgs({ requestContext });
-    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(inputArgs as any);
-
-    // The stale mark does not exclude A from the pool: A is still the cursor,
-    // so the turn starts on it and the first rotate-classified error moves to B.
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
-    const errorArgs = makeArgs({ state: inputArgs.state, writer: inputArgs.writer, requestContext });
-    const result = await new AccountRotationProcessor({
-      credentialStore: seeded.storage,
-      maxProcessorRetries: 22,
-    }).processAPIError({ ...errorArgs, error: apiError(429) } as never);
-    expect(result.retry).toBe(true);
     expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
-    expect(setState).not.toHaveBeenCalled();
+    expect(args.writer.custom).not.toHaveBeenCalled();
   });
 });
 
-describe('pack-fallback parts', () => {
-  function seedSettingsWithFallbacks(
-    packFallbacks: Record<string, string>,
-    packAccountPreferences?: Record<string, Record<string, string>>,
-  ) {
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { packFallbacks, packAccountPreferences },
-      }),
-      'utf-8',
-    );
-  }
-
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
-    const emitEvent = vi.fn();
-    const setState = vi.fn(async () => {});
-    const setThreadSetting = vi.fn(async () => {});
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId, modeId },
-      threadId: 'thread-1',
-      getState: () => ({ activeModelPackId }),
-      emitEvent,
-      setState,
-      setThreadSetting,
-    });
-    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
-  }
-
-  it('emits a pack-fallback part (and live info event) when the exhausted pool has a fallback pack', async () => {
+describe('model-route fallback parts', () => {
+  it('hops to the next route entry and persists the generic marker before live state', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'anthropic',
+          label: 'Anthropic',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountA.id,
+        },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+      ],
+    });
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
+    args.writer.custom.mockImplementation(async () => {
+      route.order.push('part');
+    });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await processor.processAPIError({ ...args, error: apiError(429) } as never);
-      expect(result.retry).toBe(attempt === 0);
-    }
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
 
-    const parts = args.writer.custom.mock.calls.map(call => call[0]);
-    const packPart = parts.find(part => part.type === PACK_FALLBACK_PART_TYPE);
-    expect(packPart?.data).toMatchObject({
-      from: { packId: 'anthropic', label: 'Anthropic' },
-      to: { packId: 'openai', label: 'OpenAI' },
-      reason: 'pool-exhausted',
-    });
-    expect(args.emitEvent).toHaveBeenCalledWith({
-      type: 'info',
-      message: expect.stringContaining('Switched model pack: Anthropic → OpenAI'),
-    });
-    // Stickiness trigger: session state carries the landed pack + its model
-    // for the current mode, written before the info event.
-    const pendingHop = expect.objectContaining({
-      fromPackId: 'anthropic',
-      toPackId: 'openai',
+    const pending = {
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
       toModelId: 'openai/gpt-5.6-sol',
       threadId: 'thread-1',
       reason: 'pool-exhausted',
-    });
-    expect(args.setThreadSetting).toHaveBeenCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: pendingHop });
-    expect(args.setState).toHaveBeenCalledWith({ [PACK_FALLBACK_STATE_KEY]: pendingHop });
-    expect(args.setThreadSetting.mock.invocationCallOrder[0]).toBeLessThan(
-      args.writer.custom.mock.invocationCallOrder.at(-1)!,
-    );
-    expect(args.writer.custom.mock.invocationCallOrder.at(-1)!).toBeLessThan(
-      args.setState.mock.invocationCallOrder.at(-1)!,
-    );
-  });
-
-  it('re-evaluates subscription routing when a fallback pack lands', async () => {
-    const seeded = await makeTwoAccountStorage();
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
-      { label: 'OpenAI A' },
-    );
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
-      { label: 'OpenAI B' },
-    );
-    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
-    seeded.storage.activateAccount('openai-codex', openaiA!.id);
-    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-
-    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
-    expect(
-      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
-    ).toMatchObject({
-      type: ACCOUNT_SWITCH_PART_TYPE,
-      data: {
-        provider: 'openai-codex',
-        from: { id: openaiA!.id },
-        to: { id: openaiB!.id },
-      },
-    });
-  });
-
-  it('does not activate the target pack preferred account when the hop transcript write fails', async () => {
-    const seeded = await makeTwoAccountStorage();
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
-      { label: 'OpenAI A' },
-    );
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
-      { label: 'OpenAI B' },
-    );
-    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
-    seeded.storage.activateAccount('openai-codex', openaiA!.id);
-    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-    args.writer.custom.mockImplementation(async part => {
-      if (part.type === PACK_FALLBACK_PART_TYPE) throw new Error('transcript unavailable');
-    });
-
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    await expect(processor.processAPIError({ ...args, error: apiError(429) } as never)).rejects.toThrow(
-      'transcript unavailable',
-    );
-
-    // The provider-global active account for the target pack is untouched:
-    // activation happens only after the hop is durable.
-    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiA!.id);
-    expect(
-      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
-    ).toBeUndefined();
-  });
-
-  it('re-arms the start notice on a hop so the retried request re-applies target-pack routing', async () => {
-    const seeded = await makeTwoAccountStorage();
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-a', refresh: 'openai-refresh-a', expires: FUTURE },
-      { label: 'OpenAI A' },
-    );
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'openai-b', refresh: 'openai-refresh-b', expires: FUTURE },
-      { label: 'OpenAI B' },
-    );
-    const [openaiA, openaiB] = seeded.storage.listAccounts('openai-codex');
-    seeded.storage.activateAccount('openai-codex', openaiA!.id);
-    seedSettingsWithFallbacks({ anthropic: 'openai' }, { openai: { 'openai/gpt-5.6-sol': openaiB!.id } });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-    // A switch on the original attempt set the once-per-request guard; the
-    // hop must clear it so the retry on the target pack re-applies routing.
-    args.state.startNoticeEmitted = true;
-    // Force the hop-time best-effort activation to fail (swallowed), leaving
-    // only the start-notice backstop to land the preferred account.
-    const originalActivate = seeded.storage.activateAccount.bind(seeded.storage);
-    let openaiActivations = 0;
-    seeded.storage.activateAccount = ((providerId: string, accountId: string) => {
-      if (providerId === 'openai-codex' && openaiActivations++ === 0) {
-        throw new Error('activation unavailable');
-      }
-      return originalActivate(providerId, accountId);
-    }) as typeof seeded.storage.activateAccount;
-
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-
-    expect(args.state.startNoticeEmitted).toBe(false);
-    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiA!.id);
-
-    args.writer.custom.mockImplementation(async () => {});
-    const pendingHop = args.setState.mock.calls
-      .map(([updates]) => (updates as Record<string, unknown>)[PACK_FALLBACK_STATE_KEY])
-      .find(value => value && typeof value === 'object');
-    const retryContext = new RequestContext();
-    retryContext.set('controller', {
-      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
-      threadId: 'thread-1',
-      getState: () => ({ mastracodePendingPackFallback: pendingHop }),
-    });
-    const retryArgs = {
-      state: args.state,
-      messageList: { marker: 'message-list' },
-      writer: args.writer,
-      requestContext: retryContext,
     };
-    await new AccountStartNoticeProcessor({ credentialStore: seeded.storage }).processInput(retryArgs as any);
-
-    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(openaiB!.id);
-    expect(
-      args.writer.custom.mock.calls.map(([part]) => part).find(part => part.data?.reason === 'preferred-routing'),
-    ).toMatchObject({ data: { to: { id: openaiB!.id } } });
-  });
-
-  it('does not reuse exhausted accounts when the fallback pack uses the same provider', async () => {
-    const seeded = await makeTwoAccountStorage();
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        customModelPacks: [
-          { name: 'Primary', models: { build: 'anthropic/claude-fable-5' } },
-          { name: 'Fallback', models: { build: 'anthropic/claude-fable-5' } },
-        ],
-        models: { packFallbacks: { 'custom:Primary': 'custom:Fallback' }, packAccountPreferences: {} },
+    expect(route.persisted[MODEL_FALLBACK_STATE_KEY]).toMatchObject(pending);
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toMatchObject(pending);
+    expect(route.order).toEqual(['part', 'setting', 'part', 'state']);
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'anthropic', label: 'Anthropic' },
+        to: { entryId: 'openai', label: 'OpenAI' },
+        reason: 'pool-exhausted',
       }),
-      'utf-8',
-    );
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'custom:Primary');
-
-    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: true });
-    expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
-
-    // Exhaustion is recorded as a flag, not a sentinel id: a sentinel would
-    // reach credential lookup and make `get()` fall back to the active
-    // (exhausted) account. The only recorded selection is the real account the
-    // fallback pack's routing landed on.
-    expect(isRequestAccountRoutingExhausted(args.requestContext, PROVIDER)).toBe(true);
-    expect(getRequestAccountSelection(args.requestContext, PROVIDER)).toBe(seeded.accountB.id);
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountB.id);
+    });
   });
 
-  it('fails every credential read once routing marks the provider exhausted', async () => {
+  it('does not ask the host for a thinking default when the session picked its own level', async () => {
     const seeded = await makeTwoAccountStorage();
-    const requestContext = new RequestContext();
-    markRequestAccountRoutingExhausted(requestContext, PROVIDER);
-    const scoped = createRequestScopedCredentialStore(seeded.storage, requestContext);
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5', accountId: seeded.accountA.id },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+      ],
+    });
+    route.state.thinkingLevel = 'medium';
+    const resolveDefaultThinkingLevel = vi.fn(async () => {
+      throw new Error('lookup failed');
+    });
+    const processor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+      resolveDefaultThinkingLevel,
+    });
 
-    // Falling through to the base store would hand back the active account —
-    // the one routing just rejected.
-    expect(scoped.get(PROVIDER)).toBeUndefined();
-    expect(scoped.getStoredApiKey(PROVIDER)).toBeUndefined();
-    expect(await scoped.getApiKey(PROVIDER)).toBeUndefined();
-    expect(await scoped.getOAuthCredential?.(PROVIDER)).toBeUndefined();
-    // A different provider on the same request is unaffected.
-    seeded.storage.setStoredApiKey('openai-codex', 'sk-other');
-    expect(scoped.getStoredApiKey('openai-codex')).toBe('sk-other');
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toMatchObject({ toEntryId: 'openai' });
+    expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
   });
 
-  it('A14: a targeted route never activates a sibling and records no exhausted-route mark', async () => {
+  it('advances through multiple route entries in one request', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks(
-      {},
-      {
-        anthropic: { 'anthropic/claude-fable-5': seeded.accountA.id },
-      },
-    );
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'anthropic',
+          label: 'Anthropic',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountA.id,
+        },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol', accountId: 'openai:missing' },
+        { id: 'copilot', label: 'Copilot', modelId: 'github-copilot/gpt-4.1' },
+      ],
+    });
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
 
-    // The pinned account failed: the route does not rotate to B.
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
     expect(await processor.processAPIError({ ...args, error: apiError(429) } as never)).toEqual({ retry: false });
 
-    // A14: the per-thread skip-list write is gone. The pin alone keeps the
-    // sibling off the route, so nothing persists that a later turn would read
-    // as "this route is dead, abort before trying".
+    const parts = args.writer.custom.mock.calls
+      .map(call => call[0])
+      .filter(part => part.type === MODEL_FALLBACK_PART_TYPE);
+    expect(parts).toHaveLength(2);
+    expect(parts[1]?.data).toMatchObject({
+      from: { entryId: 'openai' },
+      to: { entryId: 'copilot' },
+    });
+  });
+
+  it('uses the pending route entry as the cascade start on an immediate retrigger', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol', accountId: 'openai:missing' },
+        { id: 'copilot', label: 'Copilot', modelId: 'github-copilot/gpt-4.1' },
+      ],
+    });
+    route.state.mastracodePendingModelFallback = {
+      fromEntryId: 'anthropic',
+      toEntryId: 'openai',
+      toModelId: 'openai/gpt-5.6-sol',
+      threadId: 'thread-1',
+      reason: 'pool-exhausted',
+      at: '2026-10-05T00:00:00.000Z',
+    };
+    const args = makeArgs({
+      error: apiError(429, { url: null, modelId: 'openai/gpt-5.6-sol' }),
+      requestContext: route.requestContext,
+    });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+
+    const part = args.writer.custom.mock.calls
+      .map(call => call[0])
+      .find(item => item.type === MODEL_FALLBACK_PART_TYPE);
+    expect(part?.data).toMatchObject({ from: { entryId: 'openai' }, to: { entryId: 'copilot' } });
+  });
+
+  it('does not reuse exhausted accounts when the next route entry uses the same provider', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'primary',
+          label: 'Primary',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountA.id,
+        },
+        {
+          id: 'secondary',
+          label: 'Secondary',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountB.id,
+        },
+      ],
+    });
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(getRequestAccountSelection(route.requestContext, PROVIDER)).toBeUndefined();
     expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
-    expect(
-      args.setThreadSetting.mock.calls.some(([setting]) => setting.key === 'mastracodeAccountRoutingExhausted'),
-    ).toBe(false);
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toMatchObject({ toEntryId: 'secondary' });
   });
 
-  it('does not notify live fallback state when the transcript hop cannot be written', async () => {
+  it('does not publish live fallback state when the transcript write fails', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        {
+          id: 'primary',
+          label: 'Primary',
+          modelId: 'anthropic/claude-fable-5',
+          accountId: seeded.accountA.id,
+        },
+        { id: 'fallback', label: 'Fallback', modelId: 'openai/gpt-5.6-sol' },
+      ],
+    });
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
     args.writer.custom.mockImplementation(async part => {
-      if (part.type === PACK_FALLBACK_PART_TYPE) throw new Error('transcript unavailable');
+      if (part.type === MODEL_FALLBACK_PART_TYPE) throw new Error('transcript unavailable');
     });
-
-    await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    await expect(processor.processAPIError({ ...args, error: apiError(429) } as never)).rejects.toThrow(
-      'transcript unavailable',
-    );
-
-    expect(args.setState).not.toHaveBeenCalledWith(
-      expect.objectContaining({ [PACK_FALLBACK_STATE_KEY]: expect.anything() }),
-    );
-    expect(args.setThreadSetting).toHaveBeenLastCalledWith({ key: PACK_FALLBACK_STATE_KEY, value: undefined });
-    expect(args.emitEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('Switched model pack') }),
-    );
-  });
-
-  it('attributes the hop to the explicit active pack when packs share a model', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ 'custom:Shared Model': 'openai' });
-    const settingsPath = join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json');
-    const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
-    raw.models.activeModelPackId = 'anthropic';
-    raw.customModelPacks = [
-      {
-        name: 'Shared Model',
-        models: { build: 'anthropic/claude-fable-5' },
-        createdAt: '2026-01-01T00:00:00.000Z',
-      },
-    ];
-    writeFileSync(settingsPath, JSON.stringify(raw), 'utf-8');
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'custom:Shared Model');
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-
-    const packPart = args.writer.custom.mock.calls
-      .map(call => call[0])
-      .find(part => part.type === PACK_FALLBACK_PART_TYPE);
-    expect(packPart?.data.from).toEqual({ packId: 'custom:Shared Model', label: 'Shared Model' });
-    expect(packPart?.data.to).toEqual({ packId: 'openai', label: 'OpenAI' });
+    await expect(processor.processAPIError(args as never)).rejects.toThrow('transcript unavailable');
+    expect(route.persisted[MODEL_FALLBACK_STATE_KEY]).toBeUndefined();
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toBeUndefined();
+    expect(route.setState).not.toHaveBeenCalled();
   });
 
-  it('advances the cascade position on a second hop in the same request', async () => {
+  it('hops on a persistent outage from a provider without an account registry', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai', openai: 'github-copilot' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    // Hop 1: anthropic pool exhausts.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-    // Hop 2: the request is now on the openai pack; a persistent outage there
-    // advances the cascade to github-copilot.
-    await processor.processAPIError({
-      ...args,
-      retryCount: 2,
-      error: apiError(500, { url: 'https://api.openai.com/v1/responses' }),
-    } as never);
-
-    const packParts = args.writer.custom.mock.calls
-      .map(call => call[0])
-      .filter(part => part.type === PACK_FALLBACK_PART_TYPE);
-    expect(packParts.map(part => [part.data.from.packId, part.data.to.packId])).toEqual([
-      ['anthropic', 'openai'],
-      ['openai', 'github-copilot'],
-    ]);
-  });
-
-  it('attributes an error without request metadata to the cascade model after a hop', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai', openai: 'github-copilot' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-    const result = await processor.processAPIError({
-      ...args,
-      retryCount: 2,
-      error: new ProviderAuthRequiredError('Fallback provider login expired'),
-    } as never);
-
-    expect(result).toEqual({ retry: false });
-    const parts = args.writer.custom.mock.calls.map(call => call[0]);
-    expect(parts.filter(part => part.type === ACCOUNT_SWITCH_PART_TYPE)).toHaveLength(2);
-    expect(
-      parts
-        .filter(part => part.type === PACK_FALLBACK_PART_TYPE)
-        .map(part => [part.data.from.packId, part.data.to.packId]),
-    ).toEqual([
-      ['anthropic', 'openai'],
-      ['openai', 'github-copilot'],
-    ]);
-  });
-
-  it('does not fall back to the original session provider on an unattributable custom-pack error', async () => {
-    const seeded = await makeTwoAccountStorage();
-    await seeded.storage.addAccount('github-copilot', {
-      access: 'copilot-token',
-      refresh: 'copilot-refresh',
-      expires: FUTURE,
+    const route = makeRouteContext({
+      modelId: 'cerebras/llama-3.3-70b',
+      entries: [
+        { id: 'cerebras', label: 'Cerebras', modelId: 'cerebras/llama-3.3-70b' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
     });
-    seedSettingsWithFallbacks({ anthropic: 'custom:cere', 'custom:cere': 'github-copilot' });
-    const raw = JSON.parse(readFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), 'utf-8'));
-    raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
-    writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5', 'build', 'anthropic');
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-    args.writer.custom.mockClear();
-
-    const result = await processor.processAPIError({
-      ...args,
-      retryCount: 2,
-      error: new ProviderAuthRequiredError('Custom provider login expired'),
-    } as never);
-
-    expect(result).toEqual({ retry: false });
-    const parts = args.writer.custom.mock.calls.map(call => call[0]);
-    expect(parts.some(part => part.type === ACCOUNT_SWITCH_PART_TYPE)).toBe(false);
-    expect(parts.find(part => part.type === PACK_FALLBACK_PART_TYPE)?.data).toMatchObject({
-      from: { packId: 'custom:cere' },
-      to: { packId: 'github-copilot' },
+    const args = makeArgs({
+      error: apiError(500, { url: 'https://api.cerebras.ai/v1/chat/completions' }),
+      requestContext: route.requestContext,
     });
-  });
-
-  it('emits no pack part when the active pack has no fallback configured', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({});
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
 
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-
-    const types = args.writer.custom.mock.calls.map(call => call[0].type);
-    expect(types).not.toContain(PACK_FALLBACK_PART_TYPE);
-  });
-
-  it('announces the hop even when the failing provider has no account registry', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    // xAI: not seeded → no registry entries; persistent outage hops the pack.
-    const result = await processor.processAPIError({
-      ...args,
-      error: apiError(500, { url: 'https://api.x.ai/v1/responses' }),
-    } as never);
-
-    expect(result.retry).toBe(false);
-    const packPart = args.writer.custom.mock.calls
-      .map(call => call[0])
-      .find(part => part.type === PACK_FALLBACK_PART_TYPE);
-    expect(packPart?.data.to).toEqual({ packId: 'openai', label: 'OpenAI' });
-  });
-});
-
-describe('Q14 chain gate (400/unknown never hop packs)', () => {
-  function seedSettingsWithFallbacks(packFallbacks: Record<string, string>) {
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { packFallbacks },
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'cerebras', label: 'Cerebras' },
+        to: { entryId: 'anthropic', label: 'Anthropic' },
+        reason: 'persistent-outage',
       }),
-      'utf-8',
-    );
-  }
-
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
-    const emitEvent = vi.fn();
-    const setState = vi.fn(async () => {});
-    const setThreadSetting = vi.fn(async () => {});
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId, modeId },
-      threadId: 'thread-1',
-      getState: () => ({ activeModelPackId }),
-      emitEvent,
-      setState,
-      setThreadSetting,
     });
-    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
-  }
-
-  it('throws TripWire on a 400 when the session pack has an active fallback chain', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-    const error = apiError(400, { message: 'invalid request: max_tokens too large' });
-
-    const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
-    expect(thrown).toBeInstanceOf(TripWire);
-    expect((thrown as TripWire).message).toBe('invalid request: max_tokens too large');
-    expect((thrown as TripWire).processorId).toBe(processor.id);
-    // No rotation, no parts: the cursor and transcript stay untouched.
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
-    expect(args.writer.custom).not.toHaveBeenCalled();
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
   });
 
-  it('surfaces a 400 with retry:false (no TripWire) when no chain is configured', async () => {
+  it('throws TripWire for a never-rotate error while a route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({});
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    const result = await processor.processAPIError({ ...args, error: apiError(400) } as never);
-    expect(result.retry).toBe(false);
-  });
-
-  it('throws TripWire on an unknown error when a chain is active', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-    const error = new Error('something unexpected');
-
-    const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
-    expect(thrown).toBeInstanceOf(TripWire);
-  });
-
-  it('throws TripWire at retry-budget exhaustion when a chain is active', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    const thrown = await processor
-      .processAPIError({ ...args, retryCount: 3, error: apiError(429) } as never)
-      .catch(e => e);
-    expect(thrown).toBeInstanceOf(TripWire);
-    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
-  });
-
-  it('returns retry:false at retry-budget exhaustion when no chain is configured', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({});
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 3 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    const result = await processor.processAPIError({ ...args, retryCount: 3, error: apiError(429) } as never);
-    expect(result.retry).toBe(false);
-  });
-
-  it('returns retry:false on a 400 when the request is already on the last chain entry', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    // Exhaust the anthropic pool → hop to openai (cascade position advances).
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-    // Now on the openai pack (last entry): a 400 surfaces plainly.
-    const result = await processor.processAPIError({
-      ...args,
-      retryCount: 2,
-      error: apiError(400, { url: 'https://api.openai.com/v1/responses' }),
-    } as never);
-    expect(result.retry).toBe(false);
-  });
-
-  it('still hops on pool exhaustion with a chain active (gate only covers never-classified errors)', async () => {
-    const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
-
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await processor.processAPIError({ ...args, error: apiError(429) } as never);
-      expect(result.retry).toBe(attempt === 0);
-    }
-    const parts = args.writer.custom.mock.calls.map(call => call[0]);
-    expect(parts.some(part => part.type === PACK_FALLBACK_PART_TYPE)).toBe(true);
-  });
-});
-
-describe('cross-provider cascades', () => {
-  function seedSettingsWithFallbacks(packFallbacks: Record<string, string>) {
-    const appDataDir = process.env.MASTRA_APP_DATA_DIR!;
-    mkdirSync(appDataDir, { recursive: true });
-    writeFileSync(
-      join(appDataDir, 'settings.json'),
-      JSON.stringify({
-        onboarding: { completedAt: '2026-01-01T00:00:00.000Z', skippedAt: null, version: 1 },
-        models: { packFallbacks },
-      }),
-      'utf-8',
-    );
-  }
-
-  function makeControllerArgs(modelId: string, modeId = 'build', activeModelPackId = modelId.split('/')[0]) {
-    const emitEvent = vi.fn();
-    const setState = vi.fn(async () => {});
-    const setThreadSetting = vi.fn(async () => {});
-    const requestContext = new RequestContext();
-    requestContext.set('controller', {
-      session: { modelId, modeId },
-      threadId: 'thread-1',
-      getState: () => ({ activeModelPackId }),
-      emitEvent,
-      setState,
-      setThreadSetting,
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+      ],
     });
-    return makeArgs({ requestContext, emitEvent, setState, setThreadSetting });
-  }
-
-  it('scopes the tried-set per provider: the landed pack pool still rotates after a hop', async () => {
-    const seeded = await makeTwoAccountStorage();
-    // Second provider pool: two Codex accounts.
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'token-c', refresh: 'refresh-c', expires: FUTURE },
-      { label: 'Codex C' },
-    );
-    await seeded.storage.addAccount(
-      'openai-codex',
-      { access: 'token-d', refresh: 'refresh-d', expires: FUTURE },
-      { label: 'Codex D' },
-    );
-    seeded.storage.activateAccount('openai-codex', seeded.storage.listAccounts('openai-codex')[0]!.id);
-    seedSettingsWithFallbacks({ anthropic: 'openai' });
+    const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('anthropic/claude-fable-5');
 
-    // Exhaust the anthropic pool → hop to the openai pack.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await processor.processAPIError({ ...args, error: apiError(429) } as never);
-    }
-    // The tried-set now holds both anthropic ids; a Codex 429 must rotate
-    // Codex's own pool, not read anthropic's entries as exhaustion.
-    const codex429 = apiError(429, { url: 'https://chatgpt.com/backend-api/codex/responses' });
-    const rotated = await processor.processAPIError({ ...args, retryCount: 2, error: codex429 } as never);
-    expect(rotated.retry).toBe(true);
-    const codexAccounts = seeded.storage.listAccounts('openai-codex');
-    expect(seeded.storage.getActiveAccount('openai-codex')?.id).toBe(codexAccounts[1]!.id);
-
-    // Second Codex 429: Codex's pool is now genuinely exhausted.
-    const exhausted = await processor.processAPIError({ ...args, retryCount: 3, error: codex429 } as never);
-    expect(exhausted.retry).toBe(false);
+    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
-  it('hops (no TripWire) on a persistent outage from a provider outside the OAuth registry', async () => {
+  it('does not hop on a Codex Fast rejection when the route uses the canonical ID', async () => {
     const seeded = await makeTwoAccountStorage();
-    // Active pack is a custom pack on an unattributable provider (cerebras,
-    // served through the models.dev router) with anthropic as its fallback.
-    seedSettingsWithFallbacks({ 'custom:cere': 'anthropic' });
-    const raw = JSON.parse(readFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), 'utf-8'));
-    raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
-    writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
-    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('cerebras/llama-3.3-70b', 'build', 'custom:cere');
-    const error = apiError(500, { url: 'https://api.cerebras.ai/v1/chat/completions' });
-
-    const result = await processor.processAPIError({ ...args, error } as never);
-    expect(result.retry).toBe(false);
-    const parts = args.writer.custom.mock.calls.map(call => call[0]);
-    const packPart = parts.find(part => part.type === PACK_FALLBACK_PART_TYPE);
-    expect(packPart?.data).toMatchObject({
-      from: { packId: 'custom:cere' },
-      to: { packId: 'anthropic' },
-      reason: 'persistent-outage',
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-6.2-sol:fast',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-6.2-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+      ],
     });
-    // No account part: the provider has no registry to declare unavailable.
-    expect(parts.some(part => part.type === ACCOUNT_SWITCH_PART_TYPE)).toBe(false);
+    const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    await expect(processor.processAPIError(args as never)).rejects.toBeInstanceOf(TripWire);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
-  it('still TripWires a 400 from a provider outside the OAuth registry', async () => {
+  it('returns retry false when no route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
-    seedSettingsWithFallbacks({ 'custom:cere': 'anthropic' });
-    const raw = JSON.parse(readFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), 'utf-8'));
-    raw.customModelPacks = [{ name: 'cere', models: { build: 'cerebras/llama-3.3-70b' } }];
-    writeFileSync(join(process.env.MASTRA_APP_DATA_DIR!, 'settings.json'), JSON.stringify(raw), 'utf-8');
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [{ id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' }],
+    });
+    const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
-    const args = makeControllerArgs('cerebras/llama-3.3-70b', 'build', 'custom:cere');
-    const error = apiError(400, { url: 'https://api.cerebras.ai/v1/chat/completions' });
 
-    const thrown = await processor.processAPIError({ ...args, error } as never).catch(e => e);
-    expect(thrown).toBeInstanceOf(TripWire);
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
   });
 });

@@ -20,8 +20,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
+  description: null,
   revision: 1,
   createdAt: '2026-08-01T09:00:00.000Z',
   updatedAt: '2026-08-05T09:00:00.000Z',
@@ -169,7 +168,7 @@ describe('workItemActivity', () => {
     expect(activity.lastWorker).toEqual({
       id: 'github:octocat',
       name: 'octocat',
-      avatarUrl: 'https://github.com/octocat.png?size=64',
+      avatarUrl: 'https://avatars.githubusercontent.com/octocat?s=64',
     });
   });
 
@@ -200,6 +199,43 @@ describe('workItemActivity', () => {
       name: 'Grace Hopper',
       avatarUrl: 'https://avatars.example/grace.png',
     });
+  });
+
+  it('shows GitLab authors and assignees as distinct external activity', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'gitlab-issue',
+        metadata: { identifier: 'group/project#7', assignee: 'grace', author: 'ada' },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'gitlab:grace', name: 'grace' });
+    expect(activity.extraActors).toEqual({
+      'gitlab:grace': { id: 'gitlab:grace', name: 'grace' },
+      'gitlab:ada': { id: 'gitlab:ada', name: 'ada' },
+    });
+    expect(activity.events.map(candidate => ({ id: candidate.id, actorId: candidate.actorId }))).toEqual([
+      { id: `synthetic-assigned:${item.id}`, actorId: 'gitlab:grace' },
+      { id: `synthetic-created:${item.id}`, actorId: 'gitlab:ada' },
+    ]);
+  });
+
+  it('uses the first GitLab assignee from webhook metadata when the singular field is absent', () => {
+    const activity = workItemActivity(
+      {
+        ...item,
+        createdBy: 'factory-rule-dispatcher',
+        source: 'gitlab-issue',
+        metadata: { author: 'ada', assignees: ['grace', 'linus'] },
+      },
+      { events: [], actors: {} },
+    );
+
+    expect(activity.lastWorker).toEqual({ id: 'gitlab:grace', name: 'grace' });
+    expect(activity.events[0]?.actorId).toBe('gitlab:grace');
   });
 
   it('falls back to the Linear assignee without an avatar url', () => {

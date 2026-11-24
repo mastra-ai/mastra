@@ -1,12 +1,12 @@
 import { z } from 'zod/v4';
-import { Agent, isSupportedLanguageModel } from '../agent';
+import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import type { AgentMemoryOption, ToolsInput } from '../agent/types';
-import { tryStreamWithJsonFallback } from '../agent/utils';
+import type { AgentInstructions, AgentMemoryOption, ToolsInput } from '../agent/types';
+import { isSupportedLanguageModel, tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
-import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -33,11 +33,12 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../processors/index';
-import { RequestContext } from '../request-context';
+import { isReservedRequestContextKey, RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { JSONValue, MastraOnFinishCallback } from '../stream';
 import type { MastraOnStepFinishCallback } from '../stream/types';
+import type { DynamicArgument } from '../types';
 import { selectFields } from '../utils';
 import { createWorkflow } from '../workflows/create';
 import { createStep } from '../workflows/workflow';
@@ -81,7 +82,12 @@ type ScorerTypeShortcuts = {
  */
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
-  instructions: string;
+  /**
+   * System instructions for the judge. Accepts the same forms as `Agent` instructions:
+   * text, system messages (which can carry `providerOptions` such as a cache setting),
+   * or a function of `requestContext` that returns either.
+   */
+  instructions: DynamicArgument<AgentInstructions, any>;
   /**
    * Controls how the judge's structured output schema reaches the model.
    * Defaults to automatic capability-based routing.
@@ -121,9 +127,14 @@ export interface ScorerJudgeConfig {
    */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
+   * Set to `false` to run only the judge's configured `errorProcessors`, with none
+   * of the agent's shared stability defaults added. See `AgentConfig.errorProcessorDefaults`.
+   */
+  errorProcessorDefaults?: boolean;
+  /**
    * Maximum number of times error processors can retry one V2+ judge generation.
    * When errorProcessors are configured and this is omitted, the runtime cap is
-   * 10. Set this explicitly to bound the coordinated retry budget.
+   * 3. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
   /**
@@ -137,7 +148,8 @@ export interface ScorerJudgeConfig {
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
    * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
-   * correct observer model and provider credentials.
+   * correct observer model and provider credentials. Values from the run's `requestContext`
+   * override these values, except for reserved Mastra keys and `MastraMemory`.
    */
   requestContext?: RequestContext<any>;
 }
@@ -146,7 +158,7 @@ export interface ScorerJudgeConfig {
  * Step-level fields override scorer-level judge fields. Processor arrays replace
  * the scorer-level arrays; omit maxProcessorRetries to inherit its numeric cap.
  */
-export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions' | 'requestContext'> & {
   /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
   memory?: AgentMemoryOption;
 };
@@ -198,7 +210,10 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** Expected trajectory config for trajectory scorers. Flows from dataset items or scorer constructor. */
   expectedTrajectory?: TrajectoryExpectation;
 
-  /** Optional request context forwarded to scorers and judge prompts. */
+  /**
+   * Optional request context forwarded to scorer steps and the judge. The judge doesn't
+   * receive the run's reserved Mastra keys or its `MastraMemory` binding.
+   */
   requestContext?: Record<string, any> | RequestContext;
 
   /**
@@ -245,6 +260,13 @@ interface ScorerRun<TInput = any, TOutput = any> {
   /** @internal Framework controls that must not affect scorer execution or returned results. */
   _internal?: {
     emitObservabilityScore?: boolean;
+    /**
+     * Inherited from the scored target's trace (`tracingOptions.hideInput`). Hides the
+     * scorer's own trace input and keeps the judge's reason out of the emitted score.
+     */
+    hideInput?: boolean;
+    /** Inherited from the scored target's trace (`tracingOptions.hideOutput`). */
+    hideOutput?: boolean;
   };
 }
 
@@ -281,6 +303,7 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
+  mastra?: Mastra;
 };
 
 // Simplified AccumulatedResults - don't try to resolve Promise types here.
@@ -970,12 +993,31 @@ class MastraScorer<
     return new RequestContext(Object.entries(requestContext));
   }
 
+  private mergeJudgeRequestContext(
+    runRequestContext?: Record<string, any> | RequestContext,
+  ): RequestContext<any> | undefined {
+    const scorerRequestContext = this.config.judge?.requestContext;
+    // Only the caller's own data passes from the run to the judge. Thread, resource, and scope keys and the
+    // memory binding would put the judge on the caller's thread. The other reserved keys, such as the auth token,
+    // stay out by least privilege. A judge that needs one can set it on `judge.requestContext`.
+    const runEntries = [...(this.normalizeRunRequestContext(runRequestContext)?.entries() ?? [])].filter(
+      ([key]) => key !== 'MastraMemory' && !isReservedRequestContextKey(key),
+    );
+
+    if (runEntries.length === 0) {
+      return scorerRequestContext;
+    }
+
+    return new RequestContext<any>([...(scorerRequestContext?.entries() ?? []), ...runEntries]);
+  }
+
   /**
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
    *
-   * `serializeForSpan()` provides the safe base projection — the framework auth
-   * token is redacted and values are shaped for the trace serializer to bound.
+   * `serializeForSpan()` provides the safe base projection — reserved Mastra keys
+   * (auth token, internal plumbing) are omitted and values are shaped for the
+   * trace serializer to bound.
    * `requestContextKeys` then selects from it:
    * - omitted / empty → nothing is persisted (secure default)
    * - `['*']`         → the full (safe) context
@@ -997,6 +1039,8 @@ class MastraScorer<
 
   async run(input: ScorerRun<TInput, TRunOutput>): Promise<ScorerRunResult<TAccumulatedResults, TInput, TRunOutput>> {
     const { _internal, ...scorerInput } = input;
+    const hideInput = _internal?.hideInput === true;
+    const hideOutput = _internal?.hideOutput === true;
 
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
@@ -1031,6 +1075,7 @@ class MastraScorer<
       name: `scorer run: '${this.id}'`,
       entityType: EntityType.SCORER,
       entityId: this.id,
+      entityName: this.name,
       input: {
         input: prepared.input,
         output: prepared.output,
@@ -1050,6 +1095,11 @@ class MastraScorer<
         ...(prepared.targetTraceId ? { targetTraceId: prepared.targetTraceId } : {}),
         ...(prepared.targetSpanId ? { targetSpanId: prepared.targetSpanId } : {}),
       },
+      // The scorer run is its own trace, so the scored target's hide flags do not reach it
+      // through span parentage. Its spans don't split along the target's input/output: the
+      // run's span input holds the scored output, step inputs and judge prompts hold both, and
+      // the reason can quote either. So hiding either side hides both sides of this trace.
+      ...(hideInput || hideOutput ? { tracingOptions: { hideInput: true, hideOutput: true } } : {}),
       mastra: this.#mastra,
     });
     const run: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string } = {
@@ -1182,7 +1232,10 @@ class MastraScorer<
             scorerName: this.name,
             ...(input.scoreSource ? { scoreSource: input.scoreSource } : {}),
             score: scorerResult.score,
-            ...(typeof scorerResult.reason === 'string' ? { reason: scorerResult.reason } : {}),
+            // A judge's reason routinely quotes the data it scored.
+            ...(typeof scorerResult.reason === 'string' && !hideInput && !hideOutput
+              ? { reason: scorerResult.reason }
+              : {}),
             ...(typeof scorerResult.scoreTraceId === 'string' ? { scoreTraceId: scorerResult.scoreTraceId } : {}),
             ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
             metadata: {
@@ -1245,12 +1298,14 @@ class MastraScorer<
         description: `Scorer step: ${scorerStep.name}`,
         inputSchema: z.any(),
         outputSchema: z.any(),
-        execute: async ({ inputData, getInitData, bail, ...rest }) => {
-          const observabilityContext = resolveObservabilityContext(rest);
+        execute: async ({ inputData, getInitData, bail, tracing, tracingContext, loggerVNext, metrics }) => {
+          const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
           const { accumulatedResults = {}, generatedPrompts = {}, judge } = inputData;
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
-          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const context = this.createScorerContext(scorerStep.name, run, accumulatedResults, {
+            mastra: this.#mastra,
+          });
           const currentSpan = observabilityContext.tracingContext.currentSpan;
           const scorerRunSpan =
             currentSpan?.type === SpanType.SCORER_RUN
@@ -1261,6 +1316,7 @@ class MastraScorer<
             name: `scorer step: '${scorerStep.name}'`,
             entityType: EntityType.SCORER,
             entityId: this.config.id ?? this.config.name,
+            entityName: this.name,
             input: context,
             attributes: {
               step: scorerStep.name,
@@ -1302,10 +1358,13 @@ class MastraScorer<
             throw attachFailedScorerStep(error, scorerStep.name as ScorerStepName);
           }
 
-          if (prompt !== undefined || judgeModel !== undefined) {
+          // Hide flags only clear span input/output, but the judge prompt quotes the scored data.
+          const traceHidesData = stepSpan?.traceState?.hideInput === true || stepSpan?.traceState?.hideOutput === true;
+          const recordedPrompt = traceHidesData ? undefined : prompt;
+          if (recordedPrompt !== undefined || judgeModel !== undefined) {
             stepSpan?.update({
               attributes: {
-                ...(prompt !== undefined ? { prompt } : {}),
+                ...(recordedPrompt !== undefined ? { prompt: recordedPrompt } : {}),
                 ...(judgeModel !== undefined ? { judgeModel } : {}),
               },
             });
@@ -1411,13 +1470,14 @@ class MastraScorer<
     stepName: string,
     run: ScorerRun<TInput, TRunOutput>,
     accumulatedResults: Record<string, any>,
+    executionContext: Pick<StepContext<Record<string, any>, TInput, TRunOutput>, 'mastra'>,
   ) {
     if (stepName === 'generateReason') {
       const score = accumulatedResults.generateScoreStepResult;
-      return { run, results: accumulatedResults, score };
+      return { run, results: accumulatedResults, score, ...executionContext };
     }
 
-    return { run, results: accumulatedResults };
+    return { run, results: accumulatedResults, ...executionContext };
   }
 
   private async executeFunctionStep(scorerStep: ScorerStepDefinition, context: any) {
@@ -1436,7 +1496,9 @@ class MastraScorer<
     }
 
     const prompt = await originalStep.createPrompt(context);
-    const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
+    const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
+    const modelConfig: WidenedMastraModelConfig | undefined =
+      (originalStep.judge?.model as WidenedMastraModelConfig | undefined) ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';
@@ -1455,6 +1517,8 @@ class MastraScorer<
     const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const errorProcessorDefaults =
+      originalStep.judge?.errorProcessorDefaults ?? this.config.judge?.errorProcessorDefaults;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
     const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
@@ -1483,11 +1547,7 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(
-      modelConfig,
-      this.config.judge?.requestContext ?? undefined,
-      this.#mastra,
-    );
+    const resolvedModel = await resolveModelConfig(modelConfig, judgeRequestContext, this.#mastra);
     const judgeModel = resolvedModel.modelId;
     const telemetry: ScorerJudgeTelemetryAccumulator = {
       usage: {},
@@ -1657,6 +1717,7 @@ class MastraScorer<
       ...(inputProcessors ? { inputProcessors } : {}),
       ...(outputProcessors ? { outputProcessors } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
+      ...(errorProcessorDefaults !== undefined ? { errorProcessorDefaults } : {}),
       ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
     if (this.#mastra) {
@@ -1667,7 +1728,7 @@ class MastraScorer<
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
       ...(modelSettings ? { modelSettings } : {}),
-      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
+      ...(judgeRequestContext ? { requestContext: judgeRequestContext } : {}),
     };
     const createJudgeStreamRunOptions = () => ({
       ...judgeRunOptions,
@@ -1740,20 +1801,19 @@ class MastraScorer<
           const object = await result.object;
           const score = (object as { score: number }).score;
           return { result: score, prompt, judgeModel, execution: createExecution(score) };
-        } else {
-          const schema = z.object({
-            score: z.number(),
-          });
-          const standardSchema = toStandardSchema(schema as PublicSchema);
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const score = (result.object as { score: number }).score;
-          return { result: score, prompt, judgeModel, execution: createExecution(score) };
         }
+        const schema = z.object({
+          score: z.number(),
+        });
+        const standardSchema = toStandardSchema(schema as PublicSchema);
+        recordAttempt();
+        result = await judge.generateLegacy(prompt, {
+          output: standardSchemaToJSONSchema(standardSchema),
+          ...judgeRunOptions,
+        });
+        recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+        const score = (result.object as { score: number }).score;
+        return { result: score, prompt, judgeModel, execution: createExecution(score) };
 
         // GenerateReason output must be a string
       } else if (scorerStep.name === 'generateReason') {
@@ -1776,38 +1836,36 @@ class MastraScorer<
         recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
         const reason = result.text;
         return { result: reason, prompt, judgeModel, execution: createExecution(reason) };
-      } else {
-        const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
-        // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
-        // Cast to PublicSchema since outputSchema can be any schema type
-        const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
-        let result;
-        if (isSupportedLanguageModel(resolvedModel)) {
-          // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-          result = await tryStreamWithJsonFallback(judge, prompt, {
-            fallbackJsonPromptInjection,
-            structuredOutput: {
-              schema: standardSchema as any,
-              jsonPromptInjection,
-            },
-            ...createJudgeStreamRunOptions(),
-            ...(onStream ? { onStream } : {}),
-            onStreamAttempt: recordAttempt,
-            onStreamFinish: recordStreamResult,
-          });
-          const object = (await result.object) as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        } else {
-          recordAttempt();
-          result = await judge.generateLegacy(prompt, {
-            output: standardSchemaToJSONSchema(standardSchema),
-            ...judgeRunOptions,
-          });
-          recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
-          const object = result.object as JSONValue;
-          return { result: object, prompt, judgeModel, execution: createExecution(object) };
-        }
       }
+      const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
+      // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
+      // Cast to PublicSchema since outputSchema can be any schema type
+      const standardSchema = toStandardSchema(promptStep.outputSchema as PublicSchema);
+      let result;
+      if (isSupportedLanguageModel(resolvedModel)) {
+        // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
+        result = await tryStreamWithJsonFallback(judge, prompt, {
+          fallbackJsonPromptInjection,
+          structuredOutput: {
+            schema: standardSchema as any,
+            jsonPromptInjection,
+          },
+          ...createJudgeStreamRunOptions(),
+          ...(onStream ? { onStream } : {}),
+          onStreamAttempt: recordAttempt,
+          onStreamFinish: recordStreamResult,
+        });
+        const object = (await result.object) as JSONValue;
+        return { result: object, prompt, judgeModel, execution: createExecution(object) };
+      }
+      recordAttempt();
+      result = await judge.generateLegacy(prompt, {
+        output: standardSchemaToJSONSchema(standardSchema),
+        ...judgeRunOptions,
+      });
+      recordLegacyUsage(result.usage, (result as { steps?: unknown }).steps);
+      const object = result.object as JSONValue;
+      return { result: object, prompt, judgeModel, execution: createExecution(object) };
     } catch (error) {
       const failedExecution = createFailedExecution(error);
       if (failedExecution) {
@@ -2257,7 +2315,7 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
   });
 }
 
-// Export types and interfaces for use in test files
-export type { ScorerConfig, ScorerRun, PromptObject };
+// Export types and interfaces for adapters and test files
+export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };

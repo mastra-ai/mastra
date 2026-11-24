@@ -1,0 +1,162 @@
+import type { McpServerInfo, McpServerTaskSurface, McpToolInfo } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { useMCPServerTools } from '@mastra/react/hooks/mcps';
+import { useMemo, useState } from 'react';
+import { z } from 'zod';
+import { useMcpServerTaskSurfaces } from '../hooks/use-mcp-server-tasks';
+import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
+
+const COLUMNS = 'auto minmax(0, 1fr) auto';
+const COLUMNS_WITH_TASKS = 'auto minmax(0, 1fr) auto auto';
+
+const TOOL_TYPE_LABELS = { tool: 'Tool', agent: 'Agent', workflow: 'Workflow' } as const;
+
+function isKnownToolType(type: string): type is keyof typeof ToolIconMap {
+  return type in ToolIconMap;
+}
+
+function ToolTypeIcon({ type }: { type: string }) {
+  const known = isKnownToolType(type) ? type : 'tool';
+  const Icon = ToolIconMap[known];
+  const label = TOOL_TYPE_LABELS[known];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span aria-label={known} className="inline-flex text-muted-foreground [&>svg]:size-icon-md">
+          <Icon />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+const appUiMetaSchema = z.object({
+  ui: z.object({ resourceUri: z.string().optional() }).optional(),
+  'ui/resourceUri': z.string().optional(),
+});
+
+function hasAppUi(meta: McpToolInfo['_meta']): boolean {
+  const result = appUiMetaSchema.safeParse(meta);
+  if (!result.success) return false;
+  return Boolean(
+    result.data.ui?.resourceUri?.startsWith('ui://') || result.data['ui/resourceUri']?.startsWith('ui://'),
+  );
+}
+
+type TaskSurface = McpServerTaskSurface | undefined;
+
+/** How a tool runs as an MCP task: always, or only when the client asks (`auto`). */
+function TaskModeBadge({ surface }: { surface: TaskSurface }) {
+  if (!surface) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1">
+          <Badge size="xs" variant={surface.mode === 'always' ? 'info' : 'neutral'} emphasis="subtle">
+            {surface.mode}
+          </Badge>
+          {surface.required && (
+            <Badge size="xs" variant="warning" emphasis="subtle">
+              required
+            </Badge>
+          )}
+          {surface.recover && (
+            <Badge size="xs" variant="neutral" emphasis="subtle">
+              recover
+            </Badge>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {surface.mode === 'always' ? 'Always runs as a task' : 'Runs as a task when the client asks for one'}
+        {surface.required ? '; clients without task support are refused' : ''}
+        {surface.recover ? '; resumed after a server restart' : ''}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export function McpServerToolsList({ server }: { server: McpServerInfo }) {
+  const [search, setSearch] = useState('');
+  const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
+  const { Link, paths } = useLinkComponent();
+  const { data: taskSurfaces } = useMcpServerTaskSurfaces(server.id, { enabled: Boolean(server.tasks_capability) });
+  const surfaces = useMemo(() => new Map(taskSurfaces?.map(surface => [surface.name, surface])), [taskSurfaces]);
+  const showTasks = Boolean(server.tasks_capability);
+  const columns = showTasks ? COLUMNS_WITH_TASKS : COLUMNS;
+
+  const filteredTools = useMemo(() => {
+    const term = search.toLowerCase();
+    return Object.values(tools).filter(
+      tool => tool.name.toLowerCase().includes(term) || tool.description?.toLowerCase().includes(term),
+    );
+  }, [tools, search]);
+
+  const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredTools.length });
+
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Txt as="h2" variant="heading">
+          Available tools
+        </Txt>
+        <div className="max-w-120 flex-1">
+          <SearchInput
+            size="sm"
+            debounceMs={300}
+            className="max-w-120"
+            onValueChange={setSearch}
+            label="Search tools"
+            placeholder="Search by name"
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <DataListSkeleton columns={columns} />
+      ) : (
+        <DataList columns={columns} fit="container" scrollRef={containerRef}>
+          <DataList.Top>
+            <DataList.TopCell>Name</DataList.TopCell>
+            <DataList.TopCell>Description</DataList.TopCell>
+            <DataList.TopCell className="justify-center text-center">Type</DataList.TopCell>
+            {showTasks && <DataList.TopCell>Task</DataList.TopCell>}
+          </DataList.Top>
+
+          {filteredTools.length === 0 && search ? <DataList.NoMatch message="No tools match your search" /> : null}
+
+          {filteredTools.map((tool, index) => (
+            <DataList.RowLink
+              key={tool.name}
+              to={paths.mcpServerToolLink(server.id, tool.name)}
+              LinkComponent={Link}
+              {...getRowProps(index)}
+            >
+              <DataList.NameCell>
+                <span className="flex items-center gap-2">
+                  {tool.name}
+                  {hasAppUi(tool._meta) && <Badge size="xs">App</Badge>}
+                </span>
+              </DataList.NameCell>
+              <DataList.DescriptionCell>{tool.description}</DataList.DescriptionCell>
+              <DataList.TextCell className="justify-center text-center">
+                <ToolTypeIcon type={tool.toolType ?? 'tool'} />
+              </DataList.TextCell>
+              {showTasks && (
+                <DataList.Cell>
+                  <TaskModeBadge surface={surfaces.get(tool.name)} />
+                </DataList.Cell>
+              )}
+            </DataList.RowLink>
+          ))}
+        </DataList>
+      )}
+    </section>
+  );
+}

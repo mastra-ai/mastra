@@ -129,7 +129,7 @@ voice.on('speaker', stream => {
 ## Notes
 
 - This method is primarily used with real-time voice providers that support event-based communication
-- If called on a voice provider that doesn't support events, it will log a warning and do nothing
+- If called on a voice provider that doesn't support events, it will log a debug message and do nothing
 - Event listeners should be registered before calling methods that might emit events
 - To remove an event listener, use the [voice.off()](./voice.off) method with the same event name and callback function
 - Multiple listeners can be registered for the same event

@@ -30,14 +30,14 @@ describe('Transcript notifications', () => {
       expect(within(notification).queryByRole('link')).not.toBeInTheDocument();
       await userEvent.click(within(notification).getByRole('button'));
       expect(within(notification).getByText(message)).toBeVisible();
-      const link = within(notification).getByRole('link', { name: `Open notification target: ${message}` });
+      const link = within(notification).getByRole('link', { name: /^Open on GitHub: The pull request was merged/ });
       expect(link).toHaveAttribute('href', 'https://github.com/mastra-ai/mastra/pull/24263');
       expect(link).toHaveAttribute('rel', 'noreferrer');
     });
   });
 
   describe('when a notification has an unsupported target URL', () => {
-    it('keeps the message available without exposing the URL', async () => {
+    it('keeps the message on its line without exposing the URL', () => {
       renderEntries([
         {
           kind: 'notification',
@@ -49,31 +49,87 @@ describe('Transcript notifications', () => {
       ]);
 
       const notification = within(screen.getByRole('group', { name: 'Notification: github' }));
-      await userEvent.click(notification.getByRole('button'));
       expect(notification.queryByRole('link')).not.toBeInTheDocument();
-      expect(notification.getAllByText('A work item was updated.')).toHaveLength(2);
+      expect(notification.getByText('A work item was updated.')).toBeVisible();
+      expect(notification.queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
   describe('when pending notifications are summarized', () => {
-    it('keeps the summary expandable in the transcript', async () => {
+    it('says how many are new and names their source', () => {
       renderEntries([
         {
           kind: 'notification_summary',
           id: 'summary',
-          message: '2 pull requests and 1 issue need attention.',
-          pending: 3,
-          bySource: { github: 3 },
-          byPriority: { high: 3 },
-          notificationIds: ['1', '2', '3'],
+          message: 'factory-session: 1',
+          pending: 1,
+          bySource: { 'factory-session': 1 },
+          byPriority: { low: 1 },
+          notificationIds: ['1'],
         },
       ]);
 
-      const notification = within(screen.getByRole('group', { name: 'Notification: Notification summary' }));
-      const trigger = notification.getByRole('button');
-      await userEvent.click(trigger);
-      expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      expect(notification.getAllByText('2 pull requests and 1 issue need attention.')).toHaveLength(2);
+      const summary = screen.getByRole('group', { name: 'Notification summary' });
+      expect(summary).toHaveAttribute('data-notification-state', 'summary');
+      expect(within(summary).getByText('Notifications')).toBeVisible();
+      expect(within(summary).getByText('1 new')).toBeVisible();
+      expect(within(summary).getByText('Factory session')).toBeVisible();
+      expect(within(summary).queryByText('factory-session: 1')).not.toBeInTheDocument();
+      expect(within(summary).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('counts each source when several are pending, including ones it has no name for', () => {
+      renderEntries([
+        {
+          kind: 'notification_summary',
+          id: 'summary',
+          message: 'github: 3, my-webhook: 1',
+          pending: 4,
+          bySource: { github: 3, 'my-webhook': 1 },
+          byPriority: { high: 3, low: 1 },
+          notificationIds: ['1', '2', '3', '4'],
+        },
+      ]);
+
+      const summary = within(screen.getByRole('group', { name: 'Notification summary' }));
+      expect(summary.getByText('4 new')).toBeVisible();
+      expect(summary.getByText('GitHub 3')).toBeVisible();
+      expect(summary.getByText('My webhook 1')).toBeVisible();
+    });
+
+    it('falls back to the summary text when it carries no counts', () => {
+      renderEntries([
+        {
+          kind: 'notification_summary',
+          id: 'summary',
+          message: 'No pending notifications',
+          pending: 0,
+          bySource: {},
+          byPriority: {},
+          notificationIds: [],
+        },
+      ]);
+
+      const summary = within(screen.getByRole('group', { name: 'Notification summary' }));
+      expect(summary.getByText('No pending notifications')).toBeVisible();
+    });
+
+    it('names a source that collides with a built-in object key from its id', () => {
+      renderEntries([
+        {
+          kind: 'notification_summary',
+          id: 'summary',
+          message: '__proto__: 1',
+          pending: 1,
+          bySource: JSON.parse('{"__proto__": 1}') as Record<string, number>,
+          byPriority: { low: 1 },
+          notificationIds: ['1'],
+        },
+      ]);
+
+      const summary = within(screen.getByRole('group', { name: 'Notification summary' }));
+      expect(summary.getByText('1 new')).toBeVisible();
+      expect(summary.getByText('Proto')).toBeVisible();
     });
   });
 });

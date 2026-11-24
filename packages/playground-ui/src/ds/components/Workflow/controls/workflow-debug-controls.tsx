@@ -1,7 +1,11 @@
-import { Loader2, Pause, PlayIcon, StepForwardIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconStepForwards } from '@/ds/icons/central/IconStepForwards';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;
@@ -27,14 +31,16 @@ export function WorkflowDebugControls({
 
   return (
     <div className="flex min-w-0 flex-col gap-3" data-testid="workflow-debug-step-controls">
-      <div className="border-border1/50 bg-surface2 rounded-xl border p-3">
+      <div className="rounded-xl border border-surface-rim bg-background p-3">
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-ui-xs text-muted-foreground">Next step</span>
-          <Badge size="sm" icon={<Pause />} emphasis="muted">
+          <Txt as="span" variant="meta" tone="muted">
+            Next step
+          </Txt>
+          <Badge size="sm" icon={<IconPause />} emphasis="subtle">
             Step by step
           </Badge>
         </div>
-        <div className="text-ui-md text-foreground font-medium break-words" aria-live="polite">
+        <div className="text-subheading break-words text-foreground" aria-live="polite">
           {nextStepLabel || nextStepFallback}
         </div>
       </div>
@@ -46,7 +52,7 @@ export function WorkflowDebugControls({
           aria-label="Run next step"
           onClick={onRunNextStep}
           disabled={actionsDisabled}
-          icon={isStreaming ? <Loader2 className="motion-safe:animate-spin" /> : <StepForwardIcon />}
+          icon={isStreaming ? <IconLoadingCircle className="motion-safe:animate-spin" /> : <IconStepForwards />}
         >
           {isStreaming ? 'Running step…' : 'Run next step'}
         </Button>
@@ -59,7 +65,7 @@ export function WorkflowDebugControls({
           onClick={onContinueRun}
           disabled={actionsDisabled}
         >
-          <PlayIcon />
+          <IconPlay />
         </Button>
         {children}
       </div>

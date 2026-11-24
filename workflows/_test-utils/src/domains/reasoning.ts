@@ -121,7 +121,7 @@ export function createReasoningTests({ createAgent }: DurableAgentTestContext) {
           },
         });
 
-        expect(result.workflowInput.options.temperature).toBe(0.7);
+        expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.7);
       });
     });
 

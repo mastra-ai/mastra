@@ -5,12 +5,10 @@
  * in skills paths. All operations are async.
  */
 
-import matter from 'gray-matter';
-
 import { isGlobPattern, resolvePathPattern } from '../glob';
 import type { ReaddirEntry } from '../glob';
 import type { IndexDocument, SearchResult } from '../search';
-import { validateSkillMetadata } from './schemas';
+import { extractSkillFrontmatter, validateSkillMetadata } from './schemas';
 import type { SkillSource as SkillSourceInterface } from './skill-source';
 import type {
   ContentSource,
@@ -56,6 +54,21 @@ interface SharedSearchState {
 
 /** @internal Prefix of every search document ID owned by a request-scoped skills view. */
 export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
+
+/** Search document ID suffix for a skill's name + description document. */
+const SKILL_METADATA_SOURCE = 'SKILL.md#metadata';
+
+const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
+
+/** Same-named skills in tie-break order: local > managed > external, then by path. */
+function sortBySourcePriority(skills: InternalSkill[]): InternalSkill[] {
+  return [...skills].sort((a, b) => {
+    const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
+    const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
+    if (aPri !== bPri) return aPri - bPri;
+    return a.path.localeCompare(b.path);
+  });
+}
 
 // =============================================================================
 // WorkspaceSkillsImpl
@@ -420,16 +433,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       canonicalGroups.set(canonicalPath, group);
     }
 
-    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
-    return [...canonicalGroups.values()].map(
-      group =>
-        [...group].sort((a, b) => {
-          const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
-          const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
-          if (aPri !== bPri) return aPri - bPri;
-          return a.path.localeCompare(b.path);
-        })[0]!,
-    );
+    return [...canonicalGroups.values()].map(group => sortBySourcePriority(group)[0]!);
   }
 
   /**
@@ -449,13 +453,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     if (deduped.length === 1) return deduped[0]!;
 
-    const SOURCE_PRIORITY: Record<string, number> = { local: 0, managed: 1, external: 2 };
-    const sorted = [...deduped].sort((a, b) => {
-      const aPri = SOURCE_PRIORITY[a.source.type] ?? 99;
-      const bPri = SOURCE_PRIORITY[b.source.type] ?? 99;
-      if (aPri !== bPri) return aPri - bPri;
-      return a.path.localeCompare(b.path);
-    });
+    const sorted = sortBySourcePriority(deduped);
 
     const winner = sorted[0]!;
     const runnerUp = sorted[1]!;
@@ -482,6 +480,19 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     );
 
     return winner;
+  }
+
+  /**
+   * Same-named candidates for search: the tie-break winner, or every distinct skill of the
+   * winning source type when two of them share the name. `get()` refuses such a name, but
+   * search must not fail over one ambiguous skill, and each result carries its own path.
+   */
+  async #searchCandidates(candidates: InternalSkill[]): Promise<InternalSkill[]> {
+    if (candidates.length <= 1) return candidates;
+
+    const deduped = await this.#dedupeCanonicalCandidates(candidates);
+    const sorted = sortBySourcePriority(deduped);
+    return sorted.filter(s => s.source.type === sorted[0]!.source.type);
   }
 
   async refresh(): Promise<void> {
@@ -581,6 +592,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const unchanged =
         oldSkill &&
         oldSkill.instructions === newSkill.instructions &&
+        oldSkill.name === newSkill.name &&
+        oldSkill.description === newSkill.description &&
         oldSkill.references.length === newSkill.references.length &&
         oldSkill.references.every((r, i) => r === newSkill.references[i]);
       if (unchanged) continue;
@@ -738,7 +751,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       ? this.#sharedSearchState.documentIds.size
       : [...this.#skills.values()].reduce(
           (count, candidates) =>
-            count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+            count + candidates.reduce((skillCount, skill) => skillCount + 2 + skill.references.length, 0),
           0,
         );
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
@@ -764,7 +777,20 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const matchedSkill = this.#resolveByPath(skillPath);
       if (!matchedSkill) continue;
 
-      const skill = (await this.#resolveByName(matchedSkill.name)) ?? matchedSkill;
+      // A hit maps onto a winner only when it is that winner or an alias of it
+      // (same canonical path); hits from losing same-named copies are dropped.
+      const winners = await this.#searchCandidates(this.#skills.get(matchedSkill.name) ?? [matchedSkill]);
+      let skill = winners.find(s => s.path === matchedSkill.path);
+      if (!skill) {
+        const canonicalPath = await this.#getCanonicalSkillPath(matchedSkill.path);
+        for (const winner of winners) {
+          if ((await this.#getCanonicalSkillPath(winner.path)) === canonicalPath) {
+            skill = winner;
+            break;
+          }
+        }
+      }
+      if (!skill) continue;
 
       // Filter by skill names if specified
       if (skillNames && !skillNames.includes(skill.name)) {
@@ -782,13 +808,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
       seenCanonicalSources.add(canonicalSourceKey);
 
+      // The name + description document isn't part of SKILL.md, so its line
+      // numbers would point at the wrong lines of the file.
+      const isMetadataHit = result.id === this.#searchDocumentId(skillPath, SKILL_METADATA_SOURCE);
+
       results.push({
         skillName: skill.name,
         skillPath: skill.path,
         source,
-        content: result.content,
+        // The metadata document starts with the name, which the result already carries
+        content: isMetadataHit ? skill.description : result.content,
         score: result.score,
-        lineRange: result.lineRange,
+        lineRange: isMetadataHit ? undefined : result.lineRange,
         scoreDetails: result.scoreDetails,
       });
 
@@ -808,8 +839,13 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const skill = (await this.#resolveByName(skillName)) ?? this.#resolveByPath(skillName);
     if (!skill) return null;
 
+    return this.#readReference(skill.path, referencePath);
+  }
+
+  /** Reads a reference file from a known skill directory, without resolving a name. */
+  async #readReference(skillPath: string, referencePath: string): Promise<string | null> {
     const safeRefPath = this.#assertRelativePath(referencePath, 'reference');
-    const refFilePath = this.#joinPath(skill.path, safeRefPath);
+    const refFilePath = this.#joinPath(skillPath, safeRefPath);
 
     if (!(await this.#source.exists(refFilePath))) {
       return null;
@@ -1303,22 +1339,15 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     const rawContent = await this.#source.readFile(filePath);
     const content = typeof rawContent === 'string' ? rawContent : rawContent.toString('utf-8');
 
-    const parsed = matter(content);
-    const frontmatter = parsed.data;
-    const body = parsed.content.trim();
+    const { metadata: frontmatter, instructions: body } = extractSkillFrontmatter(content);
 
     // Extract required fields
     // Get skill directory path (parent of SKILL.md) - needed for SkillMetadata
     const skillPath = this.#getParentPath(filePath);
 
     const metadata: SkillMetadata = {
-      name: frontmatter.name,
+      ...frontmatter,
       path: skillPath,
-      description: frontmatter.description,
-      license: frontmatter.license,
-      compatibility: frontmatter.compatibility,
-      'user-invocable': frontmatter['user-invocable'],
-      metadata: frontmatter.metadata,
     };
 
     // Validate if enabled (includes token/line count warnings)
@@ -1358,7 +1387,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     dirName: string,
     instructions?: string,
   ): { valid: boolean; errors: string[]; warnings: string[] } {
-    const result = validateSkillMetadata(metadata, dirName, instructions);
+    const result = validateSkillMetadata({ metadata, directoryName: dirName, instructions });
 
     // Log warnings if any
     if (result.warnings.length > 0) {
@@ -1461,6 +1490,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const ids = [
       this.#searchDocumentId(skill.path, 'SKILL.md'),
+      this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE),
       ...skill.references.map(r => this.#searchDocumentId(skill.path, r)),
     ];
     for (const id of ids) {
@@ -1506,6 +1536,21 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
     this.#sharedSearchState.documentIds.add(skillDocumentId);
 
+    // Index name + description as their own document so searches can find a
+    // skill by what it is for. Kept separate from the body so body line ranges
+    // stay accurate; shares source 'SKILL.md' so results de-dup per skill.
+    const metadataDocumentId = this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE);
+    await this.#searchEngine.index({
+      id: metadataDocumentId,
+      content: `${skill.name}\n${skill.description}`,
+      metadata: {
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        ...(this.#searchNamespace ? { skillScope: this.#searchNamespace } : {}),
+      },
+    });
+    this.#sharedSearchState.documentIds.add(metadataDocumentId);
+
     // Index each reference file in parallel (independent reads + index calls)
     await Promise.all(
       skill.references.map(async refPath => {
@@ -1542,51 +1587,126 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #simpleSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const { topK = 5, skillNames, includeReferences = true } = options;
-    const queryLower = query.toLowerCase();
-    const results: SkillSearchResult[] = [];
 
+    const skills: Skill[] = [];
     for (const candidates of this.#skills.values()) {
-      // Use tie-break winner for each name
-      const skill = await this.#tieBreak(candidates);
-      if (!skill) continue;
-
-      // Filter by skill names if specified
-      if (skillNames && !skillNames.includes(skill.name)) {
-        continue;
+      for (const skill of await this.#searchCandidates(candidates)) {
+        if (!skillNames || skillNames.includes(skill.name)) skills.push(skill);
       }
+    }
 
-      // Search in instructions
-      if (skill.instructions.toLowerCase().includes(queryLower)) {
-        results.push({
+    // Score by the share of query words found (case-insensitive), so keyword
+    // queries rank skills instead of needing every word or the exact phrase.
+    // Words found in the name or description count double: they say what the
+    // skill is for. Words of one or two letters ("a", "do") appear in almost
+    // every skill, so they're ignored unless the query has nothing longer, or
+    // the word is part of a skill's name ("ci", "pr", "db").
+    const nameWords = new Set(skills.flatMap(skill => skill.name.toLowerCase().split(/[-_\s]+/)));
+    const allTerms = [
+      ...new Set(
+        query
+          .toLowerCase()
+          .split(/\s+/)
+          // "review," or "(test)" should match "review" and "test"
+          .map(word => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+          .filter(Boolean),
+      ),
+    ];
+    const longTerms = allTerms.filter(term => term.length > 2 || nameWords.has(term));
+    const terms = longTerms.length > 0 ? longTerms : allTerms;
+
+    if (terms.length === 0) {
+      return this.#listSkillDocuments(skills, topK, includeReferences);
+    }
+
+    const skillHits: SkillSearchResult[] = [];
+    for (const skill of skills) {
+      const lowerAbout = `${skill.name}\n${skill.description}`.toLowerCase();
+      const lowerBody = skill.instructions.toLowerCase();
+      let aboutMatches = 0;
+      let weighted = 0;
+      for (const term of terms) {
+        if (lowerAbout.includes(term)) {
+          aboutMatches++;
+          weighted += 1;
+        } else if (lowerBody.includes(term)) {
+          weighted += 0.5;
+        }
+      }
+      if (weighted > 0) {
+        skillHits.push({
           skillName: skill.name,
           skillPath: skill.path,
           source: 'SKILL.md',
-          content: skill.instructions.substring(0, 200),
-          score: 1,
+          // Preview the description when it matched: it says what the skill is for
+          content: aboutMatches > 0 ? skill.description : skill.instructions.substring(0, 200),
+          score: weighted / terms.length,
         });
       }
+    }
+    // Stable sort keeps discovery order for equal scores
+    skillHits.sort((a, b) => b.score - a.score);
 
-      // Search in references if included
-      if (includeReferences) {
+    // Reference files are read from the filesystem, which may be remote, so read
+    // as few as possible. A reference scores at most 0.5, so skip them when topK
+    // skills already score higher. Otherwise read the best-matching skills'
+    // references first and stop after topK reference hits.
+    const referenceHits: SkillSearchResult[] = [];
+    if (includeReferences && skillHits.filter(hit => hit.score > 0.5).length < topK) {
+      const skillsByPath = new Map(skills.map(skill => [skill.path, skill]));
+      const byRank = skillHits.map(hit => skillsByPath.get(hit.skillPath)!);
+      for (const hit of skillHits) skillsByPath.delete(hit.skillPath);
+      byRank.push(...skillsByPath.values());
+      search: for (const skill of byRank) {
         for (const refPath of skill.references) {
-          if (results.length >= topK) break;
-          const content = await this.getReference(skill.name, `references/${refPath}`);
-          if (content && content.toLowerCase().includes(queryLower)) {
-            results.push({
-              skillName: skill.name,
-              skillPath: skill.path,
-              source: `references/${refPath}`,
-              content: content.substring(0, 200),
-              score: 0.8,
-            });
-          }
+          const content = await this.#readReference(skill.path, `references/${refPath}`);
+          if (!content) continue;
+          const lower = content.toLowerCase();
+          const matched = terms.filter(term => lower.includes(term)).length;
+          if (matched === 0) continue;
+          referenceHits.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: (0.5 * matched) / terms.length,
+          });
+          if (referenceHits.length >= topK) break search;
         }
       }
-
-      if (results.length >= topK) break;
     }
 
-    return results.slice(0, topK);
+    return [...skillHits, ...referenceHits].sort((a, b) => b.score - a.score).slice(0, topK);
+  }
+
+  /** Empty-query search: every skill and reference file, in discovery order. */
+  async #listSkillDocuments(skills: Skill[], topK: number, includeReferences: boolean): Promise<SkillSearchResult[]> {
+    const results: SkillSearchResult[] = [];
+    for (const skill of skills) {
+      if (results.length >= topK) break;
+      results.push({
+        skillName: skill.name,
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        content: skill.instructions.substring(0, 200),
+        score: 1,
+      });
+      if (!includeReferences) continue;
+      for (const refPath of skill.references) {
+        if (results.length >= topK) break;
+        const content = await this.#readReference(skill.path, `references/${refPath}`);
+        if (content) {
+          results.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: 0.8,
+          });
+        }
+      }
+    }
+    return results;
   }
 
   /**

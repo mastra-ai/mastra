@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import type { AnySpan } from '@mastra/core/observability';
 import { toStandardSchema } from '@mastra/schema-compat';
 import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -16,6 +17,30 @@ import { z } from 'zod';
 
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import { MALFORMED_INPUT_SCHEMAS, VALID_INPUT_SCHEMAS } from './input-schema-test-cases.js';
+import type { MastraMCPServerDefinition } from './types.js';
+
+// exit-hook keeps its callbacks in a module-level Set and installs its own process
+// listeners exactly once behind an internal flag, so process.listenerCount('exit') is
+// identical whether one client holds an exit hook or none do. Counting registrations
+// here is the only way to observe that a client actually released its exit hook. The
+// wrapper delegates to the real implementation, so behaviour is unchanged.
+const exitHooks = vi.hoisted(() => ({ live: 0 }));
+
+vi.mock('exit-hook', async importOriginal => {
+  const actual = await importOriginal<typeof import('exit-hook')>();
+  return {
+    ...actual,
+    asyncExitHook: (...args: Parameters<typeof actual.asyncExitHook>) => {
+      const unsubscribe = actual.asyncExitHook(...args);
+      exitHooks.live++;
+      return () => {
+        exitHooks.live--;
+        unsubscribe();
+      };
+    },
+  };
+});
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -324,7 +349,12 @@ describe('InternalMastraMCPClient - jsonSchemaValidator pass-through', () => {
       },
     });
 
-    await expect(tool.execute?.({})).resolves.toBe(42);
+    // In-band errors resolve with the full envelope so isError is not lost (#23330).
+    await expect(tool.execute?.({})).resolves.toEqual({
+      structuredContent: 42,
+      content: [{ type: "text", text: "failed" }],
+      isError: true,
+    });
     expect(customValidator.getValidator).not.toHaveBeenCalled();
   });
   it('should leave the SDK Client default validator in place when omitted', () => {
@@ -564,7 +594,47 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(callTool).not.toHaveBeenCalled();
   });
 
-  it('bounds nested input subschemas before compiling them', async () => {
+  it('enforces JSON Schema format keywords on tool input schemas', async () => {
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'events_since',
+          description: 'Lists events since a timestamp',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { since: { type: 'string' as const, format: 'date-time' } },
+            required: ['since'],
+          },
+        },
+      ],
+    });
+    const callTool = vi.spyOn(sdkClient, 'callTool');
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const tool = (await client.tools()).events_since;
+
+      const rejected = await tool.execute?.({ since: 'not-a-date' });
+
+      expect(rejected).toMatchObject({ error: true, message: expect.stringMatching(/input validation failed/i) });
+      expect(callTool).not.toHaveBeenCalled();
+      // The reported symptom: Ajv logging `unknown format "date-time" ignored ...` on every compile.
+      expect(consoleWarn.mock.calls.flat().join(' ')).not.toContain('unknown format');
+
+      const callToolResult = { content: [{ type: 'text', text: 'ok' }], isError: false };
+      callTool.mockResolvedValue(callToolResult);
+
+      const accepted = await tool.execute?.({ since: '2026-11-05T10:00:00Z' });
+
+      expect(accepted).toEqual(callToolResult);
+      expect(callTool).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleWarn.mockRestore();
+    }
+  });
+
+  it('skips tools whose input schema is nested too deeply to validate', async () => {
     const sdkClient = (client as any).client as Client;
     let nestedSchema: Record<string, unknown> = { type: 'string' };
     for (let depth = 0; depth < 150; depth++) {
@@ -573,13 +643,13 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
       tools: [{ name: 'deep_input', inputSchema: nestedSchema as any }],
     });
-    const callTool = vi.spyOn(sdkClient, 'callTool');
+    const warn = vi.spyOn((client as any).logger, 'warn');
 
-    const tool = (await client.tools()).deep_input;
-    const result = await tool.execute?.({} as any);
-
-    expect(result).toMatchObject({ error: true, message: expect.stringMatching(/maximum depth/i) });
-    expect(callTool).not.toHaveBeenCalled();
+    expect(await client.tools()).toEqual({});
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "deep_input"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
   });
 
   it('preserves JSON Schema 2020-12 identity, composition, and boolean subschemas', async () => {
@@ -708,6 +778,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect((result as any).validationErrors).toBeDefined();
   });
 
+  it('validates schemas that declare an unsupported dialect such as 2019-09 as 2020-12', async () => {
+    const sdkClient = (client as any).client as Client;
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { $schema, type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            $schema,
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2 }) }],
+      structuredContent: { result: 2 },
+      isError: false,
+    });
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual({ result: 2 });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'nope' }],
+      structuredContent: { result: 'not-a-number' },
+      isError: false,
+    });
+    const invalid = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(invalid).toMatchObject({ error: true });
+    expect((invalid as any).message).toContain('Tool output validation failed for calculate');
+  });
+
   it('passes valid structuredContent through unchanged with content metadata intact', async () => {
     const sdkClient = (client as any).client as Client;
 
@@ -778,7 +888,8 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
       vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
 
       const result = await calculateTool.execute?.({ expression: '1 + 1' });
-      expect(result).toEqual(callToolResult.structuredContent);
+      // The envelope keeps isError next to structuredContent (#23330).
+      expect(result).toEqual(callToolResult);
       expect((result as any).error).toBeUndefined();
     } finally {
       await returnClient.disconnect().catch(() => {});
@@ -1122,6 +1233,40 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     expect(tool.toModelOutput?.(result)).toEqual({
       type: 'text',
       value: 'Found 1 calendar event(s)',
+    });
+  });
+
+  it('should include embedded resource text in toModelOutput alongside text blocks', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'get_file_contents',
+          description: 'Returns a file as an embedded resource',
+          inputSchema: { type: 'object' as const, properties: { path: { type: 'string' } } },
+          outputSchema: { type: 'object' as const, properties: { sha: { type: 'string' } } },
+        },
+      ],
+    });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: { sha: 'abc' },
+      content: [
+        { type: 'text', text: 'successfully downloaded text file (SHA: abc)' },
+        { type: 'resource', resource: { uri: 'repo://README.md', mimeType: 'text/markdown', text: '# Hello' } },
+        { type: 'resource', resource: { uri: 'repo://logo.png', mimeType: 'image/png', blob: 'AAAA' } },
+      ],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['get_file_contents'];
+    const result = await tool.execute?.({ path: 'README.md' });
+
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'successfully downloaded text file (SHA: abc)\n# Hello',
     });
   });
 
@@ -2072,6 +2217,121 @@ describe('MastraMCPClient - Custom _meta', () => {
     });
   });
 
+  describe('trace context from the calling span', () => {
+    const TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
+    const SPAN_ID = 'b7ad6b7169203331';
+    const callingSpan = (overrides: Record<string, unknown> = {}) =>
+      ({ isValid: true, traceId: TRACE_ID, id: SPAN_ID, ...overrides }) as unknown as AnySpan;
+
+    const sentCallMeta = async (
+      server: Partial<MastraMCPServerDefinition>,
+      context: { tracingContext?: { currentSpan?: AnySpan }; _meta?: Record<string, unknown> },
+    ) => {
+      client = new InternalMastraMCPClient({
+        name: 'span-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false, ...server } as MastraMCPServerDefinition,
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const sendSpy = vi.spyOn(((client as any).client as any).transport, 'send');
+      await tools['echo']?.execute?.({ msg: 'hi' }, context);
+      const call = sendSpy.mock.calls
+        .map(args => args[0] as { method?: string; params?: { _meta?: Record<string, unknown> } })
+        .find(message => message.method === 'tools/call');
+      return call?.params?._meta ?? {};
+    };
+
+    it('names the calling span as the parent of the request', async () => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan: callingSpan() } });
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`);
+      expect(meta).not.toHaveProperty('tracestate');
+    });
+
+    it('names the closest exported ancestor when the calling span is hidden from exporters', async () => {
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan({ getExportedSpanId: () => '1111111111111111' }) } },
+      );
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-1111111111111111-01`);
+    });
+
+    it('keeps a `traceparent` the caller set in `_meta`', async () => {
+      const explicit = '00-33333333333333333333333333333333-3333333333333333-01';
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan() }, _meta: { traceparent: explicit } },
+      );
+
+      expect(meta.traceparent).toBe(explicit);
+    });
+
+    it('leaves the trace fields to a configured `traceContext` provider', async () => {
+      const meta = await sentCallMeta(
+        { traceContext: () => undefined },
+        { tracingContext: { currentSpan: callingSpan() } },
+      );
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+
+    it('links the calling span to the server span named in the reply and drops that key', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: {
+          mastra: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01', other: 1 },
+          vendor: true,
+        },
+      });
+      const existingLink = { traceId: '33333333333333333333333333333333', spanId: '4444444444444444' };
+      const span = callingSpan({ links: [existingLink] });
+      const tools = await client.tools();
+
+      const output = await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toEqual([
+        existingLink,
+        { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' },
+      ]);
+      expect((output as any)._meta).toEqual({ mastra: { other: 1 }, vendor: true });
+    });
+
+    it('adds no link when the reply names no server span', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-no-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: { mastra: { traceparent: 'garbage' } },
+      });
+      const span = callingSpan();
+      const tools = await client.tools();
+
+      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toBeUndefined();
+    });
+
+    it.each([
+      ['there is no calling span', undefined],
+      ['the calling span is not recorded', callingSpan({ isValid: false, traceId: 'no-op-trace', id: 'no-op' })],
+      ['the trace id is not W3C-sized', callingSpan({ traceId: 'abc123' })],
+      ['no ancestor of the calling span is exported', callingSpan({ getExportedSpanId: () => undefined })],
+    ])('sends no `traceparent` when %s', async (_label, currentSpan) => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan } });
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+  });
+
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-progress-client',
@@ -2425,6 +2685,111 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
     const afterDisconnectCount = process.listenerCount('SIGHUP');
     expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  describe('failed connect()', () => {
+    let unresponsiveServer: HttpServer;
+    let unreachableUrl: URL;
+
+    beforeEach(async () => {
+      // Accepts the request and never replies, so connect() fails via connectTimeout
+      // rather than a transport-level refusal.
+      unresponsiveServer = createServer(() => {});
+      await new Promise<void>(resolve => unresponsiveServer.listen(0, '127.0.0.1', resolve));
+      const { port } = unresponsiveServer.address() as AddressInfo;
+      unreachableUrl = new URL(`http://127.0.0.1:${port}/mcp`);
+    });
+
+    afterEach(() => {
+      unresponsiveServer?.close();
+    });
+
+    const makeFailingClient = (name: string) =>
+      new InternalMastraMCPClient({
+        name,
+        server: { url: unreachableUrl, connectTimeout: 100 },
+      });
+
+    it('should not leak SIGTERM/SIGHUP listeners or the exit hook when connect() fails', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-client');
+      await expect(client.connect()).rejects.toThrow();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should not accumulate listeners across repeated failed connects', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      // Above Node's default max of 10, so a leak also trips MaxListenersExceededWarning.
+      for (let i = 0; i < 12; i++) {
+        const client = makeFailingClient(`failed-connect-loop-${i}`);
+        await client.connect().catch(() => {});
+        await client.disconnect();
+      }
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should release listeners and the exit hook on disconnect() after a failed connect', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-then-disconnect');
+      await client.connect().catch(() => {});
+      await client.disconnect();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    describe('stdio transport', () => {
+      // Exits before speaking MCP, so client.connect() fails after the child is spawned.
+      // That is the path where a transport is already live when the attempt collapses.
+      const makeFailingStdioClient = (name: string) =>
+        new InternalMastraMCPClient({
+          name,
+          server: { command: process.execPath, args: ['-e', 'process.exit(1)'], timeout: 5000 },
+        });
+
+      it('should not leak listeners or the exit hook when a stdio connect() fails', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialSigHup = process.listenerCount('SIGHUP');
+        const initialExitHooks = exitHooks.live;
+
+        const client = makeFailingStdioClient('failed-stdio-connect');
+        await expect(client.connect()).rejects.toThrow();
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+
+      it('should not accumulate listeners across repeated failed stdio connects', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialExitHooks = exitHooks.live;
+
+        // Above Node's default max of 10, and with no disconnect() to paper over the
+        // failure path: a failed connect must clean up on its own.
+        for (let i = 0; i < 12; i++) {
+          await makeFailingStdioClient(`failed-stdio-loop-${i}`)
+            .connect()
+            .catch(() => {});
+        }
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+    });
   });
 
   it('should not create duplicate connections when connect is called concurrently', async () => {
@@ -2951,6 +3316,40 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(greetTool.mcp?.annotations).toBeUndefined();
   });
 
+  it('should expose the MCP tool title and fall back to annotations.title', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.registerTool(
+      'titled_tool',
+      {
+        title: 'Titled Tool',
+        description: 'Has a title and an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Title' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+    testServer.mcpServer.registerTool(
+      'annotated_only',
+      {
+        description: 'Has only an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Only' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'title-precedence-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.titled_tool.title).toBe('Titled Tool');
+    expect(tools.annotated_only.title).toBe('Annotation Only');
+    expect(tools.greet.title).toBeUndefined();
+  });
+
   it('should support async approval functions', async () => {
     testServer = await setupTestServer();
     const approvalFn = vi.fn().mockImplementation(async ({ toolName }) => {
@@ -3026,21 +3425,46 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
   let mcpServer: McpServer;
   let baseUrl: URL;
   let failing = false;
-  let discoverCount = 0;
-  let dropConcurrentToolCalls = false;
-  let pendingToolCallSockets: Array<{ destroy(): void }> = [];
+  let dropDuringWrite: string | undefined;
+  let toolCallsReceived: Record<string, number> = {};
+  let ticketsCreated = 0;
+  let writeStarted: Promise<void>;
+  let markWriteStarted: () => void;
+  let writeMayFinish: Promise<void>;
+  let finishWrite: () => void;
   let client: InternalMastraMCPClient;
 
   beforeEach(async () => {
     failing = false;
-    discoverCount = 0;
-    dropConcurrentToolCalls = false;
-    pendingToolCallSockets = [];
-    mcpServer = new McpServer({ name: 'wedge-repro-server', version: '0.0.1' }, { capabilities: { tools: {} } });
-    mcpServer.registerTool('ping', { description: 'ping', inputSchema: z.object({}) }, async () => ({
-      content: [{ type: 'text', text: 'pong' }],
-    }));
-    const handler = toNodeHandler(createMcpHandler(() => mcpServer.server, { legacy: 'reject' }));
+    dropDuringWrite = undefined;
+    toolCallsReceived = {};
+    ticketsCreated = 0;
+    writeStarted = new Promise(resolve => (markWriteStarted = resolve));
+    writeMayFinish = new Promise(resolve => (finishWrite = resolve));
+    // A fresh instance per request, like MCPServer, so a slow call doesn't block a concurrent one.
+    const buildServer = () => {
+      const server = new McpServer({ name: 'wedge-repro-server', version: '0.0.1' }, { capabilities: { tools: {} } });
+      server.registerTool('ping', { description: 'ping', inputSchema: z.object({}) }, async () => ({
+        content: [{ type: 'text', text: 'pong' }],
+      }));
+      for (const [name, annotations] of [
+        ['lookup', { readOnlyHint: true }],
+        ['setStatus', { readOnlyHint: false, idempotentHint: true }],
+      ] as const) {
+        server.registerTool(name, { description: name, inputSchema: z.object({}), annotations }, async () => ({
+          content: [{ type: 'text', text: 'pong' }],
+        }));
+      }
+      server.registerTool('createTicket', { description: 'create a ticket', inputSchema: z.object({}) }, async () => {
+        ticketsCreated++;
+        markWriteStarted();
+        await writeMayFinish;
+        return { content: [{ type: 'text', text: `ticket-${ticketsCreated}` }] };
+      });
+      return server;
+    };
+    mcpServer = buildServer();
+    const handler = toNodeHandler(createMcpHandler(() => buildServer().server, { legacy: 'reject' }));
 
     httpServer = createServer(async (req, res) => {
       if (failing) {
@@ -3056,14 +3480,15 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
         res.writeHead(400).end();
         return;
       }
-      if (body?.method === 'server/discover') discoverCount++;
-      if (body?.method === 'tools/call' && dropConcurrentToolCalls) {
-        pendingToolCallSockets.push(req.socket);
-        if (pendingToolCallSockets.length === 2) {
-          dropConcurrentToolCalls = false;
-          pendingToolCallSockets.forEach(socket => socket.destroy());
+      if (body?.method === 'tools/call') {
+        const name = body.params?.name;
+        toolCallsReceived[name] = (toolCallsReceived[name] ?? 0) + 1;
+        if (name === dropDuringWrite) {
+          dropDuringWrite = undefined;
+          await writeStarted;
+          req.socket.destroy();
+          return;
         }
-        return;
       }
       handler(req, res, body);
     });
@@ -3214,27 +3639,36 @@ describe('InternalMastraMCPClient - stale SDK transport detach (issue #19862)', 
     });
   }, 20000);
 
-  it('shares one real HTTP reconnect when concurrent tool calls lose the same transport', async () => {
-    client = new InternalMastraMCPClient({
-      name: 'concurrent-http-reconnect',
-      server: { url: baseUrl },
-    });
-    await client.connect();
-    const tools = await client.tools();
+  // A dropped socket can follow a request the server already ran, and reconnecting closed the
+  // shared transport, aborting the in-flight write so it was sent again. Tools annotated
+  // read-only or idempotent are still retried, on the open transport. (#28415)
+  it.each([
+    ['an unannotated', 'ping', 1, { status: 'rejected', reason: { id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN' } }],
+    ['a read-only', 'lookup', 2, { status: 'fulfilled', value: { content: [{ type: 'text', text: 'pong' }] } }],
+    ['an idempotent', 'setStatus', 2, { status: 'fulfilled', value: { content: [{ type: 'text', text: 'pong' }] } }],
+  ])(
+    'creates one ticket when %s parallel call loses its connection while the write runs (#28415)',
+    async (_label, droppedTool, droppedToolCalls, droppedOutcome) => {
+      client = new InternalMastraMCPClient({
+        name: 'replay-safety',
+        server: { url: baseUrl },
+      });
+      await client.connect();
+      const tools = await client.tools();
 
-    dropConcurrentToolCalls = true;
-    const results = await Promise.all([
-      tools['ping'].execute!({ context: {} }),
-      tools['ping'].execute!({ context: {} }),
-    ]);
+      dropDuringWrite = droppedTool;
+      const write = tools['createTicket'].execute!({});
+      const [dropped] = await Promise.allSettled([tools[droppedTool].execute!({})]);
+      finishWrite();
+      const [ticket] = await Promise.allSettled([write]);
 
-    expect(results).toMatchObject([
-      { content: [{ type: 'text', text: 'pong' }] },
-      { content: [{ type: 'text', text: 'pong' }] },
-    ]);
-    // The reconnect reuses the negotiated revision instead of probing again.
-    expect(discoverCount).toBe(1);
-  }, 20000);
+      expect(ticketsCreated).toBe(1);
+      expect(toolCallsReceived).toEqual({ createTicket: 1, [droppedTool]: droppedToolCalls });
+      expect(ticket).toMatchObject({ status: 'fulfilled', value: { content: [{ type: 'text', text: 'ticket-1' }] } });
+      expect(dropped).toMatchObject(droppedOutcome);
+    },
+    20000,
+  );
 });
 
 describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
@@ -3253,6 +3687,9 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     });
     return { client, sdkClient };
   }
+
+  // Only failures that prove the call never reached the server are retried.
+  const refused = () => new Error('connect ECONNREFUSED 127.0.0.1:1234');
 
   it('shares one reconnect when concurrent calls fail on the same transport', async () => {
     const { client, sdkClient } = createToolClient();
@@ -3281,8 +3718,8 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     const secondCall = tool.execute?.({});
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledTimes(2));
 
-    rejectFirst(new Error('Connection closed'));
-    rejectSecond(new Error('Connection closed'));
+    rejectFirst(refused());
+    rejectSecond(refused());
 
     await expect(Promise.all([firstCall, secondCall])).resolves.toEqual([
       { content: [{ type: 'text', text: 'pong' }] },
@@ -3291,6 +3728,42 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     expect(staleTransport.close).toHaveBeenCalledOnce();
     expect(connect).toHaveBeenCalledOnce();
     expect((client as any).transport).toBe(replacementTransport);
+  });
+
+  it('retries a read-only tool on the replacement when another call is already reconnecting', async () => {
+    const { client, sdkClient } = createToolClient();
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        { name: 'lookup', description: 'lookup', inputSchema: { type: 'object' }, annotations: { readOnlyHint: true } },
+      ],
+    });
+    const tool = (await client.tools())['lookup'];
+
+    let finishClose!: () => void;
+    const closing = new Promise<void>(resolve => (finishClose = resolve));
+    const staleTransport = { close: vi.fn(() => closing) };
+    const replacementTransport = { close: vi.fn().mockResolvedValue(undefined) };
+    (client as any).transport = staleTransport;
+    vi.spyOn(client, 'connect').mockImplementation(async () => {
+      (client as any).transport = replacementTransport;
+      return true;
+    });
+    const usedTransports: unknown[] = [];
+    vi.spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(new Error('TypeError: terminated'))
+      .mockImplementation(async () => {
+        usedTransports.push((client as any).transport);
+        return { content: [{ type: 'text', text: 'pong' }] };
+      });
+
+    const reconnect = client.forceReconnect();
+    const result = tool.execute?.({});
+    await vi.waitFor(() => expect(sdkClient.callTool).toHaveBeenCalledOnce());
+    finishClose();
+
+    await expect(result).resolves.toEqual({ content: [{ type: 'text', text: 'pong' }] });
+    await reconnect;
+    expect(usedTransports).toEqual([replacementTransport]);
   });
 
   it('does not replace a healthy transport after a late failure from an older one', async () => {
@@ -3313,7 +3786,7 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
 
     (client as any).transport = replacementTransport;
-    rejectToolCall(new Error('Connection closed'));
+    rejectToolCall(refused());
 
     await expect(result).resolves.toEqual({ content: [{ type: 'text', text: 'pong' }] });
     expect(staleTransport.close).not.toHaveBeenCalled();
@@ -3347,8 +3820,8 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
       });
     const callTool = vi
       .spyOn(sdkClient, 'callTool')
-      .mockRejectedValueOnce(new Error('Connection closed'))
-      .mockRejectedValueOnce(new Error('Connection closed'))
+      .mockRejectedValueOnce(refused())
+      .mockRejectedValueOnce(refused())
       .mockResolvedValue({ content: [{ type: 'text', text: 'pong' }] });
 
     const tool = (await client.tools())['ping'];
@@ -3412,10 +3885,101 @@ describe('InternalMastraMCPClient - concurrent tool reconnects', () => {
     await vi.waitFor(() => expect(callTool).toHaveBeenCalledOnce());
 
     await client.disconnect();
-    rejectToolCall(new Error('Connection closed'));
+    rejectToolCall(refused());
 
     await expect(result).rejects.toThrow('MCP client was disconnected while recovering the failed transport');
     expect(connect).not.toHaveBeenCalled();
     expect(transport.close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () => {
+  function createClientWithTools(tools: unknown[]) {
+    const client = new InternalMastraMCPClient({
+      name: 'schema-test-server',
+      server: { url: new URL('http://localhost:1/mcp') },
+    });
+    vi.spyOn((client as any).client as Client, 'listTools').mockResolvedValue({ tools } as any);
+    const warn = vi.spyOn((client as any).logger, 'warn');
+    return { client, warn };
+  }
+
+  const validTool = {
+    name: 'get_candles',
+    inputSchema: { type: 'object', properties: { coin: { type: 'string' } }, required: ['coin'] },
+  };
+
+  it('skips a tool whose required list is nested under properties and keeps its siblings', async () => {
+    const { client, warn } = createClientWithTools([
+      validTool,
+      {
+        name: 'get_l2_book',
+        inputSchema: { type: 'object', properties: { coin: { type: 'string' }, required: ['coin'] } },
+      },
+    ]);
+
+    const tools = await client.tools();
+
+    expect(Object.keys(tools)).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "get_l2_book" with an invalid input schema'),
+      expect.objectContaining({
+        serverName: 'schema-test-server',
+        toolName: 'get_l2_book',
+        reason: '#/properties/required: Instance type "array" is invalid. Expected "object", "boolean".',
+      }),
+    );
+  });
+
+  it.each(MALFORMED_INPUT_SCHEMAS)('skips a tool with a %s input schema', async (_, inputSchema) => {
+    const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+  });
+
+  it.each(VALID_INPUT_SCHEMAS)('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
+    const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['ok']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('terminates on self-referencing schema objects', async () => {
+    const node: Record<string, unknown> = { type: 'object' };
+    node.properties = { self: node };
+    const { client, warn } = createClientWithTools([{ name: 'cyclic', inputSchema: node }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['cyclic']);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('skips an oversized input schema even when its leaf is malformed', async () => {
+    let inputSchema: Record<string, unknown> = { type: 'object', properties: { required: ['coin'] } };
+    for (let depth = 0; depth < 130; depth++) {
+      inputSchema = { type: 'object', properties: { nested: inputSchema } };
+    }
+    const { client, warn } = createClientWithTools([validTool, { name: 'malformed', inputSchema }]);
+
+    expect(Object.keys(await client.tools())).toEqual(['get_candles']);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping MCP tool "malformed"'),
+      expect.objectContaining({ reason: expect.stringMatching(/maximum depth/i) }),
+    );
+  });
+
+  it('rejects explicit hydration of an invalid definition with a dedicated error', async () => {
+    const { client } = createClientWithTools([]);
+    // The async discovery path waits for the lazily loaded schema validator.
+    await client.tools();
+
+    expect(() =>
+      client.toolFromDefinition({
+        definition: {
+          name: 'get_l2_book',
+          inputSchema: { type: 'object', properties: { required: ['coin'] } } as any,
+          server: { name: 'schema-test-server' },
+        },
+      }),
+    ).toThrow(expect.objectContaining({ id: 'MCP_CLIENT_INVALID_TOOL_INPUT_SCHEMA' }));
   });
 });

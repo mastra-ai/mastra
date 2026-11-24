@@ -1,6 +1,6 @@
-import { ArrowDownIcon } from 'lucide-react';
 import * as React from 'react';
 
+import './message-scroller-button.css';
 import {
   AUTO_SCROLL_ATTACH_THRESHOLD,
   DEFAULT_REACH_START_THRESHOLD,
@@ -22,7 +22,6 @@ import type {
   MessageScrollerScrollAlign,
   MessageScrollerScrollOptions,
   MessageScrollerScrollable,
-  MessageScrollerVisibility,
 } from './message-scroller-context';
 
 import {
@@ -36,7 +35,10 @@ import type { MessageScrollerItemRecord } from './message-scroller-geometry';
 import { glideContent } from './message-scroller-glide';
 import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
+import { createVisibilityStore } from './message-scroller-visibility-store';
 
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
 export type {
@@ -48,26 +50,8 @@ export type {
   MessageScrollerVisibility,
 } from './message-scroller-context';
 
-const mergeRefs =
-  <TElement,>(...refs: Array<React.Ref<TElement> | undefined>) =>
-  (element: TElement | null) => {
-    refs.forEach(ref => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(element);
-        return;
-      }
-      ref.current = element;
-    });
-  };
-
 const scrollableMatches = (left: MessageScrollerScrollable, right: MessageScrollerScrollable) =>
   left.start === right.start && left.end === right.end;
-
-const visibilityMatches = (left: MessageScrollerVisibility, right: MessageScrollerVisibility) =>
-  left.currentAnchorId === right.currentAnchorId &&
-  left.visibleMessageIds.length === right.visibleMessageIds.length &&
-  left.visibleMessageIds.every((messageId, index) => messageId === right.visibleMessageIds[index]);
 
 const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScrollerItemRecord]>) =>
   items.sort(([, left], [, right]) => {
@@ -145,7 +129,8 @@ export function MessageScrollerProvider({
   const seenAnchorElements = seenAnchorElementsRef.current;
   const turnAnchoringArmedRef = React.useRef(false);
   const [scrollable, setScrollable] = React.useState<MessageScrollerScrollable>(DEFAULT_SCROLLABLE);
-  const [visibility, setVisibility] = React.useState<MessageScrollerVisibility>(DEFAULT_VISIBILITY);
+  const [visibilityStore] = React.useState(createVisibilityStore);
+  const publishVisibility = visibilityStore.publish;
   const atEndRef = React.useRef(true);
   // Attachment is a mode, not a measurement: a growing reply moves the end away
   // without the reader having moved, so only the reader detaches it.
@@ -188,10 +173,6 @@ export function MessageScrollerProvider({
     },
     [rootElement, viewportElement],
   );
-
-  const publishVisibility = React.useCallback((nextVisibility: MessageScrollerVisibility) => {
-    setVisibility(current => (visibilityMatches(current, nextVisibility) ? current : nextVisibility));
-  }, []);
 
   // Registration is mount order, not document order, once history is prepended.
   const getOrderedItems = React.useCallback(() => {
@@ -552,6 +533,9 @@ export function MessageScrollerProvider({
 
       if (!didScroll) return;
       defaultScrollAppliedRef.current = true;
+      // A fresh thread opens on its first message with nothing to scroll yet: it is
+      // at its end, so the reply streaming in under it is followed.
+      if (autoScroll && getMaxScroll(viewportElement) <= VISIBILITY_EPSILON) followingRef.current = true;
       // Settling is what arms turn anchoring: the rows the transcript opened with
       // are recorded as read here, and on a settled thread the next anchor to
       // register is the send itself — an arming left to a later anchoring pass
@@ -583,6 +567,7 @@ export function MessageScrollerProvider({
       defaultScrollScheduledRef.current = false;
     };
   }, [
+    autoScroll,
     defaultScrollPosition,
     getLastAnchorId,
     getOrderedItems,
@@ -725,18 +710,10 @@ export function MessageScrollerProvider({
     [scrollable.end, scrollable.start],
   );
 
-  const visibilityContextValue = React.useMemo<MessageScrollerVisibility>(
-    () => ({
-      currentAnchorId: visibility.currentAnchorId,
-      visibleMessageIds: visibility.visibleMessageIds,
-    }),
-    [visibility.currentAnchorId, visibility.visibleMessageIds],
-  );
-
   return (
     <MessageScrollerActionsContext.Provider value={actionsContextValue}>
       <MessageScrollerScrollableContext.Provider value={scrollableContextValue}>
-        <MessageScrollerVisibilityContext.Provider value={visibilityContextValue}>
+        <MessageScrollerVisibilityContext.Provider value={visibilityStore}>
           {children}
         </MessageScrollerVisibilityContext.Provider>
       </MessageScrollerScrollableContext.Provider>
@@ -753,7 +730,7 @@ export const MessageScroller = React.forwardRef<HTMLDivElement, MessageScrollerP
       <div
         ref={mergeRefs(setRootElement, ref)}
         data-slot="message-scroller"
-        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col overflow-hidden', className)}
+        className={cn('group/message-scroller relative flex size-full min-h-0 flex-col', className)}
         {...props}
       />
     );
@@ -776,7 +753,7 @@ export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageS
         data-slot="message-scroller-viewport"
         className={cn(
           // Size container so consumers can size the room under a live turn in cqh.
-          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+          '[container-type:size] size-full min-h-0 min-w-0 overflow-y-auto overscroll-y-contain',
           'data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
           className,
         )}
@@ -870,7 +847,12 @@ export const MessageScrollerItem = React.forwardRef<HTMLDivElement, MessageScrol
         data-slot="message-scroller-item"
         data-message-id={messageId}
         data-scroll-anchor={scrollAnchor ? 'true' : 'false'}
-        className={cn('min-w-0 shrink-0 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]', className)}
+        // content-visibility contains painting. Reserve room for a 2px outline + 2px offset,
+        // and compensate with negative margins so message alignment and spacing stay unchanged.
+        className={cn(
+          '-m-1 min-w-0 shrink-0 p-1 [contain-intrinsic-size:auto_10rem] [content-visibility:auto]',
+          className,
+        )}
         {...props}
       />
     );
@@ -880,13 +862,25 @@ MessageScrollerItem.displayName = 'MessageScrollerItem';
 
 export type MessageScrollerButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
   behavior?: ScrollBehavior;
+  /** The reply is still streaming in below: the button grows a pulsing "•••" beside its arrow. */
+  busy?: boolean;
   children?: React.ReactNode;
   direction?: MessageScrollerButtonDirection;
 };
 
 export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, MessageScrollerButtonProps>(
   (
-    { behavior = 'smooth', direction = 'end', className, children, onClick, tabIndex, type = 'button', ...props },
+    {
+      behavior = 'smooth',
+      busy = false,
+      direction = 'end',
+      className,
+      children,
+      onClick,
+      tabIndex,
+      type = 'button',
+      ...props
+    },
     ref,
   ) => {
     const { scrollToEnd, scrollToStart } = useRequiredMessageScrollerActionsContext('MessageScrollerButton');
@@ -901,9 +895,10 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
         data-slot="message-scroller-button"
         data-active={active ? 'true' : 'false'}
         data-direction={direction}
+        data-busy={busy ? 'true' : 'false'}
         tabIndex={active ? tabIndex : -1}
         className={cn(
-          'absolute inset-s-1/2 inline-flex min-h-5 min-w-7 -translate-x-1/2 items-center justify-center rounded-full border border-border1 bg-surface3 text-foreground shadow-[0_1px_2px_-1px_oklch(0%_0_0deg/10%),0_8px_20px_-12px_oklch(0%_0_0deg/25%)] transition-[translate,scale,opacity] duration-200 hover:bg-surface4 data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:translate-y-0 data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=end]:data-[active=false]:translate-y-full data-[direction=start]:top-4 data-[direction=start]:data-[active=false]:-translate-y-full rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
+          'absolute inset-s-1/2 inline-flex size-control-lg -translate-x-1/2 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-[scale,opacity,box-shadow,color] duration-200 hover:text-foreground data-[active=false]:pointer-events-none data-[active=false]:scale-95 data-[active=false]:opacity-0 data-[active=false]:duration-400 data-[active=false]:ease-[cubic-bezier(0.7,0,0.84,0)] data-[active=true]:scale-100 data-[active=true]:opacity-100 data-[active=true]:ease-[cubic-bezier(0.23,1,0.32,1)] data-[direction=end]:bottom-4 data-[direction=start]:top-4 rtl:translate-x-1/2 data-[direction=start]:[&_svg]:rotate-180',
           className,
         )}
         onClick={event => {
@@ -920,7 +915,15 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
       >
         {children ?? (
           <>
-            <ArrowDownIcon className="size-4" aria-hidden />
+            <span data-slot="message-scroller-button-glyph" aria-hidden>
+              <IconArrowDown className="size-icon-sm" />
+              <svg data-slot="message-scroller-button-activity" viewBox="0 0 20 16" fill="none">
+                <path
+                  pathLength={1}
+                  d="M2 10.5c1.6-4.2 3.4-4.2 3.6-1.4.2 2.6 1.5 3.4 3-.2 1.4-3.5 3-4.4 3.5-1.6.4 2.4 1.6 3.2 2.9.6.8-1.6 1.7-2.6 3-2.9"
+                />
+              </svg>
+            </span>
             <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
           </>
         )}

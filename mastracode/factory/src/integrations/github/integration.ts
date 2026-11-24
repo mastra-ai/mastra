@@ -29,6 +29,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
+import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -40,6 +41,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type {
+  CommitCheck,
   PullRequest,
   PullRequestComment,
   Review,
@@ -49,12 +51,19 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import type { GithubEventRules, GithubRuleOverrides } from './default-rules.js';
 import { resolveGithubRules } from './default-rules.js';
+import { githubIntakeLookup } from './intake-lookup.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
-import { buildGithubRoutes } from './routes.js';
-import { attachGithubReconciler, attachGithubRules } from './rules.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
+import type { GitIdentity } from './sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -63,9 +72,11 @@ import {
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
-type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
-  ? TInput
-  : never;
+type InputOf<TMethod extends keyof VersionControl> =
+  NonNullable<VersionControl[TMethod]> extends (input: infer TInput) => unknown ? TInput : never;
+
+const GITHUB_CHECK_TITLE_LIMIT = 255;
+const GITHUB_CHECK_TEXT_LIMIT = 65_535;
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -98,6 +109,27 @@ export interface RepoSummary {
   defaultBranch: string;
   private: boolean;
   installationId: number;
+  /** When the repository last received a push, for "most recent first" ordering. */
+  pushedAt?: string | null;
+}
+
+/**
+ * Narrows a repository listing: `query` keeps names containing it, `limit`
+ * returns only that many, most recently pushed first. `fresh` skips caches.
+ */
+export interface RepoListOptions {
+  fresh?: boolean;
+  query?: string;
+  limit?: number;
+}
+
+/** Repositories whose full name contains `query`, most recently pushed first, at most `limit`. */
+export function narrowRepos(repos: RepoSummary[], query = '', limit?: number): RepoSummary[] {
+  const needle = query.trim().toLowerCase();
+  return repos
+    .filter(repo => repo.fullName.toLowerCase().includes(needle))
+    .sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''))
+    .slice(0, limit);
 }
 
 export interface GithubTriageCommentUpsertInput {
@@ -126,6 +158,11 @@ const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
 const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
 /** Bound on the shared upstream lookup; callers race their own signal against it. */
 const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
+/** Installations whose Octokit (and cached token) is kept; least recently used is evicted. */
+const INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES = 1000;
+/** Missed-open issue discovery reads at most this many pages per repository per sweep. */
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
+const OPEN_ISSUE_DISCOVERY_PAGE_SIZE = 100;
 
 export interface IssueSummary {
   number: number;
@@ -197,6 +234,13 @@ export class GithubIntegration implements FactoryIntegration {
   get rules(): GithubEventRules {
     return this.#rules;
   }
+  readonly intakeLookup: IntakeItemLookup = githubIntakeLookup({
+    sourceControl: () => this.sourceControlStorage,
+    fetchIssueState: input => this.fetchIssueState(input),
+    fetchPullRequestState: input => this.fetchPullRequestState(input),
+    getRepositoryCollaboratorPermission: (installationId, repository, login) =>
+      this.getRepositoryCollaboratorPermission(installationId, repository, login),
+  });
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
@@ -310,6 +354,21 @@ export class GithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.sourceControlStorage.installations.get({
+        orgId,
+        id: repository.installationId,
+      });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = Number.parseInt(installation.externalId, 10);
+      if (!Number.isSafeInteger(installationId)) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await this.sourceControlStorage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
@@ -346,9 +405,11 @@ export class GithubIntegration implements FactoryIntegration {
     createReviewComment: input => this.#createReviewComment(input),
     updateReviewComment: input => this.#updateReviewComment(input),
     deleteReviewComment: input => this.#deleteReviewComment(input),
+    resolveReviewThread: input => this.#resolveReviewThread(input),
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
+    publishCommitCheck: input => this.#publishCommitCheck(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -364,6 +425,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #webhookSecret: string | undefined;
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
   /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
@@ -372,6 +434,12 @@ export class GithubIntegration implements FactoryIntegration {
   >();
   /** Same key → lookup already in flight, so overlapping callers share one request. */
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
+  /**
+   * One Octokit per installation, so its auth instance keeps the installation
+   * token cached (auth-app refreshes it before expiry) instead of minting a new
+   * token on every call.
+   */
+  readonly #installationOctokits = new Map<number, Octokit>();
 
   constructor(config: GithubIntegrationConfig) {
     this.#rules = resolveGithubRules(config.rules);
@@ -395,6 +463,11 @@ export class GithubIntegration implements FactoryIntegration {
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Commit authorship for repositories opened by this App. */
+  get gitIdentity(): GitIdentity | undefined {
+    return { login: `${this.#slug}[bot]` };
   }
 
   /** Whether a GitHub login belongs to this integration's App. */
@@ -476,7 +549,29 @@ export class GithubIntegration implements FactoryIntegration {
    * token). Used to list repos and to operate on a repo on the user's behalf.
    */
   getInstallationOctokit(installationId: number): Octokit {
-    return new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+    let octokit = this.#installationOctokits.get(installationId);
+    if (octokit) {
+      // Re-insert so Map order tracks recency for LRU eviction.
+      this.#installationOctokits.delete(installationId);
+    } else {
+      const created = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      // auth-app keeps serving a cached token GitHub has revoked (it only retries
+      // 401s within 5 s of minting), so drop this client and mint fresh next call.
+      // Not on 403: GitHub also uses it for rate limits.
+      created.hook.error('request', error => {
+        if ('status' in error && error.status === 401 && this.#installationOctokits.get(installationId) === created) {
+          this.#installationOctokits.delete(installationId);
+        }
+        throw error;
+      });
+      octokit = created;
+      if (this.#installationOctokits.size >= INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES) {
+        const oldest = this.#installationOctokits.keys().next().value;
+        if (oldest !== undefined) this.#installationOctokits.delete(oldest);
+      }
+    }
+    this.#installationOctokits.set(installationId, octokit);
+    return octokit;
   }
 
   /** Octokit authenticated as a user via their OAuth token (the identify step). */
@@ -510,13 +605,17 @@ export class GithubIntegration implements FactoryIntegration {
     }));
   }
 
-  /** List repos accessible to an installation (paginated). */
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  /**
+   * List repos accessible to an installation (paginated), narrowed by
+   * `query`/`limit`. Always reads GitHub directly, so `fresh` has nothing to
+   * bypass here.
+   */
+  async listInstallationRepos(installationId: number, options?: RepoListOptions): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
     });
-    return repos.map(repo => ({
+    const summaries: RepoSummary[] = repos.map(repo => ({
       id: repo.id,
       fullName: repo.full_name,
       name: repo.name,
@@ -524,7 +623,9 @@ export class GithubIntegration implements FactoryIntegration {
       defaultBranch: repo.default_branch,
       private: repo.private,
       installationId,
+      pushedAt: repo.pushed_at ?? null,
     }));
+    return options?.query || options?.limit ? narrowRepos(summaries, options.query, options.limit) : summaries;
   }
 
   /**
@@ -575,17 +676,21 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Fetch a single repo's metadata through an installation token and confirm
-   * the installation actually has access to it. Returns `null` when the repo
-   * is not accessible to the installation (so a client can't create a project
-   * for an arbitrary repo under an installation id it merely owns).
+   * Fetch a single repo's metadata and confirm the installation was granted
+   * it. Returns `null` when the repo belongs to another installation or none
+   * (GitHub answers 404), so a client can't link an arbitrary repo under an
+   * installation id it merely owns. `repos.get` alone isn't enough: it returns
+   * any public repo to any token. Other upstream failures throw.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return null;
-    const octokit = this.getInstallationOctokit(installationId);
     try {
-      const { data } = await octokit.repos.get(parts);
+      const [{ data: installation }, { data }] = await Promise.all([
+        this.getAppOctokit().apps.getRepoInstallation(parts),
+        this.getInstallationOctokit(installationId).repos.get(parts),
+      ]);
+      if (installation.id !== installationId) return null;
       return {
         id: data.id,
         fullName: data.full_name,
@@ -595,8 +700,9 @@ export class GithubIntegration implements FactoryIntegration {
         private: data.private,
         installationId,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
     }
   }
 
@@ -1028,6 +1134,32 @@ export class GithubIntegration implements FactoryIntegration {
     });
   }
 
+  async #resolveReviewThread(input: InputOf<'resolveReviewThread'>) {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const commentId = requirePositiveId(input.commentId, 'review comment');
+    let pullRequestUrl: string;
+    try {
+      const { data } = await octokit.pulls.getReviewComment({ ...parts, comment_id: commentId });
+      pullRequestUrl = data.pull_request_url;
+    } catch (err) {
+      if (isNotFoundError(err)) {
+        throw new Error(
+          `GitHub review comment ${commentId} was not found in ${input.sourceId}. List the pull request's diff comments and pass the id of one of them.`,
+        );
+      }
+      throw err;
+    }
+    const pullNumber = requirePullRequestNumber(pullRequestUrl.slice(pullRequestUrl.lastIndexOf('/') + 1));
+    const threadId = await findReviewThreadId(octokit, parts, pullNumber, commentId);
+    if (!threadId) {
+      throw new Error(
+        `GitHub review comment ${commentId} on pull request #${pullNumber} is not part of a published review thread, so there is no thread to resolve. Comments in a pending review join a thread once that review is submitted; submit the review first, or pass the id of a published diff comment.`,
+      );
+    }
+    const mutation = input.resolved ? RESOLVE_REVIEW_THREAD_MUTATION : UNRESOLVE_REVIEW_THREAD_MUTATION;
+    await octokit.graphql(mutation, { threadId });
+  }
+
   async #listRequestedReviewers(input: InputOf<'listRequestedReviewers'>) {
     const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
     const { data } = await octokit.pulls.listRequestedReviewers({
@@ -1057,6 +1189,38 @@ export class GithubIntegration implements FactoryIntegration {
       team_reviewers: input.teams ?? [],
     });
     return parseRequestedReviewers(data);
+  }
+
+  /**
+   * Always creates a new check run: GitHub shows the latest run per app and
+   * name on a commit, so a completed run supersedes an earlier in-progress one.
+   */
+  async #publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { status } = input;
+    const { data } = await octokit.checks
+      .create({
+        ...parts,
+        name: input.name,
+        head_sha: input.headSha,
+        ...(status === 'in-progress'
+          ? { status: 'in_progress' as const }
+          : { status: 'completed' as const, conclusion: status, completed_at: new Date().toISOString() }),
+        output: {
+          title: input.title.slice(0, GITHUB_CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, GITHUB_CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, GITHUB_CHECK_TEXT_LIMIT) } : {}),
+        },
+      })
+      .catch((error: unknown) => {
+        if ((error as { status?: number } | null)?.status === 403) {
+          throw new Error(
+            'github cannot publish commit checks: the GitHub App lacks the "checks: write" permission; nothing was published.',
+          );
+        }
+        throw error;
+      });
+    return { id: String(data.id), name: data.name, headSha: data.head_sha, status: input.status, url: data.html_url };
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */
@@ -1187,28 +1351,33 @@ export class GithubIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: the `/web/github/*` + `/auth/github/*`
    * Mastra `apiRoutes` (webhook handler, install/OAuth flow, project +
-   * worktree + session operations). The factory folds these into the server's
+   * commit/push/PR operations). The factory folds these into the server's
    * `apiRoutes` when the feature is ready. Handlers operate on this instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
       sandbox: ctx.sandbox,
-      ...(ctx.users ? { users: ctx.users } : {}),
       storage: ctx.factoryStorage,
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       controller: ctx.controller,
-      memorySettings: ctx.storage.memorySettings,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
-      sessionRetirement: ctx.sessionRetirement,
-      ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
   /**
@@ -1229,22 +1398,33 @@ export class GithubIntegration implements FactoryIntegration {
     const reconcile = pullRequestEnabled
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
-    const issues = issueEnabled
-      ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+    const discover = pullRequestEnabled
+      ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
       : undefined;
-    if (!reconcile && !issues) return [];
+    const issues = issueEnabled
+      ? attachGithubIssueReconciler(
+          this,
+          ctx,
+          input => this.fetchIssueState(input),
+          input => this.listOpenIssueStates(input),
+        )
+      : undefined;
+    if (!reconcile && !issues && !discover) return [];
 
     const legacyInterval = reconcileInterval(process.env.MASTRACODE_GITHUB_RECONCILE_INTERVAL_MS);
     const intervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_RECONCILE_INTERVAL_MS) ?? legacyInterval;
     const issueIntervalMs =
       reconcileInterval(process.env.MASTRACODE_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ?? legacyInterval;
+    const discoveryIntervalMs = reconcileInterval(process.env.MASTRACODE_GITHUB_PR_DISCOVERY_INTERVAL_MS);
     return [
       new GithubReconcileWorker({
         ...(reconcile ? { reconcile } : {}),
         ...(issues ? { reconcileIssues: issues } : {}),
+        ...(discover ? { discover } : {}),
         sourceControl: ctx.storage.sourceControl,
         ...(intervalMs ? { intervalMs } : {}),
         ...(issueIntervalMs ? { issueIntervalMs } : {}),
+        ...(discoveryIntervalMs ? { discoveryIntervalMs } : {}),
       }),
     ];
   }
@@ -1320,6 +1500,47 @@ export class GithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Lists a repository's open issues (pull requests excluded) so the issue
+   * sweep can mint cards for issues whose webhook never arrived.
+   */
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return [];
+    const octokit = this.getInstallationOctokit(input.installationId);
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const { data } = await octokit.issues.listForRepo({
+        owner: parts.owner,
+        repo: parts.repo,
+        state: 'open',
+        per_page: OPEN_ISSUE_DISCOVERY_PAGE_SIZE,
+        page,
+      });
+      for (const issue of data) {
+        if (issue.pull_request) continue;
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.html_url,
+          state: 'open',
+          assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
+          labels: (issue.labels ?? [])
+            .map(label => (typeof label === 'string' ? label : label.name))
+            .filter((name): name is string => Boolean(name)),
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.created_at,
+          updatedAt: issue.updated_at,
+        });
+      }
+      if (data.length < OPEN_ISSUE_DISCOVERY_PAGE_SIZE) break;
+    }
+    return issues;
   }
 
   /**
@@ -1526,6 +1747,125 @@ function requirePositiveId(value: string, resource: string): number {
   const parsed = parsePositiveInteger(value);
   if (parsed === null) throw new Error(`GitHub ${resource} id must be a positive integer.`);
   return parsed;
+}
+
+const REVIEW_THREAD_PAGE_SIZE = 100;
+
+const REVIEW_THREADS_QUERY = `
+  query ($owner: String!, $repo: String!, $number: Int!, $cursor: String, $pageSize: Int!) {
+    repository(owner: $owner, name: $repo) {
+      pullRequest(number: $number) {
+        reviewThreads(first: $pageSize, after: $cursor) {
+          nodes {
+            id
+            comments(first: $pageSize) {
+              nodes { fullDatabaseId }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const REVIEW_THREAD_COMMENTS_QUERY = `
+  query ($threadId: ID!, $cursor: String, $pageSize: Int!) {
+    node(id: $threadId) {
+      ... on PullRequestReviewThread {
+        comments(first: $pageSize, after: $cursor) {
+          nodes { fullDatabaseId }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+  }
+`;
+
+const RESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    resolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+const UNRESOLVE_REVIEW_THREAD_MUTATION = `
+  mutation ($threadId: ID!) {
+    unresolveReviewThread(input: { threadId: $threadId }) { thread { id } }
+  }
+`;
+
+interface GraphqlPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface GraphqlReviewThreadComments {
+  // GitHub serializes the BigInt scalar as a string.
+  nodes: Array<{ fullDatabaseId: string | null } | null> | null;
+  pageInfo: GraphqlPageInfo;
+}
+
+interface ReviewThreadsResponse {
+  repository: {
+    pullRequest: {
+      reviewThreads: {
+        nodes: Array<{ id: string; comments: GraphqlReviewThreadComments } | null> | null;
+        pageInfo: GraphqlPageInfo;
+      };
+    } | null;
+  } | null;
+}
+
+interface ReviewThreadCommentsResponse {
+  node: { comments?: GraphqlReviewThreadComments } | null;
+}
+
+function containsComment(comments: GraphqlReviewThreadComments, commentId: number): boolean {
+  const id = String(commentId);
+  return (comments.nodes ?? []).some(comment => comment?.fullDatabaseId === id);
+}
+
+/**
+ * GitHub exposes review threads only through GraphQL, keyed by node id, while
+ * Factory tools carry REST comment ids. Walk every thread (and every comment of
+ * long threads) until one holds the comment; replies match their own thread.
+ */
+async function findReviewThreadId(
+  octokit: Octokit,
+  parts: { owner: string; repo: string },
+  pullNumber: number,
+  commentId: number,
+): Promise<string | null> {
+  let cursor: string | null = null;
+  do {
+    const response: ReviewThreadsResponse = await octokit.graphql<ReviewThreadsResponse>(REVIEW_THREADS_QUERY, {
+      ...parts,
+      number: pullNumber,
+      cursor,
+      pageSize: REVIEW_THREAD_PAGE_SIZE,
+    });
+    const threads = response.repository?.pullRequest?.reviewThreads;
+    if (!threads) return null;
+    const threadNodes = (threads.nodes ?? []).filter(thread => thread !== null);
+    const match = threadNodes.find(thread => containsComment(thread.comments, commentId));
+    if (match) return match.id;
+    // Only threads longer than one page can still hide the comment.
+    for (const thread of threadNodes) {
+      let comments = thread.comments;
+      while (comments.pageInfo.hasNextPage) {
+        const page: ReviewThreadCommentsResponse = await octokit.graphql<ReviewThreadCommentsResponse>(
+          REVIEW_THREAD_COMMENTS_QUERY,
+          { threadId: thread.id, cursor: comments.pageInfo.endCursor, pageSize: REVIEW_THREAD_PAGE_SIZE },
+        );
+        if (!page.node?.comments) break;
+        comments = page.node.comments;
+        if (containsComment(comments, commentId)) return thread.id;
+      }
+    }
+    cursor = threads.pageInfo.hasNextPage ? threads.pageInfo.endCursor : null;
+  } while (cursor);
+  return null;
 }
 
 function getGithubInstallationId(connection: IntegrationConnection): number {

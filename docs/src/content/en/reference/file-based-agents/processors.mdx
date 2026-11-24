@@ -7,12 +7,6 @@ packages:
 
 # Processors
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Use this page for the file-based convention; use the processors guide for built-in processors, custom processors, streaming behavior, and advanced patterns.
 
 Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.
@@ -53,6 +47,8 @@ model → config.outputProcessors → processors/output/* → response
 ```
 
 If `config.inputProcessors` or `config.outputProcessors` is a function, discovered processors of that type are ignored with a warning because function-valued processors can't be statically merged.
+
+If `config.ts` exports a `new Agent()` instead of a config object, Mastra uses that agent as-is. Discovered files under `processors/input/` and `processors/output/` are ignored with a warning, so set `inputProcessors` and `outputProcessors` on the `Agent` instead.
 
 ## Precedence with config
 

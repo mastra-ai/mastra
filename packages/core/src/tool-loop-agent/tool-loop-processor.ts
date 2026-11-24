@@ -238,7 +238,7 @@ export class ToolLoopAgentProcessor implements Processor<'tool-loop-agent-proces
         instructions: this.settings.instructions,
         stopWhen: this.settings.stopWhen,
         activeTools,
-        providerOptions,
+        providerOptions: providerOptions as PrepareCallInput['providerOptions'],
 
         // Model settings
         temperature: modelSettings?.temperature,

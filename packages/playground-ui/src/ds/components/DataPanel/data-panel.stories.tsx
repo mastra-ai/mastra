@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CalendarClockIcon, TimerIcon, BotIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
 import { DataPanel } from './data-panel';
 import type { DataPanelProps } from './data-panel-root';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 
 const meta: Meta<typeof DataPanel> = {
   title: 'Composite/DataPanel',
@@ -27,6 +29,10 @@ const meta: Meta<typeof DataPanel> = {
           '',
           'Rendering a `DataPanel` inside another one stacks them natively (Base UI nested drawers).',
           '',
+          'Pass `variant="inline"` to render the same card in the normal document flow instead (no portal,',
+          'backdrop, focus trap or dismissal). The parent controls mounting and size; give it a constrained',
+          'height so `DataPanel.Content` can scroll.',
+          '',
           'This is the pattern behind the observability trace / span / log detail views, shared by',
           'both the local Studio and Cloud Studio. For a wide modal with a hidden close tab, see `Layout/SideDialog`.',
         ].join('\n'),
@@ -46,7 +52,7 @@ export const Default: Story = {
         <DataPanel.Heading>Span Details</DataPanel.Heading>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Panel content goes here.</p>
+        <p className="text-caption text-muted-foreground">Panel content goes here.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -65,7 +71,7 @@ export const WithNavigation: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Navigate between items with the arrows.</p>
+        <p className="text-caption text-muted-foreground">Navigate between items with the arrows.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -81,13 +87,13 @@ export const WithMetadata: Story = {
             Trace <b>abc123</b>
           </DataPanel.Heading>
           <DataPanel.Metadata>
-            <DataPanel.Meta as="a" href="#" icon={<BotIcon />} tooltip="Agent">
+            <DataPanel.Meta as="a" href="#" icon={<IconRobot />} tooltip="Agent">
               weather-agent
             </DataPanel.Meta>
-            <DataPanel.Meta icon={<CalendarClockIcon />} tooltip="Started at 2024-01-01 10:00:00">
+            <DataPanel.Meta icon={<IconCalendarClock4 />} tooltip="Started at 2024-01-01 10:00:00">
               2 min ago
             </DataPanel.Meta>
-            <DataPanel.Meta icon={<TimerIcon />} tooltip="Duration 1,234ms">
+            <DataPanel.Meta icon={<IconStopwatch />} tooltip="Duration 1,234ms">
               1.2s
             </DataPanel.Meta>
           </DataPanel.Metadata>
@@ -100,9 +106,47 @@ export const WithMetadata: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Metadata renders inline next to the heading and truncates.</p>
+        <p className="text-caption text-muted-foreground">Metadata renders inline next to the heading and truncates.</p>
       </DataPanel.Content>
     </DataPanel>
+  ),
+};
+
+export const Inline: Story = {
+  render: () => (
+    <div className="grid h-150 grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_minmax(0,28rem)]">
+      <div className="rounded-xl border border-dashed border-border p-4">
+        <p className="text-caption text-muted-foreground">Page content</p>
+      </div>
+      <DataPanel variant="inline" title="Span abc123">
+        <DataPanel.Header>
+          <DataPanel.HeaderContent>
+            <DataPanel.Heading>
+              Span <b>abc123</b>
+            </DataPanel.Heading>
+            <DataPanel.Metadata>
+              <DataPanel.Meta icon={<IconRobot />} tooltip="Agent">
+                weather-agent
+              </DataPanel.Meta>
+              <DataPanel.Meta icon={<IconStopwatch />} tooltip="Duration 1,234ms">
+                1.2s
+              </DataPanel.Meta>
+            </DataPanel.Metadata>
+          </DataPanel.HeaderContent>
+          <DataPanel.HeaderActions>
+            <DataPanel.NextPrevNav onPrevious={() => {}} onNext={() => {}} />
+            <DataPanel.CloseButton icon="x" onClick={() => {}} />
+          </DataPanel.HeaderActions>
+        </DataPanel.Header>
+        <DataPanel.Content>
+          {Array.from({ length: 40 }, (_, i) => (
+            <p key={i} className="text-caption text-muted-foreground">
+              Inline content line {i + 1}
+            </p>
+          ))}
+        </DataPanel.Content>
+      </DataPanel>
+    </div>
   ),
 };
 
@@ -138,7 +182,7 @@ export const Wide: Story = {
         <DataPanel.Heading>Wide Panel</DataPanel.Heading>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">
+        <p className="text-caption text-muted-foreground">
           <code>size=&quot;wide&quot;</code> takes 80% of the viewport for multi-column content;{' '}
           <code>size=&quot;full&quot;</code> covers it entirely.
         </p>
@@ -160,7 +204,9 @@ export const DisabledNav: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Previous button is disabled because onPrevious is undefined.</p>
+        <p className="text-caption text-muted-foreground">
+          Previous button is disabled because onPrevious is undefined.
+        </p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -182,7 +228,7 @@ const StackedDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Escape, backdrop click or the close button dismiss this panel. Open a nested panel to stack a second one on
             top.
           </p>
@@ -201,7 +247,7 @@ const StackedDemo = () => {
               </DataPanel.Heading>
             </DataPanel.Header>
             <DataPanel.Content>
-              <p className="text-ui-sm text-muted-foreground">
+              <p className="text-caption text-muted-foreground">
                 Escape only closes this top-most panel; the parent stays open underneath.
               </p>
             </DataPanel.Content>
@@ -237,7 +283,7 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             The score panel is a <b>sibling</b> drawer (not nested in the DOM) rendered after this one with a higher{' '}
             <code>depth</code>, so it is narrower and this panel peeks out on the left.
           </p>
@@ -253,7 +299,7 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Escape closes this panel first; the result stays open beneath.
           </p>
         </DataPanel.Content>

@@ -13,7 +13,7 @@ import {
   ProcessorStepOutputSchema,
   ProcessorStepSchema,
 } from '@mastra/core/processors';
-import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
+import type { InferPublicSchema, PublicSchema } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
 import type { ChunkType, LanguageModelUsage } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
@@ -150,7 +150,7 @@ export function createStep<
 export function createStep<TStepId extends string, TStepOutput>(
   agent: InngestSubAgent<TStepId> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -194,7 +194,13 @@ export function createStep<
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
  */
-export function createStep<TProcessorId extends string>(
+export function createStep<
+  TProcessorId extends string,
+  // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
+  TInput extends
+    | InferPublicSchema<typeof ProcessorStepInputSchema>
+    | InferPublicSchema<typeof ProcessorStepOutputSchema> = InferPublicSchema<typeof ProcessorStepInputSchema>,
+>(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
     | (Processor<TProcessorId> & { processInputStream: Function })
@@ -205,7 +211,7 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferPublicSchema<typeof ProcessorStepInputSchema>,
+  TInput,
   InferPublicSchema<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -964,7 +970,19 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         any,
         InngestEngineType
       >[],
-    >(params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
+      TParsedInput = TInput,
+    >(
+      // A schema with `.default()`/`.coerce` has two faces: callers provide the schema's
+      // input type (`TInput`), while the first step receives the parsed output type
+      // (`TParsedInput`) because `Run._validateInput` replaces the input with the
+      // parser's return value. Re-matching `inputSchema` against the two-parameter
+      // `PublicSchema<Output, Input>` captures both faces so `.then(step)` compares
+      // the first step's input against the parsed type, while `run.start`, cron, and
+      // configured `inputData` keep accepting the raw caller input.
+      params: InngestWorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext> & {
+        inputSchema: PublicSchema<TParsedInput, TInput>;
+      },
+    ) {
       return new InngestWorkflow<
         InngestEngineType,
         TSteps,
@@ -972,7 +990,7 @@ export function init<TRequestContext = unknown>(inngest: Inngest) {
         TState,
         TInput,
         TOutput,
-        TInput,
+        TParsedInput,
         TRequestContext
       >(params, inngest);
     },

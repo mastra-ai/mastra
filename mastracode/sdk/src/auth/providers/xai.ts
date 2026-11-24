@@ -227,7 +227,7 @@ export async function pollXAIDeviceLogin(
 export async function loginXAI(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
   const pending = await startXAIDeviceLogin({ signal: callbacks.signal });
 
-  callbacks.onAuth({ url: pending.url, instructions: pending.instructions });
+  callbacks.onAuth({ url: pending.url, instructions: pending.instructions, userCode: pending.userCode });
   callbacks.onProgress?.('Waiting for xAI device authorization...');
 
   return pollDeviceCodeUntilComplete({

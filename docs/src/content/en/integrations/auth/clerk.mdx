@@ -1,22 +1,37 @@
 ---
 title: "Clerk | Auth"
-description: "Authenticate Mastra APIs and Studio with Clerk using JWT verification, OAuth single sign-on, encrypted sessions, and separate Studio authentication."
+description: "Give Mastra agents Clerk tools through Mastra Connect, and authenticate Mastra APIs and Studio with the @mastra/auth-clerk provider, OAuth single sign-on, and MastraClient."
 packages:
   - "@mastra/auth-clerk"
   - "@mastra/client-js"
+  - "@mastra/connect"
   - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import ClerkConnectTools from "@site/src/components/connect/generated/clerk.mdx";
 
 # Clerk
 
+Use Clerk with Mastra in two ways:
+
+- **Agent tools** let an agent manage Clerk users, organizations, and sessions through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Server authentication](#server-authentication)** verifies requests to your Mastra server with Clerk, using the `@mastra/auth-clerk` package.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<ClerkConnectTools />
+
+## Server authentication
+
 The `@mastra/auth-clerk` package verifies Clerk-issued tokens for API requests and supports [Studio authentication](/docs/studio/auth) through OAuth single sign-on (SSO) with encrypted session cookies. Configure it under `server.auth` for API authentication or under `studio.auth` for separate Studio authentication.
 
-## Prerequisites
+### Prerequisites
 
-This example uses Clerk authentication. Make sure to add your Clerk credentials to your `.env` file and ensure your Clerk project is properly configured.
+This example uses Clerk authentication. Ensure you add your Clerk credentials to your `.env` file and ensure your Clerk project is configured correctly.
 
 ```env title=".env"
 CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -30,7 +45,7 @@ You can find these keys in your Clerk Dashboard under "API Keys".
 
 :::
 
-## Installation
+### Installation
 
 Before you can use the `MastraAuthClerk` class you have to install the `@mastra/auth-clerk` package.
 
@@ -38,7 +53,7 @@ Before you can use the `MastraAuthClerk` class you have to install the `@mastra/
 npm install @mastra/auth-clerk@latest
 ```
 
-## Usage example
+### Usage example
 
 ```typescript {2,6-10} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -63,7 +78,7 @@ Visit [MastraAuthClerk](/reference/auth/clerk) for all available configuration o
 
 :::
 
-## Studio SSO
+### Studio SSO
 
 Clerk can act as the OAuth identity provider for Studio. The publishable key, secret key, and JWKS URI used for API authentication don't enable the Studio SSO flow on their own. You also need an OAuth client ID and secret.
 
@@ -107,13 +122,13 @@ Open Studio in a signed-out browser session and select **Sign in with Clerk**. A
 This example leaves ordinary API requests unauthenticated. A Studio login screen doesn't prevent callers from accessing those endpoints directly. Configure `server.auth` too if your API needs protection. See [Separate Studio and API authentication](/docs/studio/auth#separate-studio-and-api-authentication).
 :::
 
-To use Clerk for both Studio and API authentication, move this provider configuration to `server.auth` and leave `studio.auth` unset. For production Studio SSO, see the [EE licensing requirements](/docs/studio/auth#ee-licensing).
+To use Clerk for both Studio and API authentication, move this provider configuration to `server.auth` and leave `studio.auth` unset. For production Studio SSO, see the [EE license requirements](/docs/license#what-requires-an-ee-license).
 
-## Client-side setup
+### Client-side setup
 
 For direct API requests protected by `server.auth`, retrieve the access token from Clerk on the client side and pass it to your Mastra requests.
 
-### Retrieving the access token
+#### Retrieving the access token
 
 Use the Clerk React hooks to authenticate users and retrieve their access token:
 
@@ -134,7 +149,7 @@ export const useClerkAuth = () => {
 
 Refer to the [Clerk documentation](https://clerk.com/docs) for more information.
 
-## Configuring `MastraClient`
+### Configuring `MastraClient`
 
 When Clerk is configured under `server.auth`, requests to protected API routes made with `MastraClient` must include a valid Clerk access token in the `Authorization` header:
 
@@ -157,7 +172,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 :::
 
-### Making authenticated requests
+#### Making authenticated requests
 
 Once `MastraClient` is configured with the Clerk access token, you can send authenticated requests:
 

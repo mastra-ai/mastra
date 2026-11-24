@@ -9,6 +9,7 @@ import type {
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { __setObservabilityFeaturesForTest } from './features';
+import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
 import { getAttributes, formatUsageMetrics, getSpanName } from './gen-ai-semantics';
 
 const INFERENCE_ENABLED = new Set(['model-inference-span']);
@@ -87,6 +88,28 @@ describe('getAttributes - tool attributes', () => {
     expect(attrs).not.toHaveProperty('gen_ai.tool.type');
   });
 
+  it('exports MCP server request metadata', () => {
+    const span = createSpan(SpanType.MCP_SERVER_REQUEST);
+    span.attributes = {
+      mcpMethod: 'tools/call',
+      targetName: 'lookup',
+      mcpServer: 'roster',
+      serverVersion: '1.0.0',
+      mcpProtocolVersion: '2026-07-28',
+      clientName: 'claude-desktop',
+      clientVersion: '2.1.0',
+    };
+    expect(getAttributes(span)).toMatchObject({
+      'mcp.method.name': 'tools/call',
+      'mcp.protocol.version': '2026-07-28',
+      'mastra.mcp_server_request.server_name': 'roster',
+      'mastra.mcp_server_request.server_version': '1.0.0',
+      'mastra.mcp_server_request.target_name': 'lookup',
+      'mastra.mcp_server_request.client_name': 'claude-desktop',
+      'mastra.mcp_server_request.client_version': '2.1.0',
+    });
+  });
+
   it.each([SpanType.TOOL_CALL, SpanType.PROVIDER_TOOL_CALL])('does not export MCP metadata for %s', type => {
     const attrs = getAttributes(createSpan(type));
     expect(attrs).not.toHaveProperty('server.address');
@@ -136,7 +159,7 @@ describe('getAttributes - token usage', () => {
       usage: { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } },
     });
     const attrs = getAttributes(span);
-    expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(400);
+    expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(400);
   });
 
   it('should extract model, provider, usage, and RAG metadata for embedding spans', () => {
@@ -158,6 +181,25 @@ describe('getAttributes - token usage', () => {
     expect(attrs['mastra.rag_embedding.mode']).toBe('ingest');
     expect(attrs['mastra.rag_embedding.dimensions']).toBe(1536);
     expect(attrs['mastra.rag_embedding.input_count']).toBe(3);
+  });
+});
+
+describe('getAttributes - provider name', () => {
+  it.each([
+    ['openai', 'openai'],
+    ['openai.responses', 'openai'],
+    ['anthropic.messages', 'anthropic'],
+    ['google', 'gcp.gemini'],
+    ['google.generative-ai', 'gcp.gemini'],
+    ['google.vertex.chat', 'gcp.vertex_ai'],
+    ['vertex.anthropic.messages', 'gcp.vertex_ai'],
+    ['azure.responses', 'azure.ai.openai'],
+    ['amazon-bedrock', 'aws.bedrock'],
+    ['acme.chat', 'acme.chat'],
+  ])('reports AI SDK provider %s as %s', (provider, expected) => {
+    const attrs = getAttributes(createModelInferenceSpan({ model: 'test-model', provider }));
+
+    expect(attrs['gen_ai.provider.name']).toBe(expected);
   });
 });
 
@@ -196,7 +238,8 @@ describe('formatUsageMetrics', () => {
   it('should extract reasoning from outputDetails', () => {
     const usage: UsageStats = { inputTokens: 100, outputTokens: 500, outputDetails: { reasoning: 400 } };
     const result = formatUsageMetrics(usage);
-    expect(result['gen_ai.usage.reasoning_tokens']).toBe(400);
+    expect(result['gen_ai.usage.reasoning.output_tokens']).toBe(400);
+    expect(result).not.toHaveProperty('gen_ai.usage.reasoning_tokens');
   });
 
   it('should not emit non-spec cache attribute names that older versions used', () => {
@@ -405,6 +448,12 @@ describe('getAttributes - workflow attributes', () => {
     expect(getAttributes(span)['mastra.workflow_run.status']).toBe('success');
   });
 
+  it('names the workflow on its run span', () => {
+    const span = createWorkflowSpan(SpanType.WORKFLOW_RUN, { entityId: 'order-flow', entityName: 'order-flow' });
+
+    expect(getAttributes(span)['gen_ai.workflow.name']).toBe('order-flow');
+  });
+
   it('adds no workflow-specific keys when a workflow span carries no attributes', () => {
     const span = createWorkflowSpan(SpanType.WORKFLOW_PARALLEL, { attributes: {} });
     const attrs = getAttributes(span);
@@ -516,7 +565,7 @@ describe('getAttributes - one span per model call', () => {
       'gen_ai.usage.input_tokens': 61,
       'gen_ai.usage.output_tokens': 14,
       'gen_ai.usage.cache_read.input_tokens': 40,
-      'gen_ai.response.finish_reasons': JSON.stringify(['tool-calls']),
+      'gen_ai.response.finish_reasons': ['tool-calls'],
       'gen_ai.response.model': 'gpt-5-2025-08-07',
       'gen_ai.response.id': 'resp-1',
       'gen_ai.agent.name': 'weather-agent',
@@ -524,6 +573,30 @@ describe('getAttributes - one span per model call', () => {
     expect(attrs).toHaveProperty('gen_ai.input.messages');
     expect(attrs).toHaveProperty('gen_ai.output.messages');
     expect(getSpanName(span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o' }))).toBe('chat gpt-4o');
+  });
+
+  it('gives each output message the finish reason in the output messages schema spelling', () => {
+    const outputMessages = (finishReason?: string) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason }),
+          output: { text: 'Checking.', toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: {} }] },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    expect(outputMessages('tool-calls')).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'text', content: 'Checking.' },
+          { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: '{}' },
+        ],
+        finish_reason: 'tool_call',
+      },
+    ]);
+    expect(outputMessages('content-filter')[0].finish_reason).toBe('content_filter');
+    expect(outputMessages('length')[0].finish_reason).toBe('length');
+    expect(outputMessages(undefined)[0].finish_reason).toBe('unknown');
   });
 
   it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {
@@ -569,5 +642,65 @@ describe('getAttributes - one span per model call', () => {
       expect(attrs['gen_ai.operation.name']).toBe('model_inference');
       expect(attrs).not.toHaveProperty('gen_ai.usage.input_tokens');
     });
+  });
+});
+
+describe('convertMastraMessagesToGenAIMessages', () => {
+  const convert = (value: unknown) => JSON.parse(convertMastraMessagesToGenAIMessages(JSON.stringify(value)));
+
+  it('keeps tool calls from a tool-only model output as tool_call parts', () => {
+    expect(
+      convert({
+        text: '',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: { city: 'Paris' } }],
+      }),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [{ type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) }],
+      },
+    ]);
+  });
+
+  it('keeps both the text and the tool calls when a step has both', () => {
+    expect(
+      convert({
+        text: 'Let me check.',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: { city: 'Paris' } }],
+      }),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'text', content: 'Let me check.' },
+          { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) },
+        ],
+      },
+    ]);
+  });
+
+  it('still emits a text part for a text-only output, even when empty', () => {
+    expect(convert({ text: 'hello', toolCalls: [] })).toEqual([
+      { role: 'assistant', parts: [{ type: 'text', content: 'hello' }] },
+    ]);
+    expect(convert({ text: '' })).toEqual([{ role: 'assistant', parts: [{ type: 'text', content: '' }] }]);
+  });
+
+  it('converts the bare message list recorded as inference input', () => {
+    expect(
+      convert([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: 'Weather in Paris?' },
+      ]),
+    ).toEqual([
+      { role: 'system', parts: [{ type: 'text', content: 'Be brief.' }] },
+      { role: 'user', parts: [{ type: 'text', content: 'Weather in Paris?' }] },
+    ]);
+  });
+
+  it('returns unknown shapes unchanged', () => {
+    expect(convertMastraMessagesToGenAIMessages('[1,2]')).toBe('[1,2]');
+    expect(convertMastraMessagesToGenAIMessages('{"foo":1}')).toBe('{"foo":1}');
+    expect(convertMastraMessagesToGenAIMessages('not json')).toBe('not json');
   });
 });

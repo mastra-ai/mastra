@@ -205,6 +205,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
       error: vi.fn(),
       update: vi.fn(),
       exportSpan: vi.fn(),
+      snapshot: vi.fn(),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       // isInternal is false above, so this mock stands in for an exportable span
       // and resolves to its own id, matching BaseSpan.getExportedSpanId().
@@ -278,8 +279,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolName: 'findUserTool',
         toolCallId,
       });
-      expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.resumeFrom).toMatchObject({ traceId: 'mock-trace-id', spanId: expect.any(String) });
       expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();
@@ -600,8 +600,7 @@ describe('resumed AGENT_RUN span input and trace continuity', () => {
         toolName: 'findUserTool',
         toolCallId: output.suspendPayload!.toolCallId,
       });
-      expect(resumedCall.tracingOptions?.traceId).toBe('mock-trace-id');
-      expect(resumedCall.resumedFromSpanId).toBeTruthy();
+      expect(resumedCall.resumeFrom).toMatchObject({ traceId: 'mock-trace-id', spanId: expect.any(String) });
       expect(resumedCall.tracingOptions?.parentSpanId).toBeUndefined();
     } finally {
       spy.mockRestore();

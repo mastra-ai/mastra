@@ -1,14 +1,20 @@
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useState } from 'react';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { BuiltinMcpServerSection } from '@/domains/mcps/components/builtin-mcp-server/builtin-mcp-server-card';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import type { McpServersSort } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
-import { useMCPServers } from '@/domains/mcps/hooks/use-mcp-servers';
+import { navCrumb } from '@/domains/navigation/crumbs';
+
+const crumbs = [navCrumb('/mcps')];
 
 const MCPs = () => {
   const { data: mcpServers = [], isLoading, error } = useMCPServers();
@@ -17,51 +23,78 @@ const MCPs = () => {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="MCP servers" />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
+        <PermissionDenied variant="fill" resource="MCP servers" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load MCP servers" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
+        <EmptyState
+          tone="error"
+          variant="fill"
+          titleSlot="Failed to load MCP servers"
+          descriptionSlot={error.message}
+        />
+      </PageLayout>
     );
   }
 
   if (mcpServers.length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout>
-        <NoMCPServersInfo />
-      </NoDataPageLayout>
+      <PageLayout variant="page" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <h1 className="sr-only">MCP Servers</h1>
+        <div className="flex flex-col gap-6">
+          <BuiltinMcpServerSection />
+          <NoMCPServersInfo />
+        </div>
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout height="full">
-      <PageLayout.TopArea>
-        <div className="max-w-120">
-          <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
-        </div>
-      </PageLayout.TopArea>
-
-      <McpServersList
-        mcpServers={mcpServers}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+    <PageLayout
+      variant="page"
+      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      actionRow={
+        <ActionRow>
+          <ActionRow.Start>
+            <div className="max-w-120 flex-1">
+              <SearchInput
+                {...listSearchProps}
+                onValueChange={setSearch}
+                label="Search MCP servers"
+                placeholder="Search by name"
+              />
+            </div>
+          </ActionRow.Start>
+        </ActionRow>
+      }
+    >
+      <h1 className="sr-only">MCP Servers</h1>
+      <div className="flex flex-col gap-6">
+        <BuiltinMcpServerSection />
+        <McpServersList
+          mcpServers={mcpServers}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </div>
     </PageLayout>
   );
 };

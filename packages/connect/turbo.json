@@ -15,11 +15,23 @@
         "!**/*.spec.ts",
         "!**/__tests__/**"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "!dist/docs/**"]
     },
     "build": {
-      "dependsOn": ["build:lib"],
+      "dependsOn": ["build:lib", "generate:provider-docs"],
       "inputs": ["package.json"]
+    },
+    "generate:provider-docs": {
+      // Regenerates Connect provider docs (reference, generated integration pages, partials)
+      // from src/providers and scripts/provider-docs-metadata.ts.
+      // Writes outside the package (docs/), so it cannot be cached.
+      "inputs": [
+        "src/providers/**",
+        "scripts/generate-provider-docs.ts",
+        "scripts/provider-docs-lib.ts",
+        "scripts/provider-docs-metadata.ts"
+      ],
+      "cache": false
     }
   }
 }

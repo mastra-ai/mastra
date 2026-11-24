@@ -62,7 +62,7 @@ const processor = new ModerationProcessor({
             name: 'threshold',
             type: 'number',
             description:
-              'Confidence threshold for flagging (0-1). Content is flagged if any category score exceeds this threshold',
+              'Confidence threshold for flagging (0-1). Content is flagged if any category score is greater than or equal to this threshold',
             isOptional: true,
             default: '0.5',
           },
@@ -101,9 +101,17 @@ const processor = new ModerationProcessor({
             name: 'chunkWindow',
             type: 'number',
             description:
-              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc.',
+              'Number of previous chunks to include for context when moderating stream chunks. If set to 1, includes the previous part, etc. Only applies when `bufferSize` is `0`.',
             isOptional: true,
             default: '0 (no context window)',
+          },
+          {
+            name: 'bufferSize',
+            type: 'number',
+            description:
+              'Opt-in buffering for streamed text. When greater than `0`, streamed text is held back and moderated in one LLM call when it ends a sentence, reaches this many characters, or a non-text part arrives. This makes far fewer LLM calls and catches content split across chunks. Recommended for production streaming, for example `bufferSize: 200`. With `0`, every text chunk gets its own LLM call.',
+            isOptional: true,
+            default: '0',
           },
           {
             name: 'providerOptions',
@@ -133,19 +141,21 @@ const processor = new ModerationProcessor({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name, always 'Moderation'",
+    isOptional: false,
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
-    description: 'Processes input messages to moderate content before sending to LLM',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
+    description:
+      'Processes input messages to moderate content before sending to LLM. `requestContext` is passed to the moderation agent, including when it resolves a dynamic model.',
     isOptional: false,
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
-    description: 'Processes streaming output parts to moderate content during streaming',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; writer?: unknown; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
+    description:
+      'Processes streaming output parts to moderate content during streaming. When `bufferSize` is greater than 0 and a `writer` is passed, text deltas are buffered and checked together. The method returns `null` while text is buffered and returns the flushed text once a sentence ends or the buffer fills. With `strategy: "filter"`, it also returns `null` when flushed text is flagged, and that text is dropped. When a non-text part such as `finish` arrives, the method flushes the buffer. If the flush returns text, the method returns that text and holds the non-text part so the processor runner can reprocess it next. If the buffer is empty or the filter drops the flushed text, the non-text part is returned directly. The runner also flushes any text still buffered when the stream ends. Agents handle this for you. If you call the method directly, reprocess held parts the same way, or leave `bufferSize` at `0`. Without a `writer`, each text delta is checked separately. `requestContext` is passed to the moderation agent.',
     isOptional: false,
   },
 ]}
@@ -178,6 +188,8 @@ export const agent = new Agent({
 ```
 
 ### Output processing with batching
+
+For production streaming, set `bufferSize` (for example `bufferSize: 200`) so `ModerationProcessor` makes one moderation call per sentence instead of one per chunk. Buffering also catches content that's split across chunks. Text then reaches the client in sentence-sized pieces.
 
 When using `ModerationProcessor` as an output processor, it's recommended to combine it with `BatchPartsProcessor` to optimize performance. The `BatchPartsProcessor` batches stream chunks together before passing them to the moderator, reducing the number of LLM calls required for moderation.
 

@@ -13,6 +13,8 @@ Mastra uses pub/sub internally for workflow event processing, streaming, and cro
 
 For built-in implementations, see [`EventEmitterPubSub`](/reference/pubsub/event-emitter), [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub), [`CachingPubSub`](/reference/pubsub/caching-pubsub), [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), and [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
+Mastra decides how to behave from an implementation's [properties](#properties), not from its class. Override the ones that describe your transport.
+
 ## Usage example
 
 Extend `PubSub` and implement the four abstract methods to add a custom backend.
@@ -122,6 +124,17 @@ The default implementation is a no-op because transports that retain nothing per
 await pubsub.clearTopic('workflow.events.v2.run-123')
 ```
 
+#### `trimTopic(topic, { runId, producedBefore? })`
+
+Deletes every retained entry on the topic that was published with `runId`. Other entries are untouched. Mastra calls this once a run completes successfully and its messages are saved to storage, so finished runs leave the topic while runs still in progress or waiting for approval stay. The default implementation is a no-op. [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) overrides it. Same best-effort contract as `clearTopic`.
+
+With `producedBefore` (epoch ms), only entries whose `data.producedAt` is at or before it are deleted, and entries marked `data.pinned` (approval and suspension prompts) are kept. Mastra uses this while a run continues: each time the run's messages are saved mid-run, the parts up to the last finished step leave the topic.
+
+```typescript
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123' })
+await pubsub.trimTopic('agent.thread.thread-abc', { runId: 'run-123', producedBefore: Date.now() })
+```
+
 ### Replay methods
 
 These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](/reference/pubsub/caching-pubsub) overrides them to replay cached events.
@@ -176,6 +189,18 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     type: 'boolean',
     description:
       'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
+  },
+  {
+    name: 'deliversAcrossProcesses',
+    type: 'boolean',
+    description:
+      'Whether a published event can reach a subscriber in another process. Defaults to `true`, so Mastra coordinates runs with other processes unless the implementation says otherwise. Return `false` only when every subscriber lives in the publishing process, as `EventEmitterPubSub` does.',
+  },
+  {
+    name: 'redeliversUnacked',
+    type: 'boolean',
+    description:
+      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this, and only after 30 seconds or more. Evented workflows and agents that run on several processes need `true`. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).",
   },
 ]}
 />

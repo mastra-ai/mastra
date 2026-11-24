@@ -1,5 +1,253 @@
 # @mastra/schema-compat
 
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.4.0
+
+### Minor Changes
+
+- JSON Schema `format` keywords are now enforced when validating a plain JSON Schema ([#30113](https://github.com/mastra-ai/mastra/pull/30113))
+
+  Previously a `format` (`email`, `uri`, `date-time`, ...) declared in a plain JSON Schema was ignored: the
+  value passed validation and Ajv logged `unknown format "..." ignored in schema at path "..."`. The formats
+  from `ajv-formats` are now registered on the Ajv instance used by `toStandardSchema()`, so invalid values
+  are rejected instead.
+
+  This affects every plain JSON Schema validated through `toStandardSchema()` — MCP tool inputs, core tool
+  schemas and structured output. Schemas written with Zod or another Standard Schema library are unaffected.
+
+  Two related changes come with it:
+
+  - `format` is now checked, so values that used to be accepted are rejected. For `date-time`, replace values
+    without a timezone (before: `2026-11-05T10:00:00`) with timezone-qualified values (after:
+    `2026-11-05T10:00:00Z` or `2026-11-05T10:00:00+00:00`).
+  - `formatMinimum` / `formatMaximum` on `date` / `date-time` now take effect.
+
+  For direct `@mastra/schema-compat` callers, validate a timezone-qualified value:
+
+  ```ts
+  import { toStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
+
+  const schema = { type: 'string', format: 'date-time' } as const;
+  const result = toStandardSchema(schema)['~standard'].validate('2026-11-05T10:00:00Z');
+  ```
+
+  If direct callers need the previous behavior, use
+  `toStandardSchema(schema, { ajvOptions: { validateFormats: false } })`. MCP tool inputs, core tool schemas,
+  and structured output do not expose this opt-out; supply format-valid values for those paths instead.
+
+  Fixes [#29385](https://github.com/mastra-ai/mastra/issues/29385)
+
+### Patch Changes
+
+- Generate JSON Schema for OpenAPI request parameters and bodies from their accepted inputs, while keeping response schemas based on emitted outputs. Zod v4 schemas with defaults or transformations now expose the correct input/output representations. ([#30187](https://github.com/mastra-ai/mastra/pull/30187))
+
+- Fixed Gemini rejecting tools whose input schema has a numeric, boolean or empty-string literal, such as `z.literal(1)`, `z.literal(true)` or `z.union([z.string(), z.literal('')])`. Gemini only accepts non-empty string enums, so one such field made every request to the agent fail with HTTP 400. These fields are now sent as their plain type with the allowed values in the description. String enums from external JSON Schema that omit `type` now get `type: "string"`. Tool arguments are still validated against your original schema. Fixes #29167. ([#29416](https://github.com/mastra-ai/mastra/pull/29416))
+
+## 1.4.0-alpha.2
+
+### Patch Changes
+
+- Generate JSON Schema for OpenAPI request parameters and bodies from their accepted inputs, while keeping response schemas based on emitted outputs. Zod v4 schemas with defaults or transformations now expose the correct input/output representations. ([#30187](https://github.com/mastra-ai/mastra/pull/30187))
+
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- JSON Schema `format` keywords are now enforced when validating a plain JSON Schema ([#30113](https://github.com/mastra-ai/mastra/pull/30113))
+
+  Previously a `format` (`email`, `uri`, `date-time`, ...) declared in a plain JSON Schema was ignored: the
+  value passed validation and Ajv logged `unknown format "..." ignored in schema at path "..."`. The formats
+  from `ajv-formats` are now registered on the Ajv instance used by `toStandardSchema()`, so invalid values
+  are rejected instead.
+
+  This affects every plain JSON Schema validated through `toStandardSchema()` — MCP tool inputs, core tool
+  schemas and structured output. Schemas written with Zod or another Standard Schema library are unaffected.
+
+  Two related changes come with it:
+
+  - `format` is now checked, so values that used to be accepted are rejected. For `date-time`, replace values
+    without a timezone (before: `2026-11-05T10:00:00`) with timezone-qualified values (after:
+    `2026-11-05T10:00:00Z` or `2026-11-05T10:00:00+00:00`).
+  - `formatMinimum` / `formatMaximum` on `date` / `date-time` now take effect.
+
+  For direct `@mastra/schema-compat` callers, validate a timezone-qualified value:
+
+  ```ts
+  import { toStandardSchema } from '@mastra/schema-compat/adapters/json-schema';
+
+  const schema = { type: 'string', format: 'date-time' } as const;
+  const result = toStandardSchema(schema)['~standard'].validate('2026-11-05T10:00:00Z');
+  ```
+
+  If direct callers need the previous behavior, use
+  `toStandardSchema(schema, { ajvOptions: { validateFormats: false } })`. MCP tool inputs, core tool schemas,
+  and structured output do not expose this opt-out; supply format-valid values for those paths instead.
+
+  Fixes [#29385](https://github.com/mastra-ai/mastra/issues/29385)
+
+## 1.3.18-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini rejecting tools whose input schema has a numeric, boolean or empty-string literal, such as `z.literal(1)`, `z.literal(true)` or `z.union([z.string(), z.literal('')])`. Gemini only accepts non-empty string enums, so one such field made every request to the agent fail with HTTP 400. These fields are now sent as their plain type with the allowed values in the description. String enums from external JSON Schema that omit `type` now get `type: "string"`. Tool arguments are still validated against your original schema. Fixes #29167. ([#29416](https://github.com/mastra-ai/mastra/pull/29416))
+
+## 1.3.17
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.17-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.16
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.16-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.15
+
+### Patch Changes
+
+- Fixed Azure OpenAI GPT models filling optional tool inputs with made-up values. They now leave optional inputs empty, as they already do through `@ai-sdk/openai`. This applies when the Azure deployment name contains an OpenAI model name, such as `gpt-4o`, `my-gpt5-deployment` or `o3-mini`. Deployments with other names, such as `production`, and non-OpenAI models served through Azure behave as before. ([#26680](https://github.com/mastra-ai/mastra/pull/26680))
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
+## 1.3.15-alpha.0
+
+### Patch Changes
+
+- Fixed Azure OpenAI GPT models filling optional tool inputs with made-up values. They now leave optional inputs empty, as they already do through `@ai-sdk/openai`. This applies when the Azure deployment name contains an OpenAI model name, such as `gpt-4o`, `my-gpt5-deployment` or `o3-mini`. Deployments with other names, such as `production`, and non-OpenAI models served through Azure behave as before. ([#26680](https://github.com/mastra-ai/mastra/pull/26680))
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
+## 1.3.14
+
+### Patch Changes
+
+- Fixed TypeScript types for Standard Schemas that transform their input, such as Effect's `Schema.toStandardSchemaV1(Schema.DateFromString)`. Tool `execute` functions now receive the transformed output type instead of a union of input and output types. Tool `requestContextSchema` now accepts these schemas, and tool request context is typed with the transformed output. ([#26815](https://github.com/mastra-ai/mastra/pull/26815))
+
+  ```typescript
+  const DateSchema = Schema.toStandardSchemaV1(Schema.Struct({ date: Schema.DateFromString }));
+
+  const tool = createTool({
+    id: 'schedule',
+    description: 'Schedules an event',
+    inputSchema: DateSchema,
+    requestContextSchema: DateSchema,
+    execute: async ({ date }, { requestContext }) => {
+      date.toISOString(); // date is typed as Date
+      requestContext.get('date').toISOString(); // request context value is typed as Date
+    },
+  });
+  ```
+
+## 1.3.14-alpha.0
+
+### Patch Changes
+
+- Fixed TypeScript types for Standard Schemas that transform their input, such as Effect's `Schema.toStandardSchemaV1(Schema.DateFromString)`. Tool `execute` functions now receive the transformed output type instead of a union of input and output types. Tool `requestContextSchema` now accepts these schemas, and tool request context is typed with the transformed output. ([#26815](https://github.com/mastra-ai/mastra/pull/26815))
+
+  ```typescript
+  const DateSchema = Schema.toStandardSchemaV1(Schema.Struct({ date: Schema.DateFromString }));
+
+  const tool = createTool({
+    id: 'schedule',
+    description: 'Schedules an event',
+    inputSchema: DateSchema,
+    requestContextSchema: DateSchema,
+    execute: async ({ date }, { requestContext }) => {
+      date.toISOString(); // date is typed as Date
+      requestContext.get('date').toISOString(); // request context value is typed as Date
+    },
+  });
+  ```
+
+## 1.3.13
+
+### Patch Changes
+
+- Fixed OpenAI strict-mode schema preparation rejecting `allOf` object schemas with properties named `constructor`, `toString`, or `__proto__`. ([#25655](https://github.com/mastra-ai/mastra/pull/25655))
+
+## 1.3.13-alpha.0
+
+### Patch Changes
+
+- Fixed OpenAI strict-mode schema preparation rejecting `allOf` object schemas with properties named `constructor`, `toString`, or `__proto__`. ([#25655](https://github.com/mastra-ai/mastra/pull/25655))
+
+## 1.3.12
+
+### Patch Changes
+
+- Fixed structured output validation failing when optional fields inside `.nullable()` or `.nullish()` objects or arrays were returned as `null`. They are now dropped, matching the behavior for non-nullable parents. ([#25276](https://github.com/mastra-ai/mastra/pull/25276))
+
+- Fixed `zodToJsonSchema` so nullable Zod v4 enums and literals still accept `null`. A field like `z.enum(['red', 'blue']).nullable()` was exported as `{ type: ['string', 'null'], enum: ['red', 'blue'] }`, which rejects `null`. The exported schema now lists `null` among the allowed values, so tool parameters, OpenAPI schemas and dataset schemas match the Zod schema again. Fixes [#24516](https://github.com/mastra-ai/mastra/issues/24516). ([#25086](https://github.com/mastra-ai/mastra/pull/25086))
+
+- Fixed OpenAI tools failing silently when they have optional number parameters with a `format`, such as `pageSize: { type: "integer", format: "int32" }`. These tools now return responses as expected. ([#25067](https://github.com/mastra-ai/mastra/pull/25067))
+
+## 1.3.12-alpha.1
+
+### Patch Changes
+
+- Fixed structured output validation failing when optional fields inside `.nullable()` or `.nullish()` objects or arrays were returned as `null`. They are now dropped, matching the behavior for non-nullable parents. ([#25276](https://github.com/mastra-ai/mastra/pull/25276))
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Fixed `zodToJsonSchema` so nullable Zod v4 enums and literals still accept `null`. A field like `z.enum(['red', 'blue']).nullable()` was exported as `{ type: ['string', 'null'], enum: ['red', 'blue'] }`, which rejects `null`. The exported schema now lists `null` among the allowed values, so tool parameters, OpenAPI schemas and dataset schemas match the Zod schema again. Fixes [#24516](https://github.com/mastra-ai/mastra/issues/24516). ([#25086](https://github.com/mastra-ai/mastra/pull/25086))
+
+- Fixed OpenAI tools failing silently when they have optional number parameters with a `format`, such as `pageSize: { type: "integer", format: "int32" }`. These tools now return responses as expected. ([#25067](https://github.com/mastra-ai/mastra/pull/25067))
+
+## 1.3.11
+
+### Patch Changes
+
+- Fixed JSON Schema adapter declarations to use bundled Ajv types, so consumers do not need a separate Ajv installation. Ajv remains bundled as a development dependency. ([#23998](https://github.com/mastra-ai/mastra/pull/23998))
+
+- Fixed `@mastra/schema-compat/json-to-zod` failing with "jsonSchemaToZod is not a function" when loaded from CommonJS, and generated schemas now use `z.record(z.string(), value)` so JSON Schemas with `additionalProperties` or `patternProperties` validate correctly on Zod v4 before 4.4.0 (including zod@3.25's `zod/v4`). Fixes dataset `addItem` and tool schema conversion crashing on record-shaped schemas. See https://github.com/mastra-ai/mastra/issues/23993 ([#24049](https://github.com/mastra-ai/mastra/pull/24049))
+
+- Fixed tool schema handling for Claude models hosted on Google Vertex (`@ai-sdk/google-vertex/anthropic`). ([#24108](https://github.com/mastra-ai/mastra/pull/24108))
+
+  The Google compatibility layer matched on the `googleVertex` provider prefix and rewrote nullable fields into OpenAPI `nullable: true`, which Claude ignores. Claude on Vertex now uses the Anthropic compatibility layer, so `string | null` parameters keep JSON Schema `type: ['string', 'null']`. Gemini on Vertex is unchanged.
+
 ## 1.3.11-alpha.1
 
 ### Patch Changes

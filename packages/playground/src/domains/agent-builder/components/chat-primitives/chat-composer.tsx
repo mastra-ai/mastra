@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUpIcon, Loader2 } from 'lucide-react';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
@@ -27,7 +28,7 @@ export const ChatComposer = ({
   disabled,
   canSubmit,
   isRunning = false,
-  placeholder = 'Ask a follow-up…',
+  placeholder = 'Ask a follow-up',
   inputTestId,
   submitTestId,
   containerTestId,
@@ -43,7 +44,7 @@ export const ChatComposer = ({
     () => ({
       viewTransitionName: 'chat-composer',
       ['--agent-color-fg' as string]: agentColor.foreground,
-      ['--agent-color-bg' as string]: agentColor.background,
+      ['--agent-color-bg' as string]: agentColor.tint,
     }),
     [agentColor],
   );
@@ -51,7 +52,7 @@ export const ChatComposer = ({
   return (
     <form onSubmit={onSubmit} className="shrink-0">
       <div
-        className="border-border1 bg-surface2 rounded-3xl border px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
+        className="rounded-3xl border border-border bg-background px-3 pt-2.5 transition-colors focus-within:border-[var(--agent-color-bg)]"
         style={containerStyle}
         data-testid={containerTestId}
       >
@@ -72,9 +73,8 @@ export const ChatComposer = ({
             tooltip={isRunning ? 'Generating…' : 'Send'}
             disabled={!canSubmit}
             data-testid={submitTestId}
-            className="rounded-full"
           >
-            {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
+            {isRunning ? <IconLoadingCircle className="animate-spin" /> : <IconArrowUp />}
           </Button>
         </div>
       </div>

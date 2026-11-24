@@ -91,8 +91,38 @@ class EmulatedTerminal implements Terminal {
 
   async drainInput(_maxMs?: number, _idleMs?: number): Promise<void> {}
 
+  /** Text written to the clipboard through OSC 52, oldest first. */
+  readonly clipboardWrites: string[] = [];
+
   write(data: string): void {
     this.writeToXterm(data);
+    for (const match of data.matchAll(/\x1b\]52;c;([^\x07]*)\x07/g)) {
+      this.clipboardWrites.push(Buffer.from(match[1]!, 'base64').toString('utf8'));
+    }
+    if (data.includes('\x1b[6n')) {
+      // Headless xterm runs with stdin disabled, so answer cursor position
+      // requests ourselves once the preceding output has been applied.
+      this.outputQueue = this.outputQueue
+        .then(() => {
+          const buffer = this.xterm.buffer.active;
+          this.inputHandler?.(`\x1b[${buffer.cursorY + 1};${buffer.cursorX + 1}R`);
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  mouseTracking(): string {
+    return this.xterm.modes.mouseTrackingMode;
+  }
+
+  /** 1-based screen position of the first visible occurrence of `text`. */
+  findOnScreen(text: string): { row: number; col: number } | undefined {
+    const rows = this.serialize().view.split('\n');
+    for (let index = 0; index < rows.length; index += 1) {
+      const col = rows[index]!.indexOf(text);
+      if (col >= 0) return { row: index + 1, col: col + 1 };
+    }
+    return undefined;
   }
 
   get columns(): number {
@@ -217,6 +247,39 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     keyCtrlC() {
       terminal.sendInput('\x03');
     },
+    clickText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`clickText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}M`);
+      terminal.sendInput(`\x1b[<0;${position.col};${position.row}m`);
+      return terminal.flushInput();
+    },
+    dragText(text: string, fromOffset: number, toOffset: number) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`dragText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      const { row, col } = position;
+      terminal.sendInput(`\x1b[<0;${col + fromOffset};${row}M`);
+      terminal.sendInput(`\x1b[<32;${col + toOffset};${row}M`);
+      terminal.sendInput(`\x1b[<0;${col + toOffset};${row}m`);
+      return terminal.flushInput();
+    },
+    clipboardWrites() {
+      return [...terminal.clipboardWrites];
+    },
+    hoverText(text: string) {
+      const position = terminal.findOnScreen(text);
+      if (!position) throw new Error(`hoverText: "${text}" not on screen\n\n${terminal.serialize().view}`);
+      terminal.sendInput(`\x1b[<35;${position.col};${position.row}M`);
+    },
+    wheel(direction: 'up' | 'down', count = 1) {
+      const button = direction === 'up' ? 64 : 65;
+      const row = Math.ceil(terminal.rows / 2);
+      const col = Math.ceil(terminal.columns / 2);
+      for (let index = 0; index < count; index += 1) terminal.sendInput(`\x1b[<${button};${col};${row}M`);
+    },
+    mouseTracking() {
+      return terminal.mouseTracking();
+    },
     resize(columns: number, rows: number) {
       terminal.resize(columns, rows);
     },
@@ -338,7 +401,11 @@ async function startMastraCodeApp(
   terminal: Terminal,
   options?: McE2eStartMastraCodeAppOptions,
 ): Promise<McE2eInProcessApp> {
-  const [{ createMastraCode }, { MastraTUI }, { createBrowserFromSettings, loadSettings }] = await Promise.all([
+  const [
+    { createMastraCode, resolveSubagentsSetting },
+    { MastraTUI },
+    { createBrowserFromSettings, loadSettings, resolveStagehandModel, toActiveBrowserSettings },
+  ] = await Promise.all([
     import('@mastra/code-sdk'),
     import('../src/tui/index.js'),
     import('@mastra/code-sdk/onboarding/settings'),
@@ -357,11 +424,13 @@ async function startMastraCodeApp(
       ? { ...(envInitialState ?? {}), ...(configuredInitialState ?? {}) }
       : undefined;
   const result = await createMastraCode({
+    createInitialThread: false,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
     ...(isTruthyEnv('MASTRACODE_ENABLE_CROSS_AGENT_SIGNALS') ? { crossAgentSignals: true } : {}),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false } : {}),
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     cwd: runConfig.cwd,
     ...(process.env.HOME ? { homeDir: process.env.HOME } : {}),
     ...(options?.config ?? {}),
@@ -382,11 +451,14 @@ async function startMastraCodeApp(
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
+    initialModelOverride: Boolean(initialState?.currentModelId),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
+    threadScheduler: result.threadScheduler,
     terminal,
     ...(options?.tui ?? {}),
   });
@@ -396,11 +468,16 @@ async function startMastraCodeApp(
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
   });
 
+  // Mirrors main.ts: snapshot credential-free settings plus the launch-time model.
   if (settings.browser.enabled) {
-    const browser = await createBrowserFromSettings(settings.browser);
+    const chatModelId = result.session.model.get();
+    const browser = await createBrowserFromSettings(settings.browser, { chatModelId });
     if (browser) {
       result.controller.setBrowser(browser);
-      await result.session.state.set({ activeBrowserSettings: settings.browser });
+      await result.session.state.set({
+        activeBrowserSettings: toActiveBrowserSettings(settings.browser),
+        activeBrowserModel: resolveStagehandModel(settings.browser, { chatModelId }),
+      });
     }
   }
 
@@ -410,13 +487,23 @@ async function startMastraCodeApp(
       if (stopped) return;
       stopped = true;
       tui.stop();
-      const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+      result.threadScheduler.stop();
+      // As in the production asyncCleanup(): stop delivering notifications and
+      // release the dispatch leases before storage and the pubsub close.
+      await result.stopNotificationDispatch?.().catch(() => {});
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
         result.controller.getMastra()?.stopWorkers(),
         result.controller.stopIntervals(),
-        closeSignalsPubSub?.(),
       ]);
+      // Let background memory work (buffered observations, indexing) finish before storage
+      // closes and the scenario's temp HOME is deleted, so none of it leaks into later scenarios.
+      if (result.memory && 'settled' in result.memory) await result.memory.settled();
+      // The signals pubsub is Mastra's event bus, so close it after the workers
+      // stop (as the production asyncCleanup() does after Mastra shutdown). Call
+      // close() on the object; a detached method loses `this` and rejects silently.
+      const signalsPubSub = result.signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+      await Promise.allSettled([signalsPubSub?.close?.()]);
       // Close storage last — checkpoints WAL and switches to DELETE journal
       // mode for local libsql, mirroring the production asyncCleanup() path.
       await result.storageMaintenance?.closeStorage?.().catch(() => {

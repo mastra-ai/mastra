@@ -16,7 +16,7 @@ export function DataPanelHeading({ className, children }: DataPanelHeadingProps)
         // `shrink-0`: the heading keeps its text; the inline `Metadata` row is what gets clipped.
         'inline-flex max-w-full min-w-0 shrink-0 items-center gap-1 rounded-full px-1',
         controlSizeClasses.sm,
-        'cursor-default font-medium text-foreground [&>b]:font-normal [&>b]:text-muted-foreground',
+        'cursor-default text-foreground [&>b]:text-caption [&>b]:text-muted-foreground',
         className,
       )}
     >
