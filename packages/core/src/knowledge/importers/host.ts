@@ -1,3 +1,4 @@
+import { parseKnowledgeTimelineTime } from '../../storage/domains/knowledge/timelines';
 import type {
   KnowledgeImporterErrorCode,
   KnowledgeImporterFinishRequest,
@@ -272,8 +273,6 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   fallbackParent: { kind: 'nonEmpty' },
 };
 
-const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
-
 const ENTRY_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   externalId: { kind: 'nonEmpty', required: true },
   occurredAt: { kind: 'isoTime', required: true },
@@ -332,7 +331,7 @@ function checkFields<T>(
       case 'isoTime': {
         // Entries are ordered by these, so a string that parses wrong would look like data in the wrong place.
         const time = checkString(field, at, true);
-        if (!ISO_TIME.test(time) || Number.isNaN(Date.parse(time))) {
+        if (!parseKnowledgeTimelineTime(time)) {
           throw new TypeError(`${at} must be an ISO 8601 date-time, got "${time}".`);
         }
         out[key] = time;

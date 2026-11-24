@@ -95,6 +95,30 @@ describe('knowledgeImporterFlushDigest', () => {
 describe('parseKnowledgeImporterFlushBody', () => {
   const upsert = { op: 'upsert', item: { sourceId: 'a', title: 'A', body: 'x' } };
 
+  it.each(['2026-02-30T00:00Z', '2026-01-01T24:00Z', '2026-04-31T00:00:00+02:00'])(
+    'refuses calendar rollover %s in either entry timestamp',
+    time => {
+      for (const field of ['occurredAt', 'editedAt']) {
+        expect(() =>
+          parseKnowledgeImporterFlushBody({
+            ops: [
+              {
+                op: 'entry',
+                timeline: 'a',
+                entry: {
+                  externalId: '1',
+                  body: '',
+                  occurredAt: '2026-02-28T00:00Z',
+                  [field]: time,
+                },
+              },
+            ],
+          }),
+        ).toThrow(TypeError);
+      }
+    },
+  );
+
   it.each([
     [
       'a sparse aliases array',

@@ -12,6 +12,7 @@ import {
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
+import { parseKnowledgeTimelineTime } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -31,6 +32,53 @@ afterAll(async () => {
 });
 
 describe('KnowledgePG storage isolation', () => {
+  it('provisions timeline tables and indexes from exported DDL with init disabled', async () => {
+    const schemaName = 'knowledge_timeline_export_test';
+    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const ddl = KnowledgePG.getExportDDL(schemaName).join('\n');
+      expect(ddl).toContain('mastra_knowledge_timelines');
+      expect(ddl).toContain('mastra_knowledge_timeline_entries_time');
+      expect(ddl).toContain('mastra_knowledge_timeline_entries_thread');
+      await pool.query(ddl);
+      const store = new PostgresStore({ id: 'timeline-export', pool, schemaName, disableInit: true });
+      const knowledge = await store.getStore('knowledge');
+      const { scope } = await knowledge!.materializeScope({
+        address: 'org:acme',
+        declaration: 'org:$orgId',
+        name: 'Acme',
+        provenance: { author: 'host' },
+      });
+      const page = await knowledge!.createPage({ parentId: scope.id, name: 'Events', provenance: { author: 'host' } });
+      await knowledge!.timelines!.markTimeline({ pageId: page.id });
+      const occurredAt = parseKnowledgeTimelineTime('2024-02-29T23:30:00.123-02:00')!;
+      const editedAt = parseKnowledgeTimelineTime('2024-03-01T02:00:00+00:00')!;
+      const written = await knowledge!.timelines!.upsertEntry({
+        timelineId: page.id,
+        externalId: '1',
+        body: 'Leap day',
+        occurredAt,
+        editedAt,
+        writtenBy: 'importer:slack',
+      });
+      const reopened = new PostgresStore({ id: 'timeline-reopened', pool, schemaName, disableInit: true });
+      const read = await (await reopened.getStore('knowledge'))!.timelines!.listEntries({
+        timelineId: page.id,
+        read: 'all',
+        limit: 10,
+      });
+      expect(read.entries).toHaveLength(1);
+      expect(read.entries[0]).toMatchObject({
+        id: written.entry.id,
+        body: 'Leap day',
+        occurredAt: new Date('2024-03-01T01:30:00.123Z'),
+        editedAt,
+      });
+    } finally {
+      await pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
+    }
+  });
   it('lets PostgresStore callers override the isolation key', () => {
     const derived = new PostgresStore({ id: 'derived', pool, schemaName: 'shared' });
     const overridden = new PostgresStore({
