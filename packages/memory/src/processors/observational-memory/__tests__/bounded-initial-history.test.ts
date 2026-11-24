@@ -8,6 +8,7 @@ import { Memory } from '../../../index';
 import { runOMCommit, waitingOMCommits } from '../commit-queue';
 import { getObservationHistoryState } from '../history-loader';
 import { filterObservedMessages } from '../message-utils';
+import { TokenCounter } from '../token-counter';
 
 const threadId = 'bounded-history';
 const resourceId = 'bounded-resource';
@@ -498,7 +499,14 @@ describe('bounded initial observation history', () => {
     });
     const batch = await om.loadUnobservedMessages({ threadId, resourceId });
     expect(batch.length).toBeGreaterThan(0);
-    expect(batch.length).toBeLessThan(80);
+    const counter = new TokenCounter();
+    const tokens =
+      24 + (await Promise.all(batch.map(row => counter.countMessageAsync(row)))).reduce((a, b) => a + b, 0);
+    expect(tokens).toBeLessThanOrEqual(9_000);
+    const observable = rows.filter((_, index) => index % 40 !== 39);
+    expect(batch.map(row => row.id)).toEqual(observable.slice(0, batch.length).map(row => row.id));
+    const nextTokens = await counter.countMessageAsync(observable[batch.length]!);
+    expect(tokens + nextTokens).toBeGreaterThan(9_000);
     expect(
       batch.every(row => !rows.filter((_, index) => index % 40 === 39).some(excluded => excluded.id === row.id)),
     ).toBe(true);
