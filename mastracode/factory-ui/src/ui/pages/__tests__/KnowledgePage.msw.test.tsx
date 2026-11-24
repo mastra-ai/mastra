@@ -403,6 +403,16 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens a page linked while the project still looked empty', async () => {
+    stubKnowledge({ pages: [], edges: [], pinnedIds: [], truncated: false });
+    const { router } = renderRoute();
+    await screen.findByText('No knowledge in this project yet. Pages appear here as factory sessions write them.');
+
+    await router.navigate(`/factories/${FACTORY_ID}/knowledge?page=runbook`);
+    const pane = await screen.findByRole('region', { name: 'Selected page' });
+    expect(await within(pane).findByText('Deploys run nightly.')).toBeInTheDocument();
+  });
+
   it('says why when neither the tree nor the graph can load', async () => {
     stubKnowledge({ status: 500, message: 'Knowledge is misconfigured' });
     server.use(

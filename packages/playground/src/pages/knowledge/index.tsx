@@ -190,7 +190,7 @@ export default function KnowledgePage() {
         ) : null}
         {!knowledgeKey ? (
           <KnowledgeGraphLoader />
-        ) : graph.data?.pages.length === 0 ? (
+        ) : graph.data?.pages.length === 0 && !searchParams.get('page') ? (
           <EmptyState
             variant="fill"
             titleSlot="No pages yet"

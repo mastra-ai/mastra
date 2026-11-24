@@ -131,6 +131,11 @@ export const knowledgeTreeLevel = (parentId: string | null): KnowledgeTreeRespon
   truncated: false,
 });
 
+export const archiveTreeLevel = (parentId: string | null): KnowledgeTreeResponse => ({
+  pages: parentId === null ? [archiveScope] : [],
+  truncated: false,
+});
+
 /** A page an agent adds under the org scope while Studio is open. */
 export const chargebacksPage = page({
   id: 'page-chargebacks',

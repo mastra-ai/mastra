@@ -3,11 +3,13 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes, useLocation } from 'react-router';
+import type { ReactNode } from 'react';
+import { Route, Routes, useLocation, useNavigate } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import KnowledgePage from '..';
 import {
   archiveScope,
+  archiveTreeLevel,
   emptyKnowledgeGraph,
   knowledgeGraph,
   knowledgeGraphWithGrants,
@@ -33,7 +35,16 @@ function LocationProbe() {
   return <output data-testid="location-search">{useLocation().search}</output>;
 }
 
-const renderPage = (entry = '/knowledge') =>
+function OpenPageButton({ pageId }: { pageId: string }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(`/knowledge?page=${pageId}`)}>
+      Open {pageId}
+    </button>
+  );
+}
+
+const renderPage = (entry = '/knowledge', outside: ReactNode = null) =>
   renderWithProviders(
     <TooltipProvider>
       <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
@@ -41,6 +52,7 @@ const renderPage = (entry = '/knowledge') =>
           <Route path="/knowledge" element={<KnowledgePage />} />
         </Routes>
         <LocationProbe />
+        {outside}
       </LinkComponentProvider>
     </TooltipProvider>,
     { router: { initialEntries: [entry] } },
@@ -130,6 +142,17 @@ describe('Knowledge page', () => {
       renderPage();
       expect(await screen.findByText('No pages yet')).toBeTruthy();
     });
+
+    it('opens a page linked before the next graph read lists it', async () => {
+      withInstance(emptyKnowledgeGraph);
+      server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
+      renderPage('/knowledge', <OpenPageButton pageId="page-payments" />);
+      await screen.findByText('No pages yet');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open page-payments' }));
+      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      expect(await within(detail).findByRole('heading', { name: 'Payments Service' })).toBeTruthy();
+    });
   });
 
   it('stops polling the graph after the server refuses its read budget', async () => {
@@ -209,7 +232,7 @@ describe('Knowledge page', () => {
         http.get(`${api}/archive/tree`, ({ request }) => {
           const parent = new URL(request.url).searchParams.get('parentId');
           parents.push(parent);
-          return HttpResponse.json({ pages: parent === null ? [archiveScope] : [], truncated: false });
+          return HttpResponse.json(archiveTreeLevel(parent));
         }),
         http.get(`${api}/archive/events`, () => new HttpResponse(null, { status: 501 })),
         http.get(`${api}/:instance/link-counts`, () =>
