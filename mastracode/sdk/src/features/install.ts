@@ -143,7 +143,12 @@ async function installHoldingLock(target: FeatureInstallTarget, options: Feature
     // Move an outdated install aside rather than deleting it first, so the directory is only briefly absent.
     const previous = fs.existsSync(dir) ? `${staging}.previous` : undefined;
     if (previous) fs.renameSync(dir, previous);
-    fs.renameSync(staging, dir);
+    try {
+      fs.renameSync(staging, dir);
+    } catch (error) {
+      if (previous) fs.renameSync(previous, dir);
+      throw error;
+    }
     staging = previous;
     fs.rmSync(failedPath, { force: true });
     fs.rmSync(path.join(target.versionDir, `.failed-${target.id}.log`), { force: true });
@@ -195,6 +200,11 @@ function stagingPrefix(target: Pick<FeatureInstallTarget, 'id'>): string {
 function removeStagingDirs(target: FeatureInstallTarget): void {
   const prefix = stagingPrefix(target);
   for (const entry of fs.readdirSync(target.versionDir)) {
+    // Lock directories moved aside by a process that crashed before deleting them.
+    if (entry.startsWith(`.lock-${target.id}.removing-`)) {
+      fs.rmSync(path.join(target.versionDir, entry), { recursive: true, force: true });
+      continue;
+    }
     if (!entry.startsWith(prefix)) continue;
     const pid = Number(entry.slice(prefix.length).split('-')[0]);
     if (Number.isInteger(pid) && pid > 0 && isProcessAlive(pid)) continue;

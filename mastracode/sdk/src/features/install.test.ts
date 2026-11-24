@@ -12,6 +12,7 @@ import { runFeaturesCommand } from './cli.js';
 import { FeatureNotInstalledError } from './events.js';
 import { findInstalledFeature, getFeatureDir, installFeature, resolveFromFeatureDir } from './install.js';
 import type { FeatureInstallTarget } from './install.js';
+import { acquireLock } from './lock.js';
 
 // Stand-in for @mastra/fastembed with the same export shape. Each vector is [text length, 42].
 const FAKE_FASTEMBED = {
@@ -47,6 +48,7 @@ beforeEach(() => {
   Object.assign(process.env, npm.env);
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-features-'));
   registry.requests.length = 0;
+  registry.tarballDelayMs = 0;
 });
 
 afterEach(() => {
@@ -60,6 +62,8 @@ function target(version = PINNED): FeatureInstallTarget {
 }
 
 const tarballRequests = () => registry.requests.filter(url => url.startsWith('/-/tarball/'));
+/** One per `npm install` run: npm asks for the packument before it can use any cache. */
+const packumentRequests = () => registry.requests.filter(url => url === '/@mastra/fastembed');
 const leftovers = () => fs.readdirSync(target().versionDir).filter(entry => entry.startsWith('.staging-'));
 
 describe('first-use feature install', () => {
@@ -105,7 +109,7 @@ describe('first-use feature install', () => {
     ]);
 
     expect(a).toBe(b);
-    expect(tarballRequests()).toHaveLength(1);
+    expect(packumentRequests()).toHaveLength(1);
     expect(leftovers()).toEqual([]);
   }, 60_000);
 
@@ -133,7 +137,30 @@ describe('first-use feature install', () => {
     const results = await Promise.all(runs);
 
     expect(results).toEqual(Array(3).fill({ code: 0, out: getFeatureDir(target()) }));
-    expect(tarballRequests()).toHaveLength(1);
+    expect(packumentRequests()).toHaveLength(1);
+    expect(leftovers()).toEqual([]);
+  }, 60_000);
+
+  it('an install whose lock was taken over does not move its result into place', async () => {
+    registry.tarballDelayMs = 1_500;
+    const lockDir = path.join(target().versionDir, '.lock-embeddings');
+    const install = installFeature(target(), { registry: registry.url });
+    while (!fs.existsSync(path.join(lockDir, 'owner.json'))) await new Promise(r => setTimeout(r, 20));
+
+    // Another process decides this install is hung and takes the lock over.
+    const takeover = await acquireLock(lockDir, undefined, { heartbeatMs: 60_000, staleMs: 0 });
+    const staging = () => fs.readdirSync(target().versionDir).filter(entry => entry.startsWith('.staging-'));
+    // npm fetched the package, then the install noticed the lost lock and discarded its staging directory.
+    while (tarballRequests().length === 0 || staging().length > 0) await new Promise(r => setTimeout(r, 20));
+
+    // Nothing was committed, and the install is waiting for the lock again.
+    expect(fs.existsSync(getFeatureDir(target()))).toBe(false);
+    expect(takeover.isHeld()).toBe(true);
+
+    registry.tarballDelayMs = 0;
+    takeover.release();
+    await expect(install).resolves.toBe(getFeatureDir(target()));
+    expect(findInstalledFeature(target())).toBe(getFeatureDir(target()));
     expect(leftovers()).toEqual([]);
   }, 60_000);
 

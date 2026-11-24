@@ -21,6 +21,8 @@ export interface LocalRegistry {
   url: string;
   /** Tarball and packument requests the registry answered, in order. */
   requests: string[];
+  /** Holds each tarball response this long, to keep an install running. */
+  tarballDelayMs: number;
   close: () => Promise<void>;
 }
 
@@ -55,13 +57,15 @@ export async function startLocalRegistry(packages: FixturePackage[]): Promise<Lo
   }
 
   const requests: string[] = [];
-  const server = http.createServer((req, res) => {
+  const state = { tarballDelayMs: 0 };
+  const server = http.createServer(async (req, res) => {
     const url = decodeURIComponent(req.url ?? '/');
     requests.push(url);
     const tarball = /^\/-\/tarball\/(.+)$/.exec(url);
     if (tarball) {
       const body = tarballs.get(tarball[1]!);
       if (!body) return void res.writeHead(404).end();
+      if (state.tarballDelayMs) await new Promise(resolve => setTimeout(resolve, state.tarballDelayMs));
       res.writeHead(200, { 'content-type': 'application/octet-stream' }).end(body);
       return;
     }
@@ -100,6 +104,12 @@ export async function startLocalRegistry(packages: FixturePackage[]): Promise<Lo
   return {
     url: `http://127.0.0.1:${port}/`,
     requests,
+    get tarballDelayMs() {
+      return state.tarballDelayMs;
+    },
+    set tarballDelayMs(ms: number) {
+      state.tarballDelayMs = ms;
+    },
     close: () =>
       new Promise(resolve => {
         server.closeAllConnections();

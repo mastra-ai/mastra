@@ -46,7 +46,8 @@ export function isProcessAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
+    // Only ESRCH proves the process is gone; EPERM and anything unexpected count as alive.
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
   }
 }
 
@@ -65,7 +66,8 @@ function isStale(lockDir: string, owner: LockOwner | undefined, timing: LockTimi
 }
 
 /**
- * Removes the lock at `lockDir` only if it is still the one owned by `token`. It is first renamed aside,
+ * Removes the lock at `lockDir` only if it is still the one owned by `token` (`undefined`: a lock whose
+ * owner never wrote owner.json). It is first renamed aside,
  * which only one process can do; if what moved turns out to be a newer lock, it is put back.
  */
 function removeIfOwnedBy(lockDir: string, token: string | undefined): void {
@@ -95,21 +97,47 @@ const RECLAIM_GUARD_STALE_MS = 10_000;
  * Removes a stale lock. Takeovers go one at a time through a guard directory, and staleness is checked
  * again inside it, so a waiter that saw the old lock never removes the fresh one another waiter just made.
  */
-function reclaimStale(lockDir: string, timing: LockTiming): void {
+/** Returns false when another process is taking over right now. */
+function reclaimStale(lockDir: string, timing: LockTiming): boolean {
   const guard = `${lockDir}.reclaim`;
   try {
     fs.mkdirSync(guard);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    const stat = fs.statSync(guard, { throwIfNoEntry: false });
-    if (stat && Date.now() - stat.mtimeMs > RECLAIM_GUARD_STALE_MS) fs.rmSync(guard, { recursive: true, force: true });
-    return;
+    reapStaleGuard(guard);
+    return false;
   }
   try {
     const owner = readOwner(lockDir);
     if (fs.existsSync(lockDir) && isStale(lockDir, owner, timing)) removeIfOwnedBy(lockDir, owner?.token);
   } finally {
     fs.rmSync(guard, { recursive: true, force: true });
+  }
+  return true;
+}
+
+/** Removes a guard left by a crashed takeover. Moved aside first, and put back if it turns out to be fresh. */
+function reapStaleGuard(guard: string): void {
+  const isOld = (dir: string) => {
+    const stat = fs.statSync(dir, { throwIfNoEntry: false });
+    return stat !== undefined && Date.now() - stat.mtimeMs > RECLAIM_GUARD_STALE_MS;
+  };
+  if (!isOld(guard)) return;
+  const aside = `${guard}.stale-${randomUUID()}`;
+  try {
+    fs.renameSync(guard, aside);
+  } catch {
+    return;
+  }
+  if (isOld(aside)) {
+    fs.rmSync(aside, { recursive: true, force: true });
+    return;
+  }
+  try {
+    fs.renameSync(aside, guard);
+  } catch {
+    // Another takeover holds a newer guard; this one's owner finished or will find the lock re-checked.
+    fs.rmSync(aside, { recursive: true, force: true });
   }
 }
 
@@ -125,10 +153,10 @@ export async function acquireLock(
     try {
       fs.mkdirSync(lockDir);
       created = true;
-      fs.writeFileSync(
-        path.join(lockDir, OWNER_FILE),
-        JSON.stringify({ pid: process.pid, host: os.hostname(), token } satisfies LockOwner),
-      );
+      // Written whole, then renamed: owner.json is either absent or complete, never half written.
+      const tmp = path.join(lockDir, `${OWNER_FILE}.${token}`);
+      fs.writeFileSync(tmp, JSON.stringify({ pid: process.pid, host: os.hostname(), token } satisfies LockOwner));
+      fs.renameSync(tmp, path.join(lockDir, OWNER_FILE));
       return holdLock(lockDir, token, timing);
     } catch (error) {
       if (created) {
@@ -137,10 +165,7 @@ export async function acquireLock(
       }
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     }
-    if (isStale(lockDir, readOwner(lockDir), timing)) {
-      reclaimStale(lockDir, timing);
-      continue;
-    }
+    if (isStale(lockDir, readOwner(lockDir), timing) && reclaimStale(lockDir, timing)) continue;
     await new Promise(resolve => setTimeout(resolve, POLL_MS));
   }
 }
@@ -148,13 +173,16 @@ export async function acquireLock(
 function holdLock(lockDir: string, token: string, timing: LockTiming): HeldLock {
   const ownerFile = path.join(lockDir, OWNER_FILE);
   const isHeld = () => readOwner(lockDir)?.token === token;
+  // Keeps beating until release. A tick can miss (the lock may be moved aside for a moment by a process
+  // checking whether it owns it), so a failure never stops the heartbeat.
   const heartbeat = setInterval(() => {
     try {
-      if (!isHeld()) return clearInterval(heartbeat);
-      const now = new Date();
-      fs.utimesSync(ownerFile, now, now);
+      if (isHeld()) {
+        const now = new Date();
+        fs.utimesSync(ownerFile, now, now);
+      }
     } catch {
-      clearInterval(heartbeat);
+      // Try again next tick.
     }
   }, timing.heartbeatMs);
   heartbeat.unref();
@@ -162,7 +190,8 @@ function holdLock(lockDir: string, token: string, timing: LockTiming): HeldLock 
     isHeld,
     release: () => {
       clearInterval(heartbeat);
-      removeIfOwnedBy(lockDir, token);
+      // A process that lost the lock leaves it alone instead of moving the new owner's lock around.
+      if (isHeld()) removeIfOwnedBy(lockDir, token);
     },
   };
 }
