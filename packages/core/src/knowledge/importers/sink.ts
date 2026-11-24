@@ -78,6 +78,11 @@ export interface KnowledgeImportSettleBudget {
   until: number;
   /** Called as the slice starts, so a host can tell a timeout while settling from one before it. */
   onStart?: () => void;
+  /**
+   * Whether a pass that started from a saved cursor may start over when it finds unsettled nodes
+   * before that cursor it didn't visit (see {@link KnowledgeImportSettleResult.wrapped}). Default true.
+   */
+  wrap?: boolean;
 }
 
 export interface KnowledgeImportSettleResult {
@@ -87,6 +92,13 @@ export interface KnowledgeImportSettleResult {
   cursor: string | null;
   /** Moves and relinks this slice landed. */
   settled: number;
+  /**
+   * The pass reached the end and started over because unsettled nodes it skipped past may need
+   * work, such as linking pages another binding's move queued. A host lets the pass do this once
+   * until settling makes progress again; otherwise nodes that can never settle (waiting on a parent
+   * that never arrives) would keep it going forever.
+   */
+  wrapped?: boolean;
 }
 
 /** An unresolved link as the node map lists it, with its label. */
@@ -855,7 +867,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         // `visited.size + 1` is.
         else if (budget.after) {
           const first = await importers.listNodes(binding.id, { unsettled: true, limit: visited.size + 1 });
-          if (first.items.some(node => !visited.has(node.sourceId))) return { pending: true, cursor: null, settled };
+          if (budget.wrap !== false && first.items.some(node => !visited.has(node.sourceId))) {
+            return { pending: true, cursor: null, settled, wrapped: true };
+          }
         }
         return { pending: false, cursor: null, settled };
       }

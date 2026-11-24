@@ -1136,6 +1136,49 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect(q2?.body).not.toContain('[[docs:acme#notion/a1/linear/q1]]');
     });
 
+    it('stops settling when more nodes than one slice examines can never settle, and still repairs a link queued behind its cursor', async () => {
+      const { knowledge, run, page } = setup([
+        { id: 'b1', target: 'docs:acme#notion' },
+        { id: 'b2', target: 'docs:acme#notion/a1/linear' },
+      ]);
+      await run([upsert({ sourceId: 'a0' }), upsert({ sourceId: 'a1' })]);
+      const host = knowledge.importers!.host;
+      const orphans = Array.from({ length: 250 }, (_, i) =>
+        upsert({ sourceId: `c${String(i).padStart(3, '0')}`, parent: 'never' }),
+      );
+      const first = await host.startRun('b2');
+      if (first.status !== 'started') throw new Error('not started');
+      expect(
+        await flushOnce(host, first.runId, first.generation, 1, [
+          upsert({ sourceId: 'q1' }),
+          upsert({ sourceId: 'a-link', links: [{ sourceId: 'q1' }] }),
+          ...orphans,
+        ]),
+      ).toMatchObject({ created: 252 });
+      // Empty flushes, as the runner sends while settle work is pending: they must stop saying
+      // pending once a whole pass has gone by without settling anything.
+      let seq = 1;
+      let pending = true;
+      while (pending && seq < 10) {
+        seq++;
+        pending = (await flushOnce(host, first.runId, first.generation, seq, [])).pending;
+      }
+      expect(pending).toBe(false);
+      await host.finishRun({
+        runId: first.runId,
+        generation: first.generation,
+        outcome: 'succeeded',
+        backlog: false,
+        lastSeq: seq,
+      });
+      // b1 moves b2's folder; a-link sorts before every orphan.
+      expect(await run([upsert({ sourceId: 'a1', parent: 'a0' })])).toMatchObject({ counts: { moved: 1 } });
+      expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded' });
+      expect((await page('notion/a0/a1/linear/a-link'))?.body).toContain('[[docs:acme#notion/a0/a1/linear/q1]]');
+      // Nothing settles from here on, and runs end on their own.
+      expect(await run([], 'b2')).toMatchObject({ outcome: 'succeeded', chain: false, counts: { moved: 0 } });
+    }, 60_000);
+
     it("repairs another binding's linking pages that sort before its saved settle cursor", async () => {
       const { knowledge, run, page } = setup([
         { id: 'b1', target: 'docs:acme#notion' },

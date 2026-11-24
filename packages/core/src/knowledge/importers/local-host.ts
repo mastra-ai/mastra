@@ -132,11 +132,13 @@ const SETTLE_MAX_TIMEOUTS = 3;
 
 /**
  * Host bookkeeping kept beside the importer's own state, under a prefix the importer can't write:
- * where the settle pass stopped, and `<runId>:<n>` settle timeouts in a row for the current run.
+ * where the settle pass stopped, `<runId>:<n>` settle timeouts in a row for the current run, and
+ * whether the pass already started over without settling anything since.
  */
 const RESERVED_STATE_PREFIX = 'mastra:';
 const SETTLE_CURSOR_KEY = 'mastra:settle:cursor';
 const SETTLE_TIMEOUTS_KEY = 'mastra:settle:timeouts';
+const SETTLE_WRAPPED_KEY = 'mastra:settle:wrapped';
 
 const settleTimeouts = (state: Record<string, string>, runId: string): number => {
   const value = state[SETTLE_TIMEOUTS_KEY] ?? '';
@@ -651,6 +653,8 @@ export function createLocalKnowledgeImporterHost(
                         candidates: Math.max(1, SETTLE_CANDIDATES >> timeouts),
                         moves: SETTLE_MOVES,
                         until: Math.min(Date.now() + (options.settleBudgetMs ?? DEFAULT_SETTLE_BUDGET_MS), deadlineAt),
+                        // Once per stretch without progress, so nodes that never settle can't keep it going.
+                        wrap: hostState[SETTLE_WRAPPED_KEY] !== '1',
                         onStart: () => {
                           settling = true;
                         },
@@ -664,6 +668,10 @@ export function createLocalKnowledgeImporterHost(
                 hostUpdates[SETTLE_CURSOR_KEY] = settled.cursor ?? '';
               }
               if (timeouts > 0 && timeouts < SETTLE_MAX_TIMEOUTS) hostUpdates[SETTLE_TIMEOUTS_KEY] = '';
+              if (settled?.wrapped) hostUpdates[SETTLE_WRAPPED_KEY] = '1';
+              else if ((applied.applied || (settled?.settled ?? 0) > 0) && hostState[SETTLE_WRAPPED_KEY] === '1') {
+                hostUpdates[SETTLE_WRAPPED_KEY] = '';
+              }
               const state = { ...body.state, ...hostUpdates };
               if (Object.keys(state).length) await importers.setState(binding.id, state);
               for (const change of applied.changes) await importers.recordRunChange({ runId: run.id, ...change });
