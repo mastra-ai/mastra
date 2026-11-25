@@ -1,48 +1,28 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-
-import type {
-  FactoryEnvironmentBuild,
-  FactoryEnvironmentBuildStatus,
-  FactoryEnvironmentLastBuild,
-} from '../../../workspaces/services/environment';
-
-export const BUILD_STATUS: Record<
-  FactoryEnvironmentBuildStatus,
-  { label: string; variant: 'neutral' | 'success' | 'destructive' | 'warning' | 'info' }
-> = {
-  pending: { label: 'Pending', variant: 'info' },
-  building: { label: 'Building', variant: 'info' },
-  ready: { label: 'Ready', variant: 'success' },
-  failed: { label: 'Failed', variant: 'destructive' },
-  unknown: { label: 'Unknown', variant: 'warning' },
-};
-
-export function formatBuildTime(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
+import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
+import type { EnvironmentBuild, EnvironmentLastBuild } from './environment-build';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * Build now beside the last build's live status; sits in the Template
  * subsection header. The error, when there is one, shows under the badge.
  */
-export function BuildStatusBlock({
+export function EnvironmentBuildStatus({
   lastBuild,
   build,
   requesting,
   onBuildNow,
 }: {
-  lastBuild: FactoryEnvironmentLastBuild | null | undefined;
+  lastBuild: EnvironmentLastBuild | null | undefined;
   /** Live status of `lastBuild`; undefined while it loads or when there is no last build. */
-  build: FactoryEnvironmentBuild | undefined;
+  build: EnvironmentBuild | undefined;
   requesting: boolean;
   onBuildNow: () => void;
 }) {
   const active = build?.status === 'pending' || build?.status === 'building';
-  const status = build ? BUILD_STATUS[build.status] : lastBuild ? undefined : null;
+  const status = build ? ENVIRONMENT_BUILD_STATUS[build.status] : lastBuild ? undefined : null;
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -58,7 +38,7 @@ export function BuildStatusBlock({
             </Badge>
             {lastBuild?.attemptedAt && (
               <Txt as="span" variant="meta" tone="muted">
-                {formatBuildTime(lastBuild.attemptedAt)}
+                {formatEnvironmentBuildTime(lastBuild.attemptedAt)}
               </Txt>
             )}
           </span>
