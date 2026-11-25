@@ -122,6 +122,7 @@ class TransactionDbClient implements DbClient {
 }
 
 const transactionClients = new WeakMap<KnowledgeStorage, TxClient>();
+const UNWRAP = Symbol.for('mastra.knowledge.unwrap');
 
 /**
  * The transaction behind a {@link KnowledgePG} transaction view, for tables that must commit with
@@ -130,7 +131,10 @@ const transactionClients = new WeakMap<KnowledgeStorage, TxClient>();
  * @experimental
  */
 export function pgKnowledgeTransactionClient(view: KnowledgeStorage): TxClient {
-  const tx = transactionClients.get(view);
+  // A `getStorage()` view wraps the adapter's; it answers this key with the view it wraps.
+  const tx =
+    transactionClients.get(view) ??
+    transactionClients.get((view as { [UNWRAP]?: KnowledgeStorage })[UNWRAP] as KnowledgeStorage);
   if (!tx) throw new Error('Not a KnowledgePG transaction view.');
   return tx;
 }

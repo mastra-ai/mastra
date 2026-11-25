@@ -79,15 +79,16 @@ const MOVED_PAGE: Record<string, (input: any) => string> = {
   mergePages: (input: { sourceId: string }) => input.sourceId,
 };
 
-/** Each view {@link emitKnowledgeChanges} returned, to the store it wraps. */
-const wrapped = new WeakMap<KnowledgeStorage, KnowledgeStorage>();
-
 /**
- * The adapter's own store or transaction view under one {@link emitKnowledgeChanges} returned, for
- * helpers that find a view by identity (`pgKnowledgeTransactionClient`). Writes through it emit nothing.
+ * A view {@link emitKnowledgeChanges} returned answers this key with the store it wraps, so helpers
+ * that find a view by identity (`pgKnowledgeTransactionClient`) can look through it. `Symbol.for`, so
+ * a store package reads it without importing a newer core.
  */
+const UNWRAP = Symbol.for('mastra.knowledge.unwrap');
+
+/** The adapter's own store or transaction view under one {@link emitKnowledgeChanges} returned. Writes through it emit nothing. */
 export function unwrapKnowledgeStorage(storage: KnowledgeStorage): KnowledgeStorage {
-  return wrapped.get(storage) ?? storage;
+  return (storage as KnowledgeStorage & { [UNWRAP]?: KnowledgeStorage })[UNWRAP] ?? storage;
 }
 
 /**
@@ -111,8 +112,9 @@ export function emitKnowledgeChanges(
   chain?: { report: (change: Change) => void },
 ): KnowledgeStorage {
   const report = (change: Change) => (chain ? chain.report : emit)(change);
-  const view = new Proxy(storage, {
+  return new Proxy(storage, {
     get(target, property) {
+      if (property === UNWRAP) return target;
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
       if (property === 'transaction') {
@@ -170,6 +172,4 @@ export function emitKnowledgeChanges(
       };
     },
   });
-  wrapped.set(view, storage);
-  return view;
 }

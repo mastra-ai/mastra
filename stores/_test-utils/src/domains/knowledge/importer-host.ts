@@ -103,13 +103,19 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await run([upsert({ sourceId: 'c1', parent: 'p1' })]);
       const anchor = (await page('notion'))!;
       const child = (await page('notion/c1'))!;
-      expect(pages()).toEqual(expect.arrayContaining([`create ${anchor.id}`, `create ${child.id}`]));
+      expect(pages()).toEqual([`create ${anchor.id}`, `create ${child.id}`]);
       expect(events.filter(event => event.kind === 'page').every(event => event.scopeId === anchor.scopeId)).toBe(true);
 
       events.length = 0;
       await run([upsert({ sourceId: 'p1' })]);
       const parent = (await page('notion/p1'))!;
-      expect(pages()).toEqual(expect.arrayContaining([`create ${parent.id}`, `move ${child.id}`]));
+      expect(pages()).toEqual([`create ${parent.id}`, `move ${child.id}`]);
+
+      // A refused op reports nothing; only the write that landed beside it does.
+      events.length = 0;
+      const mixed = await run([upsert({ sourceId: 'p1', parent: 'p1' }), upsert({ sourceId: 'p2' })]);
+      expect(mixed).toMatchObject({ counts: { created: 1, refused: 1 } });
+      expect(pages()).toEqual([`create ${(await page('notion/p2'))!.id}`]);
 
       events.length = 0;
       await run([upsert({ sourceId: 'p1', body: 'changed' })]);
