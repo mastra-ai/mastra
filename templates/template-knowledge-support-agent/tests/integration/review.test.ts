@@ -111,24 +111,30 @@ async function fixture(preload?: URL) {
           'knowledge_read',
           'knowledge_search',
         ]);
-        if (!tools.length) return { tool: { name: 'knowledge_search', arguments: { query: 'SYNTHETIC' } } };
+        if (!tools.length)
+          return { tool: { name: 'knowledge_search', arguments: { query: 'SYNTHETIC', scope: [customer] } } };
         if (tools.length === 1) return { tool: { name: 'knowledge_read', arguments: { page: evidence } } };
         if (tools.length === 2)
           return { tool: { name: 'knowledge_read', arguments: { page: 'customer:north:store-2#cases/synthetic' } } };
-        if (
-          tools.length === 3 &&
-          selected.evidence[0]?.ref.startsWith(`${customer}#`) &&
-          selected.evidence[0].ref !== evidence
-        )
-          return { tool: { name: 'knowledge_read', arguments: { page: selected.evidence[0].ref } } };
-        const results = tools.map(tool => tool.content).join('\n');
+        const extraEvidence = selected.evidence[0]?.ref;
+        const readExtraEvidence = extraEvidence?.startsWith(`${customer}#`) && extraEvidence !== evidence;
+        if (readExtraEvidence && tools.length === 3)
+          return { tool: { name: 'knowledge_read', arguments: { page: extraEvidence } } };
+        const tenantScope = JSON.parse(list.find(message => message.role === 'user')!.content!).tenantScope;
+        const target = tenantScope && selected.target && `${tenantScope}#${selected.target.path}`;
+        if (target && tools.length === (readExtraEvidence ? 4 : 3))
+          return { tool: { name: 'knowledge_read', arguments: { page: target } } };
+        const results = (target ? tools.slice(0, -1) : tools).map(tool => tool.content).join('\n');
+        if (target) {
+          const read = JSON.parse(tools.at(-1)!.content!).page;
+          assert.equal(read.ref, target);
+          assert.equal(read.version, selected.target!.expectedVersion);
+        }
         if (selected.evidence.some(item => item.ref === evidence)) assert.match(results, /SYNTHETIC_PRIVATE_0/u);
-        if (tools.length > 3 && selected.evidence[0]?.ref.startsWith(`${customer}#cases/review-`))
-          assert.match(tools.at(-1)!.content!, /Reviewed by: morgan/u);
-        assert.doesNotMatch(
-          results,
-          /SYNTHETIC_PRIVATE_[1245]|SYNTHETIC_DOC_|SYNTHETIC_FOREIGN|docs:north|tenant:north/u,
-        );
+        if (extraEvidence?.startsWith(`${customer}#cases/review-`))
+          assert.match(tools[3]!.content!, /Reviewed by: morgan/u);
+        assert.doesNotMatch(results, /SYNTHETIC_PRIVATE_[1245]|SYNTHETIC_FOREIGN|(?:docs|tenant):south/u);
+        if (!tenantScope) assert.doesNotMatch(results, /SYNTHETIC_DOC_|docs:north|tenant:north/u);
         assert.match(tools[2]!.content!, /denied|not found|not readable|scope|access/iu);
         emitted = selected;
         return { content: JSON.stringify(emitted) };

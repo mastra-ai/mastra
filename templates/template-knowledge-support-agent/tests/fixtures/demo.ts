@@ -81,8 +81,17 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
       const allTools = list.filter(message => message.role === 'tool');
       if (list.some(message => message.content.includes('Review one confirmed customer outcome'))) {
         assert.ok(selected, 'Review scenario must select a candidate');
+        const { audience } = JSON.parse(list.find(message => message.role === 'user')!.content);
         if (!allTools.length)
-          return { tool: { name: 'knowledge_search', arguments: { query: alternate ? 'authentication' : 'network' } } };
+          return {
+            tool: {
+              name: 'knowledge_search',
+              arguments: {
+                query: alternate ? 'authentication' : 'network',
+                ...(audience === 'tenant' ? { scope: [customerScope] } : {}),
+              },
+            },
+          };
         for (const tool of allTools) {
           const { results } = parsedTool(tool);
           assert.ok(Array.isArray(results), 'Curator must receive a Knowledge search result');

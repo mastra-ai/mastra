@@ -218,7 +218,9 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       : received;
     const { curatorConfirmation, ...selected } = await confirmation(current, input, structured);
     const customerScope = customer(current);
-    const curator = createCuratorAgent(knowledge, customerScope);
+    const tenantScope =
+      input.audience === 'tenant' ? knowledgeScopeAddress('tenant:$tenantId', { ...plainProfile(current) }) : undefined;
+    const curator = createCuratorAgent(knowledge, tenantScope ? [customerScope, tenantScope] : [customerScope]);
     if (mastra) curator.__registerMastra(mastra);
     const maxSteps = 8;
     const response = await curator.generate(
@@ -226,6 +228,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
         audience: input.audience,
         confirmation: curatorConfirmation,
         customerScope,
+        tenantScope,
       }),
       {
         requestContext: new RequestContext(),
@@ -245,10 +248,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       candidate,
       bindings: [],
       destination: {
-        scope:
-          input.audience === 'private'
-            ? customer(current)
-            : knowledgeScopeAddress('tenant:$tenantId', { ...plainProfile(current) }),
+        scope: tenantScope ?? customerScope,
         path:
           candidate.target?.path ??
           `${input.audience === 'private' ? supportConfiguration.customerRoots[0] : supportConfiguration.sharedRoot}/review-${id}`,
