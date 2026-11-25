@@ -46,3 +46,38 @@ describe('MessageList response message rotation', () => {
     expect(assistantMessages.map(message => message.id)).toEqual(['response-1', 'response-2']);
   });
 });
+
+describe('MessageList response message rotation with recalled history (#28565)', () => {
+  function listWithRecalledReply() {
+    const messageList = new MessageList({
+      threadId: 'thread-1',
+      generateMessageId: context => (context?.role === 'assistant' ? 'response-1' : 'user-1'),
+    });
+    messageList.add({ ...assistantMessage('previous-reply', 'from an earlier turn'), threadId: 'thread-1' }, 'memory');
+    messageList.add({ role: 'user', content: 'hi' }, 'input');
+    return messageList;
+  }
+
+  it('Given a recalled assistant reply and no response yet, When the id rotates, Then the recalled reply stays in memory untouched', () => {
+    const messageList = listWithRecalledReply();
+
+    messageList.rotateResponseMessageId('response-not-created-yet');
+
+    expect(messageList.get.response.db().map(message => message.id)).toEqual([]);
+    const previousReply = messageList.get.all.db().find(message => message.id === 'previous-reply');
+    expect(messageList.get.remembered.db().map(message => message.id)).toContain('previous-reply');
+    expect(previousReply?.content.metadata).toBeUndefined();
+  });
+
+  it('Given a recalled assistant reply and a response from this run, When the id rotates without a seal target, Then only the response is sealed', () => {
+    const messageList = listWithRecalledReply();
+    messageList.add(assistantMessage('response-1', 'this turn'), 'response');
+
+    messageList.rotateResponseMessageId();
+
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
+    const byId = (id: string) => messageList.get.all.db().find(message => message.id === id);
+    expect(byId('response-1')?.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
+    expect(byId('previous-reply')?.content.metadata).toBeUndefined();
+  });
+});

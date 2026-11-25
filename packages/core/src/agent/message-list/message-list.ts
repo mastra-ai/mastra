@@ -2443,7 +2443,8 @@ export class MessageList {
   public markResponseMessageBoundary(messageId?: string): boolean {
     const message = messageId
       ? this.messages.find(message => message.id === messageId)
-      : [...this.messages].reverse().find(message => message.role === 'assistant');
+      : // Without an id, only this run's response can be the tail to seal; recalled history is never pulled into it.
+        this.messages.findLast(message => message.role === 'assistant' && this.stateManager.isResponseMessage(message));
 
     if (!message || message.role !== 'assistant') {
       return false;
