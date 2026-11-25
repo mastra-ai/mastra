@@ -32,6 +32,7 @@ const signals = new ConnectEventSignals({
           priority: 'high',
         }
       : undefined,
+  rateLimit: { limit: 5, windowMs: 60_000 },
 })
 
 export const opsAgent = new Agent({
@@ -72,6 +73,13 @@ The agent needs a `Mastra` instance with `storage`, where notifications are stor
     isOptional: true,
   },
   {
+    name: 'rateLimit',
+    type: '{ limit: number; windowMs: number }',
+    description:
+      "Caps how many events of one connection can wake an idle agent: at most `limit` per `windowMs` milliseconds. Later events in the window are still stored on the thread, marked `rateLimited`, but don't start a run. The agent sees them on its next run. No limit by default.",
+    isOptional: true,
+  },
+  {
     name: 'includeUnverified',
     type: 'boolean',
     description:
@@ -97,7 +105,7 @@ An event type that the provider doesn't send is a compile error.
 | `summary` | The provider and event type, such as `github pull_request.opened` |
 | `payload` | The provider's payload |
 | `dedupeKey` | The provider and its delivery id, so a redelivered webhook doesn't notify twice |
-| `metadata` | `connectionId`, `eventId`, `provider`, `eventType`, plus `resourceId` and `unverified` when set |
+| `metadata` | `connectionId`, `eventId`, `provider`, `eventType`, plus `resourceId`, `unverified` and `rateLimited` when set |
 
 ## Methods
 
@@ -113,7 +121,7 @@ Ends the subscription. Call it when your app stops, because the agent doesn't ca
 
 ## Delivery
 
-Events reach the agent in order. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Errors that end the subscription are described under [`start()`](#start). Without a `cursorStore`, the subscription starts at the newest event each time it starts.
+Events reach the agent in order. Each event's notification follows the agent's [delivery policy](/docs/signals/notifications), so by default one can wake an idle agent and start a run. Set `rateLimit` so a burst of webhooks from one connection can't start a run per event. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Errors that end the subscription are described under [`start()`](#start). Without a `cursorStore`, the subscription starts at the newest event each time it starts.
 
 ## Related
 
