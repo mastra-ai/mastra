@@ -136,6 +136,7 @@ export interface TracePanelDatasetButtonProps {
   onSaveAsDatasetItem: (args: { traceId: string; rootSpanId: string | undefined }) => void;
 }
 
+/** "Add to dataset", waiting for the root span the dataset item is built from. */
 export function TracePanelDatasetButton({ onSaveAsDatasetItem }: TracePanelDatasetButtonProps) {
   const { traceId, rootSpan } = useTracePanel();
   return (
@@ -144,6 +145,7 @@ export function TracePanelDatasetButton({ onSaveAsDatasetItem }: TracePanelDatas
       size="sm"
       tooltip="Add the full trace to a dataset"
       onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
+      disabled={!rootSpan}
     >
       Add to dataset
     </Button>
