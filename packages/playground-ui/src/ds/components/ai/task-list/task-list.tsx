@@ -278,7 +278,8 @@ export const TaskList = ({
             !open && 'group-hover/task-list:text-foreground',
           )}
         >
-          <DisclosureChevron open={open} className={cn('size-icon-sm', taskGraphMotion)} />
+          {/* `!`: tailwind-merge doesn't know the chevron's own `ease-out-custom`, so both easings stay. */}
+          <DisclosureChevron open={open} className={cn('size-icon-sm', taskGraphMotion, 'ease-(--resize-ease)!')} />
         </button>
       </div>
     </TaskListContainer>
