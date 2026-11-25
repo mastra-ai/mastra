@@ -1,10 +1,10 @@
-import type { LogRecord } from '../../types';
+import type { LogViewLine } from '../../types';
 import { logViewFilterFields, logViewFilterOperators } from './log-view-filter-fields';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
 
 export interface LogViewFiltersProps {
-  logs: LogRecord[];
+  logs: LogViewLine[];
   value: FilterBarItem[];
   onValueChange: (value: FilterBarItem[]) => void;
   search?: boolean;

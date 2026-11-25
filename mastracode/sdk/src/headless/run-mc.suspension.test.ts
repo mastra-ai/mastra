@@ -15,9 +15,9 @@ import { runMC } from './run-mc.js';
 import type { RunMCOptions } from './types.js';
 
 vi.mock('@mastra/core/agent-controller', () => ({ isSessionStartupCancelledError: () => false }));
-vi.mock('../auth/account-rotation-processor.js', () => ({ MODEL_FALLBACK_STATE_KEY: 'modelFallback' }));
 vi.mock('../goal-manager.js', () => ({ GoalManager: vi.fn() }));
 vi.mock('../goal-signal.js', () => ({ createGoalReminderSignal: vi.fn() }));
+vi.mock('../model-fallback.js', () => ({ MODEL_FALLBACK_STATE_KEY: 'modelFallback' }));
 vi.mock('../onboarding/settings.js', () => ({ THREAD_ACTIVE_MODEL_PACK_ID_KEY: 'activeModelPackId' }));
 
 const tick = () => new Promise(resolve => setTimeout(resolve, 0));

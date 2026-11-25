@@ -1,5 +1,7 @@
 import EventEmitter from 'node:events';
 import {
+  carryEndedSegment,
+  endFailedIteration,
   participateInDurableExecution,
   retrySettledDurableExecution,
   stopAbandonedDurableExecution,
@@ -5281,12 +5283,20 @@ export class WorkflowEventProcessor extends EventProcessor {
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
-    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) return this.#handleDelivery(event);
+    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) {
+      await carryEndedSegment(this.mastra, event);
+      const result = await this.#handleDelivery(event);
+      if (result.ok) endFailedIteration(this.mastra, event);
+      return result;
+    }
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {
         const result = await this.#handleDelivery(event);
-        if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        if (result.ok) {
+          endFailedIteration(this.mastra, event);
+          await settleEventedDurableExecution(this.mastra, event);
+        }
         // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.
         else if (!result.retry)
           await stopAbandonedDurableExecution(

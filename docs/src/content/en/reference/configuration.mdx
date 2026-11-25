@@ -204,7 +204,7 @@ export const mastra = new Mastra({
     isOptional: true,
     defaultValue: 'true',
     description:
-      "Whether the manager recovers abandoned `running` and `pending` tasks on startup. A `running` task is only recovered once its owner's execution lease has expired, so this is safe when several managers share storage. When enabled, the manager scans again once the earliest live lease it found expires, and checks every `leaseDurationMs` for `pinToWorker` tasks whose worker stopped renewing their lease. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).",
+      "Whether the manager recovers abandoned `running` and `pending` tasks on startup. A `running` task is only recovered once its owner's execution lease has expired, so this is safe when several managers share storage. When enabled, the manager scans again once the earliest live lease it found expires, and checks every `leaseDurationMs` for `running` and `pinToWorker` tasks whose worker stopped renewing their lease. See [Execution ownership and recovery](/docs/harness/background-tasks#execution-ownership-and-recovery).",
   },
   {
     name: 'leaseDurationMs',

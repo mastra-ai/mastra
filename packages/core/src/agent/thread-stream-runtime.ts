@@ -277,6 +277,8 @@ function isStaleRequest(expiresAt: number | undefined): boolean {
 /** Thread lease TTL and renew interval; shared with the durable execution lease. */
 const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
+const DURABLE_THREAD_CLAIM_WAIT_MS = 5_000;
+const DURABLE_THREAD_CLAIM_POLL_MS = 100;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
@@ -1241,22 +1243,33 @@ export class AgentThreadStreamRuntime {
     executionId?: string,
     workerFenced = false,
   ): Promise<void> {
-    const lease = await this.#acquireThreadLease(
-      pubsub,
-      this.#threadKey(resourceId, threadId),
-      runId,
-      threadLeaseOwner(runId, generation, executionId),
-    );
+    const key = this.#threadKey(resourceId, threadId);
+    const owner = threadLeaseOwner(runId, generation, executionId);
+    let lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+    const previousOwner = parseThreadLeaseOwner(lease.owner);
+    if (
+      !lease.acquired &&
+      (lease.owner === undefined ||
+        (previousOwner &&
+          previousOwner[0] !== runId &&
+          (previousOwner[1] === 'generation' || previousOwner[1] === 'execution')))
+    ) {
+      // A shared evented worker can publish finish before releasing the thread. An
+      // ownerless failure can mean the lease disappeared between the claim and owner lookup.
+      // Retry within the same deadline, but don't wait behind a new owner.
+      const blockingOwner = lease.owner;
+      const deadline = Date.now() + DURABLE_THREAD_CLAIM_WAIT_MS;
+      while (!lease.acquired && (lease.owner === undefined || lease.owner === blockingOwner)) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await new Promise(resolve => setTimeout(resolve, Math.min(remaining, DURABLE_THREAD_CLAIM_POLL_MS)));
+        lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+      }
+    }
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
     if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
       this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-        workerFenced,
-      );
+      this.#startLeaseRenewal(pubsub, key, runId, owner, workerFenced);
     }
   }
 

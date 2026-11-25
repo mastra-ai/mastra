@@ -56,6 +56,15 @@ const boards = boardRegistryOf([shipBoard]);
 const CONTEXTS = ['triage', 'work', 'review'] as const;
 type Context = (typeof CONTEXTS)[number];
 
+/**
+ * One Factory process's storage. On libsql it is in memory: a file database spends most of a
+ * test creating the schema, one fsync per table, which on a loaded CI runner neared the timeout.
+ */
+async function database(backend: 'libsql' | 'pg'): Promise<FactoryStorage> {
+  if (backend === 'libsql') return new LibSQLFactoryStorage({ id: 'factory-a', url: ':memory:' });
+  return new PgFactoryStorage({ id: 'factory-a', connectionString: await pgSchemaUrl() });
+}
+
 /** Two storage instances over one database, like two Factory replicas. */
 async function sharedDatabase(backend: 'libsql' | 'pg'): Promise<[FactoryStorage, FactoryStorage]> {
   if (backend === 'libsql') {
@@ -64,6 +73,15 @@ async function sharedDatabase(backend: 'libsql' | 'pg'): Promise<[FactoryStorage
     const url = `file:${join(dir, 'factory.db')}`;
     return [new LibSQLFactoryStorage({ id: 'factory-a', url }), new LibSQLFactoryStorage({ id: 'factory-b', url })];
   }
+  const connectionString = await pgSchemaUrl();
+  return [
+    new PgFactoryStorage({ id: 'factory-a', connectionString }),
+    new PgFactoryStorage({ id: 'factory-b', connectionString }),
+  ];
+}
+
+/** A connection string scoped to a fresh schema, dropped when the test finishes. */
+async function pgSchemaUrl(): Promise<string> {
   const admin = new PostgresStore({ id: 'factory-ctx-admin', connectionString: postgresUrl!, disableInit: true });
   const schema = `factory_ctx_${randomUUID().replaceAll('-', '')}`;
   await admin.pool.query(`CREATE SCHEMA "${schema}"`);
@@ -73,10 +91,7 @@ async function sharedDatabase(backend: 'libsql' | 'pg'): Promise<[FactoryStorage
   });
   const url = new URL(postgresUrl!);
   url.searchParams.set('options', `-c search_path=${schema}`);
-  return [
-    new PgFactoryStorage({ id: 'factory-a', connectionString: url.toString() }),
-    new PgFactoryStorage({ id: 'factory-b', connectionString: url.toString() }),
-  ];
+  return url.toString();
 }
 
 /** A sandbox provider that records what it was asked to stop by identity. */
@@ -231,7 +246,7 @@ describe.each(backends)('card sandboxes as a card moves between contexts, on %s'
     const root = await mkdtemp(join(tmpdir(), 'factory-sandboxes-'));
     onTestFinished(() => rm(root, { recursive: true, force: true }));
     const local = new LocalFactorySandbox({ root });
-    const [storage] = await sharedDatabase(backend);
+    const storage = await database(backend);
     const factory = await factoryOn(storage, local, runInFlight);
     const card = await cardWithSessions(factory.seed, stage);
     return { ...factory, card, local, root };
@@ -357,7 +372,7 @@ describe.each(backends)('card sandboxes across Factory processes, on %s', backen
 
   it('still commits the move when stopping the left sandbox fails', async () => {
     const calls: string[] = [];
-    const [storage] = await sharedDatabase(backend);
+    const storage = await database(backend);
     const factory = await factoryOn(storage, recordingSandbox(calls, { failStop: true }));
     const card = await cardWithSessions(factory.seed, 'triage');
     await card.github.sessions.setSandbox({
@@ -455,7 +470,7 @@ describe.each(backends)('a run in flight on the session the card left, on a real
     onTestFinished(() => rm(root, { recursive: true, force: true }));
     const local = new LocalFactorySandbox({ root });
     const { controller, release } = await gatedController();
-    const [storage] = await sharedDatabase(backend);
+    const storage = await database(backend);
     const unloader = new SessionUnloader({ controller, warn: () => {} });
     onTestFinished(() => unloader.stop());
     // The same checks Factory wires: the controller's session for the card's session id.

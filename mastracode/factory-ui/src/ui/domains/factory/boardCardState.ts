@@ -1,17 +1,11 @@
 import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { BoardCardStatus } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { FactoryDecisionSummary } from './services/decisions';
 
-/** A card has one status row, so every announcement it could make resolves to one of these. */
-export type BoardCardStatus =
-  | { kind: 'idle' }
-  | { kind: 'waiting'; label: string; decisionId: string }
-  /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
-  | { kind: 'held'; label: string }
-  | { kind: 'busy'; label: string }
-  | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
+export type { BoardCardStatus };
 
 export type BoardCardOwner =
   | { kind: 'free' }

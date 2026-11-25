@@ -2,6 +2,7 @@ import assert from 'node:assert';
 
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -83,7 +84,7 @@ async function setup({
     {
       workItems: seed.workItems,
       boards,
-      transitionService,
+      boardEngine: { requestMove: transitionService.transition },
       auditRecorder,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
       // Without intake rules to read, the route list, as before intake order.
@@ -739,7 +740,7 @@ describe("a card's work requested from a chat", () => {
       ...createFactoryWorkItemTools(toolScope, {
         workItems: seed.workItems,
         boards,
-        transitionService: service,
+        boardEngine: new DispatcherBoardEngine({ transitionService: service }),
         auditRecorder: { record: vi.fn(async () => null) } as never,
         sessions: { getSourceControlBySessionId: async () => null },
         intakeEvaluator: 'route-list',

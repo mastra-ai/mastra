@@ -1169,15 +1169,20 @@ export class ProcessorRunner {
        * `step-finish` chunk.
        */
       keepStepScopedSpans?: boolean;
+      /** End only the spans `keepStepScopedSpans` leaves open. */
+      stepScopedOnly?: boolean;
     },
   ): void {
     for (const state of processorStates.values()) {
-      state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
+      if (!options?.stepScopedOnly) {
+        state.span?.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
+      }
 
       for (const [key, value] of Object.entries(state.customState)) {
         if (key.startsWith('__outputStreamSpan_')) {
           const span = value as Span<SpanType.PROCESSOR_RUN> | undefined;
-          if (options?.keepStepScopedSpans && span?.parent?.type === SpanType.MODEL_STEP) {
+          const stepScoped = span?.parent?.type === SpanType.MODEL_STEP;
+          if (stepScoped ? options?.keepStepScopedSpans : options?.stepScopedOnly) {
             continue;
           }
           const durationKey = OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX + key.slice('__outputStreamSpan_'.length);

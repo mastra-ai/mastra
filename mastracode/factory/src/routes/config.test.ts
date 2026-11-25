@@ -1489,6 +1489,13 @@ describe('default model routes with a tenant', () => {
   const controller = makeAgentController([]);
   const userA = { workosId: 'user-a', organizationId: 'org1' };
   const userB = { workosId: 'user-b', organizationId: 'org1' };
+  const unset = { modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null };
+  const singleModelDefaults = (modelId: string, thinkingLevel: string) => ({
+    modelId,
+    thinkingLevel,
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel }] }],
+    defaultModelPackId: 'default',
+  });
 
   function buildApp(user: { workosId: string; organizationId?: string } | null, includeStorage = true) {
     const app = new Hono();
@@ -1536,7 +1543,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await res.json()).toEqual(unset);
   });
 
   it('validates and persists a default model per user', async () => {
@@ -1545,11 +1552,14 @@ describe('default model routes with a tenant', () => {
 
     const nullBody = await putDefault(buildApp(userA), null);
     expect(nullBody.status).toBe(400);
-    expect(await nullBody.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await nullBody.json()).toEqual({ error: 'Invalid modelId' });
 
-    const oversized = await putDefault(buildApp(userA), { modelId: 'm'.repeat(257) });
+    const oversized = await putDefault(buildApp(userA), { modelId: `openai/${'m'.repeat(250)}` });
     expect(oversized.status).toBe(400);
-    expect(await oversized.json()).toEqual({ error: 'Missing required field: modelId' });
+    expect(await oversized.json()).toEqual({ error: 'Invalid modelId' });
+
+    const searchText = await putDefault(buildApp(userA), { modelId: 'sonnet 5.5' });
+    expect(searchText.status).toBe(400);
 
     const saved = await putDefault(buildApp(userA), { modelId: ' openai/gpt-5.6 ' });
     expect(saved.status).toBe(200);
@@ -1560,97 +1570,64 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null });
+    expect(await userAResponse.json()).toEqual(singleModelDefaults('openai/gpt-5.6', 'medium'));
+    expect(await userBResponse.json()).toEqual(unset);
   });
 
-  it('saves a personal thinking level only next to a personal default model', async () => {
-    const putThinking = (body: unknown) =>
-      buildApp(userA).request('/web/config/default-model/thinking', {
+  it('replaces the caller’s model packs and keeps the default model on the default pack', async () => {
+    const putPacks = (body: unknown) =>
+      buildApp(userA).request('/web/config/model-packs', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
     const getDefaults = async (user: typeof userA) =>
       (await buildApp(user).request('/web/config/default-model')).json();
+    const build = {
+      id: 'build',
+      name: 'Build',
+      models: [
+        { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'high' },
+        { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'medium' },
+      ],
+    };
+    const quick = { id: 'quick', name: 'Quick', models: [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'low' }] };
 
-    const withoutModel = await putThinking({ thinkingLevel: 'high' });
-    expect(withoutModel.status).toBe(400);
-    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+    for (const invalid of [
+      { modelPacks: [build] },
+      { modelPacks: [build], defaultModelPackId: 'missing' },
+      { modelPacks: [build, { ...quick, name: 'build' }], defaultModelPackId: 'build' },
+      { modelPacks: [{ ...build, models: [...build.models, build.models[0]] }], defaultModelPackId: 'build' },
+    ]) {
+      const rejected = await putPacks(invalid);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ error: 'invalid_model_packs' });
+    }
+    expect(await getDefaults(userA)).toEqual(unset);
 
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const saved = await putThinking({ thinkingLevel: 'high' });
+    const saved = await putPacks({ modelPacks: [build, quick], defaultModelPackId: 'quick' });
     expect(saved.status).toBe(200);
-    expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null });
+    const quickDefaults = {
+      modelId: 'openai/gpt-5.6-sol',
+      thinkingLevel: 'low',
+      modelPacks: [build, quick],
+      defaultModelPackId: 'quick',
+    };
+    expect(await saved.json()).toEqual(quickDefaults);
+    expect(await getDefaults(userA)).toEqual(quickDefaults);
+    expect(await getDefaults(userB)).toEqual(unset);
 
-    const invalid = await putThinking({ thinkingLevel: 'enormous' });
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
-
-    const reset = await putThinking({ thinkingLevel: null });
-    expect(reset.status).toBe(200);
-    expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
-    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
-  });
-
-  it('clears a personal default model', async () => {
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const cleared = await buildApp(userA).request('/web/config/default-model', { method: 'DELETE' });
-    expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ok: true, modelId: null });
-    expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
-  });
-
-  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
-    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
-    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
-    const settings = new Map<string, string>();
-    const rows = [
-      { sessionId: 'live', userId: 'user-a', originSessionId: null },
-      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
-      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
-      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
-    ];
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('factoryAuthUser' as never, userA as never);
-      await next();
+    await putDefault(buildApp(userA), { modelId: 'google/gemini-3.8-flash' });
+    expect(await getDefaults(userA)).toEqual({
+      ...quickDefaults,
+      modelId: 'google/gemini-3.8-flash',
+      modelPacks: [build, { ...quick, models: [{ modelId: 'google/gemini-3.8-flash', thinkingLevel: 'low' }] }],
     });
-    mountApiRoutes(
-      app as never,
-      new ConfigRoutes({
-        auth: fakeRouteAuth(),
-        modelDefaults: seed.modelDefaults,
-        factoryProjects: seed.projects,
-        workItems: seed.workItems,
-        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
-        controller: {
-          ...controller,
-          getSession: async (id: string) =>
-            id === 'live'
-              ? {
-                  model: {
-                    get: () => settings.get('currentModelId') ?? '',
-                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
-                  },
-                  thread: { getId: () => 'thread-live' },
-                }
-              : undefined,
-        },
-      }).routes(),
-    );
 
-    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      modelId: 'openai/gpt-5.6',
-      applied: ['live'],
-      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
-    });
-    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
+    const emptied = await putPacks({ modelPacks: [], defaultModelPackId: null });
+    expect(emptied.status).toBe(200);
+    expect(await emptied.json()).toEqual(unset);
+    expect(await getDefaults(userA)).toEqual(unset);
   });
 
   it('uses the local sentinel org and user when auth is disabled', async () => {

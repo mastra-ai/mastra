@@ -63,6 +63,7 @@ export interface ModelPickerPanelProps {
   value?: ModelPickerValue;
   defaultModel?: ModelPickerValue;
   onSelect: (value: ModelPickerValue) => void;
+  customModel?: (query: string) => ModelPickerValue | undefined;
   /** Provider the list opens filtered to; "All" when unset. */
   initialProviderFilter?: string;
   renderProviderIcon: (providerId: string) => ReactNode;
@@ -90,6 +91,7 @@ export function ModelPickerPanel({
   value,
   defaultModel,
   onSelect,
+  customModel,
   initialProviderFilter,
   renderProviderIcon,
   header,
@@ -115,6 +117,7 @@ export function ModelPickerPanel({
   const filtering = usable.length > 1 || others.length > 0;
   const shownProviders = providerFilter ? usable.filter(provider => provider.id === providerFilter) : usable;
   const matches = deferredQuery ? searchModels([...usable, ...others], deferredQuery) : [];
+  const custom = deferredQuery === query && query ? customModel?.(query.trim()) : undefined;
   const filterTo = (providerId: string | undefined) => {
     setProviderFilter(providerId);
     setBrowsingMore(false);
@@ -230,6 +233,16 @@ export function ModelPickerPanel({
                 </CommandGroup>
               ))
             )}
+            {custom ? (
+              <CommandGroup>
+                <CommandItem value={`custom:${custom.provider}/${custom.model}`} onSelect={() => onSelect(custom)}>
+                  <IconPlusMedium aria-hidden />
+                  <span className="truncate">
+                    Use {custom.provider}/{custom.model}
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
             {reset && !deferredQuery && !browsingMore ? (
               <>
                 <CommandSeparator />

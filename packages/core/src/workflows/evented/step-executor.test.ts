@@ -704,7 +704,10 @@ describe('StepExecutor', () => {
       }
 
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
-      expect(cached.map(event => event.index)).toEqual([0, 1]);
+      // Indices are consecutive from a clock-seeded base, not 0-based.
+      const base = cached[0]!.index as number;
+      expect(typeof base).toBe('number');
+      expect(cached.map(event => event.index)).toEqual([base, base + 1]);
     });
 
     it('reuses a configured caching pubsub so one step frame is cached once', async () => {
@@ -727,8 +730,10 @@ describe('StepExecutor', () => {
 
       expect(live).toHaveLength(1);
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
-      expect(cached.map(event => event.index)).toEqual([0]);
-      expect(live[0]?.index).toBe(0);
+      expect(cached).toHaveLength(1);
+      const index = cached[0]!.index as number;
+      expect(typeof index).toBe('number');
+      expect(live[0]?.index).toBe(index);
       expect(stepPubsub).toBe(target.pubsub);
     });
 
@@ -767,9 +772,12 @@ describe('StepExecutor', () => {
       await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-caller', data: { n: 0 } } as any);
 
       const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      // The step frame continues the numbering the caller's frame seeded.
+      const base = cached[0]!.index as number;
+      expect(typeof base).toBe('number');
       expect(cached.map(event => [event.type, event.index])).toEqual([
-        ['start', 0],
-        ['chunk', 1],
+        ['start', base],
+        ['chunk', base + 1],
       ]);
     });
 
