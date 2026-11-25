@@ -351,6 +351,52 @@ describe('memory-recalled messages in durable runs', () => {
     },
   );
 
+  // The run saves its input before it starts (#31237); without savePerStep nothing else is saved
+  // until the run finishes, so only refs to that save keep the input out of the checkpoints.
+  it.each(engines)(
+    'persists the input message the run saved before starting as a ref in every later checkpoint (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, storage } = await startProcess(history(), { engine, toolRounds: 2 });
+      const marker = 'pre-run-input-marker';
+      const persisted: SnapshotRow[] = [];
+      const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+      workflows.persistWorkflowSnapshot = async args => {
+        persisted.push(structuredClone(args));
+        return persist(args);
+      };
+
+      const fileData = `UFJFUlVO${'A'.repeat(20_000)}`;
+      const result = await durableAgent.stream(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: marker },
+              { type: 'file', data: fileData, mediaType: 'application/pdf' },
+            ],
+          },
+        ],
+        { memory: memoryOption },
+      );
+      expect(await collectText(result)).toBe('done');
+
+      const memoryStore = (await storage.getStore('memory'))!;
+      const { messages: stored } = await memoryStore.listMessages({ threadId, perPage: false });
+      const inputId = stored.find(m => m.role === 'user' && JSON.stringify(m.content).includes(marker))?.id;
+      expect(inputId).toBeDefined();
+
+      // The first row makes the run recoverable before the input is saved, so it must carry the
+      // input inline; every checkpoint after it can reference the saved row.
+      const running = persisted.slice(1).filter(row => row.snapshot.status === 'running');
+      expect(copyPaths(persisted[0]!.snapshot, fileData).length).toBeGreaterThan(0);
+      expect(running.length).toBeGreaterThan(0);
+      expect(running.some(row => refIds(row.snapshot).includes(inputId!))).toBe(true);
+      expect(running.flatMap(row => copyPaths(row.snapshot, marker))).toEqual([]);
+      expect(running.flatMap(row => copyPaths(row.snapshot, fileData))).toEqual([]);
+    },
+    30_000,
+  );
+
   // Default engine only: the evented engine writes workflow state with refs at each step, and its
   // pruned checkpoints keep no other transcript copy once the input is saved, so it passes either way.
   it.each(['default'] as const)(
