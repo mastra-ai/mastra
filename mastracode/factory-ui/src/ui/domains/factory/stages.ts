@@ -21,7 +21,7 @@ const BOARD_STAGE_LABELS = {
 
 export type BoardStageId = FactoryRuleStage;
 
-export type BuiltinStageId = (typeof WORK_STAGES)[number];
+type BuiltinStageId = (typeof WORK_STAGES)[number];
 
 export interface BoardStage {
   id: BoardStageId;
@@ -36,11 +36,6 @@ export const BOARD_STAGES: ReadonlyArray<BoardStage> = WORK_STAGES.map(id => ({
 /** UI label for a stage, falling back to the raw id for unknown stages. */
 export function stageLabel(stage: string): string {
   return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;
-}
-
-/** The board column a raw stage id names, when it names one. */
-export function boardStage(stage: string): BuiltinStageId | undefined {
-  return WORK_STAGES.find(builtin => builtin === stage);
 }
 
 /** Position of a stage in the board's column order; unknown stages sort last. */
