@@ -10,5 +10,5 @@ coverage/
 *.writer.sqlite
 *.writer.sqlite-*
 
-/package-lock.json
+!/package-lock.json
 .local/
