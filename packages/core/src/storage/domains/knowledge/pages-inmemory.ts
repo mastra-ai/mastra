@@ -126,8 +126,15 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     this.#pins = copy.pins;
     this.#activity = copy.activity;
     this.#bodyLinks = copy.bodyLinks;
+    // Events from a snapshot taken before positions existed get the next ones, in stored order.
     for (const event of this.#activity) {
-      if (event.position !== undefined) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
+      const n = event.position === undefined ? NaN : Number(event.position);
+      if (Number.isSafeInteger(n)) this.#activitySeq = Math.max(this.#activitySeq, n);
+    }
+    for (const event of this.#activity) {
+      if (!Number.isSafeInteger(event.position === undefined ? NaN : Number(event.position))) {
+        event.position = String(++this.#activitySeq);
+      }
     }
   }
 
@@ -928,6 +935,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     if (ascending) {
       // Writes here are synchronous, so insertion order is commit order.
       const after = activityPosition(input.after ?? input.cursor);
+      if (after !== undefined && after > this.#activitySeq) {
+        throw new RangeError(`Knowledge activity position is ahead of this feed: ${after}`);
+      }
       const size = pageSize(input.limit);
       const matched = this.#activity.filter(
         event => this.#activityMatches(event, input) && (after === undefined || Number(event.position) > after),

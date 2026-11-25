@@ -321,6 +321,25 @@ function parseActivityPosition(position: string): { incarnation: string; xact: s
   throw new RangeError('Knowledge activity position is not one this store issued');
 }
 
+/**
+ * Explains an empty read after `after` from the read's own row of feed state: refuses a position
+ * from another incarnation of the feed, or one ahead of every transaction id this cluster has handed
+ * out (the database went back to an earlier point and wasn't rebased). A position this cluster
+ * handed out is always below `xmax`.
+ */
+function checkActivityPosition(after: { incarnation: string }, feed: Row | undefined): void {
+  if (feed?.feedIncarnation !== after.incarnation) {
+    throw new RangeError(
+      'Knowledge activity position is from before the feed was rebased (after a database restore); restart from since',
+    );
+  }
+  if (!feed?.inRange) {
+    throw new RangeError(
+      'Knowledge activity position is ahead of this feed (the database was restored to an earlier point); run rebaseActivityFeed() once and restart from since',
+    );
+  }
+}
+
 function encodeCursor(parts: unknown[]): string {
   return Buffer.from(JSON.stringify(parts)).toString('base64url');
 }
@@ -1819,24 +1838,32 @@ export class PgKnowledgePages implements KnowledgePageStore {
       // Ordered by (transaction id, sequence) and capped at the snapshot horizon: every transaction
       // below it has committed or aborted, so no event can later appear behind a position handed out.
       // The incarnation and the bounds check come from the same statement, so the same snapshot, as
-      // the events: a rebase that commits mid-read can't let an old position through.
+      // the events, also when no event matches: a rebase or a new transaction id that commits
+      // mid-read can't let an old or unissued position through.
       const from = input.after ?? input.cursor;
       const after = from === undefined ? undefined : parseActivityPosition(from);
       const incarnation = `(SELECT "activityIncarnation" FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge')`;
       where.push(`a."xact" < pg_snapshot_xmin(pg_current_snapshot())`);
-      let checks = '';
+      let inRange = 'true';
       if (after) {
         const xact = `${params.add(after.xact)}::xid8`;
-        checks = `${incarnation} = ${params.add(after.incarnation)} AND ${xact} < pg_snapshot_xmax(pg_current_snapshot())`;
-        where.push(checks, `(a."xact", a."seq") > (${xact}, ${params.add(after.seq)}::bigint)`);
+        inRange = `${xact} < pg_snapshot_xmax(pg_current_snapshot())`;
+        where.push(
+          `${incarnation} = ${params.add(after.incarnation)}`,
+          inRange,
+          `(a."xact", a."seq") > (${xact}, ${params.add(after.seq)}::bigint)`,
+        );
       }
-      const rows = await this.#rows(
+      const all = await this.#rows(
         this.#client,
-        `SELECT a.*, a."xact"::text AS "xactText", a."seq"::text AS "seqText", ${incarnation} AS "feedIncarnation" FROM ${join}
-         WHERE ${where.join(' AND ')} ORDER BY a."xact" ASC, a."seq" ASC LIMIT ${limit + 1}`,
+        `SELECT f."feedIncarnation", f."inRange", e.* FROM (SELECT ${incarnation} AS "feedIncarnation", ${inRange} AS "inRange") f
+         LEFT JOIN LATERAL (SELECT a.*, a."xact"::text AS "xactText", a."seq"::text AS "seqText" FROM ${join}
+           WHERE ${where.join(' AND ')} ORDER BY a."xact" ASC, a."seq" ASC LIMIT ${limit + 1}) e ON true
+         ORDER BY e."xact" ASC, e."seq" ASC`,
         params.values,
       );
-      if (after && rows.length === 0) await this.#checkActivityPosition(after);
+      const rows = all.filter(row => row.id != null);
+      if (after && rows.length === 0) checkActivityPosition(after, all[0]);
       const events = rows.slice(0, limit).map(row => ({
         ...toEvent(row),
         position: `${String(row.feedIncarnation)}:${String(row.xactText)}:${String(row.seqText)}`,
@@ -1866,30 +1893,6 @@ export class PgKnowledgePages implements KnowledgePageStore {
       events,
       ...(rows.length > limit && last ? { nextCursor: encodeCursor([iso(last.createdAt), last.id]) } : {}),
     };
-  }
-
-  /**
-   * Explains an empty read after `after`: refuses a position from another incarnation of the feed,
-   * or one ahead of every transaction id this cluster has handed out (the database went back to an
-   * earlier point and wasn't rebased). A position this cluster handed out is always below `xmax`.
-   */
-  async #checkActivityPosition(after: { incarnation: string; xact: string }): Promise<void> {
-    const rows = await this.#rows(
-      this.#client,
-      `SELECT "activityIncarnation" AS "incarnation", $1::xid8 < pg_snapshot_xmax(pg_current_snapshot()) AS "inRange"
-       FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge'`,
-      [after.xact],
-    );
-    if (rows[0]?.incarnation !== after.incarnation) {
-      throw new RangeError(
-        'Knowledge activity position is from before the feed was rebased (after a database restore); restart from since',
-      );
-    }
-    if (!rows[0]?.inRange) {
-      throw new RangeError(
-        'Knowledge activity position is ahead of this feed (the database was restored to an earlier point); run rebaseActivityFeed() once and restart from since',
-      );
-    }
   }
 
   /**

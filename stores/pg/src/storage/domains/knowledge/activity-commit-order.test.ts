@@ -260,34 +260,53 @@ describe('PgKnowledgePages oldest-first activity under concurrent writes (real P
     await expect(store.listPageActivity({ read, order: 'asc', after: ahead })).rejects.toThrow(/ahead of this feed/);
   });
 
-  it('reads the feed incarnation in the same statement as the events', async () => {
-    const { left, since } = await setup();
-    await store.createPage({ parentId: left.id, name: 'a page', provenance });
-    const { after } = await drain(since);
-    await store.createPage({ parentId: left.id, name: 'b page', provenance });
-    // A rebase that commits between any two statements of the read must not replay the feed:
-    // run one before every statement the read sends, and expect a refusal, never repeated events.
+  /** A reader that runs `before` ahead of every statement after its first. */
+  function interleaved(before: () => Promise<unknown>) {
     const statements: string[] = [];
-    const rebasing = new Proxy(client, {
+    const client2 = new Proxy(client, {
       get(target, prop, receiver) {
         if (prop === 'any' || prop === 'manyOrNone' || prop === 'query' || prop === 'oneOrNone' || prop === 'one') {
           const fn = Reflect.get(target, prop, receiver) as (...args: unknown[]) => Promise<unknown>;
           return async (...args: unknown[]) => {
             statements.push(String(args[0]));
-            if (statements.length > 1) await store.rebaseActivityFeed();
+            if (statements.length > 1) await before();
             return fn.apply(target, args);
           };
         }
         return Reflect.get(target, prop, receiver);
       },
     });
-    const reader = new PgKnowledgePages({ client: rebasing as DbClient, schemaName, bounds });
-    let events: unknown[] = [];
+    return new PgKnowledgePages({ client: client2 as DbClient, schemaName, bounds });
+  }
+
+  it('reads the feed incarnation in the same statement as the events', async () => {
+    const { left, since } = await setup();
+    await store.createPage({ parentId: left.id, name: 'a page', provenance });
+    const { after } = await drain(since);
+    const b = await store.createPage({ parentId: left.id, name: 'b page', provenance });
+    // A rebase that commits between any two statements of the read must not replay the feed:
+    // run one before every statement the read sends. The read returns exactly the new event, or
+    // refuses the position; it never returns the event it already handed out.
+    const reader = interleaved(() => store.rebaseActivityFeed());
+    let events: { pageId: string }[] | undefined;
     try {
       events = (await reader.listPageActivity({ read, since, order: 'asc', after })).events;
     } catch (error) {
       expect(String(error)).toMatch(/rebased/);
     }
-    expect(events.length).toBeLessThanOrEqual(1);
+    if (events) expect(events.map(event => event.pageId)).toEqual([b.id]);
+  });
+
+  it('refuses a position ahead of the feed even when a transaction id is handed out mid-read', async () => {
+    const { left, since } = await setup();
+    await store.createPage({ parentId: left.id, name: 'a page', provenance });
+    const { after } = await drain(since);
+    const [incarnation] = after!.split(':');
+    // The next transaction id: not handed out yet, so a position at it is ahead of the feed...
+    const [{ xmax }] = (await pool.query(`SELECT pg_snapshot_xmax(pg_current_snapshot())::text AS xmax`)).rows;
+    const ahead = `${incarnation}:${xmax}:1`;
+    // ...until another transaction takes it between two statements of the read.
+    const reader = interleaved(() => pool.query('SELECT pg_current_xact_id()'));
+    await expect(reader.listPageActivity({ read, order: 'asc', after: ahead })).rejects.toThrow(/ahead of this feed/);
   });
 });

@@ -1638,7 +1638,7 @@ function activityTool(host: KnowledgePageToolHost) {
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
       `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order). ` +
       'Oldest first always returns a `cursor`, also when it has caught up or found nothing yet: keep it, and a later call with it returns only the changes it has not listed, none missed or repeated. ' +
-      'The exception: a page or note that becomes readable later (moved into view, or a note restamped or restored) keeps its earlier changes behind that cursor, and they are not returned. The move, restamp or restore itself does come through; to see what came before it, read that page newest first with `from`.',
+      'The exception: a page or note that becomes readable later (moved into view, or a note restamped or restored) keeps its earlier changes behind that cursor, and they are not returned. The move, restamp or restore itself comes through as a change of the page it changed: without `from`, or with `from` on that page or the scope it is in now, but not with `from` on another page (such as one under a moved folder). To see what came before it, read that page newest first with `from`.',
     inputSchema: {
       type: 'object',
       properties: {

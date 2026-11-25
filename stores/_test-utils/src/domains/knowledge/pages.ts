@@ -1520,6 +1520,14 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
                 RangeError,
               );
             }
+            // Well-formed but past anything this feed has handed out: every number in it a billion higher.
+            const ahead = position
+              .split(':')
+              .map(part => (/^\d+$/.test(part) ? String(Number(part) + 1_000_000_000) : part))
+              .join(':');
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: ahead })).rejects.toThrow(
+              /ahead of this feed/,
+            );
           });
 
           it('leaves the default order newest first', async () => {

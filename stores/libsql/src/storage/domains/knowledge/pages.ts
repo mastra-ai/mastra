@@ -136,6 +136,24 @@ function parseActivityPosition(position: string): { incarnation: string; seq: nu
   throw new RangeError('Knowledge activity position is not one this store issued');
 }
 
+/**
+ * Explains an empty read after a position from the read's own row of feed state: refuses one from
+ * another incarnation of the feed (cleared or rebased since), or one past the highest `seq` (an
+ * older copy of the file restored).
+ */
+function checkActivityPosition(after: { incarnation: string; seq: number }, feed: Row | undefined): void {
+  if (feed?.feedIncarnation !== after.incarnation) {
+    throw new RangeError(
+      'Knowledge activity position is from before the feed was cleared or rebased (after a database restore); restart from since',
+    );
+  }
+  if (after.seq > Number(feed.maxSeq)) {
+    throw new RangeError(
+      'Knowledge activity position is ahead of this feed (an older copy of the database was restored); run rebaseActivityFeed() once and restart from since',
+    );
+  }
+}
+
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
 export const KNOWLEDGE_PAGE_DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS "mastra_knowledge_access_state" (
@@ -1602,12 +1620,18 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       args.push(cursor[0]!);
     }
     args.push(...noteVisible.args, limit + 1);
-    const rows = await this.#query(
+    const events = `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`;
+    // Oldest first, the feed's incarnation and highest seq come back on the same statement as the
+    // events, so the same read snapshot, also when no event matches.
+    const all = await this.#query(
       this.#read,
-      `SELECT e.*${ascending ? `, ${FEED_INCARNATION} AS feedIncarnation` : ''} FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
+      ascending
+        ? `SELECT f.feedIncarnation, f.maxSeq, e.* FROM (SELECT ${FEED_INCARNATION} AS feedIncarnation, (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AS maxSeq) f LEFT JOIN (${events}) e ON 1 ORDER BY e.seq ASC`
+        : events,
       args,
     );
-    if (seqAfter !== undefined && rows.length === 0) await this.#checkActivityPosition(seqAfter);
+    const rows = ascending ? all.filter(row => row.id != null) : all;
+    if (seqAfter !== undefined && rows.length === 0) checkActivityPosition(seqAfter, all[0]);
     const feedPosition = (row: Row) => `${String(row.feedIncarnation)}:${String(row.seq)}`;
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
@@ -1630,27 +1654,6 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           }
         : {}),
     };
-  }
-
-  /**
-   * Explains an empty read after a position: refuses one from another incarnation of the feed
-   * (cleared or rebased since), or one past the highest `seq` (an older copy of the file restored).
-   */
-  async #checkActivityPosition(after: { incarnation: string; seq: number }): Promise<void> {
-    const [row] = await this.#query(
-      this.#read,
-      `SELECT ${FEED_INCARNATION} AS incarnation, (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AS maxSeq`,
-    );
-    if (row?.incarnation !== after.incarnation) {
-      throw new RangeError(
-        'Knowledge activity position is from before the feed was cleared or rebased (after a database restore); restart from since',
-      );
-    }
-    if (after.seq > Number(row.maxSeq)) {
-      throw new RangeError(
-        'Knowledge activity position is ahead of this feed (an older copy of the database was restored); run rebaseActivityFeed() once and restart from since',
-      );
-    }
   }
 
   /** Rewrites the audience index rows of one pin to match `audience`. */
