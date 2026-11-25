@@ -40,8 +40,8 @@ describe('matchEnvironmentSlug', () => {
     expect(matchEnvironmentSlug(url, ['acme/platform/other'])).toBeUndefined();
   });
 
-  it('matches a slug at the end of the path when the host serves repositories under a prefix', () => {
-    expect(matchEnvironmentSlug('https://git.example.com/scm/acme/repo.git', ['acme/repo'])).toBe('acme/repo');
+  it('does not match a slug that is only the end of a longer repository path', () => {
+    expect(matchEnvironmentSlug('https://gitlab.com/acme/platform/app.git', ['platform/app'])).toBeUndefined();
   });
 
   it('is undefined for a repository outside the environment', () => {

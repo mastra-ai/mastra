@@ -37,15 +37,12 @@ export function cloneUrlSlug(cloneUrl: string): string | undefined {
 export function matchEnvironmentSlug(cloneUrl: string, slugs: Iterable<string>): string | undefined {
   const wanted = cloneUrlSlug(cloneUrl);
   if (!wanted) return undefined;
-  // A host may serve repositories under a path prefix, so a slug that is the
-  // tail of the path still names the repository when no slug is the whole path.
-  let tail: string | undefined;
+  // Only the whole path names the repository: a slug that is merely the tail
+  // of a longer path (`platform/app` against `acme/platform/app`) is another one.
   for (const slug of slugs) {
-    const lower = slug.toLowerCase();
-    if (lower === wanted) return slug;
-    if (wanted.endsWith(`/${lower}`)) tail ??= slug;
+    if (slug.toLowerCase() === wanted) return slug;
   }
-  return tail;
+  return undefined;
 }
 
 /**
