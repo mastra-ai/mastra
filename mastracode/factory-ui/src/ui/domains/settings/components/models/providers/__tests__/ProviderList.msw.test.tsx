@@ -638,7 +638,7 @@ describe('ProviderList custom endpoints', () => {
     await pickCustomRowAction(user, 'my-llm', 'Test connection');
 
     expect(await screen.findByText(`my-llm failed the connection test. ${failure.message}`)).toBeInTheDocument();
-    await waitFor(async () => expect(within(await findCustomRow('my-llm')).getByText('Check failed')).toBeVisible());
+    expect(await within(await findCustomRow('my-llm')).findByText('Check failed')).toBeVisible();
     expect(within(await findCustomRow('my-llm')).getByText(failure.message)).toBeInTheDocument();
     expect(checkBodies).toEqual([{ previousId: 'my-llm', scope: 'user' }]);
   });
@@ -653,7 +653,7 @@ describe('ProviderList custom endpoints', () => {
 
     expect(await screen.findByText('my-llm answered and lists 3 models.')).toBeInTheDocument();
     // The row counts the models configured on it, not the ones the endpoint listed.
-    await waitFor(async () => expect(within(await findCustomRow('my-llm')).getByText('2 models')).toBeVisible());
+    expect(await within(await findCustomRow('my-llm')).findByText('2 models')).toBeVisible();
   });
 });
 
@@ -938,7 +938,7 @@ describe('Custom endpoint form', () => {
     await fillCustomEndpoint(user, form, { name: 'my-llm', url: URL_UNDER_TEST, models: ['m'] });
     await user.click(within(form).getByRole('button', { name: 'Send test message' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('The endpoint did not answer the test message.');
+    expect(await within(form).findByRole('alert')).toHaveTextContent('The endpoint did not answer the test message.');
   });
 
   it('keeps the models a passing Test listed after a later Test & save fails', async () => {
