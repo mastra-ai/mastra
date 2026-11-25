@@ -342,13 +342,14 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       expect(await loadStatus(store, id, run.runId)).toBe('success');
     });
 
-    // Foreach items save nothing before their body, so the stalled process can run the next items.
-    // Their results are refused and never stored.
+    // Foreach items save nothing before their body, so the stalled process can start the next item
+    // before its checkpoint is refused. That item's result is never stored, and no item starts after it.
     it('never stores the foreach items it ran after the run was taken over', async () => {
       const ran: number[] = [];
       const stalled = gate();
+      const refused = gate();
       const item = z.object({ n: z.number() });
-      const { store, workflow, id, logged } = await setup(({ id, options }) =>
+      const { store, workflow, id, logged, writes } = await setup(({ id, options }) =>
         createWorkflow({ id, inputSchema: z.array(item), outputSchema: z.array(item), options })
           .foreach(
             createStep({
@@ -358,6 +359,8 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
               execute: async ({ inputData }) => {
                 ran.push(inputData.n);
                 if (inputData.n === 1) await stalled.wait();
+                // Holds item 2, if it started, until item 1's checkpoint was refused.
+                if (inputData.n === 2) await refused.wait();
                 return inputData;
               },
             }),
@@ -370,9 +373,13 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       const done = run.start({ inputData: [{ n: 1 }, { n: 2 }, { n: 3 }] });
       await vi.waitFor(() => expect(ran).toEqual([1]));
       await takeOverAndFinish(store, id, run.runId);
+      const afterTakeover = writes.length;
       stalled.open();
+      await vi.waitFor(() => expect(writes.slice(afterTakeover).some(w => w.refused)).toBe(true));
+      refused.open();
 
       await expect(done).rejects.toMatchObject(conflict);
+      expect([[1], [1, 2]]).toContainEqual(ran);
       const stored = await store.loadWorkflowSnapshot({ workflowName: id, runId: run.runId });
       expect(stored?.status).toBe('success');
       expect(stored?.context?.charge?.status).not.toBe('success');

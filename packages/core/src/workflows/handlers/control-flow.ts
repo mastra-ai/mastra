@@ -1270,7 +1270,11 @@ export async function executeForeach(
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));
           // A refused checkpoint means another process took the run over; its claim logged that.
-          if (!isOwnRunFenceConflict(err)) {
+          if (isOwnRunFenceConflict(err)) {
+            // Start no more items: their results can never be stored, and the new owner runs them.
+            killQueue();
+            if (inFlight === 0) resolveCompletion?.();
+          } else {
             engine
               .getLogger()
               ?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
