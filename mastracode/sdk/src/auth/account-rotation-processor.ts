@@ -32,7 +32,12 @@ import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { requestModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
-import { MODEL_FALLBACK_PART_TYPE, MODEL_FALLBACK_STATE_KEY, modelFallbackNoticeText } from '../model-fallback.js';
+import {
+  MODEL_FALLBACK_PART_TYPE,
+  MODEL_FALLBACK_STATE_KEY,
+  modelFallbackNoticeText,
+  pendingModelFallbackSchema,
+} from '../model-fallback.js';
 import type {
   ModelFallbackPartData,
   ModelFallbackReason,
@@ -52,6 +57,26 @@ import {
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
 import type { CredentialStore, OAuthAccountRecord } from './types.js';
+
+export {
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  MODEL_FALLBACK_PART_TYPE,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  MODEL_FALLBACK_STATE_KEY,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  modelFallbackNoticeText,
+} from '../model-fallback.js';
+export type {
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  ModelFallbackPartData,
+  /** @deprecated Import from `@mastra/code-sdk/model-fallback`. */
+  PendingModelFallback,
+} from '../model-fallback.js';
+
+/** @deprecated Parse the whole part with `parseModelFallbackPart` from `@mastra/code-sdk/model-fallback`. */
+export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
+  return pendingModelFallbackSchema.shape.reason.safeParse(value).success;
+}
 
 export const ACCOUNT_SWITCH_PART_TYPE = 'data-mastracode-account-switch';
 

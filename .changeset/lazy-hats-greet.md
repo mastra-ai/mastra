@@ -27,7 +27,7 @@ In a session without `resolveModelRoute`, the `info` event sent on a model switc
 
 A session whose host sets `resolveModelRoute` gets no `info` event on a switch, only the `data-mastracode-model-fallback` part, so the host shows each switch once, the same way live and after reload.
 
-Fallback helpers moved to `@mastra/code-sdk/model-fallback`, so hosts and browser clients read and word model switches the same way. `@mastra/code-sdk/auth/account-rotation-processor` and `@mastra/code-sdk/schema` no longer export them, and `isModelFallbackReason` is gone: `parseModelFallbackPart` validates the whole record.
+Fallback helpers now live in `@mastra/code-sdk/model-fallback`, so hosts and browser clients read and word model switches the same way. Importing them from `@mastra/code-sdk/auth/account-rotation-processor` or `@mastra/code-sdk/schema` still works but is deprecated. `isModelFallbackReason` is deprecated too; `parseModelFallbackPart` validates the whole record:
 
 ```diff
 - import {
