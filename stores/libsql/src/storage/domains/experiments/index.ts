@@ -135,6 +135,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         'variantId',
         'trialIndex',
         'scorerIds',
+        'scorerVersions',
       ],
     });
     await this.#db.alterTable({
@@ -269,6 +270,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       targetType: (row.targetType as Experiment['targetType']) ?? null,
       targetId: (row.targetId as string | null) ?? null,
       scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : null,
+      scorerVersions: row.scorerVersions ? safelyParseJSON(row.scorerVersions) : null,
       name: (row.name as string) ?? undefined,
       description: (row.description as string) ?? undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata as string) : undefined,
@@ -336,6 +338,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           targetType: input.targetType ?? null,
           targetId: input.targetId ?? null,
           scorerIds: input.scorerIds ?? null,
+          scorerVersions: input.scorerVersions ?? null,
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ?? null,
@@ -367,6 +370,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         targetType: input.targetType ?? null,
         targetId: input.targetId ?? null,
         scorerIds: input.scorerIds ?? null,
+        scorerVersions: input.scorerVersions ?? null,
         name: input.name,
         description: input.description,
         metadata: input.metadata,
