@@ -6,7 +6,7 @@
 
 - A line needs only a `message`. Lines without a time or level keep their columns, with a neutral bar.
 - Terminal color and bold codes render with theme colors; other escape codes are dropped.
-- `origin` puts a muted icon before the message for where the line came from, such as build or runtime, named on hover and for screen readers.
+- An optional `icon` (`{ element, label }`) puts a muted icon before the message, such as build or runtime, named on hover and for screen readers.
 - `LogView.List` takes a `ref` with `scrollToLog(id)`, to bring a line such as a deploy error into view.
 - `LogView.Count` and `LogView.Copy` show the line count and copy every line, grouped with `LogView.Refresh` in `LogView.Actions`.
 - `height="fill"` makes the panel fill its container.

@@ -1,8 +1,8 @@
 import { logLevelTextClass } from './log-level-styles';
 import type { LogLevel } from './log-level-styles';
+import { LogStreamLineIcon } from './log-stream-icon';
+import type { LogStreamIcon } from './log-stream-icon';
 import { LogStreamFields, LogStreamMessage } from './log-stream-message';
-import { LogStreamOriginIcon } from './log-stream-origin';
-import type { LogStreamOrigin } from './log-stream-origin';
 import { LogStreamTime } from './log-stream-time';
 import { cn } from '@/lib/utils';
 import type { FractionDigits } from '@/utils/date-format';
@@ -12,7 +12,7 @@ export interface LogStreamLineProps {
   timestamp?: Date | string;
   fractionDigits?: FractionDigits;
   level?: LogLevel;
-  origin?: LogStreamOrigin;
+  icon?: LogStreamIcon;
   fields?: Record<string, unknown>;
   wrap?: boolean;
   collapse?: boolean;
@@ -23,7 +23,7 @@ export function LogStreamLine({
   timestamp,
   fractionDigits,
   level,
-  origin,
+  icon,
   fields,
   wrap = true,
   collapse = true,
@@ -42,7 +42,7 @@ export function LogStreamLine({
           wrap ? 'wrap-anywhere whitespace-pre-wrap' : 'whitespace-pre',
         )}
       >
-        {origin && <LogStreamOriginIcon icon={origin.icon} label={origin.label} />}
+        {icon && <LogStreamLineIcon element={icon.element} label={icon.label} />}
         <LogStreamMessage message={message} collapse={collapse} />
         {fieldEntries.length > 0 && (
           <span className="ml-3">

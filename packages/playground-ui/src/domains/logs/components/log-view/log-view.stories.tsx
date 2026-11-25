@@ -13,10 +13,10 @@ import { IconServer } from '@/ds/icons/central/IconServer';
 
 const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
-type SandboxLine = LogRecord & Pick<LogViewLine, 'origin'>;
+type SandboxLine = LogRecord & Pick<LogViewLine, 'icon'>;
 
-const sandboxOrigin = { icon: <IconServer />, label: 'Sandbox' };
-const processOrigin = { icon: <IconConsole />, label: 'Process' };
+const sandboxIcon = { element: <IconServer />, label: 'Sandbox' };
+const processIcon = { element: <IconConsole />, label: 'Process' };
 
 const logs: SandboxLine[] = [
   {
@@ -24,21 +24,21 @@ const logs: SandboxLine[] = [
     level: 'warn',
     message: 'Memory usage above 80% of limit',
     data: { used_mb: '842', limit_mb: '1024' },
-    origin: sandboxOrigin,
+    icon: sandboxIcon,
   },
   {
     timestamp: '2026-11-24T09:31:07.956Z',
     level: 'info',
     message: 'Process.Start stream ended',
     data: { operation_id: 'op_8f21', exit_code: '0' },
-    origin: processOrigin,
+    icon: processIcon,
   },
   {
     timestamp: '2026-11-24T09:32:44.956Z',
     level: 'debug',
     message: 'envd: received exec request',
     data: { cmd: 'pnpm install --frozen-lockfile', cwd: '/home/user/app' },
-    origin: processOrigin,
+    icon: processIcon,
   },
   {
     timestamp: '2026-11-24T09:35:58.956Z',
@@ -46,7 +46,7 @@ const logs: SandboxLine[] = [
     message:
       "Command failed: node server.js, Error: Cannot find module '/home/user/app/dist/server-with-a-really-long-filename-that-should-wrap.js'",
     data: { operation_id: 'op_a771', exit_code: '1' },
-    origin: processOrigin,
+    icon: processIcon,
   },
   {
     timestamp: '2026-11-24T09:36:01.956Z',
@@ -58,7 +58,7 @@ const logs: SandboxLine[] = [
       '    at Module.load (node:internal/modules/cjs/loader:1119:32)',
       '    at node:internal/main/run_main_module:28:49',
     ].join('\n'),
-    origin: processOrigin,
+    icon: processIcon,
   },
 ];
 
@@ -227,33 +227,33 @@ export const NoFilters: Story = {
 };
 
 const ESC = String.fromCharCode(27);
-const build = { icon: <IconHammer />, label: 'Build' };
-const runtime = { icon: <IconServer />, label: 'Runtime' };
+const buildIcon = { element: <IconHammer />, label: 'Build' };
+const runtimeIcon = { element: <IconServer />, label: 'Runtime' };
 
 const buildOutput: LogViewLine[] = [
-  { message: 'Cloning github.com/acme/agent-app (branch: main)', origin: build },
-  { message: `${ESC}[1mmastra build${ESC}[0m`, origin: build },
-  { message: `${ESC}[90mResolving dependencies${ESC}[0m`, origin: build },
+  { message: 'Cloning github.com/acme/agent-app (branch: main)', icon: buildIcon },
+  { message: `${ESC}[1mmastra build${ESC}[0m`, icon: buildIcon },
+  { message: `${ESC}[90mResolving dependencies${ESC}[0m`, icon: buildIcon },
   {
     level: 'warn',
     message: 'deprecated inflight@1.0.6: This module is not supported',
-    origin: build,
+    icon: buildIcon,
   },
   {
     message: `${ESC}[32m✓${ESC}[0m Bundled 42 modules in ${ESC}[1m1.8s${ESC}[0m`,
-    origin: build,
+    icon: buildIcon,
   },
   {
     timestamp: '2026-11-24T09:36:01.956Z',
     level: 'info',
     message: 'Server listening on :4111',
-    origin: runtime,
+    icon: runtimeIcon,
   },
   {
     timestamp: '2026-11-24T09:36:04.103Z',
     level: 'error',
     message: `${ESC}[31mError: connect ECONNREFUSED 127.0.0.1:5432${ESC}[0m`,
-    origin: runtime,
+    icon: runtimeIcon,
   },
 ];
 
