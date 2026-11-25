@@ -513,6 +513,53 @@ describe("Editing a phase's outcomes", () => {
       outcomes: null,
     });
   });
+
+  it("says which outcome the exit tool's success reports, warns when none is picked, and customizes at most 20", async () => {
+    const extra = Array.from({ length: 21 }, (_, index) => ({
+      key: `step-${index + 1}`,
+      name: `Step ${index + 1}`,
+      kind: 'working' as const,
+      runner: { context: 'work' },
+      nextPhases: ['fixed'],
+    }));
+    const { saved } = serveProject({
+      stored: [
+        storedBoard('bugs', 'Bugs', {
+          phases: [
+            { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+            {
+              ...fixing,
+              nextPhases: ['reported', 'fixed', ...extra.map(phase => phase.key)],
+              exitTool: { id: 'submit_plan' },
+            },
+            ...extra,
+            { key: 'fixed', name: 'Fixed', kind: 'terminal', nextPhases: [] },
+          ],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config/fixing`);
+
+    // 21 moves into working phases, so the defaults pick no outcome for the exit tool.
+    expect(await screen.findByText(/no outcome is picked, so the card waits for the agent/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Customize outcomes' }));
+    expect(screen.getByRole('textbox', { name: 'Fixing outcome 20 key' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Fixing outcome 21 key' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add outcome' })).not.toBeInTheDocument();
+
+    const key = screen.getByRole('textbox', { name: 'Fixing outcome 3 key' });
+    await user.clear(key);
+    await user.type(key, 'advance');
+    expect(screen.queryByText(/no outcome is picked/)).not.toBeInTheDocument();
+    expect(screen.getByText(/When/)).toHaveTextContent(
+      'When submit_plan succeeds, it reports advance, moving the card to Step 1.',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitForMutationsIdle(client);
+    expect(saved.mock.calls[0]?.[1].phases.find(phase => phase.key === 'fixing')?.outcomes).toHaveLength(20);
+  });
 });
 
 describe('Deleting a board', () => {

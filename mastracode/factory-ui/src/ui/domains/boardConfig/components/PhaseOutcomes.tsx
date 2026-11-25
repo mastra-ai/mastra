@@ -1,12 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import type { StoredPhaseInfo } from '../../../../api/types';
-import { MAX_OUTCOMES, defaultOutcomes, newOutcome, nextPhasesOf, outcomeProblems } from '../boardDraft';
+import {
+  MAX_OUTCOMES,
+  defaultOutcomes,
+  exitToolOutcome,
+  newOutcome,
+  nextPhasesOf,
+  outcomeProblems,
+} from '../boardDraft';
 import type { PhaseOutcome } from '../boardDraft';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
@@ -44,6 +52,25 @@ export function PhaseOutcomes({
     );
   }
 
+  const exitTool = phase.exitTool?.id;
+  const exitNote = (outcomes: readonly PhaseOutcome[]) => {
+    if (!exitTool) return null;
+    const picked = exitToolOutcome(outcomes, phases);
+    return picked ? (
+      <Txt as="p" variant="caption" tone="muted">
+        When <code>{exitTool}</code> succeeds, it reports <code>{picked.key}</code>, moving the card to{' '}
+        {nameOf(picked.to)}.
+      </Txt>
+    ) : (
+      <Notice variant="warning">
+        <Notice.Message>
+          When <code>{exitTool}</code> succeeds, no outcome is picked, so the card waits for the agent to report one.
+          Key an outcome <code>advance</code> to choose where its success moves the card.
+        </Notice.Message>
+      </Notice>
+    );
+  };
+
   if (!own) {
     const defaults = defaultOutcomes(phase, phases);
     return (
@@ -57,13 +84,14 @@ export function PhaseOutcomes({
             </li>
           ))}
         </ul>
+        {exitNote(defaults)}
         <Txt as="p" variant="caption" tone="muted">
           This phase lists no outcomes, so the agent may report any allowed move by the key of the phase it goes to.
           Customize them to give each a description the agent reads, or to offer fewer moves than people have.
         </Txt>
         {!disabled && (
           <div>
-            <Button size="sm" variant="ghost" onClick={() => onChange(defaults)}>
+            <Button size="sm" variant="ghost" onClick={() => onChange(defaults.slice(0, MAX_OUTCOMES))}>
               Customize outcomes
             </Button>
           </div>
@@ -156,6 +184,7 @@ export function PhaseOutcomes({
           })}
         </ul>
       </SettingsContainer>
+      {exitNote(own)}
       {!disabled && (
         <div className="flex gap-2">
           {added && own.length < MAX_OUTCOMES && (

@@ -172,8 +172,25 @@ export function newOutcome(
   const taken = new Set(outcomes.map(outcome => outcome.key));
   const base = keyFromName(target.name) || to;
   let key = base;
-  for (let n = 2; taken.has(key); n++) key = `${base}-${n}`;
+  for (let n = 2; taken.has(key); n++) {
+    const suffix = `-${n}`;
+    key = `${base.slice(0, MAX_BOARD_IDENTIFIER_LENGTH - suffix.length).replace(/-+$/, '')}${suffix}`;
+  }
   return { key, label: target.name, to };
+}
+
+/**
+ * The outcome a phase's exit tool reports when it succeeds, as the server picks it: the `advance` outcome, else
+ * the only outcome into a working phase. Undefined when neither picks one; the agent then reports one itself.
+ */
+export function exitToolOutcome(
+  outcomes: readonly PhaseOutcome[],
+  phases: readonly StoredPhaseInfo[],
+): PhaseOutcome | undefined {
+  const advance = outcomes.find(outcome => outcome.key === 'advance');
+  if (advance) return advance;
+  const working = outcomes.filter(outcome => phases.find(other => other.key === outcome.to)?.kind === 'working');
+  return working.length === 1 ? working[0] : undefined;
 }
 
 /** A phase as another kind. Only a working phase has a runner, automation, an exit tool and tools; terminal moves nowhere. */

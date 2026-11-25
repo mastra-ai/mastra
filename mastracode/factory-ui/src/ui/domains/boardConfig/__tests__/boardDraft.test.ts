@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { StoredPhaseInfo } from '../../../../api/types';
 import {
+  exitToolOutcome,
   canRemovePhase,
   defaultOutcomes,
   newOutcome,
@@ -205,6 +206,32 @@ describe('phase outcomes', () => {
     });
     const both = defaultOutcomes(doing, board);
     expect(newOutcome(doing, board, both)).toEqual({ key: 'backlog-2', label: 'Backlog', to: 'backlog' });
+  });
+
+  it('keeps an added key within the identifier limit when its name is already at it', () => {
+    const long = 'a'.repeat(128);
+    const phases: StoredPhaseInfo[] = [
+      { ...doing, nextPhases: ['done'] },
+      { ...board[2], name: long },
+    ];
+    const added = newOutcome(phases[0], phases, [{ key: long, label: 'Done', to: 'done' }]);
+    expect(added?.key).toBe(`${'a'.repeat(126)}-2`);
+    expect(outcomeProblems([{ key: long, label: 'Done', to: 'done' }, added!])).toEqual([{}, {}]);
+  });
+
+  it("picks the outcome an exit tool's success reports as the server does", () => {
+    const phases: StoredPhaseInfo[] = [
+      ...board,
+      { key: 'review', name: 'Review', kind: 'working', runner: { context: 'work' } },
+      { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' } },
+    ];
+    const review = { key: 'review', label: 'Review', to: 'review' };
+    const fixing = { key: 'fix', label: 'Fix', to: 'fixing' };
+    const done = { key: 'done', label: 'Done', to: 'done' };
+    expect(exitToolOutcome([done, { key: 'advance', label: 'Ship', to: 'done' }], phases)?.key).toBe('advance');
+    expect(exitToolOutcome([done, review], phases)).toBe(review);
+    expect(exitToolOutcome([done, review, fixing], phases)).toBeUndefined();
+    expect(exitToolOutcome([done], phases)).toBeUndefined();
   });
 
   it('flags keys and labels the server would refuse, and holds the phase back', () => {
