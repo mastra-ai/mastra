@@ -392,7 +392,7 @@ export const mastra = new Mastra({
 
 On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
 
-If a stored agent isn't registered when boot recovery runs, Mastra skips it and doesn't retry when the agent loads later. To recover its runs, load the agent with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once the agent loads, call `mastra.recoverAllDurableAgents()`, which schedules eligible re-checks for skipped runs. To recover only that agent, see [Manual recovery](#manual-recovery).
+If a stored agent isn't registered when boot recovery runs, Mastra skips it and doesn't retry when the agent loads later. To recover its runs, load the agent with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once the agent loads, call `mastra.recoverAllDurableAgents()`, which schedules a re-check when a skipped run returns `retryAt`. To recover only that agent, see [Manual recovery](#manual-recovery).
 
 Recovery processes up to five agents concurrently, with up to five run waits per agent. Each wait covers both `recover()` setup and settlement of the whole recovered workflow and lasts at most 30 seconds. If it expires, the attempt continues in the background and frees a slot for another run. These limits bound waiting, not the number of live executions. Discovery and overridden custom recovery methods aren't bounded by this budget.
 
