@@ -358,6 +358,51 @@ describe('sending a test message to a custom endpoint model', () => {
     expect(result).toMatchObject({ ok: false, failure: { status: 401, detail: 'Unknown token [redacted]' } });
   });
 
+  it('keeps the text of a stream that is not OpenAI-compatible out of the message', async () => {
+    const garbage = `RAWBODYTEXT ${'x'.repeat(3000)}`;
+    const endpoint = await startEndpoint(text(200, `data: ${garbage}\n\n`, 'text/event-stream'));
+
+    const full = await testModel({ url: endpoint.url });
+    const summary = await testCustomProviderModel(
+      { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },
+      { summaryDetailOnly: true },
+    );
+
+    const message = `The answer from ${endpoint.url}/chat/completions is not an OpenAI-compatible stream`;
+    expect(full).toMatchObject({ ok: false, failure: { kind: 'invalid_response', message } });
+    expect(full.ok ? '' : full.failure.detail).toMatch(/^RAWBODYTEXT x+$/);
+    expect(full.ok ? '' : full.failure.detail).toHaveLength(1000);
+    expect(summary).toEqual({
+      ok: false,
+      failure: { kind: 'invalid_response', message },
+      latencyMs: expect.any(Number),
+    });
+  });
+
+  it('shows the message of an error chunk in the stream, also with summaryDetailOnly', async () => {
+    const endpoint = await startEndpoint(
+      text(
+        200,
+        `data: ${JSON.stringify({ error: { message: 'quota exceeded', type: 'insufficient_quota' } })}\n\n`,
+        'text/event-stream',
+      ),
+    );
+
+    const result = await testCustomProviderModel(
+      { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },
+      { summaryDetailOnly: true },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: {
+        kind: 'invalid_response',
+        message: `The answer from ${endpoint.url}/chat/completions is not an OpenAI-compatible stream`,
+        detail: 'quota exceeded',
+      },
+    });
+  });
+
   it('refuses a redirect', async () => {
     const target = await startEndpoint(chatStream('Yes'));
     const endpoint = await startEndpoint((request, res) => {

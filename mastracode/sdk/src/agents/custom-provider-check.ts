@@ -9,7 +9,7 @@
 import { STATUS_CODES } from 'node:http';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
-import { APICallError, RetryError, streamText } from 'ai';
+import { APICallError, JSONParseError, RetryError, StreamProviderError, streamText, TypeValidationError } from 'ai';
 import { customProviderAuthHeaderName, mergeHeadersIgnoringCase } from '../onboarding/custom-provider-headers.js';
 import type { CustomProviderAuthScheme, CustomProviderHeader } from '../onboarding/settings.js';
 
@@ -253,16 +253,19 @@ function upstreamDetail(body: string, contentType: string | undefined, summaryOn
   }
 }
 
-/** The failure for a response with an error status. Both checks map statuses through this. */
+/**
+ * The failure for a response with an error status. Both checks map statuses
+ * through this. The status text is the standard one for the code, never the
+ * reason phrase the endpoint sent, so `message` carries no upstream text.
+ */
 function httpFailure(args: {
   status: number;
-  statusText?: string;
   url: string;
   body: string;
   contentType?: string;
   summaryOnly: boolean;
 }): CustomProviderCheckFailure {
-  const statusText = args.statusText || STATUS_CODES[args.status] || '';
+  const statusText = STATUS_CODES[args.status] ?? '';
   return {
     kind: 'http',
     message: `HTTP ${args.status}${statusText ? ` ${statusText}` : ''} from ${args.url}`,
@@ -408,7 +411,6 @@ export async function listCustomProviderModels(
     return fail(
       httpFailure({
         status: response.status,
-        statusText: response.statusText,
         url,
         body: body.text,
         contentType,
@@ -477,8 +479,37 @@ function modelTestFailure(args: {
   if (args.abort.aborted) {
     return connectionFailure(error, args.chatUrl, args.abort);
   }
-  const reason = error instanceof Error ? error.message : String(error);
-  return { kind: 'invalid_response', message: `The answer from ${args.chatUrl} could not be read: ${reason}` };
+  return {
+    kind: 'invalid_response',
+    message: `The answer from ${args.chatUrl} is not an OpenAI-compatible stream`,
+    detail: streamErrorDetail(error, args.summaryOnly),
+  };
+}
+
+/**
+ * The detail for a stream that failed after a 200. The AI SDK puts raw
+ * upstream text in the messages of its parse errors, so that text only goes
+ * in `detail`, and only without `summaryOnly`. An error chunk is the
+ * endpoint's own error report, so its message is kept like a JSON error body.
+ * The AI SDK turns an error chunk with a `message` into a
+ * `StreamProviderError` and passes any other error chunk through as sent.
+ */
+function streamErrorDetail(error: unknown, summaryOnly: boolean): string | undefined {
+  let reported: string | undefined;
+  if (StreamProviderError.isInstance(error)) reported = error.message;
+  else if (!(error instanceof Error)) reported = jsonErrorMessage({ error });
+  if (reported !== undefined) return oneLine(reported.slice(0, DETAIL_SCAN_CHARS)) || undefined;
+  if (summaryOnly) return undefined;
+  let raw: string;
+  try {
+    if (JSONParseError.isInstance(error)) raw = error.text;
+    else if (TypeValidationError.isInstance(error)) raw = JSON.stringify(error.value) ?? '';
+    else if (error instanceof Error) raw = error.message;
+    else raw = typeof error === 'string' ? error : (JSON.stringify(error) ?? '');
+  } catch {
+    return undefined;
+  }
+  return oneLine(raw.slice(0, DETAIL_SCAN_CHARS)) || undefined;
 }
 
 /**
@@ -519,6 +550,7 @@ export async function testCustomProviderModel(
         stopped = true;
         break;
       } else if (part.type === 'abort') {
+        // The timeout or the caller's signal fired: `streamText` ends with this part instead of an `error` part.
         stopped = true;
         break;
       }
@@ -528,7 +560,9 @@ export async function testCustomProviderModel(
     stopped = true;
   }
 
-  if (stopped || signal.aborted) {
+  // A signal that fires between parts can end the stream with neither `abort` nor `finish`.
+  // A stream that reached `finish` keeps its result even if the signal fires afterwards.
+  if (stopped || (signal.aborted && finishReason === undefined)) {
     const failure = modelTestFailure({
       error: streamError,
       chatUrl,
