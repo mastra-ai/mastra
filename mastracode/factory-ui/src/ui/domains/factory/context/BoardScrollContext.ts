@@ -1,3 +1,1 @@
-import { createContext } from 'react';
-
-export const BoardScrollContext = createContext<HTMLDivElement | null | undefined>(undefined);
+export { BoardScrollContext } from '@mastra/playground-ui/domains/factory';

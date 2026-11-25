@@ -3,11 +3,12 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { INTAKE_ROUTE_METADATA_KEY, projectIntakeEvaluator, resolveIntake } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
-import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -17,7 +18,7 @@ import { CARD_NUMBER_METADATA_KEY } from './card-number.js';
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
 
-type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition']>>;
+type TransitionResult = Awaited<ReturnType<FactoryBoardEngine['requestMove']>>;
 
 /** Attempts at each step after the upsert before a card that keeps changing under its creator is left as is. */
 const STEP_ATTEMPTS = 3;
@@ -53,7 +54,7 @@ export type CreateFactoryWorkItemResult =
 export interface CreateFactoryWorkItemArgs {
   workItems: WorkItemsStorage;
   boards: BoardRegistry;
-  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   audit: FactoryAuditEmit;
   orgId: string;
   /** Who files the card; becomes its `created_by` and the human actor of its first phase entry. */
@@ -76,7 +77,7 @@ export interface CreateFactoryWorkItemArgs {
 export async function createFactoryWorkItem({
   workItems,
   boards,
-  transitionService,
+  boardEngine,
   audit,
   orgId,
   userId,
@@ -213,7 +214,7 @@ export async function createFactoryWorkItem({
     }
     if (revision === undefined) return notFound;
   }
-  if (!transitionService) {
+  if (!boardEngine) {
     await rollBack();
     return {
       status: 'refused',
@@ -225,7 +226,7 @@ export async function createFactoryWorkItem({
     request: Omit<FactoryTransitionRequest, 'expectedRevision'>,
   ): Promise<TransitionResult | undefined> => {
     for (let attempt = 1; revision !== undefined; attempt++) {
-      const transitioned = await transitionService.transition({ ...request, expectedRevision: revision });
+      const transitioned = await boardEngine.requestMove({ ...request, expectedRevision: revision });
       // The result carries no timestamp, so `updatedAt` stays at the last write this call saw; the
       // commit has moved the card past it, so a later rollback keeps the card instead of guessing.
       if (transitioned.status === 'accepted') revision = transitioned.revision;

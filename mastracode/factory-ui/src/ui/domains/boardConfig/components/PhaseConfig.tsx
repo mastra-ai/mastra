@@ -1,39 +1,20 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
-import {
-  InputNumber,
-  InputNumberDecrement,
-  InputNumberGroup,
-  InputNumberIncrement,
-  InputNumberInput,
-} from '@mastra/playground-ui/components/InputNumber';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { PhaseField, PhaseRunFields } from '@mastra/playground-ui/domains/factory';
 import { Link } from 'react-router';
-import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
-import {
-  DEFAULT_SESSION,
-  MAX_GOAL_RUNS,
-  MAX_INSTRUCTIONS,
-  MAX_OBJECTIVE,
-  PHASE_TOOLS,
-  goalRunsValid,
-  nextPhasesOf,
-  withAutoStart,
-} from '../boardDraft';
+import { DEFAULT_SESSION, PHASE_TOOLS, nextPhasesOf, withAutoStart } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
@@ -50,75 +31,6 @@ import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
 const FIELD_WIDTH = 'sm:max-w-xs';
-/** A counter only shows once its limit is near. */
-const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
-
-/**
- * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
- * `after` follows the field in the same section, for a setting that tunes this one (a goal's run limit).
- */
-function PhaseField({
-  title,
-  description,
-  error,
-  disabled,
-  children,
-  after,
-}: {
-  title: string;
-  description: string;
-  error?: string;
-  disabled?: boolean;
-  children: ReactNode;
-  after?: ReactNode;
-}) {
-  return (
-    <SettingsGroup>
-      <Field invalid={Boolean(error)} disabled={disabled}>
-        <SettingsTitle>{title}</SettingsTitle>
-        <FieldDescription>{description}</FieldDescription>
-        {children}
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
-      {after}
-    </SettingsGroup>
-  );
-}
-
-/** Markdown written straight into a card, with room to click into while empty. */
-function MarkdownCard({
-  label,
-  value,
-  placeholder,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <SettingsContainer>
-      <div className="px-4 py-3">
-        <CodeEditor
-          aria-label={label}
-          value={value}
-          placeholder={placeholder}
-          editable={!disabled}
-          onChange={onChange}
-          language="markdown"
-          font="body"
-          variant="inline"
-          lineNumbers={false}
-          showCopyButton={false}
-        />
-      </div>
-    </SettingsContainer>
-  );
-}
-
 /** One phase's settings, in the order a card meets them: how it starts, what the agent runs, how it ends and where it goes. */
 export function PhaseConfig({
   phase,
@@ -160,7 +72,6 @@ export function PhaseConfig({
   const next = nextPhasesOf(phase, phases);
   const instructions = phase.runner?.instructions ?? '';
   const goal = phase.runner?.goal;
-  const objective = goal?.objective ?? '';
   const tools = phase.tools ?? [];
   const exitToolId = phase.exitTool?.id ?? '';
   const skillName = phase.runner?.skill;
@@ -240,72 +151,14 @@ export function PhaseConfig({
         </PhaseStep>
 
         <PhaseStep icon={<IconRobot />} title="Agent runs">
-          <PhaseField
-            title="Instructions"
-            description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
-            error={instructions.length > MAX_INSTRUCTIONS ? 'Too long to save.' : undefined}
+          <PhaseRunFields
+            phaseName={phase.name}
+            instructions={instructions}
+            goal={goal}
             disabled={disabled}
-          >
-            <MarkdownCard
-              label={`${phase.name} instructions`}
-              value={instructions}
-              placeholder="Tell the agent what to do, in Markdown"
-              disabled={disabled}
-              onChange={text => setRunner({ instructions: text })}
-            />
-          </PhaseField>
-
-          <PhaseField
-            title="Goal"
-            description={`The agent keeps working until a judge finds this objective met. Leave empty for a single run.${countNear(objective.length, MAX_OBJECTIVE)}`}
-            error={objective.length > MAX_OBJECTIVE ? 'Too long to save.' : undefined}
-            disabled={disabled}
-            after={
-              goal && (
-                <Field invalid={!goalRunsValid(goal.maxRuns)} disabled={disabled}>
-                  <div className="flex items-center gap-3">
-                    <FieldLabel
-                      info={`After this many runs without meeting the goal, the card waits for a person. From 1 to ${MAX_GOAL_RUNS}; leave empty for Factory's default.`}
-                    >
-                      Pause goal after
-                    </FieldLabel>
-                    <InputNumber
-                      className="w-36"
-                      min={1}
-                      max={MAX_GOAL_RUNS}
-                      allowOutOfRange
-                      value={goal.maxRuns ?? null}
-                      disabled={disabled}
-                      onValueChange={runs => {
-                        const { maxRuns: _maxRuns, ...rest } = goal;
-                        setRunner({ goal: runs === null ? rest : { ...rest, maxRuns: runs } });
-                      }}
-                    >
-                      <InputNumberGroup size="sm">
-                        <InputNumberInput placeholder="Default" />
-                        <InputGroupAddon align="inline-end" variant="flush">
-                          <InputGroupText className="mr-1">runs</InputGroupText>
-                          <InputNumberDecrement />
-                          <InputNumberIncrement />
-                        </InputGroupAddon>
-                      </InputNumberGroup>
-                    </InputNumber>
-                  </div>
-                  {!goalRunsValid(goal.maxRuns) && (
-                    <FieldError>Use a whole number from 1 to {MAX_GOAL_RUNS}.</FieldError>
-                  )}
-                </Field>
-              )
-            }
-          >
-            <MarkdownCard
-              label={`${phase.name} goal`}
-              value={objective}
-              placeholder="Describe what done looks like"
-              disabled={disabled}
-              onChange={text => setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined })}
-            />
-          </PhaseField>
+            onInstructionsChange={text => setRunner({ instructions: text })}
+            onGoalChange={next => setRunner({ goal: next })}
+          />
 
           <PhaseField
             title="Session"

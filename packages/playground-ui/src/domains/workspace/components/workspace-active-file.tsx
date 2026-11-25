@@ -8,11 +8,12 @@ import {
 import type { ReactNode } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
+import { WorkspaceFileCode } from './workspace-file-code';
+import { WorkspaceFileSkeleton } from './workspace-file-skeleton';
+import { WorkspaceJsonPreview } from './workspace-json-preview';
 import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
-import { CodeBlock } from '@/ds/components/CodeBlock';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
 export interface WorkspaceFilePreview {
@@ -35,6 +36,8 @@ export function WorkspaceFilePath() {
     </Txt>
   );
 }
+
+const isBinary = (content: string) => content.slice(0, 8000).includes('\0');
 
 function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
   if (isImageFile(path, mimeType)) {
@@ -60,17 +63,17 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
       </div>
     );
   }
+  if (isBinary(content)) {
+    return (
+      <EmptyState titleSlot="No preview available" descriptionSlot="This file isn’t text, so it can’t be shown here." />
+    );
+  }
   if (isMarkdownFile(path)) {
     return <WorkspaceMarkdownPreview content={content} />;
   }
-  return (
-    <CodeBlock
-      code={content}
-      lang={languageForPath(path)}
-      overflow="scroll"
-      className="rounded-none border-0 bg-transparent [&_pre]:p-4"
-    />
-  );
+  const lang = languageForPath(path);
+  if (lang === 'json') return <WorkspaceJsonPreview key={path} path={path} content={content} />;
+  return <WorkspaceFileCode code={content} lang={lang} />;
 }
 
 export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: WorkspacePreviewFactory }) {
@@ -82,15 +85,7 @@ export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: 
   });
 
   if (!activeFilePath) return null;
-  if (isLoading) {
-    return (
-      <div aria-busy="true" className="flex flex-col gap-2 p-4">
-        <Skeleton className="h-4 w-1/2" />
-        <Skeleton className="h-4 w-5/6" />
-        <Skeleton className="h-4 w-2/3" />
-      </div>
-    );
-  }
+  if (isLoading) return <WorkspaceFileSkeleton />;
   // A failed background refetch keeps showing the last content.
   if (!data) return <WorkspaceError error={error} fallback="Could not load file." className="m-4" />;
 

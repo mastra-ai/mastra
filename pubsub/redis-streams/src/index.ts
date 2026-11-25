@@ -1,4 +1,4 @@
-import { PubSub } from '@mastra/core/events';
+import { PubSub, streamTopicIdleTtlMs } from '@mastra/core/events';
 import type { Event, EventCallback, LeaseProvider, PubSubDeliveryMode, SubscribeOptions } from '@mastra/core/events';
 import {
   ClientOfflineError,
@@ -270,6 +270,14 @@ export interface RedisStreamsPubSubConfig {
    * Defaults to 7 days (604_800_000). Set to 0 to disable expiry: streams
    * then live until an explicit `clearTopic`, and a stream that never reaches
    * one stays in Redis forever.
+   *
+   * Applies to every topic except those carrying a single agent run's or
+   * thread's events (`agent.stream.*`, `agent.control.*`,
+   * `agent.thread-stream.*`), which take the shorter retention their cached
+   * replay log uses — a day for run topics, matching the lifetime of the
+   * record that authorizes reading them, and an hour for thread streams.
+   * This value still caps those, so lowering it lowers them too, and `0`
+   * disables expiry for every topic.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -593,6 +601,24 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return `${this.#keyPrefix}:${topic}`;
   }
 
+  /**
+   * The idle TTL to stamp on `topic`'s stream, in milliseconds (`0` = none).
+   *
+   * `streamIdleTtlMs` is sized for the topics that need it: work queues whose
+   * grouped consumers must still find their backlog after an outage. A topic
+   * belonging to one agent run or thread has no such consumer, so it takes the
+   * shorter retention its cached replay log already uses — otherwise a
+   * finished run's stream sits in Redis for the full backstop.
+   *
+   * A configured `streamIdleTtlMs` still caps every topic, so lowering it
+   * lowers these too, and `0` disables expiry everywhere as documented.
+   */
+  #idleTtlFor(topic: string): number {
+    if (this.#streamIdleTtlMs === 0) return 0;
+    const scoped = streamTopicIdleTtlMs(topic);
+    return scoped === undefined ? this.#streamIdleTtlMs : Math.min(scoped, this.#streamIdleTtlMs);
+  }
+
   /** The Redis key of `topic`'s stream, for read-only inspection (e.g. `XINFO GROUPS`). */
   streamKey(topic: string): string {
     return this.#streamKey(topic);
@@ -661,6 +687,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     };
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
+    const idleTtlMs = this.#idleTtlFor(topic);
     // A retry after a lost reply can append the event twice. Both copies carry
     // the same event id; a duplicate workflow.step.run is dropped by the step
     // fence, and other events are already handled as at-least-once deliveries.
@@ -681,7 +708,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         );
       });
       try {
-        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions), budgetExhausted]);
+        return await Promise.race([this.#xaddEvent(streamKey, payload, xaddOptions, idleTtlMs), budgetExhausted]);
       } catch (error) {
         if (!isTransientPublishError(error) || this.#closed || Date.now() >= deadline) throw error;
         lastError = error;
@@ -692,18 +719,18 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions): Promise<void> {
+  async #xaddEvent(streamKey: string, payload: Event, xaddOptions: XaddTrimOptions, idleTtlMs: number): Promise<void> {
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
     // after a successful XADD — and on the *last* write before a topic is
     // abandoned there is no "next write" to self-heal, leaving an immortal
     // stream despite the TTL. Atomicity closes that window.
     const promise =
-      this.#streamIdleTtlMs > 0
+      idleTtlMs > 0
         ? this.#writeClient
             .multi()
             .xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions)
-            .pExpire(streamKey, this.#streamIdleTtlMs)
+            .pExpire(streamKey, idleTtlMs)
             .exec()
             .then(replies => {
               // XADD in the same transaction guarantees the key exists, so
@@ -881,8 +908,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // '$' with startFrom: 'latest' when they only want future events. Existing
     // groups (BUSYGROUP path) always keep their checkpoint. Stream growth is
     // bounded by the MAXLEN ~ trim applied on every publish.
+    const idleTtlMs = this.#idleTtlFor(topic);
     try {
-      if (this.#streamIdleTtlMs > 0) {
+      if (idleTtlMs > 0) {
         // MKSTREAM may create an empty stream key, so the TTL must be stamped
         // in the same MULTI — otherwise a topic that is subscribed to but
         // never published to (e.g. a per-run control topic) has no expiry and
@@ -894,7 +922,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         await this.#writeClient
           .multi()
           .xGroupCreate(streamKey, group, groupAnchor, { MKSTREAM: true })
-          .pExpire(streamKey, this.#streamIdleTtlMs)
+          .pExpire(streamKey, idleTtlMs)
           .exec();
       } else {
         await this.#writeClient.xGroupCreate(streamKey, group, groupAnchor, { MKSTREAM: true });
@@ -1436,8 +1464,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           // published during recovery remain visible. Before the first delivery,
           // preserve the subscription's original earliest/latest anchor.
           const recoveryAnchor = sub.lastId ?? sub.groupAnchor;
+          const recoveryTtlMs = this.#idleTtlFor(sub.topic);
           try {
-            if (this.#streamIdleTtlMs > 0) {
+            if (recoveryTtlMs > 0) {
               // MKSTREAM recreates an (empty) stream key, so the TTL must be
               // stamped in the same MULTI — a detached PEXPIRE that fails or is
               // skipped would leave an abandoned-but-recreated topic lingering
@@ -1450,7 +1479,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
               await this.#writeClient
                 .multi()
                 .xGroupCreate(sub.streamKey, sub.group, recoveryAnchor, { MKSTREAM: true })
-                .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+                .pExpire(sub.streamKey, recoveryTtlMs)
                 .exec();
             } else {
               await this.#writeClient.xGroupCreate(sub.streamKey, sub.group, recoveryAnchor, { MKSTREAM: true });
@@ -1568,8 +1597,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         ...event,
         deliveryAttempt: attempt + 1,
       };
+      const republishTtlMs = this.#idleTtlFor(sub.topic);
       try {
-        if (this.#streamIdleTtlMs > 0) {
+        if (republishTtlMs > 0) {
           // A nack republish is a write that keeps this stream in use, so it
           // must refresh the TTL too — otherwise a retry near the end of the
           // original window inherits the old expiry and the stream can be
@@ -1579,7 +1609,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           await this.#writeClient
             .multi()
             .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions())
-            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .pExpire(sub.streamKey, republishTtlMs)
             .exec();
         } else {
           await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions());
@@ -1635,7 +1665,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
             sub.consumer,
             streamId,
             payload,
-            String(this.#streamIdleTtlMs),
+            String(this.#idleTtlFor(sub.topic)),
             String(this.#maxStreamLength > 0 ? this.#maxStreamLength : 0),
           ],
         });
@@ -1803,12 +1833,13 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
         return;
       }
       const payload = { event: JSON.stringify({ ...event, deliveryAttempt: attempt + 1 } satisfies Event) };
+      const replayTtlMs = this.#idleTtlFor(sub.topic);
       try {
-        if (this.#streamIdleTtlMs > 0) {
+        if (replayTtlMs > 0) {
           await this.#writeClient
             .multi()
             .xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions())
-            .pExpire(sub.streamKey, this.#streamIdleTtlMs)
+            .pExpire(sub.streamKey, replayTtlMs)
             .exec();
         } else {
           await this.#writeClient.xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions());
