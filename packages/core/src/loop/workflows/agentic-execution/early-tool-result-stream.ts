@@ -42,8 +42,12 @@ export class EarlyToolResultStream {
     this.#tripwire = undefined;
   }
 
-  /** Queue the call's result for streaming. Returns whether it was queued. */
-  settle(output: ToolCallOutput | undefined, llmExecutionResult: unknown): boolean {
+  /**
+   * Queue the call's result for streaming. Resolves once it is processed, committed and
+   * streamed, to whether that happened. Resolves false when the result was not queued, a
+   * tripwire stopped it, or the emission failed; a failure surfaces from `take()` instead.
+   */
+  async settle(output: ToolCallOutput | undefined, llmExecutionResult: unknown): Promise<boolean> {
     const emitter = this.#emitter;
     if (!this.#enabled || !emitter || !output || !llmExecutionResult) return false;
     if (output.result === undefined || output.error || output.aborted || output.providerExecuted) return false;
@@ -58,7 +62,10 @@ export class EarlyToolResultStream {
     // Keep the queue going after a failed emission; the failure surfaces from `take()`.
     this.#queue = emission.catch(() => {});
     this.#emissions.set(output.toolCallId, emission);
-    return true;
+    return emission.then(
+      outcome => outcome?.ok === true,
+      () => false,
+    );
   }
 
   /** Wait for queued emissions and return the tripwire raised by one of them, if any. */

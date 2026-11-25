@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
+import type { Processor } from '../../../../processors';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -115,4 +116,113 @@ describeForAllEngines('Parallel tool results across a runtime suspend and resume
       ['call_balance', { balance: 1200 }],
     ]);
   });
+
+  // The evented engines drop a sibling result that is still in processToolResult when the batch
+  // suspends; that happens on main too and is not caused by early streaming.
+  const itDeliversSlowSibling = engine === 'evented' || engine === 'native-evented' ? it.fails : it;
+  itDeliversSlowSibling(
+    'delivers an early result once when the batch suspends while that result is still being processed',
+    async () => {
+      const memory = new MockMemory();
+      let balanceDone!: () => void;
+      const balanceFinished = new Promise<void>(resolve => {
+        balanceDone = resolve;
+      });
+
+      const startTransfer = createTool({
+        id: 'startTransfer',
+        description: 'Start a transfer; asks the user to confirm first.',
+        inputSchema: z.object({ amount: z.number() }),
+        execute: async (input, context) => {
+          const { resumeData, suspend } = context?.agent ?? {};
+          if (!(resumeData as { confirmed?: boolean } | undefined)?.confirmed) {
+            // Suspend after the sibling finished, so its result is ready before the run pauses.
+            await balanceFinished;
+            return await suspend?.({ message: `Confirm transfer of ${input.amount}?` });
+          }
+          return { transferred: input.amount };
+        },
+      });
+      const getBalance = createTool({
+        id: 'getBalance',
+        description: 'Get the account balance.',
+        inputSchema: z.object({ account: z.string() }),
+        execute: async () => {
+          // The transfer suspends as soon as this returns, while the slow processor below still
+          // holds the balance result, so the run pauses before that result is committed.
+          balanceDone();
+          return { balance: 1200 };
+        },
+      });
+
+      const slowToolResults: Processor = {
+        id: 'slow-tool-results',
+        processToolResult: async () => {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        },
+      };
+      const shared = await createSharedAgent(getMock(), {
+        tools: { startTransfer, getBalance },
+        memory,
+        engine,
+        agentOutputProcessors: [slowToolResults],
+      });
+
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Check my balance and send 100 to Sam.',
+        memory,
+        ...THREAD,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                { id: 'call_transfer', name: 'startTransfer', arguments: { amount: 100 } },
+                { id: 'call_balance', name: 'getBalance', arguments: { account: 'checking' } },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your balance is 1200 and 100 went to Sam.' });
+        },
+        collectChunks: true,
+      });
+
+      expect(chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      const resumed = await shared.agent.resumeStream({ confirmed: true }, { runId: output.runId, memory: THREAD });
+      const resumeChunks: ChunkType[] = [];
+      for await (const chunk of resumed.fullStream as AsyncIterable<ChunkType>) {
+        resumeChunks.push(chunk);
+      }
+
+      // Every call's result reaches the client exactly once across both streams.
+      const emitted = [...resultIds(chunks!), ...resultIds(resumeChunks)];
+      expect([...emitted].sort()).toEqual([...callOrder].sort());
+
+      expect(await resumed.text).toBe('Your balance is 1200 and 100 went to Sam.');
+
+      // The model sees both results once, in the order it called the tools.
+      const requests = getMock().getRequests();
+      const sentBack = (requests.at(-1)!.body.messages as Array<{ role: string; tool_call_id?: string }>)
+        .filter(m => m.role === 'tool')
+        .map(m => m.tool_call_id);
+      expect(sentBack).toEqual(callOrder);
+
+      // The saved thread holds each result once, in call order.
+      const savedResults = (await memory.recall(THREAD)).messages.flatMap(m =>
+        (m.content.parts ?? []).flatMap(p =>
+          p.type === 'tool-invocation' && p.toolInvocation.state === 'result'
+            ? [[p.toolInvocation.toolCallId, p.toolInvocation.result]]
+            : [],
+        ),
+      );
+      expect(savedResults).toEqual([
+        ['call_transfer', { transferred: 100 }],
+        ['call_balance', { balance: 1200 }],
+      ]);
+    },
+  );
 });

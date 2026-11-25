@@ -298,8 +298,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       ...toolCallStep,
       execute: async params => {
         const output = await toolCallStep.execute(params);
-        const queued = earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
-        return queued ? { ...(output as object), streamedEarly: true } : output;
+        // Mark the result only once it is committed: a sibling can suspend the batch while this
+        // result is still in processToolResult, and the resumed mapping step skips marked results.
+        const streamed = await earlyToolResults.settle(output as any, params.getStepResult(llmExecutionStep as any));
+        return streamed ? { ...(output as object), streamedEarly: true } : output;
       },
     };
     const llmMappingStep = this.llmMappingStep(llmExecutionStep, earlyToolResults);

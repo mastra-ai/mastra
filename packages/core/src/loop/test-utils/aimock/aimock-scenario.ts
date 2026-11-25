@@ -133,6 +133,7 @@ export async function createSharedAgent(
     | 'tracingPolicy'
     | 'engine'
     | 'inputProcessors'
+    | 'agentOutputProcessors'
   > = {},
 ): Promise<{ agent: Agent; mastra: any }> {
   // Shared agents are resumed across calls, and a resumed run only sees
