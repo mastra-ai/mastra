@@ -2,12 +2,6 @@
   "attachment": ["claude-opus-5-5", "claude-sonnet-5-5"],
   "temperature": ["deepseek-v4-pro"],
   "reasoning": {
-    "claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "deepseek-v4-pro": [
       {
         "type": "effort",
@@ -15,6 +9,12 @@
       }
     ],
     "claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

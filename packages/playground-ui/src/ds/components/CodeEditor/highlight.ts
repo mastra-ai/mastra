@@ -136,6 +136,8 @@ function reusableFragments(code: string, previous: HighlightResult | undefined) 
   ]);
 }
 
+export const MAX_HIGHLIGHT_LENGTH = 50_000;
+
 /**
  * Tokenizes `code` into lines of tokens. Joining every token's content with
  * `\n` between lines reproduces `code` exactly. Returns `null` for languages
@@ -147,7 +149,7 @@ export async function highlight(
   previous?: HighlightResult,
 ): Promise<HighlightResult | null> {
   const lang = langAliases[language?.toLowerCase()];
-  if (!lang) return null;
+  if (!lang || code.length > MAX_HIGHLIGHT_LENGTH) return null;
 
   const parser = await getParser(lang);
   const tree = parser.parse(code, reusableFragments(code, previous));

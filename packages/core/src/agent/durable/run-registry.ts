@@ -9,6 +9,7 @@ import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
 import { stopDurableExecutionParticipants } from './evented-execution';
+import { stepFailure } from './segment-spans';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -65,6 +66,10 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
     return entry;
   }
   return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
+}
+
+export function getLiveRunRequestContext(entry: RunRegistryEntry | undefined) {
+  return entry?.requestContextRebuilt ? undefined : entry?.requestContext;
 }
 
 /**
@@ -274,9 +279,16 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
  * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
  */
-export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
+export function endRunSpansWithError(
+  runId: string,
+  error: Error,
+  options: { endSpan?: boolean; endStep?: boolean } = {},
+): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+    if (options.endStep ?? options.endSpan ?? true) {
+      entry?.openStepSpan?.error(stepFailure({ error, ...executionFailureTermination(error), endSpan: true }));
+    }
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
       error,
       ...executionFailureTermination(error),

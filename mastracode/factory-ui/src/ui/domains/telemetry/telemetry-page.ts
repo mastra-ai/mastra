@@ -12,11 +12,8 @@ export function telemetryPage(pathname: string): FactoryWebActivity['page'] | un
   if (/^workspaces\/[^/]+\/threads\/[^/]+$/.test(screen) || /^user\/threads\/[^/]+$/.test(screen)) return 'thread';
   if (/^workspaces\/[^/]+$/.test(screen)) return 'workspace';
   if (screen === 'new') return 'new_session';
-  if (screen === 'new-factory') return 'new_factory';
   // These are redirects or categories represented by the patterns above.
-  if (
-    ['onboarding', 'settings', 'workspace', 'thread', 'slack_connection', 'new_session', 'new_factory'].includes(screen)
-  )
+  if (['onboarding', 'settings', 'workspace', 'thread', 'slack_connection', 'new_session'].includes(screen))
     return undefined;
   return FACTORY_WEB_PAGES.find(page => page === screen);
 }

@@ -75,7 +75,8 @@ async function main() {
     model: openai('gpt-4o-mini'),
     tools: { wait_gate: waitGate, lookup_status: lookup },
   });
-  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const writer = createClient<{}, {}, {}, 2, {}>({ url: REDIS_URL });
+  const redisPubsub = new RedisStreamsPubSub({ client: writer, keyPrefix: KEY_PREFIX, blockMs: 200 });
   const cache = new RedisServerCache(
     { client: cacheClient as any },
     { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
@@ -182,10 +183,44 @@ async function main() {
         if (key.endsWith(cmd.threadId) && owner.includes(firstRunId)) await releaseGate;
         return releaseLease(key, owner);
       };
+      const set = writer.set.bind(writer);
+      let releasedBetweenCommands = false;
+      let failedSets = 0;
+      if (cmd.releaseOnFailedSet) {
+        const setWithRelease: typeof writer.set = async (key, owner, options) => {
+          const result = await set(key, owner, options);
+          if (
+            typeof key === 'string' &&
+            key.endsWith(cmd.threadId) &&
+            typeof owner === 'string' &&
+            owner.includes(secondRunId) &&
+            result === null &&
+            ++failedSets === cmd.releaseOnFailedSet
+          ) {
+            const previousOwner = await writer.get(key);
+            if (!previousOwner?.includes(firstRunId))
+              throw new Error('Expected the first run to hold the thread lease');
+            await releaseLease(key.slice(`${KEY_PREFIX}:lease:`.length), previousOwner);
+            releasedBetweenCommands = true;
+          }
+          return result;
+        };
+        Object.defineProperty(writer, 'set', { configurable: true, value: setWithRelease });
+      }
       let releaseTimer: ReturnType<typeof setTimeout> | undefined;
       redisPubsub.acquireLease = async (key, owner, ttl) => {
         const result = await acquireLease(key, owner, ttl);
         if (
+          releasedBetweenCommands &&
+          key.endsWith(cmd.threadId) &&
+          owner.includes(secondRunId) &&
+          !result.acquired &&
+          result.owner === undefined
+        ) {
+          emit({ type: 'follow-up-ownerless' });
+        }
+        if (
+          !cmd.releaseOnFailedSet &&
           !releaseTimer &&
           key.endsWith(cmd.threadId) &&
           owner.includes(secondRunId) &&
@@ -212,6 +247,7 @@ async function main() {
         throw new Error('First turn ended without a finish frame');
       } finally {
         clearTimeout(releaseTimer);
+        if (cmd.releaseOnFailedSet) Reflect.deleteProperty(writer, 'set');
         allowRelease();
         redisPubsub.releaseLease = releaseLease;
         redisPubsub.acquireLease = acquireLease;

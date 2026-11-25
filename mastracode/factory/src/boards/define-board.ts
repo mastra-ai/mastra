@@ -116,8 +116,22 @@ export interface BoardPhaseGoal {
 }
 
 /**
- * The tool whose successful call ends a working phase. The agent then moves the card itself with
- * `factory_transition_work_item`, to one of the phase's `nextPhases`.
+ * A verdict the session working a phase can report on it, and the phase that verdict sends the
+ * card to. The session reports it with `factory_report_outcome`; Factory moves the card once the
+ * session's run ends.
+ */
+export interface BoardPhaseOutcome<PhaseId extends string = string> {
+  /** What the session reports, e.g. `advance`. */
+  readonly key: string;
+  /** What the outcome means, shown to the session and to people, e.g. "Plan approved". */
+  readonly label: string;
+  /** One of the phase's `nextPhases`. */
+  readonly to: PhaseId;
+}
+
+/**
+ * The tool whose successful call ends a working phase. Its success reports the phase's `advance`
+ * outcome (or its only outcome into a working phase), and Factory moves the card once the run ends.
  */
 export interface BoardPhaseExitTool {
   readonly id: string;
@@ -143,8 +157,13 @@ type BoardPhaseBase<PhaseId extends string> = {
   readonly nextPhases?: readonly PhaseId[];
   /** @deprecated List the phase in `nextPhases`. */
   readonly next?: PhaseId;
-  /** @deprecated Ignored apart from its targets, which are allowed next phases; list them in `nextPhases`. */
-  readonly outcomes?: Readonly<Record<string, PhaseId>>;
+  /**
+   * On a working phase, the outcomes its session may report, each going to one of `nextPhases`.
+   * Without them the session may report one outcome per next phase, keyed by that phase.
+   *
+   * The deprecated map form (`{ approve: 'done' }`), on any phase, only adds its targets to `nextPhases`.
+   */
+  readonly outcomes?: readonly BoardPhaseOutcome[] | Readonly<Record<string, string>>;
   /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
   readonly onEnter?: Readonly<Record<string, unknown>>;
   /** @deprecated Ignored; a phase starts its run from `runner.skill`. */
@@ -210,6 +229,8 @@ export type BoardPhase<PhaseId extends string> =
       readonly autoStartWhen?: RuleGroup;
       readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
       readonly tools?: readonly FactoryPhaseTool[];
+      /** The outcomes the phase declares; {@link phaseOutcomes} gives the defaults when unset. */
+      readonly outcomes?: readonly BoardPhaseOutcome[];
     })
   | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'terminal' });
 
@@ -297,7 +318,7 @@ const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context',
 const GOAL_KEYS: ReadonlySet<string> = new Set(['objective', 'maxRuns']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
 const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
-const MOVE_TOOL = 'factory_transition_work_item';
+const MOVE_TOOLS = ['factory_transition_work_item', 'factory_report_outcome'];
 
 function resolvePhaseTools(label: string, value: unknown): readonly FactoryPhaseTool[] | undefined {
   if (value === undefined) return undefined;
@@ -427,10 +448,8 @@ function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
   if (typeof id !== 'string' || id.length === 0 || id.length > MAX_TOOL_NAME_LENGTH || !IDENTIFIER_RE.test(id)) {
     throw new BoardDefinitionError(`Phase "${phaseId}" exitTool has an invalid tool name.`);
   }
-  if (id === MOVE_TOOL) {
-    throw new BoardDefinitionError(
-      `Phase "${phaseId}" cannot end with ${MOVE_TOOL}: that tool already moves the card.`,
-    );
+  if (MOVE_TOOLS.includes(id)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" cannot end with ${id}: that tool already ends the phase.`);
   }
   if (typeof autoApprove !== 'boolean') {
     throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.autoApprove must be a boolean.`);
@@ -440,6 +459,46 @@ function resolveExitTool(phaseId: string, value: unknown): ResolvedExitTool {
     throw new BoardDefinitionError(`Phase "${phaseId}" exitTool.autoApproveWhen needs autoApprove.`);
   }
   return Object.freeze({ id, autoApprove, ...(autoApproveWhen ? { autoApproveWhen } : {}) });
+}
+
+const OUTCOME_KEYS: ReadonlySet<string> = new Set(['key', 'label', 'to']);
+const MAX_OUTCOMES = 20;
+
+/** A working phase's list of outcomes, each going to one of its next phases; undefined when it lists none. */
+function resolveOutcomes(
+  phaseId: string,
+  phase: BoardPhaseDefinition<string>,
+  nextPhases: readonly string[],
+): readonly BoardPhaseOutcome<string>[] | undefined {
+  const value: unknown = phase.outcomes;
+  if (value === undefined || !Array.isArray(value)) return undefined;
+  const label = `Phase "${phaseId}"`;
+  if (phase.kind !== 'working') {
+    throw new BoardDefinitionError(`${label} is ${phase.kind}; only a working phase lists outcomes.`);
+  }
+  if (value.length === 0 || value.length > MAX_OUTCOMES) {
+    throw new BoardDefinitionError(`${label} outcomes must list 1 to ${MAX_OUTCOMES} outcomes.`);
+  }
+  const keys = new Set<string>();
+  const outcomes = value.map((outcome: unknown) => {
+    if (!isPlainObject(outcome) || Object.keys(outcome).some(key => !OUTCOME_KEYS.has(key))) {
+      throw new BoardDefinitionError(`${label} outcomes may only set key, label and to.`);
+    }
+    validateBoardIdentifier(outcome.key, `${label} outcome key`);
+    const key = outcome.key as string;
+    if (keys.has(key)) throw new BoardDefinitionError(`${label} declares outcome "${key}" more than once.`);
+    keys.add(key);
+    const text = optionalText(outcome.label, `${label} outcome "${key}" label`, MAX_NAME_LENGTH);
+    if (text === undefined) throw new BoardDefinitionError(`${label} outcome "${key}" needs a label.`);
+    const to = outcome.to;
+    if (typeof to !== 'string' || !nextPhases.includes(to)) {
+      throw new BoardDefinitionError(
+        `${label} outcome "${key}" goes to "${String(to)}", which is not one of its nextPhases (${nextPhases.join(', ') || 'none'}).`,
+      );
+    }
+    return Object.freeze({ key, label: text, to });
+  });
+  return Object.freeze(outcomes);
 }
 
 function validatePhaseSemantics(phaseId: string, phase: BoardPhaseDefinition<string>): void {
@@ -557,7 +616,9 @@ function deprecatedFields(config: DeclaredBoard): string[] {
     if (phase.role !== undefined && phase.runner?.context === undefined) {
       found.push(`phases.${phaseId}.role → runner.context`);
     }
-    if (phase.outcomes !== undefined) found.push(`phases.${phaseId}.outcomes → nextPhases`);
+    if (phase.outcomes !== undefined && !Array.isArray(phase.outcomes)) {
+      found.push(`phases.${phaseId}.outcomes map → nextPhases, or a list of outcomes`);
+    }
   }
   return found;
 }
@@ -685,10 +746,12 @@ function buildBoard<
         throw new BoardDefinitionError(`Phase "${phaseId}" nextPhases must be a list of phases.`);
       }
       const targets: BoardTransition<string>[] = [];
-      // A deprecated `outcomes` map still names moves the board allows.
+      // A deprecated `outcomes` map still names moves the board allows; a list of outcomes adds none.
       for (const to of [
         ...(phase.next !== undefined ? [phase.next] : []),
-        ...Object.values(phase.outcomes ?? {}),
+        ...(phase.outcomes !== undefined && !Array.isArray(phase.outcomes)
+          ? Object.values(phase.outcomes as Readonly<Record<string, string>>)
+          : []),
         ...(phase.nextPhases ?? []),
       ]) {
         if (!targets.some(target => target.to === to)) targets.push(Object.freeze({ outcome: null, to }));
@@ -723,6 +786,7 @@ function buildBoard<
         if (exitTool && nextPhases.length === 0) {
           throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
+        const outcomes = resolveOutcomes(phaseId, phase, nextPhases);
         const name = resolveName(phase.name, phase.title, label);
         const description = optionalText(phase.description, `${label} description`, MAX_DESCRIPTION_LENGTH);
         return [
@@ -739,6 +803,7 @@ function buildBoard<
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
             ...(tools ? { tools } : {}),
+            ...(outcomes ? { outcomes } : {}),
           }),
         ];
       }),

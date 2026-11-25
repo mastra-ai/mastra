@@ -139,6 +139,63 @@ it('settles a failed evented setup after claiming the thread lease without start
   }
 });
 
+it('leaves the thread available when another execution takes over during the thread lease claim', async () => {
+  const pubsub = sharedPubSub();
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const { model } = deliveryModel('must not run');
+  const memory = new MockMemory({ storage });
+  const agent = createEventedAgent({
+    agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+    pubsub,
+  });
+  const mastra = new Mastra({ agents: { agent }, storage, pubsub, workers: false, logger: false });
+  const runId = 'taken-over-during-thread-claim';
+  const threadKey = 'resource\u0000thread';
+  const claiming = Promise.withResolvers<void>();
+  const resumeClaim = Promise.withResolvers<void>();
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease.bind(agentThreadStreamRuntime);
+  const lease = vi.spyOn(agentThreadStreamRuntime, 'claimDurableThreadLease').mockImplementation(async (...args) => {
+    claiming.resolve();
+    await resumeClaim.promise;
+    return claim(...args);
+  });
+  const createRun = vi.spyOn(agent.getWorkflow(), 'createRun').mockRejectedValue(new Error('stale workflow started'));
+  try {
+    const streaming = agent.stream('Answer.', { runId, memory: { resource: 'resource', thread: 'thread' } });
+    void streaming.catch(() => {});
+    try {
+      await claiming.promise;
+      await streaming;
+      const execution = getRunRegistryEntry(runId, mastra)!.workflowExecution!;
+      const owner = await pubsub.getLeaseOwner(threadKey);
+      expect(owner).toContain(runId);
+      const current = (await workflows.getRunOwnership({ runId }))!;
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 60_000,
+        force: true,
+        expectedGeneration: current.generation,
+      });
+      expect(successor.acquired).toBe(true);
+      resumeClaim.resolve();
+      await execution;
+
+      expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      expect(createRun).not.toHaveBeenCalled();
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({ ownerId: 'successor', live: true });
+    } finally {
+      resumeClaim.resolve();
+      await (await streaming).cleanup();
+    }
+  } finally {
+    lease.mockRestore();
+    createRun.mockRestore();
+    await mastra.shutdown();
+  }
+});
+
 it('detaches a registered shared coordinator on API shutdown without releasing its live claim', async () => {
   const pubsub = sharedPubSub();
   const storage = new InMemoryStore();

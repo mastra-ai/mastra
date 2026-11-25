@@ -12,6 +12,7 @@ import {
   WORKSPACE_ID,
   WORKSPACE_URL,
   docsListing,
+  fileContents,
   mountedRootListing,
   fileSearchResponse,
   guidesListing,
@@ -301,6 +302,80 @@ describe('WorkspaceTreeView', () => {
       expect(frontmatter.textContent).toContain('description: Reviews code');
       expect(frontmatter.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.queryByText(/name: review/, { selector: 'p' })).toBeNull();
+    });
+  });
+
+  describe('when the active file is minified JSON', () => {
+    it('shows it indented without changing a value, and Raw shows the file as stored', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/digest.json' });
+
+      const formatted = [
+        '{',
+        '  "rows": [',
+        '    {',
+        '      "id": 12345678901234567890,',
+        '      "2": 1.0,',
+        '      "1": "a,b:{c} \\"q\\""',
+        '    }',
+        '  ],',
+        '  "empty": {},',
+        '  "list": []',
+        '}',
+      ].join('\n');
+      await waitFor(() => expect(document.querySelector('figure pre')?.textContent).toBe(formatted));
+      expect(screen.getByRole('tab', { name: 'Formatted' }).getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+
+      await waitFor(() =>
+        expect(document.querySelector('figure pre')?.textContent).toBe(fileContents['cache/digest.json']),
+      );
+    });
+  });
+
+  describe('when the active file is JSON too large to color in a code block', () => {
+    it('shows it colored in a read-only editor that draws only part of the file', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/large.json' });
+
+      const editor = await screen.findByRole('textbox', { name: 'cache/large.json' });
+      expect(editor.getAttribute('contenteditable')).toBe('false');
+      expect(editor.textContent).toContain('"id": "row-0",');
+      expect(editor.textContent).not.toContain('"id": "row-999",');
+      expect(document.querySelector('figure pre')).toBeNull();
+    });
+  });
+
+  describe('when a JSON file is not valid JSON', () => {
+    it('shows it as stored, with no formatted view', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/broken.json' });
+
+      await waitFor(() => expect(document.querySelector('figure pre')?.textContent).toBe('{"rows":[1,2'));
+      expect(screen.queryByRole('tab', { name: 'Formatted' })).toBeNull();
+    });
+  });
+
+  describe('when a JSON file is nested too deep to indent', () => {
+    it('shows it as stored instead of building an indented copy', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/nested.json' });
+
+      await waitFor(() =>
+        expect(document.querySelector('figure pre')?.textContent).toBe(fileContents['cache/nested.json']),
+      );
+      expect(screen.queryByRole('tab', { name: 'Formatted' })).toBeNull();
+    });
+  });
+
+  describe('when the active file is binary', () => {
+    it('says it cannot be previewed instead of printing its bytes', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'sfx/applause.wav' });
+
+      expect(await screen.findByText('No preview available')).toBeTruthy();
+      expect(document.body.textContent).not.toContain('WAVEfmt');
     });
   });
 

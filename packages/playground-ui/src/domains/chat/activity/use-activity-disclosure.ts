@@ -12,7 +12,8 @@ export function useDisclosureStore(): ActivityDisclosureStore {
 }
 
 export function useIsOpen(store: ActivityDisclosureStore, scope: DisclosureScope, keys: readonly string[]): boolean {
-  return useSyncExternalStore(store.subscribe, () => store.isOpen(scope, keys));
+  const isOpen = () => store.isOpen(scope, keys);
+  return useSyncExternalStore(store.subscribe, isOpen, isOpen);
 }
 
 /** A call's row in an open stretch: open as the reader left it; opening it keeps the group around it open too. */

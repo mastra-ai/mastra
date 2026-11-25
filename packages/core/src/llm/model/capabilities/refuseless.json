@@ -9,12 +9,6 @@
     "minimax-m3.1-flash"
   ],
   "reasoning": {
-    "minimax-m3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "glm-5.3-abliterated": [
       {
         "type": "effort",
@@ -25,6 +19,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-abliterated": [

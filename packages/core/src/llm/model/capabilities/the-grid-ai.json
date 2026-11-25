@@ -29,19 +29,22 @@
     "text-standard"
   ],
   "reasoning": {
-    "agent-standard": [
+    "text-max": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "code-standard": [
+    "kimi-latest": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "agent-max": [
+    "claude-opus-latest": [
       {
         "type": "toggle"
       },
@@ -56,12 +59,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "bytedance-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "code-max": [
       {
         "type": "toggle"
@@ -71,31 +68,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "minimax-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-sol-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "text-standard": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "agent-prime": [
+    "agent-standard": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -107,19 +80,55 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-pro-latest": [
+    "gemini-pro-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "text-max": [
+    "agent-max": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "code-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimax-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-sol-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "bytedance-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "text-standard": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "code-prime": [
@@ -128,16 +137,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-opus-latest": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-pro-latest": [
+    "agent-prime": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
