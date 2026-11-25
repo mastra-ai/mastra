@@ -1,6 +1,6 @@
 /**
- * A message sent to an evented run whose steps execute in another process
- * (COR-1653). The process that starts the run has workers off; a peer process
+ * A message sent to an evented run whose steps execute in another process.
+ * The process that starts the run has workers off; a peer process
  * runs the workers, so the run's tool and model calls happen there. The tool
  * parks until the test releases it, and the test releases it only after the
  * sender's `accepted` promise has resolved.
@@ -63,7 +63,16 @@ function userTexts(prompt: unknown): string[] {
     .map(message => JSON.stringify(message.content));
 }
 
-async function runCase({ messages, sender }: { messages: string[]; sender: 'starter' | 'other-instance' }) {
+async function runCase({
+  messages,
+  sender,
+  closeBeforeSend = false,
+}: {
+  messages: string[];
+  sender: 'starter' | 'other-instance';
+  /** Close the run's stored signals before sending, as the executing process does right before the run ends. */
+  closeBeforeSend?: boolean;
+}) {
   const env = await createXprocEnv({ workers: false });
   const agentId = `signal-active-run-${randomUUID()}`;
   const scope = { resourceId: `resource-${randomUUID()}`, threadId: `thread-${randomUUID()}` };
@@ -84,6 +93,9 @@ async function runCase({ messages, sender }: { messages: string[]; sender: 'star
     }
     const context = () => `${JSON.stringify({ chunks: chunks.map(chunk => chunk.type) })}\n${env.describe()}`;
 
+    // A sender that watched the run start knows the run's agent, so it stores the message itself.
+    const observer = closeBeforeSend ? await other?.runner.subscribeToThread(scope) : undefined;
+    const observedRun = observer?.stream[Symbol.asyncIterator]().next();
     const runId = `signal-active-run-${randomUUID()}`;
     const stream = await starter.runner.stream('Start the job', {
       runId,
@@ -95,6 +107,17 @@ async function runCase({ messages, sender }: { messages: string[]; sender: 'star
     })();
 
     await peer.waitFor('tool-reached', { timeoutMs: DEFAULT_HANG_GUARD_MS });
+    if (observedRun) await guarded(observedRun, 'the sender seeing the run', context);
+    if (closeBeforeSend) {
+      // Another connection to the same database, so the run's process learns of the close only from the store.
+      const closer = new LibSQLStore({ id: 'signal-active-run-closer', url: env.dbUrl });
+      try {
+        const signals = await closer.getStore('agentSignals');
+        await signals!.closeRun({ threadKey: `${scope.resourceId}\u0000${scope.threadId}`, runId, consumedIds: [] });
+      } finally {
+        await closer.close();
+      }
+    }
     const senderRunner = (other ?? starter).runner;
     const sent = messages.map(contents => senderRunner.sendSignal({ type: 'user', contents }, scope));
     const accepted = await guarded(Promise.all(sent.map(result => result.accepted)), 'accepted', context);
@@ -110,6 +133,7 @@ async function runCase({ messages, sender }: { messages: string[]; sender: 'star
     const memoryStore = await starter.storage.getStore('memory');
     const stored = (await memoryStore!.listMessages({ threadId: scope.threadId, perPage: false })).messages;
 
+    observer?.unsubscribe();
     peer.send('finish');
     await peer.result();
     return { runId, accepted: accepted.map(stripOutput), calls, stored };
@@ -141,6 +165,9 @@ function expectDeliveredInTheRun(
 
   // Call 1 asked for the tool; call 2 is the run's model call after the tool.
   const afterTool = userTexts(calls[1]?.prompt).join('\n');
+  for (const contents of messages) {
+    expect.soft(afterTool.split(contents).length - 1, `copies in the call after the tool: ${observed}`).toBe(1);
+  }
   const positions = messages.map(contents => afterTool.indexOf(contents));
   expect
     .soft(
@@ -190,6 +217,31 @@ describe('message sent to an evented run whose steps run in another process', ()
     async () => {
       const messages = ['Sent from another instance'];
       expectDeliveredInTheRun(await runCase({ messages, sender: 'other-instance' }), messages);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    'tells another instance the thread is blocked when the run already closed, and starts no turn for it',
+    async () => {
+      const contents = 'Sent after the run closed';
+      const { runId, accepted, calls, stored } = await runCase({
+        messages: [contents],
+        sender: 'other-instance',
+        closeBeforeSend: true,
+      });
+      const observed = JSON.stringify({
+        accepted,
+        calls: calls.map(report => ({ call: report.call, users: userTexts(report.prompt) })),
+      });
+      expect(accepted, observed).toEqual([{ action: 'blocked', reason: 'thread-blocked', runId }]);
+      // Tool call, the answer after it, then the barrier.
+      expect(calls.length, observed).toBe(3);
+      expect(
+        calls.some(report => userTexts(report.prompt).some(text => text.includes(contents))),
+        observed,
+      ).toBe(false);
+      expect(stored.filter(message => JSON.stringify(message.content).includes(contents))).toEqual([]);
     },
     TIMEOUT,
   );
