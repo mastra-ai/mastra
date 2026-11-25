@@ -39,6 +39,16 @@ class SharedMemory extends InMemoryMemory {
   }
 }
 
+/** The shared memory storage, recording the id of every insert of a pending signal that reached it. */
+class RecordingSharedMemory extends SharedMemory {
+  readonly enqueued: string[] = [];
+
+  override async enqueuePendingSignal(args: Parameters<InMemoryMemory['enqueuePendingSignal']>[0]) {
+    this.enqueued.push(args.message.id);
+    return super.enqueuePendingSignal(args);
+  }
+}
+
 /** A replica's pubsub client: its own subscribers, the replicas' shared events and lease table. */
 class ReplicaPubSub extends EventEmitterPubSub {
   /** Set to hold this replica's next acquire of `key` until the test releases it. */
@@ -334,5 +344,40 @@ describe('an agent whose memory is a function of the request context', () => {
         message => message.id === sent.signal.id,
       ),
     ).toEqual([]);
+  });
+});
+
+describe('a signal a replica that does not hold the run stores itself', () => {
+  it('is stored once and reaches the run once: the replica holding the run does not store it again', async () => {
+    const storage = new InMemoryStore();
+    const memoryStore = new RecordingSharedMemory();
+    storage.stores.memory = memoryStore;
+    const { scope, prompts, toolGate, replica, startRun, admittedBy } = replicas(storage);
+    const holder = replica({ memory: new MockMemory({ storage }) });
+    const sender = replica({ memory: new MockMemory({ storage }), workers: false });
+    // The sender watches the thread, so it knows the run keeps its signals in the shared store.
+    const observer = await sender.agent.subscribeToThread(scope);
+    const observedRun = observer.stream[Symbol.asyncIterator]().next();
+    const { runId, done } = await startRun(holder);
+    await observedRun;
+
+    let ids: string[] = [];
+    const admitted = admittedBy(holder, () => ids);
+    const sent = sender.agent.sendSignal({ type: 'user-message', contents: 'STORED_BY_THE_SENDER' }, scope);
+    ids = [sent.signal.id];
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId });
+    // The sender's own insert committed before it answered.
+    expect(memoryStore.enqueued.filter(id => id === sent.signal.id)).toHaveLength(1);
+    // The holder admits the signal after handling the sender's event, and stores nothing for it.
+    await admitted;
+    expect(memoryStore.enqueued.filter(id => id === sent.signal.id)).toHaveLength(1);
+    toolGate.release();
+    await done;
+    observer.unsubscribe();
+
+    expect(occurrences(prompts[1], 'STORED_BY_THE_SENDER')).toBe(1);
+    const saved = (await memoryStore.listMessages({ threadId: scope.threadId, perPage: false })).messages;
+    expect(saved.filter(message => message.id === sent.signal.id)).toHaveLength(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 });
