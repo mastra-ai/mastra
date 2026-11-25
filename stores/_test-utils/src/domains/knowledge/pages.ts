@@ -1414,11 +1414,11 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
             await expect(store.listPageActivity({ read: 'all', order: 'asc', after: '1' })).rejects.toThrow(RangeError);
           });
 
-          it('lists in the order writes committed, not createdAt order, and pages with after positions without skipping or repeating', async () => {
+          it('lists one-after-another writes in the order they were made, not createdAt order, and pages with after positions without skipping or repeating', async () => {
             if (!ascending()) return;
             const acme = await scopeAt('org:acme');
             const r = read(['org:acme']);
-            // Written one after another, so commit order is this order, whatever the clocks said.
+            // Written one after another, so every store's feed order is this order, whatever the clocks said.
             await at(T0 + 5000, () => page(acme.id, 'late clock'));
             await at(T0 + 3000, async () => {
               await page(acme.id, 'tie a');

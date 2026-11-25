@@ -1578,8 +1578,11 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   return date;
 }
 
-/** v1 continues newest first before an event; v2 continues oldest first after a store position. */
-type ActivityCursor = { v: 1; before: [string, string]; bind: string } | { v: 2; after: string; bind: string };
+/**
+ * v1 continues newest first before an event; v2 continues oldest first after a store position, or
+ * from the start of the range when `after` is null (an oldest-first read that hasn't passed one yet).
+ */
+type ActivityCursor = { v: 1; before: [string, string]; bind: string } | { v: 2; after: string | null; bind: string };
 
 async function activityBinding(parts: Array<string | undefined>): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(parts.map(part => part ?? null)));
@@ -1606,8 +1609,7 @@ function decodeActivityCursor(value: string): ActivityCursor {
     }
     if (
       cursor?.v === 2 &&
-      typeof cursor.after === 'string' &&
-      cursor.after.length > 0 &&
+      (cursor.after === null || (typeof cursor.after === 'string' && cursor.after.length > 0)) &&
       typeof cursor.bind === 'string'
     ) {
       return cursor;
@@ -1635,7 +1637,7 @@ function activityTool(host: KnowledgePageToolHost) {
       'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
       `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order). ` +
-      'Oldest first also returns a `cursor` when it has caught up: keep it, and a later call with it returns only the changes recorded since, none missed or repeated.',
+      'Oldest first always returns a `cursor`, also when it has caught up or found nothing yet: keep it, and a later call with it returns only the changes it has not listed, none missed or repeated.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1655,7 +1657,7 @@ function activityTool(host: KnowledgePageToolHost) {
           type: 'string',
           enum: ['newest', 'oldest'],
           description:
-            'newest (default) lists the latest changes first; oldest lists them in the order they were committed, so a change still being saved shows up on a later call rather than being skipped.',
+            'newest (default) lists the latest changes first; oldest lists them roughly in the order they happened, in an order where a change still being saved shows up on a later call instead of being skipped.',
         },
         limit: {
           type: 'integer',
@@ -1729,7 +1731,7 @@ function activityTool(host: KnowledgePageToolHost) {
       let position: { createdAt: Date; id: string } | string | undefined = !cursor
         ? undefined
         : cursor.v === 2
-          ? cursor.after
+          ? (cursor.after ?? undefined)
           : { createdAt: new Date(cursor.before[0]), id: cursor.before[1] };
       const passed = (event: KnowledgePageActivityEvent) => {
         if (!oldest) return { createdAt: event.createdAt, id: event.id };
@@ -1822,9 +1824,13 @@ function activityTool(host: KnowledgePageToolHost) {
           ? { from: { ref: (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id, name: origin.name } }
           : {}),
         changes: entries,
-        ...(typeof position === 'string'
-          ? // Oldest first keeps a cursor even when caught up, so a later call returns only what came after.
-            { ...(hasMore ? { more: true } : {}), cursor: encodeActivityCursor({ v: 2, after: position, bind }) }
+        ...(oldest
+          ? // Oldest first always returns a cursor, even when caught up or when it has read nothing yet
+            // (then it starts from the beginning of the range), so a later call misses nothing.
+            {
+              ...(hasMore ? { more: true } : {}),
+              cursor: encodeActivityCursor({ v: 2, after: typeof position === 'string' ? position : null, bind }),
+            }
           : hasMore && position
             ? {
                 more: true,

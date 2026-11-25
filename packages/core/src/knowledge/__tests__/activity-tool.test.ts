@@ -325,6 +325,19 @@ describe('knowledge_activity: continuation', () => {
     expect(fresh.changes.map((change: any) => change.note?.text)).toEqual(['late clock']);
   });
 
+  it('returns a cursor from an oldest-first read that finds nothing yet, and it picks up the first change', async () => {
+    const { T0, call, acme, page } = await setup();
+    const empty: any = await call({ since: day(T0), order: 'oldest' });
+    expect(empty.changes).toEqual([]);
+    expect(empty.more).toBeUndefined();
+    expect(empty.cursor).toEqual(expect.any(String));
+    await page(T0 + 1000, acme.id, 'First');
+    const next: any = await call({ since: day(T0), order: 'oldest', cursor: empty.cursor });
+    expect(next.changes.map((change: any) => change.page.name)).toEqual(['First']);
+    const again: any = await call({ since: day(T0), order: 'oldest', cursor: next.cursor });
+    expect(again.changes).toEqual([]);
+  });
+
   it('refuses a cursor from the other order, either way', async () => {
     const { T0, call, acme, page } = await setup();
     await page(T0 + 1000, acme.id, 'A');
