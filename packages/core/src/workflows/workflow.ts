@@ -3408,9 +3408,17 @@ export class Workflow<
       lookUpStoredRun,
     });
 
+    const leaseTtlMs = normalizeLeaseTtlMs(
+      options?.leaseTtlMs,
+      normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
+    );
+    const reused = this.#runs.get(runIdToUse);
+    // A cached run takes a lease passed here for its next claim; a claim it holds keeps its length.
+    if (reused && options?.leaseTtlMs !== undefined) setRunLeaseTtlMs(reused, leaseTtlMs);
+
     // Return a new Run instance with object parameters
     const run =
-      this.#runs.get(runIdToUse) ??
+      reused ??
       new Run({
         workflowId: this.id,
         stateSchema: this.stateSchema,
@@ -3438,10 +3446,7 @@ export class Workflow<
         storageVersion,
         recoverable:
           this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
-        leaseTtlMs: normalizeLeaseTtlMs(
-          options?.leaseTtlMs,
-          normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
-        ),
+        leaseTtlMs,
       });
 
     this.#runs.set(runIdToUse, run);
@@ -4268,6 +4273,9 @@ const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunStatus>([
   'bailed',
 ]);
 
+// Lets `createRun()` change the lease of a run it returns from its cache, without a public setter.
+let setRunLeaseTtlMs: (run: Run<any, any, any, any, any, any, any>, leaseTtlMs: number) => void;
+
 /**
  * Represents a workflow run that can be executed
  */
@@ -4399,6 +4407,12 @@ export class Run<
   #recoverable: boolean;
 
   #leaseTtlMs: number;
+
+  static {
+    setRunLeaseTtlMs = (run, leaseTtlMs) => {
+      run.#leaseTtlMs = leaseTtlMs;
+    };
+  }
 
   get mastra() {
     return this.#mastra;

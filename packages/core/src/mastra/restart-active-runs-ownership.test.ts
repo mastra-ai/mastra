@@ -522,6 +522,29 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success', 'success']);
     });
 
+    it("takes a run's leaseTtlMs from a later createRun() for the same run id", async () => {
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(
+        storage,
+        () => new Promise<void>(resolve => gates.push(resolve)),
+        undefined,
+        { recovery: { workflows: 'off' } },
+        { leaseTtlMs: 3_000 },
+      );
+      replicas.push(replica);
+
+      const created = await replica.getWorkflow('workflow').createRun();
+      const again = await replica.getWorkflow('workflow').createRun({ runId: created.runId, leaseTtlMs: 90_000 });
+      expect(again).toBe(created);
+      const result = again.start({ inputData: {} });
+      await until(() => gates.length === 1);
+      expect(await leaseOf(storage, created.runId)).toEqual({ live: true, ms: 90_000 });
+
+      gates.forEach(open => open());
+      expect((await result).status).toBe('success');
+    });
+
     it('doubles the lease of a run restarted over a lapsed one, up to 8 times its base, and warns each time', async () => {
       fakeTimers();
       const storage = new InMemoryStore();
