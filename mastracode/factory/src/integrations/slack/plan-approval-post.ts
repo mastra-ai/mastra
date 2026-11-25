@@ -130,37 +130,41 @@ export class PlanApprovalCards {
     if (this.#isPosting(toolCallId)) this.#answeredWhilePosting.set(toolCallId, resolution);
     const cards = this.#posted.get(toolCallId) ?? new Map<string, PostedPlanCard>();
     this.#posted.delete(toolCallId);
-    const stored = await this.#stored(toolCallId);
-    await Promise.all([
-      ...[...cards].map(async ([threadId, card]) => {
+    // Threads whose card is settled; a stored record is kept until its card is, so a later answer can retry.
+    const settled = new Set<string>(except ? [except] : []);
+    await Promise.all(
+      [...cards].map(async ([threadId, card]) => {
         if (threadId === except) return;
         try {
           await card.message.edit(planResolvedCard(card.plan, card.target, resolution));
+          settled.add(threadId);
         } catch (error) {
           console.warn('[Factory Slack] Unable to settle a plan approval card.', error);
         }
       }),
-      // Cards this process didn't post, or posted before a restart: edit them through the thread.
-      ...stored.map(async record => {
+    );
+    // Cards this process didn't post, posted before a restart, or whose edit above failed: edit them through the thread.
+    const stored = await this.#stored(toolCallId);
+    await Promise.all(
+      stored.map(async record => {
         const threadId = record.threadId;
         try {
-          if (threadId && threadId !== except && !cards.has(threadId)) {
+          if (threadId && !settled.has(threadId)) {
             const render = await this.#deps.channels()?.buildRenderContextForThread(threadId);
-            if (render?.platform === 'slack') {
-              const { plan, target } = storedCard(toolCallId, record.data);
-              await render.adapter.editMessage(
-                render.chatThread.id,
-                record.data.messageId,
-                planResolvedCard(plan, target, resolution),
-              );
-            }
+            if (render?.platform !== 'slack') return;
+            const { plan, target } = storedCard(toolCallId, record.data);
+            await render.adapter.editMessage(
+              render.chatThread.id,
+              record.data.messageId,
+              planResolvedCard(plan, target, resolution),
+            );
           }
           await this.#deps.store?.()?.delete(record.id);
         } catch (error) {
           console.warn('[Factory Slack] Unable to settle a plan approval card.', error);
         }
       }),
-    ]);
+    );
   }
 
   /**
@@ -303,8 +307,11 @@ export function observeSessionPlanCards(session: RunReportSession, cards: PlanAp
       plans.add(event.toolCallId);
       return;
     }
-    // A call parked before a restart is not in `plans`; its answer still says it was a plan.
-    if (event.type === 'tool_suspension_cancelled' && plans.delete(event.toolCallId)) {
+    // A call parked before a restart is not in `plans`; its answer or cancellation still says it was a plan.
+    if (
+      event.type === 'tool_suspension_cancelled' &&
+      (plans.delete(event.toolCallId) || event.toolName === SUBMIT_PLAN_TOOL_NAME)
+    ) {
       void cards.resolve(event.toolCallId, { kind: 'stale' });
       return;
     }

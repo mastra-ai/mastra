@@ -159,6 +159,47 @@ describe('PlanApprovalCards', () => {
     await vi.waitFor(() => expect(store.rows).toEqual([]));
   });
 
+  it('settles a card posted before a restart when its parked plan is cancelled after it', async () => {
+    const store = memoryStore();
+    await setup({ store }).cards.post(REQUEST);
+    const restarted = setup({ store });
+
+    observe(restarted.cards)({
+      type: 'tool_suspension_cancelled',
+      toolCallId: 'call-1',
+      toolName: 'submit_plan',
+      reason: 'run aborted',
+    });
+
+    await vi.waitFor(() => expect(restarted.editMessage).toHaveBeenCalledTimes(1));
+    expect(JSON.stringify(restarted.editMessage.mock.calls[0])).toContain('Plan no longer waiting: Add dark mode');
+    await vi.waitFor(() => expect(store.rows).toEqual([]));
+  });
+
+  it('keeps the record of a card it could not settle, so a later answer still can', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = memoryStore();
+    const first = setup({ store });
+    await first.cards.post(REQUEST);
+    first.edit.mockRejectedValueOnce(new Error('ratelimited'));
+    first.editMessage.mockRejectedValueOnce(new Error('ratelimited'));
+
+    await first.cards.resolve('call-1', { kind: 'stale' });
+    expect(store.rows).toHaveLength(1);
+
+    // The Slack channel is gone for a moment (e.g. after a restart): nothing is edited, so nothing is forgotten.
+    const unavailable = setup({ store });
+    unavailable.buildRenderContextForThread.mockResolvedValueOnce(null);
+    await unavailable.cards.resolve('call-1', { kind: 'stale' });
+    expect(store.rows).toHaveLength(1);
+
+    const later = setup({ store });
+    await later.cards.resolve('call-1', { kind: 'stale' });
+    expect(JSON.stringify(later.editMessage.mock.calls[0])).toContain('Plan no longer waiting: Add dark mode');
+    expect(store.rows).toEqual([]);
+    warn.mockRestore();
+  });
+
   it('settles a card posted before a restart when a click finds its plan no longer waiting', async () => {
     const store = memoryStore();
     await setup({ store }).cards.post(REQUEST);
