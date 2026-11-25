@@ -945,7 +945,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       }
       // Learn the credential-vault mode before setup decides whether the
       // sandbox may hold a GitHub token.
-      await learnSandboxGithubAuth(args.sandbox);
+      const sandboxCredentialMode = await learnSandboxGithubAuth(args.sandbox);
       // The overlay survives VM replacement; clear a token left by an earlier
       // token-mode start before setup runs its first command here.
       if (githubProvider && !sandboxAcceptsGithubToken(requireExec(args.sandbox))) {
@@ -985,6 +985,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // (e.g. local) persist nothing: a logical id handed back as a
           // `sandboxId` hint is unknown to the provider and breaks resume.
           sandboxId: target.sandboxId ?? null,
+          sandboxCredentialMode,
           // D2: a list session's working directory is the workspace root,
           // the repositories sit beneath it; a single-repository session
           // keeps its checkout as before.

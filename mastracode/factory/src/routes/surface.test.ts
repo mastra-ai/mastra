@@ -114,12 +114,21 @@ describe('prepareFactoryRuleBinding', () => {
       { modelScope: 'user', approvedBy: undefined, sandboxUserId: null, restartBy: null },
       { modelScope: 'user', approvedBy: 'agent:session:requester-1', sandboxUserId: null, restartBy: null },
     ].flatMap(test => [
-      { ...test, provider: 'railway' },
-      ...(test.approvedBy === 'approver-1' ? ['local', 'docker', 'e2b'].map(provider => ({ ...test, provider })) : []),
+      { ...test, provider: 'railway', mode: 'vault', cold: false },
+      ...(test.approvedBy === 'approver-1'
+        ? ['token', 'legacy-token', 'vault'].flatMap(mode =>
+            [false, true]
+              .filter(cold => mode !== 'vault' || cold)
+              .map(cold => ({ ...test, provider: 'railway', mode, cold })),
+          )
+        : []),
+      ...(test.approvedBy === 'approver-1'
+        ? ['local', 'docker', 'e2b'].map(provider => ({ ...test, provider, mode: 'token', cold: false }))
+        : []),
     ]),
   )(
-    'persists the vault actor for a $provider $modelScope card started by $approvedBy then $restartBy',
-    async ({ modelScope, approvedBy, sandboxUserId, restartBy, provider }) => {
+    'persists the vault actor for a $provider $mode $modelScope card started by $approvedBy then $restartBy (cold: $cold)',
+    async ({ modelScope, approvedBy, sandboxUserId, restartBy, provider, mode, cold }) => {
       const { seeded, sourceControl, project } = await seedFactoryWithRepository({
         modelScope,
         defaultModelId: 'mastra/anthropic/claude-opus-5',
@@ -157,7 +166,7 @@ describe('prepareFactoryRuleBinding', () => {
         ],
       });
       await controller.init();
-      const coordinator = new FactoryStartCoordinator(
+      let coordinator = new FactoryStartCoordinator(
         controller,
         seeded.workItems,
         undefined,
@@ -256,7 +265,11 @@ describe('prepareFactoryRuleBinding', () => {
               expiresAt: '2030-01-01T00:00:00.000Z',
             });
           }
-          return Response.json({ id: `vault-vm-${actor}`, vault: true, createdAt: '2026-11-24T00:00:00.000Z' });
+          return Response.json({
+            id: `vault-vm-${actor}`,
+            ...(mode === 'legacy-token' ? {} : { vault: mode === 'vault' }),
+            createdAt: '2026-11-24T00:00:00.000Z',
+          });
         },
         webSocketFactory: () => {
           const socket: ReturnType<NonNullable<PlatformFactorySandboxOptions['webSocketFactory']>> = {
@@ -319,17 +332,35 @@ describe('prepareFactoryRuleBinding', () => {
         // Even bypassing Factory's guard, the provider must not borrow the deployment identity.
         await expect(workspace.sandbox.start()).rejects.toThrow('vault_user_not_member');
         expect(requests).toEqual([expect.objectContaining({ actor: null })]);
+        // A legacy vault VM without an authenticated actor also refuses automation -> automation.
+        await sourceControl.sessions.setSandbox({
+          id: storedSession.id,
+          sandboxId: 'unattributed-vm',
+          sandboxWorkdir: '/workspace',
+          sandboxCredentialMode: 'vault',
+        });
+        __clearSessionSandboxesForTests();
+        await expect(
+          prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, input, undefined, {
+            workItems: seeded.workItems,
+            modelCredentials: seeded.credentials,
+            customProviders: seeded.customProviders,
+            deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+          }),
+        ).rejects.toMatchObject({ code: 'sandbox_vault_owner_required' });
         return;
       }
       await expect(invoke()).resolves.toMatchObject({ success: true, exitCode: 0 });
       expect(requests.some(request => request.path.endsWith('/sandbox'))).toBe(true);
       expect(requests.some(request => request.path.endsWith('/exec-lease'))).toBe(true);
       expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
-      expect(requests.every(request => !request.body.includes('GH_TOKEN'))).toBe(true);
+      if (mode === 'vault') expect(requests.every(request => !request.body.includes('GH_TOKEN'))).toBe(true);
       const reloaded = await sourceControl.sessions.getBySessionId(sessionId);
       assert(reloaded?.sandboxId);
+      expect(reloaded.sandboxCredentialMode).toBe(mode === 'vault' ? 'vault' : 'token');
       requestContext.set('user', { organizationId: project.orgId, workosId: 'requester-1' });
-      await expect(invoke()).rejects.toThrow('credential vault');
+      if (mode === 'vault') await expect(invoke()).rejects.toThrow('credential vault');
+      else await expect(invoke()).resolves.toMatchObject({ exitCode: 0 });
       requestContext.set('user', { organizationId: project.orgId, workosId: storedSession.userId });
       __clearSessionSandboxesForTests();
       workspace = await resolveWorkspace();
@@ -337,6 +368,17 @@ describe('prepareFactoryRuleBinding', () => {
       expect(requests.filter(request => request.path.endsWith('/exec-lease'))).toHaveLength(2);
       expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
 
+      if (cold) __clearSessionSandboxesForTests();
+      coordinator = new FactoryStartCoordinator(
+        controller,
+        seeded.workItems,
+        undefined,
+        sourceControl,
+        undefined,
+        undefined,
+        undefined,
+        provider,
+      );
       const restartInput = {
         ...input,
         record: { ...input.record, id: 'decision-2', approvedBy: restartBy },
@@ -350,7 +392,7 @@ describe('prepareFactoryRuleBinding', () => {
           deploymentModelProviders: resolveDeploymentModelProviders(undefined),
         });
       const beforeRestart = requests.length;
-      if (restartBy !== approvedBy) {
+      if (mode === 'vault' && restartBy !== approvedBy) {
         await expect(restart()).rejects.toMatchObject({
           code: 'sandbox_vault_owner_required',
           message: expect.stringContaining("this card's sandbox acts as approver-1"),
@@ -367,7 +409,9 @@ describe('prepareFactoryRuleBinding', () => {
         branch: reloaded.branch,
         originThreadId: reloaded.originThreadId,
       });
-      expect(requests).toHaveLength(beforeRestart);
+      expect(
+        requests.slice(beforeRestart).every(request => request.path.endsWith(`/sandbox/${reloaded.sandboxId}`)),
+      ).toBe(true);
       __clearSessionSandboxesForTests();
       await destroyDetachedSessionSandbox({ session: reloaded, sandbox });
       expect(requests.at(-1)).toMatchObject({

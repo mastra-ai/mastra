@@ -43,8 +43,92 @@ describe.each(['libsql', 'inmemory'] as const)('sandbox credential attribution (
       branch: 'factory/work',
       baseBranch: 'main',
     });
-    return { store, session };
+    return { store, session, backend, domain };
   }
+
+  it.skipIf(adapter !== 'libsql')('upgrades a legacy session without inferring its credential mode', async () => {
+    const { store, session, backend, domain } = await setup();
+    await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: 'starter-1' });
+    await store.sessions.setSandbox({ id: session.id, sandboxId: 'legacy-vm', sandboxWorkdir: '/workspace' });
+    const database = backend.authDatabase!()!;
+    if (database.dialect !== 'libsql') throw new Error('Expected libsql test database');
+    await database.client.execute('ALTER TABLE source_control_sessions DROP COLUMN sandbox_credential_mode');
+    await domain.init();
+    const reloadedStore = domain.forIntegration('github');
+    expect(await reloadedStore.sessions.getBySessionId(session.sessionId)).toMatchObject({
+      sandboxId: 'legacy-vm',
+      sandboxUserId: 'starter-1',
+      sandboxCredentialMode: null,
+    });
+    await reloadedStore.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'legacy-vm',
+      sandboxWorkdir: '/workspace',
+      sandboxCredentialMode: 'token',
+    });
+    await domain.init();
+    expect(
+      (await domain.forIntegration('github').sessions.getBySessionId(session.sessionId))?.sandboxCredentialMode,
+    ).toBe('token');
+  });
+
+  it.each(['vault', 'token'] as const)('persists %s mode with the VM and clears it on replacement', async mode => {
+    const { store, session } = await setup();
+    await store.sessions.setSandboxUser({ sessionId: session.sessionId, userId: 'starter-1' });
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/workspace',
+      sandboxCredentialMode: mode,
+    });
+    expect(await store.sessions.getBySessionId(session.sessionId)).toMatchObject({
+      sandboxId: 'vm-1',
+      sandboxCredentialMode: mode,
+      sandboxUserId: 'starter-1',
+    });
+    await store.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/workspace/repo' });
+    expect((await store.sessions.getBySessionId(session.sessionId))?.sandboxCredentialMode).toBe(mode);
+    await store.sessions.setSandbox({ id: session.id, sandboxId: 'vm-2', sandboxWorkdir: '/workspace' });
+    expect((await store.sessions.getBySessionId(session.sessionId))?.sandboxCredentialMode).toBeNull();
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-2',
+      sandboxWorkdir: '/workspace',
+      sandboxCredentialMode: mode,
+    });
+    await store.sessions.setSandbox({ id: session.id, sandboxId: null, sandboxWorkdir: '' });
+    expect(await store.sessions.getBySessionId(session.sessionId)).toMatchObject({
+      sandboxCredentialMode: null,
+      sandboxUserId: 'starter-1',
+    });
+  });
+
+  it('does not publish mode for a sandbox belonging to a previous session owner', async () => {
+    const { store, session } = await setup();
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/workspace',
+      sandboxCredentialMode: 'vault',
+    });
+    await store.sessions.transferOwner({
+      sessionId: session.sessionId,
+      expectedUserId: 'owner-1',
+      toUserId: 'owner-2',
+      releaseSandbox: true,
+    });
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/workspace',
+      sandboxCredentialMode: 'vault',
+      expectedUserId: 'owner-1',
+    });
+    expect(await store.sessions.getBySessionId(session.sessionId)).toMatchObject({
+      sandboxId: null,
+      sandboxCredentialMode: null,
+    });
+  });
 
   it('lets an explicit human approval claim an unattributed session before any VM exists', async () => {
     const { store, session } = await setup();

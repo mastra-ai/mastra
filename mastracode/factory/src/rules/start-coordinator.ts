@@ -7,7 +7,6 @@ import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
 import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
 import {
@@ -208,14 +207,11 @@ export class FactoryStartCoordinator {
     const hasSandbox = Boolean(sourceSession.sandboxId || sourceSession.materializedAt);
     const existingActor =
       sourceSession.sandboxUserId !== undefined ? sourceSession.sandboxUserId : hasSandbox ? null : undefined;
-    const sandbox = peekSessionSandbox(sourceSession.sessionId)?.sandbox;
-    const tokenSandbox = sandbox && 'vault' in sandbox && sandbox.vault === false;
-    const vaultSandbox = this.#vaultSandboxes && !tokenSandbox;
+    const vaultSandbox = this.#vaultSandboxes && sourceSession.sandboxCredentialMode !== 'token';
     if (
       vaultSandbox &&
-      existingActor !== undefined &&
-      (existingActor !== sandboxUserId || (hasSandbox && existingActor === null)) &&
-      (existingActor !== null || hasSandbox)
+      (hasSandbox || existingActor != null) &&
+      (existingActor == null || existingActor !== sandboxUserId)
     ) {
       throw new FactoryDispatchError(
         'sandbox_vault_owner_required',

@@ -176,6 +176,7 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       sandbox_workdir: { type: 'text', nullable: true },
       sandbox_user_id: { type: 'text', nullable: true },
       sandbox_actor_set: { type: 'boolean', nullable: true },
+      sandbox_credential_mode: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
@@ -383,6 +384,7 @@ export interface SourceControlSession {
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
+  sandboxCredentialMode?: 'vault' | 'token' | null;
   materializedAt: Date | null;
   /** When the first user message reached the session's agent. Write-once. */
   firstMessageAt: Date | null;
@@ -598,6 +600,7 @@ export interface SourceControlStorageHandle {
       id: string;
       sandboxId: string | null;
       sandboxWorkdir: string;
+      sandboxCredentialMode?: 'vault' | 'token';
       expectedUserId?: string;
     }): Promise<void>;
     /**
@@ -704,6 +707,7 @@ interface SessionDbRow extends Record<string, unknown> {
   sandbox_workdir: string | null;
   sandbox_user_id?: string | null;
   sandbox_actor_set?: boolean | null;
+  sandbox_credential_mode?: 'vault' | 'token' | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
@@ -824,6 +828,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
+    sandboxCredentialMode: row.sandbox_credential_mode ?? null,
     sandboxUserId: row.sandbox_actor_set ? (row.sandbox_user_id ?? null) : undefined,
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
@@ -1859,7 +1864,13 @@ export class SourceControlStorage extends FactoryStorageDomain {
                 moved = true;
                 if (!releaseSandbox) return { user_id: toUserId, updated_at: new Date() };
                 releasedSandboxId = current.sandbox_id;
-                return { user_id: toUserId, sandbox_id: null, sandbox_workdir: '', updated_at: new Date() };
+                return {
+                  user_id: toUserId,
+                  sandbox_id: null,
+                  sandbox_workdir: '',
+                  sandbox_credential_mode: null,
+                  updated_at: new Date(),
+                };
               },
             );
             if (updated) {
@@ -1890,12 +1901,19 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (!row) throw new Error(`Factory session ${sessionId} not found`);
           return toSession(row);
         },
-        setSandbox: async ({ id, sandboxId, sandboxWorkdir, expectedUserId }) => {
+        setSandbox: async ({ id, sandboxId, sandboxWorkdir, sandboxCredentialMode, expectedUserId }) => {
           let written = false;
           const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id }, current => {
             if (expectedUserId !== undefined && current.user_id !== expectedUserId) return null;
             written = true;
-            return { sandbox_id: sandboxId, sandbox_workdir: sandboxWorkdir, updated_at: new Date() };
+            return {
+              sandbox_id: sandboxId,
+              sandbox_workdir: sandboxWorkdir,
+              sandbox_credential_mode: sandboxId
+                ? (sandboxCredentialMode ?? (current.sandbox_id === sandboxId ? current.sandbox_credential_mode : null))
+                : null,
+              updated_at: new Date(),
+            };
           });
           if (row && written) this.#announceSessions([row]);
         },

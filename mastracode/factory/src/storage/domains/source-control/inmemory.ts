@@ -610,7 +610,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const updated = {
         ...session,
         userId: toUserId,
-        ...(releaseSandbox ? { sandboxId: null, sandboxWorkdir: '' } : {}),
+        ...(releaseSandbox ? { sandboxId: null, sandboxWorkdir: '', sandboxCredentialMode: null } : {}),
         updatedAt: new Date(),
       };
       this.sessionsRows[index] = updated;
@@ -624,16 +624,25 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       id,
       sandboxId,
       sandboxWorkdir,
+      sandboxCredentialMode,
       expectedUserId,
     }: {
       id: string;
       sandboxId: string | null;
       sandboxWorkdir: string;
+      sandboxCredentialMode?: 'vault' | 'token';
       expectedUserId?: string;
     }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
       if (row && (expectedUserId === undefined || row.userId === expectedUserId)) {
-        Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+        Object.assign(row, {
+          sandboxCredentialMode: sandboxId
+            ? (sandboxCredentialMode ?? (row.sandboxId === sandboxId ? row.sandboxCredentialMode : null))
+            : null,
+          sandboxId,
+          sandboxWorkdir,
+          updatedAt: new Date(),
+        });
       }
     },
     markMaterialized: async ({ id }: { id: string }) => {
