@@ -14,9 +14,10 @@ import { MastraModelGateway } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraEditor } from './index';
+import type { MastraEditorConfig } from './index';
 
 const JUDGE_MODEL = `judge-${randomUUID()}`;
 const LENIENT = 'Rate how helpful the response is from 0 to 1.';
@@ -39,6 +40,9 @@ const judgeModel = new MockLanguageModelV2({
   },
 });
 
+/** API keys the judge model was resolved with, in call order. */
+const judgeApiKeys: string[] = [];
+
 class JudgeGateway extends MastraModelGateway {
   readonly id = 'models.dev';
   readonly name = 'Judge gateway';
@@ -54,8 +58,9 @@ class JudgeGateway extends MastraModelGateway {
   async resolveEmbeddingModel(): Promise<any> {
     throw new Error('Not implemented');
   }
-  async resolveLanguageModel(args: { modelId: string }): Promise<LanguageModelV2> {
+  async resolveLanguageModel(args: { modelId: string; apiKey: string }): Promise<LanguageModelV2> {
     if (args.modelId !== JUDGE_MODEL) throw new Error(`Unknown mock model: ${args.modelId}`);
+    judgeApiKeys.push(args.apiKey);
     return judgeModel;
   }
 }
@@ -80,19 +85,20 @@ describe('stored scorers in durable experiments', () => {
   const mastras: Mastra[] = [];
 
   afterEach(async () => {
+    judgeApiKeys.length = 0;
     await Promise.all(mastras.map(mastra => mastra.stopWorkers()));
     for (const mastra of mastras.splice(0)) mastra.__unregisterHooks();
   });
 
   /** An API instance and a started worker instance over one database and event bus. */
-  async function setup() {
+  async function setup(editorConfig?: MastraEditorConfig) {
     const storage = new LibSQLStore({ id: `experiments-${randomUUID()}`, url: ':memory:' });
     await storage.init();
     const pubsub = new EventEmitterPubSub();
     const instance = () => {
       const mastra = new Mastra({
         storage,
-        editor: new MastraEditor(),
+        editor: new MastraEditor(editorConfig),
         workflows: { upper: upperTarget() },
         scorers: { 'code-check': codeScorer },
         gateways: { 'models.dev': new JudgeGateway() },
@@ -189,6 +195,37 @@ describe('stored scorers in durable experiments', () => {
     ]);
   });
 
+  it("calls each stored judge with the model the editor's judgeModel option builds for that scorer", async () => {
+    // Each judge gets its own key, looked up when the judge runs on the worker.
+    const { storage, api } = await setup({
+      scorers: {
+        judgeModel: scorer => async () => ({
+          id: `${scorer.model!.provider}/${scorer.model!.name}`,
+          apiKey: `key-for-${scorer.id}`,
+        }),
+      },
+    });
+    await createJudge(api, 'helpfulness');
+    await createJudge(api, 'tone');
+    const dataset = await seedDataset(api);
+
+    const { experimentId } = await dataset.startExperimentAsync({
+      targetType: 'workflow',
+      targetId: 'upper',
+      scorers: ['helpfulness', 'tone'],
+      durable: true,
+    });
+
+    expect(await waitForExperiment(storage, experimentId)).toMatchObject({ status: 'completed', succeededCount: 2 });
+    expect((await scoresFor(storage, experimentId)).map(score => score.scorerId).sort()).toEqual([
+      'helpfulness',
+      'helpfulness',
+      'tone',
+      'tone',
+    ]);
+    expect(new Set(judgeApiKeys)).toEqual(new Set(['key-for-helpfulness', 'key-for-tone']));
+  });
+
   it('pins the version of every stored scorer the experiment can use, but not code scorers', async () => {
     const { api } = await setup();
     const runVersion = await createJudge(api, 'run-judge');
@@ -241,6 +278,7 @@ describe('stored scorers in durable experiments', () => {
     const { storage, api } = await setup();
     const versionId = await createJudge(api, 'helpfulness');
     const dataset = await seedDataset(api);
+    const addScore = vi.spyOn(api.observability, 'addScore');
 
     const summary = await dataset.startExperiment({
       targetType: 'workflow',
@@ -254,6 +292,11 @@ describe('stored scorers in durable experiments', () => {
     expect(await scoresFor(storage, summary.experimentId)).toEqual([
       { scorerId: 'helpfulness', score: 0.6, versionId },
       { scorerId: 'helpfulness', score: 0.6, versionId },
+    ]);
+    // Observability scores (what hosted Studio reads) carry the same version.
+    expect(addScore.mock.calls.map(([{ score }]) => [score.scorerId, score.scorerVersion])).toEqual([
+      ['helpfulness', versionId],
+      ['helpfulness', versionId],
     ]);
   });
 

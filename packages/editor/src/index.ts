@@ -70,6 +70,8 @@ export class MastraEditor implements IMastraEditor {
   private __codePath: string;
   private __sourceControlProvider?: SourceControlProvider;
   private readonly __builderConfig?: AgentBuilderOptions;
+  /** @internal — read by the scorer namespace */
+  readonly __scorerJudgeModel?: NonNullable<MastraEditorConfig['scorers']>['judgeModel'];
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
   private readonly __workflowBuilderConfig?: WorkflowBuilderOptions;
@@ -127,6 +129,7 @@ export class MastraEditor implements IMastraEditor {
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
     this.__source = config?.source;
     this.__codePath = config?.codePath ?? './mastra/editor';
+    this.__scorerJudgeModel = config?.scorers?.judgeModel;
     this.__sourceControlProvider =
       config?.sourceControlProvider ??
       createGitHubSourceControlProviderFromEnv(process.env, { pathPrefix: this.__codePath });
