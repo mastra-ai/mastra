@@ -1,0 +1,392 @@
+/**
+ * Connection and model checks against custom OpenAI-compatible endpoints.
+ *
+ * Local HTTP servers stand in for the endpoints, so the assertions are on what
+ * crossed the wire and on what a user is shown when the endpoint fails.
+ */
+
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import {
+  createCustomProviderChatModel,
+  listCustomProviderModels,
+  testCustomProviderModel,
+} from './custom-provider-check.js';
+import type { CustomProviderConnection } from './custom-provider-check.js';
+
+interface ReceivedRequest {
+  method: string;
+  path: string;
+  headers: IncomingHttpHeaders;
+  body: string;
+}
+
+interface Endpoint {
+  /** Base URL to save on a custom provider. */
+  url: string;
+  origin: string;
+  requests: ReceivedRequest[];
+  close(): Promise<void>;
+}
+
+type Respond = (request: ReceivedRequest, res: ServerResponse) => void;
+
+const endpoints: Endpoint[] = [];
+
+afterEach(async () => {
+  await Promise.all(endpoints.splice(0).map(endpoint => endpoint.close()));
+});
+
+/** An endpoint that records every request and answers through `respond`. */
+async function startEndpoint(respond: Respond): Promise<Endpoint> {
+  const requests: ReceivedRequest[] = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.on('data', chunk => (body += chunk));
+    req.on('end', () => {
+      const request = { method: req.method ?? '', path: req.url ?? '', headers: req.headers, body };
+      requests.push(request);
+      respond(request, res);
+    });
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const endpoint: Endpoint = {
+    url: `${origin}/v1`,
+    origin,
+    requests,
+    close: () =>
+      new Promise(resolve => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
+  };
+  endpoints.push(endpoint);
+  return endpoint;
+}
+
+function json(status: number, body: unknown, headers: Record<string, string> = {}): Respond {
+  return (_, res) => {
+    res.writeHead(status, { 'content-type': 'application/json', ...headers });
+    res.end(JSON.stringify(body));
+  };
+}
+
+function text(status: number, body: string, contentType: string): Respond {
+  return (_, res) => {
+    res.writeHead(status, { 'content-type': contentType });
+    res.end(body);
+  };
+}
+
+/** A streamed chat completion that says `content` and stops. */
+function chatStream(content: string): Respond {
+  const chunk = (delta: unknown, finishReason: string | null) =>
+    `data: ${JSON.stringify({
+      id: 'chatcmpl-test',
+      object: 'chat.completion.chunk',
+      created: 0,
+      model: 'model-x',
+      choices: [{ index: 0, delta, finish_reason: finishReason }],
+    })}\n\n`;
+  return (_, res) => {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    res.end(`${chunk({ role: 'assistant', content }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`);
+  };
+}
+
+describe('listing the models of a custom endpoint', () => {
+  it.each([
+    ['OpenAI', { object: 'list', data: [{ id: 'b-model' }, { id: ' a-model ' }, { id: 'b-model' }] }],
+    ['a models list with ids', { models: [{ id: 'b-model' }, { id: 'a-model' }] }],
+    ['Ollama', { models: [{ name: 'b-model' }, { name: 'a-model' }] }],
+    ['a plain array of ids', ['b-model', 'a-model']],
+    ['a plain array of objects', [{ id: 'b-model' }, { id: 'a-model' }]],
+  ])('reads the %s list shape', async (_, body) => {
+    const endpoint = await startEndpoint(json(200, body));
+
+    const result = await listCustomProviderModels({ url: `${endpoint.url}/` });
+
+    expect(result).toMatchObject({ ok: true, models: ['a-model', 'b-model'] });
+    expect(endpoint.requests.map(request => `${request.method} ${request.path}`)).toEqual(['GET /v1/models']);
+  });
+
+  it('reports a 200 that is not a model list', async () => {
+    const endpoint = await startEndpoint(
+      text(200, '<html><title>Welcome</title><p>Router admin</p></html>', 'text/html'),
+    );
+
+    const result = await listCustomProviderModels({ url: endpoint.url });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'invalid_response', message: `The response from ${endpoint.url}/models is not a model list` },
+    });
+  });
+
+  it('sends the key in x-api-key and no Authorization header with the x-api-key scheme', async () => {
+    const endpoint = await startEndpoint(json(200, { data: [] }));
+
+    await listCustomProviderModels({ url: endpoint.url, apiKey: 'gw-key', authScheme: 'x-api-key' });
+
+    expect(endpoint.requests[0]!.headers['x-api-key']).toBe('gw-key');
+    expect(endpoint.requests[0]!.headers.authorization).toBeUndefined();
+  });
+
+  it('sends the custom headers, with the auth header winning over a custom one of the same name', async () => {
+    const endpoint = await startEndpoint(json(200, { data: [] }));
+
+    await listCustomProviderModels({
+      url: endpoint.url,
+      apiKey: 'real-key',
+      headers: [
+        { name: 'X-Org-Id', value: 'org-1', secret: false },
+        { name: 'User-Agent', value: 'acme/1.0' },
+        { name: 'authorization', value: 'Bearer stolen' },
+      ],
+    });
+
+    expect(endpoint.requests[0]!.headers).toMatchObject({
+      'x-org-id': 'org-1',
+      'user-agent': 'acme/1.0',
+      authorization: 'Bearer real-key',
+    });
+  });
+
+  it('shows the status and the page title and text of a 403 HTML page', async () => {
+    const page = `<!DOCTYPE html><html><head><title>403 Forbidden</title><style>body{color:red}</style></head>
+      <body><h1>Access denied</h1>
+      <p>Your IP is not on the allow list &amp; was blocked.</p><script>track()</script></body></html>`;
+    const endpoint = await startEndpoint(text(403, page, 'text/html; charset=utf-8'));
+
+    const result = await listCustomProviderModels({ url: endpoint.url });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: {
+        kind: 'http',
+        status: 403,
+        message: `HTTP 403 Forbidden from ${endpoint.url}/models`,
+        detail: '403 Forbidden: Access denied Your IP is not on the allow list & was blocked.',
+      },
+    });
+  });
+
+  it('shows the error message of a JSON error body', async () => {
+    const endpoint = await startEndpoint(
+      json(401, { error: { message: 'Incorrect API key provided.', type: 'invalid_request_error' } }),
+    );
+
+    const result = await listCustomProviderModels({ url: endpoint.url, apiKey: 'wrong' });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'http', status: 401, detail: 'Incorrect API key provided.' },
+    });
+  });
+
+  it('redacts the key and secret header values the endpoint echoes back, and keeps plain values', async () => {
+    const endpoint = await startEndpoint((request, res) => {
+      res.writeHead(400, { 'content-type': 'text/plain' });
+      res.end(`Rejected headers: ${JSON.stringify(request.headers)}`);
+    });
+
+    const result = await listCustomProviderModels({
+      url: endpoint.url,
+      apiKey: 'sk-live-key',
+      headers: [
+        { name: 'X-Tenant-Token', value: 'tenant-secret', secret: true },
+        { name: 'X-Saved-Token', value: 'saved-secret' },
+        { name: 'X-Org-Id', value: 'org-plain', secret: false },
+      ],
+    });
+
+    expect(result.ok).toBe(false);
+    const detail = result.ok ? '' : (result.failure.detail ?? '');
+    expect(detail).toContain('org-plain');
+    expect(detail).toContain('[redacted]');
+    for (const secret of ['sk-live-key', 'tenant-secret', 'saved-secret']) expect(detail).not.toContain(secret);
+  });
+
+  it('keeps only a JSON error message with summaryDetailOnly', async () => {
+    const plain = await startEndpoint(text(500, 'stack trace from the internal host 10.0.0.5', 'text/plain'));
+    const jsonError = await startEndpoint(json(500, { error: 'model server is down' }));
+
+    const plainResult = await listCustomProviderModels({ url: plain.url }, { summaryDetailOnly: true });
+    const jsonResult = await listCustomProviderModels({ url: jsonError.url }, { summaryDetailOnly: true });
+
+    expect(plainResult).toMatchObject({ ok: false, failure: { kind: 'http', status: 500 } });
+    expect(plainResult.ok ? undefined : plainResult.failure.detail).toBeUndefined();
+    expect(jsonResult).toMatchObject({ ok: false, failure: { status: 500, detail: 'model server is down' } });
+  });
+
+  // The server makes this call too: a redirect could send it somewhere the
+  // saved URL was never allowed to point, such as a cloud metadata address.
+  it('refuses a redirect and does not call its target', async () => {
+    const target = await startEndpoint(json(200, { data: [{ id: 'model-x' }] }));
+    const endpoint = await startEndpoint((request, res) => {
+      res.writeHead(307, { location: `${target.origin}${request.path}` });
+      res.end();
+    });
+
+    const result = await listCustomProviderModels({ url: endpoint.url, apiKey: 'acme-secret' });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'redirect' } });
+    expect(endpoint.requests).toHaveLength(1);
+    expect(target.requests).toEqual([]);
+  });
+
+  it('times out on an endpoint that never answers', async () => {
+    const endpoint = await startEndpoint(() => {});
+
+    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 200 });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'timeout', message: `No answer from ${endpoint.url}/models within 0.2 s` },
+    });
+  });
+
+  it('reports a host that does not resolve as a network failure', async () => {
+    const result = await listCustomProviderModels({ url: 'http://custom-endpoint.invalid/v1' });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'network' } });
+    expect(result.ok ? '' : result.failure.message).toMatch(
+      /^Could not reach http:\/\/custom-endpoint\.invalid\/v1\/models: .*ENOTFOUND/,
+    );
+  });
+});
+
+describe('sending a test message to a custom endpoint model', () => {
+  const testModel = (connection: CustomProviderConnection) =>
+    testCustomProviderModel({ providerId: 'acme', connection, modelId: 'model-x' });
+
+  it('returns the reply, sending the custom headers and the x-api-key scheme', async () => {
+    const endpoint = await startEndpoint(chatStream('Yes'));
+
+    const result = await testModel({
+      url: endpoint.url,
+      apiKey: 'gw-key',
+      authScheme: 'x-api-key',
+      headers: [{ name: 'X-Org-Id', value: 'org-1' }],
+    });
+
+    expect(result).toMatchObject({ ok: true, reply: 'Yes', finishReason: 'stop' });
+    const [request] = endpoint.requests;
+    expect(`${request!.method} ${request!.path}`).toBe('POST /v1/chat/completions');
+    expect(request!.headers).toMatchObject({ 'x-api-key': 'gw-key', 'x-org-id': 'org-1' });
+    expect(request!.headers.authorization).toBeUndefined();
+    expect(JSON.parse(request!.body)).toMatchObject({ model: 'model-x', stream: true });
+  });
+
+  it('passes when the model answers with no text', async () => {
+    const endpoint = await startEndpoint(chatStream(''));
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: true, reply: '', finishReason: 'stop' });
+  });
+
+  it('reports a 503 at once and asks only once', async () => {
+    const endpoint = await startEndpoint(json(503, { error: { message: 'Model is loading' } }));
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: {
+        kind: 'http',
+        status: 503,
+        message: `HTTP 503 Service Unavailable from ${endpoint.url}/chat/completions`,
+        detail: 'Model is loading',
+      },
+    });
+    expect(endpoint.requests).toHaveLength(1);
+  });
+
+  it('does not wait out a 429 retry-after and asks only once', async () => {
+    const endpoint = await startEndpoint(json(429, { error: { message: 'Rate limited' } }, { 'retry-after': '1' }));
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 429, detail: 'Rate limited' } });
+    expect(endpoint.requests).toHaveLength(1);
+  });
+
+  it('redacts a secret header value the endpoint echoes in its error', async () => {
+    const endpoint = await startEndpoint((request, res) => {
+      res.writeHead(401, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: `Unknown token ${request.headers['x-tenant-token']}` } }));
+    });
+
+    const result = await testModel({
+      url: endpoint.url,
+      headers: [{ name: 'X-Tenant-Token', value: 'tenant-secret', secret: true }],
+    });
+
+    expect(result).toMatchObject({ ok: false, failure: { status: 401, detail: 'Unknown token [redacted]' } });
+  });
+
+  it('refuses a redirect', async () => {
+    const target = await startEndpoint(chatStream('Yes'));
+    const endpoint = await startEndpoint((request, res) => {
+      res.writeHead(307, { location: `${target.origin}${request.path}` });
+      res.end();
+    });
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'redirect' } });
+    expect(target.requests).toEqual([]);
+  });
+});
+
+describe('the headers of a custom endpoint chat call', () => {
+  async function sendWith(
+    connection: Omit<CustomProviderConnection, 'url'>,
+    requestHeaders: Record<string, string>,
+  ): Promise<IncomingHttpHeaders> {
+    const endpoint = await startEndpoint(
+      json(200, {
+        id: 'chatcmpl-test',
+        object: 'chat.completion',
+        created: 0,
+        model: 'model-x',
+        choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      }),
+    );
+    const model = createCustomProviderChatModel({
+      providerId: 'acme',
+      connection: { url: endpoint.url, ...connection },
+      modelId: 'model-x',
+      requestHeaders,
+    });
+    await model.doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] } as never);
+    return endpoint.requests[0]!.headers;
+  }
+
+  it('lets a custom header replace the Mastra thread header', async () => {
+    const headers = await sendWith(
+      { headers: [{ name: 'X-Thread-Id', value: 'custom-thread' }] },
+      {
+        'x-thread-id': 'mastra-thread',
+        'x-resource-id': 'mastra-resource',
+      },
+    );
+
+    expect(headers['x-thread-id']).toBe('custom-thread');
+    expect(headers['x-resource-id']).toBe('mastra-resource');
+  });
+
+  it('never lets a custom header replace the auth header', async () => {
+    const headers = await sendWith(
+      { apiKey: 'real-key', headers: [{ name: 'Authorization', value: 'Bearer stolen' }] },
+      { authorization: 'Bearer from-request' },
+    );
+
+    expect(headers.authorization).toBe('Bearer real-key');
+  });
+});
