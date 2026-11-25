@@ -221,6 +221,84 @@ describe('message sent to an evented run whose steps run in another process', ()
     TIMEOUT,
   );
 
+  // From another instance, the sender watched the run start, so it stores the message itself and announces it.
+  it.each(['starter', 'other-instance'] as const)(
+    "cuts short the worker's model request that is still only reasoning, sent from the %s, and its next request has the message",
+    async sender => {
+      const contents = 'Steer: answer in French';
+      const env = await createXprocEnv({ workers: false });
+      const agentId = `signal-active-run-${randomUUID()}`;
+      const scope = { resourceId: `resource-${randomUUID()}`, threadId: `thread-${randomUUID()}` };
+      const starter = buildApp(env, agentId, 'starter');
+      let other: ReturnType<typeof buildApp> | undefined;
+      let otherPubsub: UnixSocketPubSub | undefined;
+      const chunks: Array<{ type: string }> = [];
+      try {
+        const peer = await env.spawnPeer(WORKER, { agentId, reasoning: true } satisfies SignalActiveRunPeerArgs, {
+          role: 'signal-active-run-worker',
+          workers: true,
+        });
+        await peer.waitFor('worker-ready');
+        if (sender === 'other-instance') {
+          otherPubsub = new UnixSocketPubSub(env.socketPath);
+          other = buildApp(env, agentId, 'other-instance', otherPubsub);
+        }
+        const context = () => `${JSON.stringify({ chunks: chunks.map(chunk => chunk.type) })}\n${env.describe()}`;
+        const observer = await other?.runner.subscribeToThread(scope);
+        const observedRun = observer?.stream[Symbol.asyncIterator]().next();
+        const runId = `signal-active-run-${randomUUID()}`;
+        const stream = await starter.runner.stream('Start the job', {
+          runId,
+          maxSteps: 5,
+          memory: { thread: scope.threadId, resource: scope.resourceId },
+        });
+        const consumed = (async () => {
+          for await (const chunk of stream.fullStream) chunks.push(chunk);
+        })();
+        await peer.waitFor('reasoning-reached', { timeoutMs: DEFAULT_HANG_GUARD_MS });
+        if (observedRun) await guarded(observedRun, 'the sender seeing the run', context);
+        // Queued while the run is active, so it starts only after every turn the run leaves.
+        const barrier = starter.runner.queueMessage(BARRIER, scope);
+        await guarded(barrier.accepted, 'barrier accepted', context);
+
+        const sent = (other ?? starter).runner.sendSignal({ type: 'user', contents }, scope);
+        const accepted = stripOutput(await guarded(sent.accepted, 'accepted', context));
+        await peer.waitFor('reasoning-cut-short', { timeoutMs: DEFAULT_HANG_GUARD_MS });
+        await guarded(consumed, 'the run', context);
+
+        const calls: ModelCallReport[] = [];
+        for (let call = 1; !calls.some(report => userTexts(report.prompt).at(-1)?.includes(BARRIER)); call++) {
+          calls.push(await peer.waitFor<ModelCallReport>(`model-call-${call}`, { timeoutMs: DEFAULT_HANG_GUARD_MS }));
+        }
+        const memoryStore = await starter.storage.getStore('memory');
+        const stored = (await memoryStore!.listMessages({ threadId: scope.threadId, perPage: false })).messages;
+        observer?.unsubscribe();
+        peer.send('finish');
+        await peer.result();
+
+        const observed = JSON.stringify({
+          accepted,
+          calls: calls.map(report => ({ call: report.call, users: userTexts(report.prompt) })),
+          stored: stored.map(message => ({ id: message.id, role: message.role, content: message.content })),
+        });
+        expect(accepted, observed).toEqual({ action: 'deliver', runId });
+        // The request that was cut short, the one asked again with the message, then the barrier.
+        expect(calls.length, observed).toBe(3);
+        expect(userTexts(calls[0]!.prompt).join('\n').includes(contents), observed).toBe(false);
+        expect(userTexts(calls[1]!.prompt).join('\n').split(contents).length - 1, observed).toBe(1);
+        expect(stored.filter(message => JSON.stringify(message.content).includes(contents)).length, observed).toBe(1);
+      } finally {
+        await other?.mastra.shutdown();
+        await other?.storage.close();
+        await otherPubsub?.close();
+        await starter.mastra.shutdown();
+        await starter.storage.close();
+        await env.cleanup();
+      }
+    },
+    TIMEOUT,
+  );
+
   it(
     'tells another instance the thread is blocked when the run already closed, and starts no turn for it',
     async () => {
