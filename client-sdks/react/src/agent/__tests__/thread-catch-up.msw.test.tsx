@@ -143,10 +143,13 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
       useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),
     );
     await waitFor(() => expect(threads.streams).toHaveLength(1));
+    act(() => threads.streams[0]!.controller.error(new TypeError('network error')));
+    await waitFor(() => expect(threads.streams).toHaveLength(2), { timeout: 3000 });
 
     page.unmount();
+    act(() => threads.streams[1]!.controller.error(new TypeError('network error')));
     await new Promise(resolve => setTimeout(resolve, 1_500));
 
-    expect(threads.streams).toHaveLength(1);
+    expect(threads.streams).toHaveLength(2);
   });
 });
