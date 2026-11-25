@@ -96,7 +96,7 @@ const CONVERSATION = 'conversation:';
 
 /** Ended spans under one MODEL_GENERATION, used to rebuild each provider call's `$ai_input`. */
 interface Conversation {
-  /** Ended MODEL_INFERENCE spans, in the order they ended. */
+  /** Ended MODEL_INFERENCE and MODEL_STEP spans, in the order they ended. */
   calls: AnyExportedSpan[];
   /** Ended TOOL_CALL / MCP_TOOL_CALL spans and PROVIDER_TOOL_CALL spans with a result, keyed by toolCallId. */
   toolResults: Map<string, AnyExportedSpan>;
@@ -472,7 +472,7 @@ export class PosthogExporter extends TrackingExporter<
 
     const messages = this.formatMessages(generation.input, 'user');
     const conversation = traceData.getExtraValue(CONVERSATION + generation.id) as Conversation | undefined;
-    for (const call of conversation?.calls ?? []) {
+    for (const call of conversation ? this.earlierCalls(span, generation, conversation) : []) {
       const output = call.output as
         | { text?: string; toolCalls?: Array<{ toolCallId: string; toolName: string }> }
         | undefined;
@@ -511,9 +511,46 @@ export class PosthogExporter extends TrackingExporter<
     return { ...span, input: messages };
   }
 
+  /**
+   * The calls whose responses `span` received, in order. A run resumed after a tool
+   * approval or suspension replays the step it stopped in without calling the model
+   * again, so its generation starts with a response no MODEL_INFERENCE records. It is
+   * read from the replayed MODEL_STEP or, when steps are not exported, from the tools
+   * that ended before the first call.
+   */
+  private earlierCalls(
+    span: AnyExportedSpan,
+    generation: AnyExportedSpan,
+    { calls, toolResults }: Conversation,
+  ): Array<{ output?: unknown }> {
+    const endedBefore = (other: AnyExportedSpan, call: AnyExportedSpan) =>
+      !!other.endTime && this.toDate(other.endTime) <= this.toDate(call.startTime);
+    const earlier = calls
+      .filter(
+        call =>
+          call.type === SpanType.MODEL_INFERENCE ||
+          // A step can end before its own call is exported, so it counts only once it is in the past.
+          (call.id !== span.parentSpanId &&
+            endedBefore(call, span) &&
+            !calls.some(inference => inference.parentSpanId === call.id)),
+      )
+      .sort((a, b) => this.toDate(a.startTime).getTime() - this.toDate(b.startTime).getTime());
+    const exportsSteps = calls.some(call => call.type === SpanType.MODEL_STEP);
+    if (exportsSteps || !generation.metadata?.resumed) return earlier;
+
+    const toolCalls = [...toolResults]
+      .filter(([, toolSpan]) => [span, ...calls].every(call => endedBefore(toolSpan, call)))
+      .map(([toolCallId, toolSpan]) => ({
+        toolCallId,
+        toolName: toolSpan.entityName ?? toolSpan.entityId,
+        args: toolSpan.input,
+      }));
+    return toolCalls.length > 0 ? [{ output: { toolCalls } }, ...earlier] : earlier;
+  }
+
   /** Record ended calls and tool results so later calls in the same generation can rebuild their input. */
   private recordForConversation(span: AnyExportedSpan, traceData: PosthogTraceData): void {
-    const isCall = span.type === SpanType.MODEL_INFERENCE && !span.errorInfo;
+    const isCall = (span.type === SpanType.MODEL_INFERENCE || span.type === SpanType.MODEL_STEP) && !span.errorInfo;
     // A PROVIDER_TOOL_CALL span ended without a result (e.g. the run stopped first)
     // has no `success`, and recording it would add an empty result.
     const isProviderToolWithResult =
