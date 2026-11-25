@@ -105,28 +105,34 @@ export class DurableExecutionEngine {
     const attachedAtLogIndex = newestLogIndex(history);
     if (!offset) return { keepReplayEvent, attachedAtLogIndex };
     // The floor is the highest generation among the events the client already
-    // consumed (every event below its offset). Trust the log for it only when
-    // the log provably still holds all of them: indices are opaque cursors
-    // (see MastraServerCache.listPushIndexed), and a run log's entries share
-    // one TTL, so the log is either complete from its first retained frame or
-    // was recreated with a higher seed. Contiguity below the offset — as many
-    // entries as the index range spans — proves completeness. Anything else
-    // (a reseeded log, holes from failed appends) falls back to the run's
-    // current generation from storage, which is a stricter floor, so it must
-    // never be used when the log can answer: it would drop committed events
-    // from earlier generations that were never superseded.
+    // consumed, i.e. everything below its offset. It is a blunt instrument:
+    // `keepReplayEvent` already drops exactly the ranges a later execution
+    // declared abandoned, so the floor only exists to stop a stale frame from
+    // a lost execution reaching a client that has moved past it.
+    //
+    // A floor read off the log can only be too low, never too high, and too
+    // low is covered by `keepReplayEvent`. So whenever the log holds anything
+    // below the offset, use it. Requiring the indices below the offset to be
+    // contiguous would be stricter but wrong: one hole from a failed append
+    // (possible on the non-atomic composed fallback) would fall through to the
+    // run's current generation and discard committed output from an earlier
+    // generation that was never superseded.
+    //
+    // Storage is consulted only when the log holds nothing below the offset,
+    // which is the case where there is genuinely no evidence. Indices are
+    // opaque cursors seeded per log (see MastraServerCache.listPushIndexed),
+    // so a log recreated after expiry numbers above an old offset and lands
+    // here rather than answering from the wrong segment.
     let first: number | undefined;
-    let below = 0;
     let floor: number | undefined;
     for (const event of history) {
       const index = event.index;
       if (typeof index !== 'number' || index >= offset) continue;
       if (first === undefined || index < first) first = index;
-      below++;
       const generation = event.generation;
       if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
     }
-    if (first !== undefined && below === offset - first) {
+    if (first !== undefined) {
       return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex };
     }
     return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent, attachedAtLogIndex };

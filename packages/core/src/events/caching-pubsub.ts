@@ -253,27 +253,38 @@ export class CachingPubSub extends PubSub {
    *
    * Numbered entries are returned in index order, followed by unnumbered
    * ones, because a non-atomic append can store frames out of order.
+   *
+   * Sizing the slice from the last entry's index instead would be one read
+   * cheaper, but only if list order matched index order. It does not on the
+   * non-atomic composed fallback: for a list appended `[0, 1, 4, 2, 3]`, a
+   * tail sized from the last index (3) spans two entries and silently loses
+   * index 4, where walking back by the hole count reaches it.
+   *
+   * The hole count is not a complete defence either — it assumes an entry
+   * numbered `from` or later sits at position `from` or later, which an
+   * out-of-order append can also break for a high enough `from`. Reading from
+   * position 0 whenever the cache cannot promise index-ordered appends would
+   * close that, at the cost of a whole-log read per resume and per live gap;
+   * it needs a capability on `MastraServerCache` to avoid paying that on the
+   * atomic caches, which is tracked separately.
    */
   private async readLogFrom(topic: string, from: number): Promise<Event[]> {
     const cacheKey = this.getCacheKey(topic);
-    let entries = from > 0 ? await this.readLogTailFrom(cacheKey, from) : undefined;
-    if (!entries) {
-      let start = 0;
-      if (from > 0) {
-        // Length before counter: an append landing between the two reads can
-        // only overstate the holes, which starts the slice early, never late.
-        // A counter seeded past the indices in the log (an expired log that
-        // was recreated) overstates them to the point of reading everything,
-        // which is still correct — the tail read above is the fast path there.
-        const length = await this.cache.listLength(cacheKey).catch(() => undefined);
-        const counter =
-          length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
-        if (typeof length === 'number' && typeof counter === 'number') {
-          start = Math.max(0, from - Math.max(0, counter - length));
-        }
+    let start = 0;
+    if (from > 0) {
+      // Length before counter: an append landing between the two reads can
+      // only overstate the holes, which starts the slice early, never late.
+      // A counter seeded past the indices in the log (an expired log that was
+      // recreated) overstates them to the point of reading everything, which
+      // is still correct.
+      const length = await this.cache.listLength(cacheKey).catch(() => undefined);
+      const counter =
+        length === undefined ? undefined : await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+      if (typeof length === 'number' && typeof counter === 'number') {
+        start = Math.max(0, from - Math.max(0, counter - length));
       }
-      entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
     }
+    const entries = (await this.cache.listFromTo(cacheKey, start)) as Event[];
     const numbered: Event[] = [];
     const unnumbered: Event[] = [];
     for (const event of entries) {
@@ -282,34 +293,6 @@ export class CachingPubSub extends PubSub {
     }
     numbered.sort((a, b) => a.index! - b.index!);
     return [...numbered, ...unnumbered];
-  }
-
-  /**
-   * Read only the slice of the log that can hold indices at or past `from`,
-   * sized from the last entry's index. List positions are contiguous, so a
-   * tail whose first entry is numbered at or below `from` provably contains
-   * every stored entry numbered `from` or later.
-   *
-   * Returns `undefined` when coverage cannot be proven — an unnumbered edge
-   * entry, a slice too wide to bound (indices are epoch-seeded, so a cursor
-   * from before a reseed is astronomically far from the tip), or a read
-   * failure — and the caller falls back to a wider read.
-   */
-  private async readLogTailFrom(cacheKey: string, from: number): Promise<Event[] | undefined> {
-    try {
-      const last = ((await this.cache.listFromTo(cacheKey, -1)) as Event[])[0];
-      if (!last) return []; // Empty log: nothing to replay.
-      if (typeof last.index !== 'number' || last.index < from) return undefined;
-      const width = last.index - from + 1;
-      if (!Number.isSafeInteger(width) || width > 100_000) return undefined;
-      const tail = (await this.cache.listFromTo(cacheKey, -width)) as Event[];
-      // A short result means the slice covered the whole log.
-      if (tail.length < width) return tail;
-      const first = tail[0];
-      return first && typeof first.index === 'number' && first.index <= from ? tail : undefined;
-    } catch {
-      return undefined;
-    }
   }
 
   async publish(

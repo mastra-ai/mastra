@@ -1847,6 +1847,25 @@ describe('CachingPubSub', () => {
       expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
     });
 
+    it('reads every entry at or after the offset when appends landed out of order', async () => {
+      // The non-atomic composed fallback can store a higher index before a
+      // lower one. Sizing a read from the last entry's index would then cover
+      // too little: for `[0, 1, 4, 2, 3]` from offset 2 it spans two entries
+      // and drops index 4. Walking back by the hole count and filtering by
+      // index cannot miss it.
+      const cache = new InMemoryServerCache();
+      const outOfOrder = 'out-of-order-offset-topic';
+      const key = `pubsub:${outOfOrder}`;
+      for (const index of [0, 1, 4, 2, 3]) {
+        await cache.listPush(key, { type: 'chunk', runId: 'r', data: { index }, index, id: `f${index}` } as Event);
+      }
+      await cache.set(`${key}:counter`, 5);
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache);
+
+      expect((await pubsub.getHistory(outOfOrder, 2)).map(event => event.index)).toEqual([2, 3, 4]);
+      expect((await pubsub.getHistory(outOfOrder, 0)).map(event => event.index)).toEqual([0, 1, 2, 3, 4]);
+    });
+
     it('misses a log reseeded below the cursor, so a reader must reattach to see it', async () => {
       // The documented limit of restart detection. Clock seeding normally puts
       // a recreated log *above* the old cursor, where the gap path picks it up.

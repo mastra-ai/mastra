@@ -401,6 +401,49 @@ describe('observe() from an offset', () => {
     await transport.close();
   });
 
+  it('keeps committed output from an earlier generation when the log has a hole below the offset', async () => {
+    // The replay floor is a blunt backstop: `keepReplayEvent` already drops
+    // exactly the ranges a takeover declared abandoned. So the floor must not
+    // be raised to the run's current generation just because the log is not
+    // contiguous below the offset — a single index allocated by a failed
+    // append (possible on the non-atomic composed fallback) would otherwise
+    // discard committed output the takeover never superseded.
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'floor-hole';
+    const { stale: committed, current: recovered } = await takeOver(workflows, runId);
+
+    await runInRunFenceScope(scopeAt(runId, committed), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('committed 0'));
+    });
+
+    // Allocate an index without appending an entry: the counter advances and
+    // the log keeps a permanent gap, exactly as a failed push leaves it.
+    const cache = (pubsub as any).getCache();
+    await cache.increment(`pubsub:${AGENT_STREAM_TOPIC(runId)}:counter`);
+
+    await runInRunFenceScope(scopeAt(runId, committed), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('committed 1'));
+    });
+    const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+    const indices = history.map(event => event.index!);
+    // The hole is real: the span is wider than the number of entries.
+    expect(indices.at(-1)! - indices[0]!).toBeGreaterThan(indices.length - 1);
+    const offset = indices.at(-1)!;
+
+    // The takeover supersedes only what comes after the committed output.
+    await emitOwnershipClaimedEvent(pubsub, runId, recovered, offset + 1);
+    await runInRunFenceScope(scopeAt(runId, recovered), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed 1', 'replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
   it('includes a takeover announced between replay-floor reading and subscription', async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'claim-during-attachment';
