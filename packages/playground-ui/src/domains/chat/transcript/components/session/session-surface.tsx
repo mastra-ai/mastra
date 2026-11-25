@@ -1,6 +1,5 @@
 import type { AgentControllerTaskSnapshot } from '@mastra/client-js';
 import type { ReactNode } from 'react';
-import { TranscriptAnnotations } from '@/ds/components/ai/annotations';
 
 import { TaskList } from '@/ds/components/ai/task-list';
 import { ChatShell } from '@/ds/components/ChatShell';
@@ -82,10 +81,7 @@ export function SessionSurface({
               className="relative gap-0 pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6"
             >
               <SessionPreparationOverlay preparing={preparing} />
-              <ChatShell.Transcript className="flex-1">
-                <TranscriptAnnotations />
-                {children}
-              </ChatShell.Transcript>
+              <ChatShell.Transcript className="flex-1">{children}</ChatShell.Transcript>
             </ChatShell.Content>
             <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
               <ChatShell.ScrollButton aria-label="Jump to latest message" busy={busy} />

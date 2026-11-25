@@ -1,5 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { formatAnnotatedMessage, useChatAnnotations } from '@mastra/playground-ui/components/ai/annotations';
+import {
+  ComposerAnnotations,
+  formatAnnotatedMessage,
+  useChatAnnotations,
+} from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
 import { useComposerCommands } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
@@ -316,6 +320,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       connectionNotice={connectionNotice}
       busy={busy || chatPreparing || startingDraft}
       suggestions={commandMenu.suggestionsProps}
+      annotations={<ComposerAnnotations />}
       images={images}
       onRemoveImage={removeImage}
       onAddFiles={addFiles}

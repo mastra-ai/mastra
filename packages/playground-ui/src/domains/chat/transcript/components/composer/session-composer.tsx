@@ -5,7 +5,6 @@ import { ComposerImageAttachments } from './image-attachments';
 import { ComposerPrimaryAction } from './primary-action';
 
 import type { PendingImage } from './types';
-import { ComposerAnnotations } from '@/ds/components/ai/annotations';
 import {
   Composer,
   ComposerActions,
@@ -27,6 +26,7 @@ export interface SessionComposerProps {
   busy: boolean;
   /** Spread from `useComposerCommands().suggestionsProps`; omit when the host has no commands. */
   suggestions?: ComponentProps<typeof ComposerSuggestions>;
+  annotations?: ReactNode;
   images: PendingImage[];
   onRemoveImage: (id: string) => void;
   onAddFiles?: (files: File[]) => void;
@@ -49,6 +49,7 @@ export function SessionComposer({
   connectionNotice,
   busy,
   suggestions,
+  annotations,
   images,
   onRemoveImage,
   onAddFiles,
@@ -70,7 +71,7 @@ export function SessionComposer({
         <ComposerRing busy={busy && !connectionNotice}>
           <ComposerBox>
             {suggestions && <ComposerSuggestions {...suggestions} />}
-            <ComposerAnnotations />
+            {annotations}
             <ComposerImageAttachments images={images} onRemove={onRemoveImage} />
             <ComposerInput aria-label="Message" {...input} />
             <ComposerActions>

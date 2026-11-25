@@ -1,3 +1,4 @@
+import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { SessionSurface } from '@mastra/playground-ui/domains/chat/transcript';
 import type { ReactNode } from 'react';
 
@@ -49,6 +50,7 @@ export function SessionChatSurface({
       viewportClassName={reservedSpaceClass.viewport}
       composerColumnClassName={composerColumnClass}
     >
+      <TranscriptAnnotations />
       <ChatMessageBoundary showPreparation={false}>
         <TranscriptHistoryLoader />
         {!conversationStarted && emptyState}
