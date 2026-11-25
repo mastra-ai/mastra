@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { resolveClient, stripTrailingSlashes } from './client.js';
 import type { ConnectClientOptions, ResolvedClient } from './client.js';
 import { MastraConnectError, parseRetryAfterMs } from './errors.js';
+import { selectsConnectEvent } from './event-filter.js';
+import type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 import type { ConnectEventPayloads } from './event-payloads/index.js';
 
 const DEFAULT_EVENTS_URL = 'https://events.mastra.ai';
@@ -190,39 +192,12 @@ export type ConnectEventOf<P extends ConnectEventProvider, E extends ConnectEven
 export type KnownConnectEvent = { [P in ConnectEventProvider]: ConnectEventOf<P> }[ConnectEventProvider];
 
 /**
- * A provider event from a project's `connect` topic. Narrow it with
- * {@link isConnectEvent} to get the payload typed from the provider's
- * contract (see {@link ConnectEventPayloads}).
+ * A provider event from a project's `connect` topic. `ConnectEvents`,
+ * `ConnectEventSignals` and `ConnectEventWorker` deliver the
+ * {@link FilteredConnectEvent} their `events` option selects, so checking
+ * `provider` and `eventType` narrows the payload.
  */
 export type ConnectEvent = KnownConnectEvent | UntypedConnectEvent;
-
-/**
- * Whether `event` is a verified, parsed `eventType` event of `provider`,
- * narrowing its payload to the provider's documented shape. Unverified events
- * and payloads that weren't JSON never match.
- *
- * @example
- * ```ts
- * for await (const event of new ConnectEvents()) {
- *   if (isConnectEvent(event, 'github', 'pull_request.opened')) {
- *     console.log(event.payload.pull_request.title);
- *   }
- *   if (isConnectEvent(event, 'linear', ['Issue.create', 'Issue.update'])) {
- *     console.log(event.payload.data.title);
- *   }
- * }
- * ```
- */
-export function isConnectEvent<P extends ConnectEventProvider, E extends ConnectEventType<P>>(
-  event: UntypedConnectEvent,
-  provider: P,
-  eventType: E | readonly E[],
-): event is ConnectEventOf<P, E> {
-  if (event.unverified || event.payloadParseError || event.provider !== provider) return false;
-  return typeof eventType === 'string'
-    ? event.eventType === eventType
-    : (eventType as readonly string[]).includes(event.eventType);
-}
 
 const gapSchema = z.object({ after: z.string(), resumedAfter: z.string() });
 
@@ -673,9 +648,11 @@ const CONNECT_TOPIC = 'connect';
 
 /**
  * Options for {@link ConnectEvents}: the client configuration (credentials,
- * project, events URL, reconnect timing) and where the subscription starts.
+ * project, events URL, reconnect timing), where the subscription starts, and
+ * which events it delivers.
  */
-export interface ConnectEventsOptions extends EventsClientOptions, Omit<SubscribeOptions, 'projectId'> {}
+export interface ConnectEventsOptions<F extends ConnectEventFilter | undefined = undefined, U extends boolean = false>
+  extends EventsClientOptions, Omit<SubscribeOptions, 'projectId'>, ConnectEventFilterOptions<F, U> {}
 
 /**
  * A subscription to a project's provider events: webhooks the platform
@@ -692,23 +669,35 @@ export interface ConnectEventsOptions extends EventsClientOptions, Omit<Subscrib
  * it can't recover from, and when `cursorStore` or `onGap` throws. Stop it
  * with `close()`, `signal`, or by breaking out of the loop.
  *
+ * `events` picks the providers and event types to deliver. A provider with
+ * typed payloads only delivers event types Connect has types for, so checking
+ * `provider` and `eventType` narrows `payload`. Unverified events are dropped
+ * unless `includeUnverified` is set. Skipped events still move the cursor.
+ *
  * @example
  * ```ts
  * const events = new ConnectEvents({
+ *   events: { github: ['pull_request.opened'], linear: true },
  *   cursorStore: { load: () => db.get('events-cursor'), save: cursor => db.set('events-cursor', cursor) },
  *   onGap: () => resyncFromProviders(),
  * });
  * for await (const event of events) {
- *   await handle(event.provider, event.eventType, event.payload);
+ *   if (event.provider === 'github') console.log(event.payload.pull_request.title);
+ *   else if (event.eventType === 'Issue.create') console.log(event.payload.data.title);
  * }
  * ```
  */
-export class ConnectEvents implements AsyncIterable<ConnectEvent> {
+export class ConnectEvents<
+  const F extends ConnectEventFilter | undefined = undefined,
+  U extends boolean = false,
+> implements AsyncIterable<FilteredConnectEvent<F, U>> {
   readonly #subscription: EventSubscription;
+  readonly #filter: ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean>;
   #iterating = false;
 
-  constructor(options: ConnectEventsOptions = {}) {
-    const { after, afterTimestamp, cursorStore, onGap, signal, ...clientOptions } = options;
+  constructor(options: ConnectEventsOptions<F, U> = {}) {
+    const { after, afterTimestamp, cursorStore, onGap, signal, events, includeUnverified, ...clientOptions } = options;
+    this.#filter = { events, includeUnverified };
     this.#subscription = new EventsClient(clientOptions).subscribe(CONNECT_TOPIC, {
       after,
       afterTimestamp,
@@ -739,7 +728,7 @@ export class ConnectEvents implements AsyncIterable<ConnectEvent> {
     this.#subscription.close();
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<ConnectEvent> {
+  [Symbol.asyncIterator](): AsyncIterator<FilteredConnectEvent<F, U>> {
     if (this.#iterating) {
       throw new MastraConnectError(
         'invalid_options',
@@ -747,20 +736,28 @@ export class ConnectEvents implements AsyncIterable<ConnectEvent> {
       );
     }
     this.#iterating = true;
-    return mapEvents(this.#subscription[Symbol.asyncIterator]());
+    const filter = this.#filter;
+    return mapEvents(this.#subscription[Symbol.asyncIterator](), event =>
+      selectsConnectEvent(filter, event),
+    ) as AsyncIterator<FilteredConnectEvent<F, U>>;
   }
 }
 
 /**
- * Maps topic events to connect events one at a time, so the subscription
- * still saves an event only when the consumer asks for the next one.
+ * Maps topic events to the connect events `select` takes, one at a time, so
+ * the subscription still saves an event only when the consumer asks for the
+ * next one. A skipped event is saved when the next one is read.
  */
-async function* mapEvents(events: AsyncIterator<TopicEvent>): AsyncGenerator<ConnectEvent, void, undefined> {
+async function* mapEvents(
+  events: AsyncIterator<TopicEvent>,
+  select: (event: ConnectEvent) => boolean,
+): AsyncGenerator<ConnectEvent, void, undefined> {
   try {
     while (true) {
       const next = await events.next();
       if (next.done) return;
-      yield toConnectEvent(next.value);
+      const event = toConnectEvent(next.value);
+      if (select(event)) yield event;
     }
   } finally {
     await events.return?.();

@@ -7,8 +7,9 @@ import type { SignalProviderTarget } from '@mastra/core/signals';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { ConnectEventFilter } from '../event-filter.js';
 import { ConnectEventSignals } from '../event-signals.js';
-import type { ConnectEventSignalsOptions, ConnectEventFilter } from '../event-signals.js';
+import type { ConnectEventSignalsOptions } from '../event-signals.js';
 import { event, eventsServer, ready, startStream } from './events-server.js';
 
 const servers: Array<{ close(): Promise<void> }> = [];
@@ -172,18 +173,23 @@ describe('ConnectEventSignals', () => {
     expect(records[1]).toMatchObject({ kind: 'linear:Issue.create', payload: { data: { id: 'iss_1' } } });
   });
 
-  it('sends every verified event when no filter is given', async () => {
+  it('sends every verified event when no filter is given, but only typed events of a typed provider', async () => {
     const service = await eventsService([
       { provider: 'posthog', eventType: '$pageview', payload: { distinct_id: 'u1' } },
       { provider: 'github', eventType: 'push', payload: { ref: 'refs/heads/main' }, unverified: true },
+      // No typed payload for GitHub's `ping`, or for a Jira body that isn't JSON.
+      { provider: 'github', eventType: 'ping', payload: { zen: 'Keep it logically awesome.' } },
       { provider: 'jira', eventType: 'jira:issue_created', rawPayload: 'not json' },
+      { provider: 'github', eventType: 'push', payload: { ref: 'refs/heads/next' } },
+      { provider: 'posthog', eventType: '$pageview', rawPayload: 'not json' },
     ]);
     const { notifications } = opsAgent(service.url, { target: ops });
 
-    await vi.waitFor(async () => expect(await notifications()).toHaveLength(2));
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(3));
     expect((await notifications()).map(record => [record.kind, record.payload])).toEqual([
       ['posthog:$pageview', { distinct_id: 'u1' }],
-      ['jira:jira:issue_created', 'not json'],
+      ['github:push', { ref: 'refs/heads/next' }],
+      ['posthog:$pageview', 'not json'],
     ]);
   });
 

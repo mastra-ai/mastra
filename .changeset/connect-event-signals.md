@@ -18,4 +18,4 @@ const signals = new ConnectEventSignals({
 const agent = new Agent({ id: 'ops', name: 'Ops', instructions, model, signals: [signals] });
 ```
 
-Without `events`, every event is sent. Listed event types of a provider with typed payloads give `target` and `notification` a typed payload. Unverified events are dropped unless `includeUnverified` is set, and a redelivered webhook doesn't notify twice.
+Without `events`, every event is sent. A provider with typed payloads only sends the event types Connect has types for, so `target` and `notification` get a typed payload once they check `provider` and `eventType`. Unverified events are dropped unless `includeUnverified` is set, and a redelivered webhook doesn't notify twice.

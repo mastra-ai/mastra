@@ -31,9 +31,10 @@ export type {
   ConnectRequestMethod,
   ListConnectionsInput,
 } from './connect-client.js';
-export { ConnectEvents, isConnectEvent } from './events.js';
+export { ConnectEvents } from './events.js';
 export { ConnectEventSignals } from './event-signals.js';
-export type { ConnectEventFilter, ConnectEventSignalsOptions, FilteredConnectEvent } from './event-signals.js';
+export type { ConnectEventSignalsOptions } from './event-signals.js';
+export type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 export type {
   ConnectEvent,
   ConnectEventEnvelope,

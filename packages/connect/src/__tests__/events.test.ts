@@ -3,7 +3,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraConnectError } from '../errors.js';
-import { ConnectEvents, EventsClient, isConnectEvent, parseServerSentEvents, resolveEventsUrl } from '../events.js';
+import type { ConnectEventFilter } from '../event-filter.js';
+import { ConnectEvents, EventsClient, parseServerSentEvents, resolveEventsUrl } from '../events.js';
 import type { ConnectEventsOptions, EventCursor, EventStreamGap, EventsClientOptions, TopicEvent } from '../events.js';
 import { event, eventsServer, ready, startStream } from './events-server.js';
 import type { Handler } from './events-server.js';
@@ -1012,7 +1013,7 @@ describe('EventsClient.subscribe gaps and planned closes', () => {
   });
 });
 
-function connectEvents(url: string, overrides: ConnectEventsOptions = {}) {
+function connectEvents(url: string, overrides: ConnectEventsOptions<ConnectEventFilter | undefined, boolean> = {}) {
   return new ConnectEvents({
     accessToken: 'tok_secret',
     projectId: 'proj_1',
@@ -1031,8 +1032,8 @@ describe('ConnectEvents', () => {
         res.write(
           event('11', {
             connectionId: 'conn_1',
-            integrationId: 'gitlab',
-            eventType: 'merge_request.open',
+            integrationId: 'posthog',
+            eventType: '$pageview',
             sourceEventId: 'delivery-1',
             resourceId: 'user_42',
             payload: JSON.stringify({ object_kind: 'merge_request' }),
@@ -1041,15 +1042,15 @@ describe('ConnectEvents', () => {
         res.write(
           event('12', {
             connectionId: 'conn_2',
-            integrationId: 'jira',
-            eventType: 'jira:issue_created',
+            integrationId: 'pylon',
+            eventType: 'issue.created',
             payload: '{not json',
             unverified: 'true',
           }),
         );
       },
     ]);
-    const events = connectEvents(s.url);
+    const events = connectEvents(s.url, { includeUnverified: true });
     const delivered = await take(events, 2);
     expect(s.requests[0]!.url).toBe('/v1/projects/proj_1/topics/connect');
     expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_secret');
@@ -1060,8 +1061,8 @@ describe('ConnectEvents', () => {
         id: '11',
         timestamp: 1_700_000_000_000,
         connectionId: 'conn_1',
-        provider: 'gitlab',
-        eventType: 'merge_request.open',
+        provider: 'posthog',
+        eventType: '$pageview',
         sourceEventId: 'delivery-1',
         resourceId: 'user_42',
         payload: { object_kind: 'merge_request' },
@@ -1071,8 +1072,8 @@ describe('ConnectEvents', () => {
         id: '12',
         timestamp: 1_700_000_000_000,
         connectionId: 'conn_2',
-        provider: 'jira',
-        eventType: 'jira:issue_created',
+        provider: 'pylon',
+        eventType: 'issue.created',
         sourceEventId: null,
         payload: '{not json',
         payloadParseError: true,
@@ -1081,47 +1082,87 @@ describe('ConnectEvents', () => {
     ]);
   });
 
-  it('narrows only verified, parsed events of the asked provider and event types', async () => {
-    const fields = (provider: string, eventType: string, extra: Record<string, string> = {}) => ({
-      connectionId: 'conn_1',
-      integrationId: provider,
-      eventType,
-      payload: JSON.stringify({ action: 'opened', number: 7 }),
-      ...extra,
-    });
-    const s = await server([
-      (_req, res) => {
-        startStream(res);
-        res.write(ready('10'));
-        res.write(event('11', fields('github', 'pull_request.opened')));
-        res.write(event('12', fields('github', 'pull_request.opened', { unverified: 'true' })));
-        res.write(event('13', fields('github', 'pull_request.opened', { payload: '{not json' })));
-        res.write(event('14', fields('gitlab', 'pull_request.opened')));
-        res.write(event('15', fields('github', 'pull_request.closed')));
-        res.write(event('16', fields('github', 'issues.opened')));
-      },
-    ]);
-    const delivered = await take(connectEvents(s.url), 6);
+  describe('filtering', () => {
+    const stream: Array<[id: string, provider: string, eventType: string, extra?: Record<string, string>]> = [
+      ['11', 'github', 'pull_request.opened'],
+      ['12', 'github', 'pull_request.opened', { unverified: 'true' }],
+      ['13', 'github', 'pull_request.opened', { payload: '{not json' }],
+      // GitHub sends `ping`, which has no typed payload.
+      ['14', 'github', 'ping'],
+      ['15', 'github', 'pull_request.closed'],
+      ['16', 'posthog', '$pageview'],
+      ['17', 'posthog', '$pageview', { payload: '{not json' }],
+      ['18', 'slack', 'channel_rename'],
+      ['19', 'github', 'ping', { unverified: 'true' }],
+      // A provider named like an Object.prototype member is just a provider.
+      ['20', 'toString', 'x'],
+    ];
 
-    expect(delivered.map(e => isConnectEvent(e, 'github', 'pull_request.opened'))).toEqual([
-      true,
-      false,
-      false,
-      false,
-      false,
-      false,
-    ]);
-    expect(delivered.map(e => isConnectEvent(e, 'github', ['pull_request.opened', 'pull_request.closed']))).toEqual([
-      true,
-      false,
-      false,
-      false,
-      true,
-      false,
-    ]);
-    const [opened] = delivered;
-    if (!opened || !isConnectEvent(opened, 'github', 'pull_request.opened')) throw new Error('expected a match');
-    expect(opened.payload.number).toBe(7);
+    async function delivered(options: ConnectEventsOptions<ConnectEventFilter | undefined, boolean>) {
+      const s = await server([
+        (_req, res) => {
+          startStream(res);
+          res.write(ready('10'));
+          for (const [id, provider, eventType, extra] of stream) {
+            res.write(
+              event(id, {
+                connectionId: 'conn_1',
+                integrationId: provider,
+                eventType,
+                payload: JSON.stringify({ action: 'opened', number: 7 }),
+                ...extra,
+              }),
+            );
+          }
+          res.write(event('21', { connectionId: 'conn_1', integrationId: 'end', eventType: 'end', payload: '{}' }));
+        },
+      ]);
+      const { saved, store } = memoryStore();
+      const ids: string[] = [];
+      // Every filter also takes the `end` event, so the loop knows the stream is done.
+      const events = options.events && { ...options.events, end: true as const };
+      for await (const e of connectEvents(s.url, { ...options, events, cursorStore: store })) {
+        if (e.provider === 'end') break;
+        ids.push(e.id);
+      }
+      return { ids, saved: saved.map(c => c.eventId) };
+    }
+
+    it('takes every verified event without a filter, but only typed events of a typed provider', async () => {
+      // GitHub's `ping`, Slack's `channel_rename` and the unparsed GitHub event have no typed payload.
+      expect((await delivered({})).ids).toEqual(['11', '15', '16', '17', '20']);
+    });
+
+    it('delivers only typed, parsed events for `true` on a typed provider', async () => {
+      expect((await delivered({ events: { github: true } })).ids).toEqual(['11', '15']);
+    });
+
+    it('takes every event of a provider without typed payloads for `true`', async () => {
+      expect((await delivered({ events: { posthog: true } })).ids).toEqual(['16', '17']);
+    });
+
+    it('delivers only the listed, parsed event types', async () => {
+      expect((await delivered({ events: { github: ['pull_request.closed'], posthog: ['$pageview'] } })).ids).toEqual([
+        '15',
+        '16',
+      ]);
+    });
+
+    it('delivers a listed event type Connect has no type for', async () => {
+      // As when an app adds `channel_rename` to `SlackWebhookPayloads` itself.
+      const events = { slack: ['channel_rename'] } as unknown as ConnectEventFilter;
+      expect((await delivered({ events })).ids).toEqual(['18']);
+    });
+
+    it('takes unverified events with includeUnverified, still only typed ones of a typed provider', async () => {
+      expect((await delivered({ events: { github: true }, includeUnverified: true })).ids).toEqual(['11', '12', '15']);
+    });
+
+    it('saves skipped events as the cursor moves past them', async () => {
+      const { ids, saved } = await delivered({ events: { posthog: ['$pageview'] } });
+      expect(ids).toEqual(['16']);
+      expect(saved).toEqual(['11', '12', '13', '14', '15', '16', '17', '18', '19', '20']);
+    });
   });
 
   it('falls back to the environment for credentials, project and events URL', async () => {

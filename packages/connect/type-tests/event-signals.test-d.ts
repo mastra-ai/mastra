@@ -1,7 +1,7 @@
 import { expectTypeOf } from 'vitest';
 
 import { ConnectEventSignals } from '../src/index.js';
-import type { ConnectEvent, GithubWebhookPayloads, LinearWebhookPayloads } from '../src/index.js';
+import type { ConnectEvent, ConnectEventType, GithubWebhookPayloads, LinearWebhookPayloads } from '../src/index.js';
 
 const target = { threadId: 'ops', resourceId: 'team-ops' };
 
@@ -33,10 +33,13 @@ new ConnectEventSignals({
       return { summary: `PR ${event.payload.action}: ${event.payload.pull_request.title}` };
     }
     if (event.provider === 'linear') {
-      // Every Linear event includes types without typed payloads, so narrow
-      // with `isConnectEvent` or check `payloadParseError` and the event type.
-      expectTypeOf(event.payload).toBeUnknown();
-      return undefined;
+      // `true` delivers only the event types Connect has types for, so the
+      // event type narrows the payload.
+      expectTypeOf(event.unverified).toEqualTypeOf<false>();
+      if (event.eventType === 'Issue.create') {
+        expectTypeOf(event.payload).toEqualTypeOf<LinearWebhookPayloads['Issue.create']>();
+      }
+      return { summary: event.eventType };
     }
     // A provider without typed payloads keeps its listed event types.
     expectTypeOf(event.eventType).toEqualTypeOf<'$pageview'>();
@@ -54,6 +57,22 @@ new ConnectEventSignals({
     expectTypeOf(event.payload).toBeUnknown();
     if (!event.unverified) {
       expectTypeOf(event.payload).toEqualTypeOf<LinearWebhookPayloads['Issue.create']>();
+    }
+    return undefined;
+  },
+});
+
+// `true` with unverified events: the verified ones narrow, the unverified ones stay unknown.
+new ConnectEventSignals({
+  events: { github: true },
+  includeUnverified: true,
+  target,
+  notification: event => {
+    expectTypeOf(event.eventType).toEqualTypeOf<ConnectEventType<'github'>>();
+    if (event.unverified) {
+      expectTypeOf(event.payload).toBeUnknown();
+    } else if (event.eventType === 'issues.opened') {
+      expectTypeOf(event.payload).toEqualTypeOf<GithubWebhookPayloads['issues.opened']>();
     }
     return undefined;
   },

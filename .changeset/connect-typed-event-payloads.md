@@ -2,21 +2,23 @@
 '@mastra/connect': minor
 ---
 
-Added typed payloads for Connect events. `isConnectEvent()` narrows an event from `ConnectEvents` to one provider's event types, and types its `payload` from the provider's published contract. Payloads are typed for Clerk, ElevenLabs, Fireflies, GitHub, GitLab, HubSpot, incident.io, Jira, Linear, Notion, OpenAI, Outlook, Resend, SendGrid, Slack, Supabase, Telegram, WorkOS and Zendesk:
+Added typed payloads for Connect events, and an `events` filter on `ConnectEvents`. Pick providers and event types, and checking `provider` and `eventType` types the `payload` from the provider's published contract. Payloads are typed for Clerk, ElevenLabs, Fireflies, GitHub, GitLab, HubSpot, incident.io, Jira, Linear, Notion, OpenAI, Outlook, Resend, SendGrid, Slack, Supabase, Telegram, WorkOS and Zendesk:
 
 ```ts
-import { ConnectEvents, isConnectEvent } from '@mastra/connect';
+import { ConnectEvents } from '@mastra/connect';
 
-for await (const event of new ConnectEvents()) {
-  if (isConnectEvent(event, 'github', 'pull_request.opened')) {
+for await (const event of new ConnectEvents({ events: { github: ['pull_request.opened'], linear: true } })) {
+  if (event.provider === 'github') {
     console.log(event.payload.pull_request.title);
+  } else if (event.eventType === 'Issue.create') {
+    console.log(event.payload.data.title);
   }
 }
 ```
 
-Unverified events and payloads that weren't JSON never match. To type another provider's events, extend the `ConnectEventPayloads` interface with `declare module '@mastra/connect'`. To type more events of a typed provider, extend its map, such as `SlackWebhookPayloads`, the same way.
+A provider with typed payloads only delivers the event types Connect has types for, and only payloads that parsed as JSON, so every event it delivers has a typed payload. Unverified events are dropped unless `includeUnverified` is set. To type another provider's events, extend the `ConnectEventPayloads` interface with `declare module '@mastra/connect'`. To type more events of a typed provider, extend its map, such as `SlackWebhookPayloads`, the same way, and list the new event type in `events`.
 
-**Breaking:** `ConnectEvent`'s `integrationId` field is renamed to `provider`, and the `ConnectEventIntegration` type to `ConnectEventProvider`:
+**Breaking:** `ConnectEvents` now drops unverified events unless `includeUnverified` is set, and drops event types of a typed provider that Connect has no type for unless they are listed in `events`. `ConnectEvent`'s `integrationId` field is renamed to `provider`, and the `ConnectEventIntegration` type to `ConnectEventProvider`:
 
 ```ts
 // Before
