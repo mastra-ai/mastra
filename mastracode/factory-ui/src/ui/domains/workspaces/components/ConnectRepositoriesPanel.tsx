@@ -75,7 +75,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                   variant="ghost"
                   size="sm"
                   icon={<IconArrowRotateCounterClockwise />}
-                  disabled={environmentQuery.isFetching}
+                  loading={environmentQuery.isFetching}
                   onClick={() => void environmentQuery.refetch()}
                 >
                   Retry repository configuration

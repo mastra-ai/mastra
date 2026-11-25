@@ -149,10 +149,21 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
     <div role="group" aria-label="Waiting session" className="flex flex-wrap items-center gap-2 pl-6">
       {toolCallId && !outcome && parked && (
         <>
-          <Button size="sm" variant="primary" disabled={answer.isPending} onClick={() => answer.mutate('approve')}>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={answer.isPending}
+            loading={answer.isPending && answer.variables === 'approve'}
+            onClick={() => answer.mutate('approve')}
+          >
             Approve
           </Button>
-          <Button size="sm" disabled={answer.isPending} onClick={() => answer.mutate('decline')}>
+          <Button
+            size="sm"
+            disabled={answer.isPending}
+            loading={answer.isPending && answer.variables === 'decline'}
+            onClick={() => answer.mutate('decline')}
+          >
             Decline
           </Button>
         </>

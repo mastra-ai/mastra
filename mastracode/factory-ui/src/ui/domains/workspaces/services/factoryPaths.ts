@@ -9,11 +9,6 @@ export function factoryHomePath(factory: Pick<FactoryProject, 'id'>): string {
   return `/factories/${factory.id}`;
 }
 
-/** Inline create-Factory wizard, kept inside the app shell of the factory in view. */
-export function createFactoryPath(factoryId: string): string {
-  return `/factories/${factoryId}/new-factory`;
-}
-
 export function newUserSessionPath(factoryId: string): string {
   return `/factories/${factoryId}/user/new/${crypto.randomUUID()}`;
 }

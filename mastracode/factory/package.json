@@ -1,6 +1,6 @@
 {
   "name": "@mastra/factory",
-  "version": "0.31.0-alpha.8",
+  "version": "0.31.0",
   "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
@@ -74,6 +74,7 @@
     "chat": "catalog:",
     "fetch-to-node": "^2.1.0",
     "hono": "^4.13.13",
+    "jose": "^6.2.12",
     "posthog-node": "^5.57.1",
     "zod": "catalog:"
   },

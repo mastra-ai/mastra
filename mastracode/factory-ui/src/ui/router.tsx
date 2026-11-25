@@ -47,8 +47,7 @@ import {
   retiredReviewBoardSearch,
 } from './routeLoaders';
 import type { Prefetch, RouteLoaderServices } from './routeLoaders';
-import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
-import { cardDraftPath, createFactoryPath } from './domains/workspaces/services/factoryPaths';
+import { cardDraftPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Only the boards ship in the startup bundle; every other page loads on first
@@ -117,10 +116,6 @@ const SlackConnectionPage = lazyPage(
   () => import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
   <AppPageLoader />,
 );
-const CreateFactoryPage = lazyPage(
-  () => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage),
-  <AppPageLoader />,
-);
 const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage), <AppPageLoader />);
 const OnboardingPage = lazyPage(
   () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
@@ -136,12 +131,6 @@ function RootLanding() {
   // Preserve `routeErrorNotice`-style state through the redirect chain (e.g.
   // FactoryLayout bouncing an unknown factoryId here).
   const { state, search } = useLocation();
-
-  // OAuth callbacks land on `/?github=connected` etc. A mid-way create-factory
-  // flow knows the Factory it was opened from, so it resumes there (with the
-  // search intact) without waiting on any query.
-  const createFlowFactoryId = pendingCreateFlowFactoryId();
-  if (createFlowFactoryId) return <Navigate to={`${createFactoryPath(createFlowFactoryId)}${search}`} replace />;
 
   if (isPending || !factories) return null;
 
@@ -319,7 +308,6 @@ export function createAppRoutes(services?: RouteLoaderServices, holdsNavigation?
                           ],
                         },
                         { path: 'new', ...lazyRoute(NewPage, prefetchComposer) },
-                        { path: 'new-factory', ...lazyRoute(CreateFactoryPage) },
                         { path: 'new-board', ...lazyRoute(NewBoardPage) },
                         { path: 'work', element: <WorkBoardPage />, ...loadOnEntry(prefetchBoard) },
                         // The Review board was retired: new pull requests live on Work.

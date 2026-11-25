@@ -403,7 +403,7 @@ function ComboboxChips({ className, children, 'aria-label': ariaLabel, ...props 
         'h-auto min-h-control-md items-start data-multiline:rounded-xl',
         // The chips field keeps its resting look: no open tint, no placeholder color. InputGroup sets those
         // attributes, which the trigger recipe styles.
-        'data-[placeholder]:text-foreground data-[popup-open]:[--surface-tint:transparent]',
+        'data-[placeholder]:text-foreground [&[data-popup-open]:where(:not([aria-expanded=false]))]:[--surface-tint:transparent]',
         className,
       )}
       {...props}

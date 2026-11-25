@@ -1306,6 +1306,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         agent,
+        abortSignal,
         lateSignalSink,
         phase,
         runId: agentRunId,

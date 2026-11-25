@@ -1403,7 +1403,7 @@ export class Agent<
 
     const durable = config.durable;
     if (durable && typeof durable === 'object') {
-      const legacyKeys = ['maxSteps', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      const legacyKeys = ['id', 'name'].filter(key => Object.hasOwn(durable, key));
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
@@ -2114,7 +2114,7 @@ export class Agent<
     this.logger.warn(`Agent "${this.id}": ${message}`);
   }
 
-  #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
+  #warnInheritedExecutionOptions(options: { eagerToolExecution?: boolean; stopWhen?: unknown }): void {
     if (!this.#executionEnginePolicy.inherited) return;
     if (options.eagerToolExecution === true) {
       this.#warnExecutionPolicy(
@@ -2123,7 +2123,10 @@ export class Agent<
       );
     }
     if (this.#executionEnginePolicy.engine === 'evented' && options.stopWhen !== undefined) {
-      this.#warnExecutionPolicy('stopWhen', 'Mastra-inherited evented policy does not support stopWhen.');
+      this.#warnExecutionPolicy(
+        'stopWhen',
+        'Mastra-inherited evented execution does not carry stopWhen to another process. Set maxSteps to bound the run across processes.',
+      );
     }
   }
 
@@ -2541,6 +2544,7 @@ export class Agent<
         new PinnedStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
           readPins: context => knowledge.__deliveredPins(context),
+          ...knowledge.__toolGroups,
         }),
       );
     }
@@ -10853,6 +10857,18 @@ export class Agent<
   }
 
   /**
+   * The resource and thread that a `runId`-only `sendSignal`, `sendMessage` or `queueMessage`
+   * target resolves to, or undefined when this process doesn't track the run. Servers use it to
+   * check that a caller owns the run before sending to it. Core rejects a target whose `resourceId` doesn't own
+   * its `runId`, but that is a consistency check, not authorization: Core doesn't know who is calling and trusts a
+   * `runId`-only target. Callers that take `runId` from untrusted input must authenticate the caller and compare
+   * this owner with the caller's trusted resource before sending.
+   */
+  getThreadRunTarget(runId: string): { resourceId?: string; threadId: string } | undefined {
+    return agentThreadStreamRuntime.getThreadRunTarget(runId, this.getPubSub());
+  }
+
+  /**
    * Lists suspended agent runs from workflow snapshot storage — runs waiting on
    * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
    * tool that called `suspend()`.
@@ -13018,6 +13034,7 @@ export class Agent<
       - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
+      - write the title in the same language the user's messages are written in
       - do not use quotes or colons
       - the entire text you return will be used as the title`;
 
@@ -13051,10 +13068,13 @@ export class Agent<
     return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
   }
   protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
+    const durable = this.durable;
+    const config = typeof durable === 'object' ? durable : undefined;
     return this.executionEngine.getWorkflow({
+      maxSteps: config?.maxSteps,
       workflowEngine: this.workflowEngine,
-      storesRunsInJournal: false,
-      shouldPersistSnapshot: typeof this.durable === 'object' ? this.durable.shouldPersistSnapshot : undefined,
+      storesRunsInJournal: config?.storageVersion === 2,
+      shouldPersistSnapshot: config?.shouldPersistSnapshot,
       logger: this.logger,
       guardrailLogger: this.guardrailLogger,
     });
@@ -13117,12 +13137,18 @@ export class Agent<
       const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
       // A continuation can finish an earlier reader after resume replaced its execution.
       if (currentFence && currentFence !== executionFence) return;
+      // The workers settle a run this process detached from. Its terminal event can arrive after the
+      // detach, and the reader still delivers it.
+      if (executionFence.detached) return;
       try {
         await publisher?.settle(status);
       } catch (error) {
-        if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
+        const unverified = error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID;
         // The local reader still finishes, but cannot mutate shared lifecycle state.
-        this.#unverifiedReaderFences.add(executionFence);
+        if (unverified) this.#unverifiedReaderFences.add(executionFence);
+        // The detach can also land while the write waits in the publisher's queue.
+        if (executionFence.detached) return;
+        if (!unverified) throw error;
         this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: terminal ownership could not be verified`, { error });
       }
     };
@@ -13392,6 +13418,7 @@ export class Agent<
     abortController,
     executionFence,
     originalSpansEnded,
+    openStepsOf,
     latestMessageListState,
   }: {
     runId: string;
@@ -13399,6 +13426,8 @@ export class Agent<
     abortController: AbortController;
     executionFence: ExecutionFence;
     originalSpansEnded: boolean;
+    /** The generations whose MODEL_STEP the crash left open, when the snapshot names them. */
+    openStepsOf?: string[];
     /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
     latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
@@ -13618,6 +13647,7 @@ export class Agent<
           outcome: null,
           name: `llm: '${model?.modelId ?? ''}'`,
           attributes: { model: model?.modelId, provider: model?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, recovered: true },
           requestContext,
         });
@@ -13634,7 +13664,11 @@ export class Agent<
         ? {
             ...openedSegment(recoverAgentSpan, recoverModelSpan),
             adoptsOpenSteps: true,
-            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+            ...(openStepsOf
+              ? { openStepsOf }
+              : originalSpansEnded && origModelSpanData?.id
+                ? { endedStepsOf: origModelSpanData.id }
+                : {}),
           }
         : null,
     );
@@ -14115,6 +14149,7 @@ export class Agent<
         abortController,
         executionFence,
         originalSpansEnded: loaded.originalSpansEnded,
+        openStepsOf: loaded.openStepsOf,
         latestMessageListState: await this.loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
@@ -14441,11 +14476,11 @@ export class Agent<
     }
 
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
-    this.#warnInheritedExecutionOptions(defaultOptions);
     const resolvedOptions = deepMerge(
       withDefaultToolCallConcurrencyLimit(defaultOptions ?? {}, options) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    this.#warnInheritedExecutionOptions(resolvedOptions);
     // Actor is a per-call trust signal, so an explicit value replaces the
     // default actor as a whole rather than inheriting any of its fields.
     if (options?.actor !== undefined) {
@@ -14888,6 +14923,13 @@ export class Agent<
         optionsAreResolved: true,
         resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
+        onRequestContextEntryOmitted: this.#executionEnginePolicy.inherited
+          ? () =>
+              this.#warnExecutionPolicy(
+                'requestContextSnapshot',
+                'Mastra-inherited durable execution omitted a value from the request context snapshot. Use JSON-safe values that fit in the snapshot if another process needs them.',
+              )
+          : undefined,
         mastra: this.#mastra,
         methodType,
         durableAgentId: this.id,
@@ -15821,6 +15863,7 @@ export class Agent<
           outcome: null,
           name: `llm: '${resumeModel?.modelId ?? ''}'`,
           attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });

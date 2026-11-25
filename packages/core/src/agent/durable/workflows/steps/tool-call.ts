@@ -40,8 +40,14 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import type { ExportedSpan, ObservabilityContext, SpanTermination } from '../../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityContext,
+  SpanTermination,
+} from '../../../../observability';
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
+import { extractUsageMetrics, isUsageIncomplete, subtractReportedUsage } from '../../../../observability/usage';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { isProcessorWorkflow } from '../../../../processors/is-processor-workflow';
@@ -106,8 +112,10 @@ import {
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 import { recordBackgroundResult } from '../shared/background-results';
-import { carriedSpanClocks } from '../shared/iteration-state';
+import { calculateAccumulatedUsage, carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
+import { responseRecordSchema } from '../shared/schemas';
+import type { AccumulatedUsage, BaseIterationState } from '../shared/schemas';
 
 /**
  * Input schema for the durable tool call step.
@@ -134,6 +142,10 @@ const durableToolCallInputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
+  // Other tool calls of the step run at the same time, so a suspension reports no model usage
+  sideBySide: z.boolean().optional(),
+  // The model that answered the step that produced this call, and the cost its provider reported
+  response: responseRecordSchema.optional(),
 });
 
 /**
@@ -494,6 +506,7 @@ export function createDurableToolCallStep() {
       const initData = getInitData<{
         runId: string;
         agentId: string;
+        agentVersionId?: string;
         options: SerializableDurableOptions;
         state: {
           threadId?: string;
@@ -506,6 +519,10 @@ export function createDurableToolCallStep() {
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
         timeToFirstTokenMs?: number;
+        accumulatedUsage: AccumulatedUsage;
+        generationReportedUsage?: AccumulatedUsage;
+        generationReportedSteps?: number;
+        reportedCosts?: BaseIterationState['reportedCosts'];
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -542,9 +559,23 @@ export function createDurableToolCallStep() {
                 },
             segment.carried,
           );
-          if (typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData)) {
+          // This segment made the suspended step's model call only when it owns the step; a later
+          // suspension of the same step, after a resume, made none. The generation records the
+          // run total so far less what earlier suspensions recorded, like the regular agent.
+          // Tool calls that run side by side can each suspend here, so none of them records it.
+          // A total the provider left partly unknown is not recorded either: its known detail
+          // counts would be reported without the total they are part of.
+          const ownsStep = !!typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData);
+          const reported = initData.generationReportedUsage;
+          const total = calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage);
+          const usage =
+            reported && ownsStep && !typedInput.sideBySide && !isUsageIncomplete(total)
+              ? subtractReportedUsage(total, reported)
+              : undefined;
+          if (ownsStep) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
               output,
+              ...(reported ? { attributes: { usage: extractUsageMetrics(typedInput.stepUsage) } } : {}),
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
@@ -556,12 +587,13 @@ export function createDurableToolCallStep() {
                   : null,
             });
           }
+          const agentSpan = agentSpanData && obs.rebuildSpan(agentSpanData);
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData)?.end({
+            const end = {
               output,
               attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              outcome: 'suspend' as const,
+              stopReason: info.reason === 'approval' ? ('approval_required' as const) : null,
               stopReasonContext:
                 info.reason === 'approval'
                   ? compactStopReasonContext('approval_required', {
@@ -569,23 +601,40 @@ export function createDurableToolCallStep() {
                       toolName: info.toolName,
                     })
                   : null,
-            });
+            };
+            const modelSpan = obs.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined;
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
+            if (usage) {
+              // As at the end of the run: the model that answered, and the cost its provider reported.
+              const servedBy = typedInput.response?.servedBy;
+              const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+              if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
+              const costs = initData.reportedCosts?.slice(initData.generationReportedSteps ?? 0) ?? [];
+              modelSpan?.createTracker()?.endGeneration({
+                ...end,
+                attributes: {
+                  ...attributes,
+                  ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
+                },
+                usage,
+                stepProviderMetadata: [...costs, typedInput.response?.reportedCost].map(cost => cost ?? undefined),
+              });
+            } else modelSpan?.end(end);
           }
-          if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData)?.end({
-              output,
-              attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
-          }
+          agentSpan?.end({
+            output,
+            attributes,
+            outcome: 'suspend',
+            stopReason: info.reason === 'approval' ? 'approval_required' : null,
+            stopReasonContext:
+              info.reason === 'approval'
+                ? compactStopReasonContext('approval_required', {
+                    toolCallId: info.toolCallId,
+                    toolName: info.toolName,
+                  })
+                : null,
+          });
         } catch (error) {
           // Span bookkeeping must never break suspension.
           logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
@@ -686,6 +735,7 @@ export function createDurableToolCallStep() {
           mastra: mastra as Mastra,
           runId,
           agentId: initData.agentId,
+          agentVersionId: initData.agentVersionId,
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
@@ -722,12 +772,15 @@ export function createDurableToolCallStep() {
       // miss: tool ids are not unique across agents, so a global lookup first
       // could execute another agent's same-id tool. A hydrated registry's
       // per-step snapshot is authoritative and must not fall back to this full
-      // catalog when prepareStep or an input processor omitted a tool.
-      if (!tool && !hasAuthoritativeToolSnapshot) {
+      // catalog when prepareStep or an input processor omitted a tool. If a
+      // pinned agent could not be rebuilt, only an already-resolved tool is safe.
+      const canUseGlobalTools =
+        !hasAuthoritativeToolSnapshot && (!initData.agentVersionId || rebuiltTools !== undefined);
+      if (!tool && canUseGlobalTools) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
+      if (!tool && canUseGlobalTools && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;

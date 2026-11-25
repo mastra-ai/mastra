@@ -23,10 +23,10 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "doubao-seed-2.1-pro": [
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "doubao-seed-2.0-lite": [
@@ -35,7 +35,7 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
       },
@@ -44,15 +44,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "doubao-seed-2.1-pro": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.5-pro": [
-      {
-        "type": "toggle"
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5.3": [
@@ -61,32 +56,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 262144
-      }
-    ],
-    "deepseek-v4-pro": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -104,6 +74,36 @@
     "mimo-v2.5": [
       {
         "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 262144
       }
     ]
   }

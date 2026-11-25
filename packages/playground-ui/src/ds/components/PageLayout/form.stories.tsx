@@ -66,7 +66,7 @@ const meta = {
       description: {
         component: [
           'The frame for any create or edit form page, such as New alert, New project or Edit destination. It is `<PageLayout variant="form">`: no breadcrumb bar, holding a centered 640px column (the settings width) under a back link and the page title.',
-          'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 28px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
+          'The back link, the title, each `SettingsTitle` and the field labels share one left edge, and sections sit 24px apart. The back link is the only way out, so there is no breadcrumb to show the same thing twice. Pass the app router link as `LinkComponent`.',
           'Use `variant="settings"` for a settings page that someone browses to and changes in place. Use `variant="page"` for every other page: lists, dashboards, detail pages and explorers.',
         ].join('\n\n'),
       },
@@ -122,7 +122,7 @@ export const Create: Story = {
     const firstSection = details.closest('section');
     const secondSection = notify.closest('section');
     if (!firstSection || !secondSection) throw new Error('Missing a section');
-    await expect(secondSection.getBoundingClientRect().top - firstSection.getBoundingClientRect().bottom).toBe(28);
+    await expect(secondSection.getBoundingClientRect().top - firstSection.getBoundingClientRect().bottom).toBe(24);
   },
 };
 

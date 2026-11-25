@@ -1,3 +1,5 @@
+import { classifyProviderError } from '@mastra/core/error';
+
 import { omDebug } from './debug';
 
 /**
@@ -220,6 +222,18 @@ export function isTransientLLMError(error: unknown): boolean {
 }
 
 /**
+ * Returns true when the error says the provider account has no credits or quota left, as core's
+ * provider-error classifier decides it. These can carry a retryable status (OpenAI's are HTTP 429,
+ * the status of a rate limit), so `withRetry` stops on them even though `isTransientLLMError`
+ * matches: the account stays unusable until someone adds credits. Rate limits are still retried.
+ *
+ * @internal
+ */
+export function isExhaustedAccountError(error: unknown): boolean {
+  return classifyProviderError(error) === 'quota';
+}
+
+/**
  * Compute the backoff delay (ms) for the Nth retry (0-indexed).
  *
  * Exponential growth (`initialDelayMs * backoffFactor^attempt`) capped at
@@ -327,7 +341,8 @@ async function attemptWithIdleTimeout<T>(
 /**
  * Run `fn` with retries on transient transport-class errors.
  *
- * Non-transient errors (auth, validation, schema, etc.) are rethrown
+ * Non-transient errors (auth, validation, schema, etc.) and errors from an
+ * account with no credits or quota left (see `isExhaustedAccountError`) are rethrown
  * immediately. User-initiated aborts are rethrown without delay.
  *
  * @internal
@@ -349,7 +364,7 @@ export async function withRetry<T>(
     } catch (error) {
       if (abortSignal?.aborted) throw error;
       if (!(error instanceof OmModelCallTimeoutError) && hasAbortInChain(error)) throw error;
-      if (attempt >= maxRetries || !isTransientLLMError(error)) {
+      if (attempt >= maxRetries || !isTransientLLMError(error) || isExhaustedAccountError(error)) {
         if (attempt > 0) {
           omDebug(
             `[OM:retry:${label}] giving up after ${attempt} retry/retries: ${

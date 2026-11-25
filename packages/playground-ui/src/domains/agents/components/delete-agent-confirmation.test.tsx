@@ -61,7 +61,7 @@ describe('DeleteAgentConfirmation', () => {
       fireEvent.click(screen.getByTestId('agent-builder-delete-agent-cancel'));
       expect(onConfirm).not.toHaveBeenCalled();
       expect(onOpenChange).not.toHaveBeenCalled();
-      expect(screen.getByText('Deleting…')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Delete agent' }).getAttribute('aria-busy')).toBe('true');
     });
   });
 });

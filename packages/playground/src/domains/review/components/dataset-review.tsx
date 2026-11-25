@@ -492,12 +492,10 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
+              icon={<IconGauge />}
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="xs">
-                <IconGauge />
-              </Icon>
               Create scorer
             </Button>
           )}
@@ -516,8 +514,8 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
-                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <IconDotGrid1x3Horizontal />}
+                  <Button size="icon-md" aria-label="More actions" loading={isAnalyzing}>
+                    <IconDotGrid1x3Horizontal />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -686,7 +684,7 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-6 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
             <Spinner fill />
