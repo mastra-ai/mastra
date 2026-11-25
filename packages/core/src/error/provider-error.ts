@@ -31,10 +31,9 @@ const BILLING_EXHAUSTED =
 const USAGE_CAPPED =
   /usage[_ ](?:limit|cap)|quota (?:exceeded|exhausted|reached)|exceeded (?:your )?current quota|weekly limit|monthly limit/i;
 // A cap that refills within the hour is a rate limit, whatever the provider calls it.
-const RENEWS_WITHIN_THE_HOUR = /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b/i;
+const RENEWS_WITHIN_THE_HOUR =
+  /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b|\b(?:retry|try again) in \d+(?:\.\d+)?\s*(?:ms|s|sec|seconds?|m|min|minutes?)\b/i;
 const RENEWS_AFTER_THE_HOUR = /per[_ -]?(?:day|week|month)|\b(?:daily|weekly|monthly)\b/i;
-const RETRY_HINT = /\b(?:retry|try again) in (\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?|m|min|minutes?)\b/i;
-const HOUR_MS = 3_600_000;
 const ACCESS_DENIED_WORDING =
   /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|authentication[_ ]error|permission_?(?:denied|error)|access[_ ]?denied/i;
 // Bare "unauthorized" or "forbidden" in free text can come from any service a run touches, not only the model provider.
@@ -179,20 +178,10 @@ function narrowInvalidRequest(evidence: string, status: number | undefined, code
 
 function usageKind(evidence: string): 'quota' | 'rate_limited' | undefined {
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  if (USAGE_CAPPED.test(evidence)) return renewsWithinTheHour(evidence) ? 'rate_limited' : 'quota';
+  if (USAGE_CAPPED.test(evidence)) {
+    return RENEWS_AFTER_THE_HOUR.test(evidence) || !RENEWS_WITHIN_THE_HOUR.test(evidence) ? 'quota' : 'rate_limited';
+  }
   return undefined;
-}
-
-function renewsWithinTheHour(evidence: string): boolean {
-  if (RENEWS_AFTER_THE_HOUR.test(evidence)) return false;
-  if (RENEWS_WITHIN_THE_HOUR.test(evidence)) return true;
-  const hint = RETRY_HINT.exec(evidence);
-  return hint !== null && retryHintMs(Number(hint[1]), hint[2]!.toLowerCase()) <= HOUR_MS;
-}
-
-function retryHintMs(amount: number, unit: string): number {
-  if (unit === 'ms') return amount;
-  return unit.startsWith('m') ? amount * 60_000 : amount * 1000;
 }
 
 function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
