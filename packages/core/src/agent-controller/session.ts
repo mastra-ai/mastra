@@ -3716,11 +3716,18 @@ export class SessionDisplayState {
 
     switch (event.type) {
       // ── Agent lifecycle ────────────────────────────────────────────────
-      case 'agent_start':
+      case 'agent_start': {
         ds.isRunning = true;
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
+        // Follow-ups run in order: the oldest one now has its own run, so it no longer waits behind a reply.
+        const next = ds.pendingUserMessages.findIndex(message => message.kind === 'follow-up');
+        if (next !== -1) {
+          ds.pendingUserMessages = ds.pendingUserMessages.map((message, at) =>
+            at === next ? { ...message, kind: 'message' } : message,
+          );
+        }
         // Parked approvals are deliberately NOT cleared here either: a run on
         // another thread may still be waiting on one, and resuming a parked tool
         // restarts the run (a fresh agent_start) whose own gate must stay armed
@@ -3729,6 +3736,7 @@ export class SessionDisplayState {
         // one parked tool restarts the run (a fresh agent_start) and the other
         // parallel prompts must stay rendered until they are resolved.
         break;
+      }
 
       case 'agent_end': {
         ds.isRunning = false;

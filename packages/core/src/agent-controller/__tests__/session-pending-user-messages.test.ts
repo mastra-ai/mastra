@@ -349,6 +349,29 @@ describe('a sent message is pending until stored, then stored', () => {
     expect(h.prompts[1]).toContain('third task');
   });
 
+  it("a follow-up still pending when its own run starts is listed as that run's message, not as queued", async () => {
+    const h = await createHarness('follow-up-own-run');
+    const first = h.holdModelCall(1);
+    void h.session.sendMessage({ content: 'first message' }).catch(() => {});
+    await first.reached;
+    await h.session.followUp({ content: 'and then this' });
+    await h.session.followUp({ content: 'and after that' });
+    expect(h.pending()).toEqual([
+      { content: 'and then this', kind: 'follow-up' },
+      { content: 'and after that', kind: 'follow-up' },
+    ]);
+
+    // With the early store skipped (observational memory), a follow-up is still pending when its run starts.
+    h.session.displayState.apply({ type: 'agent_start' });
+    expect(h.pending()).toEqual([
+      { content: 'and then this', kind: 'message' },
+      { content: 'and after that', kind: 'follow-up' },
+    ]);
+
+    first.release();
+    await h.runsEnded(1);
+  });
+
   it('a metadata refresh of the same thread keeps dropping a pending message once it is stored', async () => {
     const h = await createHarness('refresh');
     const first = h.holdModelCall(1);
