@@ -4671,7 +4671,7 @@ export class Run<
       .then(
         () => held,
         error => {
-          if (runFenceConflictOf(error)?.runId === this.runId) this.#lostAtEpoch = epoch;
+          if (runFenceConflictOf(error)?.runId === this.runId) this.#lostAtEpoch = Math.max(this.#lostAtEpoch, epoch);
           return held;
         },
       )
@@ -4739,9 +4739,10 @@ export class Run<
     // cancel stands, and releases the run like any other end.
     const status = this.workflowRunStatus === 'canceled' ? 'canceled' : this.#result?.status;
     if (status) this.workflowRunStatus = status;
-    // Another process drives the run now, so this instance is stale whatever it last returned.
+    // Another process drives the run now, so this instance is stale whatever it last returned. Evicted,
+    // not cleaned up: the run is not finished, and a later resume here keeps its persistence override.
     if (this.#lostAtEpoch > (this.#result?.epoch ?? 0)) {
-      this.cleanup?.();
+      this.#registration?.evict();
       return;
     }
     if (status && status !== 'suspended') {

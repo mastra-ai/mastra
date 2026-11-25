@@ -739,7 +739,11 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       firstSave.release();
 
       await expect(resumed).rejects.toMatchObject(conflict);
-      expect(writes.slice(afterTakeover).every(w => w.refused)).toBe(true);
+      // The held save, then the rollback of the unused claim, both refused.
+      expect(writes.slice(afterTakeover)).toEqual([
+        expect.objectContaining({ fenced: true, refused: true }),
+        expect.objectContaining({ fenced: true, refused: true }),
+      ]);
       expect(await loadStatus(store, id, run.runId)).toBe('running');
       await vi.waitFor(() => expect(workflow.runs.has(run.runId)).toBe(false));
     });
