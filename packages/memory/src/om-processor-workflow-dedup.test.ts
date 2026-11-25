@@ -90,6 +90,11 @@ const graphs: Record<string, GraphBuilder> = {
     processorWorkflow('cloned')
       .then(cloneStep(createStep(om), { id: 'my-om-step' }))
       .commit() as ProcessorWorkflow,
+  // Steps built by an older @mastra/core have no processorId, only the id `processor:<id>`.
+  'older core step without processorId': om => {
+    const { processorId: _, ...step } = createStep(om);
+    return processorWorkflow('older-core').then(step).commit() as ProcessorWorkflow;
+  },
   nested: om =>
     processorWorkflow('outer')
       .then(processorWorkflow('inner').then(createStep(om)).commit())
