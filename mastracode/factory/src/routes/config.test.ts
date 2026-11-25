@@ -3002,10 +3002,23 @@ describe('custom provider routes', () => {
         check: true,
       });
       expect(edited.status).toBe(200);
+      expect((await edited.json()).provider.lastCheck).toEqual({ at: expect.any(String), ok: true });
       expect(passing.requests.at(-1)!.headers).toMatchObject({
         'x-api-key': 'sk-saved-key',
         'x-tenant': 'tenant-secret-value',
       });
+
+      // An edit that fails its test leaves the saved row as it was.
+      const before = await ownList(userA);
+      const failedEdit = await postProvider(app, {
+        ...savedConnection(failing.url),
+        models: ['m3'],
+        previousId: provider.id,
+        check: true,
+      });
+      expect(failedEdit.status).toBe(422);
+      expect((await failedEdit.json()).error).toBe('custom_endpoint_check_failed');
+      expect(await ownList(userA)).toEqual(before);
     });
 
     it('never returns a secret header value or the key, and returns plain header values', async () => {
