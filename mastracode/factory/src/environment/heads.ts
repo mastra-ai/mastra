@@ -12,7 +12,7 @@ import { groupedRepositoryAccess } from './repository-access.js';
 
 export type EnvironmentHeads = Record<string, string>;
 
-/** `owner/repo` from a clone URL in any common spelling, lower-cased, `.git` stripped; undefined when unparseable. */
+/** The repository path from a clone URL in any common spelling (`owner/repo`, or `group/subgroup/repo`), lower-cased, `.git` stripped; undefined when unparseable. */
 export function cloneUrlSlug(cloneUrl: string): string | undefined {
   let path: string;
   const scp = /^[^@/]+@[^:/]+:(.+)$/.exec(cloneUrl.trim());
@@ -30,17 +30,22 @@ export function cloneUrlSlug(cloneUrl: string): string | undefined {
     .split('/')
     .filter(Boolean);
   if (parts.length < 2) return undefined;
-  return `${parts[parts.length - 2]}/${parts[parts.length - 1]}`.toLowerCase();
+  return parts.join('/').toLowerCase();
 }
 
 /** The environment slug a clone URL names, in the environment's own spelling; undefined when none matches. */
 export function matchEnvironmentSlug(cloneUrl: string, slugs: Iterable<string>): string | undefined {
   const wanted = cloneUrlSlug(cloneUrl);
   if (!wanted) return undefined;
+  // A host may serve repositories under a path prefix, so a slug that is the
+  // tail of the path still names the repository when no slug is the whole path.
+  let tail: string | undefined;
   for (const slug of slugs) {
-    if (slug.toLowerCase() === wanted) return slug;
+    const lower = slug.toLowerCase();
+    if (lower === wanted) return slug;
+    if (wanted.endsWith(`/${lower}`)) tail ??= slug;
   }
-  return undefined;
+  return tail;
 }
 
 /**

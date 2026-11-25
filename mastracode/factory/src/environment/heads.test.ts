@@ -18,6 +18,7 @@ describe('cloneUrlSlug', () => {
     ['https://x-access-token:secret@github.com/acme/repo.git', 'acme/repo'],
     ['git@github.com:acme/repo.git', 'acme/repo'],
     ['ssh://git@github.com/acme/repo.git', 'acme/repo'],
+    ['https://gitlab.example.com/acme/platform/app.git', 'acme/platform/app'],
   ])('%s -> %s', (url, slug) => {
     expect(cloneUrlSlug(url)).toBe(slug);
   });
@@ -33,6 +34,16 @@ describe('matchEnvironmentSlug', () => {
     expect(matchEnvironmentSlug('https://github.com/acme/repo.git', ['Acme/Repo', 'acme/other'])).toBe('Acme/Repo');
   });
 
+  it('matches a repository in a subgroup on its full path', () => {
+    const url = 'https://gitlab.example.com/acme/platform/app.git';
+    expect(matchEnvironmentSlug(url, ['platform/app', 'Acme/Platform/App'])).toBe('Acme/Platform/App');
+    expect(matchEnvironmentSlug(url, ['acme/platform/other'])).toBeUndefined();
+  });
+
+  it('matches a slug at the end of the path when the host serves repositories under a prefix', () => {
+    expect(matchEnvironmentSlug('https://git.example.com/scm/acme/repo.git', ['acme/repo'])).toBe('acme/repo');
+  });
+
   it('is undefined for a repository outside the environment', () => {
     expect(matchEnvironmentSlug('https://github.com/acme/repo.git', ['acme/other'])).toBeUndefined();
   });
@@ -44,6 +55,12 @@ describe('recordedHeadResolver', () => {
 
     expect(await resolve('https://github.com/ACME/repo.git')).toBe(SHA_A);
     expect(await resolve('https://github.com/acme/other.git')).toBeUndefined();
+  });
+
+  it('answers for a repository in a subgroup', async () => {
+    const resolve = recordedHeadResolver({ 'acme/platform/app': SHA_A });
+
+    expect(await resolve('https://gitlab.example.com/acme/platform/app.git')).toBe(SHA_A);
   });
 });
 
