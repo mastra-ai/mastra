@@ -12,6 +12,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
 
 import type { RouteEvent } from '../boards/board-events.js';
@@ -48,6 +49,8 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
   projects: FactoryProjectsStorage;
   storage: StoredBoardsStorage;
+  /** Files the cards a route change moves to another board. */
+  boardEngine: Pick<FactoryBoardEngine, 'requestPlacement'>;
   /** Cards an intake route change may move to another board. */
   workItems: Pick<
     WorkItemsStorage,
@@ -490,6 +493,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const moves = await this.#planReroute(scope);
         const result = await applyReroute({
           moves,
+          boardEngine: this.deps.boardEngine,
           workItems: this.deps.workItems,
           registry: await this.#registry(scope),
           userId: scope.userId,

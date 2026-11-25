@@ -2,9 +2,10 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
+import { DispatcherBoardEngine } from '../../board-engine/engine.js';
 import { createBoardRegistry } from '../../boards/index.js';
-import { ProjectBoardCache } from '../../boards/project-boards.js';
 
+import { ProjectBoardCache } from '../../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../../boards/test-utils.js';
 import { workSeedWithSelfReview } from '../../boards/work-migrations.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
@@ -345,13 +346,17 @@ async function harness(
       session: { id: `session-${sessions}`, ownerId: 'code', modeId: 'build' },
       getState: () => ({ factoryProjectId: project.id }),
     });
-    const tools = await createFactoryTransitionTools({ requestContext, storage: workItems, transitionService, boards });
+    const tools = await createFactoryTransitionTools({
+      requestContext,
+      storage: workItems,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+      boards,
+    });
     const transition = tools.factory_transition_work_item as unknown as {
       execute: (input: unknown, context: unknown) => Promise<unknown>;
     };
     const verdict = tools.factory_record_review_verdict as
-      | { execute: (input: unknown, context: unknown) => Promise<unknown> }
-      | undefined;
+      { execute: (input: unknown, context: unknown) => Promise<unknown> } | undefined;
     return {
       tools,
       /** The agent's own move, through the tool it is given. */
@@ -476,7 +481,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('the pull reques
       expect(pushed.map(entry => entry.status)).not.toContain('proposed');
     });
 
-    it("sends the card back to rest when its pull request closes unmerged", async () => {
+    it('sends the card back to rest when its pull request closes unmerged', async () => {
       const h = await harness(backend, loop);
       const id = await cardInBuild(h);
       await h.authored(id);
