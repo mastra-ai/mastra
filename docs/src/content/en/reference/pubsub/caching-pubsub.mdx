@@ -79,7 +79,7 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
         name: 'runLogTtlMs',
         type: 'number',
         description:
-          "Minimum retention requested for `agent.stream.*` run logs with every append. The default matches the run record's 24-hour lifetime: a run parked on a tool approval appends nothing while it waits, so its log must outlive every moment the record still authorizes observing it, or the approval request expires out of an authorized run. Storage holds the messages, and once a log expires there is nothing left to replay, so a reconnecting observer reads what it missed from storage. A cache whose own TTL is longer keeps that instead.",
+          "Minimum retention requested for `agent.stream.*` run logs with every append. The default matches the run record's 24-hour lifetime: a run parked on a tool approval appends nothing while it waits, so its log must outlive every moment the record still authorizes observing it, or the approval request expires out of an authorized run. Storage holds the messages, and once a log expires there is nothing left to replay: `observe()` does not read messages from storage, so a reconnecting client fetches what it missed from storage itself. A cache whose own TTL is longer keeps that instead.",
         isOptional: true,
         defaultValue: '86400000 (24 hours)',
       },
@@ -109,7 +109,7 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
     name: 'supportsOffsets',
     type: 'boolean',
     description:
-      "Returns `true`. Cached events carry numeric indexes that support offset replay, strictly increasing within a log's lifetime. Indexes are opaque cursors, not positions: a fresh log starts at a clock-derived value, so pass an index read from an event (plus one), never a computed count. A recreated log normally continues above its predecessor, but that follows the cache's clock rather than a guarantee.",
+      "Returns `true`. Cached events carry numeric indexes that support offset replay, strictly increasing within a log's lifetime. Indexes are opaque cursors, not positions: with the built-in Redis, Valkey and in-memory caches a fresh log starts at a clock-derived value, and Convex numbers densely, so pass an index read from an event (plus one), never a computed count. A recreated log normally continues above its predecessor, but that follows the cache's clock rather than a guarantee.",
   },
 ]}
 />

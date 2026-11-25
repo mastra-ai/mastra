@@ -44,24 +44,26 @@ export abstract class MastraServerCache extends MastraBase {
    * (with `index` set to the allocated index) to the list at `listKey`.
    * Returns the assigned index.
    *
-   * Indices are opaque cursors — not list positions, and not dense. The
-   * contract callers rely on is that within one log's life indices strictly
-   * increase, consecutive appends get consecutive indices, and a log recreated
-   * after its predecessor expired or was evicted does not reissue an index a
-   * subscriber may still hold. Readers resume from `index + 1`, not
-   * from a frame count.
+   * Indices are opaque cursors — not list positions, and not dense. Within
+   * one log's life they strictly increase and consecutive appends get
+   * consecutive indices; readers resume from `index + 1`, not from a frame
+   * count. A log recreated after its predecessor expired or was evicted
+   * should avoid reissuing an index a subscriber may still hold — but no
+   * implementation makes that absolute, so readers must not depend on it.
    *
-   * How an implementation keeps that last part is up to it. The built-in
-   * Redis, Valkey and in-memory caches seed a counter they create from the
-   * clock in epoch MICROseconds — microseconds because a hot log appends
-   * faster than the millisecond clock advances, and an index must not outrun
-   * the next seed. Epoch microseconds stay well inside
-   * Number.MAX_SAFE_INTEGER (2^53 ≈ year 2255). `ConvexServerCache` instead
-   * allocates `max(counter, list length)` inside one transaction. Neither is
-   * absolute: a clock seed is only as monotonic as the clock, so recreating a
-   * log within the seed's resolution, or after the clock moves backwards, can
-   * still repeat an index. Readers detect a restarted log and resynchronise
-   * rather than depend on that never happening.
+   * How an implementation approaches it is up to it. The built-in Redis,
+   * Valkey and in-memory caches seed a counter they create from the clock in
+   * epoch MICROseconds — microseconds because a hot log appends faster than
+   * the millisecond clock advances, and an index must not outrun the next
+   * seed. Epoch microseconds stay well inside Number.MAX_SAFE_INTEGER (2^53
+   * ≈ year 2255). `ConvexServerCache` instead allocates `max(counter, list
+   * length)` inside one transaction, so its recreated logs renumber densely
+   * from 0. A clock seed is only as monotonic as the clock: recreating a log
+   * within the seed's resolution, or after the clock moves backwards, can
+   * still repeat an index. The subscriber's fallback detection only
+   * recognises a log that restarts at 0 (the dense case); a log reseeded
+   * below a subscriber's cursor without reaching 0 goes unnoticed until that
+   * reader reattaches.
    *
    * The list and its counter must expire together: a counter that expires
    * before its list would reuse indices already in the list. Every append

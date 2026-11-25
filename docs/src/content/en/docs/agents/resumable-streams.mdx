@@ -86,7 +86,7 @@ The retentions that apply:
 - The in-memory cache holds 1,000 entries by default. Each run uses several entries (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
 - The server's observe and abort routes return 404 when a run's ownership record is evicted or expires. Evicted run events can't be replayed.
 
-A run log recreated after its retention lapsed normally numbers above the indices it issued before. An attached observer then keeps receiving the new frames. Treat that as the common case rather than a guarantee: the numbering follows the cache's clock, and the fallback that detects a restarted log only recognizes one that restarts at zero. An observer attached across a log recreated below its cursor stops receiving frames until it reattaches. Storage remains the source of truth for a run's messages. Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
+A run log recreated after its retention lapsed normally numbers above the indices it issued before. An attached observer then keeps receiving the new frames. Treat that as the common case rather than a guarantee: the built-in Redis, Valkey and in-memory caches derive the numbering from a clock, Convex numbers densely instead, and the fallback that detects a restarted log only recognizes one that restarts at zero. An observer attached across a log recreated below its cursor stops receiving frames until it reattaches. Storage remains the source of truth for a run's messages. Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
 
 ## Follow a run
 
