@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 /** Shared by Studio and privileged local writers. */
 export function localDatabasePath(url = databaseUrlForPath(resolve('.local/support.db'))) {
   if (!url.startsWith('file:') || /[?#\u0000]/u.test(url)) throw new Error('Expected a local file database URL');
-  const path = url.startsWith('file://') ? fileURLToPath(url) : decodeURIComponent(url.slice(5));
+  const path = url.startsWith('file:/') ? fileURLToPath(url) : decodeURIComponent(url.slice(5));
   if (!path || path === ':memory:' || path.includes('\u0000') || (process.platform !== 'win32' && path.includes('\\')))
     throw new Error('Expected a persistent local file database');
   return resolve(path);
