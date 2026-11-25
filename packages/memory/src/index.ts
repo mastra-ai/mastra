@@ -1163,10 +1163,6 @@ export class Memory extends MastraMemory {
     if (typeof this.clearThreadStream === 'function') {
       void this.clearThreadStream(threadId, resourceId);
     }
-    // Same peer range: older @mastra/core versions have no clearThreadSignals.
-    if (typeof this.clearThreadSignals === 'function') {
-      await this.clearThreadSignals(threadId, resourceId);
-    }
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
