@@ -1,101 +1,93 @@
 import type { IMastraLogger } from '@mastra/core/logger';
+import type { Mastra } from '@mastra/core/mastra';
 import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerStopOptions } from '@mastra/core/worker';
-import type { Workflow } from '@mastra/core/workflows';
 
-import { selectsConnectEvent } from './event-filter.js';
-import type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
-import { selectedConnectEvents } from './events.js';
-import type { ConnectEvent, ConnectEventsOptions } from './events.js';
+import { ConnectClient } from './connect-client.js';
+import type { ConnectEventFilter, FilteredConnectEvent } from './event-filter.js';
+import { ConnectEvents } from './events.js';
+import type { ConnectEvent, ConnectEventProvider, ConnectEventsOptions, ConnectEventType } from './events.js';
 
-type MaybePromise<T> = T | Promise<T>;
-
-/** A workflow whose input is `TInput`. */
-type WorkflowWithInput<TInput> = Workflow<any, any, any, any, TInput, any, any, any>;
-
-/** Which events start the workflow is chosen with `events` and `includeUnverified`, as for `ConnectEvents`. */
-export interface ConnectEventTriggerOptions<
-  F extends ConnectEventFilter | undefined = undefined,
-  U extends boolean = false,
-  TInput = unknown,
-> extends ConnectEventFilterOptions<F, U> {
-  /** The workflow to start. It must be registered on the Mastra the worker runs on. */
-  workflow: WorkflowWithInput<TInput>;
-  /** The workflow's input for an event. Return `undefined` to skip the event. */
-  inputData: (event: FilteredConnectEvent<F, U>) => MaybePromise<NoInfer<TInput> | undefined>;
+/** What a handler gets for each event. */
+export interface ConnectEventHandlerContext<E> {
+  /** The event. */
+  event: E;
+  /** The Mastra the worker runs on, to start workflows or call agents. */
+  mastra: Mastra;
+  /** Mastra's logger. */
+  logger: IMastraLogger;
+  /**
+   * A client for the project's connections, built from the worker's options.
+   * Use `connect.withResource(event.resourceId)` to act as the end user an
+   * event's connection belongs to.
+   */
+  connect: ConnectClient;
 }
 
-/** A workflow started by Connect events. Create one with {@link onConnectEvent}. */
-export interface ConnectEventTrigger extends ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean> {
-  readonly workflow: WorkflowWithInput<any>;
-  readonly inputData: (event: ConnectEvent) => MaybePromise<unknown>;
-}
+/** Handles one event. Throwing logs the error, and the worker moves on to the next event. */
+export type ConnectEventHandler<E> = (context: ConnectEventHandlerContext<E>) => void | Promise<void>;
+
+type HandlerFor<F extends ConnectEventFilter, U extends boolean> = ConnectEventHandler<FilteredConnectEvent<F, U>>;
 
 /**
- * Starts `workflow` for the Connect events `events` selects. Pass it to
- * `ConnectEventWorker`'s `triggers`.
- *
- * @example
- * ```ts
- * onConnectEvent({
- *   events: { github: ['pull_request.opened'] },
- *   workflow: reviewPullRequest,
- *   inputData: event => ({ repo: event.payload.repository.full_name, number: event.payload.number }),
- * });
- * ```
+ * One provider's handlers: a function for every event of the provider, or an
+ * object with a function per event type. A provider with typed payloads only
+ * gets the event types Connect has types for, and only listed event types can
+ * be keys.
  */
-export function onConnectEvent<
-  const F extends ConnectEventFilter | undefined = undefined,
-  U extends boolean = false,
-  TInput = unknown,
->(trigger: ConnectEventTriggerOptions<F, U, TInput>): ConnectEventTrigger {
-  return trigger as unknown as ConnectEventTrigger;
+export type ConnectEventProviderHandlers<P extends string, U extends boolean = false> = P extends ConnectEventProvider
+  ? HandlerFor<{ [K in P]: true }, U> | { [E in ConnectEventType<P>]?: HandlerFor<{ [K in P]: readonly [E] }, U> }
+  : HandlerFor<{ [K in P]: true }, U> | { [eventType: string]: HandlerFor<{ [K in P]: true }, U> };
+
+/** Handlers keyed by provider, such as `github` or `linear`. */
+export type ConnectEventHandlers<H = Record<string, unknown>, U extends boolean = false> = {
+  [P in keyof H & string]: ConnectEventProviderHandlers<P, U>;
+};
+
+export interface ConnectEventWorkerOptions<U extends boolean = false> extends Omit<
+  ConnectEventsOptions<undefined, U>,
+  'events'
+> {
+  /** Per-request timeout for `connect`, in milliseconds. Defaults to 15000. */
+  timeoutMs?: number;
 }
 
-interface RunnableTrigger {
-  trigger: ConnectEventTrigger;
-  /** The workflow registered on Mastra, which runs with its storage. */
-  workflow: WorkflowWithInput<unknown>;
-}
-
-export interface ConnectEventWorkerOptions extends Omit<ConnectEventsOptions, 'events' | 'includeUnverified'> {
-  /** The workflows to start, and the events that start them. */
-  triggers: ConnectEventTrigger[];
-}
+type AnyHandler = ConnectEventHandler<ConnectEvent>;
 
 /**
- * Starts workflows from provider events on a project's Connect connections.
- * Pass it to `new Mastra({ workers: [...] })`; it subscribes when Mastra
- * starts its workers.
+ * Handles provider events on a project's Connect connections. Pass it to
+ * `new Mastra({ workers: [...] })`; it subscribes when Mastra starts its
+ * workers, and only to the providers and event types it has handlers for.
  *
- * Each event starts a workflow once: the run id comes from the event, so a
- * redelivered webhook finds the run it already started and is skipped. Runs
- * get the event's `resourceId` when the connection belongs to an end user.
+ * Delivery is at least once and in order: the cursor moves past an event
+ * once its handler returns, so a handler can see an event again after a
+ * restart. Run the worker in one process.
  *
  * @example
  * ```ts
  * const connectEvents = new ConnectEventWorker({
- *   triggers: [
- *     onConnectEvent({
- *       events: { linear: ['Issue.create'] },
- *       workflow: triageIssue,
- *       inputData: event => ({ issueId: event.payload.data.id }),
- *     }),
- *   ],
+ *   linear: {
+ *     'Issue.create': async ({ event, mastra }) => {
+ *       const run = await mastra.getWorkflow('triageIssue').createRun({ resourceId: event.resourceId });
+ *       await run.startAsync({ inputData: { issueId: event.payload.data.id } });
+ *     },
+ *   },
  * });
  *
  * export const mastra = new Mastra({ workflows: { triageIssue }, workers: [connectEvents] });
  * ```
  */
-export class ConnectEventWorker extends MastraWorker {
+export class ConnectEventWorker<const H = Record<string, unknown>, U extends boolean = false> extends MastraWorker {
   readonly name = 'connect-events';
 
-  readonly #options: ConnectEventWorkerOptions;
-  #events?: ReturnType<typeof selectedConnectEvents>;
+  readonly #handlers: Record<string, AnyHandler | Record<string, AnyHandler>>;
+  readonly #options: ConnectEventWorkerOptions<U>;
+  #events?: ConnectEvents<ConnectEventFilter, boolean>;
   #delivery?: Promise<void>;
 
-  constructor(options: ConnectEventWorkerOptions) {
+  constructor(handlers: ConnectEventHandlers<H, U>, options: ConnectEventWorkerOptions<U> = {}) {
     super();
+    this.#handlers = handlers as Record<string, AnyHandler | Record<string, AnyHandler>>;
     this.#options = options;
   }
 
@@ -106,37 +98,28 @@ export class ConnectEventWorker extends MastraWorker {
   /** Subscribes to the project's Connect events. Called when Mastra starts its workers. */
   async start(): Promise<void> {
     if (this.#events) return;
-    const { triggers, ...eventsOptions } = this.#options;
-    const runnable: RunnableTrigger[] = [];
-    for (const trigger of triggers) {
-      const workflow = this.#registered(trigger);
-      if (workflow) runnable.push({ trigger, workflow });
-      else {
-        this.#logger.error(
-          `Connect event worker: workflow "${trigger.workflow.id}" isn't registered on this Mastra, so Connect events won't start it`,
-        );
-      }
-    }
-    if (runnable.length === 0) return;
-
-    let events: ReturnType<typeof selectedConnectEvents>;
-    try {
-      // Each trigger picks its own events, so the subscription takes any event one of them selects.
-      events = selectedConnectEvents(eventsOptions, event =>
-        runnable.some(({ trigger }) => selectsConnectEvent(trigger, event)),
-      );
-    } catch (error) {
-      this.#logger.error('Connect event worker could not subscribe', { error });
+    const mastra = this.mastra;
+    if (!mastra) {
+      console.error('Connect event worker is not registered on a Mastra, so it is not listening');
       return;
     }
-    this.#events = events;
-    this.#delivery = this.#deliver(events, runnable);
+    const events = this.#filter();
+    if (Object.keys(events).length === 0) return;
+
+    let subscription: ConnectEvents<ConnectEventFilter, boolean>;
+    let connect: ConnectClient;
+    try {
+      connect = new ConnectClient(this.#options);
+      subscription = new ConnectEvents<ConnectEventFilter, boolean>({ ...this.#options, events });
+    } catch (error) {
+      mastra.getLogger().error('Connect event worker could not subscribe', { error });
+      return;
+    }
+    this.#events = subscription;
+    this.#delivery = this.#deliver(subscription, { mastra, logger: mastra.getLogger(), connect });
   }
 
-  /**
-   * Ends the subscription and waits for the event being handled, up to
-   * `drainTimeout` ms. Workflows already started keep running.
-   */
+  /** Ends the subscription and waits for the event being handled, up to `drainTimeout` ms. */
   async stop(options?: WorkerStopOptions): Promise<void> {
     const events = this.#events;
     const delivery = this.#delivery;
@@ -150,53 +133,47 @@ export class ConnectEventWorker extends MastraWorker {
     clearTimeout(timer);
   }
 
-  async #deliver(events: ReturnType<typeof selectedConnectEvents>, triggers: RunnableTrigger[]): Promise<void> {
+  /** The events the handlers ask for: every event of a provider with a function, or the listed event types. */
+  #filter(): ConnectEventFilter {
+    const filter: Record<string, true | string[]> = {};
+    for (const [provider, handlers] of Object.entries(this.#handlers)) {
+      if (typeof handlers === 'function') filter[provider] = true;
+      else if (handlers) filter[provider] = Object.keys(handlers).filter(type => typeof handlers[type] === 'function');
+    }
+    return filter as ConnectEventFilter;
+  }
+
+  #handler(event: ConnectEvent): AnyHandler | undefined {
+    // The subscription only delivers events a handler asked for.
+    const handlers = this.#handlers[event.provider];
+    return typeof handlers === 'function' ? handlers : handlers?.[event.eventType];
+  }
+
+  async #deliver(
+    events: ConnectEvents<ConnectEventFilter, boolean>,
+    context: Omit<ConnectEventHandlerContext<ConnectEvent>, 'event'>,
+  ): Promise<void> {
     try {
-      for await (const event of events) {
-        for (const runnable of triggers) {
-          await this.#trigger(runnable, event);
+      for await (const event of events as AsyncIterable<ConnectEvent>) {
+        try {
+          await this.#handler(event)?.({ ...context, event });
+        } catch (error) {
+          // One failing event must not end the subscription.
+          context.logger.error('Connect event handler failed', {
+            error,
+            eventId: event.id,
+            provider: event.provider,
+            eventType: event.eventType,
+          });
         }
       }
     } catch (error) {
-      this.#logger.error('Connect event worker subscription ended', { error });
+      context.logger.error('Connect event worker subscription ended', { error });
     } finally {
       if (this.#events === events) {
         this.#events = undefined;
         this.#delivery = undefined;
       }
     }
-  }
-
-  async #trigger({ trigger, workflow }: RunnableTrigger, event: ConnectEvent): Promise<void> {
-    if (!selectsConnectEvent(trigger, event)) return;
-    try {
-      const inputData = await trigger.inputData(event);
-      if (inputData === undefined) return;
-      const run = await workflow.createRun({
-        // Redelivered webhooks keep their source event id, so they reopen this run instead of starting another.
-        runId: `connect:${workflow.id}:${event.provider}:${event.sourceEventId ?? event.id}`,
-        resourceId: event.resourceId,
-      });
-      if (run.workflowRunStatus !== 'pending') return;
-      await run.startAsync({ inputData });
-    } catch (error) {
-      // One event that can't start its workflow must not end the subscription.
-      this.#logger.error('Connect event worker could not start a workflow', {
-        error,
-        workflowId: workflow.id,
-        eventId: event.id,
-        provider: event.provider,
-        eventType: event.eventType,
-      });
-    }
-  }
-
-  #registered(trigger: ConnectEventTrigger): WorkflowWithInput<unknown> | undefined {
-    const id = trigger.workflow.id;
-    return Object.values(this.mastra?.listWorkflows() ?? {}).find(workflow => workflow.id === id);
-  }
-
-  get #logger(): Pick<IMastraLogger, 'error'> {
-    return this.deps?.logger ?? this.mastra?.getLogger() ?? console;
   }
 }

@@ -654,8 +654,6 @@ const CONNECT_TOPIC = 'connect';
 export interface ConnectEventsOptions<F extends ConnectEventFilter | undefined = undefined, U extends boolean = false>
   extends EventsClientOptions, Omit<SubscribeOptions, 'projectId'>, ConnectEventFilterOptions<F, U> {}
 
-let selectEvents: (events: ConnectEvents<any, any>, select: (event: ConnectEvent) => boolean) => void;
-
 /**
  * A subscription to a project's provider events: webhooks the platform
  * received for the project's connections. Iterate it once; it reconnects and
@@ -693,20 +691,13 @@ export class ConnectEvents<
   const F extends ConnectEventFilter | undefined = undefined,
   U extends boolean = false,
 > implements AsyncIterable<FilteredConnectEvent<F, U>> {
-  static {
-    selectEvents = (events, select) => {
-      events.#select = select;
-    };
-  }
-
   readonly #subscription: EventSubscription;
-  #select: (event: ConnectEvent) => boolean;
+  readonly #filter: ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean>;
   #iterating = false;
 
   constructor(options: ConnectEventsOptions<F, U> = {}) {
     const { after, afterTimestamp, cursorStore, onGap, signal, events, includeUnverified, ...clientOptions } = options;
-    const filter = { events, includeUnverified };
-    this.#select = event => selectsConnectEvent(filter, event);
+    this.#filter = { events, includeUnverified };
     this.#subscription = new EventsClient(clientOptions).subscribe(CONNECT_TOPIC, {
       after,
       afterTimestamp,
@@ -745,24 +736,11 @@ export class ConnectEvents<
       );
     }
     this.#iterating = true;
-    return mapEvents(this.#subscription[Symbol.asyncIterator](), this.#select) as AsyncIterator<
-      FilteredConnectEvent<F, U>
-    >;
+    const filter = this.#filter;
+    return mapEvents(this.#subscription[Symbol.asyncIterator](), event =>
+      selectsConnectEvent(filter, event),
+    ) as AsyncIterator<FilteredConnectEvent<F, U>>;
   }
-}
-
-/**
- * Internal, not exported from the package: a subscription whose events the
- * caller selects itself, such as `ConnectEventWorker` with one filter per
- * trigger.
- */
-export function selectedConnectEvents(
-  options: ConnectEventsOptions,
-  select: (event: ConnectEvent) => boolean,
-): AsyncIterable<ConnectEvent> & Pick<ConnectEvents, 'close' | 'cursor'> {
-  const events = new ConnectEvents(options);
-  selectEvents(events, select);
-  return events as unknown as AsyncIterable<ConnectEvent> & Pick<ConnectEvents, 'close' | 'cursor'>;
 }
 
 /**

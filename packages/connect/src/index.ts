@@ -34,8 +34,14 @@ export type {
 export { ConnectEvents } from './events.js';
 export { ConnectEventSignals } from './event-signals.js';
 export type { ConnectEventSignalsOptions } from './event-signals.js';
-export { ConnectEventWorker, onConnectEvent } from './event-worker.js';
-export type { ConnectEventTrigger, ConnectEventTriggerOptions, ConnectEventWorkerOptions } from './event-worker.js';
+export { ConnectEventWorker } from './event-worker.js';
+export type {
+  ConnectEventHandler,
+  ConnectEventHandlerContext,
+  ConnectEventHandlers,
+  ConnectEventProviderHandlers,
+  ConnectEventWorkerOptions,
+} from './event-worker.js';
 export type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 export type {
   ConnectEvent,

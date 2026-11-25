@@ -6,8 +6,9 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { ConnectEventWorker, onConnectEvent } from '../event-worker.js';
-import type { ConnectEventTrigger } from '../event-worker.js';
+import { ConnectClient } from '../connect-client.js';
+import { ConnectEventWorker } from '../event-worker.js';
+import type { ConnectEventHandlers, ConnectEventWorkerOptions } from '../event-worker.js';
 import { event, eventsServer, ready, startStream } from './events-server.js';
 
 const servers: Array<{ close(): Promise<void> }> = [];
@@ -36,6 +37,7 @@ interface Delivery {
   provider: string;
   eventType: string;
   payload?: unknown;
+  rawPayload?: string;
   sourceEventId?: string;
   resourceId?: string;
   unverified?: boolean;
@@ -46,7 +48,7 @@ function fields(delivery: Delivery): Record<string, string> {
     connectionId: 'conn_1',
     integrationId: delivery.provider,
     eventType: delivery.eventType,
-    payload: JSON.stringify(delivery.payload ?? {}),
+    payload: delivery.rawPayload ?? JSON.stringify(delivery.payload ?? {}),
     ...(delivery.sourceEventId ? { sourceEventId: delivery.sourceEventId } : {}),
     ...(delivery.resourceId ? { resourceId: delivery.resourceId } : {}),
     ...(delivery.unverified ? { unverified: 'true' } : {}),
@@ -68,44 +70,24 @@ async function eventsService(deliveries: Delivery[]) {
   return { ...s, streams };
 }
 
-/** A workflow that records each input it runs with. */
-function recordingWorkflow<TInput extends z.ZodTypeAny>(id: string, inputSchema: TInput) {
-  const inputs: z.infer<TInput>[] = [];
-  const record = createStep({
-    id: 'record',
-    inputSchema: z.any(),
-    outputSchema: z.object({}),
-    execute: async ({ inputData }) => {
-      inputs.push(inputData);
-      return {};
-    },
-  });
-  const workflow = createWorkflow({ id, inputSchema, outputSchema: z.object({}) })
-    .then(record)
-    .commit();
-  return { workflow, inputs };
-}
-
-const review = () => recordingWorkflow('review-pull-request', z.object({ repo: z.string(), number: z.number() }));
-
-/** A real Mastra with in-memory storage, running a worker with `triggers`. */
-async function run(
+/** A real Mastra with in-memory storage, running a worker with `handlers`. */
+async function run<const H, U extends boolean = false>(
   url: string,
-  triggers: ConnectEventTrigger[],
-  workflows: Record<string, ReturnType<typeof review>['workflow']>,
-  storage = new InMemoryStore(),
+  handlers: ConnectEventHandlers<H, U>,
+  options: Omit<ConnectEventWorkerOptions<U>, 'eventsUrl'> = {},
+  workflows: Record<string, ReturnType<typeof createWorkflow>> = {},
 ) {
-  const worker = new ConnectEventWorker({
+  const worker = new ConnectEventWorker<H, U>(handlers, {
     accessToken: 'tok_secret',
     projectId: 'proj_1',
     eventsUrl: url,
     reconnectDelayMs: 5,
-    triggers,
+    ...options,
   });
-  const mastra = new Mastra({ workflows, workers: [worker], logger: false, storage });
+  const mastra = new Mastra({ workflows, workers: [worker], logger: false, storage: new InMemoryStore() });
   instances.push(mastra);
   await mastra.startWorkers();
-  return { worker, mastra, storage };
+  return { worker, mastra };
 }
 
 const prOpened = (number: number) => ({
@@ -115,214 +97,172 @@ const prOpened = (number: number) => ({
   repository: { full_name: 'acme/app' },
 });
 
-const reviewTrigger = (workflow: ReturnType<typeof review>['workflow']) =>
-  onConnectEvent({
-    events: { github: ['pull_request.opened'] },
-    workflow,
-    inputData: event => ({ repo: event.payload.repository.full_name, number: event.payload.number }),
-  });
-
 describe('ConnectEventWorker', () => {
-  it('starts the workflow once for each event it asked for, and for nothing else', async () => {
-    const { workflow, inputs } = review();
+  it("calls each provider's handler with the events it asked for, and nothing else", async () => {
     const service = await eventsService([
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(7), sourceEventId: 'd-1' },
-      { provider: 'github', eventType: 'push', payload: { ref: 'refs/heads/main' } },
-      { provider: 'linear', eventType: 'Issue.create', payload: {} },
-      // A forged delivery never starts a workflow.
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(666), unverified: true },
-      // The platform redelivered the webhook.
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(7), sourceEventId: 'd-1' },
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(8), sourceEventId: 'd-2' },
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(7) },
+      // Connect has no payload type for GitHub's `ping`, so a handler for all of GitHub doesn't get it.
+      { provider: 'github', eventType: 'ping', payload: { zen: 'Keep it logically awesome.' } },
+      { provider: 'github', eventType: 'push', rawPayload: 'not json' },
+      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(8), unverified: true },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } } },
+      { provider: 'linear', eventType: 'Issue.update', payload: { data: { id: 'iss_1' } } },
+      { provider: 'posthog', eventType: '$pageview', payload: { distinct_id: 'u1' } },
+      { provider: 'slack', eventType: 'app_mention', payload: {} },
+      // A handler for listed event types never gets a payload that isn't JSON, even for a provider without types.
+      { provider: 'pylon', eventType: 'issue.new', rawPayload: 'not json' },
+      { provider: 'pylon', eventType: 'issue.new', payload: { id: 'p_1' } },
     ]);
+    const seen: string[] = [];
 
-    const { mastra } = await run(service.url, [reviewTrigger(workflow)], { review: workflow });
-
-    await vi.waitFor(() => expect(inputs).toHaveLength(2));
-    expect(inputs).toEqual([
-      { repo: 'acme/app', number: 7 },
-      { repo: 'acme/app', number: 8 },
-    ]);
-    const { runs } = await mastra.getWorkflow('review').listWorkflowRuns();
-    expect(runs.map(r => r.runId).sort()).toEqual([
-      'connect:review-pull-request:github:d-1',
-      'connect:review-pull-request:github:d-2',
-    ]);
-  });
-
-  it('skips an event whose input is undefined', async () => {
-    const { workflow, inputs } = review();
-    const service = await eventsService([
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(1), sourceEventId: 'd-1' },
-      {
-        provider: 'github',
-        eventType: 'pull_request.opened',
-        payload: { ...prOpened(2), pull_request: { base: { ref: 'main' } } },
-        sourceEventId: 'd-2',
-      },
-    ]);
-
-    const { mastra } = await run(
-      service.url,
-      [
-        onConnectEvent({
-          events: { github: ['pull_request.opened'] },
-          workflow,
-          inputData: event =>
-            event.payload.pull_request.base.ref === 'main' && event.payload.number !== 1
-              ? { repo: event.payload.repository.full_name, number: event.payload.number }
-              : undefined,
-        }),
-      ],
-      { review: workflow },
-    );
-
-    await vi.waitFor(() => expect(inputs).toEqual([{ repo: 'acme/app', number: 2 }]));
-    const { runs } = await mastra.getWorkflow('review').listWorkflowRuns();
-    expect(runs.map(r => r.runId)).toEqual(['connect:review-pull-request:github:d-2']);
-  });
-
-  it("doesn't start a workflow again for an event a previous subscription already handled", async () => {
-    const { workflow, inputs } = review();
-    const service = await eventsService([
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(7), sourceEventId: 'd-1' },
-    ]);
-    const { mastra, storage } = await run(service.url, [reviewTrigger(workflow)], { review: workflow });
-    await vi.waitFor(async () => {
-      const { runs } = await mastra.getWorkflow('review').listWorkflowRuns();
-      expect(runs.map(r => r.snapshot)).toMatchObject([{ status: 'success' }]);
+    await run(service.url, {
+      github: ({ event }) => void seen.push(`github ${event.eventType}`),
+      linear: { 'Issue.create': ({ event }) => void seen.push(`linear ${event.eventType} ${event.payload.data.id}`) },
+      posthog: ({ event }) => void seen.push(`posthog ${event.eventType}`),
+      pylon: { 'issue.new': ({ event }) => void seen.push(`pylon ${JSON.stringify(event.payload)}`) },
     });
-    await mastra.stopWorkers();
 
-    // A restart without a saved cursor receives the same event again.
-    const again = review();
-    await run(service.url, [reviewTrigger(again.workflow)], { review: again.workflow }, storage);
-    await vi.waitFor(() => expect(service.streams).toHaveLength(2));
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    expect(inputs).toHaveLength(1);
-    expect(again.inputs).toHaveLength(0);
+    await vi.waitFor(() => expect(seen).toHaveLength(4));
+    expect(seen).toEqual([
+      'github pull_request.opened',
+      'linear Issue.create iss_1',
+      'posthog $pageview',
+      'pylon {"id":"p_1"}',
+    ]);
   });
 
-  it("gives the run the end user the event's connection belongs to", async () => {
-    const { workflow } = review();
+  it('gives handlers Mastra, its logger, and a Connect client for the project', async () => {
     const service = await eventsService([
-      {
-        provider: 'github',
-        eventType: 'pull_request.opened',
-        payload: prOpened(7),
-        sourceEventId: 'd-1',
-        resourceId: 'user_42',
-      },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } }, resourceId: 'user_ada' },
     ]);
-    const { mastra } = await run(service.url, [reviewTrigger(workflow)], { review: workflow });
+    const contexts: unknown[] = [];
+    const { mastra } = await run(service.url, { linear: context => void contexts.push(context) });
 
-    await vi.waitFor(async () => {
-      const { runs } = await mastra.getWorkflow('review').listWorkflowRuns();
-      expect(runs).toMatchObject([{ runId: 'connect:review-pull-request:github:d-1', resourceId: 'user_42' }]);
+    await vi.waitFor(() => expect(contexts).toHaveLength(1));
+    expect(contexts[0]).toEqual({
+      event: expect.objectContaining({ provider: 'linear', resourceId: 'user_ada' }),
+      mastra,
+      logger: mastra.getLogger(),
+      connect: expect.any(ConnectClient),
     });
   });
 
-  it('starts every workflow an event triggers, and only those', async () => {
-    const reviewed = review();
-    const audited = recordingWorkflow('audit', z.object({ provider: z.string(), eventType: z.string() }));
-    const pinged = recordingWorkflow('ping', z.object({ unverified: z.boolean() }));
+  it('starts a workflow from a handler, once per webhook even when it is redelivered', async () => {
+    const inputs: unknown[] = [];
+    const triage = createWorkflow({
+      id: 'triage-issue',
+      inputSchema: z.object({ issueId: z.string() }),
+      outputSchema: z.object({}),
+    })
+      .then(
+        createStep({
+          id: 'record',
+          inputSchema: z.any(),
+          outputSchema: z.object({}),
+          execute: async ({ inputData }) => {
+            inputs.push(inputData);
+            return {};
+          },
+        }),
+      )
+      .commit();
     const service = await eventsService([
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(7), sourceEventId: 'd-1' },
-      // Connect has no payload type for GitHub's `ping`, so only a trigger that lists it gets it.
-      { provider: 'github', eventType: 'ping', payload: { zen: 'Keep it logically awesome.' }, sourceEventId: 'g-1' },
-      { provider: 'github', eventType: 'ping', unverified: true, sourceEventId: 'g-2' },
-      { provider: 'linear', eventType: 'Issue.create', payload: {}, sourceEventId: 'l-1' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } }, sourceEventId: 'l-1' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } }, sourceEventId: 'l-1' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_2' } }, sourceEventId: 'l-2' },
     ]);
+    const handled: string[] = [];
 
+    // The pattern the docs show.
     await run(
       service.url,
-      [
-        reviewTrigger(reviewed.workflow),
-        onConnectEvent({
-          workflow: audited.workflow,
-          inputData: event => ({ provider: event.provider, eventType: event.eventType }),
-        }),
-        onConnectEvent({
-          events: { github: ['ping'] },
-          includeUnverified: true,
-          workflow: pinged.workflow,
-          inputData: event => ({ unverified: event.unverified }),
-        }),
-      ],
-      { review: reviewed.workflow, audit: audited.workflow, ping: pinged.workflow },
+      {
+        linear: {
+          'Issue.create': async ({ event, mastra }) => {
+            const run = await mastra.getWorkflow('triage').createRun({
+              runId: `linear:${event.sourceEventId ?? event.id}`,
+              resourceId: event.resourceId,
+            });
+            if (run.workflowRunStatus === 'pending')
+              await run.startAsync({ inputData: { issueId: event.payload.data.id } });
+            handled.push(event.id);
+          },
+        },
+      },
+      {},
+      { triage },
     );
 
-    await vi.waitFor(() => expect(audited.inputs).toHaveLength(2));
-    expect(audited.inputs).toEqual([
-      { provider: 'github', eventType: 'pull_request.opened' },
-      { provider: 'linear', eventType: 'Issue.create' },
-    ]);
-    expect(reviewed.inputs).toEqual([{ repo: 'acme/app', number: 7 }]);
-    await vi.waitFor(() => expect(pinged.inputs).toEqual([{ unverified: false }, { unverified: true }]));
+    await vi.waitFor(() => expect(handled).toHaveLength(3));
+    await vi.waitFor(() => expect(inputs).toEqual([{ issueId: 'iss_1' }, { issueId: 'iss_2' }]));
   });
 
-  it('keeps starting workflows after one event fails, and when a workflow is not registered', async () => {
-    const { workflow, inputs } = review();
-    const unregistered = recordingWorkflow('not-registered', z.object({}));
+  it('logs a failing handler and keeps handling events', async () => {
     const service = await eventsService([
-      { provider: 'github', eventType: 'pull_request.opened', payload: { action: 'opened' }, sourceEventId: 'd-1' },
-      { provider: 'github', eventType: 'pull_request.opened', payload: prOpened(8), sourceEventId: 'd-2' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'bad' } } },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'good' } } },
     ]);
+    const handled: string[] = [];
+    const { mastra } = await run(service.url, {
+      linear: ({ event }) => {
+        if (event.eventType === 'Issue.create' && event.payload.data.id === 'bad') throw new Error('boom');
+        handled.push(event.id);
+      },
+    });
+    const error = vi.spyOn(mastra.getLogger(), 'error');
 
-    await run(
-      service.url,
-      [onConnectEvent({ workflow: unregistered.workflow, inputData: () => ({}) }), reviewTrigger(workflow)],
-      { review: workflow },
+    await vi.waitFor(() => expect(handled).toEqual(['12']));
+    expect(error).toHaveBeenCalledWith(
+      'Connect event handler failed',
+      expect.objectContaining({ eventId: '11', provider: 'linear', eventType: 'Issue.create' }),
     );
-
-    // The first payload has no repository, so its input can't be built.
-    await vi.waitFor(() => expect(inputs).toEqual([{ repo: 'acme/app', number: 8 }]));
-    expect(unregistered.inputs).toHaveLength(0);
   });
 
-  it('starts only workflows for unverified events when asked to', async () => {
-    const { workflow, inputs } = recordingWorkflow('log', z.object({ unverified: z.boolean() }));
+  it('passes unverified events to handlers when asked to', async () => {
     const service = await eventsService([
-      { provider: 'posthog', eventType: '$pageview', unverified: true, sourceEventId: 'p-1' },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_1' } }, unverified: true },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'iss_2' } } },
     ]);
-
+    const seen: boolean[] = [];
     await run(
       service.url,
-      [
-        onConnectEvent({
-          events: { posthog: true },
-          includeUnverified: true,
-          workflow,
-          inputData: event => ({ unverified: event.unverified }),
-        }),
-      ],
-      { log: workflow },
+      { linear: { 'Issue.create': ({ event }) => void seen.push(event.unverified) } },
+      {
+        includeUnverified: true,
+      },
     );
 
-    await vi.waitFor(() => expect(inputs).toEqual([{ unverified: true }]));
+    await vi.waitFor(() => expect(seen).toEqual([true, false]));
   });
 
   it('stops listening when stopped, and listens again when started', async () => {
-    const { workflow } = review();
     const service = await eventsService([]);
-    const { worker } = await run(service.url, [reviewTrigger(workflow)], { review: workflow });
+    const { worker } = await run(service.url, { linear: () => {} });
     await vi.waitFor(() => expect(service.streams).toHaveLength(1));
     expect(worker.isRunning).toBe(true);
+    await worker.start();
 
     await worker.stop({ drainTimeout: 1_000 });
     expect(worker.isRunning).toBe(false);
     await vi.waitFor(() => expect(service.streams[0]!.destroyed || service.streams[0]!.writableEnded).toBe(true));
 
+    expect(service.streams).toHaveLength(1);
     await worker.start();
     await vi.waitFor(() => expect(service.streams).toHaveLength(2));
   });
 
+  it('does not subscribe without handlers', async () => {
+    const service = await eventsService([]);
+    const { worker } = await run(service.url, {});
+
+    expect(worker.isRunning).toBe(false);
+    expect(service.streams).toHaveLength(0);
+  });
+
   it('lets Mastra start its workers without platform credentials, and says why it is not listening', async () => {
-    const { workflow } = review();
-    const worker = new ConnectEventWorker({ triggers: [reviewTrigger(workflow)] });
+    const worker = new ConnectEventWorker({ linear: () => {} });
     const error = vi.fn();
-    const mastra = new Mastra({ workflows: { review: workflow }, workers: [worker], storage: new InMemoryStore() });
+    const mastra = new Mastra({ workers: [worker], storage: new InMemoryStore() });
     instances.push(mastra);
     vi.spyOn(mastra.getLogger(), 'error').mockImplementation(error);
 
