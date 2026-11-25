@@ -105,15 +105,18 @@ describe('E2BFactorySandbox', () => {
     expect((await schema['~standard'].validate({ memoryMb: 16384 })).issues).toBeDefined();
   });
 
-  it('offers one vCPU or an even count up to 8 and rejects an odd count above one', async () => {
+  it('offers one vCPU or an even count up to 64 and rejects an odd count above one', async () => {
     const sandbox = new E2BFactorySandbox({ apiKey: 'e2b_test' });
-    const cpu = describeFactorySandbox(sandbox).settingsSchema.properties?.cpuCount as { oneOf?: unknown };
-    expect(cpu.oneOf).toEqual([{ const: 1 }, { const: 2 }, { const: 4 }, { const: 6 }, { const: 8 }]);
+    const cpu = describeFactorySandbox(sandbox).settingsSchema.properties?.cpuCount as { oneOf: { const: number }[] };
+    const counts = cpu.oneOf.map(member => member.const);
+    expect(counts.slice(0, 4)).toEqual([1, 2, 4, 6]);
+    expect(counts.at(-1)).toBe(64);
+    expect(counts.filter(count => count > 1 && count % 2 === 1)).toEqual([]);
     const schema = normalizeFactorySandboxSettings(sandbox);
-    for (const cpuCount of [1, 2, 8]) {
+    for (const cpuCount of [1, 2, 4, 64]) {
       expect((await schema['~standard'].validate({ cpuCount })).issues).toBeUndefined();
     }
-    for (const cpuCount of [0, 3, 7, 10]) {
+    for (const cpuCount of [0, 3, 5, 63, 66]) {
       expect((await schema['~standard'].validate({ cpuCount })).issues).toBeDefined();
     }
   });

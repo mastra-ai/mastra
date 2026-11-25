@@ -28,8 +28,8 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   publicPorts?: boolean;
 }
 
-/** vCPU counts a sandbox can be created with: one, or an even number. An odd count above one fails at creation. */
-const CPU_COUNTS = [1, ...Array.from({ length: 32 }, (_, index) => (index + 1) * 2)];
+/** vCPU counts a sandbox can be created with: one, or an even number up to 8. Any other count fails at creation. */
+const CPU_COUNTS = [1, 2, 4, 6, 8];
 
 /** Applied when neither the environment setting nor a host default is set. */
 const DEFAULT_SETTINGS = {
