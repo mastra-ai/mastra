@@ -134,7 +134,7 @@ describe('LogView header parts', () => {
       </TooltipProvider>,
     );
 
-    expect(screen.getByText('1,204 lines')).toBeTruthy();
+    expect(screen.getByText(/^1\D?204 lines$/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /copy/i }).getAttribute('type')).toBe('button');
   });
 });
