@@ -32,12 +32,11 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
 const CPU_COUNTS = [1, 2, 4, 6, 8];
 
 /**
- * The largest offered count that does not exceed `count`. A count saved before
- * the list existed, or passed as a default, may not be on it; the sandbox gets
- * the nearest one below so it can still be created.
+ * `count` when it is offered, else the built-in default. A count saved before
+ * the list existed, or passed as a default, may not be on it.
  */
-function offeredCpuCount(count: number): number {
-  return CPU_COUNTS.findLast(offered => offered <= count) ?? CPU_COUNTS[0]!;
+function offeredCpuCount(count: number | undefined): number {
+  return count !== undefined && CPU_COUNTS.includes(count) ? count : DEFAULT_SETTINGS.cpuCount;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
@@ -110,7 +109,7 @@ function settingsSchema(
   defaults: Partial<PlatformFactorySandboxSettings> | undefined,
 ): PublicSchema<PlatformFactorySandboxSettings> {
   const effective = { ...DEFAULT_SETTINGS, ...defaults };
-  effective.cpuCount = offeredCpuCount(effective.cpuCount ?? DEFAULT_SETTINGS.cpuCount);
+  effective.cpuCount = offeredCpuCount(effective.cpuCount);
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
@@ -188,7 +187,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...rest,
       ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
       ...(buildEnvRevision ? { buildEnvRevision } : {}),
-      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount),
+      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });

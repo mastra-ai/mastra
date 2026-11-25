@@ -154,9 +154,9 @@ describe('E2BFactorySandbox', () => {
 
   it.each([
     [3, 2],
-    [7, 6],
-    [65, 64],
-  ])('builds a saved CPU count of %i, which is not offered, as %i', async (saved, used) => {
+    [7, 2],
+    [65, 2],
+  ])('builds a saved CPU count of %i, which is not offered, with the default %i', async (saved, used) => {
     const ctx = context();
     const expected = repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, cpuCount: used });
     const fromSetting = new E2BFactorySandbox().template(ctx, { cpuCount: saved })!;

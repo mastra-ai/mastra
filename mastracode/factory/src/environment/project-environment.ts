@@ -39,19 +39,6 @@ export interface EnvironmentUpdate {
 
 export type EnvironmentIssue = { message: string; path: unknown[] };
 
-/** A setting's choices, ascending, when its schema offers a fixed list of numbers (`enum`, or a `oneOf` of `const`). */
-function numberChoices(schema: unknown): number[] | undefined {
-  if (typeof schema !== 'object' || schema === null) return undefined;
-  const { enum: listed, oneOf } = schema as { enum?: unknown; oneOf?: unknown };
-  const values = Array.isArray(listed)
-    ? listed
-    : Array.isArray(oneOf) && oneOf.every(member => typeof member === 'object' && member !== null && 'const' in member)
-      ? oneOf.map(member => (member as { const: unknown }).const)
-      : undefined;
-  if (!values?.length || !values.every((value): value is number => typeof value === 'number')) return undefined;
-  return [...values].sort((a, b) => a - b);
-}
-
 export type EnvironmentUpdateResult =
   | { project: FactoryProject }
   | { error: 'project_not_found' | 'repository_not_found' | 'incomplete_reorder' | 'no_sandbox' }
@@ -92,7 +79,7 @@ export class ProjectEnvironment {
   ): Promise<
     { merged: Record<string, unknown> | null } | { issues: ReadonlyArray<{ message: string; path?: unknown }> }
   > {
-    const merged: Record<string, unknown> = { ...(this.#nearestChoices(stored) ?? stored) };
+    const merged: Record<string, unknown> = { ...stored };
     for (const [key, value] of Object.entries(patch)) {
       if (value === null) delete merged[key];
       else merged[key] = value;
@@ -118,39 +105,37 @@ export class ProjectEnvironment {
   }
 
   /**
-   * The stored settings with every number that is no longer one of its
-   * setting's offered choices moved to the nearest offered choice below it (the
-   * lowest choice when none is below). Undefined when nothing moves.
-   *
-   * A choice list can replace a free range, or shrink. The value saved before
-   * then would otherwise sit in storage, shown on the settings page, while the
-   * sandbox runs with something else.
+   * The stored settings without the keys the sandbox's schema now rejects (a
+   * tightened range or choice list), so the sandbox falls back to its default
+   * for them. Undefined when nothing is rejected.
    */
-  #nearestChoices(stored: Record<string, unknown>): Record<string, unknown> | undefined {
-    const declared = this.describeSandbox().settingsSchema.properties ?? {};
-    let moved: Record<string, unknown> | undefined;
-    for (const [key, value] of Object.entries(stored)) {
-      if (typeof value !== 'number' || !Object.hasOwn(declared, key)) continue;
-      const choices = numberChoices(declared[key]);
-      if (!choices || choices.includes(value)) continue;
-      moved ??= { ...stored };
-      moved[key] = choices.findLast(choice => choice <= value) ?? choices[0];
-    }
-    return moved;
+  async #withoutRejected(stored: Record<string, unknown>): Promise<Record<string, unknown> | null | undefined> {
+    this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
+    const result = await this.#settingsSchema['~standard'].validate(stored);
+    if (!result.issues) return undefined;
+    const rejected = new Set(
+      result.issues.map(issue => {
+        const segment = issue.path?.[0];
+        return typeof segment === 'object' && segment !== null ? segment.key : segment;
+      }),
+    );
+    const kept = Object.fromEntries(Object.entries(stored).filter(([key]) => !rejected.has(key)));
+    if (Object.keys(kept).length === Object.keys(stored).length) return undefined;
+    return Object.keys(kept).length > 0 ? kept : null;
   }
 
-  /** The project with its stored settings moved onto offered choices, saved when any moved. */
-  async #withOfferedSettings(orgId: string, project: FactoryProject): Promise<FactoryProject> {
-    if (!this.deps.sandbox || !project.sandboxSettings || !this.#nearestChoices(project.sandboxSettings)) {
-      return project;
-    }
+  /** The project with any stored setting its sandbox now rejects removed, saved when one was. */
+  async #withValidSettings(orgId: string, project: FactoryProject): Promise<FactoryProject> {
+    if (!this.deps.sandbox || !project.sandboxSettings) return project;
+    if ((await this.#withoutRejected(project.sandboxSettings)) === undefined) return project;
     const projects = await this.projects();
     const saved = await projects.update({
       orgId,
       id: project.id,
       input: async current => {
-        const sandboxSettings = current.sandboxSettings && this.#nearestChoices(current.sandboxSettings);
-        return sandboxSettings ? { sandboxSettings } : null;
+        if (!current.sandboxSettings) return null;
+        const sandboxSettings = await this.#withoutRejected(current.sandboxSettings);
+        return sandboxSettings === undefined ? null : { sandboxSettings };
       },
     });
     return saved ?? (await projects.get({ orgId, id: project.id })) ?? project;
@@ -201,7 +186,7 @@ export class ProjectEnvironment {
 
   /** The environment as `projectEnvironmentResponseSchema` describes it, minus the build keys. */
   async payload(orgId: string, storedProject: FactoryProject) {
-    const project = await this.#withOfferedSettings(orgId, storedProject);
+    const project = await this.#withValidSettings(orgId, storedProject);
     const repositories = [];
     for (const { handle, projectRepository } of await this.links(orgId, project.id)) {
       const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });

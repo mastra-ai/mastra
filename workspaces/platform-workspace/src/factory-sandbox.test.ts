@@ -204,10 +204,10 @@ describe('PlatformFactorySandbox', () => {
 
   it.each([
     [3, 2],
-    [7, 6],
-    [12, 8],
-    [64, 8],
-  ])('builds a saved CPU count of %i, which is not offered, as %i', async (saved, used) => {
+    [7, 2],
+    [12, 2],
+    [64, 2],
+  ])('builds a saved CPU count of %i, which is not offered, with the default %i', async (saved, used) => {
     const ctx = listContext();
     const sandbox = new PlatformFactorySandbox();
     const fromSetting = await identity(sandbox.template(ctx, { cpuCount: saved }));

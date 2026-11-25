@@ -1468,13 +1468,9 @@ describe('ProjectRoutes', () => {
       const read = async (app: Hono, projectId: string) =>
         (await (await app.request(`/web/factory/projects/${projectId}/environment`)).json()).environment.settings;
 
-      it.each([
-        [3, 2],
-        [64, 8],
-        [0, 1],
-      ])(
-        'moves a stored %i to the nearest choice below when the environment is read, and saves it',
-        async (stored, offered) => {
+      it.each([3, 64, 0])(
+        'drops a stored %i that is not a choice when the environment is read, so the default applies, and saves that',
+        async stored => {
           const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
           await seed.projects.update({
             orgId: 'org-1',
@@ -1482,13 +1478,18 @@ describe('ProjectRoutes', () => {
             input: { sandboxSettings: { cpuCount: stored, label: 'kept' } },
           });
 
-          expect(await read(app, project.id)).toEqual({ cpuCount: offered, label: 'kept' });
-          expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({
-            cpuCount: offered,
-            label: 'kept',
-          });
+          expect(await read(app, project.id)).toEqual({ label: 'kept' });
+          expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ label: 'kept' });
         },
       );
+
+      it('clears the stored settings when the only stored value is not a choice', async () => {
+        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
+        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 3 } } });
+
+        expect(await read(app, project.id)).toEqual({});
+        expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toBeNull();
+      });
 
       it('leaves an offered value alone', async () => {
         const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
@@ -1499,16 +1500,9 @@ describe('ProjectRoutes', () => {
         expect((await seed.projects.getById({ id: project.id }))?.updatedAt).toEqual(before);
       });
 
-      it('moves the stored value before a save of another setting, where it was dropped before', async () => {
-        const { seed, project, app } = await seedEnvironment(new ChoiceFactorySandbox());
-        await seed.projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 3 } } });
+      it('still refuses a save that sets a value that is not a choice', async () => {
+        const { project, app } = await seedEnvironment(new ChoiceFactorySandbox());
 
-        expect((await patch(app, project.id, { settings: { label: 'new' } })).status).toBe(200);
-        expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({
-          cpuCount: 2,
-          label: 'new',
-        });
-        // A save that sets a value outside the list is still refused.
         expect((await patch(app, project.id, { settings: { cpuCount: 3 } })).status).toBe(400);
       });
     });
