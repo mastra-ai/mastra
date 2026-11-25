@@ -321,13 +321,48 @@ describe('runKnowledgeImport', () => {
     it('fails the run flush_too_large when the saved state cannot fit on its own', async () => {
       const host = new RecordingHost();
       const receipt = await runKnowledgeImport({
-        importers: [importer(async ctx => void (await ctx.state.set('cursor', 'c'.repeat(20_000)).catch(() => {})))],
+        importers: [importer(async ctx => await ctx.state.set('cursor', 'c'.repeat(20_000)).catch(() => {}))],
         host,
         bindingId: 'b1',
         maxFlushBytes: 10_000,
       });
       expect(host.attempts).toEqual([]);
       expect(receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
+    it('fails the run flush_too_large rather than send an empty settle flush over the bound', async () => {
+      const host = new RecordingHost();
+      const receipt = await runKnowledgeImport({
+        importers: [importer(async () => {})],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 1,
+      });
+      expect(host.attempts).toEqual([]);
+      expect(receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
+    it('sends what was handed over, so an item changed after upsert cannot grow the request', async () => {
+      const host = new RecordingHost();
+      const receipt = await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            const page = big(1, 100);
+            await ctx.items.upsert(page);
+            page.body = 'a'.repeat(30_000);
+            await ctx.state.set('cursor', 'c1');
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      expect(receipt).toMatchObject({ outcome: 'succeeded' });
+      for (const flush of host.attempts) expect(bytes(flush)).toBeLessThanOrEqual(10_000);
+      const sent = host.flushes.flatMap(f => f.ops);
+      expect(sent).toHaveLength(1);
+      expect(sent[0]).toMatchObject({ op: 'upsert', item: { body: 'a'.repeat(100) } });
+      expect(host.state).toEqual({ cursor: 'c1' });
     });
 
     it('refuses a bound that is not a positive number of bytes', async () => {

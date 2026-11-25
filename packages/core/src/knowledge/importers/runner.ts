@@ -42,8 +42,11 @@ export interface RunKnowledgeImportOptions {
    * Largest flush request, in bytes of the request encoded as JSON (`runId`, `generation`, `seq`,
    * `digest`, `ops` and `state`): the buffer is sent before an op or a saved state would take it
    * over. An op or a state too big for a request on its own ends the run `flush_too_large` before
-   * anything more is sent. A host that wraps the request, or limits its whole HTTP body, sets this
-   * a little under its limit. A positive whole number. Default no limit.
+   * anything more is sent, and so does any request that would still be over it when sent. With a
+   * limit, each pushed op is copied through JSON when handed over, so later changes to it are not
+   * sent and values JSON can't carry arrive as JSON makes them. A host that
+   * wraps the request, or limits its whole HTTP body, sets this a little under its limit. A positive
+   * whole number. Default no limit.
    */
   maxFlushBytes?: number;
   /**
@@ -244,6 +247,13 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       // A stop that arrived while the digest was computed: send nothing.
       if (stop) throw stop;
       const request = { runId, generation, seq, digest, ...body };
+      // The estimate that split the buffer can't cover everything (an empty settle flush, a limit
+      // below the envelope): the request as sent is measured, and is never sent over the limit.
+      if (maxFlushBytes !== Infinity && encodedBytes(request) > maxFlushBytes) {
+        flushFailure = { code: 'flush_too_large' };
+        halt('flush');
+        throw stop;
+      }
       unsettledSeq = seq;
       try {
         const receipt = await withRetries(() => host.flush(request), 'mutation');
@@ -280,11 +290,17 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     const state = stateBytes === undefined ? 0 : 9 + stateBytes;
     return envelopeBytes + bufferBytes + extra + commas + state;
   };
-  /** Measures what the importer hands over; anything unencodable or too big ends the run here. */
-  const measure = (value: unknown, alone: (bytes: number) => number) => {
+  /**
+   * Measures what the importer hands over and returns a copy decoded from that encoding, so a value
+   * the importer changes after handing it over can't outgrow its measured size. Anything
+   * unencodable or too big ends the run here.
+   */
+  const measure = <T>(value: T, alone: (bytes: number) => number): { bytes: number; copy: T } => {
+    let json: string;
     let bytes: number;
     try {
-      bytes = encodedBytes(value);
+      json = JSON.stringify(value);
+      bytes = new TextEncoder().encode(json).byteLength;
     } catch (error) {
       flushFailure = { code: 'importer_error' };
       halt('flush');
@@ -295,14 +311,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       halt('flush');
       throw stop;
     }
-    return bytes;
+    return { bytes, copy: JSON.parse(json) as T };
   };
 
-  const push = async (op: KnowledgeImporterOp) => {
+  const push = async (handed: KnowledgeImporterOp) => {
     if (stop) throw stop;
+    let op = handed;
     let sending: Promise<void> | undefined;
     if (maxFlushBytes !== Infinity) {
-      const bytes = measure(op, opBytes => envelopeBytes + opBytes);
+      const { bytes, copy } = measure(handed, opBytes => envelopeBytes + opBytes);
+      op = copy;
       // Taken now, with the op added after, so ops pushed meanwhile keep their order.
       if (buffer.length > 0 && requestBytes(bytes, 1) > maxFlushBytes) sending = flush();
       bufferBytes += bytes;
@@ -385,7 +403,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
         if (stop) throw stop;
         const staged = { [key]: value };
         if (maxFlushBytes !== Infinity) {
-          const bytes = measure(staged, stateBytes => envelopeBytes + 9 + stateBytes);
+          // State values are strings, so the state needs no copy.
+          const { bytes } = measure(staged, stateBytes => envelopeBytes + 9 + stateBytes);
           // The ops go first on their own; the state follows in the next flush, so it still lands
           // only once they have.
           if (requestBytes(0, 0, bytes) > maxFlushBytes) void flush().catch(() => {});
