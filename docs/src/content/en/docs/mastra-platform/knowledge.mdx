@@ -39,7 +39,7 @@ On the importer's page, select **Run now** to start a run, or stop a run that's 
 
 ### Run your own importers
 
-Your app can also bring its own importer classes, for a tool the platform doesn't support. Pass them to `PlatformKnowledge` and add the route the platform calls to start a run:
+Your app can also bring its own importer classes, for a tool the platform doesn't support. [Write an importer](/docs/knowledge/importers#write-an-importer) shows how to write one. Pass them to `PlatformKnowledge` and add the route the platform calls to start a run:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

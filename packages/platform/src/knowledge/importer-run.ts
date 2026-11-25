@@ -2,7 +2,7 @@
 // runner, and a named import of something missing would stop the whole package from loading.
 import * as coreKnowledge from '@mastra/core/knowledge';
 
-/** Where Platform starts an app's importer run. The deploy wrapper mounts the handler here. */
+/** Where Platform starts an app's importer run. The app mounts `handleImporterRun` here with `registerApiRoute`. */
 export const IMPORTER_RUN_PATH = '/_mastra/knowledge-importers/run';
 /** Where the app talks to its run on the Knowledge API, authorized by the run token alone. */
 const SESSIONS_PATH = '/v1/knowledge-importer-sessions';

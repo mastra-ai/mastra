@@ -351,8 +351,8 @@ export class PlatformKnowledge extends Knowledge {
   }
 
   /**
-   * Answers Mastra Platform's trigger for one importer run (`POST /_mastra/knowledge-importers/run`,
-   * which Platform's deploy mounts). The request's run token is the only input: the run is claimed
+   * Answers Mastra Platform's trigger for one importer run. Mount it at
+   * `POST /_mastra/knowledge-importers/run` with `registerApiRoute`. The request's run token is the only input: the run is claimed
    * from this instance's Knowledge API, its credentials are read from the app's environment, and it
    * runs one of `importerClasses` in the background. Answers 202 once started, 401 without a run
    * token, 404 for another instance's run.
