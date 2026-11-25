@@ -3,9 +3,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import type { ConnectClient } from '@mastra/connect';
-import { onTestFinished } from 'vitest';
+import { Mastra } from '@mastra/core/mastra';
+import { expect, onTestFinished, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 import { createPlatformConnectClient } from '../platform-connect.js';
+import { PlatformEventsWorker } from './events-worker.js';
+import type { PlatformConnectEventRoute, PlatformEventsWorkerOptions } from './events-worker.js';
 
 export interface FakeConnection {
   id: string;
@@ -23,18 +27,6 @@ export interface FakeReply {
   headers?: Record<string, string>;
 }
 
-/** A row of a connection's platform event log, as `GET /v2/connections/:id/events` returns it. */
-export interface FakeConnectionEvent {
-  /** A Redis stream id, `<unix ms>-<sequence>`. */
-  id: string;
-  timestamp: number;
-  integrationId: string;
-  eventType: string;
-  sourceEventId: string | null;
-  payload: unknown;
-  unverified?: boolean;
-}
-
 export interface FakePlatformRequest {
   method: string;
   path: string;
@@ -43,6 +35,19 @@ export interface FakePlatformRequest {
   body?: unknown;
   /** The end user the request was scoped to (`x-mastra-resource-id`), when it was. */
   resourceId?: string;
+}
+
+/** A subscription the fake events service received. */
+export interface FakeStreamRequest {
+  topic: string;
+  lastEventId: string | undefined;
+  afterTimestamp?: number;
+}
+
+interface FakeTopicEvent {
+  id: string;
+  timestamp: number;
+  fields: Record<string, string>;
 }
 
 /** A platform problem response (`application/problem+json`), as the platform itself answers. */
@@ -66,10 +71,6 @@ export class FakePlatform {
   /** Replies for the next project listings, in place of the listing. */
   readonly nextListingReplies: FakeReply[] = [];
   readonly requests: FakePlatformRequest[] = [];
-  /** Each connection's event log, oldest first. */
-  readonly connectionEvents = new Map<string, FakeConnectionEvent[]>();
-  /** Replies for the next event log reads of a connection, in place of the log. */
-  readonly nextEventReplies = new Map<string, FakeReply[]>();
   proxy: (connectionId: string, path: string, query: URLSearchParams, body: unknown) => FakeReply = () => ({
     status: 200,
     body: {},
@@ -83,8 +84,17 @@ export class FakePlatform {
    * `accessToken` here is also what `POST .../github/app/installations/:id/access_tokens` mints.
    */
   readonly credentials = new Map<string, unknown>();
+  /** Events published per topic, oldest first. */
+  readonly topics = new Map<string, FakeTopicEvent[]>();
+  /** Cursors the events service answers with 400, as it does for a cursor outside the stream. */
+  readonly rejectedCursors = new Set<string>();
+  /** Cursors whose following events are trimmed: the stream resumes at the tail after a `gap` frame. */
+  readonly trimmedCursors = new Set<string>();
+  readonly streamRequests: FakeStreamRequest[] = [];
 
   #url = '';
+  #lastEventId = 1_000;
+  readonly #streams = new Set<{ topic: string; res: ServerResponse }>();
 
   get baseUrl(): string {
     return this.#url;
@@ -98,6 +108,49 @@ export class FakePlatform {
     });
   }
 
+  /** Appends an event to a topic and sends it to every open stream on that topic. Returns its id. */
+  publish(topic: string, fields: Record<string, string>, timestamp = Date.now()): string {
+    const event = { id: String(++this.#lastEventId), timestamp, fields };
+    const log = this.topics.get(topic) ?? [];
+    log.push(event);
+    this.topics.set(topic, log);
+    for (const stream of this.#streams) {
+      if (stream.topic === topic) stream.res.write(sseEvent(event));
+    }
+    return event.id;
+  }
+
+  /** Publishes a `connect`-topic event the way the platform's fan-out does. */
+  publishConnect(event: {
+    connectionId: string;
+    integrationId: string;
+    eventType: string;
+    payload: unknown;
+    sourceEventId?: string;
+    resourceId?: string;
+    unverified?: boolean;
+  }): string {
+    return this.publish('connect', {
+      connectionId: event.connectionId,
+      integrationId: event.integrationId,
+      eventType: event.eventType,
+      payload: JSON.stringify(event.payload),
+      ...(event.sourceEventId ? { sourceEventId: event.sourceEventId } : {}),
+      ...(event.resourceId ? { resourceId: event.resourceId } : {}),
+      ...(event.unverified ? { unverified: 'true' } : {}),
+    });
+  }
+
+  /** Drops every open event stream, as a server restart would. */
+  dropStreams(): void {
+    for (const stream of this.#streams) stream.res.destroy();
+    this.#streams.clear();
+  }
+
+  get openStreams(): number {
+    return this.#streams.size;
+  }
+
   count(method: string, path: string): number {
     return this.requests.filter(request => request.method === method && request.path === path).length;
   }
@@ -106,11 +159,19 @@ export class FakePlatform {
     const server = createServer((req, res) => void this.#handle(req, res));
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     this.#url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())));
+    onTestFinished(() => {
+      this.dropStreams();
+      return new Promise<void>(resolve => server.close(() => resolve()));
+    });
     return this;
   }
 
   async #handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const topic = new RegExp(`^/v1/projects/${this.projectId}/topics/([^/?]+)`).exec(req.url ?? '');
+    if (req.method === 'GET' && topic) {
+      this.#stream(decodeURIComponent(topic[1]!), req, res);
+      return;
+    }
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
     const text = Buffer.concat(chunks).toString('utf8');
@@ -135,6 +196,37 @@ export class FakePlatform {
     }
     res.setHeader('content-type', reply.contentType ?? 'application/json');
     res.end(JSON.stringify(reply.body));
+  }
+
+  #stream(topic: string, req: IncomingMessage, res: ServerResponse): void {
+    const header = req.headers['last-event-id'];
+    const lastEventId = typeof header === 'string' ? header : undefined;
+    const timeParam = new URL(req.url ?? '/', 'http://fake').searchParams.get('afterTimestamp');
+    const afterTimestamp = lastEventId === undefined && timeParam !== null ? Number(timeParam) : undefined;
+    this.streamRequests.push({ topic, lastEventId, ...(afterTimestamp !== undefined ? { afterTimestamp } : {}) });
+    if (lastEventId !== undefined && this.rejectedCursors.has(lastEventId)) {
+      res.writeHead(400, { 'content-type': 'application/problem+json' });
+      res.end(JSON.stringify({ type: 'invalid_cursor', title: 'invalid_cursor', status: 400 }));
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store' });
+    const log = this.topics.get(topic) ?? [];
+    const trimmed = lastEventId !== undefined && this.trimmedCursors.has(lastEventId);
+    // Like the events service: a time start begins after the last event at or before that time.
+    const start =
+      afterTimestamp !== undefined
+        ? (log.filter(event => event.timestamp <= afterTimestamp).at(-1)?.id ?? '0')
+        : trimmed || lastEventId === undefined
+          ? String(this.#lastEventId)
+          : lastEventId;
+    res.write(`event: ready\nid: ${start}\nretry: 1000\ndata: \n\n`);
+    if (trimmed) res.write(`event: gap\ndata: ${JSON.stringify({ after: lastEventId, resumedAfter: start })}\n\n`);
+    for (const event of log) {
+      if (BigInt(event.id) > BigInt(start)) res.write(sseEvent(event));
+    }
+    const stream = { topic, res };
+    this.#streams.add(stream);
+    res.on('close', () => this.#streams.delete(stream));
   }
 
   #route(method: string, path: string, query: URLSearchParams, body: unknown): FakeReply {
@@ -169,20 +261,10 @@ export class FakePlatform {
         },
       };
     }
-    const events = /^\/v2\/connections\/([^/]+)\/events$/.exec(path);
-    if (method === 'GET' && events) {
-      const id = decodeURIComponent(events[1]!);
-      const reply = this.nextEventReplies.get(id)?.shift();
-      if (reply) return reply;
-      const after = query.get('afterEventId') ?? '0-0';
-      const limit = Number(query.get('limit') ?? 100);
-      const page = (this.connectionEvents.get(id) ?? []).filter(e => compareStreamIds(e.id, after) > 0).slice(0, limit);
-      return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
-    }
     const context = /^\/v2\/connections\/([^/]+)\/context$/.exec(path);
     if (method === 'GET' && context) {
-      const reply = this.contexts.get(decodeURIComponent(context[1]!));
-      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
+      const body = this.contexts.get(decodeURIComponent(context[1]!));
+      return body === undefined ? problem(404, 'not_found', path) : { status: 200, body };
     }
     const mint = /^\/v2\/connections\/([^/]+)\/github\/app\/installations\/([^/]+)\/access_tokens$/.exec(path);
     if (method === 'POST' && mint) {
@@ -207,8 +289,8 @@ export class FakePlatform {
     }
     const credentials = /^\/v2\/connections\/([^/]+)\/credentials$/.exec(path);
     if (method === 'GET' && credentials) {
-      const reply = this.credentials.get(decodeURIComponent(credentials[1]!));
-      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
+      const body = this.credentials.get(decodeURIComponent(credentials[1]!));
+      return body === undefined ? problem(404, 'not_found', path) : { status: 200, body };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
     if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query, body);
@@ -224,12 +306,34 @@ function parseBody(text: string): unknown {
   }
 }
 
-function compareStreamIds(a: string, b: string): number {
-  const [aMs = 0, aSeq = 0] = a.split('-').map(Number);
-  const [bMs = 0, bSeq = 0] = b.split('-').map(Number);
-  return aMs - bMs || aSeq - bSeq;
+function sseEvent(event: FakeTopicEvent): string {
+  return `event: event\nid: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`;
 }
 
 export function startFakePlatform(): Promise<FakePlatform> {
   return new FakePlatform().start();
+}
+
+/** Starts a `PlatformEventsWorker` on a real Mastra, reading the fake platform's events, and waits for its stream. */
+export async function startEventsWorker(
+  platform: FakePlatform,
+  routes: PlatformConnectEventRoute[],
+  options: PlatformEventsWorkerOptions = {},
+): Promise<{ worker: PlatformEventsWorker; logger: Record<'debug' | 'info' | 'warn' | 'error', Mock> }> {
+  const worker = new PlatformEventsWorker(routes, {
+    accessToken: 'platform-secret',
+    projectId: platform.projectId,
+    eventsUrl: platform.baseUrl,
+    reconnectDelayMs: 5,
+    retry: { delayMs: 1 },
+    ...options,
+  });
+  const mastra = new Mastra({ logger: false });
+  worker.__registerMastra(mastra);
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  vi.spyOn(mastra, 'getLogger').mockReturnValue(logger as unknown as ReturnType<Mastra['getLogger']>);
+  await worker.start();
+  onTestFinished(() => worker.stop());
+  await vi.waitFor(() => expect(platform.openStreams).toBe(1));
+  return { worker, logger };
 }

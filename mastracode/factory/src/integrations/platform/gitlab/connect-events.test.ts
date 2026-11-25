@@ -1,13 +1,10 @@
-import type { WorkerDeps } from '@mastra/core/worker';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { GitLabSignalSubscriptionRow } from '../../gitlab/subscriptions.js';
 import { normalizeGitLabWebhookMetadata } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
-import { PlatformConnectEventPoller } from '../foundation/connect-event-poller.js';
-import type { PlatformConnectEventPollerStorage } from '../foundation/connect-event-poller.js';
-import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
-import { startFakePlatform } from '../foundation/test-utils.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { startEventsWorker, startFakePlatform } from '../foundation/test-utils.js';
 import { handleGitLabConnectEvent } from './connect-events.js';
 import type { GitLabConnectEventDependencies } from './connect-events.js';
 import { PlatformGitLabIntegration } from './integration.js';
@@ -262,49 +259,29 @@ describe('handleGitLabConnectEvent', () => {
 });
 
 describe('PlatformGitLabIntegration events', () => {
-  it("reads a GitLab webhook from the connection's platform event log and runs it through the webhook processor", async () => {
+  it('receives a GitLab webhook from the platform events service and runs it through the webhook processor', async () => {
     const platform = await startFakePlatform();
     platform.orgConnections = [{ id: 'conn-1', integrationId: 'gitlab', status: 'active' }];
     platform.linked.add('conn-1');
-    platform.connectionEvents.set('conn-1', [
-      {
-        id: '2000-0',
-        timestamp: 2_000,
-        integrationId: 'gitlab',
-        eventType: 'Issue Hook',
-        sourceEventId: 'gl-uuid-9',
-        payload: { object_kind: 'issue', project, object_attributes: { iid: 9, action: 'open' } },
-      },
-    ]);
-    const gitlab = new PlatformGitLabIntegration({ connect: platform.connect(), pollingIntervalMs: 45_000 });
+    const gitlab = new PlatformGitLabIntegration({ connect: platform.connect() });
     const handled: PlatformConnectEventDelivery[] = [];
-    const route = gitlab.connectEventRoute({ controller: {} } as never)!;
-    expect(route.pollIntervalMs).toBe(45_000);
+    const route = gitlab.connectEventRoute({} as never);
     const recorded = {
       ...route,
       handle: async (event: PlatformConnectEventDelivery) => {
-        await route.handle(event);
         handled.push(event);
+        await route.handle(event);
       },
     };
-    let saved: unknown = { version: 1, connections: { 'conn-1': { afterEventId: '1-0' } } };
-    const poller = new PlatformConnectEventPoller({
-      storage: {
-        integrationId: 'platform-connect-event-poller',
-        settings: {
-          get: async () => saved,
-          save: async (_o: string, _u: string, next: unknown) => void (saved = structuredClone(next)),
-        },
-      } as unknown as PlatformConnectEventPollerStorage,
-      routes: [recorded],
+    await startEventsWorker(platform, [recorded]);
+
+    platform.publishConnect({
+      connectionId: 'conn-1',
+      integrationId: 'gitlab',
+      eventType: 'Issue Hook',
+      payload: { object_kind: 'issue', project, object_attributes: { iid: 9, action: 'open' } },
+      sourceEventId: 'gl-uuid-9',
     });
-    await poller.init({
-      pubsub: {},
-      storage: {},
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    } as unknown as WorkerDeps);
-    await poller.start();
-    onTestFinished(() => poller.stop());
 
     await vi.waitFor(() =>
       expect(handled).toEqual([expect.objectContaining({ connectionId: 'conn-1', dedupeKey: 'gl-uuid-9' })]),

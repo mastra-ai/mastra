@@ -114,10 +114,9 @@ import {
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
 import {
-  PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID,
-  PlatformConnectEventPoller,
-} from './integrations/platform/foundation/connect-event-poller.js';
-import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
+  PlatformEventsWorker,
+  isPlatformConnectEventSource,
+} from './integrations/platform/foundation/events-worker.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { observeSessionMemoryFailurePosts } from './integrations/slack/memory-failure-post.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
@@ -2825,21 +2824,26 @@ export class MastraFactory {
     const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
       integration.workers ? integration.workers(context) : [],
     );
-    // One event poller per deployment reads the platform event log of every
-    // Platform integration's connections and routes each event to its
-    // integration. Integrations without an event route add nothing.
-    const eventRoutes = readyContexts.flatMap(({ integration, context }) => {
-      if (!isPlatformConnectEventSource(integration)) return [];
-      const route = integration.connectEventRoute(context);
-      return route ? [route] : [];
-    });
-    if (eventRoutes.length > 0) {
-      integrationWorkers.push(
-        new PlatformConnectEventPoller({
-          storage: integrationStorage.forIntegration(PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID),
-          routes: eventRoutes,
-        }),
+    // One events subscription per deployment: the project's Connect events
+    // carry every connection, so each event is routed to the integrations
+    // that own its provider key. Integrations without an event source (Vanta)
+    // add no route, and a deployment with no routes opens no stream. The
+    // worker reads the project of the env's Platform credentials, like every
+    // auto-installed Platform integration's client.
+    const eventRoutes = hasPlatformCredentials()
+      ? readyContexts.flatMap(({ integration, context }) => {
+          if (!isPlatformConnectEventSource(integration)) return [];
+          const route = integration.connectEventRoute(context);
+          return route ? [route] : [];
+        })
+      : [];
+    const eventsProjectId = process.env.MASTRA_PROJECT_ID?.trim();
+    if (eventRoutes.length > 0 && !eventsProjectId) {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
       );
+    } else if (eventRoutes.length > 0) {
+      integrationWorkers.push(new PlatformEventsWorker(eventRoutes));
     }
 
     return {

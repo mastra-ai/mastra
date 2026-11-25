@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createBoardRegistry } from '../../boards/index.js';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
 import { DEFAULT_CONNECTION_CACHE_TTL_MS } from '../platform/foundation/connect-binding.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import {
@@ -456,52 +459,73 @@ describe('PlatformGitLabIntegration', () => {
       mode: 'platform',
       connectionFilterConfigured: true,
       webhookConfigured: false,
-      pollingEnabled: true,
     });
-    expect(gitlab.diagnostics()).not.toHaveProperty('pollingIntervalMs');
+    expect(gitlab.diagnostics()).not.toHaveProperty('pollingEnabled');
   });
 
-  it("routes its connections' events to the Platform event poller by default and reports its settings without needing a webhook secret", () => {
+  it('runs no event poller: events come through its events route, and the reconcile sweeps hourly', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => void vi.useRealTimers());
+    const seeded = await createFactoryStorageForTests();
     const context = {
-      controller: {},
-      storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
-    } as never;
+      storage: { projects: seeded.projects, sourceControl: new SourceControlStorageInMemory(), intake: seeded.intake },
+      runtime: { configVersion: 'gitlab-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const gitlab = platform();
+    vi.spyOn(gitlab, 'listConnections').mockResolvedValue([]);
 
-    const route = platform().connectEventRoute(context);
-    expect(route).toMatchObject({ binding: expect.anything() });
-    expect(route).not.toHaveProperty('pollIntervalMs');
+    const workers = gitlab.workers(context);
+    expect(workers.map(worker => worker.name)).toEqual(['gitlab-issue-reconcile']);
+    const route = gitlab.connectEventRoute(context);
+    expect(route.binding.providerKeys).toEqual(['gitlab', 'gitlab-self-hosted']);
 
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
-    const tuned = platform();
-    expect(tuned.diagnostics()).toMatchObject({
-      pollingEnabled: true,
-      pollingIntervalMs: 45_000,
-      webhookConfigured: false,
+    const acquireLease = vi.fn(async () => ({ acquired: true }));
+    const lease = { acquireLease, renewLease: async () => true, releaseLease: async () => {} };
+    const [worker] = workers;
+    await worker!.init({
+      pubsub: { getLeaseProvider: () => lease },
+      storage: {},
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    } as never);
+    await worker!.start();
+    onTestFinished(() => worker!.stop());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(acquireLease).toHaveBeenCalledTimes(1);
+
+    // The old five-minute cadence no longer applies.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(acquireLease).toHaveBeenCalledTimes(1);
+    // The events worker asks for a sweep when it can't vouch for what it missed.
+    route.reconcile();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(acquireLease).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(acquireLease).toHaveBeenCalledTimes(3);
+  });
+
+  it("refreshes one Factory project's GitLab intake once its workers have the Factory runtime", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const context = {
+      storage: { projects: seeded.projects, sourceControl: new SourceControlStorageInMemory(), intake: seeded.intake },
+      runtime: { configVersion: 'gitlab-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const gitlab = platform();
+    vi.spyOn(gitlab, 'listConnections').mockResolvedValue([]);
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await expect(gitlab.refreshIntake(scope)).resolves.toBeNull();
+
+    gitlab.workers(context);
+
+    await expect(gitlab.refreshIntake(scope)).resolves.toEqual({
+      checked: 0,
+      updated: 0,
+      closed: 0,
+      observed: 0,
+      failed: 0,
+      errors: [],
     });
-    expect(tuned.connectEventRoute(context)).toMatchObject({ pollIntervalMs: 45_000 });
-    expect(() => tuned.connectEventRoute({ storage: context.storage } as never)).toThrow(
-      'Platform GitLab event polling requires the mounted Mastra Code controller.',
-    );
-
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '0');
-    expect(() => platform()).toThrow('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS must be a positive integer.');
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '');
-
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_ENABLED', 'false');
-    const disabled = platform();
-    expect(disabled.diagnostics()).toMatchObject({ pollingEnabled: false });
-    expect(disabled.connectEventRoute({ storage: context.storage } as never)).toBeNull();
-    expect(
-      new PlatformGitLabIntegration({
-        connect: {
-          baseUrl: 'https://integrations.example.com',
-          projectId: 'proj_factory',
-          accessToken: 'platform-token',
-        },
-        pollingEnabled: true,
-        pollingIntervalMs: 30_000,
-      }).diagnostics(),
-    ).toMatchObject({ pollingEnabled: true, pollingIntervalMs: 30_000 });
+    await expect(gitlab.refreshIntake({ orgId: 'org-2', factoryProjectId: project.id })).resolves.toBeNull();
   });
   it.each([
     {

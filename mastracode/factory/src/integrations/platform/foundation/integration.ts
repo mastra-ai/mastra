@@ -3,6 +3,12 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { FactoryIntegration, IntegrationContext } from '../../base.js';
+import {
+  addReconcileSummary,
+  emptyIntakeRefreshSummary,
+  scopeIntegrationContextToProject,
+} from '../../intake-refresh.js';
+import type { IntakeRefreshScope, IntakeRefreshSummary } from '../../intake-refresh.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
@@ -18,10 +24,13 @@ import type {
   PlatformConnectEventDelivery,
   PlatformConnectEventRoute,
   PlatformConnectEventSource,
-} from './connect-events.js';
+} from './events-worker.js';
 
 /** Reconciles run hourly unless an integration says otherwise. */
 export const DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS = 60 * 60_000;
+
+/** The shortest gap between two reconciles requested by events for items with no card yet. */
+export const PLATFORM_DISCOVERY_MIN_GAP_MS = 60_000;
 
 /** A provider the integration registers with the platform connect routes. */
 export interface PlatformConnectProvider {
@@ -69,6 +78,10 @@ export abstract class PlatformConnectIntegration
   readonly #connectProviders: readonly PlatformConnectProvider[];
   readonly #reconcileIntervalMs: number;
   #reconcileWorker: IssueReconcileWorker | undefined;
+  #discoveryRequestedAt = Number.NEGATIVE_INFINITY;
+  #discoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The context `workers()` was given, which a board refresh runs with. */
+  protected workerContext: IntegrationContext | undefined;
 
   constructor(options: PlatformConnectIntegrationOptions) {
     this.id = options.id;
@@ -154,6 +167,7 @@ export abstract class PlatformConnectIntegration
    * extra reconcile. The integration's storage remembers what was linked.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     void this.binding.ensureBootLinked(ctx.storage.generic);
     const reconcile = this.reconcile(ctx);
     if (!reconcile) return [];
@@ -173,8 +187,56 @@ export abstract class PlatformConnectIntegration
   }
 
   /**
-   * Handles one event from a connection's platform event log. Integrations
-   * without provider events leave it undefined and get no route.
+   * Runs the integration's reconcile now for one Factory project, outside the
+   * worker's lease: a refresh is idempotent like any reconcile, and waits for
+   * nothing but its own project.
+   */
+  async refreshIntake(scope: IntakeRefreshScope): Promise<IntakeRefreshSummary | null> {
+    if (!this.workerContext) return null;
+    const scoped = await scopeIntegrationContextToProject(this.workerContext, scope);
+    return scoped ? this.refreshProject(scoped.context, this.workerContext) : null;
+  }
+
+  /**
+   * One project's refresh. `scoped` lists only that project; `full` is the
+   * unscoped context, for integrations whose reconcile reads every project
+   * for more than walking them.
+   */
+  protected async refreshProject(
+    scoped: IntegrationContext,
+    _full: IntegrationContext,
+  ): Promise<IntakeRefreshSummary | null> {
+    const reconcile = this.reconcile(scoped);
+    if (!reconcile) return null;
+    return addReconcileSummary(emptyIntakeRefreshSummary(), await reconcile());
+  }
+
+  /**
+   * Runs the reconcile so it files an item an event named that has no card
+   * yet. Requests are throttled to one per `PLATFORM_DISCOVERY_MIN_GAP_MS`:
+   * one inside the gap runs once at its end, so a burst of events, or events
+   * for items no binding takes, costs at most one reconcile a minute.
+   */
+  requestDiscovery(): void {
+    if (this.#discoveryTimer) return;
+    const now = Date.now();
+    const wait = this.#discoveryRequestedAt + PLATFORM_DISCOVERY_MIN_GAP_MS - now;
+    if (wait <= 0) {
+      this.#discoveryRequestedAt = now;
+      this.requestReconcile();
+      return;
+    }
+    this.#discoveryTimer = setTimeout(() => {
+      this.#discoveryTimer = undefined;
+      this.#discoveryRequestedAt = Date.now();
+      this.requestReconcile();
+    }, wait);
+    this.#discoveryTimer.unref?.();
+  }
+
+  /**
+   * Handles one `connect`-topic event for this integration's connections.
+   * Integrations without provider events leave it undefined and get no route.
    */
   protected handleConnectEvent?(event: PlatformConnectEventDelivery, ctx: IntegrationContext): Promise<void>;
 

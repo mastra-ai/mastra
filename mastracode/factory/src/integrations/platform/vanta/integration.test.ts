@@ -375,6 +375,53 @@ describe('Vanta sync through the Factory project connections', () => {
     expect(commits).not.toHaveBeenCalled();
   });
 
+  it("refreshes one Factory project's Vanta cards now, leaving the org's other projects alone", async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-vanta', integrationId: 'vanta', status: 'active' }];
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const { vanta, ctx, commits, filed } = await setup(platform);
+    const seededProjects = ctx.storage.projects;
+    const other = await seededProjects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'other' } });
+    const workItems = ctx.runtime!.workItems;
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: other.id,
+      input: {
+        externalSource: { integrationId: 'vanta', type: 'vulnerability', externalId: 'vuln-filed' },
+        title: 'lodash: CVE-2026-9',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { state: 'open' },
+      },
+    });
+    const scope = { orgId: 'org-1', factoryProjectId: filed.factoryProjectId };
+    await expect(vanta.refreshIntake(scope)).resolves.toBeNull();
+
+    vanta.workers(ctx);
+    await vi.waitFor(() => expect(platform.linked.has('conn-vanta')).toBe(true));
+    const summary = await vanta.refreshIntake(scope);
+
+    expect(summary).toMatchObject({ checked: 1, failed: 0 });
+    const evaluated = new Set(commits.mock.calls.map(([input]) => input.factoryProjectId));
+    expect(evaluated).toEqual(new Set([filed.factoryProjectId]));
+  });
+
+  it("refuses a global Vanta connection on refresh too, when another org's project could own it", async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-vanta', integrationId: 'vanta', status: 'active' }];
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const { vanta, ctx, commits, filed } = await setup(platform);
+    await ctx.storage.projects.create({ orgId: 'org-2', userId: 'user-2', input: { name: 'tenant' } });
+    vanta.workers(ctx);
+    await vi.waitFor(() => expect(platform.linked.has('conn-vanta')).toBe(true));
+
+    await vanta.refreshIntake({ orgId: 'org-1', factoryProjectId: filed.factoryProjectId });
+
+    expect(commits).not.toHaveBeenCalled();
+    expect(platform.requests.some(request => request.path.includes('/proxy'))).toBe(false);
+  });
+
   it('syncs every 15 minutes unless syncIntervalMs says otherwise', () => {
     const offline = { baseUrl: 'http://127.0.0.1:9', accessToken: 'platform-secret', projectId: 'proj_factory' };
     expect(new PlatformVantaIntegration({ connect: offline }).reconcileIntervalMs).toBe(15 * 60_000);

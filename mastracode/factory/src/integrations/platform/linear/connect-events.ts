@@ -1,7 +1,7 @@
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
 import { logPlatformWarn } from '../logging.js';
 
 /** How many handled delivery keys are remembered to skip replays. */
@@ -36,7 +36,7 @@ export interface LinearConnectEventDeps {
 }
 
 /**
- * Handles one Linear webhook from a connection's platform event log: the raw webhook body
+ * Handles one Linear webhook from the `connect` topic: the raw webhook body
  * of a migrated workspace, published by the platform after its HMAC check.
  *
  * An Issue event updates the issue's cards, but only in the `(org, project)`
@@ -54,7 +54,7 @@ export interface LinearConnectEventDeps {
  * deployment serving several organizations), only cards that know the issue's
  * id are updated: that id names this one Linear issue.
  *
- * Throws when a project's ingest fails, so the event poller retries; ingest
+ * Throws when a project's ingest fails, so the events worker retries; ingest
  * is idempotent per issue revision, so projects that already succeeded are
  * not changed twice.
  */

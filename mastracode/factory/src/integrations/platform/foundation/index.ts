@@ -15,11 +15,10 @@ export type { PlatformConnectIntegrationOptions, PlatformConnectProvider } from 
 export { PlatformIntakeCapability } from './intake.js';
 export { PlatformVersionControlCapability } from './version-control.js';
 export type { PlatformConnectionCredential } from './version-control.js';
-export { PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID, PlatformConnectEventPoller } from './connect-event-poller.js';
-export type { PlatformConnectEventPollerConfig, PlatformConnectEventPollerStorage } from './connect-event-poller.js';
-export { isPlatformConnectEventSource } from './connect-events.js';
+export { PlatformEventsWorker, isPlatformConnectEventSource } from './events-worker.js';
 export type {
   PlatformConnectEventDelivery,
   PlatformConnectEventRoute,
   PlatformConnectEventSource,
-} from './connect-events.js';
+  PlatformEventsWorkerOptions,
+} from './events-worker.js';

@@ -24,7 +24,7 @@ import type { LinearConnectionWorkspace, LinearWorkspaceListingError } from '../
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
-import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
 import { logPlatformBootInfo, logPlatformInfo } from '../logging.js';
 import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
@@ -55,8 +55,8 @@ export interface PlatformLinearIntegrationConfig {
  * a lease so only one replica migrates. A workspace is migrated once; one already
  * migrated is never sent again, and its connection is linked only if this
  * project has never had it. Migration links each new connection
- * to the Factory project, and the workspace's webhooks land in the
- * connection's platform event log from then on. Until a workspace is migrated, Platform
+ * to the Factory project, so the workspace's webhooks reach the project's
+ * `connect` topic from then on. Until a workspace is migrated, Platform
  * Linear reports `migration_required` for it; there is no legacy fallback.
  */
 export class PlatformLinearIntegration extends PlatformConnectIntegration {
@@ -256,7 +256,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
   }
 
   /**
-   * Linear webhooks of migrated workspaces, from their connections' event logs. The
+   * Linear webhooks of migrated workspaces, from the `connect` topic. The
    * route exists from boot, before any workspace is migrated, so a workspace
    * migrated later gets its events without a restart.
    */

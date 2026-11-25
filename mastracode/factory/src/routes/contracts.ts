@@ -361,6 +361,22 @@ const intakeRouteAgainResponseSchema = z.object({
   phaseKey: z.string(),
   routeId: z.string(),
 });
+const intakeRefreshSummarySchema = z.object({
+  checked: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  closed: z.number().int().nonnegative(),
+  observed: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+});
+const intakeRefreshResponseSchema = z.object({
+  /** One entry per integration that could refresh the project; an integration without a runtime yet is left out. */
+  integrations: z.array(
+    z.discriminatedUnion('status', [
+      z.object({ integrationId: z.string(), status: z.literal('refreshed'), summary: intakeRefreshSummarySchema }),
+      z.object({ integrationId: z.string(), status: z.literal('failed') }),
+    ]),
+  ),
+});
 /** A board's rules as edited, not saved yet: they stand in for all of that board's rules. */
 const intakeDraftBoardSchema = z
   .object({
@@ -1798,6 +1814,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Run intake again for an item no board took, filing it where the rules now say',
     pathSchema: intakeDecisionPathSchema,
     responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeRefresh: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/refresh',
+    description:
+      "Reconcile the project's intake sources now: re-read its cards' items and file what the sources hold, catching anything an event missed",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRefreshResponseSchema,
   },
   intakeSkippedList: {
     method: 'GET',

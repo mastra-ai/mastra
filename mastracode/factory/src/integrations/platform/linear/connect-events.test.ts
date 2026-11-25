@@ -1,4 +1,3 @@
-import type { WorkerDeps } from '@mastra/core/worker';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
@@ -6,9 +5,8 @@ import type { FactoryLinearRuleContext } from '../../../rules/types.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformConnectEventPoller } from '../foundation/connect-event-poller.js';
-import type { PlatformConnectEventPollerStorage } from '../foundation/connect-event-poller.js';
-import type { PlatformConnectEventDelivery } from '../foundation/connect-events.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { startEventsWorker } from '../foundation/test-utils.js';
 import { handleLinearConnectEvent } from './connect-events.js';
 import type { LinearConnectEventDeps } from './connect-events.js';
 import { PlatformLinearIntegration } from './integration.js';
@@ -351,30 +349,7 @@ describe('handleLinearConnectEvent', () => {
   });
 });
 
-describe('PlatformLinearIntegration through the Connect event poller', () => {
-  /** Appends a webhook to a connection's platform event log, as the platform's Linear route does for a migrated workspace. */
-  function logWebhook(
-    fake: FakeLinear,
-    connectionId: string,
-    event: { id: string; sourceEventId: string; payload: unknown },
-  ): void {
-    const log = fake.platform.connectionEvents.get(connectionId) ?? [];
-    log.push({
-      id: event.id,
-      timestamp: Date.now(),
-      integrationId: 'linear',
-      eventType: 'Issue.update',
-      sourceEventId: event.sourceEventId,
-      payload: event.payload,
-    });
-    fake.platform.connectionEvents.set(connectionId, log);
-  }
-
-  /** Reads of a connection's event log the poller made. */
-  function eventReads(fake: FakeLinear, connectionId: string): number {
-    return fake.platform.requests.filter(r => r.path === `/v2/connections/${connectionId}/events`).length;
-  }
-
+describe('PlatformLinearIntegration through the events worker', () => {
   async function seedCard() {
     const seeded = await createFactoryStorageForTests();
     const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
@@ -402,7 +377,7 @@ describe('PlatformLinearIntegration through the Connect event poller', () => {
     return { context };
   }
 
-  /** The integration with a rule that records the issues it observes, and the poller with its route. */
+  /** The integration with a rule that records the issues it observes, and the events worker with its route. */
   async function start(fake: FakeLinear) {
     const { context } = await seedCard();
     const observed: Array<{ title: string; state: string; tracked: boolean }> = [];
@@ -417,41 +392,20 @@ describe('PlatformLinearIntegration through the Connect event poller', () => {
     // Registered at boot, whether or not any workspace is migrated yet.
     const route = linear.connectEventRoute(context);
     expect(route).not.toBeNull();
-    let saved: unknown = null;
-    const worker = new PlatformConnectEventPoller({
-      storage: {
-        integrationId: 'platform-connect-event-poller',
-        settings: {
-          get: async () => saved,
-          save: async (_o: string, _u: string, next: unknown) => void (saved = next),
-        },
-      } as unknown as PlatformConnectEventPollerStorage,
-      routes: [route!],
-      intervalMs: 20,
-      retryDelayMs: 5,
-    });
-    await worker.init({
-      pubsub: {},
-      storage: {},
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    } as unknown as WorkerDeps);
-    await worker.start();
-    onTestFinished(async () => {
-      await worker.stop();
-      linear.migration.stop();
-    });
-    return { linear, observed, route: route! };
+    onTestFinished(() => linear.migration.stop());
+    await startEventsWorker(fake.platform, [route!]);
+    return { linear, observed };
   }
 
   it("routes a linear event to Linear's handler, which updates the tracked card", async () => {
     const fake = await startFakeLinear();
     const connectionId = fake.connect(linearWorkspace());
     const { observed } = await start(fake);
-    // The poller starts a connection it hasn't read before at the present moment.
-    await vi.waitFor(() => expect(eventReads(fake, connectionId)).toBeGreaterThan(0));
 
-    logWebhook(fake, connectionId, {
-      id: `${Date.now() + 1}-0`,
+    fake.platform.publishConnect({
+      connectionId,
+      integrationId: 'linear',
+      eventType: 'Issue.update',
       sourceEventId: 'delivery-1',
       payload: issueWebhook({ title: 'Fix intake (renamed)' }),
     });
@@ -472,9 +426,10 @@ describe('PlatformLinearIntegration through the Connect event poller', () => {
     const [connection] = await linear.listConnections();
     expect(connection?.integrationId).toBe('linear');
 
-    await vi.waitFor(() => expect(eventReads(fake, connection!.id)).toBeGreaterThan(0));
-    logWebhook(fake, connection!.id, {
-      id: `${Date.now() + 1}-0`,
+    fake.platform.publishConnect({
+      connectionId: connection!.id,
+      integrationId: 'linear',
+      eventType: 'Issue.update',
       sourceEventId: 'delivery-after-migration',
       payload: issueWebhook({ title: 'Fix intake after migration' }),
     });
@@ -487,12 +442,17 @@ describe('PlatformLinearIntegration through the Connect event poller', () => {
   it('counts unverified events it drops in diagnostics', async () => {
     const fake = await startFakeLinear();
     const connectionId = fake.connect(linearWorkspace());
-    const { linear, observed, route } = await start(fake);
+    const { linear, observed } = await start(fake);
 
-    // The platform event log carries no verification flag, so the route is handed the delivery directly.
-    await route.handle(delivery(issueWebhook(), { connectionId, unverified: true }));
+    fake.platform.publishConnect({
+      connectionId,
+      integrationId: 'linear',
+      eventType: 'Issue.update',
+      payload: issueWebhook(),
+      unverified: true,
+    });
 
-    expect(linear.diagnostics()).toMatchObject({ unverifiedEventsDropped: 1 });
+    await vi.waitFor(() => expect(linear.diagnostics()).toMatchObject({ unverifiedEventsDropped: 1 }));
     expect(observed).toEqual([]);
   });
 });

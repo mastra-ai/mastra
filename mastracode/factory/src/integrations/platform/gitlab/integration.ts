@@ -7,12 +7,15 @@ import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
 import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase, normalizeGitLabHost } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
+import { attachGitLabReconciler } from '../../gitlab/reconciler.js';
+import { gitlabReconciliationInterval } from '../../gitlab/reconciliation-config.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { PlatformConnectProviderRegistration, PlatformConnectProviderSource } from '../connect/routes.js';
 import { PlatformConnectBinding } from '../foundation/connect-binding.js';
 import type { PlatformConnection } from '../foundation/connect-binding.js';
-import type { PlatformConnectEventRoute, PlatformConnectEventSource } from '../foundation/connect-events.js';
+import type { PlatformConnectEventRoute, PlatformConnectEventSource } from '../foundation/events-worker.js';
+import { DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS } from '../foundation/integration.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 import { handleGitLabConnectEvent } from './connect-events.js';
 
@@ -41,13 +44,10 @@ export interface PlatformGitLabIntegrationConfig {
   connectionId?: string;
   /**
    * Optional. Only a direct project webhook to `/web/gitlab/webhook` needs it;
-   * a Platform-connected deployment receives events by polling instead.
+   * a Platform-connected deployment receives events from the platform events
+   * service instead.
    */
   webhookSecret?: string;
-  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`, and to true when that is unset. */
-  pollingEnabled?: boolean;
-  /** Defaults to `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`, and to the poller's 20 s when unset. */
-  pollingIntervalMs?: number;
 }
 
 /**
@@ -63,8 +63,6 @@ export class PlatformGitLabIntegration
   readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
   readonly #webhookSecret: string | undefined;
-  readonly #pollingEnabled: boolean;
-  readonly #pollingIntervalMs: number | undefined;
   #reconcileWorker: IssueReconcileWorker | undefined;
   // Keyed by the connection record, so a self-hosted instance is re-read
   // whenever the binding re-reads the connection list, e.g. after a reconnect.
@@ -73,6 +71,7 @@ export class PlatformGitLabIntegration
   // stays on that instance: anything already built from it (source ids, linked
   // repositories, cached contexts) would otherwise reach a different server.
   readonly #instances = new Map<string, string>();
+  #unverifiedEventsDropped = 0;
 
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
@@ -87,10 +86,6 @@ export class PlatformGitLabIntegration
     this.#connectionId = connectionId;
     this.#endpointHost = new URL(this.binding.connect.baseUrl).host;
     this.#webhookSecret = config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
-    this.#pollingEnabled =
-      config.pollingEnabled ?? process.env.MASTRA_PLATFORM_GITLAB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    this.#pollingIntervalMs =
-      config.pollingIntervalMs ?? optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS');
   }
 
   listConnections(): Promise<PlatformConnection[]> {
@@ -189,37 +184,39 @@ export class PlatformGitLabIntegration
   }
 
   /**
-   * The reconcile sweeps from the base class. Events come through the
-   * deployment's Platform Connect event poller (`connectEventRoute`), which
-   * replaces the direct project webhook: the webhook route stays mounted for
-   * deployments that also configured a secret, but nothing in Platform mode
-   * requires one.
+   * The issue and merge request reconcile, hourly by default: GitLab events
+   * arrive through the platform events worker (`connectEventRoute`), so the
+   * reconcile only repairs what that missed. The webhook route stays mounted
+   * for deployments that also configured a secret, but nothing in Platform
+   * mode requires one.
    */
   override workers(ctx: IntegrationContext): MastraWorker[] {
+    this.workerContext = ctx;
     void this.binding.ensureBootLinked(ctx.storage.generic);
-    const workers = super.workers(ctx);
-    this.#reconcileWorker = workers.find(worker => worker instanceof IssueReconcileWorker);
-    return workers;
+    const reconcile = attachGitLabReconciler(this, ctx);
+    if (!reconcile) return [];
+    const worker = new IssueReconcileWorker({
+      integrationId: this.id,
+      reconcile,
+      intervalMs: gitlabReconciliationInterval() ?? DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
+    });
+    this.#reconcileWorker = worker;
+    this.binding.onConnectionsLinked(() => worker.requestRun());
+    return [worker];
   }
 
-  /** The route the Platform Connect event poller reads GitLab events through, unless polling is off. */
-  connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute | null {
-    if (!this.#pollingEnabled) return null;
-    const controller = ctx.controller;
-    if (!controller) {
-      throw new Error('Platform GitLab event polling requires the mounted Mastra Code controller.');
-    }
+  connectEventRoute(ctx: IntegrationContext): PlatformConnectEventRoute {
     const ingestFactoryEvent = attachGitLabRules(this, ctx);
     return {
       binding: this.binding,
       handle: event =>
         handleGitLabConnectEvent(event, {
-          controller,
+          ...(ctx.controller ? { controller: ctx.controller } : {}),
           gitlab: this,
           ingestFactoryEvent,
+          onUnverifiedDropped: () => (this.#unverifiedEventsDropped += 1),
         }),
       reconcile: () => this.#reconcileWorker?.requestRun(),
-      ...(this.#pollingIntervalMs === undefined ? {} : { pollIntervalMs: this.#pollingIntervalMs }),
     };
   }
 
@@ -230,8 +227,7 @@ export class PlatformGitLabIntegration
       endpointHost: this.#endpointHost,
       connectionFilterConfigured: Boolean(this.#connectionId),
       webhookConfigured: Boolean(this.#webhookSecret),
-      pollingEnabled: this.#pollingEnabled,
-      ...(this.#pollingIntervalMs === undefined ? {} : { pollingIntervalMs: this.#pollingIntervalMs }),
+      ...(this.#unverifiedEventsDropped > 0 ? { unverifiedEventsDropped: this.#unverifiedEventsDropped } : {}),
       ...(this.binding.needsLinking.length > 0 ? { needsLinking: this.binding.needsLinking } : {}),
       ...(this.binding.detached.length > 0 ? { detached: this.binding.detached } : {}),
     };
@@ -343,14 +339,4 @@ function selfHostedHostname(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS'): number | undefined {
-  const value = process.env[name]?.trim();
-  if (!value) return undefined;
-  const parsed = Number(value);
-  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(parsed)) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-  return parsed;
 }
