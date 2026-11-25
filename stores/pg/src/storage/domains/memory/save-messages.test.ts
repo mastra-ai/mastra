@@ -119,7 +119,7 @@ describe('MemoryPG.saveMessages', () => {
 
     await memory.saveMessages({ messages: [createMessage({ id: 'message-1', createdAt })] });
 
-    const [insertQuery, threadUpdateQuery] = client.txClient.queries;
+    const [, insertQuery, threadUpdateQuery] = client.txClient.queries;
     expect(insertQuery!.values![3]).toBe(createdAt.toISOString());
     expect(insertQuery!.values![4]).toBe(createdAt.toISOString());
     expect(threadUpdateQuery!.values![0]).toMatch(/Z$/);
@@ -138,8 +138,8 @@ describe('MemoryPG.saveMessages', () => {
       ],
     });
 
-    expect(client.txClient.queries).toHaveLength(2);
-    const [insertQuery, threadUpdateQuery] = client.txClient.queries;
+    expect(client.txClient.queries).toHaveLength(3);
+    const [, insertQuery, threadUpdateQuery] = client.txClient.queries;
     expect(insertQuery!.query).toContain(
       'VALUES ($1, $2, $3, $4, $5, $6, $7, $8), ($9, $10, $11, $12, $13, $14, $15, $16), ($17, $18, $19, $20, $21, $22, $23, $24)',
     );
@@ -160,7 +160,7 @@ describe('MemoryPG.saveMessages', () => {
       ],
     });
 
-    const [insertQuery] = client.txClient.queries;
+    const [, insertQuery] = client.txClient.queries;
     expect(insertQuery!.query).toContain('VALUES ($1, $2, $3, $4, $5, $6, $7, $8)');
     expect(insertQuery!.query).not.toContain('$9');
     expect(insertQuery!.values).toHaveLength(8);
@@ -176,8 +176,8 @@ describe('MemoryPG.saveMessages', () => {
 
     await memory.saveMessages({ messages });
 
-    expect(client.txClient.queries).toHaveLength(3);
-    const [firstInsertQuery, secondInsertQuery, threadUpdateQuery] = client.txClient.queries;
+    expect(client.txClient.queries).toHaveLength(4);
+    const [, firstInsertQuery, secondInsertQuery, threadUpdateQuery] = client.txClient.queries;
     expect(firstInsertQuery!.query).toContain('INSERT INTO "public"."mastra_messages"');
     expect(firstInsertQuery!.values).toHaveLength(65528);
     expect(secondInsertQuery!.query).toContain('INSERT INTO "public"."mastra_messages"');
@@ -259,8 +259,11 @@ describe('MemoryPG.saveMessages', () => {
       ],
     });
 
-    expect(client.txClient.queries).toHaveLength(3);
-    const [insertQuery, firstThreadUpdate, secondThreadUpdate] = client.txClient.queries;
+    expect(client.txClient.queries).toHaveLength(4);
+    const [threadLock, insertQuery, firstThreadUpdate, secondThreadUpdate] = client.txClient.queries;
+    // Every touched thread is locked, in one statement, before any message row.
+    expect(threadLock!.query).toContain('FOR NO KEY UPDATE');
+    expect(threadLock!.values).toEqual([['thread-1', 'thread-2']]);
     expect(insertQuery!.query).toContain('INSERT INTO "public"."mastra_messages"');
     expect(firstThreadUpdate!.values![2]).toBe('thread-1');
     expect(secondThreadUpdate!.values![2]).toBe('thread-2');
