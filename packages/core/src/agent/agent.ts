@@ -13187,12 +13187,18 @@ export class Agent<
       const currentFence = getRunRegistryEntry(runId, this.#mastra)?.executionFence;
       // A continuation can finish an earlier reader after resume replaced its execution.
       if (currentFence && currentFence !== executionFence) return;
+      // The workers settle a run this process detached from. Its terminal event can arrive after the
+      // detach, and the reader still delivers it.
+      if (executionFence.detached) return;
       try {
         await publisher?.settle(status);
       } catch (error) {
-        if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
+        const unverified = error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID;
         // The local reader still finishes, but cannot mutate shared lifecycle state.
-        this.#unverifiedReaderFences.add(executionFence);
+        if (unverified) this.#unverifiedReaderFences.add(executionFence);
+        // The detach can also land while the write waits in the publisher's queue.
+        if (executionFence.detached) return;
+        if (!unverified) throw error;
         this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: terminal ownership could not be verified`, { error });
       }
     };
@@ -13463,6 +13469,7 @@ export class Agent<
     abortController,
     executionFence,
     originalSpansEnded,
+    openStepsOf,
     latestMessageListState,
   }: {
     runId: string;
@@ -13470,6 +13477,8 @@ export class Agent<
     abortController: AbortController;
     executionFence: ExecutionFence;
     originalSpansEnded: boolean;
+    /** The generations whose MODEL_STEP the crash left open, when the snapshot names them. */
+    openStepsOf?: string[];
     /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
     latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
@@ -13689,6 +13698,7 @@ export class Agent<
           outcome: null,
           name: `llm: '${model?.modelId ?? ''}'`,
           attributes: { model: model?.modelId, provider: model?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, recovered: true },
           requestContext,
         });
@@ -13705,7 +13715,11 @@ export class Agent<
         ? {
             ...openedSegment(recoverAgentSpan, recoverModelSpan),
             adoptsOpenSteps: true,
-            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+            ...(openStepsOf
+              ? { openStepsOf }
+              : originalSpansEnded && origModelSpanData?.id
+                ? { endedStepsOf: origModelSpanData.id }
+                : {}),
           }
         : null,
     );
@@ -14234,6 +14248,7 @@ export class Agent<
         abortController,
         executionFence,
         originalSpansEnded: loaded.originalSpansEnded,
+        openStepsOf: loaded.openStepsOf,
         latestMessageListState: await this.loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
@@ -15953,6 +15968,7 @@ export class Agent<
           outcome: null,
           name: `llm: '${resumeModel?.modelId ?? ''}'`,
           attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          tracingPolicy: agentTracingPolicy,
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });

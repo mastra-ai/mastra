@@ -76,6 +76,7 @@
  */
 
 import { expect, vi } from 'vitest';
+import type { ObservabilityEntrypoint } from '../../../observability';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
@@ -227,6 +228,12 @@ export type ScenarioOptions<K extends RestartKind> = {
    * they are at `restart()`, which is the checkpoint only while graph 1 is parked.
    */
   storageVersion?: 1 | 2;
+  /** Observability for each graph's Mastra, so a test can read the spans both processes emit. */
+  observability?: (generation: number) => ObservabilityEntrypoint;
+  /** `off` saves no checkpoint while a step runs, as a Mastra without automatic recovery does. Defaults to `auto`. */
+  recovery?: 'auto' | 'off';
+  /** Called for each chunk of the recovered stream, for a run that asks for approval again. */
+  onRecoveredChunk?: (chunk: any, graph: Graph) => void;
 };
 
 export type Graph = {
@@ -273,7 +280,8 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       logger: false,
       storage,
       agents: { [built.id]: agent as any },
-      recovery: { durableAgents: 'auto' },
+      recovery: { durableAgents: options.recovery ?? 'auto' },
+      ...(options.observability ? { observability: options.observability(generation) } : {}),
     });
     const expectedEngine = options.kind === 'evented' ? 'evented' : 'default';
     expect((agent.getWorkflow() as { engineType?: string }).engineType).toBe(expectedEngine);
@@ -510,6 +518,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
         let usage: AgentRestartResult['usage'];
         for await (const chunk of recovered.fullStream) {
           chunkTypes.push(chunk.type);
+          options.onRecoveredChunk?.(chunk, graph);
           if (chunk.type === 'error') streamErrors.push(String(chunk.payload?.error?.message ?? chunk.payload));
           if (chunk.type === 'finish') {
             text = chunk.payload.output?.text;

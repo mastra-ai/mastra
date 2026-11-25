@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
 import { createPolicyTestRegistry } from '../boards/test-utils.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
@@ -474,7 +475,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      transitionService,
+      new DispatcherBoardEngine({ transitionService }),
       makeSourceControl() as never,
     );
 
@@ -507,7 +508,7 @@ describe('FactoryStartCoordinator', () => {
       const coordinator = new FactoryStartCoordinator(
         makeController().controller as never,
         storage,
-        transitionService,
+        new DispatcherBoardEngine({ transitionService }),
         sourceControl as never,
       );
       const prepared = await coordinator.prepare({
@@ -654,7 +655,13 @@ describe('FactoryStartCoordinator', () => {
       const coordinator = new FactoryStartCoordinator(
         controller as never,
         storage,
-        new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards: createBoardRegistry() }),
+        new DispatcherBoardEngine({
+          transitionService: new FactoryTransitionService({
+            storage,
+            configVersion: 'rules-v1',
+            boards: createBoardRegistry(),
+          }),
+        }),
         makeSourceControl() as never,
         undefined,
         undefined,
@@ -757,7 +764,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      transitionService,
+      new DispatcherBoardEngine({ transitionService }),
       makeSourceControl() as never,
     );
 
