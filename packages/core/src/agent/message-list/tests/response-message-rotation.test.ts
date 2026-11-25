@@ -116,7 +116,42 @@ describe('MessageList response message rotation with an assistant-ending input',
       .filter(message => message.role === 'assistant')
       .map(message => message.id);
     expect(assistantIds).toEqual(['recalled-reply', 'prefill', 'response-1']);
+    const prefill = messageList.get.all.db().find(message => message.id === 'prefill');
+    expect(prefill?.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
+    expect(prefill?.content.parts).toMatchObject([{ type: 'text', text: 'partial answer' }]);
     const recalled = messageList.get.all.db().find(message => message.id === 'recalled-reply');
     expect(recalled?.content.metadata).toBeUndefined();
+  });
+});
+
+describe('MessageList response message rotation with an earlier-turn assistant tail', () => {
+  it('Given a memory assistant sorted after this run’s response, When the id rotates without a seal target, Then neither message is sealed', () => {
+    const messageList = new MessageList({ threadId: 'thread-1' });
+    messageList.add({ role: 'user', content: 'hi' }, 'input');
+    messageList.add({ ...assistantMessage('response-1', 'this turn'), threadId: 'thread-1' }, 'response');
+    messageList.add(
+      { ...assistantMessage('recalled', 'earlier'), threadId: 'thread-1', createdAt: new Date(Date.now() + 60_000) },
+      'memory',
+    );
+    expect(messageList.get.all.db().at(-1)?.id).toBe('recalled');
+
+    expect(messageList.markResponseMessageBoundary()).toBe(false);
+
+    const byId = (id: string) => messageList.get.all.db().find(message => message.id === id);
+    expect(byId('response-1')?.content.metadata).toBeUndefined();
+    expect(byId('recalled')?.content.metadata).toBeUndefined();
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
+  });
+
+  it('Given only a context assistant, When the id rotates without a seal target, Then it is not sealed or moved into the response', () => {
+    const messageList = new MessageList({ threadId: 'thread-1' });
+    messageList.add({ ...assistantMessage('context-reply', 'context'), threadId: 'thread-1' }, 'context');
+    messageList.add({ role: 'user', content: 'hi' }, 'input');
+
+    messageList.rotateResponseMessageId('response-not-created-yet');
+
+    expect(messageList.get.response.db()).toEqual([]);
+    const contextReply = messageList.get.all.db().find(message => message.id === 'context-reply');
+    expect(contextReply?.content.metadata).toBeUndefined();
   });
 });

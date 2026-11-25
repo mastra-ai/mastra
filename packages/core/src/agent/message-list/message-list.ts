@@ -2434,7 +2434,7 @@ export class MessageList {
     if (index !== -1) this.#boundaryFingerprints.set(boundary, { messageId, prefix: prefixFingerprint(parts, index) });
   }
 
-  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. Recalled history is never sealed. */
+  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. Without an id, a memory or context tail is left alone. */
   public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
     return this.newMessageId('assistant');
@@ -2443,13 +2443,16 @@ export class MessageList {
   public markResponseMessageBoundary(messageId?: string): boolean {
     const message = messageId
       ? this.messages.find(message => message.id === messageId)
-      : // Recalled history and context belong to earlier turns: sealing one would pull it into this turn's response.
-        this.messages.findLast(
-          message =>
-            message.role === 'assistant' &&
-            !this.stateManager.isMemoryMessage(message) &&
-            !this.stateManager.isContextMessage(message),
-        );
+      : this.messages.findLast(message => message.role === 'assistant');
+
+    // Without an id, a recalled or context tail belongs to an earlier turn: sealing it would pull it into this turn's response.
+    if (
+      !messageId &&
+      message &&
+      (this.stateManager.isMemoryMessage(message) || this.stateManager.isContextMessage(message))
+    ) {
+      return false;
+    }
 
     if (!message || message.role !== 'assistant') {
       return false;
