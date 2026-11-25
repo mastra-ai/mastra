@@ -85,7 +85,8 @@ Executes background tool calls dispatched by agents.
 - **PubSub topic**: `background-tasks`
 - **Consumer group**: `background-task-workers`
 - **Supports multiple replicas**: Instances share the consumer group
-- **Agent runs on processes without it**: An agent run whose loop executes on a process that doesn't run this worker (`workers: false`, or `MASTRA_WORKERS` without `backgroundTasks`) can't hand its tool calls to a dedicated worker, because each call is bound to the run. A durable agent runs the tool inline instead. A regular agent returns the dispatch error as the tool result. To run background tools from a regular agent there, run the `backgroundTasks` worker on that process, or pass `disableBackgroundTasks: true` to the agent's `stream()` or `generate()` call so its tools run inline.
+
+An agent's background tool call is bound to the run that made it, so only the process running that agent loop can execute it. A dedicated worker can't take it over. On a process that doesn't run this worker (`workers: false`, or `MASTRA_WORKERS` without `backgroundTasks`), a durable agent runs the tool inline and a regular agent returns a dispatch error as the tool result. To run background tools from a regular agent there, start the `backgroundTasks` worker on that process, or pass [`disableBackgroundTasks: true`](/reference/streaming/agents/stream) to `stream()` or `generate()` so the tools run inline.
 
 ## Supported storage backends
 
