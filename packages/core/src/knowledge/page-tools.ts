@@ -1831,7 +1831,7 @@ function activityTool(host: KnowledgePageToolHost) {
               ...(hasMore ? { more: true } : {}),
               cursor: encodeActivityCursor({ v: 2, after: typeof position === 'string' ? position : null, bind }),
             }
-          : hasMore && position
+          : hasMore && position && typeof position !== 'string'
             ? {
                 more: true,
                 cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
