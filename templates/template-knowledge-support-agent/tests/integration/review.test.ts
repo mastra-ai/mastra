@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { runtimeFixture } from '../fixtures/runtime.ts';
+import { runtimeFixture, useLocalTestDatabase } from '../fixtures/runtime.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { acquireWriterLock } from '../../src/mastra/knowledge/writer-lock.ts';
@@ -19,6 +19,8 @@ import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
 
 type Fixture = Awaited<ReturnType<typeof runtimeFixture>>;
 type Message = { role: string; content?: string };
+useLocalTestDatabase();
+
 const execute = promisify(execFile);
 const customer = 'customer:north:store-1';
 const evidence = `${customer}#cases/synthetic`;

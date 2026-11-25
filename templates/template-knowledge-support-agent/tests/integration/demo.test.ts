@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { useLocalTestDatabase } from '../fixtures/runtime.ts';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { setTimeout } from 'node:timers/promises';
 import { demoCorpus } from '../fixtures/demo-corpus.ts';
@@ -25,6 +26,8 @@ import {
   turn,
 } from '../fixtures/demo.ts';
 import type { Fixture } from '../fixtures/demo.ts';
+
+useLocalTestDatabase();
 
 async function retrievalBaseline(f: Fixture, queries: readonly { query: string; expected: string }[]) {
   const ranks: number[] = [];

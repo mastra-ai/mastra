@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { mkdtemp, writeFile, rm, readFile, realpath } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
+import { after, before } from 'node:test';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
@@ -15,6 +16,23 @@ import { Memory } from '@mastra/memory';
 import { startModelServer, type ModelScript } from './model-server.ts';
 
 const template = fileURLToPath(new URL('../..', import.meta.url));
+
+export const localTestDatabaseEnvironment = {
+  DATABASE_PROVIDER: 'local',
+  SUPPORT_MODE: 'local',
+  MASTRA_ENVIRONMENT_ID: '',
+} as const;
+
+export function useLocalTestDatabase() {
+  const original = { ...process.env };
+  before(() => Object.assign(process.env, localTestDatabaseEnvironment));
+  after(() => {
+    for (const key of Object.keys(localTestDatabaseEnvironment)) {
+      if (original[key] === undefined) delete process.env[key];
+      else process.env[key] = original[key];
+    }
+  });
+}
 
 export function fixtureFetch(url: string, options: RequestInit = {}) {
   return fetch(url, { ...options, signal: options.signal ?? AbortSignal.timeout(30000) });
@@ -126,6 +144,7 @@ async function configureRuntime(
   const policyApprovalFile = join(directory, 'approved-policies.json');
   await writeFile(policyApprovalFile, '{}');
   const overrides = {
+    ...localTestDatabaseEnvironment,
     SUPPORT_DATABASE_URL: databaseUrl,
     SUPPORT_CREDENTIALS_FILE: file,
     SUPPORT_STUDIO_ROLE: studioRole,

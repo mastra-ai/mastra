@@ -9,7 +9,9 @@ import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { hasDuplicatePage } from '../../src/mastra/review/duplicate.ts';
 import { generateHistoryCorpus, historyRecord, reviewedNote } from '../fixtures/history-corpus.ts';
-import { runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
+import { runtimeFixture, syntheticSafetyPolicy, useLocalTestDatabase } from '../fixtures/runtime.ts';
+
+useLocalTestDatabase();
 
 const profile = exampleProfiles[0]!;
 type Discovery = ReturnType<HistoryKnowledge['openHistoryStorage']>;

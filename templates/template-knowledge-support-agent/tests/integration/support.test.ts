@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
-import { fixtureFetch, runtimeFixture, syntheticSafetyPolicy } from '../fixtures/runtime.ts';
+import { fixtureFetch, runtimeFixture, syntheticSafetyPolicy, useLocalTestDatabase } from '../fixtures/runtime.ts';
 import type { ModelScript } from '../fixtures/model-server.ts';
 import { datasets } from '../../src/examples/datasets.ts';
 import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
@@ -16,6 +16,8 @@ import {
   confirmationText,
   decodeConfirmationReference,
 } from '../../src/mastra/review/confirmation.ts';
+
+useLocalTestDatabase();
 
 const execute = promisify(execFile);
 const guide = 'docs:north#guides/connectivity';

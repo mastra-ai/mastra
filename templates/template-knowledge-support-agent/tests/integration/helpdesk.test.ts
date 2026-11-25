@@ -6,8 +6,10 @@ import { seedDataset } from '../../src/mastra/knowledge/seed.ts';
 import { resourceId } from '../../src/mastra/identity.ts';
 import { encodeConfirmationReference } from '../../src/mastra/review/confirmation.ts';
 import type { Candidate, Proposal } from '../../src/mastra/review/contracts.ts';
-import { fixtureFetch, runtimeFixture } from '../fixtures/runtime.ts';
+import { fixtureFetch, runtimeFixture, useLocalTestDatabase } from '../fixtures/runtime.ts';
 import { history, json, latest, messages } from '../fixtures/demo.ts';
+
+useLocalTestDatabase();
 
 const guide = 'docs:helpdesk#guides/network-configuration';
 const source = 'https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/ipconfig';
