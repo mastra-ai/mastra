@@ -1145,47 +1145,6 @@ export const RUN_FENCING_TABLE_SCHEMAS = {
   [TABLE_MEMORY_RUN_FENCES]: MEMORY_RUN_FENCES_SCHEMA,
 };
 
-export const TABLE_AGENT_SIGNALS = 'mastra_agent_signals';
-export const TABLE_AGENT_SIGNAL_RUNS = 'mastra_agent_signal_runs';
-
-/**
- * Pending signals of the `agentSignals` domain. `seq` is the insertion counter
- * the store assigns and the only ordering key; `createdAt` is informational.
- * `signal` holds the JSON payload as enqueued.
- */
-export const AGENT_SIGNALS_SCHEMA: Record<string, StorageColumn> = {
-  id: { type: 'text', nullable: false, primaryKey: true },
-  threadKey: { type: 'text', nullable: false },
-  runId: { type: 'text', nullable: true },
-  scope: { type: 'text', nullable: false },
-  claimedBy: { type: 'text', nullable: true },
-  signal: { type: 'jsonb', nullable: false },
-  seq: { type: 'bigint', nullable: false },
-  createdAt: { type: 'timestamp', nullable: false },
-};
-
-/**
- * Run markers of the `agentSignals` domain, one per `(threadKey, runId)`.
- * `closedAt` is null while the run is open.
- */
-export const AGENT_SIGNAL_RUNS_SCHEMA: Record<string, StorageColumn> = {
-  threadKey: { type: 'text', nullable: false },
-  runId: { type: 'text', nullable: false },
-  closedAt: { type: 'timestamp', nullable: true },
-};
-
-/**
- * Table configs for the `agentSignals` domain.
- * Exported separately because only adapters that implement the domain create them,
- * so they are not part of TABLE_NAMES. Indexes and the way `seq` is assigned are
- * not declared here: each adapter creates its own indexes and assigns `seq` so
- * that it follows insertion order on its database.
- */
-export const AGENT_SIGNALS_TABLE_CONFIGS = {
-  [TABLE_AGENT_SIGNALS]: { columns: AGENT_SIGNALS_SCHEMA },
-  [TABLE_AGENT_SIGNAL_RUNS]: { columns: AGENT_SIGNAL_RUNS_SCHEMA, compositePrimaryKey: ['threadKey', 'runId'] },
-} satisfies Record<string, StorageTableConfig>;
-
 export const TABLE_WORKFLOW_RUNS = 'mastra_workflow_runs';
 export const TABLE_WORKFLOW_RUN_ENTRIES = 'mastra_workflow_run_entries';
 
