@@ -260,7 +260,10 @@ An unknown ID in the experiment's `scorers` option rejects `startExperiment()`, 
 
 If an item's scorer can't be found once the experiment is running, that item fails with the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code. This happens for a stale item-level or dataset-level ID, or for a scorer deleted after the experiment started. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
 
-A scorer lookup that fails for another reason, such as unavailable storage, isn't reported as a missing ID. The call or experiment fails with the original error.
+A scorer lookup that fails for another reason, such as unavailable storage, isn't reported as a missing ID:
+
+- If the lookup fails while Mastra starts or creates the experiment, the call rejects with the original error.
+- If the lookup fails while items run, Mastra marks the experiment `failed` instead of failing only that item. `startExperiment()` returns a summary with `status: 'failed'` instead of rejecting, and the `experiment.run.finished` event carries the original error when an event observer is configured.
 
 Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
