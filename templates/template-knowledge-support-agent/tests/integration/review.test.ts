@@ -424,10 +424,16 @@ test('a short thread ID blocks explicit references and permits ordinary shared w
     f.select(candidate('short-thread', { content: 'Wait for the link light to turn green.', publicSource }));
     const safe = await pending(f, input);
     const { revision, ...draft } = safe.proposal;
-    const longOwner = resourceId({ ...draft.reviewer, actorId: 'a'.repeat(200) });
+    const longReviewer = { ...draft.reviewer, actorId: 'a'.repeat(200) };
+    const longOwner = resourceId(longReviewer);
     assert.ok(longOwner.length > 200);
-    assert.equal(proposalDraftSchema.parse({ ...draft, owner: longOwner }).owner, longOwner);
-    assert.equal(proposalSchema.parse({ ...draft, revision, owner: longOwner }).owner, longOwner);
+    assert.equal(proposalDraftSchema.parse({ ...draft, reviewer: longReviewer, owner: longOwner }).owner, longOwner);
+    assert.equal(
+      proposalSchema.parse({ ...draft, revision, reviewer: longReviewer, owner: longOwner }).owner,
+      longOwner,
+    );
+    assert.equal(proposalDraftSchema.safeParse({ ...draft, owner: longOwner }).success, false);
+    assert.equal(proposalSchema.safeParse({ ...draft, revision, owner: longOwner }).success, false);
     assert.equal(proposalDraftSchema.safeParse({ ...draft, owner: 'a'.repeat(1001) }).success, false);
     assert.equal(proposalSchema.safeParse({ ...draft, revision, owner: 'a'.repeat(1001) }).success, false);
     for (const [customerId, ordinary, explicit] of [

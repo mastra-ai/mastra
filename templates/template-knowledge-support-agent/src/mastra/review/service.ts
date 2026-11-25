@@ -147,7 +147,6 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       return binding;
     };
     reviewer(authenticated ?? proposal.reviewer);
-    requireReview(resourceId(proposal.reviewer) === proposal.owner, 'Proposal ownership mismatch');
     const selected = await confirmation(proposal.reviewer, proposal.source);
     requireReview(
       selected.digest === proposal.source.digest && selected.confirmation === proposal.source.confirmation,

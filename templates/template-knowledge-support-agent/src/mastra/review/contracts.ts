@@ -9,7 +9,7 @@ import {
   knowledgeScopeAddress,
 } from '@mastra/core/knowledge';
 import { supportConfiguration } from '../../examples/support.ts';
-import { actorIdSchema, profileSchema } from '../identity.ts';
+import { actorIdSchema, profileSchema, resourceId } from '../identity.ts';
 
 const text = (max: number) =>
   z
@@ -161,9 +161,11 @@ export function targetBinding({ destination, bindings }: Pick<ProposalFields, 'd
 }
 
 function validateProposalDraft(
-  { candidate, destination, reviewer, source }: Omit<ProposalFields, 'revision'>,
+  { candidate, destination, owner, reviewer, source }: Omit<ProposalFields, 'revision'>,
   context: z.RefinementCtx,
 ) {
+  if (profileSchema.safeParse(reviewer).success && resourceId(reviewer) !== owner)
+    context.addIssue({ code: 'custom', path: ['owner'], message: 'Proposal ownership mismatch' });
   if (candidate.action !== 'page' && candidate.action !== 'note' && candidate.action !== 'update') return;
   if (
     !destination.path.startsWith(`${supportConfiguration.customerRoots[0]}/`) &&
