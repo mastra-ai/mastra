@@ -1,4 +1,4 @@
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
@@ -181,18 +181,16 @@ export function OnboardingProviderPicker({
           <DialogHeader>
             <DialogTitle>Add a custom provider</DialogTitle>
           </DialogHeader>
-          <DialogBody>
-            <CustomProviderForm
-              requireModels
-              scope={connection.credentialScope}
-              onCancel={() => setAddingCustom(false)}
-              onSaved={provider => {
-                setAddingCustom(false);
-                connection.chooseCustomProvider(provider.id);
-                onPreviewProvider(provider.id, 'api_key');
-              }}
-            />
-          </DialogBody>
+          <CustomProviderForm
+            requireModels
+            scope={connection.credentialScope}
+            onCancel={() => setAddingCustom(false)}
+            onSaved={provider => {
+              setAddingCustom(false);
+              connection.chooseCustomProvider(provider.id);
+              onPreviewProvider(provider.id, 'api_key');
+            }}
+          />
         </DialogContent>
       </Dialog>
     </>

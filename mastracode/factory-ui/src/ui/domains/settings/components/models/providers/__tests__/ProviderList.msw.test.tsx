@@ -435,16 +435,19 @@ describe('ProviderList custom endpoints', () => {
     await fillCustomEndpoint(user, form, {
       name: 'my-llm',
       url: 'https://api.example.com/v1',
-      models: 'model-a, model-b',
+      models: ['model-a', 'model-b'],
     });
-    await user.click(within(form).getByRole('button', { name: 'Add' }));
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     await waitFor(() =>
       expect(postBody).toEqual({
         name: 'my-llm',
         url: 'https://api.example.com/v1',
+        authScheme: 'bearer',
+        headers: [],
         models: ['model-a', 'model-b'],
         scope: 'user',
+        check: true,
       }),
     );
     expect(await findCustomRow('my-llm')).toBeInTheDocument();
@@ -465,8 +468,8 @@ describe('ProviderList custom endpoints', () => {
     renderWithProviders(<ProviderList credentialScope="user" />);
 
     const form = await openCustomEndpointForm(user, await openAddProvider(user));
-    await fillCustomEndpoint(user, form, { name: 'OpenAI', url: 'https://proxy.example.com/v1', models: 'gpt' });
-    await user.click(within(form).getByRole('button', { name: 'Add' }));
+    await fillCustomEndpoint(user, form, { name: 'OpenAI', url: 'https://proxy.example.com/v1', models: ['gpt'] });
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     expect(await within(form).findByText(/already a built-in provider/)).toBeInTheDocument();
   });
@@ -489,15 +492,18 @@ describe('ProviderList custom endpoints', () => {
     const url = within(form).getByPlaceholderText('https://api.example.com/v1');
     await user.clear(url);
     await user.type(url, 'https://api.example.com/v2');
-    await user.click(within(form).getByRole('button', { name: 'Save' }));
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     await waitFor(() =>
       expect(postBody).toEqual({
         name: 'my-llm',
         url: 'https://api.example.com/v2',
+        authScheme: 'bearer',
+        headers: [],
         models: ['model-a', 'model-b'],
         previousId: 'my-llm',
         scope: 'user',
+        check: true,
       }),
     );
   });
@@ -524,7 +530,7 @@ describe('ProviderList custom endpoints', () => {
     const url = within(form).getByPlaceholderText('https://api.example.com/v1');
     await user.clear(url);
     await user.type(url, 'https://elsewhere.example.com/v1');
-    await user.click(within(form).getByRole('button', { name: 'Save' }));
+    await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
     expect(await within(form).findByText(/Enter the API key again/)).toBeInTheDocument();
   });

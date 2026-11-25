@@ -1,6 +1,5 @@
 import {
   Dialog,
-  DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -32,9 +31,7 @@ export function CustomProviderDialog({
           <DialogTitle>{provider ? `Edit ${provider.name}` : 'Add custom endpoint'}</DialogTitle>
           <DialogDescription>Any OpenAI-compatible API. {SCOPE_AUDIENCE[savedAt]}</DialogDescription>
         </DialogHeader>
-        <DialogBody>
-          <CustomProviderForm provider={provider} scope={savedAt} onCancel={onClose} onSaved={onClose} />
-        </DialogBody>
+        <CustomProviderForm provider={provider} scope={savedAt} onCancel={onClose} onSaved={onClose} />
       </DialogContent>
     </Dialog>
   );

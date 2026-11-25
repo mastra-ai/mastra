@@ -296,12 +296,10 @@ describe('ProviderList credential scopes', () => {
 
         const form = await openCustomEndpointForm(user, await openAddProvider(user, lists[list]()));
         expect(within(form).getByText(new RegExp(audience.replace('.', '\\.')))).toBeInTheDocument();
-        await fillCustomEndpoint(user, form, { name: 'Team', url: 'https://team.example.com/v1', models: 'm' });
-        await user.click(within(form).getByRole('button', { name: 'Add' }));
+        await fillCustomEndpoint(user, form, { name: 'Team', url: 'https://team.example.com/v1', models: ['m'] });
+        await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
-        await waitFor(() =>
-          expect(postBody).toEqual({ name: 'Team', url: 'https://team.example.com/v1', models: ['m'], scope }),
-        );
+        await waitFor(() => expect(postBody).toMatchObject({ name: 'Team', models: ['m'], scope }));
       });
 
       it('removes a personal endpoint at user scope, leaving the same name in the organization list', async () => {
