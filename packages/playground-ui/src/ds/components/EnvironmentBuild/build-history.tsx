@@ -1,28 +1,23 @@
 import { useState } from 'react';
 
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  SettingsContainer,
-  SettingsEmptyRow,
-  SettingsNoticeRow,
-  SettingsSkeleton,
-} from '@mastra/playground-ui/new/settings';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Badge } from '@/ds/components/Badge';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
+import { SettingsContainer, SettingsEmptyRow, SettingsNoticeRow, SettingsSkeleton } from '@/ds/new/settings';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
 
-import type { FactoryEnvironmentBuild } from '../../../workspaces/services/environment';
-import { BUILD_STATUS, formatBuildTime } from './BuildStatusBlock';
-import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
-import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
+import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
+import type { EnvironmentBuild } from './environment-build';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 
 /** The provider's build history, newest first; a row opens to its error and logs. */
-export function BuildHistoryBlock({
+export function EnvironmentBuildHistory({
   builds,
   error,
 }: {
-  builds: FactoryEnvironmentBuild[] | undefined;
+  builds: EnvironmentBuild[] | undefined;
   error: string | undefined;
 }) {
   // Only the loaded builds make a list; the error, skeleton and empty row are single rows of the same card.
@@ -34,13 +29,7 @@ export function BuildHistoryBlock({
   );
 }
 
-function BuildHistoryRows({
-  builds,
-  error,
-}: {
-  builds: FactoryEnvironmentBuild[] | undefined;
-  error: string | undefined;
-}) {
+function BuildHistoryRows({ builds, error }: { builds: EnvironmentBuild[] | undefined; error: string | undefined }) {
   const [open, setOpen] = useState<string>();
 
   if (error) {
@@ -56,7 +45,7 @@ function BuildHistoryRows({
   return (
     <>
       {builds.map(build => {
-        const status = BUILD_STATUS[build.status];
+        const status = ENVIRONMENT_BUILD_STATUS[build.status];
         const expanded = open === build.buildId;
         const detail = build.error || (build.logs && build.logs.length > 0);
         return (
@@ -78,9 +67,9 @@ function BuildHistoryRows({
               </Badge>
               <Txt as="span" variant="meta" tone="muted">
                 {build.finishedAt
-                  ? formatBuildTime(build.finishedAt)
+                  ? formatEnvironmentBuildTime(build.finishedAt)
                   : build.startedAt
-                    ? formatBuildTime(build.startedAt)
+                    ? formatEnvironmentBuildTime(build.startedAt)
                     : ''}
               </Txt>
               <Txt
