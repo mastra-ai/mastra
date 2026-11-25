@@ -399,6 +399,11 @@ export class ObservationStep {
           }
 
           await this.turn.refreshRecord();
+          const remainingIds = new Set(getObservableMessages(messageList).map(msg => msg.id));
+          this.turn.floorRetained = {
+            ids: observedIds.filter(id => remainingIds.has(id)),
+            lastObservedAt: this.turn.record.lastObservedAt?.getTime(),
+          };
           if (this.turn.record.generationCount > preObsGeneration) {
             reflected = true;
           }
@@ -435,7 +440,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()]
           .map(msg => msg.id)
-          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList))
+          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList), this.floorRetainedIds())
           .filter(Boolean),
       );
 
@@ -467,6 +472,13 @@ export class ObservationStep {
     };
     this._prepared = true;
     return this._context;
+  }
+
+  /** Ids cleanup kept for the retention floor, while nothing newer has been observed. */
+  private floorRetainedIds(): string[] {
+    const retained = this.turn.floorRetained;
+    if (!retained || retained.lastObservedAt !== this.turn.record.lastObservedAt?.getTime()) return [];
+    return retained.ids;
   }
 
   /** Ids of already-drained messages that now hold parts the model has not been sent. */
