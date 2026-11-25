@@ -81,8 +81,11 @@ describe('Postgres single-statement fenced writes', () => {
   });
 
   afterAll(async () => {
-    await claimerStore.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-    await claimerStore.close();
+    try {
+      await claimerStore.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    } finally {
+      await claimerStore.close();
+    }
   });
 
   const claim = async (runId: string, ownerId: string): Promise<RunFence> => {
