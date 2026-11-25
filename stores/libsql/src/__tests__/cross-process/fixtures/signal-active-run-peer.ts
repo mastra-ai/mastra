@@ -21,6 +21,8 @@ export interface SignalActiveRunPeerArgs {
    * answer fails, as with a workflows store that lost its database for good.
    */
   failRunId?: string;
+  /** The agent's memory uses this database instead of the Mastra instance's storage. */
+  memoryDbUrl?: string;
 }
 
 export interface ModelCallReport {
@@ -48,8 +50,11 @@ async function failStepResultWrites(storage: LibSQLStore, runId: string, text: s
 }
 
 runPeer<SignalActiveRunPeerArgs>(async peer => {
-  const { agentId, failRunId } = peer.args;
+  const { agentId, failRunId, memoryDbUrl } = peer.args;
   const storage = new LibSQLStore({ id: `signal-active-run-worker-${process.pid}`, url: peer.dbUrl });
+  const memoryStorage = memoryDbUrl
+    ? new LibSQLStore({ id: `signal-active-run-worker-memory-${process.pid}`, url: memoryDbUrl })
+    : storage;
   if (failRunId) await failStepResultWrites(storage, failRunId, FINAL_TEXT);
   const release = gate();
   const answer = gate();
@@ -66,7 +71,7 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
     );
   }
   const memory = new MockMemory();
-  memory.setStorage(storage);
+  memory.setStorage(memoryStorage);
   const { agent } = createStepAgent({
     id: agentId,
     steps: 1,
@@ -97,5 +102,6 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
   } finally {
     await mastra.shutdown();
     await storage.close();
+    if (memoryStorage !== storage) await memoryStorage.close();
   }
 });
