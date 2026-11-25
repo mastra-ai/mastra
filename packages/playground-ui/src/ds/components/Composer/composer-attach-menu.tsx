@@ -106,7 +106,7 @@ export function ComposerAttachMenu({
               {entries.map((entry, index) => (
                 <li
                   key={entry.key}
-                  className={cn(entry.className, index === separatorBefore && 'mt-1 border-t border-border pt-1')}
+                  className={cn(entry.className, index === separatorBefore && 'border-t border-border')}
                 >
                   <Button
                     icon={entry.icon}

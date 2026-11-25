@@ -9,6 +9,7 @@ import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { controlIconState } from '@/ds/primitives/control-icon';
+import { menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -261,6 +262,8 @@ const CommandGroup = React.forwardRef<
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-muted-foreground',
+      // Items meet a separator as closely as they meet each other, like in the menus.
+      'has-[+[cmdk-separator]]:pb-0 [[cmdk-separator]+&]:pt-0',
       '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-muted-foreground',
       '[&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:uppercase',
       'in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:tracking-normal in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:normal-case',
@@ -275,7 +278,7 @@ const CommandSeparator = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
 >(({ className, ...props }, ref) => (
-  <CommandPrimitive.Separator ref={ref} className={cn('mx-2 h-px bg-separator', className)} {...props} />
+  <CommandPrimitive.Separator ref={ref} className={cn(menuSeparatorClass, className)} {...props} />
 ));
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 

@@ -90,7 +90,8 @@ export const menuLabelClass =
 
 export const menuLabelInsetClass = menuItemInsetClass;
 
-export const menuSeparatorClass = 'mx-2 my-1 h-px bg-separator';
+// No vertical margin: items meet the line as closely as they meet each other.
+export const menuSeparatorClass = 'mx-2 h-px bg-separator';
 
 export const menuShortcutClass = 'ml-auto pl-4 text-caption tracking-normal text-muted-foreground tabular-nums';
 
