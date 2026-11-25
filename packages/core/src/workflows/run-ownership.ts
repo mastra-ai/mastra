@@ -20,17 +20,24 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 const MAX_LEASE_MS = 3 * MAX_TIMER_DELAY_MS;
 /** The longest `leaseTtlMs`, so that even after every doubling the lease stays within {@link MAX_LEASE_MS}. */
 export const MAX_WORKFLOW_RUN_LEASE_TTL_MS = Math.floor(MAX_LEASE_MS / 2 ** WORKFLOW_RUN_LEASE_MAX_DOUBLINGS);
+/**
+ * The shortest `leaseTtlMs`. A run renews every third of its lease with one storage write, and
+ * `createRun()` options can come from a request body, so a tiny value must not set that rate.
+ */
+export const MIN_WORKFLOW_RUN_LEASE_TTL_MS = 1_000;
 
 /**
- * `leaseTtlMs` as configured, rounded up to whole milliseconds and capped at
- * {@link MAX_WORKFLOW_RUN_LEASE_TTL_MS}, or `fallback` when it is not a positive finite number.
+ * `leaseTtlMs` as configured, rounded up to whole milliseconds and kept between
+ * {@link MIN_WORKFLOW_RUN_LEASE_TTL_MS} and {@link MAX_WORKFLOW_RUN_LEASE_TTL_MS}, or `fallback`
+ * when it is not a positive finite number. `fallback` is used as is, so the default lease from
+ * `MASTRA_AGENT_THREAD_LEASE_TTL_MS` can be shorter than the minimum.
  */
 export function normalizeLeaseTtlMs(leaseTtlMs: unknown, fallback: number): number {
   if (typeof leaseTtlMs !== 'number' || !Number.isFinite(leaseTtlMs) || leaseTtlMs <= 0) {
     return fallback;
   }
 
-  return Math.min(Math.ceil(leaseTtlMs), MAX_WORKFLOW_RUN_LEASE_TTL_MS);
+  return Math.min(Math.max(Math.ceil(leaseTtlMs), MIN_WORKFLOW_RUN_LEASE_TTL_MS), MAX_WORKFLOW_RUN_LEASE_TTL_MS);
 }
 
 /** How often a lease of `leaseMs` is renewed: a third of it, or the configured interval for the default lease. */

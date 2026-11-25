@@ -9,6 +9,7 @@ import {
   WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS,
   WORKFLOW_RUN_LEASE_TTL_MS,
   MAX_WORKFLOW_RUN_LEASE_TTL_MS,
+  MIN_WORKFLOW_RUN_LEASE_TTL_MS,
   leaseAfterTakeover,
   normalizeLeaseTtlMs,
   renewWorkflowLease,
@@ -199,6 +200,13 @@ describe('leaseAfterTakeover', () => {
     ['a lapsed lease read a few ms short of the cap', 8_000, lapsed(7_995)],
   ])('after %s, a 1000 ms base lease becomes %i ms', (_case, expected, previous) => {
     expect(leaseAfterTakeover(1_000, previous).leaseMs).toBe(expected);
+  });
+
+  it('raises a lease under the minimum, but keeps a shorter default lease as configured', () => {
+    expect(normalizeLeaseTtlMs(1, 15_000)).toBe(MIN_WORKFLOW_RUN_LEASE_TTL_MS);
+    // The default comes from MASTRA_AGENT_THREAD_LEASE_TTL_MS, which tests set to a few hundred ms.
+    expect(normalizeLeaseTtlMs(undefined, 300)).toBe(300);
+    expect(normalizeLeaseTtlMs(-5, 300)).toBe(300);
   });
 
   it('keeps the longest lease within what timers can renew', () => {

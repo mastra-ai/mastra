@@ -10,7 +10,11 @@ import type { IMastraLogger } from '../logger';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowOptions } from '../workflows';
-import { MAX_WORKFLOW_RUN_LEASE_TTL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
+import {
+  MAX_WORKFLOW_RUN_LEASE_TTL_MS,
+  MIN_WORKFLOW_RUN_LEASE_TTL_MS,
+  WORKFLOW_RUN_LEASE_TTL_MS,
+} from '../workflows/run-ownership';
 import { Mastra } from './index';
 
 function buildReplica(
@@ -520,6 +524,33 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
 
       gates.forEach(open => open());
       expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success', 'success']);
+    });
+
+    // createRun() options can come from a request body, so a tiny lease must not set the storage write rate.
+    it('renews a run with a lease under the minimum no more often than one at the minimum', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(storage, () => new Promise<void>(resolve => gates.push(resolve)), undefined, {
+        recovery: { workflows: 'off' },
+      });
+      replicas.push(replica);
+      const store = (await storage.getStore('workflows'))!;
+      const renewals = vi.spyOn(store, 'renewRunOwnership');
+
+      const tiny = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: 1 });
+      const minimum = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: MIN_WORKFLOW_RUN_LEASE_TTL_MS });
+      const results = [tiny, minimum].map(run => run.start({ inputData: {} }));
+      await until(() => gates.length === 2);
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const renewalsOf = (runId: string) => renewals.mock.calls.filter(([args]) => args.runId === runId).length;
+      expect(renewalsOf(minimum.runId)).toBeGreaterThan(0);
+      expect(renewalsOf(tiny.runId)).toBe(renewalsOf(minimum.runId));
+      expect(await leaseOf(storage, tiny.runId)).toEqual({ live: true, ms: MIN_WORKFLOW_RUN_LEASE_TTL_MS });
+
+      gates.forEach(open => open());
+      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success']);
     });
 
     it("takes a run's leaseTtlMs from a later createRun() for the same run id", async () => {

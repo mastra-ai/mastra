@@ -618,6 +618,7 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * that blocks the event loop for longer than this lets another process take
    * the run over. A restart over a lease that lapsed doubles it, up to 8 times
    * this value. Defaults to `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15000).
+   * Values under 1000 are raised to 1000.
    * `createRun({ leaseTtlMs })` overrides it for one run.
    */
   leaseTtlMs?: number;
