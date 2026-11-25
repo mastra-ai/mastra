@@ -69,9 +69,10 @@ const scorer = createScorer({
         parameters: [
           {
             name: 'model',
-            type: 'LanguageModel',
+            type: 'DynamicArgument<MastraModelConfig>',
             isOptional: false,
-            description: 'The LLM model instance to use for evaluation.',
+            description:
+              'The model the judge uses for evaluation: a model instance, a `"provider/model"` ID, or an OpenAI-compatible config. Also accepts a function of `{ requestContext, mastra }` that returns one of these. Mastra resolves a function on every judge call, so it can look up values such as an API key at run time.',
           },
           {
             name: 'instructions',
