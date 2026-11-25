@@ -180,7 +180,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   function resolveMappingTool(toolName: string) {
     return ((
       readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
-        Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+        | Record<string, { toModelOutput?: (output: unknown) => unknown }>
+        | undefined
     )?.[toolName] ?? rest.tools?.[toolName]) as { toModelOutput?: (output: unknown) => unknown } | undefined;
   }
 
@@ -340,7 +341,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         toolArgs: toolCall.args,
         approval: toolCall.approval,
         providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
-          ProviderMetadata | undefined,
+          | ProviderMetadata
+          | undefined,
       });
     }
 
