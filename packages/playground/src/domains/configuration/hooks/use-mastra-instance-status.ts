@@ -25,6 +25,8 @@ export const instanceStatusQueryKey = ['mastra-instance-status'];
 
 const DEFAULT_API_PREFIX = '/api';
 const MAX_RETRY_DELAY = 5000;
+// A server that accepts a request and never answers counts as not up yet.
+const CHECK_TIMEOUT = 10_000;
 const CORS_CHECK_TIMEOUT = 3000;
 // Client errors a server can stop giving on its own.
 const TEMPORARY_CLIENT_ERRORS = [408, 425, 429];
@@ -62,7 +64,7 @@ const isCapabilities = (body: unknown): boolean =>
 
 /** Throws when the server can't be reached. Sent like the requests Studio makes next, so CORS treats them the same. */
 const requestStatus = async (url: string, headers: Record<string, string>): Promise<MastraInstanceStatus> => {
-  const response = await fetch(url, { headers, credentials: 'include' });
+  const response = await fetch(url, { headers, credentials: 'include', signal: AbortSignal.timeout(CHECK_TIMEOUT) });
   const { status: httpStatus } = response;
 
   if (httpStatus >= 500 || TEMPORARY_CLIENT_ERRORS.includes(httpStatus))
