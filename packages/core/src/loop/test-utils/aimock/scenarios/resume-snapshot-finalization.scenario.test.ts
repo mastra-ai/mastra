@@ -110,7 +110,8 @@ describeForAllEngines('Resumed run snapshot finalization', engine => {
           // Inngest publishes suspension before the workflow snapshot is persisted.
           await expect.poll(getSnapshot, { timeout: 5_000 }).not.toBeNull();
           // Evented runs do not persist a separate child workflow row in this scenario.
-          if (engine !== 'evented') await expect.poll(getNestedSnapshot, { timeout: 5_000 }).not.toBeNull();
+          if (engine !== 'evented' && engine !== 'native-evented')
+            await expect.poll(getNestedSnapshot, { timeout: 5_000 }).not.toBeNull();
 
           const store = await memory.storage.getStore('memory');
           if (!store) throw new Error('Missing memory store');
@@ -170,7 +171,7 @@ describeForAllEngines('Resumed run snapshot finalization', engine => {
             expect(finished).toBe(false);
             expect(completed).toBe(false);
             expect(await getSnapshot(), 'run vanished while its final save was pending').not.toBeNull();
-            if (engine !== 'evented') {
+            if (engine !== 'evented' && engine !== 'native-evented') {
               expect(await getNestedSnapshot(), 'nested run vanished while its final save was pending').not.toBeNull();
             }
             const before = await memory.recall({ threadId, resourceId });

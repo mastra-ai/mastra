@@ -52,7 +52,6 @@ beforeEach(() => {
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
-    http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
@@ -163,6 +162,18 @@ describe('Settings ownership', () => {
       state: { settingsReturnTo: '/factories/fp-1/work' },
     });
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('sends retired Preferences links to My account, where theme and completion sound now live', async () => {
+    const router = renderSettings('preferences', { search: '?from=chat' });
+
+    expect(await screen.findByRole('radiogroup', { name: 'Theme' })).toBeInTheDocument();
+    expect(router.state.location).toMatchObject({
+      pathname: '/factories/fp-1/settings/account',
+      search: '?from=chat',
+      state: { settingsReturnTo: '/factories/fp-1/work' },
+    });
+    expect(screen.getByRole('link', { name: 'My account' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('sends retired Factory memory links to Memory', async () => {

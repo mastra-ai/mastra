@@ -1,3 +1,4 @@
+import type { EnvironmentBuild } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,11 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type {
-  FactoryEnvironmentBuild,
-  FactoryEnvironmentPatch,
-  FactoryEnvironmentPayload,
-} from '../../../workspaces/services/environment';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { FactoryManagementSection } from '../FactoryManagementSection';
 import {
   buildHistory,
@@ -99,7 +96,7 @@ describe('Environment builds', () => {
     const reads = useEnvironment(holder);
     let posts = 0;
     let historyReads = 0;
-    const statuses: FactoryEnvironmentBuild['status'][] = ['building', 'ready'];
+    const statuses: EnvironmentBuild['status'][] = ['building', 'ready'];
     server.use(
       http.post(`${ENVIRONMENT_URL}/build`, () => {
         posts += 1;

@@ -103,13 +103,13 @@ function DemoEditor({ initialRows }: { initialRows: EnvironmentVariableEntry[] }
         actions={
           <>
             <Button
+              icon={<IconArrowRotateClockwise />}
               type="button"
               variant="primary"
               size="sm"
               disabled={!editor.isDirty || editor.hasDuplicateKeys}
               onClick={save}
             >
-              <IconArrowRotateClockwise />
               Save & restart
             </Button>
             <Button

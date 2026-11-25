@@ -18,7 +18,7 @@ This demo runs in Mastra Studio, but you can connect this workflow to your React
 
 ## Prerequisites
 
-- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` to run the sample workflows in Studio with the default `openai/gpt-4o-mini` model.
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` to run the sample workflows in Studio with the default `openai/gpt-6-luna` model.
 - Keep the local settings in `.env.example`. The sample workflows need no WorkOS, IPinfo, or Linear account and no approval secrets.
 - The first start downloads an embedding model and indexes the included runbooks, so allow extra time and network access for it to finish.
 

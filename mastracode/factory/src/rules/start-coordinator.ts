@@ -2,6 +2,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -11,7 +12,7 @@ import { hydrateFactorySession, resolveFactorySessionModel } from '../session/fa
 import {
   isRunRepositoryInstruction,
   repositoryChosenByRun,
-  resolveRunRepository,
+  resolveRunRepositoryFromIntake,
   runRepositoryInstruction,
 } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -20,7 +21,6 @@ import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { externallyAuthoredWorkItem } from './types.js';
 import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
@@ -155,7 +155,7 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
-  readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
+  readonly #boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
   readonly #sourceControl?:
     | SourceControlStorageHandle
     | ((
@@ -169,7 +169,7 @@ export class FactoryStartCoordinator {
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
-    transitionService?: Pick<FactoryTransitionService, 'transition'>,
+    boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>,
     sourceControl?:
       | SourceControlStorageHandle
       | ((
@@ -182,7 +182,7 @@ export class FactoryStartCoordinator {
   ) {
     this.#controller = controller;
     this.#storage = storage;
-    this.#transitionService = transitionService;
+    this.#boardEngine = boardEngine;
     this.#sourceControl = sourceControl;
     this.#intake = intake;
     this.#projects = sessionModel?.projects;
@@ -210,19 +210,17 @@ export class FactoryStartCoordinator {
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
-    const intakeConfig = await this.#intake?.getConfig({ orgId: request.orgId, integrationIds: ['linear'] });
     const runItem = storedItem ?? {
       metadata: request.workItem.input.metadata ?? null,
       workItem: { metadata: request.workItem.input.metadata ?? null },
     };
     // A card that names no repository runs in the session's own repository,
     // and its agent determines from the card which repository to work in.
-    const repository = await resolveRunRepository({
+    const repository = await resolveRunRepositoryFromIntake(this.#intake, {
       sourceControl,
       orgId: request.orgId,
       factoryProjectId: request.factoryProjectId,
       item: runItem,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
       boundProjectRepositoryId: sourceSession.projectRepositoryId,
     });
     if (repository.status === 'unlinked') {
@@ -361,8 +359,8 @@ export class FactoryStartCoordinator {
     let revision = prepared.item.revision;
     const destinationStage = request.destinationStage;
     if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
-      if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
-      const transition = await this.#transitionService.transition({
+      if (!this.#boardEngine) throw new Error('Factory board engine is unavailable.');
+      const transition = await this.#boardEngine.requestMove({
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,

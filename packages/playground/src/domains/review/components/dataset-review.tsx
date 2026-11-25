@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExperimentResultsList } from '@mastra/playground-ui/domains/experiments/components/experiment-results-list';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
@@ -36,8 +37,7 @@ import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
-import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
-import { ExperimentResultsList } from '@/domains/experiments/components/experiment-results-list';
+import { StudioExperimentResultDetail } from '@/domains/experiments/components/studio-experiment-result-detail';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 import { BulkTagPicker } from '@/domains/shared/components/bulk-tag-picker';
 
@@ -71,8 +71,6 @@ export interface ReviewListFilters {
 }
 
 export interface DatasetReviewProps {
-  /** Trace drawer's full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
-  withQueryTrace: boolean;
   /** Shows the Feedback tabs on the result and trace drawers. */
   withFeedback: boolean;
   /** When set, the dataset's tags seed the tag vocabulary. Without it, tags come from the items only. */
@@ -120,7 +118,6 @@ export function DatasetReview({
   toolbarEnd,
   onCreateScorer,
   breadcrumbs,
-  withQueryTrace,
   withFeedback,
 }: DatasetReviewProps) {
   const client = useMastraClient();
@@ -495,12 +492,10 @@ export function DatasetReview({
           {toolbarEnd}
           {showCreateScorer && (
             <Button
+              icon={<IconGauge />}
               size="md"
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
-              <Icon size="xs">
-                <IconGauge />
-              </Icon>
               Create scorer
             </Button>
           )}
@@ -519,8 +514,8 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
-                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <IconDotGrid1x3Horizontal />}
+                  <Button size="icon-md" aria-label="More actions" loading={isAnalyzing}>
+                    <IconDotGrid1x3Horizontal />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
@@ -548,7 +543,7 @@ export function DatasetReview({
 
   if (isLoadingReview) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
         <h1 className="sr-only">Review Queue</h1>
         <Spinner fill />
       </PageLayout>
@@ -556,8 +551,7 @@ export function DatasetReview({
   }
 
   const detailPanel = (
-    <ExperimentResultDetail
-      withQueryTrace={withQueryTrace}
+    <StudioExperimentResultDetail
       withFeedback={withFeedback}
       result={featuredItem ?? undefined}
       title={`Review item ${featuredItem?.id ?? ''}`}
@@ -575,7 +569,7 @@ export function DatasetReview({
   );
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+    <PageLayout variant="page" breadcrumbs={breadcrumbs} actionRow={toolbar}>
       <h1 className="sr-only">Review Queue</h1>
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -690,7 +684,7 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-6 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay || (displayItems.length === 0 && displayQuery.hasNextPage) ? (
             <Spinner fill />

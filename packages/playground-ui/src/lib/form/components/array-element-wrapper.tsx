@@ -39,7 +39,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="overflow-hidden rounded-lg border border-border bg-background motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
+      className="overflow-hidden rounded-lg bg-nested motion-reduce:[&_[data-slot=collapsible-content]]:transition-none motion-reduce:[&_svg]:transition-none"
     >
       <div className="flex min-w-0 items-center gap-1 pr-1">
         <CollapsibleTrigger

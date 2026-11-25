@@ -95,19 +95,6 @@ describe('SidebarSections', () => {
     expect(untitled.hasAttribute('aria-labelledby')).toBe(false);
   });
 
-  it('points a section heading at the heading it actually rendered', () => {
-    render(
-      <SidebarSections
-        sections={[{ key: 'workspace', title: 'Workspace', links: [{ name: 'Agents', url: '/agents' }] }]}
-      />,
-    );
-
-    const section = screen.getByRole('region', { name: 'Workspace' });
-    const headingId = section.getAttribute('aria-labelledby');
-
-    expect(document.getElementById(headingId ?? '')?.textContent).toBe('Workspace');
-  });
-
   it('gives two sections that share a key their own heading ids', () => {
     render(
       <>

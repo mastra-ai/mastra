@@ -1,0 +1,50 @@
+---
+title: "Team members | Mastra platform"
+description: "Invite people to your Mastra platform organization, assign roles, and remove members or pending invitations."
+---
+
+# Team members
+
+Everyone in a Mastra platform organization can access its projects. Each member has a role that decides what they can change. Manage members on the **Team** page in your organization's settings.
+
+## Roles
+
+| Role | What they can do |
+| - | - |
+| Admin | Everything a member can do, plus manage members and invitations, billing, alerting configuration, organization settings, and Memory and Knowledge instances. |
+| Member | Create and change projects, environments, environment variables, deploys, Gateway settings, integrations, and [access tokens](/docs/mastra-platform/access-tokens). |
+| Viewer | Read projects, alerts, dashboards, and saved views. Viewers can't change anything. |
+
+An organization always needs at least one admin. You can't remove the only admin, change their role, or leave the organization as the only admin.
+
+## Invite a member
+
+Only admins can invite members.
+
+1. Open your organization's settings in the [Mastra platform](https://projects.mastra.ai) and select **Team**.
+1. Select **Invite member**.
+1. Enter the person's email address and choose a role.
+1. Select **Send invite**.
+
+The person gets an email with a link to join. The dialog can also show the invite link so you can share it directly. The link works once and expires after 7 days.
+
+Pending invitations appear under **Invitations** until they're accepted. To cancel one, revoke it. The link stops working immediately, and you can send a new invitation later.
+
+## Change a member's role
+
+Admins can change a member's role from the **Members** list. The new role applies to everything in the organization. To change the role of the only admin, first make another member an admin.
+
+## Remove a member
+
+Admins can remove a member from the **Members** list. The member loses access to every resource in the organization immediately. You can invite them again later.
+
+Access tokens a member creates are tied to them and stop working when they leave the organization. Before you remove a member, replace any tokens they created that CI or deployed apps use. Have a member who's staying in the organization create the replacement tokens, so they don't stop working too. Confirm that CI and deployed apps use the new tokens, then remove the member.
+
+## Leave an organization
+
+To leave an organization, open the **Team** page and select **Leave organization**. You lose access to all of its projects and resources. If you're the only admin, assign another admin first.
+
+## Related
+
+- [Access tokens](/docs/mastra-platform/access-tokens)
+- [Mastra platform overview](/docs/mastra-platform/overview)

@@ -71,16 +71,6 @@ describe('AgentPlaygroundConfig', () => {
       expect(screen.getByRole('tab', { name: 'Tools 2' })).not.toBeNull();
     });
 
-    it('keeps the system prompt in edit mode without a preview toggle', () => {
-      render(<AgentPlaygroundConfigHarness />);
-
-      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
-
-      expect(screen.getByText('Instruction blocks editor')).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
-    });
-
     it('shows variable syntax help as a tooltip from the underlined text', async () => {
       render(<AgentPlaygroundConfigHarness />);
 

@@ -16,6 +16,8 @@ export const DEFAULT_MAX_PINS = 20;
 export const DEFAULT_PINNED_MAX_TOKENS = 500;
 
 export const PIN_TRUNCATION_MARKER = '[truncated — knowledge_read for the rest]';
+/** The marker for runs without `knowledge_read`, which can't open the rest. */
+export const PIN_EXCERPT_MARKER = '[truncated]';
 /** Entry id of the line listing stored pins that didn't fit the budget. */
 export const PIN_OVERFLOW_ID = 'overflow';
 /** Most stored pins the overflow line names; the rest are counted. */
@@ -90,13 +92,13 @@ async function resolveListing(
 /**
  * Fills `maxTokens` a level at a time: every depth-1 line that fits, then depth 2, and so on, stopping
  * at the first line that doesn't fit (always at least one). Lines print in tree order, so each child
- * still sits under its parent; a cut ends with a pointer to knowledge_list.
+ * still sits under its parent; a cut ends with a pointer to knowledge_list when the run has it.
  */
-function renderListing(listing: PinnedListing, ref: string, maxTokens: number): string {
+function renderListing(listing: PinnedListing, ref: string, maxTokens: number, read: boolean): string {
   const head = `Pages under ${listing.origin.name} (${ref}, depth ${listing.depth}):`;
   if (listing.lines.length === 0) return `${head} none.`;
   const tail = (left: number) =>
-    `…${left > 0 && !listing.more ? `and ${left} more` : 'and more'}; knowledge_list from: "${ref}"`;
+    `…${left > 0 && !listing.more ? `and ${left} more` : 'and more'}${read ? `; knowledge_list from: "${ref}"` : ''}`;
   const all = [head, ...listing.lines.map(line => line.text), ...(listing.more ? [tail(0)] : [])].join('\n');
   if (estimateTokenCount(all) <= maxTokens) return all;
   // Tree order filtered to one depth is that level's order, so a stable sort by depth is breadth-first.
@@ -121,7 +123,7 @@ interface PinLabel {
   notes?: number;
 }
 
-function render(page: KnowledgePage, label: PinLabel, maxTokens: number): string {
+function render(page: KnowledgePage, label: PinLabel, maxTokens: number, read: boolean): string {
   const notes =
     label.notes === undefined
       ? ''
@@ -132,8 +134,9 @@ function render(page: KnowledgePage, label: PinLabel, maxTokens: number): string
           : `, ${label.notes} notes`;
   const text = `${page.name} (${label.ref}, v${page.version}${notes}): ${page.body!.trim()}`;
   if (estimateTokenCount(text) <= maxTokens) return text;
-  const room = Math.max(maxTokens - estimateTokenCount(PIN_TRUNCATION_MARKER) - 1, 1);
-  return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;
+  const marker = read ? PIN_TRUNCATION_MARKER : PIN_EXCERPT_MARKER;
+  const room = Math.max(maxTokens - estimateTokenCount(marker) - 1, 1);
+  return `${sliceByTokens(text, 0, room).trimEnd()} ${marker}`;
 }
 
 /** The run's principals grouped by `pinnedContextPriority`, highest first. */
@@ -231,10 +234,10 @@ async function rankedStoredPins(
   return { pins, total };
 }
 
-function overflowLine(names: string[], more: number): string {
+function overflowLine(names: string[], more: number, read: boolean): string {
   const listed = names.join(', ');
   const rest = more > 0 ? `${listed ? `${listed}, ` : ''}…and ${more} more` : listed;
-  return `Also pinned (open with knowledge_read): ${rest}`;
+  return `Also pinned${read ? ' (open with knowledge_read)' : ''}: ${rest}`;
 }
 
 /**
@@ -244,7 +247,8 @@ function overflowLine(names: string[], more: number): string {
  * the rest. The line counts against the token budget. Only pages the run can read and that have a body
  * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
-export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
+/** `read` is whether the run has `knowledge_read` and `knowledge_list`; without them no entry names either. */
+export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget, read: boolean): Promise<PinEntry[]> {
   // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one countNotes) + one getPages per page-tree level above the pinned pages, plus the config-pin
   // lookups and one tree walk per pinned listing; never one per page pin.
@@ -304,11 +308,11 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   const entries: PinEntry[] = [];
   const configCount = configured.length + listings.length;
   const renderConfig = (room: number) => {
-    for (const page of configured) entries.push({ id: page.id, text: render(page, labelOf(page), room) });
+    for (const page of configured) entries.push({ id: page.id, text: render(page, labelOf(page), room, read) });
     for (const listing of listings) {
       entries.push({
         id: `${PIN_LIST_ID_PREFIX}${listing.origin.id}`,
-        text: renderListing(listing, listingRef(listing), room),
+        text: renderListing(listing, listingRef(listing), room, read),
       });
     }
   };
@@ -331,8 +335,8 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
       continue;
     }
     const entry: PinEntry = listing
-      ? { id: `${PIN_LIST_ID_PREFIX}${page.id}`, text: renderListing(listing, listingRef(listing), remaining) }
-      : { id: page.id, text: render(page, labelOf(page), remaining) };
+      ? { id: `${PIN_LIST_ID_PREFIX}${page.id}`, text: renderListing(listing, listingRef(listing), remaining, read) }
+      : { id: page.id, text: render(page, labelOf(page), remaining, read) };
     used += estimateTokenCount(entry.text);
     delivered.push({ entry, pin });
   }
@@ -342,6 +346,7 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
     overflowLine(
       left.slice(0, OVERFLOW_NAMES).map(pin => (pin.kind === 'list' ? `${pin.pageName} (listing)` : pin.pageName)),
       total - delivered.length - Math.min(left.length, OVERFLOW_NAMES),
+      read,
     );
   while (total > delivered.length && delivered.length > 0 && used + estimateTokenCount(line()) > budget.maxTokens) {
     const dropped = delivered.pop()!;

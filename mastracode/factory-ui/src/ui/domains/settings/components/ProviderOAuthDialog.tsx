@@ -70,8 +70,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
           <Txt as="p" variant="caption" tone="muted">
             {session.instructions}
           </Txt>
-          <Button onClick={() => openAuthorizationUrl(session.url)}>
-            <IconSquareArrowTopRight />
+          <Button icon={<IconSquareArrowTopRight />} onClick={() => openAuthorizationUrl(session.url)}>
             Open authorization page
           </Button>
           <Input
@@ -93,8 +92,8 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
         </DialogBody>
         <DialogFooter>
           <DialogCancel>Cancel</DialogCancel>
-          <DialogAction disabled={!code.trim()} onConfirm={() => void complete()}>
-            {completeMutation.isPending ? 'Completing…' : 'Complete sign in'}
+          <DialogAction disabled={!code.trim()} onConfirm={() => void complete()} loading={completeMutation.isPending}>
+            Complete sign in
           </DialogAction>
         </DialogFooter>
       </DialogContent>
@@ -164,8 +163,11 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
               <CopyButton content={session.userCode} variant="ghost" size="icon-sm" tooltip="Copy code" />
             </div>
           )}
-          <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
-            <IconSquareArrowTopRight />
+          <Button
+            icon={<IconSquareArrowTopRight />}
+            className="w-full"
+            onClick={() => openAuthorizationUrl(session.url)}
+          >
             Open authorization page
           </Button>
         </DialogBody>
@@ -181,7 +183,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             </Txt>
           ) : (
             <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
-              <IconLoadingCircle size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
+              <IconLoadingCircle className="size-icon-sm motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
                 Waiting for authorization…
               </Txt>

@@ -367,7 +367,7 @@ function ZoomTrack({
           Zoom
         </Txt>
         <Button variant="ghost" size="icon-sm" aria-label="Reset zoom" onClick={onReset}>
-          <IconArrowRotateCounterClockwise className="size-3" />
+          <IconArrowRotateCounterClockwise />
         </Button>
       </div>
       <div

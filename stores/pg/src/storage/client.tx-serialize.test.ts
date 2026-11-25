@@ -41,6 +41,25 @@ function createStrictClient() {
 }
 
 describe('TransactionClient COMMIT/ROLLBACK drain', () => {
+  it('releases a savepoint after rolling back to it, so failed savepoints do not nest', async () => {
+    const { client, statements } = createStrictClient();
+    const adapter = new PoolAdapter({ connect: async () => client } as unknown as Pool);
+    await adapter.tx(async t => {
+      const tx = t as unknown as { savepoint<T>(name: string, run: () => Promise<T>): Promise<T> };
+      await tx.savepoint('sp1', () => t.none('FAIL1')).catch(() => {});
+      await t.none('SELECT after');
+    });
+    expect(statements).toEqual([
+      'BEGIN',
+      'SAVEPOINT sp1',
+      'FAIL1',
+      'ROLLBACK TO SAVEPOINT sp1',
+      'RELEASE SAVEPOINT sp1',
+      'SELECT after',
+      'COMMIT',
+    ]);
+  });
+
   it('serializes concurrent t.none() calls onto one client', async () => {
     const { client, statements } = createStrictClient();
     const pool = {

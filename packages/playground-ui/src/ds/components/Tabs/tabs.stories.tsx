@@ -8,7 +8,7 @@ import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
 import { IconChart3 } from '@/ds/icons/central/IconChart3';
 import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -118,7 +118,7 @@ function ContainedExample({
             )}
             {visibleTabs.includes('settings') && (
               <Tab value="settings" onClose={closeHandler('settings')}>
-                <IconSettingsGear1 aria-hidden="true" className="size-4" />
+                <IconSettingsGear5 aria-hidden="true" className="size-4" />
                 Settings
               </Tab>
             )}
@@ -275,6 +275,37 @@ export const PillGhostVariant: Story = {
         <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+const BREAKDOWN_VIEWS = ['Projects', 'Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments'];
+
+/**
+ * `overflow="menu"`: tabs that don't fit fold into a "+N" menu after the last one that does, and
+ * the open tab always stays in the row (a metrics card's views). The default scrolls instead.
+ */
+export const OverflowMenu: Story = {
+  render: () => (
+    <div className="flex w-150 flex-col gap-6">
+      {[600, 320].map(width => (
+        <div key={width} style={{ width }}>
+          <Tabs defaultTab="Agents">
+            <TabList variant="pill" size="sm" overflow="menu">
+              {BREAKDOWN_VIEWS.map(view => (
+                <Tab key={view} value={view}>
+                  {view}
+                </Tab>
+              ))}
+            </TabList>
+            {BREAKDOWN_VIEWS.map(view => (
+              <TabContent key={view} value={view}>
+                <div className="p-4 text-foreground">Breakdown by {view.toLowerCase()}</div>
+              </TabContent>
+            ))}
+          </Tabs>
+        </div>
+      ))}
+    </div>
   ),
 };
 

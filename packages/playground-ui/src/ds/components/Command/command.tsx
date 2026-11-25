@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
 import type { DialogSize } from '@/ds/components/Dialog';
+import { KeyLabel } from '@/ds/components/Kbd/key-label';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
@@ -31,14 +32,14 @@ type CommandDialogVariant = 'default' | 'inset';
 
 const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
   default: 'overflow-hidden py-0',
-  inset: 'overflow-hidden sm:top-1/4 sm:translate-y-0 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+  inset: 'overflow-hidden sm:top-1/4 sm:translate-y-0 rounded-[calc(var(--radius-xl)+--spacing(1))] p-1',
 };
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
   default: cn(
-    '[&_[data-slot=command-input-wrapper]_svg]:size-5',
+    '[&_[data-slot=command-input-wrapper]_svg]:size-icon-lg',
     '**:[[cmdk-input]]:h-12',
-    '[&_[cmdk-item]_svg]:size-5',
+    '[&_[cmdk-item]_svg]:size-icon-lg',
   ),
   inset: cn(
     'gap-1',
@@ -69,10 +70,7 @@ const CommandDialogBody = ({
 
   return (
     <>
-      <div
-        data-slot="command-dialog-panel"
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl bg-background"
-      >
+      <div data-slot="command-dialog-panel" className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl">
         {children}
       </div>
       {footer && (
@@ -175,7 +173,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       data-slot="command-input-wrapper"
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
-      <IconMagnifyingGlass className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      <IconMagnifyingGlass className={cn('mr-2 size-icon-md shrink-0 text-muted-foreground', transitions.colors)} />
       {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}
@@ -277,7 +275,7 @@ const CommandSeparator = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Separator>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Separator>
 >(({ className, ...props }, ref) => (
-  <CommandPrimitive.Separator ref={ref} className={cn('-mx-1 h-px bg-border', className)} {...props} />
+  <CommandPrimitive.Separator ref={ref} className={cn('mx-2 h-px bg-separator', className)} {...props} />
 ));
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 
@@ -288,15 +286,14 @@ const CommandItem = React.forwardRef<
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-muted-foreground select-none',
+      'relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-body-sm text-foreground select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
-      'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
+      'data-[selected=true]:bg-fill',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
+      '[&_svg]:pointer-events-none [&>svg]:size-icon-md [&>svg]:shrink-0',
       controlIconState,
-      // A selected row brightens its icon with its label, like a highlighted menu row.
-      '[--control-icon-hover:var(--foreground)] data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
+      '[--control-icon-rest:var(--icon)]',
       className,
     )}
     {...props}
@@ -304,7 +301,7 @@ const CommandItem = React.forwardRef<
 ));
 CommandItem.displayName = CommandPrimitive.Item.displayName;
 
-const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
+const CommandShortcut = ({ className, children, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
   return (
     <Txt
       as="span"
@@ -312,7 +309,9 @@ const CommandShortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanE
       tone="muted"
       className={cn('ml-auto tracking-wider tabular-nums', className)}
       {...props}
-    />
+    >
+      <KeyLabel>{children}</KeyLabel>
+    </Txt>
   );
 };
 CommandShortcut.displayName = 'CommandShortcut';

@@ -28,7 +28,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { FolderGit2 } from 'lucide-react';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
-import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
 import { IconFontStyle } from '@mastra/playground-ui/icons/central/IconFontStyle';
 import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
@@ -40,11 +40,17 @@ import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
-import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import type { ComponentType, SVGProps } from 'react';
 
 import { andLimits, repositoryHint } from '../services/rules';
-import { CONDITION_OPERATORS, VALUE_PLACEHOLDERS, conditionFields } from './conditionFields';
+import {
+  CONDITION_OPERATORS,
+  VALUE_PLACEHOLDERS,
+  conditionFields,
+  isPresenceField,
+  legacyConditionFields,
+} from './conditionFields';
 import type { Facts } from './conditionFields';
 import { MANY, VALUELESS, canNest, emptyRow, fromRule, isGroup, newKey, toRule, valueFor } from './conditionTree';
 import type { Group, Item, Row } from './conditionTree';
@@ -52,15 +58,16 @@ import { narrowSuggestions } from './sourceSuggestions';
 import { IconListAdd } from '@mastra/playground-ui/icons/central/IconListAdd';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-const FIELD_ICONS: Record<string, LucideIcon> = {
+const FIELD_ICONS: Record<string, ComponentType<SVGProps<SVGSVGElement>>> = {
   'item.labels': IconTag,
   'item.title': IconFontStyle,
   'item.author': IconUser,
   'item.key': IconHashtag,
-  'item.state': IconCircleRecord,
+  'item.state': CircleDotIcon,
   'item.assignees': IconUserDuo,
   'item.pullRequest': IconPullRequest,
-  'author.trusted': IconShieldCheck,
+  'item.trusted': IconShieldCheck,
+  'pullRequest.trusted': IconShieldCheck,
   'source.kind': IconPullRequest,
   'source.integration': IconPlugin1,
   'source.provider': IconPlugin1,
@@ -71,6 +78,8 @@ const FIELD_ICONS: Record<string, LucideIcon> = {
   'event.type': IconZap,
   'event.reason': IconCircleCheck,
 };
+
+const LEGACY_FIELDS = legacyConditionFields();
 
 function operatorLabel(field: FilterBarField | undefined, operator: string): string {
   return (
@@ -255,7 +264,7 @@ function GroupLines({
 }
 
 function FieldIcon({ id }: { id: string }) {
-  const Icon = FIELD_ICONS[id] ?? IconCircleRecord;
+  const Icon = FIELD_ICONS[id] ?? CircleDotIcon;
   return <Icon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />;
 }
 
@@ -273,15 +282,23 @@ function ConditionLine({
   onChange: (row: Row) => void;
   onRemove: () => void;
 }) {
-  const listed = fields.find(candidate => candidate.id === row.field);
+  const legacy = LEGACY_FIELDS.find(candidate => candidate.id === row.field);
+  // A stored rule may name a field the picker no longer offers: it still shows, and can be changed away from.
+  const shown = legacy && !fields.some(candidate => candidate.id === legacy.id) ? [legacy, ...fields] : fields;
+  const listed = shown.find(candidate => candidate.id === row.field);
   const field = listed && narrowSuggestions(listed, limits);
+  // A stored comparison on a presence field (say, a pull request number) keeps its regular controls.
+  const presence =
+    !!field &&
+    isPresenceField(field.id) &&
+    (!row.operator || row.operator === 'exists' || row.operator === 'not_exists');
 
   return (
     <RuleLineContent>
       <Select
         value={row.field || null}
         onValueChange={id => {
-          const next = fields.find(candidate => candidate.id === id);
+          const next = shown.find(candidate => candidate.id === id);
           if (!next) return;
           const operator = next.operators?.[0] ?? 'equals';
           onChange({ ...row, field: next.id, operator, value: valueFor(next, operator, undefined) });
@@ -296,7 +313,7 @@ function ConditionLine({
           </span>
         </SelectTrigger>
         <SelectContent>
-          {fields.map(candidate => (
+          {shown.map(candidate => (
             <SelectItem key={candidate.id} value={candidate.id}>
               <span className="flex items-center gap-2">
                 <FieldIcon id={candidate.id} />
@@ -308,7 +325,8 @@ function ConditionLine({
       </Select>
 
       {field?.type === 'boolean' && <BooleanValue row={row} field={field} onChange={onChange} />}
-      {field && field.type !== 'boolean' && (
+      {field && presence && <PresenceValue row={row} field={field} onChange={onChange} />}
+      {field && field.type !== 'boolean' && !presence && (
         <>
           <Select
             value={row.operator}
@@ -361,6 +379,28 @@ function BooleanValue({ row, field, onChange }: { row: Row; field: FilterBarFiel
             {option.label}
           </SegmentedControlItem>
         ))}
+      </SegmentedControl>
+    </>
+  );
+}
+
+/** A fact only tested for being there reads as "Has pull request is [Yes | No]". */
+function PresenceValue({ row, field, onChange }: { row: Row; field: FilterBarField; onChange: (row: Row) => void }) {
+  return (
+    <>
+      <Txt as="span" variant="caption" tone="muted">
+        is
+      </Txt>
+      <SegmentedControl
+        size="sm"
+        aria-label={field.label}
+        value={row.operator === 'not_exists' ? 'false' : 'true'}
+        onValueChange={value =>
+          onChange({ ...row, operator: value === 'true' ? 'exists' : 'not_exists', value: undefined })
+        }
+      >
+        <SegmentedControlItem value="true">Yes</SegmentedControlItem>
+        <SegmentedControlItem value="false">No</SegmentedControlItem>
       </SegmentedControl>
     </>
   );
@@ -573,25 +613,28 @@ function TextValue({
   many: boolean;
   onChange: (row: Row) => void;
 }) {
-  // What is being typed, until it is saved or put back; the saved value shows otherwise.
+  // What is being typed, shown as typed until the field is left; the value shows otherwise. Each keystroke
+  // reports the value at once, so Save works without leaving the field first: clicking a disabled Save
+  // doesn't move focus, so a value only reported on blur never got saved.
   const [draft, setDraft] = useState<string>();
+  // The value from before this round of typing, which Escape puts back.
+  const before = useRef<Row['value']>(undefined);
   const text = draft ?? textOf(row.value);
-  const commit = () => {
-    if (draft === undefined) return;
-    setDraft(undefined);
-    if (draft === textOf(row.value)) return;
-    if (many) {
-      const parts = draft.split(',').map(part => part.trim());
-      onChange({ ...row, value: parts.filter(part => part !== '') });
-      return;
-    }
-    if (field.type !== 'number') {
-      onChange({ ...row, value: draft.trim() });
-      return;
-    }
+  const valueOf = (typed: string): Row['value'] => {
+    if (many)
+      return typed
+        .split(',')
+        .map(part => part.trim())
+        .filter(part => part !== '');
+    if (field.type !== 'number') return typed.trim();
     // A number left empty or unreadable stays unfinished rather than saving 0 or NaN.
-    const number = Number(draft.trim());
-    onChange({ ...row, value: draft.trim() !== '' && Number.isFinite(number) ? number : undefined });
+    const number = Number(typed.trim());
+    return typed.trim() !== '' && Number.isFinite(number) ? number : undefined;
+  };
+  const type = (typed: string) => {
+    if (draft === undefined) before.current = row.value;
+    setDraft(typed);
+    onChange({ ...row, value: valueOf(typed) });
   };
   return (
     <Input
@@ -601,14 +644,15 @@ function TextValue({
       placeholder={VALUE_PLACEHOLDERS[field.id] ?? (many ? 'Values, comma separated' : 'Value')}
       value={text}
       className="w-48"
-      onChange={event => setDraft(event.target.value)}
-      onBlur={commit}
+      onChange={event => type(event.target.value)}
+      onBlur={() => setDraft(undefined)}
       onKeyDown={event => {
         if (event.key === 'Enter') {
           event.preventDefault();
-          commit();
-        } else if (event.key === 'Escape') {
           setDraft(undefined);
+        } else if (event.key === 'Escape' && draft !== undefined) {
+          setDraft(undefined);
+          onChange({ ...row, value: before.current });
         }
       }}
     />

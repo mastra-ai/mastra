@@ -4,7 +4,7 @@ import { useChatTranscript } from '../../context/useChatTranscript';
 import { usePreparingThreadId } from '../../hooks/usePreparingThreadId';
 import { IconFormCircle } from '@mastra/playground-ui/icons/central/IconFormCircle';
 
-const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-placeholder';
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-subtle-foreground';
 
 export function ConnectionActivity() {
   const { status } = useChatConnection();
@@ -18,7 +18,7 @@ export function ConnectionActivity() {
   if (preparingThreadId)
     return (
       <span className={statusItem} role="status" aria-live="polite">
-        <IconFormCircle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
+        <IconFormCircle className="size-icon-xs" /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
       </span>
     );
   // Spinning composer ring is the visible cue; this keeps the state announced.

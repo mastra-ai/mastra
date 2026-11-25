@@ -729,7 +729,7 @@ export class Deps extends MastraBase {
     });
 
     let packCmd = 'pack';
-    let destinationFlag = `--pack-destination ${destination}`;
+    let destinationArgs = ['--pack-destination', destination];
     if (this.packageManager === 'yarn') {
       if (this.lockFile && (await isYarnClassicLockfile(this.lockFile.path))) {
         if (!SAFE_PACKAGE_VERSION.test(version)) {
@@ -742,23 +742,24 @@ export class Deps extends MastraBase {
           });
         }
         // Yarn classic has no --out/%v; --filename takes the full output path.
-        destinationFlag = `--filename ${destination}/${sanitizedName}-${version}.tgz`;
+        destinationArgs = ['--filename', `${destination}/${sanitizedName}-${version}.tgz`];
       } else {
         // %s includes an '@' at the start of packages names with an '@'
         // so we need to use our sanitizedName instead.
-        destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+        destinationArgs = ['--out', `${destination}/${sanitizedName}-%v.tgz`];
       }
     }
     if (this.packageManager === 'bun') {
       // bun uses `pm pack` instead of `pack`
       packCmd = 'pm pack';
       // bun uses --destination instead of --pack-destination
-      destinationFlag = `--destination ${destination}`;
+      destinationArgs = ['--destination', destination];
     }
 
     return cpLogger({
-      cmd: `${this.packageManager} ${packCmd} ${destinationFlag}`,
-      args: [],
+      // The destination goes in args so it is never parsed as part of the command.
+      cmd: `${this.packageManager} ${packCmd}`,
+      args: destinationArgs,
       env: {
         PATH: process.env.PATH!,
       },

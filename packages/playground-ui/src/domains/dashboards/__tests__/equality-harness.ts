@@ -108,6 +108,25 @@ export function recordRequests() {
 /** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
 export const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
+/** A card's markup without its top bar and view tabs: what a widget whose views are tabs shares with a card whose views are a title menu. */
+function bodyMarkup(root: HTMLElement) {
+  const clone = root.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) throw new Error('Expected an element');
+  clone.querySelector('[class*="group/metrics-card"]')?.firstElementChild?.remove();
+  clone.querySelector('[data-slot="tabs"]')?.remove();
+  return clone.innerHTML;
+}
+
+/**
+ * Same markup. A widget that lists its views as tabs (the Breakdown) titles itself apart from the card's
+ * title menu, so then only the bodies are compared.
+ */
+export function expectSameMarkup(card: HTMLElement, widget: HTMLElement, message?: string) {
+  const tabs = widget.querySelector('[data-slot="tabs"]') !== null;
+  const markup = (root: HTMLElement) => normalise(tabs ? bodyMarkup(root) : root.innerHTML);
+  expect(markup(widget), message).toBe(markup(card));
+}
+
 /** Waits until nothing is in flight and the request count has stopped growing. */
 export async function settle(recorder: ReturnType<typeof recordRequests>) {
   let last = -1;
@@ -135,11 +154,47 @@ export function find(container: HTMLElement, selector: string): HTMLElement {
 export function expectSame(card: Rendered, widget: Rendered) {
   expect(widget.root).not.toBeNull();
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
-/** Picks a view from the card's title menu. The menu portals out, but only one is open at a time. */
+/**
+ * The tab or folded menu item showing `view`: by its label, else by its label without the words the
+ * card's views share, as `shortViewLabels` names it ("Breakdown by tool" → "Tools", "Workflow latency" → "Workflow").
+ */
+function showing(view: string, options: HTMLElement[]) {
+  const words = view.toLowerCase().split(/\s+/);
+  const forms = (w: string) => [w, `${w}s`, `${w}es`, `${w.slice(0, -1)}ies`];
+  const short = (shown: string) =>
+    shown
+      .toLowerCase()
+      .split(/\s+/)
+      .every(word => words.some(w => forms(w).includes(word)));
+  return options.find(o => o.textContent === view) ?? options.find(o => short(o.textContent ?? ''));
+}
+
+/**
+ * Picks a view: a tab, for a widget that lists its views under its title (by its short name,
+ * "Breakdown by agent" → "Agents"), else from the card's title menu. The menu portals out, but only
+ * one is open at a time.
+ */
 export function pickIn(root: HTMLElement, view: string) {
+  if (within(root).queryAllByRole('tab', { hidden: true }).length) {
+    const tabs = within(root).queryAllByRole('tab');
+    const more = within(root).queryByRole('button', { name: /more tabs$/ });
+    const exact = tabs.find(tab => tab.textContent === view);
+    if (exact || !more) {
+      const tab = exact ?? showing(view, tabs);
+      if (!tab) throw new Error(`No tab shows ${view}`);
+      fireEvent.click(tab);
+      return;
+    }
+    // Maybe folded into the "+N" menu.
+    fireEvent.click(more);
+    const option = showing(view, [...tabs, ...screen.getAllByRole('menuitem')]);
+    if (!option) throw new Error(`No tab shows ${view}`);
+    fireEvent.click(option);
+    return;
+  }
   const trigger = within(root)
     .getAllByRole('button')
     .find(b => b.getAttribute('aria-haspopup') === 'menu');
@@ -179,7 +234,7 @@ export async function expectSameViewFromCache(card: Rendered, widget: Rendered, 
   await pickInBoth(card, widget, view);
   expect(card.sent.length).toBeGreaterThan(0);
   expect(widget.sent).toEqual([]);
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 export const API = `${TEST_BASE_URL}/api/observability`;

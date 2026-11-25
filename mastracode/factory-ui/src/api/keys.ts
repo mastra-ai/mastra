@@ -1,4 +1,4 @@
-import type { BoardPhasesRequest, WorkspaceChangesScope } from './types';
+import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -47,7 +47,6 @@ export const queryKeys = {
   board: (factoryProjectId: string | undefined, boardKey: string) =>
     ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
-  factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   factoryEnvironment: (factoryProjectId: string | undefined) =>
     ['factory', 'environment', factoryProjectId ?? null] as const,
@@ -86,6 +85,7 @@ export const queryKeys = {
   jiraStatus: () => ['jira', 'status'] as const,
   platformConnections: (provider: string) => ['platform-connections', provider] as const,
   connectTools: () => ['connect-tools'] as const,
+  connectToolList: () => ['connect-tools', 'tools'] as const,
   jiraProjects: () => ['jira', 'projects'] as const,
   jiraIssue: (factoryProjectId: string | undefined, identifier: string | undefined, issueRef: string | undefined) =>
     ['jira', 'issue', factoryProjectId ?? null, identifier ?? null, issueRef ?? null] as const,
@@ -96,11 +96,35 @@ export const queryKeys = {
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule or order change refreshes the counts.
+  intakeDryRun: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule change refreshes its skips.
+  intakeSkipped: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  intakeNotRouted: (factoryProjectId: string | undefined) =>
+    ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
+  // Not under the board's key: card rewrites there expect a board snapshot.
+  workItemSessionRepository: (
+    factoryProjectId: string | undefined,
+    workItemId: string | undefined,
+    cardUpdatedAt: string | undefined,
+  ) =>
+    [
+      'factory',
+      'work-item-session-repository',
+      factoryProjectId ?? null,
+      workItemId ?? null,
+      cardUpdatedAt ?? null,
+    ] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
   sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
+  workItem: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'card', workItemId ?? null] as const,
   workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
@@ -145,6 +169,11 @@ export const queryKeys = {
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
+  // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
+  sessionRowsRoot: (factoryId: string | undefined) => ['factory', 'session-rows', factoryId ?? null] as const,
+  sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
+    [...queryKeys.sessionRowsRoot(factoryId), request] as const,
+  sessionActivity: (factoryId: string | undefined) => ['factory', 'session-activity', factoryId ?? null] as const,
   providers: () => ['providers'] as const,
   mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>
@@ -196,9 +225,6 @@ export const queryKeys = {
       'state',
       ...(threadId ? [threadId] : []),
     ] as const,
-  // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
-  agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
-    ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
   agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
   agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>

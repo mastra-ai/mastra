@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 import { SpanType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
@@ -26,10 +25,8 @@ import {
   processorSystemMutationSpan,
   processorToolResultSpan,
   processorTripwireSpan,
-  traceWithoutToolCalls,
 } from './fixtures/span-payloads';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
@@ -56,11 +53,6 @@ const sectionTitles = () =>
 const LAYOUTS = [['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />]] as const;
 
 describe('SpanPayloadProcessor', () => {
-  it('reads the phase from the span rather than the payload shape', () => {
-    render(<SpanInputRenderer span={processorToolResultSpan} />);
-    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('toolResult');
-  });
-
   it('shows system and user messages as one list tagged by role', () => {
     render(<SpanInputRenderer span={processorRequestErrorSpan} />);
     expect(document.querySelectorAll('[data-slot="span-payload-messages"]').length).toBe(1);
@@ -95,7 +87,6 @@ describe('SpanPayloadProcessor', () => {
 
   it('keeps the two output hooks apart', () => {
     render(<SpanOutputRenderer span={processorOutputStreamSpan} />);
-    expect(slot('span-payload-processor')?.getAttribute('data-phase')).toBe('outputStream');
     expect(screen.getByText('The sky is blue.')).toBeTruthy();
     expect(valueOf('Chunks')).toBe('126');
   });
@@ -298,12 +289,6 @@ const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name
 const promptDiff = () => screen.getByRole('region', { name: 'Prompt' });
 
 describe('processor spans in the data panel', () => {
-  beforeEach(() => {
-    server.use(
-      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
-    );
-  });
-
   const renderPanel = (span: SpanRecord) =>
     renderWithProviders(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
 

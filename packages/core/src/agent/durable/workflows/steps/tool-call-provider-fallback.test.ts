@@ -77,6 +77,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'web_search',
@@ -86,7 +87,7 @@ describe('durable tool-call provider-tool fallback', () => {
       suspend: vi.fn(),
       resumeData: undefined,
       requestContext: new Map(),
-      getInitData: () => makeInitData(),
+      getInitData: () => ({ ...makeInitData(), agentVersionId: 'pinned' }),
       [PUBSUB_SYMBOL]: mockPubsub(),
     });
 
@@ -111,6 +112,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-mastra',
         toolName: 'mastraTool',
@@ -149,6 +151,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-provider-mastra',
         toolName: 'web_search',
@@ -167,6 +170,25 @@ describe('durable tool-call provider-tool fallback', () => {
     expect(result.result).toEqual({ snippet: 'web-result' });
   });
 
+  it('reports a missing tool without consulting the global catalog when the pinned agent cannot be rebuilt', async () => {
+    const listTools = vi.fn(() => ({}));
+    const step = createDurableToolCallStep();
+    const result = await (step as any).execute({
+      getState: async () => ({}),
+      inputData: { toolCallId: 'call-pinned', toolName: 'missingTool', args: {} },
+      mastra: { getLogger: () => undefined, listTools },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: new Map(),
+      getInitData: () => ({ ...makeInitData(), agentVersionId: 'pinned' }),
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    expect(result.error?.name).toBe('ToolNotFoundError');
+    expect(resolveRuntime.resolveTool).not.toHaveBeenCalled();
+    expect(listTools).not.toHaveBeenCalled();
+  });
+
   it('still emits ToolNotFoundError when no provider tool matches', async () => {
     globalRunRegistry.set(RUN_ID, {
       tools: {
@@ -181,6 +203,7 @@ describe('durable tool-call provider-tool fallback', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: {
         toolCallId: 'call-1',
         toolName: 'definitely_not_a_tool',

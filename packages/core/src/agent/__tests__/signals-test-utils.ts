@@ -263,13 +263,14 @@ export async function readNextRun(iterator: AsyncIterator<any>) {
   return { value: { runId: nextRun.value.runId, text: nextRun.value.text, part: nextRun.value.part }, done: false };
 }
 
-export async function readNextRunWithParts(iterator: AsyncIterator<any>) {
+export async function readNextRunWithParts(iterator: AsyncIterator<any>, onPart?: () => void) {
   let runId: string | undefined;
   let text = '';
   const parts: any[] = [];
 
   while (true) {
     const next = await iterator.next();
+    onPart?.();
     if (next.done) return next;
 
     const part = next.value;
@@ -319,6 +320,43 @@ export async function withTimeout<T>(promise: Promise<T>, message: string, timeo
   } finally {
     if (timeout) clearTimeout(timeout);
   }
+}
+
+/**
+ * Like withTimeout, but the budget restarts each time `progress` is called, so it fails
+ * only when nothing has moved for `idleMs`. A CPU-starved runner that is slow but still
+ * delivering passes; a real hang still fails within `idleMs` of the last progress.
+ */
+export function withStallTimeout<T>(
+  work: (progress: () => void) => Promise<T>,
+  message: string,
+  idleMs = 500,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const progress = () => {
+      if (settled) return;
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        settled = true;
+        reject(new Error(message));
+      }, idleMs);
+    };
+    progress();
+    work(progress).then(
+      value => {
+        settled = true;
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      error => {
+        settled = true;
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
 }
 
 export function createFakeThreadRun(runId: string, finished: Promise<void>) {

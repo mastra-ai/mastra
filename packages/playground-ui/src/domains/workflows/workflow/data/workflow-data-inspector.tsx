@@ -11,7 +11,7 @@ import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
 import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
-import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconPause } from '@/ds/icons/central/IconPause';
 
@@ -65,16 +65,20 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}
-            className="min-w-0 rounded-lg bg-background p-3"
+            className="min-w-0 rounded-lg bg-nested p-3"
           />
         )}
       </div>
       {result?.status === 'suspended' && (
         <div className="shrink-0 border-t border-border p-2">
-          <Button variant="ghost" className="w-full justify-start text-warning-foreground" onClick={closeStepDetail}>
-            <IconPause />
-            Return to suspended step
-            <IconChevronRight className="ml-auto" />
+          <Button
+            iconEnd={<IconChevronRightMedium />}
+            icon={<IconPause />}
+            variant="ghost"
+            className="w-full justify-start text-warning-foreground"
+            onClick={closeStepDetail}
+          >
+            <span className="flex-1 text-left">Return to suspended step</span>
           </Button>
         </div>
       )}

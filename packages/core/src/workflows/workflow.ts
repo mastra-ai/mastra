@@ -117,7 +117,7 @@ import type {
 } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
-import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
+import { collectPredicateStepRefs, predicateReadsState, resolveStepOutputs } from './step-refs';
 import type {
   DefaultEngineType,
   DynamicMapping,
@@ -223,6 +223,7 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  */
 export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
   const stepRefs = collectPredicateStepRefs(predicate);
+  const readsState = predicateReadsState(predicate);
   return async (params: any) => {
     // Resolve every referenced step up front. Passing the sync getStepResult
     // instead would let the predicate's fail-quiet lookup swallow its throw on
@@ -234,7 +235,12 @@ export function predicateToCondition(predicate: Predicate): (params: any) => Pro
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
       inputData: params?.inputData,
-      state: params?.state,
+      // Storage v2 runs serve the state through getState only.
+      state: readsState
+        ? typeof params?.getState === 'function'
+          ? await params.getState()
+          : params?.state
+        : undefined,
       stepResults,
     });
   };
@@ -1300,6 +1306,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
         agent,
+        abortSignal,
         lateSignalSink,
         phase,
         runId: agentRunId,
@@ -2043,8 +2050,13 @@ export class Workflow<
   #nestedRun?: {
     /** The parent run's storage version, which a new nested run takes. */
     storageVersion: 1 | 2;
-    /** Set when execute() starts the nested run rather than resuming or restarting it. */
+    /**
+     * Set when execute() may start the nested run: on a start, and on a restart, which starts it
+     * when it wasn't stored before. Unset on a resume.
+     */
     start?: { input: TInput; state: TState; inheritedState?: StateBase };
+    /** Set by createRun() when it saved the run's first snapshot: the run wasn't stored before. */
+    inserted?: boolean;
   };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
@@ -2142,6 +2154,7 @@ export class Workflow<
       evaluatePersistencePredicateBeforeDurableOperation: options.evaluatePersistencePredicateBeforeDurableOperation,
       allowUnclaimedResumes: options.allowUnclaimedResumes,
       persistResumeClaim: options.persistResumeClaim,
+      localCancellationOnly: options.localCancellationOnly,
       isOwnershipLostError: options.isOwnershipLostError,
       isForeignExecution: options.isForeignExecution,
       watchExecutionLoss: options.watchExecutionLoss,
@@ -2155,15 +2168,6 @@ export class Workflow<
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
     };
-
-    if (options.storageVersion === 2 && options.pruneSnapshot) {
-      throw new MastraError({
-        id: 'WORKFLOW_STORAGE_V2_PRUNE_SNAPSHOT',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: `Workflow "${id}" sets both storageVersion: 2 and pruneSnapshot. Storage version 2 doesn't support pruneSnapshot.`,
-      });
-    }
 
     if (!executionEngine) {
       // TODO: this should be configured using the Mastra class instance that's passed in
@@ -2203,12 +2207,12 @@ export class Workflow<
 
   __registerMastra(mastra: Mastra) {
     // Checked here rather than in the constructor: other engines set engineType after super().
-    if (this.#options.storageVersion === 2 && this.engineType !== 'default') {
+    if (this.#options.storageVersion === 2 && this.engineType !== 'default' && this.engineType !== 'evented') {
       throw new MastraError({
         id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
         domain: ErrorDomain.MASTRA_WORKFLOW,
         category: ErrorCategory.USER,
-        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default engine or storageVersion: 1.`,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the ${this.engineType} engine doesn't support yet. Use the default or evented engine, or storageVersion: 1.`,
       });
     }
     this.#mastra = mastra;
@@ -3158,6 +3162,177 @@ export class Workflow<
   }
 
   /**
+   * Takes the nested-run handoff set by execute() and clears it, so a later top-level createRun()
+   * on the same instance cannot inherit it. Concurrent parent runs share the workflow instance, so
+   * this must be taken synchronously, before the first await.
+   */
+  protected takeNestedRun() {
+    const nestedRun = this.#nestedRun;
+    this.#nestedRun = undefined;
+    return nestedRun;
+  }
+
+  /**
+   * Resolves the storage version a createRun() call uses, and reads the stored run that call
+   * reopens. Shared by the default and evented engines so their rules cannot drift.
+   *
+   * A stored run keeps the version it was created with, whatever the workflow sets now. A new
+   * nested run takes its parent run's version, so the version its parent looks it up under is the
+   * one it is stored in. A new top-level run takes the workflow's option, or the automatic choice.
+   * Only a caller-given top-level id can name a run stored in the other version's table.
+   */
+  protected async resolveRunStorage({
+    runId,
+    reopen,
+    cachedRun,
+    nestedRun,
+    lookUpStoredRun,
+  }: {
+    runId: string;
+    /** The caller supplied this id, so it may name a run created earlier. */
+    reopen: boolean;
+    cachedRun?: { storageVersion: 1 | 2 };
+    nestedRun?: { storageVersion: 1 | 2 };
+    /** The run can be in storage: the snapshot policy persists it, or the caller named it. */
+    lookUpStoredRun: boolean;
+  }): Promise<{
+    storageVersion: 1 | 2;
+    existsInStorage: boolean;
+    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'>;
+  }> {
+    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
+    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2, on an engine
+    // that can write one.
+    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
+    const workflowsStore = await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows');
+    const journal = !!workflowsStore?.supportsRunJournal();
+    let unsupportedV2 = false;
+    let autoVersion: 1 | 2 | undefined;
+    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
+      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
+      else autoVersion = journal && (this.engineType === 'default' || this.engineType === 'evented') ? 2 : 1;
+    }
+    const throwUnsupportedV2 = (): never => {
+      throw new MastraError({
+        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
+      });
+    };
+    if (unsupportedV2 && !reopen) throwUnsupportedV2();
+
+    let storageVersion: 1 | 2 =
+      cachedRun?.storageVersion ??
+      nestedRun?.storageVersion ??
+      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
+    // A cached run's version is already known, and a nested run is stored in its parent's.
+    const probeOtherVersion = reopen && !cachedRun && !nestedRun;
+    const loadStoredHeader = (version: 1 | 2) =>
+      createRunStorage({
+        storageVersion: version,
+        workflowName: this.id,
+        runId,
+        getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+      }).loadHeader();
+    let existsInStorage = false;
+    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
+
+    if (storageVersion === 2) {
+      // The header holds the status and parent this reads, so one header read replaces the
+      // existence check and a snapshot load.
+      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
+      if (header) {
+        existsInStorage = true;
+        stored = header;
+      } else if (probeOtherVersion) {
+        const v1Header = await loadStoredHeader(1);
+        if (v1Header) {
+          existsInStorage = true;
+          stored = v1Header;
+          storageVersion = 1;
+        }
+      }
+    } else {
+      // Unlike the header reads, this finds the run in either version's table.
+      const existingRun = lookUpStoredRun
+        ? await this.getWorkflowRunById(runId, { withNestedWorkflows: false })
+        : undefined;
+      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
+      if (existsInStorage && existingRun?.status) {
+        let header = await loadStoredHeader(1);
+        if (!header && probeOtherVersion && journal) {
+          header = await loadStoredHeader(2);
+          if (header) storageVersion = 2;
+        }
+        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
+      }
+    }
+    if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
+
+    return { storageVersion, existsInStorage, stored };
+  }
+
+  /**
+   * Stores a `running` snapshot holding only the input of a run that isn't stored yet. A caller
+   * that commits a side effect before the run's first checkpoint writes it first, so a crash in
+   * between still leaves a run that recovery finds and `restart()` starts from its first step.
+   * Does nothing when the run is already stored or the snapshot policy doesn't persist `running`
+   * snapshots. `onWrite` runs right before the write, which may commit even when it rejects.
+   * @internal
+   */
+  async __persistRestartableStart({
+    runId,
+    resourceId,
+    input,
+    requestContext,
+    onWrite,
+  }: {
+    runId: string;
+    resourceId?: string;
+    input: TInput;
+    requestContext?: RequestContext;
+    onWrite: () => void;
+  }): Promise<void> {
+    if (!this.#options.shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })) return;
+    const { storageVersion, existsInStorage } = await this.resolveRunStorage({
+      runId,
+      reopen: true,
+      cachedRun: this.#runs.get(runId),
+      lookUpStoredRun: true,
+    });
+    if (existsInStorage) return;
+    // No active paths and no step results: `restart()` treats this as a run that hasn't
+    // started its first step (see createRestartExecutionParams).
+    const snapshot: WorkflowRunState = {
+      runId,
+      status: 'running',
+      value: {},
+      context: { input } as WorkflowRunState['context'],
+      requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      serializedStepGraph: this.serializedStepGraph,
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
+    onWrite();
+    await createRunStorage({
+      storageVersion,
+      workflowName: this.id,
+      runId,
+      getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
+    }).writeSnapshot(
+      this.#options.pruneSnapshot && storageVersion === 1
+        ? this.#options.pruneSnapshot({ snapshot, workflowStatus: 'running' })
+        : snapshot,
+      resourceId,
+    );
+  }
+
+  /**
    * Creates a new workflow run instance and stores a snapshot of the workflow in the storage
    * @param options Optional configuration for the run
    * @param options.runId Optional custom run ID, defaults to a random UUID
@@ -3183,8 +3358,7 @@ export class Workflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
     // instance, so a later execute() would otherwise swap in its own input and state.
-    const nestedRun = this.#nestedRun;
-    this.#nestedRun = undefined;
+    const nestedRun = this.takeNestedRun();
     const nestedRunStart = nestedRun?.start;
     if (this.stepFlow.length === 0) {
       throw new Error(
@@ -3194,27 +3368,6 @@ export class Workflow<
     if (!this.executionGraph.steps) {
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
-    // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
-    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2.
-    // A nested run doesn't use the workflow's options, so it never hits either.
-    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
-    let unsupportedV2 = false;
-    let autoVersion: 1 | 2 | undefined;
-    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const journal = !!workflowsStore?.supportsRunJournal();
-      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
-      else autoVersion = journal && this.engineType === 'default' ? 2 : 1;
-    }
-    const throwUnsupportedV2 = (): never => {
-      throw new MastraError({
-        id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_STORE',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text: `Workflow "${this.id}" sets storageVersion: 2, which the configured storage adapter doesn't support yet. Use storageVersion: 1.`,
-      });
-    };
-    if (unsupportedV2 && !options?.runId) throwUnsupportedV2();
     const runIdToUse =
       options?.runId ||
       this.#mastra?.generateId({
@@ -3236,64 +3389,13 @@ export class Workflow<
     // existence read would be a guaranteed miss. Skipping it removes one storage
     // round trip per streamed chunk on the agent output-processor hot path (#19015).
     const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
-    // A stored run keeps the version it was created with, whatever the workflow sets now. A new
-    // nested run takes its parent run's, and a new top-level run the workflow's. The version's
-    // table is probed first; only a caller-given top-level id can name a run stored in the other
-    // one. A cached run's version is already known, and a nested run is stored in its parent's.
-    let storageVersion: 1 | 2 =
-      cachedRun?.storageVersion ??
-      nestedRun?.storageVersion ??
-      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
-    const probeOtherVersion = !!options?.runId && !cachedRun && !nestedRun;
-    const loadStoredHeader = (version: 1 | 2) =>
-      createRunStorage({
-        storageVersion: version,
-        workflowName: this.id,
-        runId: runIdToUse,
-        getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
-      }).loadHeader();
-    let existsInStorage = false;
-    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
-
-    if (storageVersion === 2) {
-      // The header holds the status and parent this reads, so one header read replaces the
-      // existence check and the snapshot load.
-      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
-      if (header) {
-        existsInStorage = true;
-        stored = header;
-      } else if (probeOtherVersion) {
-        const v1Snapshot = await loadStoredHeader(1);
-        if (v1Snapshot) {
-          existsInStorage = true;
-          stored = v1Snapshot;
-          storageVersion = 1;
-        }
-      }
-    } else {
-      // Unlike the header reads, this finds the run in either version's table.
-      const existingRun = lookUpStoredRun
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
-        : undefined;
-
-      // Check if run exists in persistent storage (not just in-memory)
-      existsInStorage = !!existingRun && !existingRun.isFromInMemory;
-
-      // If a run exists in storage, update the run's status to reflect the actual state
-      // This fixes the issue where createRun checks storage but doesn't use the stored data
-      if (existsInStorage && existingRun?.status) {
-        let header = await loadStoredHeader(1);
-        if (!header && probeOtherVersion) {
-          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-          if (workflowsStore?.supportsRunJournal()) {
-            header = await loadStoredHeader(2);
-            if (header) storageVersion = 2;
-          }
-        }
-        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
-      }
-    }
-    if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
+    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
+      runId: runIdToUse,
+      reopen: !!options?.runId,
+      cachedRun,
+      nestedRun,
+      lookUpStoredRun,
+    });
 
     // Return a new Run instance with object parameters
     const run =
@@ -3346,6 +3448,8 @@ export class Workflow<
         // A nested run restarted before its first step only has this snapshot to rebuild from,
         // so it must carry the parent's state alongside the input.
         value: nestedRunStart?.state ?? {},
+        // Only a truthy input is kept, as on main: a restart recognizes this snapshot by its input and
+        // restarts it without calling onStart, so a falsy input stays unrecognized and fails recovery.
         // @ts-expect-error - context type mismatch
         context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
         activePaths: [],
@@ -3358,7 +3462,7 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await run.runStorage.writeInitial(
+      await run.runStorage.writeSnapshot(
         // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
         this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
@@ -3367,6 +3471,7 @@ export class Workflow<
         // The nested run starts from exactly that version of the parent's state.
         { stateBase: nestedRunStart?.inheritedState?.ref },
       );
+      if (nestedRun) nestedRun.inserted = true;
     }
 
     run.inheritedState = nestedRunStart?.inheritedState;
@@ -3527,21 +3632,27 @@ export class Workflow<
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // A started nested run works on its own copy of the parent's state and hands back its changes
     // on top of the parent's state then, so changes the parent's other steps make meanwhile are kept.
+    // A restart prepares the same, because it starts the nested run when it wasn't stored before.
     let startState = state;
     let startedFrom: Record<string, unknown> | undefined;
-    if (!restart && !isResume) {
+    if (!isResume) {
       startedFrom = toJsonState(state);
       // State that isn't JSON is shared and handed back whole, as before.
       if (startedFrom) startState = copyState(state);
     }
     // The nested run takes the parent run's version. Only a storage v2 parent hands over its
     // state link, and it stores the nested run's state as its changes to a version of the parent's.
+    // Not on a restart: it only learns after createRun() whether it starts or restarts the nested
+    // run, and taking the link can write a draft of the parent's state that a restarted run never uses.
+    // A nested run a restart starts stores its full state instead, which costs space only.
     const inheritedState = !restart && !isResume ? await parentState?.(startState) : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
     this.#nestedRun = {
       storageVersion: parentState ? 2 : 1,
-      start: !restart && !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
+      start: !isResume ? { input: inputData, state: startState, inheritedState } : undefined,
     };
+    // createRun() takes it off the instance, and records on it whether it saved the run.
+    const nestedRunHandoff = this.#nestedRun;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3585,6 +3696,7 @@ export class Workflow<
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
+      let storedPending = false;
       if ((restart || isResume) && !isTimeTravel) {
         const nestedSnapshot = await run.runStorage.loadHeader();
         let nestedStatus = nestedSnapshot?.status;
@@ -3611,7 +3723,14 @@ export class Workflow<
         } else if (restart && nestedStatus === 'suspended') {
           restartNested = false;
           resumeNested = true;
+        } else if (restart && !isResume && (!nestedSnapshot || nestedRunHandoff.inserted)) {
+          // The parent saves this step as running before the nested run saves anything, so a crash
+          // or a failed write in between leaves no nested run. createRun() just saved it, or it
+          // doesn't save pending runs, so start it. A nested run that was already stored as
+          // `pending` keeps the restart: its onStart may have accepted it already, and must not run twice.
+          restartNested = false;
         }
+        storedPending = nestedStatus === 'pending' && !nestedRunHandoff.inserted;
       }
 
       if (isTimeTravel) {
@@ -3634,6 +3753,9 @@ export class Workflow<
         // The changes since the drive started are the ones the parent hasn't received: from a fresh
         // start, none of them; from a resume, those after the suspension the parent took in.
         handBackBase = await run.runStorage.loadDriveStartState();
+        // A nested run still `pending` never ran a step, so every change it makes is new to the
+        // parent, relative to the state it was saved with. v1 records no drive start state.
+        if (!handBackBase && storedPending) handBackBase = toJsonState((await run.runStorage.loadFull())?.value);
         res = await run.restart({
           requestContext,
           actor,
@@ -4685,7 +4807,7 @@ export class Run<
             timestamp: Date.now(),
           };
           try {
-            await this.runStorage.writeInitial(
+            await this.runStorage.writeSnapshot(
               this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
                 ? this.executionEngine.options.pruneSnapshot({
                     snapshot: initialRunSnapshot,
@@ -6057,46 +6179,22 @@ export class Run<
     });
   }
 
-  protected async _restart({
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    actor,
-    ...rest
-  }: {
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const allowedEngines = ['default', 'evented'];
-    if (!allowedEngines.includes(this.workflowEngineType)) {
-      throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
-    }
-
-    let snapshot =
-      this.storageVersion === 2
-        ? await this.runStorage.loadForResume({ wait: false })
-        : await this.runStorage.loadFull();
-
-    if (!snapshot) {
-      throw new Error(`Snapshot not found for run ${this.runId}`);
-    }
-
-    // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
-    // children may already be terminal while the parent still lists them as active and
-    // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
-    // See https://github.com/mastra-ai/mastra/issues/20225
-    //
-    // Only statuses already represented on WorkflowResult are reconstructed here.
-    // Other terminal statuses (canceled/bailed) keep the existing createRestartExecutionParams
-    // "was not active" behavior — expanding WorkflowResult is out of scope for this fix.
+  /**
+   * The result `restart()` returns for a run that already finished, or undefined for any other status.
+   * On the finished path it also runs the run's cleanup.
+   *
+   * Parent parallel activeStepsPath can lag behind nested child completion after a crash:
+   * children may already be terminal while the parent still lists them as active and
+   * re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
+   * See https://github.com/mastra-ai/mastra/issues/20225
+   *
+   * Only statuses already represented on WorkflowResult are reconstructed here.
+   * Other terminal statuses (canceled/bailed) keep the "was not active" error from
+   * createRestartExecutionParams, because WorkflowResult doesn't represent them.
+   */
+  async #storedRestartResult(
+    snapshot: WorkflowRunState,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion> | undefined> {
     if (snapshot.status === 'success' || snapshot.status === 'failed' || snapshot.status === 'tripwire') {
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
@@ -6164,15 +6262,47 @@ export class Run<
         TStorageVersion
       >;
     }
+    return undefined;
+  }
 
-    if (this.storageVersion === 2) {
-      snapshot = await this.runStorage.loadFull();
-      if (!snapshot) {
-        throw new Error(`Snapshot not found for run ${this.runId}`);
-      }
+  protected async _restart({
+    requestContext,
+    outputWriter,
+    tracingOptions,
+    outputOptions,
+    actor,
+    ...rest
+  }: {
+    requestContext?: RequestContext<TRequestContext>;
+    outputWriter?: OutputWriter;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+    actor?: ActorSignal;
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const allowedEngines = ['default', 'evented'];
+    if (!allowedEngines.includes(this.workflowEngineType)) {
+      throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
+    const firstRead =
+      this.storageVersion === 2
+        ? await this.runStorage.loadForResume({ wait: false })
+        : await this.runStorage.loadFull();
+
+    if (!firstRead) {
+      throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    const storedResult = await this.#storedRestartResult(firstRead);
+    if (storedResult) {
+      return storedResult;
+    }
+    // Throws for a run that isn't active, before it touches the lease table.
+    createRestartExecutionParams({ snapshot: firstRead, graph: this.executionGraph });
 
     const ownership = await this.#claimOwnership(false);
     if (!('release' in ownership)) {
@@ -6189,6 +6319,29 @@ export class Run<
           leaseExpiresAt: ownership.owner?.leaseExpiresAt?.toISOString() ?? null,
         },
       });
+    }
+
+    // The owner can finish, suspend or be canceled and release its lease between the first read
+    // and the claim, so the restart acts on the run as it is once the claim is held.
+    let snapshot: WorkflowRunState;
+    let restartData: ReturnType<typeof createRestartExecutionParams>;
+    let restarting = false;
+    try {
+      const loaded = await this.runStorage.loadFull();
+      if (!loaded) {
+        throw new Error(`Snapshot not found for run ${this.runId}`);
+      }
+      snapshot = loaded;
+      const finishedResult = await this.#storedRestartResult(snapshot);
+      if (finishedResult) {
+        return finishedResult;
+      }
+      restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
+      restarting = true;
+    } finally {
+      if (!restarting) {
+        await ownership.release();
+      }
     }
 
     const requestContextToUse = requestContext ?? new RequestContext();

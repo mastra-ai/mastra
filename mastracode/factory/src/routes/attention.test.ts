@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { ParkedRun } from '../session/live-sessions.js';
 import type { FactoryDeferredDecisionRecord, Card } from '../storage/domains/work-items/base.js';
@@ -37,9 +38,13 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       projects: seed.projects,
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
-      transitionService: new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems }),
+      boardEngine: new DispatcherBoardEngine({
+        transitionService: new FactoryTransitionService({
+          configVersion: 'factory-config-v1',
+          storage: seed.workItems,
+        }),
+      }),
       liveSessions: {
-        isRunning: () => false,
         parked: sessionId => parkedBySession.get(sessionId),
         parkedIn: () => [...parkedBySession].map(([sessionId, run]) => ({ sessionId, run })),
       },

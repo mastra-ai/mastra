@@ -63,9 +63,9 @@ export function CommentEditor({
           readOnly={isPending}
           aria-label={ariaLabel}
           rows={2}
-          className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-border bg-background px-2 pt-1.5 pb-9 text-caption zoom-safe-text text-foreground outline-none focus:border-border-strong"
+          className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg bg-field px-2 pt-1.5 pb-9 text-caption zoom-safe-text text-foreground shadow-input outline-none focus-visible:[--surface-rim:var(--field-rim-focus)]"
         />
-        <div className="absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg bg-background px-1.5 pt-1 pb-1.5">
+        <div className="absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg bg-field px-1.5 pt-1 pb-1.5">
           <Button
             icon={<IconCrossMedium />}
             type="button"
@@ -76,8 +76,15 @@ export function CommentEditor({
           >
             Cancel
           </Button>
-          <Button icon={<IconCheckmark2Medium />} type="button" size="sm" disabled={!canSave} onClick={save}>
-            {isPending ? 'Saving…' : 'Save'}
+          <Button
+            icon={<IconCheckmark2Medium />}
+            type="button"
+            size="sm"
+            disabled={!canSave}
+            onClick={save}
+            loading={isPending}
+          >
+            Save
           </Button>
         </div>
       </div>

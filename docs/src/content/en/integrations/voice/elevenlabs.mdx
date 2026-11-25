@@ -1,15 +1,57 @@
 ---
 title: "ElevenLabs | Voice"
-description: "Add ElevenLabs text-to-speech and speech-to-text to Mastra with configurable voices, models, audio formats, synthesis, and transcription."
+description: "Give Mastra agents ElevenLabs tools through Mastra Connect, and add ElevenLabs text-to-speech and speech-to-text to Mastra."
 packages:
+  - "@mastra/connect"
   - "@mastra/voice-elevenlabs"
 ---
 
+import ElevenlabsConnectTools from "@site/src/components/connect/generated/elevenlabs.mdx";
+
 # ElevenLabs
+
+Use ElevenLabs with Mastra in two ways:
+
+- **Agent tools** let an agent convert text to speech, transcribe recordings, clone voices, compose music, and manage ElevenLabs conversational AI agents, voices, and pronunciation dictionaries through [Mastra Connect](/docs/mastra-platform/connect). The agent decides when to call them, and your ElevenLabs API key stays on Mastra Platform.
+- **[Voice](#voice)** adds text-to-speech and speech-to-text to an agent with `ElevenLabsVoice`, for speaking and listening directly in your application.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<ElevenlabsConnectTools />
+
+### Require approval for voice cloning
+
+`elevenlabs_clone_voice` copies a real person's voice from recordings of them. Only clone a voice with its owner's consent, and require a person to approve each clone before it runs:
+
+```typescript title="src/mastra/agents/elevenlabs-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { tools } from '@mastra/connect'
+
+export const elevenlabsAgent = new Agent({
+  id: 'elevenlabs-agent',
+  name: 'ElevenLabs agent',
+  instructions: 'You narrate messages, transcribe recordings, and compose music with ElevenLabs.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: tools({
+    providers: ['elevenlabs'],
+    requireApproval: ['elevenlabs_clone_voice'],
+  }),
+})
+```
+
+The agent still calls the other ElevenLabs tools without asking. See [Human-in-the-loop](/docs/agents/human-in-the-loop) for how to approve or decline a call.
+
+### Audio results
+
+`elevenlabs_text_to_speech` and `elevenlabs_compose_music` return the audio base64-encoded in the tool result, so your code can save or play it. The model sees only a one-line summary of the audio, which keeps the bytes out of its context.
+
+## Voice
 
 The ElevenLabs voice implementation in Mastra provides high-quality text-to-speech (TTS) and speech-to-text (STT) capabilities using the ElevenLabs API.
 
-## Usage example
+### Usage example
 
 ```typescript
 import { ElevenLabsVoice } from '@mastra/voice-elevenlabs'
@@ -33,7 +75,7 @@ const audioStream = await voice.speak('Hello, world!')
 const speakers = await voice.getSpeakers()
 ```
 
-## Constructor parameters
+### Constructor parameters
 
 <PropertiesTable
   content={[
@@ -74,9 +116,9 @@ const speakers = await voice.getSpeakers()
 ]}
 />
 
-## Methods
+### Methods
 
-### `speak()`
+#### `speak()`
 
 Converts text to speech using the configured speech model and voice.
 
@@ -112,7 +154,7 @@ Converts text to speech using the configured speech model and voice.
 
 Returns: `Promise<NodeJS.ReadableStream>`
 
-### `getSpeakers()`
+#### `getSpeakers()`
 
 Returns an array of available voice options, where each node contains:
 
@@ -145,7 +187,7 @@ Returns an array of available voice options, where each node contains:
 ]}
 />
 
-### `listen()`
+#### `listen()`
 
 Converts audio input to text using ElevenLabs Speech-to-Text API.
 
@@ -217,9 +259,8 @@ The options object supports the following properties:
 
 Returns: `Promise<string>` - A Promise that resolves to the transcribed text
 
-## Important notes
+### Important notes
 
 1. An ElevenLabs API key is required. Set it via the `ELEVENLABS_API_KEY` environment variable or pass it in the constructor.
 1. The default speaker is set to Aria (ID: '9BWtsMINqrJLrRacOk9x').
-1. Speech-to-text functionality isn't supported by ElevenLabs.
 1. Available speakers can be retrieved using the `getSpeakers()` method, which returns detailed information about each voice including language and gender.

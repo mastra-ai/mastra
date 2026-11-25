@@ -289,6 +289,14 @@ describe('KnowledgeInspector', () => {
     expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Acme handbook', 'P1 plan']);
   });
 
+  it("reads a Factory session as the host's org scope instead of its own org and project", async () => {
+    harness = await createHarness({ factoryOrgId: 'acme', factoryProjectId: 'p1' }, ['org:plat']);
+    await harness.seed.page('org:plat', 'Plat handbook');
+    await harness.seed.page('org:acme', 'Acme handbook');
+    await harness.seed.page('project:p1', 'P1 plan');
+    expect(names(await harness.inspector.listNodes({ level: 'org' }))).toEqual(['Plat handbook']);
+  });
+
   it('reads the same canonical scopes the code agent writes, encoding only Memory ids', async () => {
     // Host scopes reach the agent as canonical addresses, so the inspector must not encode them again.
     harness = await createHarness({}, ['org:a%3Ab']);

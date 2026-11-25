@@ -93,6 +93,14 @@ const sidebars = {
             icon: 'https://app.nango.dev/images/template-logos/outlook.svg',
           },
         },
+        {
+          type: 'doc',
+          id: 'email-calendar/sendgrid',
+          label: 'SendGrid',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/sendgrid.svg',
+          },
+        },
       ],
     },
     {
@@ -379,6 +387,12 @@ const sidebars = {
             iconDark: 'https://cdn.simpleicons.org/vercel/white?viewbox=auto&size=28',
           },
         },
+        {
+          type: 'doc',
+          id: 'sandboxes/wbx',
+          label: 'WBX Sandbox',
+          customProps: { icon: '/img/integrations/wbx.svg', customCSS: 'dark:invert' },
+        },
       ],
     },
     {
@@ -443,7 +457,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/observability',
+          href: '/docs/mastra-platform/observability/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
@@ -695,7 +709,7 @@ const sidebars = {
         {
           type: 'link',
           label: 'Mastra',
-          href: '/docs/mastra-platform/deploy',
+          href: '/docs/mastra-platform/deploy/overview',
           customProps: { icon: '/img/integrations/mastra.svg', customCSS: 'dark:invert' },
         },
         {
@@ -746,6 +760,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'tools/anthropic',
+          label: 'Anthropic',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/anthropic/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/anthropic/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'tools/brightdata',
           label: 'Bright Data',
           customProps: { icon: '/img/integrations/bright-data.svg' },
@@ -758,6 +781,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/gitlab',
+          label: 'GitLab',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/gitlab?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'tools/parallel',
           label: 'Parallel',
           customProps: { icon: '/img/integrations/parallel.svg' },
@@ -767,6 +798,15 @@ const sidebars = {
           id: 'tools/perplexity',
           label: 'Perplexity',
           customProps: { icon: 'https://cdn.simpleicons.org/perplexity?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
+          id: 'tools/sanity-context',
+          label: 'Sanity Context',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/sanity/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/sanity/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
@@ -1293,10 +1333,42 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'other/cloudflare-workers',
+          label: 'Cloudflare Workers',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/digits',
+          label: 'Digits',
+          customProps: {
+            icon: 'https://app.nango.dev/images/template-logos/digits.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/figma',
+          label: 'Figma',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/figma?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'other/fireflies',
           label: 'Fireflies.ai',
           customProps: {
             icon: 'https://app.nango.dev/images/template-logos/fireflies.svg',
+          },
+        },
+        {
+          type: 'doc',
+          id: 'other/google-analytics',
+          label: 'Google Analytics',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/googleanalytics?viewbox=auto&size=28',
           },
         },
         {

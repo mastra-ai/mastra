@@ -36,7 +36,11 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         )}
         onClick={() => onChange(muted ? lastAudible : 'none')}
       >
-        {muted ? <IconVolumeOff aria-hidden className="size-4" /> : <IconVolumeFull aria-hidden className="size-4" />}
+        {muted ? (
+          <IconVolumeOff aria-hidden className="size-icon-md" />
+        ) : (
+          <IconVolumeFull aria-hidden className="size-icon-md" />
+        )}
       </button>
 
       <Select
@@ -54,7 +58,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
             'bg-card relative z-10 w-32',
             // Opaque even when muted: the mute button is tucked underneath.
             'disabled:opacity-100',
-            muted && 'text-placeholder hover:text-placeholder hover:bg-card [&_svg]:opacity-25',
+            muted && 'text-subtle-foreground hover:text-subtle-foreground hover:bg-card [&_svg]:opacity-25',
           )}
         >
           {AUDIBLE_SOUNDS.find(option => option.value === lastAudible)?.label}

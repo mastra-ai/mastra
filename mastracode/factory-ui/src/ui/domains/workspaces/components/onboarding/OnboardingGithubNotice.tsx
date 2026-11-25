@@ -101,7 +101,7 @@ export function OnboardingGithubNotice({
         title="Factory can’t use this GitHub installation"
         action={
           <>
-            <Notice.Button disabled={redirecting} onClick={onConnect}>
+            <Notice.Button loading={redirecting} onClick={onConnect}>
               Choose another account
             </Notice.Button>
             <RefreshButton refreshing={refreshing} onRefresh={onRefresh} />
@@ -124,7 +124,7 @@ export function OnboardingGithubNotice({
         onDismiss={onDismiss}
         action={
           <>
-            <Notice.Button disabled={redirecting} onClick={onConnect}>
+            <Notice.Button loading={redirecting} onClick={onConnect}>
               Choose another account
             </Notice.Button>
             <RefreshButton refreshing={refreshing} onRefresh={onRefresh} />
@@ -141,7 +141,7 @@ export function OnboardingGithubNotice({
 
 function RefreshButton({ refreshing, onRefresh }: { refreshing: boolean; onRefresh: () => void }) {
   return (
-    <Notice.Button disabled={refreshing} onClick={onRefresh}>
+    <Notice.Button loading={refreshing} onClick={onRefresh}>
       Refresh
     </Notice.Button>
   );
@@ -166,7 +166,7 @@ function CallbackNextAction({
     return <Notice.Button onClick={() => signOutOfOnboarding(baseUrl)}>Sign out</Notice.Button>;
   }
   return (
-    <Notice.Button disabled={redirecting} onClick={onConnect}>
+    <Notice.Button loading={redirecting} onClick={onConnect}>
       Connect GitHub again
     </Notice.Button>
   );

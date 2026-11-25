@@ -1,5 +1,45 @@
 # @mastra/auth-workos
 
+## 1.7.0
+
+### Minor Changes
+
+- Upgraded `@workos-inc/node` to v12. `getWorkOS()` now returns a v12 `WorkOS` client, so if you call the WorkOS SDK directly, follow the [WorkOS v12 migration notes](https://github.com/workos/workos-node/releases). For example, admin portal links are now generated with `workos.adminPortal.generateLink()` instead of `workos.portal.generateLink()`, and `GeneratePortalLinkIntent` is now `GenerateLinkIntent`. `WorkOSAdminPortal` has been updated to use the new API and its behavior is unchanged. ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+
+### Patch Changes
+
+- dependencies updates: ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+  - Updated dependency [`@workos-inc/node@12.2.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/12.2.0) (from `8.13.0`, in `dependencies`)
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/auth@1.2.1
+
+## 1.7.0-alpha.1
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/auth@1.2.1-alpha.0
+
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Upgraded `@workos-inc/node` to v12. `getWorkOS()` now returns a v12 `WorkOS` client, so if you call the WorkOS SDK directly, follow the [WorkOS v12 migration notes](https://github.com/workos/workos-node/releases). For example, admin portal links are now generated with `workos.adminPortal.generateLink()` instead of `workos.portal.generateLink()`, and `GeneratePortalLinkIntent` is now `GenerateLinkIntent`. `WorkOSAdminPortal` has been updated to use the new API and its behavior is unchanged. ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+
+### Patch Changes
+
+- dependencies updates: ([#30537](https://github.com/mastra-ai/mastra/pull/30537))
+  - Updated dependency [`@workos-inc/node@12.2.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/12.2.0) (from `8.13.0`, in `dependencies`)
+
 ## 1.6.9
 
 ### Patch Changes

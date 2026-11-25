@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { DEFAULT_CONNECTION_CACHE_TTL_MS } from '../platform/foundation/connect-binding.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import {
   decodeIssueReference,
@@ -61,7 +62,7 @@ const platformConnections = [
 
 function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {
   return new PlatformGitLabIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connect: { baseUrl: 'https://integrations.example.com', projectId: 'proj_factory', accessToken: 'platform-token' },
     connectionId,
   });
 }
@@ -460,17 +461,15 @@ describe('PlatformGitLabIntegration', () => {
     expect(gitlab.diagnostics()).not.toHaveProperty('pollingIntervalMs');
   });
 
-  it('runs the Platform event poller by default and reports its settings without needing a webhook secret', () => {
+  it("routes its connections' events to the Platform event poller by default and reports its settings without needing a webhook secret", () => {
     const context = {
       controller: {},
       storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
     } as never;
 
-    expect(
-      platform()
-        .workers(context)
-        .map(worker => worker.name),
-    ).toEqual(['platform-gitlab-events']);
+    const route = platform().connectEventRoute(context);
+    expect(route).toMatchObject({ binding: expect.anything() });
+    expect(route).not.toHaveProperty('pollIntervalMs');
 
     vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
     const tuned = platform();
@@ -479,8 +478,8 @@ describe('PlatformGitLabIntegration', () => {
       pollingIntervalMs: 45_000,
       webhookConfigured: false,
     });
-    expect(tuned.workers(context)).toHaveLength(1);
-    expect(() => tuned.workers({ storage: context.storage } as never)).toThrow(
+    expect(tuned.connectEventRoute(context)).toMatchObject({ pollIntervalMs: 45_000 });
+    expect(() => tuned.connectEventRoute({ storage: context.storage } as never)).toThrow(
       'Platform GitLab event polling requires the mounted Mastra Code controller.',
     );
 
@@ -491,10 +490,14 @@ describe('PlatformGitLabIntegration', () => {
     vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_ENABLED', 'false');
     const disabled = platform();
     expect(disabled.diagnostics()).toMatchObject({ pollingEnabled: false });
-    expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
+    expect(disabled.connectEventRoute({ storage: context.storage } as never)).toBeNull();
     expect(
       new PlatformGitLabIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
         pollingEnabled: true,
         pollingIntervalMs: 30_000,
       }).diagnostics(),
@@ -518,7 +521,7 @@ describe('PlatformGitLabIntegration', () => {
       let credentialStatus = 200;
       const fetchMock = vi.fn<typeof fetch>(async input => {
         const url = String(input);
-        if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+        if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
         if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
         throw new Error(`Unexpected request: ${url}`);
       });
@@ -570,7 +573,7 @@ describe('PlatformGitLabIntegration', () => {
   it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -578,7 +581,7 @@ describe('PlatformGitLabIntegration', () => {
 
     const sources = await platform().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      'https://integrations.example.com/v2/connections?providerKey=gitlab',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     );
 
     expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
@@ -594,7 +597,7 @@ describe('PlatformGitLabIntegration', () => {
   it('keeps issue references scoped to the configured connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([issue(10, 42, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -642,17 +645,428 @@ describe('PlatformGitLabIntegration', () => {
     expect(JSON.stringify(resolved)).not.toContain('platform-token');
   });
 
+  describe('self-hosted connections', () => {
+    const selfHosted = {
+      id: 'a1b_selfhosted',
+      integrationId: 'gitlab-self-hosted',
+      status: 'active',
+      accountLabel: 'ops',
+    };
+
+    function stubPlatform(
+      context: (connectionId: string) => Response,
+      credential?: (connectionId: string) => Response,
+    ) {
+      const fetchMock = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        if (url.includes('/v2/projects/proj_factory/connections')) {
+          return json({ connections: [platformConnections[0], selfHosted] });
+        }
+        const contextMatch = url.match(/\/v2\/connections\/([^/]+)\/context$/);
+        if (contextMatch) return context(decodeURIComponent(contextMatch[1]!));
+        const credentialMatch = url.match(/\/v2\/connections\/([^/]+)\/credentials$/);
+        if (credentialMatch && credential) return credential(decodeURIComponent(credentialMatch[1]!));
+        if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
+        if (url.includes('a1b_selfhosted/proxy')) {
+          return json([{ ...project(7, 'ops/infra'), web_url: 'https://gitlab.example.com/ops/infra' }]);
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    function discovering(): PlatformGitLabIntegration {
+      return new PlatformGitLabIntegration({
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
+      });
+    }
+
+    it('lists projects on the instance the connection was made for', async () => {
+      const fetchMock = stubPlatform(() =>
+        json({ connection_config: { hostname: 'GitLab.Example.com' }, metadata: null }),
+      );
+
+      const sources = await discovering().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+
+      expect(sources.map(source => [source.name, decodeSourceId(source.id)])).toEqual([
+        ['mastra/platform', { version: 2, host: 'gitlab.com', projectId: '10' }],
+        ['ops/infra', { version: 2, host: 'gitlab.example.com', projectId: '7' }],
+      ]);
+      const contextReads = fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.endsWith('/context'));
+      // One read for the context, one confirming the instance after the listing.
+      expect(contextReads).toEqual([
+        'https://integrations.example.com/v2/connections/a1b_selfhosted/context',
+        'https://integrations.example.com/v2/connections/a1b_selfhosted/context',
+      ]);
+    });
+
+    it.each([
+      ['no hostname', { connection_config: {}, metadata: null }],
+      ['a null connection config', { connection_config: null, metadata: null }],
+      ['a hostname with a path', { connection_config: { hostname: 'gitlab.example.com/evil' }, metadata: null }],
+      [
+        'a URL instead of a hostname',
+        { connection_config: { hostname: 'https://gitlab.example.com' }, metadata: null },
+      ],
+    ])('refuses a self-hosted connection with %s instead of assuming gitlab.com', async (_, body) => {
+      stubPlatform(() => json(body));
+      const gitlab = discovering();
+
+      await expect(
+        gitlab.intake.resolveIntakeDispatch?.({
+          orgId: 'org-1',
+          externalSource: {
+            type: 'issue',
+            externalId: encodeIssueReference({
+              connectionId: 'a1b_selfhosted',
+              projectId: '7',
+              projectPath: 'ops/infra',
+              issueIid: 3,
+            }),
+          },
+        }),
+      ).rejects.toThrow('Self-hosted GitLab connection a1b_selfhosted has no valid instance hostname.');
+    });
+
+    it('keeps gitlab.com intake working when a self-hosted connection cannot be read', async () => {
+      stubPlatform(() => json({ message: 'Platform unavailable' }, 503));
+      const gitlab = discovering();
+
+      const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const dispatch = await gitlab.intake.resolveIntakeDispatch?.({
+        orgId: 'org-1',
+        externalSource: {
+          type: 'issue',
+          externalId: encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 }),
+        },
+      });
+
+      expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
+      expect(dispatch).toEqual({
+        connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_mastra' },
+        sourceId: encodeSourceId({ host: 'gitlab.com', projectId: '10' }),
+        issueId: '42',
+      });
+    });
+
+    it('never sends a reconnected credential to the instance the connection used to point at', async () => {
+      let hostname = 'gitlab.example.com';
+      let token = 'old-instance-token';
+      stubPlatform(
+        () => json({ connection_config: { hostname }, metadata: null }),
+        () => json({ type: 'api_key', apiKey: token }),
+      );
+      const gitlab = discovering();
+      gitlab.versionControl.initialize({ storage: new SourceControlStorageInMemory('gitlab') });
+      const installation = await gitlab.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await gitlab.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toEqual({
+        cloneUrl: 'https://gitlab.example.com/ops/infra.git',
+        authorization: { scheme: 'bearer', token: 'old-instance-token', username: 'oauth2' },
+      });
+
+      // The user reconnects the same connection to another instance.
+      hostname = 'gitlab.other.com';
+      token = 'new-instance-token';
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await expect(gitlab.versionControl.getRepositoryAccess(input)).rejects.toMatchObject({ status: 409 });
+      }
+      const sources = await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      expect(sources.map(source => decodeSourceId(source.id).host)).toEqual(['gitlab.com']);
+
+      // Moving it back to the instance it was first used for works again.
+      hostname = 'gitlab.example.com';
+      token = 'returned-token';
+      await expect(gitlab.versionControl.getRepositoryAccess(input)).resolves.toMatchObject({
+        cloneUrl: 'https://gitlab.example.com/ops/infra.git',
+      });
+    });
+
+    it('reconnects a self-hosted connection on the instance it is pinned to', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const gitlab = discovering();
+      const reconnectParams = gitlab
+        .platformConnectProviders()
+        .find(provider => provider.provider === 'gitlab-self-hosted')?.reconnectParams;
+      if (!reconnectParams) throw new Error('self-hosted GitLab offers no reconnect params');
+
+      // Before this process has used the connection, Platform's record names the instance.
+      await expect(reconnectParams('a1b_selfhosted')).resolves.toEqual({ hostname: 'gitlab.example.com' });
+
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      // The connection was moved elsewhere; the reconnect form still names the pinned instance.
+      hostname = 'gitlab.other.com';
+      await expect(reconnectParams('a1b_selfhosted')).resolves.toEqual({ hostname: 'gitlab.example.com' });
+      expect(gitlab.platformConnectProviders().find(provider => provider.provider === 'gitlab')?.reconnectParams).toBe(
+        undefined,
+      );
+    });
+
+    it('refuses to re-register a connection on another instance, even after a restart', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const register = (gitlab: PlatformGitLabIntegration) =>
+        gitlab.versionControl.registerInstallation({
+          orgId: 'org-1',
+          userId: 'user-1',
+          installation: {
+            externalId: 'a1b_selfhosted',
+            accountName: 'ops',
+            accountType: 'GitLab',
+            metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+          },
+        });
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await register(first);
+
+      // A fresh process has no memory of the instance; the stored link does.
+      hostname = 'gitlab.other.com';
+      const restarted = discovering();
+      restarted.versionControl.initialize({ storage });
+
+      await expect(register(restarted)).rejects.toMatchObject({ status: 409 });
+      const stored = await storage.installations.get({ orgId: 'org-1', id: installation.id });
+      expect(stored?.providerMetadata.host).toBe('gitlab.example.com');
+    });
+
+    it('uses the instance a stored link names, not the one a restarted process happened to see first', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await first.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await first.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+
+      // The connection moves while no process is running; the restarted one
+      // sees the other instance first.
+      hostname = 'gitlab.other.com';
+      const restarted = discovering();
+      restarted.versionControl.initialize({ storage });
+      await restarted.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const target = () =>
+        restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id });
+      await expect(target()).rejects.toMatchObject({ status: 409 });
+
+      // Moving it back to the linked instance works without another restart.
+      hostname = 'gitlab.example.com';
+      await expect(target()).resolves.toMatchObject({ sourceId: '7:ops/infra' });
+    });
+
+    it('refuses reads and writes through a context built for an instance the pin has since moved off', async () => {
+      class Exposed extends PlatformGitLabIntegration {
+        context(connectionId: string) {
+          return this.contextById(connectionId);
+        }
+      }
+      let hostname = 'gitlab.example.com';
+      const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const storage = new SourceControlStorageInMemory('gitlab');
+      const first = discovering();
+      first.versionControl.initialize({ storage });
+      const installation = await first.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: {
+          externalId: 'a1b_selfhosted',
+          accountName: 'ops',
+          accountType: 'GitLab',
+          metadata: { connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' } },
+        },
+      });
+      const [repository] = await first.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '7', slug: 'ops/infra', defaultBranch: 'main' }],
+      });
+
+      // Restarted while the connection points at another instance; a context is built for it.
+      hostname = 'gitlab.other.com';
+      const restarted = new Exposed({
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
+      });
+      restarted.versionControl.initialize({ storage });
+      const other = await restarted.context('a1b_selfhosted');
+      expect(other.host).toBe('gitlab.other.com');
+
+      // The stored link re-pins the connection to its own instance, then the connection returns there.
+      await expect(
+        restarted.versionControl.getRepositoryTarget({ orgId: 'org-1', repositoryId: repository!.id }),
+      ).rejects.toMatchObject({ status: 409 });
+      hostname = 'gitlab.example.com';
+
+      const writes = () =>
+        fetchMock.mock.calls.filter(
+          ([url, init]) => String(url).includes('a1b_selfhosted/proxy') && init?.method === 'POST',
+        ).length;
+      await expect(other.api.listProjects()).rejects.toMatchObject({ status: 409 });
+      await expect(other.api.createMergeRequestNote('7', 3, 'hello')).rejects.toMatchObject({ status: 409 });
+      expect(writes()).toBe(0);
+    });
+
+    it('refuses a write through a context built before the connection moved to another instance', async () => {
+      let hostname = 'gitlab.example.com';
+      const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const gitlab = discovering();
+      await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
+      const proxyCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('a1b_selfhosted/proxy')).length;
+      const before = proxyCalls();
+
+      // Reconnected to another instance inside the connection list's cache window.
+      hostname = 'gitlab.other.com';
+      await expect(
+        gitlab.versionControl.createComment({
+          connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' },
+          sourceId: '7:ops/infra',
+          pullRequestId: '3',
+          body: 'hello',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      expect(proxyCalls()).toBe(before);
+    });
+
+    it('stops using a self-hosted connection that moved to another instance once the connection list refreshes', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        let hostname = 'gitlab.example.com';
+        const fetchMock = stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+        const gitlab = discovering();
+        const hosts = async () =>
+          (await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).map(
+            source => decodeSourceId(source.id).host,
+          );
+
+        expect(await hosts()).toEqual(['gitlab.com', 'gitlab.example.com']);
+
+        // The user reconnects the same connection to another instance; no
+        // repository credential is fetched in between.
+        hostname = 'gitlab.other.com';
+        vi.advanceTimersByTime(DEFAULT_CONNECTION_CACHE_TTL_MS);
+
+        expect(await hosts()).toEqual(['gitlab.com']);
+        await expect(
+          gitlab.intake.resolveIntakeDispatch?.({
+            orgId: 'org-1',
+            externalSource: {
+              type: 'issue',
+              externalId: encodeIssueReference({
+                connectionId: 'a1b_selfhosted',
+                projectId: '7',
+                projectPath: 'ops/infra',
+                issueIid: 3,
+              }),
+            },
+          }),
+        ).rejects.toMatchObject({
+          status: 409,
+          message: expect.stringContaining('connect gitlab.other.com as a new connection'),
+        });
+        expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/credentials'))).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not list projects from another instance under the old host inside the cache window', async () => {
+      let hostname = 'gitlab.example.com';
+      stubPlatform(() => json({ connection_config: { hostname }, metadata: null }));
+      const gitlab = discovering();
+      const hosts = async () =>
+        (await gitlab.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).map(
+          source => decodeSourceId(source.id).host,
+        );
+      expect(await hosts()).toEqual(['gitlab.com', 'gitlab.example.com']);
+
+      // Reconnected to another instance; the connection list is still cached
+      // and nothing invalidates it.
+      hostname = 'gitlab.other.com';
+      expect(await hosts()).toEqual(['gitlab.com']);
+      await expect(
+        gitlab.versionControl.getPullRequest({
+          connection: { type: 'oauth', accessToken: 'gitlab-connection:a1b_selfhosted' },
+          sourceId: '7:ops/infra',
+          pullRequestId: '3',
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it('registers self-hosted connect sessions separately and lists both kinds under gitlab', () => {
+      const registrations = discovering()
+        .platformConnectProviders()
+        .map(({ provider, integrationId, connectionIntegrationIds }) => ({
+          provider,
+          integrationId,
+          connectionIntegrationIds,
+        }));
+
+      expect(registrations).toEqual([
+        { provider: 'gitlab', integrationId: 'gitlab', connectionIntegrationIds: ['gitlab', 'gitlab-self-hosted'] },
+        {
+          provider: 'gitlab-self-hosted',
+          integrationId: 'gitlab-self-hosted',
+          connectionIntegrationIds: ['gitlab-self-hosted'],
+        },
+      ]);
+    });
+  });
+
   it('tries another account only when the first account cannot access a canonical project', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Not found' }, 404);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -669,14 +1083,18 @@ describe('PlatformGitLabIntegration', () => {
   it('preserves transient project lookup failures instead of masking them as another account miss', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Temporarily unavailable' }, 503);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -724,28 +1142,34 @@ describe('PlatformGitLabIntegration', () => {
     await expect(gitlab.getWorkItemAuthorUsername('direct', '10', 'merge_request', 17)).resolves.toBe('review-author');
   });
   it('uses MASTRA_GITLAB_CONNECTION_ID as an optional filter and otherwise discovers every GitLab connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async input => {
-      const providerKey = new URL(String(input)).searchParams.get('providerKey');
-      return json({ connections: platformConnections.filter(connection => connection.integrationId === providerKey) });
-    });
+    // The project listing returns every provider's connections; GitLab keeps only its own.
+    const fetchMock = vi.fn<typeof fetch>(async () => json({ connections: platformConnections }));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
     const filtered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(filtered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }]);
     expect(filtered.diagnostics()).toMatchObject({ connectionFilterConfigured: true });
 
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', '');
     const discovered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }, { id: 'a1b_acme' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });
-    // One query per listing: only the Platform's `gitlab` integration is discovered.
-    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('providerKey'))).toEqual([
-      'gitlab',
-      'gitlab',
+    // One project listing per integration; the Jira connection in it is never discovered.
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     ]);
   });
 });

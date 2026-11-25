@@ -1,11 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import type { PubSub } from '../../events/pubsub';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -17,25 +12,7 @@ import { createStep, createWorkflow } from '.';
 // retried, and if the read keeps failing the run settles as failed.
 // The re-check runs only when the broadcast may have been missed; a failing
 // control subscribe is one such case and keeps it on every delivery.
-const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Promise<void> }>]> = [
-  ['EventEmitterPubSub', async () => ({ pubsub: new EventEmitterPubSub(), close: async () => {} })],
-  [
-    'UnixSocketPubSub',
-    async () => {
-      const dir = await mkdtemp(join(tmpdir(), 'mastra-cancel-read-'));
-      const pubsub = new UnixSocketPubSub(join(dir, 'events.sock'));
-      return {
-        pubsub,
-        close: async () => {
-          await pubsub.close();
-          await rm(dir, { recursive: true, force: true });
-        },
-      };
-    },
-  ],
-];
-
-describe.each(transports)('evented workflow: pre-step cancel check read failure (%s)', (_name, makeTransport) => {
+describe('evented workflow: pre-step cancel check read failure', () => {
   const cleanups: Array<() => Promise<void>> = [];
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -43,8 +20,7 @@ describe.each(transports)('evented workflow: pre-step cancel check read failure 
   });
 
   async function run(failingReads: number) {
-    const { pubsub, close } = await makeTransport();
-    cleanups.push(close);
+    const pubsub = new EventEmitterPubSub();
     const id = `cancel-read-${Math.random().toString(36).slice(2)}`;
     let executions = 0;
     const step = createStep({

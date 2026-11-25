@@ -341,6 +341,8 @@ export function assertKnowledgeNoteTextWithinBound(text: string): void {
   }
 }
 
+export { KnowledgeInvalidCursorError } from '@internal/core/knowledge-compat';
+
 /** @experimental */
 export class KnowledgeMoveTooLargeError extends Error {
   constructor(
@@ -658,6 +660,21 @@ export interface KnowledgePageActivityEvent {
 }
 
 /** @experimental */
+export interface KnowledgePageActivityInput {
+  read: KnowledgeReadScope;
+  scopeId?: string;
+  pageId?: string;
+  cursor?: string;
+  limit?: number;
+  /** Events at or after this time (dated mode). */
+  since?: Date;
+  /** Events before this time (dated mode). */
+  until?: Date;
+  /** Events strictly older than this one in dated `(createdAt, id)` order (dated mode). */
+  before?: { createdAt: Date; id: string };
+}
+
+/** @experimental */
 export interface KnowledgeScopeDeclarationCount {
   declaration: string;
   scopes: number;
@@ -867,14 +884,16 @@ export interface KnowledgePageStore {
    * mention's page scope readable). The log never reveals a hidden page's or note's id, author or
    * source thread. `scopeId` on an event is the home scope after the change (the target for a move or
    * merge); the `scopeId` filter matches the page's current home scope.
+   *
+   * `since` (inclusive), `until` (exclusive) and `before` put the read in dated mode, only on stores
+   * reporting `supportsActivityDateRange`: events are ordered by `createdAt` then `id`, both newest
+   * first, the bounds apply before the limit, and `before` returns only events strictly older than
+   * that event in this order. `before` can't be combined with `cursor`. Without any of them the
+   * store's existing order and cursor are unchanged.
    */
-  listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }>;
+  listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }>;
 
   // Pins
   /**

@@ -1,0 +1,51 @@
+---
+title: Custom skills | Configuration
+description: Add a custom skill that Factory loads alongside its built-in skills.
+---
+
+# Custom skills
+
+Custom skills give Factory additional instructions for specific tasks. Use them to encode your team's conventions, such as review checklists or release steps, without repeating the guidance in each session. Factory loads them alongside its built-in skills.
+
+Organization administrators can create and edit skills in the Factory UI. A skill can also live in the Factory Server project as a file.
+
+## Create a skill in the UI
+
+1. Open a board and select **Configure board**.
+1. In the settings sidebar, select **Skills**.
+1. Select **New skill** and fill in the form:
+   - **Name**: Lowercase letters, digits, and single hyphens, such as `release-notes`.
+   - **Description**: When the agent should use the skill.
+   - **Instructions**: What the agent should do.
+1. Save the skill.
+
+**Skills** lists each available skill with the instructions it gives the agent, except for skills that a board phase runs. Those are listed on the phase's page.
+
+Saved skills belong to the Factory project. They apply on the next scan, so you don't need to restart the server. A skill that fails validation shows **Failed to load** with the reason, and agents skip it until you fix it.
+
+Editing a built-in skill stores an override for this Factory project. Revert it to go back to the original instructions. A skill the project created can be deleted.
+
+## Add a skill file
+
+`npm create factory` doesn't create the custom skills directory. Create a directory for the skill and add a `SKILL.md` file at:
+
+```text
+src/mastra/public/factory-skills/<skill-name>/SKILL.md
+```
+
+The skill directory name must match the `name` in the `SKILL.md` frontmatter. For example, create this file at `src/mastra/public/factory-skills/security-review/SKILL.md`:
+
+```md title="src/mastra/public/factory-skills/security-review/SKILL.md"
+---
+name: security-review
+description: Review changes for security risks.
+---
+
+# Security review
+
+Review the change for authentication, authorization, secret handling, and injection risks.
+```
+
+Restart the Factory Server after creating the directory, so Factory finds it. After that, skills added to the directory are read on the next scan.
+
+Factory reads a skill from the first place it finds it. The `skills` option on `MastraFactory` takes precedence over the `factory-skills` directory, and both take precedence over the built-in skills. A skill edited in the UI keeps its other files and replaces the `SKILL.md` instructions for this Factory project.

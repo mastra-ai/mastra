@@ -54,6 +54,13 @@ function positiveInt(raw: string | undefined): number | undefined {
   return parsed;
 }
 
+function nonNegativeInt(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) return undefined;
+  return parsed;
+}
+
 function decodeCredentialEncryptionKey(name: string, encodedKey: string): Buffer {
   const key = Buffer.from(encodedKey, 'base64');
   if (key.byteLength !== 32) throw new Error(`${name} must contain base64-encoded 32-byte keys.`);
@@ -335,6 +342,13 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+// Recall embedder for every agent's memory, e.g. mastra/openai/text-embedding-3-small. Unset → local
+// fastembed on this host. Factory reads the provider's key from its usual env var and fails startup without it.
+const embedder = process.env.FACTORY_EMBEDDER?.trim() || undefined;
+if (embedder && !vector) {
+  throw new Error('FACTORY_EMBEDDER needs DATABASE_URL: recall vectors are stored in Postgres.');
+}
+
 const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
 const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
 
@@ -427,10 +441,12 @@ export const factory = new MastraFactory({
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,
-  // Per-replica cap on concurrent Factory background dispatches. Unset means
-  // the dispatcher default; invalid and non-positive values are ignored.
+  // Per-replica caps on concurrent Factory background dispatches, and the
+  // reserve for people's replies on top of it. Unset means the dispatcher
+  // default; invalid values are ignored (and a non-positive run cap too).
   dispatcher: {
     maxInFlight: positiveInt(process.env.MASTRACODE_DISPATCH_MAX_IN_FLIGHT),
+    maxInteractiveInFlight: nonNegativeInt(process.env.MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT),
   },
   // Agent state (threads, messages, memory, OM, recall vectors) lives in the
   // single app Postgres alongside the github/app tables — one shared DB (and
@@ -438,6 +454,7 @@ export const factory = new MastraFactory({
   // local dev) → default storage resolution applies (local libSQL file).
   storage,
   vector,
+  ...(embedder ? { embedder } : {}),
   pubsub,
   platform: {
     // The deployment's own self-hosted App slug, when one is configured. It is

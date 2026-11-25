@@ -16,14 +16,21 @@
  * don't).
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Memory } from '../../../../../memory/src';
+import { ObservationalMemoryProcessor } from '../../../../../memory/src/processors/observational-memory';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
+import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
+import { ConsoleLogger } from '../../../logger';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
@@ -49,10 +56,10 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
+import { getExecutionStreamOwner } from '../execution-stream-publisher';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -333,6 +340,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
     });
 
     afterEach(async () => {
+      vi.useRealTimers();
       vi.restoreAllMocks();
       globalRunRegistry.clear();
       __resetExecutionFencesForTests();
@@ -435,6 +443,245 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    it('finishes the owning reader record while its verified execution releases ownership (COR-1560)', async () => {
+      const storage = createStorage(backend);
+      const model = gatedModel('released answer');
+      const durableAgent = buildAgent({
+        model: model.model,
+        storage,
+        cache: new InMemoryServerCache(),
+        cleanupTimeoutMs: 0,
+      });
+      const runId = `release-window-${backend}`;
+      const released = gate();
+      const completeRelease = gate();
+      const publish = pubsub.publish.bind(pubsub);
+      let deliverTerminal: (() => Promise<void>) | undefined;
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+          deliverTerminal = () => publish(topic, event);
+          return;
+        }
+        return publish(topic, event);
+      });
+      if (backend === 'storage') {
+        const workflows = storage.stores.workflows!;
+        const release = workflows.releaseRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'releaseRunOwnership').mockImplementation(async args => {
+          const result = await release(args);
+          if (args.runId === runId) {
+            released.open();
+            await completeRelease.opened;
+          }
+          return result;
+        });
+      } else {
+        const leases = resolveLeaseProvider(pubsub);
+        const release = leases.releaseLease.bind(leases);
+        vi.spyOn(leases, 'releaseLease').mockImplementation(async (...args) => {
+          const result = await release(...args);
+          if (args[0] === executionLeaseKey(durableAgent.id, runId)) {
+            released.open();
+            await completeRelease.opened;
+          }
+          return result;
+        });
+      }
+      const result = await durableAgent.stream('Answer me.', { runId });
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const stream = collect(result.fullStream);
+      try {
+        model.release();
+        await released.opened;
+        expect(deliverTerminal).toBeDefined();
+        await deliverTerminal!();
+        await vi.waitFor(async () =>
+          expect(await durableAgent.__getRunRecord(runId)).toMatchObject({ status: 'finished' }),
+        );
+        expect(fence.isLost()).toBe(false);
+        completeRelease.open();
+        await fence.whenSettled;
+        expect(fence.settlement).toBe('owned');
+      } finally {
+        completeRelease.open();
+        await stream.stop();
+        result.cleanup();
+      }
+    });
+
+    it.each(['takeover', 'released-takeover', 'unverified'])(
+      'a held terminal preserves shared state and only completes a nonsuperseded reader when ownership is %s (COR-1560)',
+      async ownership => {
+        const storage = createStorage(backend);
+        const model = gatedModel('old answer');
+        const agent = createDurableAgent({
+          agent: new Agent({
+            id: 'released-reader-agent',
+            name: 'Released reader',
+            instructions: 'Answer.',
+            model: model.model,
+          }),
+          pubsub,
+          cache: new InMemoryServerCache(),
+          cleanupTimeoutMs: 0,
+        });
+        const mastra = new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+        const runId = `released-reader-${backend}`;
+        const publish = pubsub.publish.bind(pubsub);
+        const subscribe = pubsub.subscribe.bind(pubsub);
+        let terminalDelivery: Promise<void> | undefined;
+        vi.spyOn(pubsub, 'subscribe').mockImplementation((topic, callback, options) =>
+          subscribe(
+            topic,
+            (event, ack, nack) => {
+              const delivery = Promise.resolve(callback(event, ack, nack));
+              if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+                terminalDelivery = delivery;
+              }
+              return delivery;
+            },
+            options,
+          ),
+        );
+        let terminal: Parameters<typeof pubsub.publish> | undefined;
+        vi.spyOn(pubsub, 'publish').mockImplementation(async (...args) => {
+          if (args[0] === AGENT_STREAM_TOPIC(runId) && args[1].type === AgentStreamEventTypes.FINISH) {
+            terminal = args;
+            return;
+          }
+          return publish(...args);
+        });
+        const onFinish = vi.fn();
+        const scheduleCleanup = vi.spyOn(agent.__getStreamBus(), 'scheduleCleanup');
+        const clearTopic = vi.spyOn(pubsub, 'clearTopic');
+        const result = await agent.stream('Answer me.', { runId, onFinish });
+        const stream = collect(result.fullStream);
+        const observer = ownership === 'unverified' ? await agent.observe(runId) : undefined;
+        const observedStream = observer ? collect(observer.fullStream) : undefined;
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const foreign = foreignOwnership(backend, storage, pubsub);
+        const originalPublisher = getExecutionStreamOwner({
+          runId,
+          agentId: agent.id,
+          mastra,
+          claim: fence.claim,
+        })!;
+        try {
+          await model.entered;
+          model.release();
+          await fence.whenSettled;
+          expect(fence.settlement).toBe('owned');
+          expect(terminal).toBeDefined();
+          if (ownership !== 'unverified') {
+            await foreign.hold(agent.id, runId, 'replacement-reader');
+            const record =
+              backend === 'storage'
+                ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
+                : undefined;
+            const replacement = getExecutionStreamOwner({
+              runId,
+              agentId: agent.id,
+              mastra,
+              claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
+            })!;
+            await replacement.ready;
+            if (ownership === 'released-takeover') {
+              await replacement.settle('finished');
+              await foreign.free(agent.id, runId, 'replacement-reader');
+            }
+          }
+          const expected = await agent.__getRunRecord(runId);
+          expect(expected).toMatchObject({
+            status: ownership === 'released-takeover' ? 'finished' : 'running',
+            publisherId: ownership !== 'unverified' ? 'replacement-reader' : fence.executionId,
+          });
+          if (ownership === 'unverified') {
+            const unavailable = new Error('ownership backend unavailable');
+            const check =
+              backend === 'storage'
+                ? vi.spyOn(storage.stores.workflows!, 'getRunOwnership')
+                : vi.spyOn(resolveLeaseProvider(pubsub), 'getLeaseOwner');
+            check.mockRejectedValueOnce(unavailable).mockRejectedValueOnce(unavailable);
+          }
+          await publish(...terminal!);
+          expect(terminalDelivery).toBeDefined();
+          await terminalDelivery;
+          expect(await agent.__getRunRecord(runId)).toEqual(expected);
+          if (ownership === 'unverified') {
+            await expect.poll(() => onFinish.mock.calls.length).toBe(1);
+            await expect.poll(() => stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+            expect(onFinish).toHaveBeenCalledOnce();
+            expect(onFinish.mock.calls[0]![0].text).toBe('old answer');
+            await expect(observer!.output.text).resolves.toBe('old answer');
+            for (const [cleanup] of scheduleCleanup.mock.calls) cleanup();
+            expect(clearTopic).not.toHaveBeenCalled();
+            observer!.cleanup();
+            await originalPublisher.detach();
+            expect(clearTopic).not.toHaveBeenCalled();
+            expect(agent.__getRunOwner(runId)).toBeDefined();
+            result.cleanup();
+            await originalPublisher.detach();
+            expect(agent.__getRunOwner(runId)).toBeUndefined();
+            expect(globalRunRegistry.get(runId)).toBeUndefined();
+            expect(await agent.__getRunRecord(runId)).toEqual(expected);
+            expect(clearTopic).not.toHaveBeenCalled();
+          } else {
+            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+            expect(onFinish).not.toHaveBeenCalled();
+            result.cleanup();
+            await originalPublisher.detach();
+            expect(await agent.__getRunRecord(runId)).toEqual(expected);
+          }
+        } finally {
+          model.release();
+          await stream.stop();
+          await observedStream?.stop();
+          observer?.detach();
+          result.cleanup();
+          if (ownership === 'takeover') await foreign.free(agent.id, runId, 'replacement-reader');
+        }
+      },
+    );
+
+    it('a reader cannot finish the shared record after another execution takes its generation (COR-1560)', async () => {
+      const storage = createStorage(backend);
+      const model = gatedModel('stale answer');
+      const agent = createDurableAgent({
+        agent: new Agent({
+          id: 'reader-fence-agent',
+          name: 'Reader fence',
+          instructions: 'Answer.',
+          model: model.model,
+        }),
+        pubsub,
+        cache: new InMemoryServerCache(),
+        cleanupTimeoutMs: 0,
+      });
+      const mastra = new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+      const runId = `reader-generation-${backend}`;
+      const result = await agent.stream('Answer me.', { runId });
+      const stream = collect(result.fullStream);
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const publisher = getExecutionStreamOwner({
+        runId,
+        agentId: agent.id,
+        mastra,
+        claim: fence.claim,
+      })!;
+      try {
+        await model.entered;
+        await publisher.ready;
+        await foreignOwnership(backend, storage, pubsub).takeOver(fence, 'new-reader-owner');
+        await expect(publisher.settle('finished')).rejects.toMatchObject({ id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'running', publisherId: fence.executionId });
+      } finally {
+        model.release();
+        await stream.stop();
+        result.cleanup();
+        await foreignOwnership(backend, storage, pubsub).free(agent.id, runId, 'new-reader-owner');
+      }
+    });
+
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
@@ -447,7 +694,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         memory,
       });
       // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
-      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, storageVersion: 1 });
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -587,6 +834,88 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         await stream.stop();
         result.cleanup();
+      },
+    );
+
+    it.each([false, true])(
+      'keeps a warm resumed execution alive (clean up recovery reader=%s)',
+      async cleanupRecovery => {
+        const storage = createStorage(backend);
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('abandoned answer');
+        const resumedToolEntered = gate();
+        const releaseResumedTool = gate();
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Wait for confirmation before looking up the answer.',
+          inputSchema: z.object({}),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          suspendSchema: z.object({ question: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) {
+              return context?.agent?.suspend({ question: 'Continue?' });
+            }
+            resumedToolEntered.open();
+            await releaseResumedTool.opened;
+            return { answer: 'confirmed' };
+          },
+        });
+        const agentA = buildAgent({ model: original.model, storage, cache, tools: { lookup } });
+        const started = await agentA.stream('Look up the answer.');
+        const startedStream = collect(started.fullStream);
+        const { runId } = started;
+        let recovered: Awaited<ReturnType<typeof agentA.recover>> | undefined;
+        let resumed: Awaited<ReturnType<typeof agentA.resume>> | undefined;
+        let recoveredStream: ReturnType<typeof collect> | undefined;
+        let resumedStream: ReturnType<typeof collect> | undefined;
+        try {
+          await original.entered;
+          await waitForCheckpoint(storage, runId);
+          // The checkpoint survives the originating process; recover and resume run in its replacement.
+          globalRunRegistry.clear();
+          __resetExecutionFencesForTests();
+          const replacement = toolCallThenTextModel('lookup', {}, 'confirmed answer');
+          const agentB = buildAgent({
+            model: replacement.model,
+            storage,
+            cache,
+            tools: { lookup },
+            cleanupTimeoutMs: 0,
+          });
+          recovered = await agentB.recover(runId, { force: true });
+          recoveredStream = collect(recovered.fullStream);
+          await vi.waitFor(() =>
+            expect(recoveredStream!.chunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true),
+          );
+          const recoveryEntry = globalRunRegistry.get(runId)!;
+          await recoveryEntry.workflowExecution;
+          const recoveryFence = recoveryEntry.executionFence;
+          await recoveryFence?.whenSettled;
+          resumed = await agentB.resume(runId, { confirmed: true }, { toolCallId: 'call-1' });
+          resumedStream = collect(resumed.fullStream);
+          await resumedToolEntered.opened;
+          const resumedEntry = globalRunRegistry.get(runId)!;
+          expect(resumedEntry).toBe(recoveryEntry);
+          expect(resumedEntry.executionFence).not.toBe(recoveryFence);
+          const clearTopic = vi.spyOn(agentB.pubsub, 'clearTopic');
+          if (cleanupRecovery) recovered.cleanup();
+          await new Promise(resolve => setTimeout(resolve, 20));
+          expect.soft(globalRunRegistry.get(runId) === resumedEntry).toBe(true);
+          expect.soft(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+          releaseResumedTool.open();
+          await vi.waitFor(() => expect(resumedStream!.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+          expect(await resumed.output.text).toBe('confirmed answer');
+        } finally {
+          releaseResumedTool.open();
+          original.release();
+          await startedStream.stop();
+          await recoveredStream?.stop();
+          await resumedStream?.stop();
+          resumed?.cleanup();
+          recovered?.cleanup();
+          started.cleanup();
+        }
       },
     );
 
@@ -1277,6 +1606,282 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       started.cleanup();
     });
 
+    // A renewal sent just before the run suspends can reach storage after the suspension released the claim. It then
+    // renews nothing and comes back false, though nobody took the run over. On the lease backend the release leaves
+    // no record, so that late renewal still counts as a loss, as before.
+    it.skipIf(backend !== 'storage')(
+      'a renewal that lands after the run suspends does not mark it lost, and resume() streams to its finish (#30206)',
+      async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        const execute = vi.fn(async () => ({ found: true }));
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute,
+        });
+        const durableAgent = buildAgent({ model, storage, tools: { lookup } });
+
+        // Hold the heartbeat's renewal until the suspension has released the claim. Only the renewal sent by the
+        // heartbeat tick below, while the model call is pending, is held.
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const workflows = storage.stores.workflows!;
+        const renew = workflows.renewRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(async args => {
+          if (!holdNextRenewal) return renew(args);
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          const result = await renew(args);
+          renewedAfterRelease = result.renewed;
+          return result;
+        });
+
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
+
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
+
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
+
+        const resumed = await durableAgent.resume(runId, { approved: true });
+        const chunks = await Promise.race([
+          drain(resumed.fullStream),
+          new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
+        ]);
+        if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
+        expect(chunks.map(chunk => chunk.type)).toContain('finish');
+        expect(JSON.stringify(chunks)).toContain('answer 2');
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(lost).not.toHaveBeenCalled();
+        expect(suspendedFence.isLost()).toBe(false);
+
+        resumed.cleanup();
+        started.cleanup();
+      },
+    );
+
+    // The issue's second symptom: with observational memory on, the false loss also failed the resumed run's memory
+    // input step with the suspended run's "lost its execution lease" error. (#30206)
+    it.skipIf(backend !== 'storage')(
+      'with observational memory, a renewal that lands after the run suspends does not fail the resumed memory step (#30206)',
+      async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const logged: string[] = [];
+        for (const level of ['error', 'warn', 'info', 'debug', 'log'] as const) {
+          vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
+            logged.push(args.map(arg => (arg instanceof Error ? arg.message : String(arg))).join(' '));
+          });
+        }
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        // Thresholds no message reaches, so the observer and reflector never call their model.
+        const observerModel = new MockLanguageModelV2({
+          doStream: async () => {
+            throw new Error('the observer model must not be called');
+          },
+        });
+        const memory = new Memory({
+          storage,
+          options: {
+            observationalMemory: {
+              enabled: true,
+              observation: { model: observerModel, messageTokens: 100_000, bufferTokens: false },
+              reflection: { model: observerModel, observationTokens: 100_000 },
+            },
+          },
+        });
+        const execute = vi.fn(async () => ({ found: true }));
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute,
+        });
+        const durableAgent = createDurableAgent({
+          agent: new Agent({
+            id: 'fence-agent',
+            name: 'Fence Agent',
+            instructions: 'You are a helpful agent.',
+            model: model as LanguageModelV2,
+            memory,
+            tools: { lookup },
+          }),
+          pubsub,
+        });
+        new Mastra({
+          agents: { 'fence-agent': durableAgent as any },
+          logger: new ConsoleLogger({ level: 'debug' }),
+          storage,
+          pubsub,
+          recovery: { durableAgents: 'auto' },
+        });
+
+        // Shows the observational memory input step ran, in the first run and in the resumed one.
+        const omSteps = vi.spyOn(ObservationalMemoryProcessor.prototype, 'processInputStep');
+
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const workflows = storage.stores.workflows!;
+        const renew = workflows.renewRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'renewRunOwnership').mockImplementation(async args => {
+          if (!holdNextRenewal) return renew(args);
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          const result = await renew(args);
+          renewedAfterRelease = result.renewed;
+          return result;
+        });
+
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          memory: { thread: THREAD, resource: RESOURCE },
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
+
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
+
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
+        expect(omSteps).toHaveBeenCalled();
+        omSteps.mockClear();
+
+        const resumed = await durableAgent.resume(runId, { approved: true });
+        const events: string[] = [];
+        await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: unknown) => {
+          events.push(JSON.stringify(event));
+        });
+        const chunks = await Promise.race([
+          drain(resumed.fullStream),
+          new Promise<'still open'>(resolve => setTimeout(() => resolve('still open'), 5_000)),
+        ]);
+        const emitted = [JSON.stringify(chunks), ...events, ...logged];
+        expect(emitted.filter(text => text.includes('lost its execution lease'))).toEqual([]);
+        if (chunks === 'still open') throw new Error('the resumed stream was still open after 5s');
+        expect(chunks.map(chunk => chunk.type)).toContain('finish');
+        expect(chunks.map(chunk => chunk.type)).not.toContain('tripwire');
+        expect(JSON.stringify(chunks)).toContain('answer 2');
+        expect(omSteps).toHaveBeenCalled();
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(lost).not.toHaveBeenCalled();
+        expect(suspendedFence.isLost()).toBe(false);
+
+        resumed.cleanup();
+        started.cleanup();
+      },
+    );
+
+    // The lease backend can't tell its own release from a takeover: a released lease leaves nothing behind. A renewal
+    // that lands after the suspension released the lease is still a loss, as before. (#30206)
+    it.skipIf(backend !== 'lease')(
+      'a renewal that lands after the run suspends still marks a lease-backed run lost (#30206)',
+      async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+        const storage = createStorage(backend);
+        const firstCall = gate();
+        const { model, prompts } = recordingModel([firstCall.opened], 'lookup');
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        });
+        const durableAgent = buildAgent({ model, storage, tools: { lookup } });
+
+        let suspended = false;
+        const started = await durableAgent.stream('Look it up', {
+          requireToolApproval: true,
+          onSuspended: () => {
+            suspended = true;
+          },
+        });
+        const { runId } = started;
+        const suspendedFence = ExecutionFence.getLocalActive(runId)!;
+        const lost = vi.fn();
+        suspendedFence.onLost(lost);
+
+        // Hold the heartbeat's renewal of this run's lease until the suspension has released it. Only the renewal sent
+        // by the heartbeat tick below, while the model call is pending, is held.
+        const renewal = gate();
+        let holdNextRenewal = false;
+        let renewalSent = false;
+        let renewedAfterRelease: boolean | undefined;
+        const leases = resolveLeaseProvider(durableAgent.pubsub);
+        const renew = leases.renewLease.bind(leases);
+        const leaseKey = executionLeaseKey(suspendedFence.agentId, runId);
+        vi.spyOn(leases, 'renewLease').mockImplementation(async (key, ...rest) => {
+          if (key !== leaseKey || !holdNextRenewal) return renew(key, ...rest);
+          holdNextRenewal = false;
+          renewalSent = true;
+          await renewal.opened;
+          renewedAfterRelease = await renew(key, ...rest);
+          return renewedAfterRelease;
+        });
+
+        await vi.waitFor(() => expect(prompts).toHaveLength(1));
+        holdNextRenewal = true;
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(renewalSent).toBe(true);
+        firstCall.open();
+        await vi.waitFor(() => expect(suspended).toBe(true));
+        await suspendedFence.whenSettled;
+        expect(lost).not.toHaveBeenCalled();
+
+        renewal.open();
+        await vi.waitFor(() => expect(renewedAfterRelease).toBe(false));
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(suspendedFence.isLost()).toBe(true);
+        expect(lost).toHaveBeenCalledTimes(1);
+
+        started.cleanup();
+      },
+    );
+
     it('a resume() that fails to read the suspended run after claiming it releases the run, so a retry resumes it', async () => {
       const storage = createStorage(backend);
       const model = toolCallThenTextModel('lookup', { query: 'the answer' }, 'looked it up');
@@ -1393,40 +1998,48 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       started.cleanup();
     });
 
-    it('recover() of a run this process is still executing rejects with RUN_ACTIVE_LOCALLY and leaves it running', async () => {
-      const storage = createStorage(backend);
-      const memory = new MockMemory({ storage });
-      const model = gatedModel('the live answer');
-      const durableAgent = buildAgent({ model: model.model, storage, memory });
-      const result = await durableAgent.stream('What is the answer?', {
-        memory: { thread: THREAD, resource: RESOURCE },
-      });
-      const { runId } = result;
-      const stream = collect(result.fullStream);
-      await model.entered;
-      await waitForCheckpoint(storage, runId);
+    it.each([false, true])(
+      'recover() of a locally executing run rejects and leaves it running (force=%s)',
+      async force => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const model = gatedModel('the live answer');
+        const durableAgent = buildAgent({ model: model.model, storage, memory });
+        const result = await durableAgent.stream('What is the answer?', {
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const { runId } = result;
+        const stream = collect(result.fullStream);
+        await model.entered;
+        await waitForCheckpoint(storage, runId);
 
-      const entry = globalRunRegistry.get(runId);
-      const fence = ExecutionFence.getLocalActive(runId)!;
-      const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
+        const entry = globalRunRegistry.get(runId);
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const foreign = foreignOwnership(backend, storage, durableAgent.pubsub);
 
-      await expect(durableAgent.recover(runId)).rejects.toMatchObject({ id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID });
-      expect(globalRunRegistry.get(runId)).toBe(entry);
-      expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
-      expect(fence.isLost()).toBe(false);
-      expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
+        // A rejected attempt must not leave a local recovery claim behind.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await expect(durableAgent.recover(runId, { force })).rejects.toMatchObject({
+            id: RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+          });
+        }
+        expect(globalRunRegistry.get(runId)).toBe(entry);
+        expect(ExecutionFence.getLocalActive(runId)).toBe(fence);
+        expect(fence.isLost()).toBe(false);
+        expect(await foreign.owner(fence.agentId, runId)).toBe(fence.executionId);
 
-      // ---- The live execution finishes as if recover() had never been called.
-      model.release();
-      await vi.waitFor(() => expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
-      await fence.whenSettled;
-      expect(await fence.settle(async () => {})).toBe('owned');
-      await vi.waitFor(async () => expect(await assistantText(memory)).toContain('the live answer'));
-      expect(model.calls()).toBe(1);
+        // ---- The live execution finishes as if recover() had never been called.
+        model.release();
+        await vi.waitFor(() => expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+        await fence.whenSettled;
+        expect(await fence.settle(async () => {})).toBe('owned');
+        await vi.waitFor(async () => expect(await assistantText(memory)).toContain('the live answer'));
+        expect(model.calls()).toBe(1);
 
-      await stream.stop();
-      result.cleanup();
-    });
+        await stream.stop();
+        result.cleanup();
+      },
+    );
 
     it('an execution whose lease vanished with no new owner reports the lease loss and keeps its snapshots', async () => {
       const storage = createStorage(backend);
@@ -1461,6 +2074,70 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
       await stream.stop();
       result.cleanup();
+    });
+
+    // A foreground tool's suspension keeps the strict check: only a background task's suspension may land
+    // after the run released its claim. An execution that couldn't renew its claim past the lease, with
+    // nobody else claiming the run, must not record an approval or question nobody can answer (#30182).
+    it('a foreground tool that suspends after its execution lost the lease stops the run without recording the suspension', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      const storage = createStorage(backend);
+      const memory = new MockMemory({ storage });
+      const model = toolCallThenTextModel('askReviewer', { topic: 'refund' }, 'must not be reached');
+      let enterTool!: () => void;
+      const toolEntered = new Promise<void>(resolve => (enterTool = resolve));
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => (releaseTool = resolve));
+      const askReviewer = createTool({
+        id: 'askReviewer',
+        description: 'Ask a reviewer to approve the refund',
+        inputSchema: z.object({ topic: z.string() }),
+        execute: async ({ topic }, options) => {
+          enterTool();
+          await toolGate;
+          return options?.agent?.suspend?.({ awaiting: 'reviewer', topic }) as any;
+        },
+      });
+      const durableAgent = buildAgent({ model: model.model, storage, memory, tools: { askReviewer } });
+      const result = await durableAgent.stream('Refund this order once a reviewer approves', {
+        memory: { thread: THREAD, resource: RESOURCE },
+      });
+      const { runId } = result;
+      const stream = collect(result.fullStream);
+      const errors: any[] = [];
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), (event: any) => {
+        if (event.type === 'error') errors.push(event);
+      });
+      try {
+        await toolEntered;
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        // Renewals can't reach the backend until the claim's lease runs out, as a dropped connection would.
+        if (backend === 'storage') {
+          vi.spyOn(storage.stores.workflows!, 'renewRunOwnership').mockRejectedValue(new Error('store unreachable'));
+        } else {
+          vi.spyOn(pubsub, 'renewLease').mockRejectedValue(new Error('redis unreachable'));
+        }
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 2 * EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(fence.isLost()).toBe(true);
+        expect(await foreignOwnership(backend, storage, pubsub).owner(durableAgent.id, runId)).not.toBe('successor');
+
+        releaseTool();
+        await fence.whenSettled;
+        await vi.waitFor(() => expect(errors).toHaveLength(1));
+        expect(errors[0].data.error.message).toContain(
+          `Durable run ${runId}: could not verify that this execution still owns the run`,
+        );
+        const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+        const metadata = messages.map(message => message.content.metadata ?? {});
+        // No open request for the reviewer: nothing a later resume() could answer.
+        expect(metadata.some(entry => 'suspendedTools' in entry || 'pendingToolApprovals' in entry)).toBe(false);
+        expect(model.calls()).toBe(1);
+      } finally {
+        releaseTool();
+        vi.useRealTimers();
+        await stream.stop();
+        result.cleanup();
+      }
     });
 
     it.each([
@@ -1726,7 +2403,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The recovery's own cleanup still finds its state, and clears it.
         recovered.cleanup();
         expect(globalRunRegistry.get(runId)).toBeUndefined();
-        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        await vi.waitFor(() => expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId)));
       },
     );
 
@@ -1819,7 +2496,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         [DurableStepIds.AGENTIC_EXECUTION]: 'running',
       });
       const writes = (
-        ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState', 'deleteWorkflowRunById'] as const
+        [
+          'persistWorkflowSnapshot',
+          'updateWorkflowResults',
+          'updateWorkflowState',
+          'appendWorkflowRunEntries',
+          'mergeWorkflowRunStepResult',
+          'writeWorkflowRunCheckpoint',
+          'updateWorkflowRunHeader',
+          'deleteWorkflowRunById',
+        ] as const
       ).map(method => vi.spyOn(workflows, method));
       await memory.saveMessages({ messages: [recoveredAssistantMessage(messageId, 'recovered answer')] });
 
@@ -2063,6 +2749,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
       'updateWorkflowResults',
       'updateWorkflowState',
       'appendWorkflowRunEntries',
+      'mergeWorkflowRunStepResult',
       'writeWorkflowRunCheckpoint',
       'updateWorkflowRunHeader',
     ] as const) {
@@ -2143,4 +2830,72 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     started.cleanup();
     await pubsub.close();
   });
+});
+
+describe('evented agent on a shared bus: the caller stream ends after its execution detaches', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
+  });
+
+  // The caller detaches when the run ends and leaves settlement to the workers. Its reader must
+  // still deliver the terminal event, whichever comes first.
+  it.each(['before the terminal event arrives', 'while the run record write waits'] as const)(
+    'detach lands %s',
+    async when => {
+      const directory = await mkdtemp(join(tmpdir(), 'detached-reader-'));
+      const pubsub = new UnixSocketPubSub(join(directory, 'bus.sock'));
+      const model = gatedModel('detached answer');
+      const agent = createEventedAgent({
+        agent: new Agent({
+          id: 'detached-agent',
+          name: 'Detached Agent',
+          instructions: 'Answer.',
+          model: model.model as LanguageModelV2,
+        }),
+      });
+      const mastra = new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore(), pubsub });
+      const runId = `detached-reader-${when.replace(/\W+/g, '-')}`;
+      const publish = pubsub.publish.bind(pubsub);
+      let deliverTerminal: (() => Promise<void>) | undefined;
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+          deliverTerminal = () => publish(topic, event, options);
+          return;
+        }
+        return publish(topic, event, options);
+      });
+      try {
+        const result = await agent.stream('Answer me.', { runId });
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        let detachLater: (() => void) | undefined;
+        if (when === 'while the run record write waits') {
+          // Hold the detach until the reader's write checks ownership.
+          const detach = fence.detach.bind(fence);
+          const throwIfLost = fence.throwIfLost.bind(fence);
+          vi.spyOn(fence, 'detach').mockImplementation(() => {
+            detachLater = detach;
+          });
+          vi.spyOn(fence, 'throwIfLost').mockImplementation(() => {
+            detachLater?.();
+            return throwIfLost();
+          });
+        }
+        model.release();
+        await vi.waitFor(() => expect(fence.detached || detachLater).toBeTruthy());
+        await vi.waitFor(() => expect(deliverTerminal).toBeDefined());
+        await deliverTerminal!();
+        expect(await result.output.text).toBe('detached answer');
+        expect(fence.detached).toBe(true);
+        result.cleanup();
+      } finally {
+        model.release();
+        await mastra.shutdown();
+        await pubsub.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+    20_000,
+  );
 });

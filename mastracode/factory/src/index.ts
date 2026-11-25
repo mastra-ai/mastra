@@ -38,6 +38,14 @@ export type {
   MastraFactorySandboxOption,
   FactorySandboxStart,
 } from './factory.js';
+export { DispatcherBoardEngine, createDispatcherBoardEngine } from './board-engine/engine.js';
+export type {
+  FactoryBoardEngine,
+  FactoryBoardEngineContext,
+  FactoryBoardEngineFactory,
+} from './board-engine/engine.js';
+export type { FactoryTransitionRequest } from './rules/transition-service.js';
+export type { FactoryTransitionResult } from './rules/types.js';
 export type { FactoryMetricsOptions, MetricGroup } from './metrics/index.js';
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can

@@ -34,7 +34,7 @@ function BoardLayout({ kind }: { kind: string }) {
   const factory = useActiveFactory();
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
+    <PageLayout variant="page" body="fixed" {...slots}>
       <Board factory={factory} kind={kind} />
     </PageLayout>
   );
@@ -69,15 +69,6 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
   const kind = definition.id;
-  const repository = factory.repositories[0];
-  if (!repository) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
-  return (
-    <BoardContent
-      key={`${factory.id}:${kind}`}
-      factory={factory}
-      repository={repository}
-      kind={kind}
-      definition={definition}
-    />
-  );
+  if (factory.repositories.length === 0) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
+  return <BoardContent key={`${factory.id}:${kind}`} factory={factory} kind={kind} definition={definition} />;
 }

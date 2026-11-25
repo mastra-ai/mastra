@@ -103,7 +103,7 @@ export function ActivityFold({
     >
       <ActivityTrigger>
         <ActivityHeader>
-          <ActivityIcon className={cn(pose && '[&_svg]:size-4')}>
+          <ActivityIcon className={cn(pose && '[&_svg]:size-icon-md')}>
             <FoldIcon pose={pose} animates={animates} live={live} fallback={words.icon} />
           </ActivityIcon>
           <span ref={box} className="relative flex min-w-0">
@@ -120,10 +120,9 @@ export function ActivityFold({
                 )}
                 {failed && (
                   <IconCrossMedium
-                    size={13}
                     role="img"
                     aria-label="Failed"
-                    className="shrink-0 text-destructive-foreground"
+                    className="size-icon-sm shrink-0 text-destructive-foreground"
                   />
                 )}
                 {outcomeLabel && (

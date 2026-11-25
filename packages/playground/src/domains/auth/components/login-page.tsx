@@ -109,8 +109,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   };
 
   const description = login.description ? (
-    <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
-      <IconLock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+    <div className="flex items-start gap-2.5 rounded-md bg-nested p-3">
+      <IconLock className="mt-0.5 size-icon-md shrink-0 text-muted-foreground" />
       <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;
@@ -183,8 +183,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             </div>
           ) : null}
 
-          <Button icon={<IconArrowBoxRight />} type="submit" disabled={isPending} className="w-full" size="lg">
-            {isPending ? (isSignIn ? 'Signing in...' : 'Creating account...') : isSignIn ? 'Sign in' : 'Create account'}
+          <Button icon={<IconArrowBoxRight />} type="submit" loading={isPending} className="w-full" size="lg">
+            {isSignIn ? 'Sign in' : 'Create account'}
           </Button>
 
           {signUpEnabled && (
@@ -216,9 +216,8 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       )}
 
       {hasSSO && sso && (
-        <Button onClick={handleSSOLogin} disabled={isSSOPending} className="w-full" size="lg">
-          {sso.icon && <span className="mr-2">{sso.icon}</span>}
-          {isSSOPending ? 'Redirecting...' : sso.text || 'Sign in'}
+        <Button icon={sso.icon} onClick={handleSSOLogin} className="w-full" size="lg" loading={isSSOPending}>
+          {sso.text || 'Sign in'}
         </Button>
       )}
     </LoginLayout>

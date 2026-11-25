@@ -5,7 +5,7 @@ import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { useDataListKeyboard } from '@/ds/components/DataList/use-data-list-keyboard';
 import { SearchInput } from '@/ds/components/SearchInput';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];
@@ -67,7 +67,7 @@ export function TopicTraceSummaryList({
       </DataList>
 
       {visible.hasMore ? (
-        <Button icon={<IconChevronBottom />} size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
+        <Button icon={<IconChevronDownMedium />} size="sm" onClick={() => setPage(currentPage => currentPage + 1)}>
           Load more traces ({visible.traces.length} of {visible.total})
         </Button>
       ) : null}

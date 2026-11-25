@@ -1,6 +1,9 @@
 /** Registers built-in domains on fresh LibSQL storage or an isolated Postgres schema. */
 
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -23,6 +26,7 @@ import {
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
+import { OpenRunsStorage } from './domains/open-runs/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SandboxEnvsStorage } from './domains/sandbox-envs/base.js';
@@ -138,9 +142,8 @@ export function createProviderWorkItemForTests(input: {
   };
 }
 
-/** Keep migration tests from clearing tables another Postgres test is using. */
-export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
-  const { PgFactoryStorage, PostgresStore } = await import('@mastra/pg');
+async function isolatedPostgresSchemaForTests(connectionString: string): Promise<string> {
+  const { PostgresStore } = await import('@mastra/pg');
   const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
   const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
   await admin.pool.query(`CREATE SCHEMA "${schema}"`);
@@ -150,7 +153,32 @@ export async function createIsolatedFactoryPostgresForTests(connectionString: st
     await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
     await admin.close();
   });
-  return new PgFactoryStorage({ id: 'factory-test', connectionString: url.toString() });
+  return url.toString();
+}
+
+/** Keep migration tests from clearing tables another Postgres test is using. */
+export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const { PgFactoryStorage } = await import('@mastra/pg');
+  return new PgFactoryStorage({
+    id: 'factory-test',
+    connectionString: await isolatedPostgresSchemaForTests(connectionString),
+  });
+}
+
+export async function createSharedFactoryDatabaseForTests(): Promise<{
+  connect(id: string): Promise<FactoryStorageTestSeed>;
+}> {
+  if (process.env.FACTORY_TEST_STORAGE_BACKEND === 'postgres') {
+    const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+    if (!postgresUrl) throw new Error('FACTORY_TEST_POSTGRES_URL is required for the Postgres test backend.');
+    const { PgFactoryStorage } = await import('@mastra/pg');
+    const connectionString = await isolatedPostgresSchemaForTests(postgresUrl);
+    return { connect: id => createFactoryStorageForTests(new PgFactoryStorage({ id, connectionString })) };
+  }
+  const directory = await mkdtemp(join(tmpdir(), 'factory-test-'));
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
+  const url = `file:${join(directory, 'factory.db')}`;
+  return { connect: id => createFactoryStorageForTests(new LibSQLFactoryStorage({ id, url })) };
 }
 
 export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorage> {
@@ -171,6 +199,7 @@ export interface FactoryStorageTestSeed<T extends FactoryStorage = FactoryStorag
   boards: StoredBoardsStorage;
   skillOverrides: SkillOverridesStorage;
   voiceSettings: VoiceSettingsStorage;
+  openRuns: OpenRunsStorage;
 }
 
 /**
@@ -207,6 +236,7 @@ export async function createFactoryStorageForTests(
   const boards = storage.registerDomain(new StoredBoardsStorage());
   const skillOverrides = storage.registerDomain(new SkillOverridesStorage());
   const voiceSettings = storage.registerDomain(new VoiceSettingsStorage());
+  const openRuns = storage.registerDomain(new OpenRunsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -227,5 +257,22 @@ export async function createFactoryStorageForTests(
     boards,
     skillOverrides,
     voiceSettings,
+    openRuns,
   };
+}
+
+/**
+ * Makes a project read as one created before the intake evaluator setting: its lock row carries no
+ * setting, so the project uses `route-list` unless one is forced, and its intake order is derived
+ * from the route list.
+ */
+export async function asProjectFromBeforeIntakeEvaluator(
+  storage: Pick<FactoryStorage, 'ops'>,
+  scope: { orgId: string; factoryProjectId: string },
+): Promise<void> {
+  await storage.ops.updateMany(
+    'factory_intake_route_locks',
+    { org_id: scope.orgId, factory_project_id: scope.factoryProjectId },
+    { intake_evaluator: null, intake_order: null, intake_order_origin: null },
+  );
 }

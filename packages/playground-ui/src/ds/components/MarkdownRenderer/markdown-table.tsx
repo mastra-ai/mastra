@@ -6,7 +6,7 @@ import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
@@ -20,6 +20,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
       <div className="flex justify-end">
         <ButtonsGroup size="sm" aria-label="Table actions">
           <Button
+            icon={isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
             type="button"
             variant="ghost"
             disabled={typeof markdown !== 'string'}
@@ -28,7 +29,6 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             }}
             aria-label="Copy table as markdown"
           >
-            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
             {isCopied ? 'Copied!' : 'Copy table as markdown'}
           </Button>
           <DropdownMenu>
@@ -36,7 +36,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
               disabled={typeof csv !== 'string'}
               render={
                 <Button type="button" size="icon-sm" variant="ghost" aria-label="More table options">
-                  <IconChevronBottom />
+                  <IconChevronDownMedium />
                 </Button>
               }
             />

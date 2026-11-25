@@ -18,7 +18,7 @@ npm install @mastra/redis
 
 ## Usage
 
-### Using Connection String
+### Using connection string
 
 ```typescript
 import { RedisStore } from '@mastra/redis'
@@ -31,7 +31,7 @@ const storage = new RedisStore({
 await storage.init()
 ```
 
-### Using Host/Port Configuration
+### Using host and port configuration
 
 ```typescript
 import { RedisStore } from '@mastra/redis'
@@ -47,7 +47,7 @@ const storage = new RedisStore({
 await storage.init()
 ```
 
-### Using Pre-configured Client
+### Using pre-configured client
 
 For advanced configurations such as Sentinel, you can pass a pre-configured Redis client:
 
@@ -126,9 +126,9 @@ const storage = new RedisStore({
 You must provide either `connectionString`, `host`, or `client`. These options are mutually exclusive.
 :::
 
-## Additional Notes
+## Additional notes
 
-### Key Structure
+### Key structure
 
 The Redis storage implementation uses the following key patterns:
 
@@ -165,7 +165,7 @@ const storage = new RedisStore({
 
 Redis Cluster isn't supported. `RedisStore` accepts only a standalone client from `createClient()`, and several operations read or write keys that hash to different slots, which Redis Cluster rejects with a `CROSSSLOT` error.
 
-### Accessing the Underlying Client
+### Accessing the underlying client
 
 You can access the underlying Redis client for custom operations:
 
@@ -192,7 +192,7 @@ When shutting down your application, close the Redis connection:
 await storage.close()
 ```
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 

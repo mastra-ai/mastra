@@ -101,10 +101,10 @@ export function PublishChannelContent({
         ) : platform.isConfigured ? (
           <DialogAction
             onConfirm={handleConnect}
-            disabled={isConnecting}
             data-testid={`publish-channel-dialog-${platform.id}-connect`}
+            loading={isConnecting}
           >
-            {isConnecting ? 'Connecting…' : copy.connectLabel}
+            {copy.connectLabel}
           </DialogAction>
         ) : (
           <DialogCancel>Close</DialogCancel>

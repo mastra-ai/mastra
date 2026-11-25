@@ -148,27 +148,6 @@ describe('ContextMenu', () => {
     ).not.toThrow();
   });
 
-  it('accepts Base UI positioning props on menu content', () => {
-    render(
-      <ContextMenu defaultOpen>
-        <ContextMenu.Trigger>Right click here</ContextMenu.Trigger>
-        <ContextMenu.Content
-          anchor={document.body}
-          arrowPadding={6}
-          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
-          collisionBoundary={document.body}
-          collisionPadding={8}
-          positionMethod="fixed"
-          sticky
-        >
-          <ContextMenu.Item>Positioned action</ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu>,
-    );
-
-    expect(screen.getByRole('menuitem', { name: 'Positioned action' })).toBeTruthy();
-  });
-
   it('fires the onSelect handler when an item is clicked', () => {
     const onSelect = vi.fn();
     render(

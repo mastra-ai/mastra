@@ -1,9 +1,10 @@
-import type { StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
+import type { IntakeEvaluator, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
-import { resolveIntakePlacement } from './intake-routing.js';
+import { resolveIntake, resolveIntakePlacement } from './intake-routing.js';
 import type { BoardRegistry } from './registry.js';
-import { effectiveBoard, moveCardToBoard } from './relocate.js';
+import { effectiveBoard } from './relocate.js';
 
 export type RerouteMove = { item: Card; fromBoard: string; toBoard: string; toPhase: string; routeId: string };
 
@@ -19,17 +20,19 @@ function untouched(item: Card, registry: BoardRegistry): boolean {
 
 /**
  * Which untouched cards the routes, as they stand, would file on a different board. Each lands at
- * the start of its new board. A card no route places stays where it is.
+ * the start of its new board. A card no route places stays where it is. Under `intake-order` the
+ * boards are asked in `order`, as a new arrival would be.
  */
 export function planReroute(
   routes: readonly StoredIntakeRouteRecord[],
   items: readonly Card[],
   registry: BoardRegistry,
+  intake: { evaluator: IntakeEvaluator; order: readonly string[] } = { evaluator: 'route-list', order: [] },
 ): RerouteMove[] {
   const moves: RerouteMove[] = [];
   for (const item of items) {
     if (!untouched(item, registry)) continue;
-    const placement = resolveIntakePlacement(routes, cardRuleFacts(item), registry);
+    const placement = placementOf(routes, item, registry, intake);
     if (!placement) continue;
     const fromBoard = effectiveBoard(item);
     if (placement.board === fromBoard) continue;
@@ -37,6 +40,19 @@ export function planReroute(
     moves.push({ item, fromBoard, toBoard: placement.board, toPhase: target.initialPhase, routeId: placement.routeId });
   }
   return moves;
+}
+
+function placementOf(
+  routes: readonly StoredIntakeRouteRecord[],
+  item: Card,
+  registry: BoardRegistry,
+  intake: { evaluator: IntakeEvaluator; order: readonly string[] },
+): { board: string; routeId: string } | undefined {
+  if (intake.evaluator === 'route-list') return resolveIntakePlacement(routes, cardRuleFacts(item), registry);
+  const resolution = resolveIntake({ ...intake, routes, facts: cardRuleFacts(item), registry });
+  return resolution.outcome === 'placed' && resolution.routeId !== null
+    ? { board: resolution.board, routeId: resolution.routeId }
+    : undefined;
 }
 
 /** How many cards a plan moves from each board to each other board. */
@@ -55,11 +71,13 @@ export function summarizeReroute(
 
 export async function applyReroute({
   moves,
+  boardEngine,
   workItems,
   registry,
   userId,
 }: {
   moves: readonly RerouteMove[];
+  boardEngine: Pick<FactoryBoardEngine, 'requestPlacement'>;
   workItems: Pick<WorkItemsStorage, 'update' | 'supersedeDecisionsForWorkItem'>;
   registry: BoardRegistry;
   userId: string;
@@ -67,7 +85,7 @@ export async function applyReroute({
   let moved = 0;
   let skipped = 0;
   for (const move of moves) {
-    const result = await moveCardToBoard({
+    const result = await boardEngine.requestPlacement({
       workItems,
       boardRegistry: registry,
       userId,

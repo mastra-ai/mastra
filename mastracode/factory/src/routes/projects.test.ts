@@ -78,6 +78,56 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("still creates an organization's second project, warning once per process that it is deprecated", async () => {
+    vi.resetModules();
+    const { ProjectRoutes: FreshProjectRoutes } = await import('./projects.js');
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      const organizationId = context.req.header('x-org') ?? 'org-1';
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new FreshProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+      }).routes(),
+    );
+    const create = (name: string, org = 'org-1') =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-org': org },
+        body: JSON.stringify({ name }),
+      });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deprecations = () =>
+      warn.mock.calls.filter(([message]) => String(message).includes('more than one Factory project'));
+
+    try {
+      expect((await create('Platform')).status).toBe(201);
+      expect((await create('Acme', 'org-2')).status).toBe(201);
+      expect(deprecations()).toEqual([]);
+
+      expect((await create('Payments')).status).toBe(201);
+      expect((await create('Growth')).status).toBe(201);
+      expect(deprecations()).toEqual([
+        [
+          '[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.',
+        ],
+      ]);
+
+      const listed = (await (await app.request('/web/factory/projects')).json()) as {
+        projects: Array<{ name: string }>;
+      };
+      expect(listed.projects.map(project => project.name).sort()).toEqual(['Growth', 'Payments', 'Platform']);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
     const seed = await createFactoryStorageForTests();
     const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
@@ -466,11 +516,13 @@ describe('ProjectRoutes', () => {
         listRunBindings: vi.fn().mockResolvedValue(bindings),
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
+      const setThreadModel = vi.fn().mockResolvedValue({ live: false });
       const controller = {
         getSession: vi.fn(async (sessionId: string) => {
           if (sessionId === 'session-thread-lookup-failed') throw new Error('gateway unavailable');
           return sessions.get(sessionId) ?? null;
         }),
+        setThreadModel,
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const completed = vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -490,11 +542,18 @@ describe('ProjectRoutes', () => {
           expect(completed).toHaveBeenCalledWith('[factory] apply-default-model completed', {
             projectId: project.id,
             modelId: 'anthropic/claude-opus-4-6',
-            applied: 2,
-            skipped: 6,
+            applied: 3,
+            skipped: 5,
           }),
         );
         expect(warn).toHaveBeenCalledTimes(2);
+        // A bound session that is not loaded gets the model stored on its thread.
+        expect(setThreadModel).toHaveBeenCalledTimes(1);
+        expect(setThreadModel).toHaveBeenCalledWith({
+          resourceId: 'resource-not-running',
+          threadId: 'thread-not-running',
+          modelId: 'anthropic/claude-opus-4-6',
+        });
         expect(failingSetSettingOn).toHaveBeenCalledTimes(1);
         expect(setSettingOn).toHaveBeenCalledTimes(2);
         expect(setSettingOn).toHaveBeenNthCalledWith(1, {
@@ -949,6 +1008,51 @@ describe('ProjectRoutes', () => {
       projectRepository: expect.objectContaining({ repositoryId: repository.id, connectionId: connection.id }),
     });
     warn.mockRestore();
+  });
+
+  it.each([
+    ['brings in its issues by default', {}, ['acme/web', 'acme/api']],
+    ['leaves issue intake alone when the caller opts out', { selectIntake: false }, ['acme/web']],
+  ])('linking a GitHub repository %s', async (_name, options, expected) => {
+    const seed = await createFactoryStorageForTests();
+    await seed.intake.saveConfig({ orgId: 'org-1', config: { github: { enabled: true, sourceIds: ['acme/web'] } } });
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+      accountName: 'acme',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: 'repo-1', slug: 'acme/api', defaultBranch: 'main' },
+    });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { intake: seed.intake }));
+    const connectResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ integrationId: 'github', installationId: installation.id }),
+    });
+    const { connection } = (await connectResponse.json()) as { connection: { id: string } };
+
+    const linkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${connection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ repositoryId: repository.id, branch: 'main', ...options }),
+      },
+    );
+
+    expect(linkResponse.status).toBe(201);
+    const { github: selection } = await seed.intake.getConfig({ orgId: 'org-1', integrationIds: ['github'] });
+    expect(selection).toEqual({ enabled: true, sourceIds: expected });
   });
 
   it('does not 500 when a linked GitHub installation was pruned (uninstalled)', async () => {

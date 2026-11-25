@@ -777,6 +777,79 @@ describe('notification inbox', () => {
     });
   });
 
+  it('delivers a deferred persist-only notification without waking the idle thread', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sent: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push({ signal, target });
+      return { accepted: Promise.resolve({ action: 'persist' }), signal };
+    });
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'factory',
+      kind: 'rule-message',
+      priority: 'high',
+      summary: 'New commits on pull request #17.',
+      deliverAt: now,
+      metadata: { __mastraNotificationRouting: { idleBehavior: 'persist' } },
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(sent[0]?.target).toEqual({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      ifIdle: { behavior: 'persist' },
+    });
+  });
+
+  it('summarizes a batch asleep only when every record asked to persist', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const record = (id: string, threadId: string, persist: boolean) =>
+      storage.createNotification({
+        id,
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId,
+        source: 'factory',
+        kind: 'rule-message',
+        priority: 'high',
+        summary: `${id} summary`,
+        summaryAt: now,
+        ...(persist ? { metadata: { __mastraNotificationRouting: { idleBehavior: 'persist' as const } } } : {}),
+      });
+    await record('p1', 'thread-sleeping', true);
+    await record('p2', 'thread-sleeping', true);
+    await record('m1', 'thread-waking', true);
+    await record('m2', 'thread-waking', false);
+    const sent: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push({ signal, target });
+      return { accepted: Promise.resolve({ action: 'persist' }), signal };
+    });
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    const targetFor = (threadId: string) => sent.find(entry => entry.target.threadId === threadId)?.target;
+    // Every record of the batch persisted: the summary keeps the thread asleep too.
+    expect(targetFor('thread-sleeping')).toEqual({
+      resourceId: 'resource-1',
+      threadId: 'thread-sleeping',
+      ifIdle: { behavior: 'persist' },
+    });
+    // One record wanted a wake: the mixed summary still wakes.
+    expect(targetFor('thread-waking')).toEqual({ resourceId: 'resource-1', threadId: 'thread-waking' });
+  });
+
   it('resolves stream options for deferred summary deliveries with non-low priorities', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

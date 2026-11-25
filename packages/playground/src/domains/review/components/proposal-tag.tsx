@@ -64,7 +64,7 @@ export function ProposalTag({
           }}
           className={cn(quietTextHover, 'p-0.5')}
         >
-          <IconCheckmark2Medium className="h-3 w-3" />
+          <IconCheckmark2Medium className="size-icon-xs" />
         </button>
       </span>
     );
@@ -84,15 +84,15 @@ export function ProposalTag({
         className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
         title="Edit tag"
       >
-        <IconPencil className="h-3 w-3" />
+        <IconPencil className="size-icon-xs" />
       </button>
       <button
         type="button"
         onClick={onRemove}
-        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
+        className="p-0.5 text-subtle-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
-        <IconCrossMedium className="h-3 w-3" />
+        <IconCrossMedium className="size-icon-xs" />
       </button>
     </span>
   );

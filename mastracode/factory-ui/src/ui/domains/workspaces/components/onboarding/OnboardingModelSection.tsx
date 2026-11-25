@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
@@ -131,11 +130,12 @@ export function OnboardingModelSection({
       >
         <Button
           variant="primary"
-          disabled={!setup.canCreate || creating}
+          disabled={!setup.canCreate}
+          loading={creating}
           aria-describedby={!error && blockedReason ? blockedReasonId : undefined}
           onClick={onCreate}
         >
-          <CreateFactoryLabel creating={creating} />
+          Create factory
         </Button>
       </OnboardingPageAction>
     </>
@@ -165,13 +165,3 @@ const ACCOUNT_DETAILS: Record<OnboardingModelScope, string> = {
   hybrid: 'One for Factory work, one for your sessions',
   user: 'Only you',
 };
-
-function CreateFactoryLabel({ creating }: { creating: boolean }) {
-  if (!creating) return 'Create factory';
-  return (
-    <>
-      <Spinner size="sm" aria-hidden="true" />
-      Creating your factory…
-    </>
-  );
-}

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-studio",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "Mastra Studio Auth integration — proxies authentication through Mastra shared API",
   "type": "module",
   "main": "dist/index.js",
@@ -38,7 +38,8 @@
     "vitest": "catalog:"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

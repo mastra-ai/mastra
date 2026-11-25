@@ -236,9 +236,9 @@ Returning `undefined` abstains, and the agent's configured model is used.
 
 ## Routing scope
 
-Each step in a run sends the conversation and every tool result so far to the model. That makes the opening call the cheapest one, not the most expensive, so routing only that call captures very little.
+Each step in a run sends the conversation and every tool result so far to the model. That makes the opening call the cheapest one, not the most expensive, so routing only that call captures little.
 
-On a four-step run the opening call holds roughly 14% of the input tokens, so routing it alone captures under a tenth of the available saving. That figure counts every input token at full price. With prompt caching, most of a later step's input is a discounted cache read, so routing later steps saves less than their token share suggests.
+On a four-step run the opening call holds about 14% of the input tokens, so routing it alone captures under a tenth of the available saving. That figure counts every input token at full price. With prompt caching, most of a later step's input is a discounted cache read, so routing later steps saves less than their token share suggests.
 
 `scope: 'run'` is the default for this reason. Use `scope: 'first-step'` when you would rather a long run drift back to the capable model than commit to one decision, and accept that on multi-step runs it saves close to nothing.
 

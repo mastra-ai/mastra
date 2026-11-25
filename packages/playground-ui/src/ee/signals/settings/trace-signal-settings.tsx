@@ -14,7 +14,7 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArchive } from '@/ds/icons/central/IconArchive';
 import { IconLayoutGrid1 } from '@/ds/icons/central/IconLayoutGrid1';
 import { IconPencil } from '@/ds/icons/central/IconPencil';
-import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
 import { IconUnarchiv } from '@/ds/icons/central/IconUnarchiv';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
@@ -32,7 +32,7 @@ export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; on
       aria-expanded={open}
       onClick={onClick}
     >
-      <IconSettingsGear1 aria-hidden="true" />
+      <IconSettingsGear5 aria-hidden="true" />
     </Button>
   );
 }
@@ -43,7 +43,7 @@ export function TraceSignalSettingsPanel({ onClose }: { onClose: () => void }) {
       <DataDetailsPanel>
         <DataDetailsPanel.Header>
           <DataDetailsPanel.Heading className="items-center text-subheading text-foreground">
-            <IconSettingsGear1 aria-hidden="true" /> Trace signal settings
+            <IconSettingsGear5 aria-hidden="true" /> Trace signal settings
           </DataDetailsPanel.Heading>
           <DataDetailsPanel.CloseButton onClick={onClose} tooltip="Close settings" />
         </DataDetailsPanel.Header>
@@ -181,9 +181,8 @@ function TraceSignalSettingsContent() {
                   icon={<IconArchive />}
                   size="sm"
                   variant="ghost"
-                  disabled={
-                    !canManage || (mutations.archive.isPending && mutations.archive.variables === definition.id)
-                  }
+                  disabled={!canManage}
+                  loading={mutations.archive.isPending && mutations.archive.variables === definition.id}
                   onClick={() => void runAction(() => mutations.archive.mutateAsync(definition.id))}
                 >
                   Archive
@@ -228,11 +227,8 @@ function TraceSignalSettingsContent() {
                   icon={<IconUnarchiv />}
                   size="sm"
                   variant="ghost"
-                  disabled={
-                    !canManage ||
-                    atLimit ||
-                    (mutations.restore.isPending && mutations.restore.variables === definition.id)
-                  }
+                  disabled={!canManage || atLimit}
+                  loading={mutations.restore.isPending && mutations.restore.variables === definition.id}
                   onClick={() => void runAction(() => mutations.restore.mutateAsync(definition.id))}
                 >
                   Restore

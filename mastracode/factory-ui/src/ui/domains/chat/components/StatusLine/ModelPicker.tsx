@@ -15,6 +15,7 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
 import { ModelCredential } from './ModelCredential';
@@ -41,13 +42,12 @@ const withinProvider = (provider: string, modelId: string) =>
   modelId.startsWith(`${provider}/`) ? modelId.slice(provider.length + 1) : modelId;
 
 function canSwitchModel({
-  kind,
   draftSessionId,
   sessionEnabled,
   modelLockedReason,
-}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+}: Pick<ChatSessionContextApi, 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
   if (modelLockedReason) return false;
-  if (kind === 'user' && draftSessionId) return true;
+  if (draftSessionId) return true;
   return sessionEnabled;
 }
 
@@ -102,7 +102,7 @@ interface ModelMenuProps {
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey2 className="size-icon-sm" />} />
 );
 
 function ModelMenu({
@@ -192,18 +192,19 @@ function LockedModelMenu({
   modelAriaLabel: string;
 }) {
   const { summary } = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
+  const modelCredential = useModelCredential(modelSwitch.activeModelId);
+  const credentialNote =
+    modelCredential &&
+    (modelCredential.warning ?? `${modelCredential.credential}: ${modelCredential.holderDescription}`);
   return (
-    <>
-      <ModelCredential />
-      <ModelMenu
-        modelSwitch={modelSwitch}
-        triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
-        triggerClassName={triggerClassName}
-        unavailableReason={lockedReason}
-      >
-        {children}
-      </ModelMenu>
-    </>
+    <ModelMenu
+      modelSwitch={modelSwitch}
+      triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
+      triggerClassName={triggerClassName}
+      unavailableReason={credentialNote ? `${lockedReason} ${credentialNote}.` : lockedReason}
+    >
+      {children}
+    </ModelMenu>
   );
 }
 
@@ -217,7 +218,12 @@ export function ModelPicker() {
   const organizationScoped = useOrganizationScopedFactory();
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
-    return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+    return (
+      <div role="status" aria-label="Loading model" className="flex items-center gap-1.5">
+        <Skeleton className="size-4 rounded-full" />
+        <Skeleton data-composer-line-hidden className="h-3.5 w-20" />
+      </div>
+    );
   }
   if (!selectedModelId && error) {
     return (
@@ -236,11 +242,17 @@ export function ModelPicker() {
   const trigger = (
     <>
       <ModelProviderMark modelId={selectedModelId} provider={selectedModelId?.split('/')[0]} />
-      <Metadata singleLine className="max-w-48 max-sm:max-w-28">
+      <Metadata
+        singleLine
+        className="max-w-48 max-sm:max-w-28"
+        data-composer-line-hidden={notConfigured ? undefined : ''}
+      >
         <Metadata.Item>{label}</Metadata.Item>
         {notConfigured && <Metadata.Item className="shrink-0">not configured</Metadata.Item>}
       </Metadata>
-      <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+      <span className="flex shrink-0" data-composer-line-hidden>
+        <SessionThinkingIcon modelId={activeModelId} switchingModel={busy} />
+      </span>
     </>
   );
 

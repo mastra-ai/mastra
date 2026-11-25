@@ -8,7 +8,7 @@ import { InMemoryStore } from '../../../../storage';
 import type { ToolHooks } from '../../../../tools/types';
 import { executeCommandTool } from '../../../../workspace/tools/execute-command';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
-import { SCENARIO_MODEL_ID } from '../types';
+import { nativeExecutionEngine, SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Regression class: a blocking `beforeToolCall` hook on a workspace sandbox tool (#28753).
@@ -31,7 +31,7 @@ describeForAllEngines('AIMock loop scenario: sandbox tool blocked by beforeToolC
       llm,
       prompt: 'Delete scratch.txt.',
       stopWhen: stepCountIs(3),
-      sharedAgent: buildAgent(llm, {
+      sharedAgent: buildAgent(llm, nativeExecutionEngine(engine), {
         beforeToolCall: () => ({ proceed: false, output: { error: 'Blocked by test hook' } }),
       }),
       fixtures: llm => {
@@ -62,7 +62,11 @@ describeForAllEngines('AIMock loop scenario: sandbox tool blocked by beforeToolC
 
 let agentCounter = 0;
 
-function buildAgent(llm: LLMock, hooks: ToolHooks): { agent: Agent; mastra: Mastra } {
+function buildAgent(
+  llm: LLMock,
+  executionEngine: ReturnType<typeof nativeExecutionEngine>,
+  hooks: ToolHooks,
+): { agent: Agent; mastra: Mastra } {
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
   const id = `sandbox-hook-block-agent-${++agentCounter}`;
   const agent = new Agent({
@@ -73,6 +77,11 @@ function buildAgent(llm: LLMock, hooks: ToolHooks): { agent: Agent; mastra: Mast
     tools: { execute_command: executeCommandTool },
     hooks,
   });
-  const mastra = new Mastra({ agents: { [id]: agent }, logger: false, storage: new InMemoryStore() });
+  const mastra = new Mastra({
+    agents: { [id]: agent },
+    logger: false,
+    storage: new InMemoryStore(),
+    ...(executionEngine ? { durable: { executionEngine } } : {}),
+  });
   return { agent: mastra.getAgent(id), mastra };
 }

@@ -1,12 +1,13 @@
 {
   "name": "@mastra/cursor",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Cursor SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

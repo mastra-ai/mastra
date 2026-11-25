@@ -1,56 +1,44 @@
+import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem } from '../boards/index.js';
-import { workLaneForRole } from '../boards/legacy-plan-role.js';
-import { toBoardSource } from '../boards/project-boards.js';
-import type { ProjectBoardSource } from '../boards/project-boards.js';
-import type { BoardRegistry } from '../boards/registry.js';
 import type { IntegrationTools } from '../integrations/base.js';
-import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
+import { factorySessionUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../routes/source-control-sessions.js';
+import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
+import { customProviderOwner } from '../routes/custom-provider-source.js';
 import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
-import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
-import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import {
   ensureFactorySourceSession,
   hydrateFactorySession,
-  requireOrganizationModelKey,
   resolveFactorySessionModel,
 } from '../session/factory-session.js';
-import { recordSessionRunStart } from '../session/run-audit.js';
-import { resolveRunRepository } from '../session/work-item-repository.js';
-import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
-import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { workItemNumber } from '../work-items/card-number.js';
-import { deliverFactorySessionNotification, resolveSessionThread } from './deliver.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
+import { resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
-import { findWorkItem, workItemNotFound, workItemRefSchema } from './read-tools.js';
-import { heartbeatOpenRunUntilEnd } from './run-watch.js';
 import type { FactoryToolScope } from './scope.js';
 import { sessionModel } from './side-sessions.js';
 
 const TITLE_LENGTH = 120;
-
-/** Who renews the open-run entries this process writes; one id per process, like the dispatcher's. */
-export const FACTORY_TOOLS_OWNER_ID = `factory-tools:${globalThis.crypto.randomUUID()}`;
 
 export interface FactorySessionToolDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
   sessionModel: {
     projects: FactoryProjectsStorage;
     modelDefaults: ModelDefaultsStorage;
+    /**
+     * The server's own sign-ins, for local mode without tenant credentials, so
+     * model switches see the same catalog as the Settings picker.
+     */
+    localAuthStorage?: () => AuthStorage | undefined;
     /**
      * Tenant credential stores, present when auth is on. Model switches then
      * check the target session's credential scope, like the Settings picker;
@@ -77,28 +65,9 @@ export interface FactorySessionToolDependencies {
     | 'listSessionSubscriptions'
     | 'listWorkItemSubscribers'
   >;
-  /** A fixed registry, or the per-project boards. */
-  boards: BoardRegistry | ProjectBoardSource;
-  auditRecorder: AuditRecorder;
-  intake?: Pick<IntakeStorage, 'getConfig'>;
-  /** The browser Start's coordinator; absent until the Factory runtime is ready. */
-  startCoordinator: () => Pick<FactoryStartCoordinator, 'prepare'> | undefined;
 }
 
 const LISTED_MODELS = 8;
-
-function startErrorMessage(error: unknown): string | null {
-  if (error instanceof WorkItemRepositoryError) {
-    return error.message;
-  }
-  if (error instanceof FactoryStartTransitionError) return `The start was refused: ${error.result.reason}`;
-  return null;
-}
-
-function workItemLabel(item: Card): string {
-  const number = workItemNumber(item);
-  return number === null ? `"${item.title}"` : `#${number}`;
-}
 
 function titleFrom(prompt: string): string {
   const firstLine = prompt.split('\n').find(line => line.trim()) ?? prompt;
@@ -121,7 +90,9 @@ export function createFactorySessionTools(
     const known = new Set(models.flatMap(model => (typeof model.id === 'string' ? [model.id] : [])));
     const tenantCatalog = deps.sessionModel.tenantCatalog;
     if (!tenantCatalog) {
-      const usable = (await buildModelCatalog({ controller })).map(model => model.id);
+      const usable = (await buildModelCatalog({ controller, authStorage: deps.sessionModel.localAuthStorage?.() })).map(
+        model => model.id,
+      );
       return { usable, known, scopeLabel: 'server' };
     }
     const requestContext = new RequestContext();
@@ -136,6 +107,13 @@ export function createFactorySessionTools(
     const modelScope = policy.tenant.credentialScope ?? 'user';
     const orgId = policy.tenant.orgId ?? scope.orgId;
     const customProviders = tenantCatalog.customProviders;
+    // The list model resolution uses for this session, so the tool never
+    // offers a custom model the session cannot run. A tenant catalog only
+    // exists with sign-in on.
+    const customProviderOwnerForSession = customProviderOwner(
+      { orgId, userId: policy.tenant.userId, credentialScope: modelScope },
+      /* authEnabled */ true,
+    );
     const usable = (
       await buildModelCatalog({
         controller,
@@ -146,12 +124,15 @@ export function createFactorySessionTools(
           modelScope,
         }),
         deploymentProviders: tenantCatalog.deploymentProviders,
-        listCustomProviders: customProviders
-          ? async () => {
-              await customProviders.ensureReady();
-              return customProviders.list({ orgId });
-            }
-          : undefined,
+        listCustomProviders:
+          customProviders && customProviderOwnerForSession
+            ? async () => {
+                await customProviders.ensureReady();
+                return (await customProviders.list(customProviderOwnerForSession)).filter(
+                  provider => !customEndpointUrlProblem(provider.url),
+                );
+              }
+            : undefined,
       })
     ).map(model => model.id);
     for (const id of usable) known.add(id);
@@ -222,9 +203,9 @@ export function createFactorySessionTools(
     description: [
       'Start a side session in this Factory with a prompt. It runs on its own sandbox and branch as you, and reports back to this session with `factory-session` notifications.',
       'A side session uses this session’s model. Pass `model` to start it on another model the session credentials can run.',
-      'Use it for self-contained investigations; when the result should land as a pull request, file a work item instead.',
-      'With `workItem` and `role` it starts that role on the work item instead, without moving the card, and this session follows the item.',
-      "A role that already has a session on the item (current or past) can't be started again from here: message that session with factory_signal_session, or ask the person to start it from a signed-in chat.",
+      'Use it when the person asks for a side session, and for work no card stage does: investigations and research, experiments, pushing fixes to an existing pull request or taking one over, or work that should leave the board alone.',
+      "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it and started.",
+      'Find cards with factory_list_work_items (a pasted link works) and move them, or rerun their stage, with factory_transition_work_item.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -239,25 +220,9 @@ export function createFactorySessionTools(
           .describe(
             'Model id for a side session. Omit it to inherit this session’s model. The session credentials must be able to run it.',
           ),
-        workItem: workItemRefSchema.optional(),
-        role: z.string().trim().min(1).max(64).optional(),
       })
-      .strict()
-      .refine(input => input.role === undefined || input.workItem !== undefined, {
-        message: 'Pass workItem together with role.',
-        path: ['role'],
-      }),
-    execute: async ({ prompt, title, model, workItem, role }) => {
-      if (workItem !== undefined) {
-        // A role start records a run as the person, so it waits for a turn the person started.
-        if (!scope.interactive) {
-          throw new Error(
-            'Starting a role on a work item needs a person in this turn; start a side session, or ask the person to ask for it in a signed-in chat.',
-          );
-        }
-        return startWorkItemRole({ prompt, title, workItem, role });
-      }
-
+      .strict(),
+    execute: async ({ prompt, title, model }) => {
       const parent = await deps.sessions.getBySessionId(scope.sessionId);
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
       if (!parent || !sourceControl) throw new Error('This session has no Factory session row to start from.');
@@ -365,221 +330,6 @@ export function createFactorySessionTools(
       };
     },
   });
-
-  async function startWorkItemRole({
-    prompt,
-    title,
-    workItem,
-    role,
-  }: {
-    prompt: string;
-    title?: string;
-    workItem: string;
-    role?: string;
-  }) {
-    if (!role) throw new Error('Pass the role to start on the work item.');
-    const coordinator = deps.startCoordinator();
-    if (!coordinator) throw new Error("Factory sessions can't be started yet; try again shortly.");
-    const item = await findWorkItem(deps.workItems, scope, workItem);
-    if (!item) throw workItemNotFound(workItem);
-    const label = workItemLabel(item);
-    const board = (await toBoardSource(deps.boards).load(scope)).get(boardForWorkItem(item));
-    // Work's old `plan` role still names Planning, though no phase runs in a `plan` context any more.
-    if (!workLaneForRole(board, role) && !board?.phaseForRole(role)) {
-      throw new Error(`${label}'s board has no ${role} role.`);
-    }
-    const seated = item.sessions[role];
-    if (seated) {
-      throw new Error(
-        `${label} already has a ${role} session ${seated.sessionId}; message it with factory_signal_session.`,
-      );
-    }
-
-    const parent = await deps.sessions.getBySessionId(scope.sessionId);
-    const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
-    if (!parent || !sourceControl) throw new Error('This session has no Factory session row to start from.');
-    const messaging = await deps.messaging();
-    if (!messaging) throw new Error('Starting sessions is not available on this server.');
-    const project = await deps.sessionModel.projects.get({ orgId: scope.orgId, id: scope.factoryProjectId });
-    if (!project) throw new Error('This Factory no longer exists.');
-    // A work-item start is a run, so a hybrid Factory uses the Factory's scope (as the Start route does).
-    const modelScope = effectiveModelScope(project.modelScope, 'run');
-    // On the Factory's credentials the card's session is the Factory's own, as when the board starts it;
-    // the person asking stays the one who started it, and follows it from this session.
-    const ownerUserId = modelScope === 'factory' ? factoryPrincipalId(project.id) : scope.userId;
-    if (modelScope === 'factory') {
-      await requireOrganizationModelKey(
-        {
-          modelCredentials: deps.sessionModel.tenantCatalog?.credentials,
-          customProviders: deps.sessionModel.tenantCatalog?.customProviders,
-          deploymentModelProviders: deps.sessionModel.tenantCatalog?.deploymentProviders,
-        },
-        project,
-      );
-    }
-    const projectRepositoryId = await resolveRepository(sourceControl, item);
-
-    const sessionId = globalThis.crypto.randomUUID();
-    const ensured = await ensureFactorySourceSession({
-      sourceControl,
-      orgId: scope.orgId,
-      factoryProjectId: scope.factoryProjectId,
-      sessionId,
-      branch: `${USER_SESSION_BRANCH_PREFIX}${sessionId}`,
-      projectRepositoryId,
-      attributeToUserId: ownerUserId,
-      // A run works a shared card, so the org can open it and answer its approvals even when the session that
-      // started it is private.
-      visibility: 'org',
-    });
-
-    // Follow first, so a fast run's first report already has somewhere to go.
-    const followScope = { orgId: scope.orgId, factoryProjectId: scope.factoryProjectId };
-    const alreadyFollowing = (
-      await deps.workItems.listSessionSubscriptions({ ...followScope, sessionId: scope.sessionId })
-    ).some(subscription => subscription.workItemId === item.id);
-    await deps.workItems.subscribeToWorkItem({
-      ...followScope,
-      workItemId: item.id,
-      sessionId: scope.sessionId,
-      threadId: scope.threadId,
-      resourceId: scope.resourceId,
-      userId: scope.userId,
-      reason: 'started',
-    });
-
-    const startedAt = new Date();
-    let prepared;
-    try {
-      prepared = await coordinator.prepare({
-        orgId: scope.orgId,
-        userId: ownerUserId,
-        startedBy: { type: 'human', id: scope.userId },
-        factoryProjectId: scope.factoryProjectId,
-        sessionId: ensured.sessionId,
-        threadTitle: title ?? `${label} ${role}`,
-        kickoffKey: globalThis.crypto.randomUUID(),
-        modelScope,
-        defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
-        workItem: {
-          id: item.id,
-          role,
-          input: {
-            externalSource: item.externalSource,
-            parentWorkItemId: item.parentWorkItemId,
-            title: item.title,
-            stages: item.stages,
-            sessions: item.sessions,
-            metadata: item.metadata,
-          },
-        },
-      });
-    } catch (error) {
-      if (!alreadyFollowing) {
-        await deps.workItems.unsubscribeFromWorkItem({
-          orgId: scope.orgId,
-          workItemId: item.id,
-          sessionId: scope.sessionId,
-        });
-      }
-      const message = startErrorMessage(error);
-      if (message) throw new Error(message);
-      throw error;
-    }
-
-    const bindings = await deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id);
-    const replaced = bindings.find(
-      binding =>
-        binding.role === role &&
-        binding.id !== prepared.bindingId &&
-        binding.revokedAt !== null &&
-        binding.revokedAt >= startedAt,
-    );
-
-    const session = await messaging.controller.getSession(prepared.sessionId);
-    if (!session) {
-      throw new Error(
-        `The ${role} session ${prepared.sessionId} was bound but is not running; message it with factory_signal_session to wake it.`,
-      );
-    }
-    const kickoffId = globalThis.crypto.randomUUID();
-    // Heartbeat from before the kickoff so a fast run's end is seen; the open-run
-    // entry and audit follow the accepted kickoff, as the dispatcher records them.
-    // The run's end reaches this item's followers through the session's listener.
-    const heartbeat = heartbeatOpenRunUntilEnd(session, kickoffId);
-    const kickoffContext = new RequestContext();
-    kickoffContext.set('user', { workosId: ownerUserId, organizationId: scope.orgId });
-    try {
-      await session.sendSignal(
-        { id: kickoffId, type: 'user', tagName: 'user', contents: prompt },
-        { requestContext: kickoffContext, requireDelivery: true },
-      ).accepted;
-    } catch (error) {
-      heartbeat.stop();
-      throw error;
-    }
-
-    await recordSessionRunStart(session, {
-      audit: deps.auditRecorder,
-      actorType: 'human',
-      observedEnd: heartbeat.endReason,
-      run: {
-        kickoffId,
-        ownerId: FACTORY_TOOLS_OWNER_ID,
-        heartbeatAt: Date.now(),
-        bindingId: prepared.bindingId,
-        role,
-        startedBy: scope.userId,
-        orgId: scope.orgId,
-        factoryProjectId: scope.factoryProjectId,
-        workItemId: item.id,
-        workItemName: item.title,
-        sessionId: prepared.sessionId,
-        threadId: prepared.threadId,
-        branch: prepared.branch,
-      },
-    });
-
-    const number = workItemNumber(item);
-    return {
-      mode: 'work-item' as const,
-      workItem: {
-        id: item.id,
-        ...(number === null ? {} : { number }),
-        url:
-          factoryWorkItemUrl({
-            factoryProjectId: scope.factoryProjectId,
-            board: boardForWorkItem(item),
-            workItemId: item.id,
-          }) ?? null,
-      },
-      role,
-      sessionId: prepared.sessionId,
-      threadId: prepared.threadId,
-      url:
-        factorySessionUrl({
-          factoryProjectId: scope.factoryProjectId,
-          sessionId: prepared.sessionId,
-          threadId: prepared.threadId,
-        }) ?? null,
-      bindingId: prepared.bindingId,
-      ...(replaced ? { replacedSessionId: replaced.sessionId } : {}),
-    };
-  }
-
-  async function resolveRepository(sourceControl: SourceControlStorageHandle, item: Card): Promise<string> {
-    const intakeConfig = await deps.intake?.getConfig({ orgId: scope.orgId, integrationIds: ['linear'] });
-    // A card that names no repository starts in the environment's first one; its agent determines the right one.
-    const repository = await resolveRunRepository({
-      sourceControl,
-      orgId: scope.orgId,
-      factoryProjectId: scope.factoryProjectId,
-      item,
-      linearRepositoryMap: intakeConfig?.linear?.repositoryByLinearProject,
-    });
-    if (repository.status === 'unlinked') throw new Error(repository.hint);
-    return repository.projectRepositoryId;
-  }
 
   return { factory_start_session: start, factory_switch_session_model: switchModel };
 }

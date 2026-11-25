@@ -1,8 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 
-import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
-import type { RunEndCaptureSession } from '../session/run-audit.js';
 import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
@@ -49,6 +47,9 @@ export type SessionRunEndReport = (outcome: FactoryRunOutcome, since: Date) => P
 
 /** Told when the run holds a tool call for approval; the run stays open meanwhile. */
 export type SessionApprovalReport = (request: { toolName: string; toolCallId: string; args: unknown }) => Promise<void>;
+
+/** How core's `agent_end.abortReason` says an observational-memory failure stopped the run. */
+export const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
 
 /** How much of a run's error message a `failed` report quotes. */
 const ERROR_MESSAGE_LENGTH = 400;
@@ -102,7 +103,7 @@ export function observeSessionRunReports(
       return;
     }
     if (event.type !== 'agent_end') return;
-    const outcome = runOutcome(event.reason, parked, lastError);
+    const outcome = runOutcome(event.reason, parked, lastError, event.abortReason);
     parked = undefined;
     lastError = undefined;
     if (!outcome) return;
@@ -117,42 +118,16 @@ export function observeSessionRunReports(
 }
 
 /**
- * Renew a kicked-off run's open-run entry until the run ends, like the
- * dispatcher's heartbeat, so no dispatcher starts the role again meanwhile.
- * `endReason` is how that run ended, once it has; `stop` is for a kickoff that fails.
+ * `null` for an aborted run: someone stopped or steered it, which is not an outcome. A run
+ * that a memory-model failure stopped did not end by anyone's choice, so it failed.
  */
-export function heartbeatOpenRunUntilEnd(
-  session: RunEndCaptureSession,
-  kickoffId: string,
-): { endReason: () => RunEndReason; stop: () => void } {
-  let endReason: RunEndReason;
-  let unsubscribe = () => {};
-  const timer = setInterval(
-    () => void heartbeatSessionOpenRun(session, kickoffId),
-    Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
-  );
-  timer.unref?.();
-  let stopped = false;
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    clearInterval(timer);
-    unsubscribe();
-  };
-  unsubscribe = session.subscribe(event => {
-    if (event.type !== 'agent_end') return;
-    endReason ??= event.reason;
-    stop();
-  });
-  return { endReason: () => endReason, stop };
-}
-
-/** `null` for an aborted run: someone stopped or steered it, which is not an outcome. */
 export function runOutcome(
   reason: RunEndReason,
   parked: ParkedTool | undefined,
   errorMessage?: string,
+  abortReason?: string,
 ): FactoryRunOutcome | null {
+  if (reason === 'aborted' && abortReason === MEMORY_FAILURE_ABORT_REASON) reason = 'error';
   switch (reason) {
     case 'error': {
       const message = errorMessage?.trim();

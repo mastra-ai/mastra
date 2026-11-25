@@ -8,7 +8,7 @@ packages:
 
 # Metric queries
 
-Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the [Metrics overview](/docs/observability/metrics/overview). For automatic metric names and labels, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics).
+Metric queries read raw and aggregated metric data from the observability storage domain. For exporter and storage setup, see the [Metrics overview](/docs/observability/metrics/overview). For automatic metric names and labels, see the [Automatic metrics reference](/reference/observability/metrics/automatic-metrics). Metrics you emit with [`MetricsContext.emit()`](/reference/observability/metrics/metrics-context) are queried the same way, by the name you passed to `emit()`.
 
 ## Access
 

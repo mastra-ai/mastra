@@ -35,7 +35,7 @@ DD_SITE=datadoghq.com  # Optional: defaults to datadoghq.com
 DD_ENV=production      # Optional: environment name
 ```
 
-#### Zero-Config Setup
+#### Zero-config setup
 
 With environment variables set, use the exporter with no configuration:
 
@@ -56,7 +56,7 @@ export const mastra = new Mastra({
 })
 ```
 
-#### Explicit Configuration
+#### Explicit configuration
 
 You can also pass credentials directly (takes precedence over environment variables):
 
@@ -84,7 +84,7 @@ export const mastra = new Mastra({
 
 ### Configuration options
 
-#### Complete Configuration
+#### Complete configuration
 
 ```typescript
 new DatadogExporter({
@@ -106,7 +106,7 @@ new DatadogExporter({
 })
 ```
 
-#### With Local Datadog Agent
+#### With local Datadog agent
 
 If you have a Datadog Agent running locally, you can route traces through it instead of direct HTTPS:
 
@@ -137,7 +137,7 @@ Mastra span types are automatically mapped to Datadog LLM Observability span kin
 
 Other/future Mastra span types will default to 'task' when mapped unless specified.
 
-### Application Performance Monitoring
+### Application performance monitoring
 
 The sections above cover Mastra's [LLM Observability](https://docs.datadoghq.com/llm_observability/) integration. To trace your Mastra HTTP server routes (request latency, error tracking, service maps), use `dd-trace` directly for Datadog Application Performance Monitoring (APM).
 
@@ -192,7 +192,7 @@ DD_VERSION=1.0.0
 
 `dd-trace` auto-instruments popular HTTP frameworks, including those supported by Mastra's [server adapters](/docs/server/server-adapters). Inbound requests, outbound HTTP calls, and database queries appear as APM traces in Datadog.
 
-#### APM and LLM Observability
+#### APM and LLM observability
 
 Import and initialize `dd-trace` before creating the Mastra instance. The `DatadogExporter` detects the existing tracer and skips re-initialization, adding LLM Observability on top of your APM setup:
 
@@ -246,7 +246,7 @@ DD_LLMOBS_ML_APP=my-llm-app
 Server routes appear as APM traces and LLM calls appear as LLM Observability spans, all under the same service in Datadog.
 
 :::note
-Import and initialize `dd-trace` before all other modules. This allows its auto-instrumentation to patch HTTP, database, and framework libraries at load time.
+Import and initialize `dd-trace` before all other modules so its auto-instrumentation can patch HTTP, database, and framework libraries at load time.
 :::
 
 ### Troubleshooting
@@ -371,10 +371,10 @@ import { DatadogBridge } from '@mastra/datadog'
 ```
 
 :::note
-Import and initialize `dd-trace` at the very top of your application's entry file, before any other imports.
+Import and initialize `dd-trace` at the top of your application's entry file, before any other imports.
 :::
 
-#### Step 2: Mastra Configuration
+#### Step 2: Mastra configuration
 
 Add the `DatadogBridge` to your Mastra observability config:
 
