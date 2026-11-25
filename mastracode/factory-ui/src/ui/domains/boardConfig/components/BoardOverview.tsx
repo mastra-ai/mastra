@@ -16,12 +16,6 @@ import { RuleCountCard } from './RuleCountCard';
 import { StartsToggle } from './StartsToggle';
 
 /**
- * Lines the first column's content up with the settings column above it (42rem wide, centered), and leaves the same
- * gutter after the last one. A column's content sits 1.25rem inside its edge.
- */
-const MAP_GUTTER = 'px-[max(0.75rem,calc((100cqw_-_42rem)/2_-_1.25rem))]';
-
-/**
  * A board as a map: its phases as columns, in board order, each reading top to bottom as a card's way through it:
  * how cards get in, who works them, how the work ends, and where they can go next. Rules are only counted here; the
  * Rules page holds what they say and in which order they apply.

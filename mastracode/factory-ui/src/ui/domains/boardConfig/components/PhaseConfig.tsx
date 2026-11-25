@@ -1,24 +1,13 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
-import {
-  InputNumber,
-  InputNumberDecrement,
-  InputNumberGroup,
-  InputNumberIncrement,
-  InputNumberInput,
-} from '@mastra/playground-ui/components/InputNumber';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { PhaseField, PhaseRunFields } from '@mastra/playground-ui/domains/factory';
 import { Link } from 'react-router';
-import type { ReactNode } from 'react';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
@@ -27,11 +16,7 @@ import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
 import {
   DEFAULT_SESSION,
-  MAX_GOAL_RUNS,
-  MAX_INSTRUCTIONS,
-  MAX_OBJECTIVE,
   PHASE_TOOLS,
-  goalRunsValid,
   nextPhasesOf,
   withAutoStart,
 } from '../boardDraft';
