@@ -4688,6 +4688,10 @@ export class Run<
     return this._validateTimetravelInputData(inputData, step);
   }
 
+  protected _resolveTimetravelSnapshotState(_snapshot: WorkflowRunState): Record<string, unknown> | undefined {
+    return undefined;
+  }
+
   protected async _start(
     {
       inputData,
@@ -6492,7 +6496,7 @@ export class Run<
       context,
       nestedStepsContext,
       snapshot,
-      initialState,
+      initialState: initialState ?? this._resolveTimetravelSnapshotState(snapshot),
       graph: this.executionGraph,
       perStep,
     });

@@ -2948,6 +2948,10 @@ export class EventedRun<
     };
   }
 
+  protected override _resolveTimetravelSnapshotState(snapshot: WorkflowRunState): Record<string, unknown> | undefined {
+    return snapshot.context.__state;
+  }
+
   async cancel() {
     if (await this.hasReachedTerminalStatus()) {
       return this.cancelSuspendedNestedRuns();
