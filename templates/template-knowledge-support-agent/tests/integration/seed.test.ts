@@ -177,8 +177,8 @@ async function noFile(path: string) {
 }
 const quote = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
-test('seed preserves a host page written after the destination was checked', async t => {
-  for (const scenario of ['create', 'update', 'relocate']) {
+test('seed preserves a host page written before the guarded transaction begins', async t => {
+  for (const scenario of ['create', 'update', 'move-parent-before-create', 'move-parent-before-update']) {
     await t.test(scenario, async t => {
       const f = await fixture();
       try {
@@ -186,39 +186,36 @@ test('seed preserves a host page written after the destination was checked', asy
         const config = { ...datasets['retail-pos']!, directory: dirname(f.manifestFile) };
         const manifest = await f.readManifest();
         const guide = manifest.pages[0]!;
-        const destination = scenario === 'create' ? 'guides/concurrent-page' : guide.path;
+        const createsPage = scenario.endsWith('create');
+        const movesParent = scenario.startsWith('move-parent');
+        const destination = createsPage ? 'guides/concurrent-page' : guide.path;
         await f.saveManifest({
           ...manifest,
-          pages:
-            scenario === 'create'
-              ? [{ ...guide, key: 'new-guide', path: destination }, ...manifest.pages]
-              : [{ ...guide, title: 'Seed update' }, ...manifest.pages.slice(1)],
+          pages: createsPage
+            ? [{ ...guide, key: 'new-guide', path: destination }, ...manifest.pages]
+            : [{ ...guide, title: 'Seed update' }, ...manifest.pages.slice(1)],
         });
         await f.knowledge(async (host, storage) => {
-          const read = KnowledgeLibSQL.prototype.getPageByPath;
-          let reads = 0;
+          const begin = KnowledgeLibSQL.prototype.transaction;
           let writtenId: string | undefined;
-          const hook = t.mock.method(
-            KnowledgeLibSQL.prototype,
-            'getPageByPath',
-            async function (this: KnowledgeLibSQL, input: Parameters<KnowledgeLibSQL['getPageByPath']>[0]) {
-              const current = await read.call(this, input);
-              if (input.path.join('/') === destination && ++reads === (scenario === 'update' ? 3 : 2)) {
-                if (scenario === 'relocate') {
-                  await host.movePage({ scope: 'docs:north', path: 'guides', toScope: 'docs:south' });
-                }
-                const { page } = await host.upsertPage({
-                  scope: 'docs:north',
-                  path: destination,
-                  name: 'Operator update',
-                  body: 'Keep the operator’s change.',
-                  author: 'operator',
-                });
-                writtenId = page.id;
+          const hook = t.mock.method(KnowledgeLibSQL.prototype, 'transaction', async function <
+            T,
+          >(this: KnowledgeLibSQL, operation: (storage: KnowledgeStorage) => Promise<T>) {
+            if (!writtenId) {
+              if (movesParent) {
+                await host.movePage({ scope: 'docs:north', path: 'guides', toScope: 'docs:south' });
               }
-              return current;
-            },
-          );
+              const { page } = await host.upsertPage({
+                scope: 'docs:north',
+                path: destination,
+                name: 'Operator update',
+                body: 'Keep the operator’s change.',
+                author: 'operator',
+              });
+              writtenId = page.id;
+            }
+            return begin.call(this, operation) as Promise<T>;
+          });
           try {
             await assert.rejects(seedDataset(config, { databaseUrl: f.url }), { name: 'KnowledgeConflictError' });
           } finally {
@@ -229,9 +226,16 @@ test('seed preserves a host page written after the destination was checked', asy
           assert.equal(current?.name, 'Operator update');
           assert.equal(current.body, 'Keep the operator’s change.');
           assert.equal(current.updatedBy.author, 'operator');
-          if (scenario === 'relocate') {
+          if (movesParent) {
             const moved = await storage.getPage({ id: page(seeded, 'connection-guide').id!, read: 'all' });
             assert.equal(moved?.name, guide.title);
+            const [foreign] = await storage.getScopesByAddress(['docs:south']);
+            const pageAtOldParent = await storage.getPageByPath({
+              scopeId: foreign!.id,
+              path: destination.split('/'),
+              read: 'all',
+            });
+            assert.equal(pageAtOldParent?.id, createsPage ? undefined : moved?.id);
           }
         });
       } finally {

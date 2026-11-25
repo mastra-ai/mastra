@@ -430,6 +430,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
                 },
                 expected ?? null,
                 mutations,
+                postgres,
               ),
             );
           } catch (error) {

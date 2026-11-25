@@ -138,6 +138,8 @@ async function writeDataset(
       storage,
       { scope, path, name, description, body, author },
       scanned.get(wanted)!,
+      undefined,
+      context.postgres,
     );
     written.set(`${wanted.scope}#${wanted.path}`, result);
   }

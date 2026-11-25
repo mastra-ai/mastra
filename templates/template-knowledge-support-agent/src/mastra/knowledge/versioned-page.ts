@@ -7,18 +7,9 @@ import {
   type KnowledgeUpsertPageResult,
 } from '@mastra/core/knowledge';
 import { knowledgePagePath } from '@mastra/core/storage';
-import { KnowledgePG, pgKnowledgeTransactionClient } from '@mastra/pg';
+import type { DbClient } from '@mastra/pg';
 
-export type PageMutations = Pick<KnowledgeStorage, 'updatePage' | 'transaction'>;
-
-async function lockPageDestinations(storage: KnowledgeStorage) {
-  // LibSQL takes the database's write lock before entering its transaction callback.
-  // PostgreSQL's default isolation allows a concurrent move unless page writes are locked.
-  if (storage instanceof KnowledgePG)
-    await pgKnowledgeTransactionClient(storage).none(
-      'LOCK TABLE public.mastra_knowledge_pages IN SHARE ROW EXCLUSIVE MODE',
-    );
-}
+export type PageMutations = Pick<KnowledgeStorage, 'transaction'>;
 
 /** Guard native leaf writes while preserving scope, parent, and link handling. */
 export async function upsertPageAtRevision(
@@ -27,18 +18,25 @@ export async function upsertPageAtRevision(
   input: KnowledgeUpsertPageInput & { body: string },
   expected: Pick<KnowledgePage, 'id' | 'version'> | null,
   mutations: PageMutations = storage,
+  postgres?: DbClient,
 ): Promise<KnowledgeUpsertPageResult> {
   const { scope: scopeAddress, path: keyPath } = input;
   const destination = `${scopeAddress}#${keyPath}`;
   const path = knowledgePagePath(keyPath);
   // Abort the native retry on a leaf conflict. The native upsert still manages scope, parent and link writes.
   const conflict = new Error(`Destination changed: ${destination}`);
+  async function inWriteTransaction<T>(operation: (transaction: KnowledgeStorage) => Promise<T>) {
+    // LibSQL acquires its write lock when opening the transaction view.
+    if (!postgres) return mutations.transaction(operation);
+    // The existing PostgreSQL writer transaction holds the lock through native writes and receipts.
+    await postgres.none('LOCK TABLE public.mastra_knowledge_pages IN SHARE ROW EXCLUSIVE MODE');
+    return operation(storage);
+  }
   const createPage: KnowledgeStorage['createPage'] = async input => {
     if (expected) throw conflict;
     if (input.body === undefined) return storage.createPage(input); // Native parent scaffolding.
     try {
-      return await mutations.transaction(async transaction => {
-        await lockPageDestinations(transaction);
+      return await inWriteTransaction(async transaction => {
         const [scope] = await transaction.getScopesByAddress([scopeAddress]);
         const parent =
           scope && path.length > 1
@@ -54,12 +52,14 @@ export async function upsertPageAtRevision(
   };
   const updatePage: KnowledgeStorage['updatePage'] = async input => {
     if (!expected || input.id !== expected.id || input.expectedVersion !== expected.version) throw conflict;
-    // Moving an ancestor can change the destination without bumping the leaf version.
-    const [scope] = await storage.getScopesByAddress([scopeAddress]);
-    const current = scope && (await storage.getPageByPath({ scopeId: scope.id, path, read: 'all' }));
-    if (current?.id !== expected.id || current.version !== expected.version) throw conflict;
     try {
-      return await mutations.updatePage(input);
+      return await inWriteTransaction(async transaction => {
+        // Moving an ancestor can change the destination without bumping the leaf version.
+        const [scope] = await transaction.getScopesByAddress([scopeAddress]);
+        const current = scope && (await transaction.getPageByPath({ scopeId: scope.id, path, read: 'all' }));
+        if (current?.id !== expected.id || current.version !== expected.version) throw conflict;
+        return transaction.updatePage(input);
+      });
     } catch (error) {
       if (['KnowledgeNotFoundError', 'KnowledgeConflictError'].includes((error as Error)?.name)) throw conflict;
       throw error;
