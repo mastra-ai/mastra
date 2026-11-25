@@ -1160,6 +1160,58 @@ describe('customProviders parsing/persistence', () => {
       ]);
     });
   });
+
+  it('round-trips the auth scheme and custom headers', () => {
+    withTempSettingsFile(filePath => {
+      const provider: CustomProviderSetting = {
+        name: 'Gateway',
+        url: 'https://gateway.example.com/v1',
+        apiKey: 'gw-key',
+        authScheme: 'x-api-key',
+        headers: [
+          { name: 'X-Org-Id', value: 'org-1', secret: false },
+          { name: 'X-Tenant-Token', value: 'tenant-secret', secret: true },
+          { name: 'X-Legacy', value: 'no-flag' },
+        ],
+        models: ['model-1'],
+      };
+
+      saveSettings(createSettings({ customProviders: [provider] }), filePath);
+
+      expect(loadSettings(filePath).customProviders).toEqual([provider]);
+    });
+  });
+
+  it('drops an unknown auth scheme and each header that breaks the header rules', () => {
+    const [provider] = parseCustomProviders([
+      {
+        name: 'Gateway',
+        url: 'https://gateway.example.com/v1',
+        authScheme: 'basic',
+        headers: [
+          { name: ' X-Org-Id ', value: ' org-1 ' },
+          { name: 'Authorization', value: 'Basic abc' },
+          { name: 'x-org-id', value: 'duplicate' },
+          { name: 'Host', value: 'evil.example.com' },
+          { name: 'X-Split', value: 'a\nInjected: 1' },
+          { name: 'X-No-Value' },
+          'not-an-object',
+          { name: 'X-Kept', value: 'kept', secret: false },
+        ],
+        models: ['model-1'],
+      },
+    ]);
+
+    expect(provider).toEqual({
+      name: 'Gateway',
+      url: 'https://gateway.example.com/v1',
+      headers: [
+        { name: 'X-Org-Id', value: 'org-1' },
+        { name: 'X-Kept', value: 'kept', secret: false },
+      ],
+      models: ['model-1'],
+    });
+  });
 });
 
 describe('parseThreadSettings', () => {

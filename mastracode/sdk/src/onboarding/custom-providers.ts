@@ -6,11 +6,14 @@
 import { getCustomProviderId } from './settings.js';
 import type { CustomProviderSetting, GlobalSettings } from './settings.js';
 
+/** Trim the fields a user typed. The auth scheme and headers are kept as given; callers validate headers first. */
 function normalizeProvider(input: CustomProviderSetting): CustomProviderSetting {
   return {
     name: input.name.trim(),
     url: input.url.trim(),
     apiKey: input.apiKey?.trim() || undefined,
+    ...(input.authScheme ? { authScheme: input.authScheme } : {}),
+    ...(input.headers?.length ? { headers: input.headers.map(header => ({ ...header })) } : {}),
     models: [...new Set(input.models.map(model => model.trim()).filter(Boolean))],
   };
 }
