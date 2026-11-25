@@ -129,6 +129,21 @@ describe('safeParseErrorObject', () => {
     expect(safeParseErrorObject(new Error('oops'))).toBe('Error: oops');
   });
 
+  it('keeps a native, non-enumerable cause and code instead of collapsing to Name: message', () => {
+    const cause = new Error('upstream failed');
+    const error = new Error('retry exhausted', { cause });
+    Object.defineProperty(error, 'code', { value: 'E_RETRY', enumerable: false });
+    expect(Object.keys(error)).toEqual([]);
+
+    const parsed = JSON.parse(safeParseErrorObject(error));
+    expect(parsed).toEqual({
+      name: 'Error',
+      message: 'retry exhausted',
+      code: 'E_RETRY',
+      cause: { name: 'Error', message: 'upstream failed' },
+    });
+  });
+
   it('does not throw on circular references', () => {
     const obj: any = { a: 1 };
     obj.self = obj;

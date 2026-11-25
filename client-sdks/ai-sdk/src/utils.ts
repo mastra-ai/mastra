@@ -76,12 +76,17 @@ export function safeParseErrorObject(obj: unknown): string {
   }
 
   try {
-    // A bare Error (no serializable fields of its own) keeps its familiar
-    // `Name: message` rendering.
-    if (obj instanceof Error && Object.keys(obj).length === 0 && typeof (obj as any).toJSON !== 'function') {
+    const safe = pickSafeErrorFields(obj, 0);
+    // A bare Error (nothing safe beyond name/message, no cause) keeps its
+    // familiar `Name: message` rendering. Fields like `cause` and `code` can be
+    // non-enumerable, so check the picked fields rather than Object.keys().
+    if (
+      obj instanceof Error &&
+      typeof (obj as { toJSON?: unknown }).toJSON !== 'function' &&
+      Object.keys(safe).every(key => key === 'name' || key === 'message')
+    ) {
       return `${obj.name}: ${obj.message}`;
     }
-    const safe = pickSafeErrorFields(obj, 0);
     return Object.keys(safe).length > 0 ? JSON.stringify(safe) : 'Unknown error';
   } catch {
     return 'Unknown error';
