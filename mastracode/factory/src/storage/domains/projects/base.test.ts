@@ -205,7 +205,7 @@ describe('FactoryProjectsStorage builds', () => {
       lastBuildId: null,
       lastBuildAttemptedAt: null,
       buildOnPushEnabled: false,
-      buildPushDebounceMinutes: 10,
+      buildPushDebounceMinutes: 30,
     });
 
     const at = new Date('2026-10-08T10:00:00.000Z');

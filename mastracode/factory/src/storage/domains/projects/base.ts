@@ -9,7 +9,7 @@ import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
 import { stampNewProjectIntake } from '../boards/base.js';
 import { FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA } from '../boards/schemas.js';
 
-export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
+export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 30;
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 /** The single credential scope one session or run resolves from; `hybrid` is never effective. */

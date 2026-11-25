@@ -1692,7 +1692,7 @@ describe('ProjectRoutes', () => {
         expect(environment.sandbox.capabilities.builds).toEqual({ available: true, history: true });
         expect(environment.buildTriggers).toEqual({
           schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: true },
-          push: { enabled: false, debounceMinutes: 10 },
+          push: { enabled: false, debounceMinutes: 30 },
         });
         expect(environment.build).toBeNull();
         expect(environment.buildRequested).toBeUndefined();
