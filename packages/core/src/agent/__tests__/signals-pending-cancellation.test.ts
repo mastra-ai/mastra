@@ -2557,7 +2557,6 @@ describe('Agent signals: pending cancellation', () => {
         for (let i = 0; i < 8; i++) await tick();
         expect(probes()).toBe(probesHeld);
         expect(turns('first message')).toBe(1);
-        expect(turns('first message')).toBe(1);
       } finally {
         observer.unsubscribe();
         follower.resetForTests();
