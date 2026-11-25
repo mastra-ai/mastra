@@ -20,6 +20,9 @@ const providers: ComboboxOption[] = [
   { label: 'Google', value: 'google' },
 ];
 
+// A label that shares no text with the value, so only a value match finds it.
+const namedModels: ComboboxOption[] = [{ label: 'Friendly name', value: 'org/model-v2' }, ...providers];
+
 function InField({ children }: { children: ReactNode }) {
   return (
     <Field>
@@ -317,6 +320,32 @@ describe('Combobox', () => {
       await user.keyboard('{Enter}');
 
       expect(onValueChange).toHaveBeenLastCalledWith(['google']);
+    });
+
+    it.each([
+      [
+        'single',
+        'org/model-v2',
+        (onValueChange: (value: string | string[]) => void) => (
+          <SingleField allowCustomValue options={namedModels} onValueChange={onValueChange} />
+        ),
+      ],
+      [
+        'multiple',
+        ['org/model-v2'],
+        (onValueChange: (value: string | string[]) => void) => (
+          <MultipleField allowCustomValue options={namedModels} onValueChange={onValueChange} />
+        ),
+      ],
+    ])('offers the existing option when the typed text is its value in a %s select', async (_kind, expected, field) => {
+      const onValueChange = vi.fn();
+      render(field(onValueChange));
+      const user = await openField();
+
+      await user.keyboard(' org/model-v2 ');
+      await user.click(await screen.findByRole('option', { name: 'Friendly name' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(expected);
     });
 
     it('adds the typed text with Enter when it matches no option in a multiple select', async () => {

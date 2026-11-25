@@ -143,9 +143,14 @@ function getComboboxShape({
   return 'chips';
 }
 
+/** The value typed text stands for. The custom option and the value match in the filter both read it this way. */
+function typedValue(inputValue: string): string {
+  return inputValue.trim();
+}
+
 /** A "Use “text”" option for typed text that isn't one of the options yet. */
 function getCustomOption(options: ComboboxOption[], inputValue: string): ComboboxOption | undefined {
-  const value = inputValue.trim();
+  const value = typedValue(inputValue);
   if (!value) return undefined;
   // A field shows the selected option's text while it's closed; that isn't a new value.
   if (options.some(option => option.value === value || optionText(option) === value)) return undefined;
@@ -179,10 +184,15 @@ function isSameOption(item: ComboboxOption, selected: ComboboxOption): boolean {
   return item.value === selected.value;
 }
 
-/** Matches the label like Base UI's default filter, the text a field shows, and any keywords. */
-function useOptionFilter() {
+/**
+ * Matches the label like Base UI's default filter, the text a field shows, and any keywords. With
+ * `matchValue`, an option whose value is exactly the typed value matches too: `getCustomOption` holds back
+ * typed text that is an existing value, so without this, typing a value whose label differs shows nothing.
+ */
+function useOptionFilter({ matchValue }: { matchValue: boolean }) {
   const { contains } = BaseCombobox.useFilter();
   return (option: ComboboxOption, query: string) =>
+    (matchValue && option.value === typedValue(query)) ||
     [option.label, optionText(option), ...(option.keywords ?? [])].some(text => contains(text, query));
 }
 
@@ -411,7 +421,7 @@ function SingleCombobox({
 }: ComboboxSingleProps & ShapeProps) {
   // The search text: a field's own text, or the compact trigger's popup search.
   const [inputValue, setInputValue] = React.useState('');
-  const filter = useOptionFilter();
+  const filter = useOptionFilter({ matchValue: allowCustomValue });
   const inField = shape === 'field';
   const selectedOption = options.find(option => option.value === value);
   const customOption = allowCustomValue ? getCustomOption(options, inputValue) : undefined;
@@ -494,7 +504,7 @@ function MultipleCombobox({
 }: ComboboxMultipleProps & ShapeProps) {
   // Mirrors the search text, which Base UI owns here, so the typed value can be offered as an option.
   const [inputValue, setInputValue] = React.useState('');
-  const filter = useOptionFilter();
+  const filter = useOptionFilter({ matchValue: allowCustomValue });
   const unlistedOptions = getUnlistedOptions(options, value);
   const selectedOptions = getSelectedOptions(options, value, unlistedOptions);
   // A typed value that is already picked is listed checked in the popup; offering it again would unpick it.
