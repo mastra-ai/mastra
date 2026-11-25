@@ -11,7 +11,11 @@ import {
   MASTRA_THREAD_BRANCH_METADATA_KEYS,
   persistMessagesWithThreadCreation,
 } from './thread-branching-compat';
-import type { InternalThreadBranchAuthorizationCandidate, InternalThreadBranchState, ThreadBranchHistoryOutput } from './thread-branching-compat';
+import type {
+  InternalThreadBranchAuthorizationCandidate,
+  InternalThreadBranchState,
+  ThreadBranchHistoryOutput,
+} from './thread-branching-compat';
 import { enforceThreadAccess } from './utils';
 
 export function assertThreadBranchingSupported(memory: MastraMemory): void {
