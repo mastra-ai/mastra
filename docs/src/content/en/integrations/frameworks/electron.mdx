@@ -108,6 +108,7 @@ export const mastra = new Mastra({
     apiRoutes: [
       chatRoute({
         path: '/chat/:agentId',
+        version: 'v7',
       }),
     ],
   },
@@ -138,12 +139,36 @@ const STATE_TO_LABEL_MAP: Record<string, string> = {
   'output-error': 'Error',
 }
 
+// Replace with the signed-in user's ID from your auth provider
+const RESOURCE_ID = 'example-user'
+
+function getThreadId(): string {
+  const key = `mastra-thread-id:${RESOURCE_ID}`
+  let threadId = localStorage.getItem(key)
+  if (!threadId) {
+    threadId = crypto.randomUUID()
+    localStorage.setItem(key, threadId)
+  }
+  return threadId
+}
+
+const THREAD_ID = getThreadId()
+
 export default function App(): React.JSX.Element {
   const [input, setInput] = useState('')
 
   const { messages, sendMessage } = useChat({
     transport: new DefaultChatTransport({
       api: `http://localhost:4111/chat/weather-agent`,
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: {
+          messages: [messages[messages.length - 1]],
+          memory: {
+            thread: THREAD_ID,
+            resource: RESOURCE_ID,
+          },
+        },
+      }),
     }),
   })
 
@@ -383,6 +408,21 @@ export default function App(): React.JSX.Element {
 
 This connects [`useChat()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat) to the `/chat/weather-agent` endpoint, sending prompts there and streaming the response back in chunks.
 
+### Save the conversation in memory
+
+The weather agent has [memory](/docs/memory/overview), but it only saves a conversation when a request names one. The `prepareSendMessagesRequest` function adds a `memory` object to every request:
+
+- `thread` identifies the conversation. The component creates one ID and keeps it in `localStorage` under a key that includes the resource ID, so restarting the app continues the same conversation. Create a new ID to start a new conversation. Never reuse a thread ID for a different resource: Mastra rejects the request.
+- `resource` identifies the user who owns the conversation. In a real app, take it from your authentication, such as the signed-in user's ID. Don't use one constant for every user in production, or all users share the same memory.
+
+Mastra loads earlier messages from memory on the server. The transport only needs to send the newest message. Visit [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory) for details.
+
+:::note
+A request body is under the client's control. In production, set the resource ID on the server from the authenticated user instead, as described in [Reserved keys](/docs/server/request-context#reserved-keys).
+:::
+
+After a restart, the chat starts empty even though the agent remembers the conversation. To show earlier messages, fetch them from `GET http://localhost:4111/api/memory/threads/<thread>/messages?agentId=weather-agent`, read the `messages` array from the response, convert that array with [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages) using `{ version: 'v7' }` to match the installed AI SDK version, and pass the result to `useChat()` as `messages`.
+
 ## Test your agent
 
 To test your agent with the chat interface, run both the Mastra server and the Electron app.
@@ -399,6 +439,7 @@ To test your agent with the chat interface, run both the Mastra server and the E
    ```
 1. An Electron window opens with the chat interface
 1. Try asking about the weather. If your API key is set  up correctly, you'll get a response
+1. Restart the app and ask which city you asked about. The agent answers from memory
 
 ## Next steps
 

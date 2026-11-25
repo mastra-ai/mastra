@@ -157,14 +157,16 @@ describe('Resumable Streams Integration', () => {
       });
       await cachingPubsub.subscribeWithReplay(topic, firstCallback);
 
-      // 2. Receive some events
+      // 2. Receive some events. The first live frame after attach reconciles
+      // against the log asynchronously (the cursor sits below the epoch-seeded
+      // index), so wait for delivery.
       await cachingPubsub.publish(topic, {
         type: AgentStreamEventTypes.CHUNK,
         runId,
         data: { chunk: 'Before disconnect' },
       });
 
-      expect(firstConnectionEvents).toHaveLength(1);
+      await vi.waitFor(() => expect(firstConnectionEvents).toHaveLength(1));
 
       // 3. Simulate disconnect (unsubscribe)
       await cachingPubsub.unsubscribe(topic, firstCallback);

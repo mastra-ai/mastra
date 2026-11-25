@@ -5,6 +5,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { InMemoryServerCache } from '../../../cache/inmemory';
+import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
@@ -191,6 +193,35 @@ describe('Agent durable resumable streams option', () => {
     await vi.waitFor(async () => expect(await agent.__getRunRecord(output.runId)).toBeUndefined(), { timeout: 2000 });
   });
 
+  it('expires a finished run even when the delayed cleanup never runs', async () => {
+    // A process restart inside the cleanup grace period loses the in-process
+    // deletion timer; `cleanupTimeoutMs: 0` models exactly that lost timer.
+    // The run log's own idle retention must then bound it with no timer at
+    // all, instead of leaving it to a multi-day transport backstop.
+    // `ttlMs: 0` (no default expiry) also pins the run log's own retention as
+    // the only bound, which is what has to hold here.
+    const cache = new InMemoryServerCache({ ttlMs: 0 });
+    const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache, { runLogTtlMs: 150 });
+    const agent = makeAgent({ durable: { pubsub, cleanupTimeoutMs: 0 } });
+    new Mastra({ agents: { agent }, logger: false });
+
+    const output = await agent.stream('Say hello.');
+    await output.consumeStream();
+    await vi.waitFor(async () =>
+      expect(await agent.__getRunRecord(output.runId)).toMatchObject({ status: 'finished' }),
+    );
+
+    // A client reconnecting right after the finish still catches the tail...
+    expect((await pubsub.getHistory(AGENT_STREAM_TOPIC(output.runId), 0)).length).toBeGreaterThan(0);
+
+    // ...and once the retention lapses the log is gone without any timer. The
+    // record outlives it deliberately: it is one small key, and it is what
+    // authorizes observe/abort/resume on a run parked on a tool approval.
+    await vi.waitFor(async () => expect(await pubsub.getHistory(AGENT_STREAM_TOPIC(output.runId), 0)).toEqual([]), {
+      timeout: 2000,
+    });
+  });
+
   describe('observe', () => {
     const collect = async (stream: ReadableStream<any>) => {
       const types: string[] = [];
@@ -226,15 +257,23 @@ describe('Agent durable resumable streams option', () => {
       const runId = await run(agent);
       await waitForFinish(pubsub, runId);
 
-      const all = await collect((await agent.observe(runId)).fullStream);
-      const tail = await collect((await agent.observe(runId, { offset: 3 })).fullStream);
+      const indexes: number[] = [];
+      const observedAll = await agent.observe(runId);
+      const all = { types: [] as string[] };
+      for await (const chunk of observedAll.fullStream) {
+        all.types.push(chunk.type);
+        if (chunk.index !== undefined) indexes.push(chunk.index);
+      }
+      // Indices are opaque cursors (epoch-seeded logs): resume from a chunk's
+      // real index, not a position.
+      const tail = await collect((await agent.observe(runId, { offset: indexes[3] })).fullStream);
       expect(tail.types.length).toBeLessThan(all.types.length);
       expect(tail.types.at(-1)).toBe('finish');
     });
 
     it.each([
       ['at the next index', (last: number) => last + 1],
-      ['far past the end', () => 100],
+      ['far past the end', (last: number) => last + 100],
     ])('closes a finished run resumed %s', async (_label, offsetFor) => {
       const pubsub = new RecordingPubSub();
       const agent = makeAgent();
@@ -261,18 +300,20 @@ describe('Agent durable resumable streams option', () => {
 
       const runId = await run(agent);
       await waitForFinish(pubsub, runId);
+      const log = await agent.__getStreamBus()!.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const pastEnd = (log.at(-1)!.index ?? 0) + 100;
 
       // A cache that lost its connection queues reads until it reconnects.
       vi.spyOn(agent.__getStreamBus()!.pubsub, 'getHistory').mockReturnValue(new Promise(() => {}));
       const timeout = new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 2_000).unref());
-      const observed = await Promise.race([agent.observe(runId, { offset: 100 }), timeout]);
+      const observed = await Promise.race([agent.observe(runId, { offset: pastEnd }), timeout]);
       expect(observed).not.toBe('hung');
       if (observed !== 'hung') observed.detach();
     });
 
     it.each([
       ['at the next index', (last: number) => last + 1],
-      ['far past the end', () => 100],
+      ['far past the end', (last: number) => last + 100],
     ])('closes a run that ended in an error event when resumed %s', async (_label, offsetFor) => {
       const pubsub = new RecordingPubSub();
       // Throwing mid-stream ends the run without a finish, so its log ends in an error event.
