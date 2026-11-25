@@ -2351,9 +2351,23 @@ describe('Agent signals: pending cancellation', () => {
     });
 
     it('leaves the lease with a run that took it back before the probe came back', async () => {
-      const { model, pubsub, key } = await recoverWithProbeHeld('reacquired-remote', async ({ key, runId, pubsub }) => {
-        pubsub.owners.set(key, runId);
-      });
+      const { model, pubsub, key } = await recoverWithProbeHeld(
+        'reacquired-remote',
+        async ({ key, runId, pubsub }) => {
+          pubsub.owners.set(key, runId);
+        },
+        {
+          afterProbe: async ({ key, runId, pubsub, tick }) => {
+            // The probe's read saw the run hold the lease, which ends that loss: when the run lets go again, one
+            // missed check is not enough to probe.
+            pubsub.owners.delete(key);
+            const probes = pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
+            await tick();
+            expect(pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe')).toHaveLength(probes);
+            pubsub.owners.set(key, runId);
+          },
+        },
+      );
       await nextTick();
       expect(pubsub.owners.get(key)).toBe('reacquired-remote-run');
       expect(model.doStreamCalls).toHaveLength(0);
@@ -3174,8 +3188,10 @@ describe('Agent signals: pending cancellation', () => {
         expect(probeSeqs).toEqual([]);
         releaseAppend();
         await vi.waitFor(() => expect(probeSeqs.length).toBeGreaterThan(0));
-        // Every retry behind the append waited on the one probe already there, so the first to leave is the first made.
-        expect(probeSeqs[0]).toBe(1);
+        await pubsub.flush();
+        await vi.advanceTimersByTimeAsync(0);
+        // Every retry behind the append waited on the one probe already there: one probe left, the first made.
+        expect(probeSeqs).toEqual([1]);
       } finally {
         releaseAppend();
         releaseC();

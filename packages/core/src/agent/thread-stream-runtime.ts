@@ -3728,6 +3728,14 @@ export class AgentThreadStreamRuntime {
     const gone = new Set([...covered].filter(runId => runId !== holder));
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
+    // A read that sees a covered run hold the lease again ends that lease loss, as a watcher check would: a later
+    // loss then has to be seen on two checks of its own before it probes.
+    for (const entry of forwarded.values()) {
+      if (entry.runId === holder && entry.leaseGone && episode.entries.get(entry) === entry.regains) {
+        entry.regains++;
+        entry.leaseGone = false;
+      }
+    }
     const lapsed = [...forwarded].filter(
       // Decided after the read: a check that saw the run hold the lease again during it bumped `regains`, so that
       // loss is over even though this episode already left the map, and the read may predate the regain.
