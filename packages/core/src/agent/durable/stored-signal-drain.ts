@@ -1,13 +1,14 @@
+import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { AgentSignalScope, AgentSignalsStorage } from '../../storage/domains/agent-signals/base';
 import type { MessageList } from '../message-list';
 import type { CreatedAgentSignal } from '../signals';
-import { fromStoredSignalPayload } from '../stored-signal-payload';
-import { getAgentSignalsStore } from '../stored-signals';
+import { decodeStoredSignals } from '../stored-signal-payload';
 import { agentThreadStreamKey } from '../thread-stream-topic';
 import { getExecutionClaim } from './execution-fence';
 import type { DurableExecutionClaim } from './execution-fence';
+import { getRunRegistryEntry } from './run-registry';
 
 /**
  * Workflow-state key of the signal ids a storage-backed run took into its
@@ -24,6 +25,8 @@ export function readConsumedSignalIds(state: unknown): string[] {
 
 type DurableRunInput = {
   agentId?: string;
+  /** Set when the run was prepared to keep its signals in storage. */
+  signalsStored?: boolean;
   state?: { threadId?: string; resourceId?: string };
   messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } | null };
 };
@@ -44,19 +47,17 @@ export function durableRunThreadKey(
   return agentThreadStreamKey(resourceId, threadId);
 }
 
-/** The signals store of a durable run's agent, resolved through the host the step runs on. */
+/**
+ * The signals store of a durable run, on the host the step runs on. The run
+ * carries the decision in its input, made once when it was prepared, so every
+ * process that executes its steps agrees with the senders. A run without the
+ * flag keeps its signals in the thread runtime's in-process queues.
+ */
 export function durableRunSignalsStore(
   mastra: Mastra | undefined,
-  agentId: string | undefined,
+  input: Pick<DurableRunInput, 'signalsStored'> | undefined,
 ): AgentSignalsStorage | undefined {
-  if (!mastra || !agentId) return undefined;
-  let agent: unknown;
-  try {
-    agent = mastra.getAgentById(agentId);
-  } catch {
-    return undefined;
-  }
-  return getAgentSignalsStore(agent);
+  return input?.signalsStored ? mastra?.getStorage()?.stores?.agentSignals : undefined;
 }
 
 /** Ids of the signals the run was started with. They reach the transcript as input, not through a drain. */
@@ -67,7 +68,28 @@ export function inputSignalIds(messageList: MessageList): string[] {
     .map(message => message.id);
 }
 
-export type StoredSignalQueue = { store: AgentSignalsStorage; threadKey: string };
+const MAX_WARNED_MISSING_STORE_RUN_IDS = 1000;
+const warnedMissingStoreRunIds = new Set<string>();
+
+/**
+ * A run prepared to store its signals, executing on a host whose storage has
+ * no `agentSignals`: its drains read nothing here. Warned once per run.
+ */
+function warnMissingSignalsStore(mastra: Mastra | undefined, runId: string) {
+  if (warnedMissingStoreRunIds.has(runId)) return;
+  warnedMissingStoreRunIds.add(runId);
+  if (warnedMissingStoreRunIds.size > MAX_WARNED_MISSING_STORE_RUN_IDS) {
+    warnedMissingStoreRunIds.delete(warnedMissingStoreRunIds.values().next().value!);
+  }
+  mastra
+    ?.getLogger?.()
+    ?.warn?.(
+      'This run keeps its signals in agent signals storage, which this process has none of: signals sent to it are not read here',
+      { runId },
+    );
+}
+
+export type StoredSignalQueue = { store: AgentSignalsStorage; threadKey: string; logger?: IMastraLogger };
 
 /**
  * Where a durable run's pending signals are read from in this step: the store,
@@ -77,21 +99,22 @@ export type StoredSignalQueue = { store: AgentSignalsStorage; threadKey: string 
  */
 export function storedSignalQueueForRun({
   mastra,
-  agentId,
+  runId,
   input,
   claim,
   hasLocalDrain,
 }: {
   mastra: Mastra | undefined;
-  agentId: string | undefined;
+  runId: string;
   input: DurableRunInput | undefined;
   claim: Pick<DurableExecutionClaim, 'threadId' | 'resourceId'> | undefined;
   hasLocalDrain: boolean;
 }): StoredSignalQueue | undefined {
   if (hasLocalDrain) return undefined;
-  const store = durableRunSignalsStore(mastra, agentId ?? input?.agentId);
+  const store = durableRunSignalsStore(mastra, input);
+  if (!store && input?.signalsStored) warnMissingSignalsStore(mastra, runId);
   const threadKey = store ? durableRunThreadKey(input, claim) : undefined;
-  return store && threadKey ? { store, threadKey } : undefined;
+  return store && threadKey ? { store, threadKey, logger: mastra?.getLogger?.() } : undefined;
 }
 
 /**
@@ -101,31 +124,40 @@ export function storedSignalQueueForRun({
  *
  * A failed close doesn't fail the run's ending: the run's untaken rows then
  * stay addressed to it, and the thread's next run takes them over at its first
- * model request.
+ * model request. Returns nothing to wait for when the run's signals are not
+ * stored, so other runs end exactly as before.
  */
-export async function closeStoredSignalRun({
+export function closeStoredSignalRun({
   mastra,
-  agentId,
   runId,
   input,
   claim,
   state,
+  deadline,
 }: {
   mastra: Mastra | undefined;
-  agentId: string | undefined;
   runId: string;
   input: DurableRunInput | undefined;
   claim: Pick<DurableExecutionClaim, 'threadId' | 'resourceId'> | undefined;
-  /** The run's latest saved workflow state. */
-  state: unknown;
-}): Promise<void> {
-  const queue = storedSignalQueueForRun({ mastra, agentId, input, claim, hasLocalDrain: false });
-  if (!queue) return;
-  try {
-    await queue.store.closeRun({ threadKey: queue.threadKey, runId, consumedIds: readConsumedSignalIds(state) });
-  } catch (error) {
-    mastra?.getLogger?.()?.warn?.('Could not close the stored signals of an ended run', { runId, error });
-  }
+  /** The run's latest saved workflow state, or a read of it. */
+  state: unknown | (() => unknown);
+  /** Set by the close of the run's total deadline. */
+  deadline?: boolean;
+}): Promise<void> | undefined {
+  const queue = storedSignalQueueForRun({ mastra, runId, input, claim, hasLocalDrain: false });
+  if (!queue) return undefined;
+  // A step the deadline cut off took signals its saved state doesn't list, and the deadline saves them to memory.
+  // Only the deadline's close knows that set, so when this process's deadline is going to close the run, the run's
+  // other endings leave the close to it.
+  if (!deadline && getRunRegistryEntry(runId, mastra)?.deadlineClosesStoredSignals) return undefined;
+  return (async () => {
+    try {
+      const saved = typeof state === 'function' ? await state() : state;
+      await queue.store.closeRun({ threadKey: queue.threadKey, runId, consumedIds: readConsumedSignalIds(saved) });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Could not close the stored signals of an ended run', { runId, error });
+    }
+  })();
 }
 
 export type StoredSignalDrain = {
@@ -142,7 +174,7 @@ export type StoredSignalDrain = {
  * gets them again.
  */
 export async function claimStoredSignals({
-  queue: { store, threadKey },
+  queue: { store, threadKey, logger },
   runId,
   consumed,
   claims,
@@ -163,11 +195,17 @@ export async function claimStoredSignals({
       scope === 'pre-run'
         ? await store.claim({ threadKey, runId, scope, leftovers })
         : await store.claim({ threadKey, runId, scope });
-    for (const row of rows) {
-      if (skip.has(row.id)) continue;
+    // A row this release can't read stays claimed and unconsumed, so the run's close releases it for a release
+    // that can.
+    const decoded = decodeStoredSignals(
+      rows.filter(row => !skip.has(row.id)),
+      (id, error) =>
+        logger?.warn?.('Skipped a stored agent signal this version cannot read', { runId, signalId: id, error }),
+    );
+    for (const { row, signal } of decoded) {
       skip.add(row.id);
       ids.push(row.id);
-      signals.push(fromStoredSignalPayload(row.signal));
+      signals.push(signal);
     }
   }
   return { signals, state: { [CONSUMED_SIGNAL_IDS_KEY]: ids } };
@@ -176,15 +214,17 @@ export async function claimStoredSignals({
 /**
  * The LLM step's reads: pre-run signals (with the thread takeover) for the
  * run's first request, pending ones for later requests. Returns `undefined`
- * when the run's signals are not read from the store here, or while the run is
- * aborted, so the saved consumed set stays as it is.
+ * when the run's signals are not read from the store here, while the run is
+ * aborted, or when the store failed, so the saved consumed set stays as it is.
+ * A failed read takes nothing, as the loop's other drain points do: the rows
+ * come back at the next drain. Returns nothing to wait for when there is no
+ * read to make.
  */
-export async function drainStoredSignalsForRequest({
+export function drainStoredSignalsForRequest({
   params,
   mastra,
-  agentId,
   runId,
-  state,
+  input,
   requestContext,
   hasLocalDrain,
   preRun,
@@ -193,30 +233,39 @@ export async function drainStoredSignalsForRequest({
 }: {
   params: { getState(keys?: readonly string[]): Promise<unknown> };
   mastra: Mastra | undefined;
-  agentId: string | undefined;
   runId: string;
-  state: DurableRunInput['state'];
+  input: Pick<DurableRunInput, 'signalsStored' | 'state'>;
   requestContext: RequestContext | undefined;
   hasLocalDrain: boolean;
   preRun: boolean;
   pending: boolean;
   aborted: boolean;
-}): Promise<StoredSignalDrain | undefined> {
+}): Promise<StoredSignalDrain | undefined> | undefined {
   const queue = storedSignalQueueForRun({
     mastra,
-    agentId,
-    input: { state },
+    runId,
+    input,
     claim: getExecutionClaim(requestContext, runId),
     hasLocalDrain,
   });
   if (!queue || aborted || (!preRun && !pending)) return undefined;
-  return claimStoredSignals({
-    queue,
-    runId,
-    consumed: readConsumedSignalIds(await params.getState([CONSUMED_SIGNAL_IDS_KEY])),
-    claims: [
-      ...(preRun ? [{ scope: 'pre-run' as const, leftovers: true }] : []),
-      ...(pending ? [{ scope: 'pending' as const }] : []),
-    ],
-  });
+  return (async () => {
+    try {
+      return await claimStoredSignals({
+        queue,
+        runId,
+        consumed: readConsumedSignalIds(await params.getState([CONSUMED_SIGNAL_IDS_KEY])),
+        claims: [
+          ...(preRun ? [{ scope: 'pre-run' as const, leftovers: true }] : []),
+          ...(pending ? [{ scope: 'pending' as const }] : []),
+        ],
+      });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Could not read the stored signals of a run for its model request', {
+        runId,
+        error,
+      });
+      return undefined;
+    }
+  })();
 }

@@ -215,14 +215,14 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
   if (event.type !== 'workflow.suspend') {
     // Before the terminal event and the snapshot delete. The finish event carries the run's latest saved state.
     const data = event.data ?? {};
-    await closeStoredSignalRun({
+    const closing = closeStoredSignalRun({
       mastra,
-      agentId: claim.agentId,
       runId: event.runId,
       input: data.stepResults?.input ?? { messageListState: data.state?.messageListState },
       claim,
       state: data.state,
     });
+    if (closing) await closing;
   }
   if (event.type === 'workflow.fail' && !released) {
     const error = getErrorFromUnknown(failure ?? 'Workflow execution failed');

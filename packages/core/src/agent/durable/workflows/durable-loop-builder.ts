@@ -28,6 +28,7 @@ import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import { markFrameworkCondition } from '../../../workflows/framework-condition';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
+import type { SerializedMessageListState } from '../../message-list/state';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import type { CreatedAgentSignal } from '../../signals';
 import { diffResponseMessages } from '../../streams/response-messages';
@@ -47,7 +48,6 @@ import {
   CONSUMED_SIGNAL_IDS_KEY,
   claimStoredSignals,
   closeStoredSignalRun,
-  durableRunSignalsStore,
   inputSignalIds,
   readConsumedSignalIds,
   storedSignalQueueForRun,
@@ -184,6 +184,7 @@ const durableAgenticInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
+  signalsStored: z.boolean().optional(),
   // Exact stored version id the run resolved to at start time; resume()/recover()
   // read it from the persisted workflow input to pin the run to that version
   // (#22128). Absent for purely code-defined agents.
@@ -378,7 +379,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
   ) {
     const queue = storedSignalQueueForRun({
       mastra: rt.mastra,
-      agentId: rt.agentId,
+      runId: rt.runId,
       input: params.getInitData() as Parameters<typeof durableRunThreadKey>[0],
       claim: getExecutionClaim(params.requestContext, rt.runId),
       hasLocalDrain: !!rt.drainPendingSignals,
@@ -397,6 +398,14 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         return drained.signals;
       },
       state: () => drained?.state,
+      /**
+       * Call with the transcript holding what the drain took, before its state is saved. The next drain deletes
+       * those rows, so a total deadline this process runs from then on must save them too.
+       */
+      captureForDeadline: (messageListState: SerializedMessageListState) => {
+        const entry = getRunRegistryEntry(rt.runId, rt.mastra);
+        if (entry?.timeoutTotalMs) entry.completedStepsState = JSON.parse(JSON.stringify(messageListState));
+      },
     };
   }
 
@@ -478,9 +487,11 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             if (cleared && cleared[CONSUMED_SIGNAL_IDS_KEY].length === 0) await stepParams.setState(cleared);
             return execOutput;
           }
+          const drainedState = drainList.serialize();
+          stored?.captureForDeadline(drainedState);
           return {
             ...execOutput,
-            ...(await storeMessageListState(stepParams, drainList.serialize(), stored?.state())),
+            ...(await storeMessageListState(stepParams, drainedState, stored?.state())),
             messageId: outcome.nextMessageId,
             stepResult: {
               ...execOutput.stepResult,
@@ -581,6 +592,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
           ...update,
           ...(await storeAccumulatedSteps(params, accumulatedSteps)),
           agentVersionId: initData.agentVersionId,
+          ...(initData.signalsStored ? { signalsStored: true } : {}),
           modelList: initData.modelList,
         });
       }
@@ -652,6 +664,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               agentId: state.agentId,
               agentVersionId: state.agentVersionId,
               agentName: state.agentName,
+              ...(state.signalsStored ? { signalsStored: true } : {}),
               messageListState: state.messageListState,
               initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
@@ -754,6 +767,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               ...baseUpdate,
               ...(await storeAccumulatedSteps(params, accumulatedSteps)),
               agentVersionId: initData.agentVersionId,
+              ...(initData.signalsStored ? { signalsStored: true } : {}),
               modelList: initData.modelList,
             };
 
@@ -904,7 +918,9 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
           const consumed = stored?.state();
           if (drainOutcome.drained && drainList) {
             state.messageId = drainOutcome.nextMessageId;
-            transcript.write(drainList.serialize(), consumed);
+            const drainedState = drainList.serialize();
+            stored?.captureForDeadline(drainedState);
+            transcript.write(drainedState, consumed);
 
             // Force continuation — the LLM must see the injected signals
             if (state.lastStepResult) {
@@ -1164,9 +1180,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               // A follow-up turn starts with its first signal as input. The run's first request claims
               // that signal's row with the rest, so listing it here keeps it from being added twice
               // and gets the row deleted by the next drain.
-              ...(durableRunSignalsStore(params.mastra as Mastra | undefined, input.agentId)
-                ? { [CONSUMED_SIGNAL_IDS_KEY]: inputSignalIds(initialMessageList) }
-                : {}),
+              ...(input.signalsStored ? { [CONSUMED_SIGNAL_IDS_KEY]: inputSignalIds(initialMessageList) } : {}),
             });
             const iterationState: IterationState = {
               ...input,
@@ -1313,14 +1327,14 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
 
             // Before FINISH: the process that started the run reacts to it by looking for the thread's
             // next turn, which needs this run's untaken signals released as leftovers.
-            await closeStoredSignalRun({
+            const closing = closeStoredSignalRun({
               mastra: mastra as Mastra | undefined,
-              agentId: state.agentId ?? initData.agentId,
               runId: state.runId,
               input: initData,
               claim: getExecutionClaim(requestContext, state.runId),
-              state: await params.getState([CONSUMED_SIGNAL_IDS_KEY]),
+              state: () => params.getState([CONSUMED_SIGNAL_IDS_KEY]),
             });
+            if (closing) await closing;
 
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {

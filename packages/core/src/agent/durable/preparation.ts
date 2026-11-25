@@ -76,6 +76,8 @@ import { isJsonSafe } from './workflows/shared/schemas';
 export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
 export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
+/** Carries where a resume rebuilt from storage keeps its run's signals, as the run decided when it started. */
+export const RESUMED_SIGNALS_STORED = Symbol('mastra.durable.resumedSignalsStored');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -218,6 +220,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
    * Falls back to `agent.name` if not provided.
    */
   durableAgentName?: string;
+  /**
+   * Whether the preparing agent keeps signals sent to its runs in storage. The
+   * run carries this decision in its input and registry entry.
+   * @internal
+   */
+  signalsStored?: boolean;
 }
 
 /**
@@ -253,6 +261,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     methodType = 'stream',
     durableAgentId,
     durableAgentName,
+    signalsStored = false,
   } = options;
 
   // Public-facing identity: use the durable wrapper's ID/name for all
@@ -846,6 +855,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     runId,
     agentId: publicAgentId,
     agentName: publicAgentName,
+    signalsStored,
     // Pin the exact stored version this run resolved to (if any) so a resume
     // after a newer publish still re-resolves to the started version.
     agentVersionId: resolvedVersionId,
@@ -985,11 +995,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // keeps the original delegation callbacks when the resume supplies none.
     delegation: execOptions?.delegation,
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
-    // Non-serializable; cross-process engines lose it and signals go undelivered.
-    drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Non-serializable, so a run whose steps can execute in another process
+    // keeps its signals in storage instead, and its steps read them there.
+    ...(signalsStored
+      ? {}
+      : {
+          drainPendingSignals: (scope?: 'pending' | 'pre-run') => typedAgent.__getDrainPendingSignals()(runId, scope),
+          enqueuePendingSignal: (signalInput: AgentSignalInput) =>
+            typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
+        }),
+    // The in-process interrupt for a run executing where its signals are sent.
     subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
-    enqueuePendingSignal: signalInput =>
-      typedAgent.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is

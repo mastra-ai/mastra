@@ -23,6 +23,8 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { ProcessOutputResultArgs } from '../../../processors';
 import { InMemoryStore } from '../../../storage';
+import type { AgentSignalClaimArgs, StoredAgentSignal } from '../../../storage/domains/agent-signals/base';
+import { InMemoryAgentSignalsStorage } from '../../../storage/domains/agent-signals/inmemory';
 import { Agent } from '../../agent';
 import type { CreatedAgentSignal } from '../../signals';
 import { createSignal } from '../../signals';
@@ -123,6 +125,25 @@ function createTestSignal(
     contents: text,
     id: `sig-${text.replace(/\s+/g, '-').toLowerCase()}`,
   });
+}
+
+/** Runs `send` right before the `at`-th claim of pending signals, so a signal arrives at a chosen drain point. */
+class SendBeforePendingClaim extends InMemoryAgentSignalsStorage {
+  send?: () => Promise<void>;
+  sent = false;
+  #pendingClaims = 0;
+
+  constructor(private readonly at: number) {
+    super();
+  }
+
+  override async claim(args: AgentSignalClaimArgs): Promise<StoredAgentSignal[]> {
+    if (args.scope === 'pending' && ++this.#pendingClaims === this.at && this.send) {
+      await this.send();
+      this.sent = true;
+    }
+    return super.claim(args);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -501,6 +522,7 @@ describe('EventedAgent inter-iteration signal drain', () => {
       name: 'evented-inter-iter-drain-agent',
       instructions: 'You are helpful.',
       model,
+      memory: new MockMemory(),
       tools: {
         myTool: {
           description: 'A tool',
@@ -510,39 +532,34 @@ describe('EventedAgent inter-iteration signal drain', () => {
       },
     });
     const eventedAgent = createEventedAgent({ agent, pubsub });
+    const storage = new InMemoryStore();
+    // The run's signals are stored. The send lands right before the second pending claim, which is the loop
+    // predicate's after the first iteration (the first is the signal-drain step's).
+    const signals = new SendBeforePendingClaim(2);
+    storage.stores.agentSignals = signals;
     const mastra = new Mastra({
       logger: false,
-      storage: new InMemoryStore(),
+      storage,
       pubsub,
       agents: { 'evented-inter-iter-drain-agent': eventedAgent as any },
     });
-
-    const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
-    let drainCallCount = 0;
-    let installedDrain = false;
-    vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
-      const entry = originalGet(runId);
-      if (entry && !installedDrain) {
-        installedDrain = true;
-        const originalDrain = entry.drainPendingSignals;
-        entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-          // The second pending drain is the loop predicate's, after the first iteration.
-          if ((scope ?? 'pending') === 'pending' && ++drainCallCount === 2) {
-            return [createTestSignal('inter-iter signal')];
-          }
-          return originalDrain?.(scope) ?? [];
-        };
-      }
-      return entry;
-    });
+    const scope = { threadId: 'evented-inter-iter-thread', resourceId: 'evented-inter-iter-resource' };
+    signals.send = async () => {
+      const sent = eventedAgent.sendSignal({ type: 'user', contents: 'inter-iter signal' }, scope);
+      await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver' });
+    };
 
     try {
-      const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+      const { fullStream, cleanup } = await eventedAgent.stream('Hello', {
+        maxSteps: 5,
+        memory: { thread: scope.threadId, resource: scope.resourceId },
+      });
       for await (const _chunk of fullStream) {
         // drain
       }
       cleanup?.();
 
+      expect(signals.sent).toBe(true);
       expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
     } finally {
       await mastra.stopWorkers();

@@ -38,6 +38,8 @@ export interface StepAgentOptions {
   finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
+  /** Receives each model call's prompt, so a test can check what the model was actually sent. */
+  onModelPrompt?: (call: number, prompt: unknown) => void;
   inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
@@ -72,14 +74,16 @@ export function createStepAgent({
   memory,
   onToolEvent,
   onModelCall,
+  onModelPrompt,
   inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
-    doStream: async () => {
+    doStream: async ({ prompt }) => {
       const call = ++calls;
       onModelCall?.(call);
+      onModelPrompt?.(call, prompt);
       const head = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },

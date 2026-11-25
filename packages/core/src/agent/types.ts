@@ -339,7 +339,15 @@ export type CancelQueuedAgentMessagesOptions =
   | { resourceId: string; threadId: string; queueOwnerId: string; signalIds?: never };
 
 export interface CancelQueuedAgentMessagesResult {
+  /** Ids cancelled before the call returned. */
   cancelledSignalIds: string[];
+  /**
+   * Present when part of the cancellation waits on storage: an evented agent
+   * whose storage keeps agent signals cancels a signal sent to a running run
+   * there. Resolves with every cancelled id, including `cancelledSignalIds`. A
+   * signal a run already took into its transcript is not cancelled.
+   */
+  settled?: Promise<{ cancelledSignalIds: string[] }>;
 }
 
 /**

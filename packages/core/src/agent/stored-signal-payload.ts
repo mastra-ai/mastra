@@ -44,6 +44,26 @@ export function toStoredSignalPayload(signal: CreatedAgentSignal): StoredAgentSi
   } as StoredAgentSignalPayload;
 }
 
+/**
+ * Decode stored rows one by one. A row this release can't read is left out and
+ * reported with its id: a newer release may read it, so callers never delete
+ * it, count it as consumed or start a turn with it.
+ */
+export function decodeStoredSignals<Row extends { id: string; signal: StoredAgentSignalPayload }>(
+  rows: readonly Row[],
+  onUndecodable: (id: string, error: unknown) => void,
+): Array<{ row: Row; signal: CreatedAgentSignal }> {
+  const decoded: Array<{ row: Row; signal: CreatedAgentSignal }> = [];
+  for (const row of rows) {
+    try {
+      decoded.push({ row, signal: fromStoredSignalPayload(row.signal) });
+    } catch (error) {
+      onUndecodable(row.id, error);
+    }
+  }
+  return decoded;
+}
+
 export function fromStoredSignalPayload(payload: StoredAgentSignalPayload): CreatedAgentSignal {
   // A row written by a newer release may encode the signal differently; reading it as this form would deliver
   // something else than was sent.
