@@ -1,6 +1,5 @@
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
-import { InMemoryAgentSignalsStorage } from './domains/agent-signals/inmemory';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { BackgroundTasksInMemory } from './domains/background-tasks/inmemory';
 import { InMemoryBlobStore } from './domains/blobs/inmemory';
@@ -92,7 +91,6 @@ export class InMemoryStore extends MastraCompositeStore {
       harness: new InMemoryHarness(),
       toolProviderConnections: new InMemoryToolProviderConnectionsStorage({ db: this.#db }),
       threadState: new InMemoryThreadStateStorage(),
-      agentSignals: new InMemoryAgentSignalsStorage(),
     };
   }
 
@@ -107,7 +105,6 @@ export class InMemoryStore extends MastraCompositeStore {
     void this.stores.channels?.dangerouslyClearAll?.();
     void this.stores.harness?.dangerouslyClearAll?.();
     void this.stores.notifications?.dangerouslyClearAll?.();
-    void this.stores.agentSignals?.dangerouslyClearAll?.();
   }
 }
 
