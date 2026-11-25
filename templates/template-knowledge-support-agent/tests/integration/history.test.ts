@@ -587,10 +587,22 @@ test(
       let moved = false;
       let removedAfterListing = false;
       let listedNotePointReads = 0;
-      store.getNote = input => {
+      const countPointRead: typeof store.getNote = input => {
         if (input.read !== 'all' && (input.id === note.id || input.id === removed.id)) listedNotePointReads++;
         return getNote(input);
       };
+      store.getNote = countPointRead;
+      const withReadSnapshot = supportKnowledge.withReadSnapshot;
+      supportKnowledge.withReadSnapshot = read =>
+        withReadSnapshot(snapshot =>
+          read({
+            ...snapshot,
+            getNote(input) {
+              if (input.read !== 'all' && (input.id === note.id || input.id === removed.id)) listedNotePointReads++;
+              return snapshot.getNote(input);
+            },
+          }),
+        );
       observeDiscovery(supportKnowledge, storage => ({
         ...storage,
         async search(...args) {
