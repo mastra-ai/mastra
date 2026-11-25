@@ -31,6 +31,7 @@ export function recordDataPart(part: DBPart): DataPartRecord {
  * that received it, which can be a different message from `message.id` when the add merges into the latest one.
  */
 export function addWriterDataPart(messageList: MessageList, message: MastraDBMessage): void {
+  // Relies on `add` keeping existing part objects (MessageMerger only splices or pushes), so only new parts differ.
   const partsBefore = new Set(messageList.get.all.db().flatMap(m => m.content.parts));
   messageList.add(message, 'response');
   let log = writeLogs.get(messageList);
