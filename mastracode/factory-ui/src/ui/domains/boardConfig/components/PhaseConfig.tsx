@@ -17,6 +17,7 @@ import { SettingsSubsection } from '../../settings/components/SettingsSubsection
 import { DEFAULT_SESSION, PHASE_TOOLS, nextPhasesOf, withAutoStart, withNextPhases } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
+import { PhaseOutcomes } from './PhaseOutcomes';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
 import { SkillBadges } from './skills/SkillBadges';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
@@ -328,6 +329,17 @@ export function PhaseConfig({
 
         <PhaseStep icon={<IconDirection1 />} title="Allowed moves">
           {moves}
+          <SettingsSubsection
+            title="Outcomes"
+            description="The ways this phase can end. The agent reports one by its key when its work is done, and Factory moves the card to that outcome's phase once the run ends. People can still make any allowed move."
+          >
+            <PhaseOutcomes
+              phase={phase}
+              phases={phases}
+              disabled={disabled}
+              onChange={outcomes => onChange({ ...phase, outcomes })}
+            />
+          </SettingsSubsection>
         </PhaseStep>
       </PhaseSteps>
 
