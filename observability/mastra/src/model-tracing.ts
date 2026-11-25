@@ -44,6 +44,16 @@ function supportsModelInference(): boolean {
   return coreFeatures.has('model-inference-span');
 }
 
+/**
+ * Whether the installed @mastra/core traces a suspended model call before the
+ * run resumes. From 1.79 the suspension chunk carries the step's usage, so the
+ * call's tokens are recorded then. An older core records them only when the
+ * resumed run replays the step. `execution-outcomes` (1.81) is the nearest flag.
+ */
+function tracesSuspendedCallBeforeResume(): boolean {
+  return coreFeatures.has('execution-outcomes');
+}
+
 import type { EndSpanOptionsWithTime } from './spans/default';
 import { extractOpenRouterCost, extractUsageMetrics } from './usage';
 import type { OpenRouterCostResult } from './usage';
@@ -587,7 +597,9 @@ export class ModelSpanTracker {
 
     // Only the final inference can still be held here (earlier ones end at their
     // step-finish or when the next model call starts); end it with its provider data.
-    this.#settlePendingInference();
+    // One of several tools that suspend together can end the run before the chunk
+    // that closes the step arrives, so a suspended run keeps the response too.
+    this.#settlePendingInference(spanOptions.outcome === 'suspend' ? this.#inferenceContent : undefined);
 
     // Cancellation and deadlines terminate work that is still active. A loop
     // limit such as max_steps must not relabel a completed logical step.
@@ -737,14 +749,19 @@ export class ModelSpanTracker {
   }
 
   /**
-   * End an inference whose provider stream already finished, without output.
-   * Used when the step ends some other way than a processed `step-finish`
-   * (error, abort, suspension, tripwire, a replacement attempt).
+   * End an inference whose provider stream already finished. Used when the step
+   * ends some other way than a processed `step-finish` (error, abort, suspension,
+   * tripwire, a replacement attempt). Only a suspension passes `output`: the run
+   * resumes from that response, the others end without one.
    */
-  #settlePendingInference(): void {
+  #settlePendingInference(output?: Record<string, unknown>): void {
     const pending = this.#pendingInferenceFinish;
     if (!pending) return;
-    this.#closeInference(pending.payload, { endTime: pending.endTime, streamAttributes: pending.streamAttributes });
+    this.#closeInference(pending.payload, {
+      output,
+      endTime: pending.endTime,
+      streamAttributes: pending.streamAttributes,
+    });
   }
 
   #closeInference(
@@ -1006,8 +1023,8 @@ export class ModelSpanTracker {
     if (!usage) return;
 
     this.#inModelResponse = false;
-    // The suspension payload carries no model output; keep what the provider reported.
-    this.#settlePendingInference();
+    // The suspension payload carries no model output; the response is what the stream delivered.
+    this.#settlePendingInference(this.#inferenceContent);
     this.#endStepSpan(
       {
         output: { usage },
@@ -1100,7 +1117,13 @@ export class ModelSpanTracker {
     output: any,
     options?: { attributes?: Record<string, any>; metadata?: Record<string, any> },
   ) {
-    this.#ensureStepAndInference();
+    // A tool result comes after the model call. A resumed run replays it for a step
+    // whose model call was traced before the suspension, so it opens no inference.
+    if (!tracesSuspendedCallBeforeResume()) {
+      this.#ensureStepAndInference();
+    } else if (!this.#currentStepSpan) {
+      this.startStep();
+    }
 
     const span = this.#chunkParent()?.createEventSpan({
       name: `chunk: '${chunkType}'`,
