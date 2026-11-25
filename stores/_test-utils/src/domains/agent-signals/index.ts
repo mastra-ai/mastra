@@ -259,6 +259,37 @@ export function createAgentSignalsTests({ storage, peerStorage }: AgentSignalsTe
     });
 
     describe('claim with a takeover', () => {
+      it('never strands a signal on a run that a racing takeover closes', async () => {
+        for (let iteration = 0; iteration < RACE_ITERATIONS; iteration++) {
+          const threadKey = newThread();
+          const runId = newRun();
+          const claimer = newRun();
+          const ids = Array.from({ length: RACE_ROWS }, (): string => randomUUID());
+
+          // Start the takeover at a different point among the sends on each iteration.
+          const claimAt = iteration % (RACE_ROWS + 1);
+          const send = (id: string) => enqueueOn(signals, threadKey, runId, 'pending', id);
+          const before = ids.slice(0, claimAt).map(send);
+          const takeover = peer.claim({ threadKey, runId: claimer, scope: 'pre-run', leftovers: true });
+          const after = ids.slice(claimAt).map(send);
+          const [results, claimed] = await Promise.all([Promise.all([...before, ...after]), takeover]);
+
+          // Sends that committed after the takeover are still open on the run, or moved to the
+          // claimer by a second takeover; nothing may stay behind on a run that is closed.
+          const later = await signals.claim({ threadKey, runId: claimer, scope: 'pre-run', leftovers: true });
+          expect(await signals.listPending({ threadKey, runId })).toEqual([]);
+          expect(await signals.listPending({ threadKey })).toEqual([]);
+
+          const reached = new Set([...idsOf(claimed), ...idsOf(later)]);
+          for (const { id, result } of results) {
+            expect({ id, result, reached: reached.has(id) }).toEqual({ id, result, reached: result === 'accepted' });
+          }
+          for (const { id } of results.filter(({ result }) => result === 'run-closed')) {
+            expect(await isGone(threadKey, id)).toBe(true);
+          }
+        }
+      });
+
       it('takes over the thread: moves leftovers and unclaimed rows, deletes claimed rows, closes other runs', async () => {
         const threadKey = newThread();
         const claimer = newRun();
