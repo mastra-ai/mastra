@@ -38,7 +38,7 @@ function enableAuth() {
 }
 
 function renderBothLists() {
-  renderWithProviders(
+  const { client } = renderWithProviders(
     <>
       <section aria-label="Personal">
         <ProviderList credentialScope="user" />
@@ -49,6 +49,7 @@ function renderBothLists() {
     </>,
   );
   return {
+    client,
     personal: () => screen.getByRole('region', { name: 'Personal' }),
     factory: () => screen.getByRole('region', { name: 'Factory' }),
   };
@@ -294,6 +295,7 @@ describe('ProviderList credential scopes', () => {
           await waitFor(() =>
             expect(within(rowFor('mastra', lists[list]())).getByText('Key saved')).toBeInTheDocument(),
           );
+          await waitForMutationsIdle(lists.client);
         },
       );
 
