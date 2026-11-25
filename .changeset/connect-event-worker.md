@@ -21,4 +21,4 @@ const connectEvents = new ConnectEventWorker({
 export const mastra = new Mastra({ workflows: { reviewPullRequest }, workers: [connectEvents] });
 ```
 
-Listed event types of a provider with typed payloads give `inputData` a typed payload, and its return type is checked against the workflow's input. Return `undefined` to skip an event. Each event starts a workflow once, even when the webhook is redelivered, and the run gets the event's `resourceId` when the connection belongs to an end user. Unverified events are skipped unless `includeUnverified` is set.
+`events` and `includeUnverified` work as on `ConnectEvents`, so `inputData` gets a typed payload once it checks `provider` and `eventType`, and its return type is checked against the workflow's input. Return `undefined` to skip an event. Each event starts a workflow once, even when the webhook is redelivered, and the run gets the event's `resourceId` when the connection belongs to an end user. Unverified events are skipped unless `includeUnverified` is set.

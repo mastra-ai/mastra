@@ -4,7 +4,7 @@ import type { WorkerStopOptions } from '@mastra/core/worker';
 import type { Workflow } from '@mastra/core/workflows';
 
 import { selectsConnectEvent } from './event-filter.js';
-import type { ConnectEventFilter, FilteredConnectEvent } from './event-filter.js';
+import type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
 import { selectedConnectEvents } from './events.js';
 import type { ConnectEvent, ConnectEventsOptions } from './events.js';
 
@@ -13,30 +13,22 @@ type MaybePromise<T> = T | Promise<T>;
 /** A workflow whose input is `TInput`. */
 type WorkflowWithInput<TInput> = Workflow<any, any, any, any, TInput, any, any, any>;
 
+/** Which events start the workflow is chosen with `events` and `includeUnverified`, as for `ConnectEvents`. */
 export interface ConnectEventTriggerOptions<
   F extends ConnectEventFilter | undefined = undefined,
   U extends boolean = false,
   TInput = unknown,
-> {
-  /** Which providers and event types start the workflow. Omit it to start it for every event. */
-  events?: F;
+> extends ConnectEventFilterOptions<F, U> {
   /** The workflow to start. It must be registered on the Mastra the worker runs on. */
   workflow: WorkflowWithInput<TInput>;
   /** The workflow's input for an event. Return `undefined` to skip the event. */
   inputData: (event: FilteredConnectEvent<F, U>) => MaybePromise<NoInfer<TInput> | undefined>;
-  /**
-   * Start the workflow for events whose signature the platform couldn't
-   * verify. Their payloads may be forged, so they're skipped by default.
-   */
-  includeUnverified?: U;
 }
 
 /** A workflow started by Connect events. Create one with {@link onConnectEvent}. */
-export interface ConnectEventTrigger {
-  readonly events?: ConnectEventFilter;
+export interface ConnectEventTrigger extends ConnectEventFilterOptions<ConnectEventFilter | undefined, boolean> {
   readonly workflow: WorkflowWithInput<any>;
   readonly inputData: (event: ConnectEvent) => MaybePromise<unknown>;
-  readonly includeUnverified?: boolean;
 }
 
 /**
