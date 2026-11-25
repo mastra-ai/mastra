@@ -2,12 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Observability } from '../../../../../../../observability/mastra/src/default';
-import { Agent } from '../../../../agent';
-import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
-import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InternalSpans, SpanType, TracingEventType } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
@@ -148,14 +145,30 @@ describeForAllEngines('run and generation span fields', engine => {
 describe('run and generation span fields on a worker in another process', () => {
   const getMock = useLoopScenarioAimock();
 
-  it('reports the usage of hidden model spans on the run', async () => {
+  const lookup = (options: { toModelOutput?: () => never; requireApproval?: boolean } = {}) =>
+    createTool({
+      id: 'lookup',
+      description: 'Look up an order.',
+      inputSchema: z.object({}),
+      execute: async () => ({ status: 'shipped' }),
+      ...options,
+    });
+  const toModelOutput = () => {
+    throw new Error('tool output mapping failed');
+  };
+
+  /** The process that streams, and the worker process that executes the run. */
+  async function split(agentOptions: Record<string, unknown>) {
     const directory = await mkdtemp(join(tmpdir(), 'run-span-fields-'));
-    const pubsubs = [0, 1].map(() => new UnixSocketPubSub(join(directory, 'pubsub.sock')));
     const storage = new InMemoryStore();
-    const llm = getMock();
-    llm.on({ endpoint: 'chat' }, { content: 'Hi.' });
-    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
-    const [api, worker] = pubsubs.map((pubsub, index) => {
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` });
+    const start = async (index: number) => {
+      // A process has its own run registry.
+      if (index === 1) vi.resetModules();
+      const { Agent } = await import('../../../../agent');
+      const { Mastra } = await import('../../../../mastra');
+      const { UnixSocketPubSub } = await import('../../../../events/unix-socket-pubsub');
+      const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
       const captured = capture();
       const agent = new Agent({
         id: 'support',
@@ -163,28 +176,100 @@ describe('run and generation span fields on a worker in another process', () => 
         instructions: 'Help.',
         model: openai('gpt-4o'),
         durable: { executionEngine: 'evented' },
-        options: { tracingPolicy: { internal: InternalSpans.MODEL } },
+        ...agentOptions,
       });
       const { observability } = captured;
       const workers = index === 0 ? { workers: false as const } : {};
       return {
         ...captured,
         agent,
+        pubsub,
         mastra: new Mastra({ agents: { agent }, storage, pubsub, observability, logger: false, ...workers }),
       };
-    }) as [any, any];
-    try {
-      await worker.mastra.startWorkers();
-      expect(await (await api.agent.stream('Hello.')).text).toBe('Hi.');
-      await expect.poll(() => worker.ended().length).toBe(1);
-
-      expect(worker.ended()[0].attributes.internalUsage).toMatchObject({ inputTokens: expect.any(Number) });
-      expect(worker.ended(SpanType.MODEL_GENERATION)).toEqual([]);
-    } finally {
+    };
+    const api: any = await start(0);
+    const worker: any = await start(1);
+    onTestFinished(async () => {
       await api.mastra.shutdown();
       await worker.mastra.shutdown();
-      for (const pubsub of pubsubs) await pubsub.close();
+      for (const { pubsub } of [api, worker]) await pubsub.close();
       await rm(directory, { recursive: true, force: true });
+    });
+    await worker.mastra.startWorkers();
+    const spanIds = (type: TracingEventType) =>
+      [api, worker].flatMap(({ events }) =>
+        events.filter((event: any) => event.type === type).map((event: any) => event.exportedSpan.id),
+      );
+    /** Ids of the spans no process ended, and of those ended more than once. */
+    const unbalanced = () => {
+      const endedIds = spanIds(TracingEventType.SPAN_ENDED);
+      return {
+        open: spanIds(TracingEventType.SPAN_STARTED).filter(id => !endedIds.includes(id)),
+        endedTwice: endedIds.filter((id, index) => endedIds.indexOf(id) !== index),
+      };
+    };
+    return { api, worker, unbalanced };
+  }
+
+  it('reports the usage of hidden model spans on the run', async () => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Hi.' });
+    const { api, worker } = await split({ options: { tracingPolicy: { internal: InternalSpans.MODEL } } });
+
+    expect(await (await api.agent.stream('Hello.')).text).toBe('Hi.');
+    await expect.poll(() => worker.ended().length).toBe(1);
+
+    expect(worker.ended()[0].attributes.internalUsage).toMatchObject({ inputTokens: expect.any(Number) });
+    expect(worker.ended(SpanType.MODEL_GENERATION)).toEqual([]);
+  }, 15_000);
+
+  it('ends every span once when the run fails', async () => {
+    getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
+    const { api, worker, unbalanced } = await split({ tools: { lookup: lookup({ toModelOutput }) } });
+
+    const { fullStream } = await api.agent.stream('Where is my order?');
+    for await (const _ of fullStream);
+
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+      await expect.poll(() => worker.ended(type)).toMatchObject([{ outcome: 'error' }]);
     }
+    expect(unbalanced()).toEqual({ open: [], endedTwice: [] });
+  }, 15_000);
+
+  it('ends every span once when the run fails after an approval', async () => {
+    getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
+    const { api, worker, unbalanced } = await split({
+      tools: { lookup: lookup({ toModelOutput, requireApproval: true }) },
+    });
+
+    const { runId, fullStream } = await api.agent.stream('Where is my order?');
+    for await (const chunk of fullStream) if (chunk.type === 'tool-call-approval') break;
+    await expect.poll(() => worker.ended().length).toBe(1);
+    const resumed = await api.agent.approveToolCall({ runId, toolCallId: 'lookup-1' });
+    for await (const _ of resumed.fullStream);
+
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION]) {
+      await expect
+        .poll(() => [...worker.ended(type), ...api.ended(type)].map(span => span.outcome).sort())
+        .toEqual(['error', 'suspend']);
+    }
+    await expect.poll(unbalanced).toMatchObject({ endedTwice: [] });
+  }, 15_000);
+
+  it('ends the spans of an output stream processor when the run succeeds', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Shipped.' });
+    const { api, worker, unbalanced } = await split({
+      tools: { lookup: lookup() },
+      outputProcessors: [{ id: 'pass-through', processOutputStream: async ({ part }: any) => part }],
+    });
+
+    expect(await (await api.agent.stream('Where is my order?')).text).toBe('Shipped.');
+    await expect.poll(() => worker.ended().length).toBe(1);
+
+    await expect.poll(unbalanced).toEqual({ open: [], endedTwice: [] });
   }, 15_000);
 });

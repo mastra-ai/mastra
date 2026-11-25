@@ -464,6 +464,59 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
     expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    await expect.poll(() => ended(SpanType.MODEL_STEP).length).toBeGreaterThan(0);
+    // On Inngest the returned tool call still reaches the step that ends the model step.
+    if (engine !== 'inngest') {
+      expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
+    }
+  });
+
+  it('ends the spans of a run whose deadline passes before it starts', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      modelSettings: { timeout: { totalMs: 1 } },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'late answer' }, { streamingProfile: { ttft: 2000 } }),
+    });
+    await expect.poll(() => ended()).toMatchObject([{ outcome: 'limit', stopReason: 'timeout' }]);
+  });
+
+  it('ends every span once when the run fails after a tool call', async () => {
+    const { observability, events, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          execute: async () => ({ status: 'shipped' }),
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+      await expect.poll(() => ended(type)).toMatchObject([{ outcome: 'error', endTime: expect.any(Date) }]);
+    }
+    const spansOf = (eventType: TracingEventType) =>
+      events
+        .filter(event => event.type === eventType)
+        .map(event => event.exportedSpan.id)
+        .sort();
+    expect(spansOf(TracingEventType.SPAN_ENDED)).toEqual(spansOf(TracingEventType.SPAN_STARTED));
   });
 
   it('reports a deadline hit during a tool call whose toModelOutput throws as a limit', async () => {
