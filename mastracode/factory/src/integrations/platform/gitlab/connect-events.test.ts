@@ -1,12 +1,10 @@
-import type { WorkerDeps } from '@mastra/core/worker';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { GitLabSignalSubscriptionRow } from '../../gitlab/subscriptions.js';
 import { normalizeGitLabWebhookMetadata } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
-import { PlatformEventsWorker } from '../foundation/events-worker.js';
-import type { PlatformConnectEventDelivery, PlatformEventsWorkerStorage } from '../foundation/events-worker.js';
-import { startFakePlatform } from '../foundation/test-utils.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { startEventsWorker, startFakePlatform } from '../foundation/test-utils.js';
 import { handleGitLabConnectEvent } from './connect-events.js';
 import type { GitLabConnectEventDependencies } from './connect-events.js';
 import { PlatformGitLabIntegration } from './integration.js';
@@ -275,27 +273,7 @@ describe('PlatformGitLabIntegration events', () => {
         await route.handle(event);
       },
     };
-    let saved: unknown = null;
-    const worker = new PlatformEventsWorker({
-      events: gitlab.binding.connect.events,
-      projectId: platform.projectId,
-      storage: {
-        integrationId: 'platform',
-        settings: {
-          get: async () => saved,
-          save: async (_o: string, _u: string, next: unknown) => void (saved = next),
-        },
-      } as unknown as PlatformEventsWorkerStorage,
-      routes: [recorded],
-    });
-    await worker.init({
-      pubsub: {},
-      storage: {},
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    } as unknown as WorkerDeps);
-    await worker.start();
-    onTestFinished(() => worker.stop());
-    await vi.waitFor(() => expect(platform.openStreams).toBe(1));
+    await startEventsWorker(platform, [recorded]);
 
     platform.publishConnect({
       connectionId: 'conn-1',

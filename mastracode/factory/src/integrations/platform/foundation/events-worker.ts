@@ -81,6 +81,11 @@ export class PlatformEventsWorker extends ConnectEventWorker<Record<string, unkn
     this.#routes = routes;
   }
 
+  /** The integrations the worker routes events to. */
+  get integrations(): string[] {
+    return this.#routes.map(route => route.binding.integrationId);
+  }
+
   override async start(): Promise<void> {
     const wasRunning = this.isRunning;
     await super.start();

@@ -477,7 +477,7 @@ describe('PlatformGitLabIntegration', () => {
     const workers = gitlab.workers(context);
     expect(workers.map(worker => worker.name)).toEqual(['gitlab-issue-reconcile']);
     const route = gitlab.connectEventRoute(context);
-    expect(route.binding.providerKeys).toEqual(['gitlab']);
+    expect(route.binding.providerKeys).toEqual(['gitlab', 'gitlab-self-hosted']);
 
     const acquireLease = vi.fn(async () => ({ acquired: true }));
     const lease = { acquireLease, renewLease: async () => true, releaseLease: async () => {} };

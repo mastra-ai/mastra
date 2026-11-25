@@ -114,7 +114,6 @@ import {
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
 import {
-  PLATFORM_EVENTS_STORAGE_ID,
   PlatformEventsWorker,
   isPlatformConnectEventSource,
 } from './integrations/platform/foundation/events-worker.js';
@@ -2815,7 +2814,7 @@ export class MastraFactory {
             ...(this.#projectBoards ? { notRouted: storedBoardsStorage } : {}),
             factoryReady,
             domains,
-            // The Platform GitHub lane receives pushes through its github-app topic subscription.
+            // The Platform GitHub lane only receives pushes through its polling worker.
             ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
             ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
           },
@@ -2825,10 +2824,12 @@ export class MastraFactory {
     const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
       integration.workers ? integration.workers(context) : [],
     );
-    // One events subscription per deployment: the project's `connect` topic
-    // carries every connection, so each event is routed to the integration
-    // that owns its provider key. Integrations without an event source (Vanta)
-    // add no route, and a deployment with no routes opens no stream.
+    // One events subscription per deployment: the project's Connect events
+    // carry every connection, so each event is routed to the integrations
+    // that own its provider key. Integrations without an event source (Vanta)
+    // add no route, and a deployment with no routes opens no stream. The
+    // worker reads the project of the env's Platform credentials, like every
+    // auto-installed Platform integration's client.
     const eventRoutes = hasPlatformCredentials()
       ? readyContexts.flatMap(({ integration, context }) => {
           if (!isPlatformConnectEventSource(integration)) return [];
@@ -2836,30 +2837,13 @@ export class MastraFactory {
           return route ? [route] : [];
         })
       : [];
-    const eventTopics = hasPlatformCredentials()
-      ? readyContexts.flatMap(({ integration, context }) =>
-          isPlatformConnectEventSource(integration) ? (integration.platformTopicSubscriptions?.(context) ?? []) : [],
-        )
-      : [];
-    const hasEventSources = eventRoutes.length > 0 || eventTopics.length > 0;
     const eventsProjectId = process.env.MASTRA_PROJECT_ID?.trim();
-    if (hasEventSources && !eventsProjectId) {
+    if (eventRoutes.length > 0 && !eventsProjectId) {
       console.warn(
         'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
       );
-    } else if (hasEventSources && eventsProjectId) {
-      integrationWorkers.push(
-        new PlatformEventsWorker({
-          // Built from env like every auto-installed Platform integration's client, so it reads
-          // the same project they list. An explicit integration given its own `connect` config
-          // for another project would get no events here.
-          events: createPlatformConnectClient().events,
-          projectId: eventsProjectId,
-          storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
-          routes: eventRoutes,
-          topics: eventTopics,
-        }),
-      );
+    } else if (eventRoutes.length > 0) {
+      integrationWorkers.push(new PlatformEventsWorker(eventRoutes));
     }
 
     return {

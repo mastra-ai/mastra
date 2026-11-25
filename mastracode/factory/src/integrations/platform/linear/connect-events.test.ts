@@ -1,4 +1,3 @@
-import type { WorkerDeps } from '@mastra/core/worker';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
@@ -6,8 +5,8 @@ import type { FactoryLinearRuleContext } from '../../../rules/types.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformEventsWorker } from '../foundation/events-worker.js';
-import type { PlatformConnectEventDelivery, PlatformEventsWorkerStorage } from '../foundation/events-worker.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { startEventsWorker } from '../foundation/test-utils.js';
 import { handleLinearConnectEvent } from './connect-events.js';
 import type { LinearConnectEventDeps } from './connect-events.js';
 import { PlatformLinearIntegration } from './integration.js';
@@ -393,32 +392,8 @@ describe('PlatformLinearIntegration through the events worker', () => {
     // Registered at boot, whether or not any workspace is migrated yet.
     const route = linear.connectEventRoute(context);
     expect(route).not.toBeNull();
-    let saved: unknown = null;
-    const worker = new PlatformEventsWorker({
-      events: fake.platform.connect().events,
-      projectId: fake.platform.projectId,
-      storage: {
-        integrationId: 'platform-events',
-        settings: {
-          get: async () => saved,
-          save: async (_o: string, _u: string, next: unknown) => void (saved = next),
-        },
-      } as unknown as PlatformEventsWorkerStorage,
-      routes: [route!],
-      retryDelayMs: 5,
-      resubscribeDelayMs: 20,
-    });
-    await worker.init({
-      pubsub: {},
-      storage: {},
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    } as unknown as WorkerDeps);
-    await worker.start();
-    onTestFinished(async () => {
-      await worker.stop();
-      linear.migration.stop();
-    });
-    await vi.waitFor(() => expect(fake.platform.openStreams).toBe(1));
+    onTestFinished(() => linear.migration.stop());
+    await startEventsWorker(fake.platform, [route!]);
     return { linear, observed };
   }
 

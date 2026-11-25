@@ -4,9 +4,8 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
-import { PlatformEventsWorker } from '../foundation/events-worker.js';
-import type { PlatformConnectEventDelivery, PlatformEventsWorkerStorage } from '../foundation/events-worker.js';
-import { startFakePlatform } from '../foundation/test-utils.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { startEventsWorker, startFakePlatform } from '../foundation/test-utils.js';
 import { jiraIssueFromPayload } from './connect-events.js';
 import { encodeIssueReference, PlatformJiraIntegration } from './integration.js';
 
@@ -228,27 +227,7 @@ describe('PlatformJiraIntegration through the events worker', () => {
           : { status: 404, body: { errorMessages: [path] } };
     const { context, card } = await seedCard();
     const jira = new PlatformJiraIntegration({ connect: platform.connect() });
-    let saved: unknown = null;
-    const worker = new PlatformEventsWorker({
-      events: jira.binding.connect.events,
-      projectId: platform.projectId,
-      storage: {
-        integrationId: 'platform-events',
-        settings: {
-          get: async () => saved,
-          save: async (_o: string, _u: string, next: unknown) => void (saved = next),
-        },
-      } as unknown as PlatformEventsWorkerStorage,
-      routes: [jira.connectEventRoute(context)!],
-    });
-    await worker.init({
-      pubsub: {},
-      storage: {},
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-    } as unknown as WorkerDeps);
-    await worker.start();
-    onTestFinished(() => worker.stop());
-    await vi.waitFor(() => expect(platform.openStreams).toBe(1));
+    await startEventsWorker(platform, [jira.connectEventRoute(context)!]);
 
     platform.publishConnect({
       connectionId: 'a1b_acme',

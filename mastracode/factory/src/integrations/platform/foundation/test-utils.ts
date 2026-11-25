@@ -3,9 +3,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
 import type { ConnectClient } from '@mastra/connect';
-import { onTestFinished } from 'vitest';
+import { Mastra } from '@mastra/core/mastra';
+import { expect, onTestFinished, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 import { createPlatformConnectClient } from '../platform-connect.js';
+import { PlatformEventsWorker } from './events-worker.js';
+import type { PlatformConnectEventRoute, PlatformEventsWorkerOptions } from './events-worker.js';
 
 export interface FakeConnection {
   id: string;
@@ -26,6 +30,7 @@ export interface FakeReply {
 export interface FakePlatformRequest {
   method: string;
   path: string;
+  query: URLSearchParams;
   /** The JSON request body, when there was one. */
   body?: unknown;
   /** The end user the request was scoped to (`x-mastra-resource-id`), when it was. */
@@ -98,7 +103,6 @@ export class FakePlatform {
   connect(): ConnectClient {
     return createPlatformConnectClient({
       baseUrl: this.#url,
-      eventsUrl: this.#url,
       accessToken: 'platform-secret',
       projectId: this.projectId,
     });
@@ -123,6 +127,7 @@ export class FakePlatform {
     eventType: string;
     payload: unknown;
     sourceEventId?: string;
+    resourceId?: string;
     unverified?: boolean;
   }): string {
     return this.publish('connect', {
@@ -131,6 +136,7 @@ export class FakePlatform {
       eventType: event.eventType,
       payload: JSON.stringify(event.payload),
       ...(event.sourceEventId ? { sourceEventId: event.sourceEventId } : {}),
+      ...(event.resourceId ? { resourceId: event.resourceId } : {}),
       ...(event.unverified ? { unverified: 'true' } : {}),
     });
   }
@@ -177,6 +183,7 @@ export class FakePlatform {
     this.requests.push({
       method,
       path,
+      query: url.searchParams,
       ...(body === undefined ? {} : { body }),
       ...(typeof resourceId === 'string' ? { resourceId } : {}),
     });
@@ -305,4 +312,28 @@ function sseEvent(event: FakeTopicEvent): string {
 
 export function startFakePlatform(): Promise<FakePlatform> {
   return new FakePlatform().start();
+}
+
+/** Starts a `PlatformEventsWorker` on a real Mastra, reading the fake platform's events, and waits for its stream. */
+export async function startEventsWorker(
+  platform: FakePlatform,
+  routes: PlatformConnectEventRoute[],
+  options: PlatformEventsWorkerOptions = {},
+): Promise<{ worker: PlatformEventsWorker; logger: Record<'debug' | 'info' | 'warn' | 'error', Mock> }> {
+  const worker = new PlatformEventsWorker(routes, {
+    accessToken: 'platform-secret',
+    projectId: platform.projectId,
+    eventsUrl: platform.baseUrl,
+    reconnectDelayMs: 5,
+    retry: { delayMs: 1 },
+    ...options,
+  });
+  const mastra = new Mastra({ logger: false });
+  worker.__registerMastra(mastra);
+  const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  vi.spyOn(mastra, 'getLogger').mockReturnValue(logger as unknown as ReturnType<Mastra['getLogger']>);
+  await worker.start();
+  onTestFinished(() => worker.stop());
+  await vi.waitFor(() => expect(platform.openStreams).toBe(1));
+  return { worker, logger };
 }

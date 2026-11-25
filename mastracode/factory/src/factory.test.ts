@@ -45,6 +45,7 @@ import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
+import type { PlatformEventsWorker } from './integrations/platform/foundation/events-worker.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
@@ -3389,15 +3390,14 @@ describe('MastraFactory.prepare integrations', () => {
     const args = await factory.prepare();
 
     const names = (args.workers ?? []).map(worker => worker.name);
-    expect(names.filter(name => name === 'platform-events')).toHaveLength(1);
+    expect(names.filter(name => name === 'connect-events')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
-    // Linear's and GitHub's events come through the shared worker; no poller of their own.
+    // Linear's and the Factory GitHub apps' events come through the shared worker; the Mastra
+    // GitHub App keeps its own poller.
     expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
-    expect(names).not.toContain('platform-github-events');
-    const events = args.workers!.find(worker => worker.name === 'platform-events') as unknown as {
-      diagnostics(): { integrations: string[] };
-    };
-    expect(events.diagnostics().integrations.sort()).toEqual(['github', 'gitlab', 'incidentio', 'jira', 'linear']);
+    expect(names).toContain('platform-github-events');
+    const events = args.workers!.find(worker => worker.name === 'connect-events') as PlatformEventsWorker;
+    expect(events.integrations.sort()).toEqual(['github', 'gitlab', 'incidentio', 'jira', 'linear']);
   });
 
   it('runs no Platform events worker, and says why, when the deployment has no project id', async () => {
@@ -3408,7 +3408,7 @@ describe('MastraFactory.prepare integrations', () => {
     onTestFinished(() => warn.mockRestore());
     const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
 
-    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('connect-events');
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('MASTRA_PROJECT_ID is missing, so Platform integrations receive no events'),
     );
@@ -3426,7 +3426,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const args = await factory.prepare();
 
-    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('connect-events');
     expect((args.workers ?? []).map(worker => worker.name)).toContain('vanta-issue-reconcile');
   });
 

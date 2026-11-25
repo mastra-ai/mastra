@@ -15,13 +15,10 @@ export type { PlatformConnectIntegrationOptions, PlatformConnectProvider } from 
 export { PlatformIntakeCapability } from './intake.js';
 export { PlatformVersionControlCapability } from './version-control.js';
 export type { PlatformConnectionCredential } from './version-control.js';
-export { PLATFORM_EVENTS_STORAGE_ID, PlatformEventsWorker, isPlatformConnectEventSource } from './events-worker.js';
+export { PlatformEventsWorker, isPlatformConnectEventSource } from './events-worker.js';
 export type {
   PlatformConnectEventDelivery,
   PlatformConnectEventRoute,
   PlatformConnectEventSource,
-  PlatformEventsWorkerConfig,
-  PlatformEventsWorkerStorage,
-  PlatformTopicEventContext,
-  PlatformTopicSubscription,
+  PlatformEventsWorkerOptions,
 } from './events-worker.js';
