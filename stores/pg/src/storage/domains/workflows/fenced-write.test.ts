@@ -132,7 +132,10 @@ describe('Postgres single-statement fenced writes', () => {
       try {
         await writerStore.init();
         const writer = (await writerStore.getStore('workflows'))!;
-        void write(writer, fence).catch(() => {});
+        const writing = write(writer, fence).then(
+          result => ({ result }),
+          (error: unknown) => ({ error }),
+        );
         await connection.fenceChecked;
 
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -142,6 +145,9 @@ describe('Postgres single-statement fenced writes', () => {
         ]);
         clearTimeout(timer);
         expect(takeover).toMatchObject({ acquired: true, record: { ownerId: 'owner-b' } });
+        // The silenced connection still returns the fenced statement's own result, so the write
+        // landed before the takeover rather than failing ahead of it.
+        expect(await writing).toEqual({ result: expect.anything() });
       } finally {
         await connection.close();
         await pool.end();
