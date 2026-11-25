@@ -1767,6 +1767,16 @@ export class AgentThreadStreamRuntime {
         this.#stopLeaseRenewal(pubsub, runId, timer);
         this.#abortLeaseLostRun(state, runId);
       }
+      // A parked run calls no tools, so this call belongs to a resume of it. A resume on another server holds the
+      // lease under this run id (a newer generation), and its step's delivery ownership is checked on its own, so
+      // the parked registration doesn't stop it. A different run holding the thread is still a takeover.
+      if (
+        state.threadRunsById.get(runId)?.lifecycle === 'suspended' &&
+        typeof owner === 'string' &&
+        threadLeaseRunId(owner) === runId
+      ) {
+        return;
+      }
       throw new AgentThreadLeaseLostError(runId);
     };
   }
