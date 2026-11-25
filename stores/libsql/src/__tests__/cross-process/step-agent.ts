@@ -40,12 +40,8 @@ export interface StepAgentOptions {
   onModelCall?: (call: number) => void;
   /** Receives each model call's prompt, so a test can check what the model was actually sent. */
   onModelPrompt?: (call: number, prompt: unknown) => void;
-  /**
-   * This model call streams reasoning and then holds until its request is aborted, as a model still thinking does.
-   * `onReasoning` runs once the reasoning is out, and again with `aborted` when the request is cut short.
-   */
-  reasoningAt?: number;
-  onReasoning?: (event: { call: number; aborted: boolean }) => void;
+  /** Holds a model call's answer until the returned promise resolves. */
+  holdModelCall?: (call: number) => Promise<void> | undefined;
   inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
@@ -81,8 +77,7 @@ export function createStepAgent({
   onToolEvent,
   onModelCall,
   onModelPrompt,
-  reasoningAt,
-  onReasoning,
+  holdModelCall,
   inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
@@ -92,6 +87,7 @@ export function createStepAgent({
       const call = ++calls;
       onModelCall?.(call);
       onModelPrompt?.(call, prompt);
+      await holdModelCall?.(call);
       const head = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
