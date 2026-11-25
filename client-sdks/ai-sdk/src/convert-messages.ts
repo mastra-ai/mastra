@@ -28,10 +28,16 @@ function isSystemReminderUIMessage(message: {
   return isSystemReminderElement(message.content);
 }
 
-const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:\s[^<>]*)?(?:>[\s\S]*<\/system-reminder>|\/>)$/;
+// Core serializes the wrapper canonically and, in signalToXmlMarkup, escapes `</system-reminder\s*>` (case-insensitive)
+// inside the contents. A body that still contains such a closing tag holds more than one element, for example user
+// text between two reminders, so it is not a reminder.
+const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:\s[^<>]*)?(?:>([\s\S]*)<\/system-reminder>|\/>)$/;
+const SYSTEM_REMINDER_CLOSING_TAG = /<\/system-reminder\s*>/i;
 
 function isSystemReminderElement(text: unknown) {
-  return typeof text === 'string' && SYSTEM_REMINDER_ELEMENT.test(text.trim());
+  if (typeof text !== 'string') return false;
+  const match = SYSTEM_REMINDER_ELEMENT.exec(text.trim());
+  return match !== null && !SYSTEM_REMINDER_CLOSING_TAG.test(match[1] ?? '');
 }
 
 function filterSystemReminderUIMessages<

@@ -162,6 +162,33 @@ describe('toAISdkFormat', () => {
       expect(toAISdkV5Messages([userMessage([{ type: 'text', text: pasted }])])).toHaveLength(1);
     });
 
+    it('keeps user text placed between two reminder blocks', () => {
+      for (const sandwiched of [
+        '<system-reminder>A</system-reminder>\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</SYSTEM-REMINDER >\nWhy were these added?\n<system-reminder>B</system-reminder>',
+      ]) {
+        const messages = [userMessage([{ type: 'text', text: sandwiched }])];
+        expect(toAISdkV4Messages(messages)).toHaveLength(1);
+        expect(toAISdkV5Messages(messages)).toHaveLength(1);
+        expect(toAISdkMessages(messages, { version: 'v6' })).toHaveLength(1);
+        expect(toAISdkMessages(messages, { version: 'v7' })).toHaveLength(1);
+      }
+    });
+
+    it('still hides a legacy reminder whose contents mention other or escaped tags', () => {
+      for (const text of [
+        '<system-reminder>see &lt;/system-reminder&gt; in docs</system-reminder>',
+        '<system-reminder>close the </system-reminders> list</system-reminder>',
+      ]) {
+        expect(toAISdkV5Messages([userMessage([{ type: 'text', text }])])).toEqual([]);
+      }
+    });
+
+    it('keeps user text whose wrapper is not the canonical lowercase reminder', () => {
+      expect(toAISdkV5Messages('<SYSTEM-REMINDER>Is this valid?</SYSTEM-REMINDER>')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder>Is this valid?</SYSTEM-REMINDER >')).toHaveLength(1);
+    });
+
     it('keeps a multi-part user message when only one part quotes the tag', () => {
       const result = toAISdkV5Messages([
         userMessage([
