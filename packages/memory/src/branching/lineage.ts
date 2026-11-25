@@ -10,8 +10,6 @@ import type { InternalThreadBranchMetadata, MemoryStorage, PublicThreadBranchMet
 
 export const MAX_THREAD_BRANCH_DEPTH = 100;
 
-const CHILD_THREAD_PAGE_SIZE = 100;
-
 export type MessageTuple = {
   createdAt: Date;
   id: string;
@@ -281,42 +279,18 @@ function childThreadFilter(parent: ThreadRef, state?: 'pending' | 'ready') {
 }
 
 /**
- * Lists `parent`'s direct branches, optionally only those in `state`, oldest first. Storage filters
- * on the indexed parent key, so only branch threads are read, never the rest of the resource.
+ * Lists `parent`'s direct branches, optionally only those in `state`, oldest first (ties by ID).
+ * Storage filters on the indexed parent key, so only that thread's branches are read, never the
+ * rest of the resource. They come back in one query and are ordered here: stores differ in how
+ * they break `createdAt` ties, so storage offset pages could skip or repeat a branch.
  */
 export async function listChildThreads(
   memoryStore: MemoryStorage,
   parent: ThreadRef,
   state?: 'pending' | 'ready',
 ): Promise<StorageThreadType[]> {
-  const children: StorageThreadType[] = [];
-  for (let page = 0; ; page += 1) {
-    const result = await memoryStore.listThreads({
-      filter: childThreadFilter(parent, state),
-      orderBy: { field: 'createdAt', direction: 'ASC' },
-      page,
-      perPage: CHILD_THREAD_PAGE_SIZE,
-    });
-    children.push(...result.threads);
-    if (!result.hasMore || result.threads.length === 0) break;
-  }
-  return children.sort(compareThreadsByCreation);
-}
-
-/** One storage page of `parent`'s direct branches in `state`, oldest first. */
-export function listChildThreadPage(
-  memoryStore: MemoryStorage,
-  parent: ThreadRef,
-  state: 'pending' | 'ready',
-  page: number,
-  perPage: number,
-): ReturnType<MemoryStorage['listThreads']> {
-  return memoryStore.listThreads({
-    filter: childThreadFilter(parent, state),
-    orderBy: { field: 'createdAt', direction: 'ASC' },
-    page,
-    perPage,
-  });
+  const { threads } = await memoryStore.listThreads({ filter: childThreadFilter(parent, state), perPage: false });
+  return threads.sort(compareThreadsByCreation);
 }
 
 /** Whether `parent` has at least one direct branch, optionally only in `state`. */
