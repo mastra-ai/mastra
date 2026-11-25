@@ -43,7 +43,7 @@ import {
   getExecutionStreamProducer,
   withExecutionStreamProducer,
 } from './execution-stream-publisher';
-import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import { deleteRunRegistryEntry, getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from './run-registry';
 import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
@@ -137,6 +137,10 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
     const options = { runId, agentId, mastra, claim: fence.claim };
     const publisher = getExecutionStreamProducer(options)!;
+    // The first resolution registered the run's placeholder entry and returned
+    // a wrapper that can retract it; resolving again returns the shared
+    // producer itself, which every nested publisher delegates to.
+    const producer = getExecutionStreamProducer(options)!;
     let reportLoss!: (error: DurableExecutionFenceError) => void;
     const guard = new ExecutionOwnershipGuard({
       observe: async () => {},
@@ -156,7 +160,7 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     const step = fencePubSub(withExecutionStreamProducer(pubsub, options), guard);
     const nested = withExecutionStreamProducer(step, options);
     const checks = vi.spyOn(guard, 'isLost');
-    const publications = vi.spyOn(publisher, 'publishEvent');
+    const publications = vi.spyOn(producer, 'publishEvent');
     try {
       if (lost) {
         reportLoss(
@@ -217,6 +221,71 @@ describe('execution publisher transport boundaries (COR-1560)', () => {
     });
     warn.mockRestore();
     await pubsub.close();
+  });
+
+  describe('placeholder retraction when a claim is superseded', () => {
+    async function setupPlaceholder() {
+      const pubsub = new EventEmitterPubSub();
+      const runId = crypto.randomUUID();
+      const fence = await claim(pubsub, runId);
+      const agent = new Agent({
+        id: agentId,
+        name: agentId,
+        instructions: 'Answer.',
+        model: 'openai/gpt-4o-mini',
+        durable: true,
+      });
+      const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+      const options = { runId, agentId, mastra, claim: fence.claim };
+      // No entry existed, so this resolution registers the run's placeholder
+      // and returns the wrapper that can retract it.
+      const producer = getExecutionStreamProducer(options)!;
+      const entry = globalRunRegistry.get(runId)!;
+      expect(entry.isPlaceholder).toBe(true);
+      onTestFinished(async () => {
+        deleteRunRegistryEntry(runId, mastra);
+        await pubsub.close();
+      });
+      /** Supersede the claim, then publish through the stale producer. */
+      const refusedPublish = async () => {
+        await claim(pubsub, runId, 'takeover');
+        const error = await producer.publishEvent({ type: 'iteration-start', runId, data: {} }).then(
+          () => undefined,
+          (thrown: unknown) => thrown,
+        );
+        expect(isExecutionFenceError(error)).toBe(true);
+      };
+      return { runId, mastra, entry, refusedPublish };
+    }
+
+    it('retracts a placeholder no other execution adopted', async () => {
+      const { runId, mastra, entry, refusedPublish } = await setupPlaceholder();
+      await refusedPublish();
+      expect(getRunRegistryEntry(runId, mastra)).toBeUndefined();
+      expect(entry.isPlaceholder).toBe(true);
+    });
+
+    it('keeps a placeholder a sibling execution adopted in place', async () => {
+      const { runId, mastra, entry, refusedPublish } = await setupPlaceholder();
+      // resolve-runtime adopts a placeholder by filling it in *in place*
+      // (`Object.assign(globalEntry, rebuilt)`), so the registry still holds
+      // this very object while it now carries another execution's live state.
+      Object.assign(entry, { isPlaceholder: false, tools: {} });
+
+      await refusedPublish();
+
+      expect(getRunRegistryEntry(runId, mastra)).toBe(entry);
+    });
+
+    it('keeps an entry that replaced the placeholder', async () => {
+      const { runId, mastra, refusedPublish } = await setupPlaceholder();
+      const replacement = { isPlaceholder: true } as RunRegistryEntry;
+      setRunRegistryEntry(runId, replacement, mastra);
+
+      await refusedPublish();
+
+      expect(getRunRegistryEntry(runId, mastra)).toBe(replacement);
+    });
   });
 
   it('drops queued direct-step events after their step guard is lost', async () => {

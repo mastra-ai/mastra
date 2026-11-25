@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from './inmemory';
 
 describe('InMemoryServerCache', () => {
@@ -199,37 +199,76 @@ describe('InMemoryServerCache', () => {
     });
 
     describe('listPushIndexed', () => {
-      it('assigns sequential 0-based indices and stores them on the list entries', async () => {
-        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a' })).toBe(0);
-        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
-        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBe(2);
+      it('seeds a fresh log from the clock and numbers consecutive appends sequentially', async () => {
+        const before = Date.now();
+        const first = await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
+        // Epoch-microsecond-seeded so a log recreated after expiry does not
+        // reissue an index a subscriber already consumed.
+        expect(first).toBeGreaterThanOrEqual(before * 1000);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(first + 1);
+        expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBe(first + 2);
 
         expect(await cache.listFromTo('events', 0)).toEqual([
-          { type: 'a', index: 0 },
-          { type: 'b', index: 1 },
-          { type: 'c', index: 2 },
+          { type: 'a', index: first },
+          { type: 'b', index: first + 1 },
+          { type: 'c', index: first + 2 },
         ]);
-        expect(await cache.increment('events:counter')).toBe(4);
+        expect(await cache.increment('events:counter')).toBe(first + 4);
       });
 
       it('keeps the log and counter for the requested TTL when it outlasts the cache default', async () => {
         const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
-        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' }, 5_000);
+        const first = await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' }, 5_000);
         await new Promise(resolve => setTimeout(resolve, 60));
 
-        // Both keys must survive together, or numbering would restart under an
-        // observer that still holds the old cursor.
-        expect(await ttlCache.listFromTo('events', 0)).toEqual([{ type: 'a', index: 0 }]);
-        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' }, 5_000)).toBe(1);
+        // Both keys must survive together, or numbering would lose its base
+        // under an observer that still holds the old cursor.
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([{ type: 'a', index: first }]);
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' }, 5_000)).toBe(first + 1);
       });
 
-      it('expires the log and counter on the cache default without a requested TTL', async () => {
+      it('applies a requested TTL even when the cache default expiry is disabled', async () => {
+        const noExpiry = new InMemoryServerCache({ ttlMs: 0 });
+        await noExpiry.listPushIndexed('events', 'events:counter', { type: 'a' }, 20);
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        // The caller stated a retention bound for this log; "no default
+        // expiry" must not override it (thread-stream keys used to be written with no
+        // TTL at all).
+        expect(await noExpiry.listFromTo('events', 0)).toEqual([]);
+      });
+
+      it('numbers above a consumed index after the log and counter expired', async () => {
         const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
-        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
+        const before = await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
         await new Promise(resolve => setTimeout(resolve, 60));
 
         expect(await ttlCache.listFromTo('events', 0)).toEqual([]);
-        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(0);
+        // The recreated log reseeds from the clock: a subscriber whose cursor
+        // points into the expired log sees the new frame as newer instead of
+        // silently dropping it as a duplicate.
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBeGreaterThan(before);
+      });
+
+      it('can repeat an index when a log is recreated inside the clock’s resolution', async () => {
+        // The documented limit of clock seeding: `Date.now()` advances once per
+        // millisecond, so clearing and immediately recreating a log can reseed
+        // at the same value. Pinned here so the guarantee is never described as
+        // absolute — readers detect a restarted log and resynchronise instead
+        // of relying on indices never repeating (see CachingPubSub's
+        // restart-detection path).
+        vi.useFakeTimers();
+        try {
+          vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+          const first = await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
+
+          await cache.delete('events');
+          await cache.delete('events:counter');
+
+          expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(first);
+        } finally {
+          vi.useRealTimers();
+        }
       });
     });
 

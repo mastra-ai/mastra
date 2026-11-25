@@ -71,7 +71,7 @@ describe('Default grouped issue list', () => {
     const triage = await screen.findByTestId('board-column-triage');
     const row = await within(triage).findByRole('article', { name: 'Moved recently' });
 
-    expect(within(row).getByText('Manual')).toBeVisible();
+    expect(within(row).getByRole('link', { name: /^Manual: ?Moved recently$/ })).toBeVisible();
   });
 
   it('collapses groups independently and expands them with the keyboard', async () => {

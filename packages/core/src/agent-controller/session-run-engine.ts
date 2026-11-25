@@ -1176,13 +1176,17 @@ export class SessionRunEngine {
               threadId: suspThreadId,
               resourceId: suspResourceId,
             });
-            this.#session.suspensions.register({
-              toolCallId: suspToolCallId,
-              runId: suspRunId,
-              toolName: suspToolName,
-              threadId: suspThreadId,
-              resourceId: suspResourceId,
-            });
+            this.#session.__registerStreamSuspension(
+              {
+                toolCallId: suspToolCallId,
+                runId: suspRunId,
+                toolName: suspToolName,
+                threadId: suspThreadId,
+                resourceId: suspResourceId,
+              },
+              // The thread subscription can replay a suspension from another mode's agent.
+              runScope?.get(SUSPENDED_RUN_AGENT_KEY),
+            );
           }
         }
         state.isSuspended = true;
