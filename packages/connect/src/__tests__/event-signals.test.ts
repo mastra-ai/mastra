@@ -332,40 +332,85 @@ describe('ConnectEventSignals', () => {
     );
   });
 
+  it("doesn't count events whose target never wakes the agent against the rate limit", async () => {
+    const service = await eventsService(
+      ['quiet-0', 'quiet-1', 'loud-0', 'loud-1'].map(id => ({
+        provider: 'linear',
+        eventType: 'Issue.create',
+        payload: { data: { id } },
+        sourceEventId: id,
+      })),
+    );
+    const { notifications } = opsAgent(service.url, {
+      // Quiet events are only stored or dropped, so only the first loud one may wake the agent.
+      target: event => {
+        const { id } = (event.payload as { data: { id: string } }).data;
+        if (id === 'quiet-0') return ops;
+        if (id === 'quiet-1') return { ...ops, ifIdle: { behavior: 'discard' } };
+        return { threadId: 'ops', resourceId: 'team-ops' };
+      },
+      rateLimit: { limit: 1, windowMs: 60_000 },
+    });
+
+    await vi.waitFor(async () => expect(await notifications()).toHaveLength(4), { timeout: 5_000 });
+    const limited = Object.fromEntries(
+      (await notifications()).map(n => [(n.payload as { data: { id: string } }).data.id, !!n.metadata?.rateLimited]),
+    );
+    expect(limited).toEqual({ 'quiet-0': false, 'quiet-1': false, 'loud-0': false, 'loud-1': true });
+  });
+
   describe('a steady stream of events from one connection', () => {
-    // Each event arrives after the agent finished with the one before, so
-    // every event that may wake the agent starts its own run.
+    // Each event is sent once the agent is done with the one before: its run
+    // has finished, or it was only stored. So every event that may wake the
+    // agent finds it idle and starts its own run.
     async function runs(rateLimit?: { limit: number; windowMs: number }) {
+      let stream: ServerResponse | undefined;
       const s = await eventsServer([
         (_req, res) => {
           startStream(res);
           res.write(ready('10'));
-          for (let i = 0; i < 4; i++) {
-            setTimeout(
-              () =>
-                res.write(
-                  event(
-                    String(11 + i),
-                    fields({
-                      provider: 'linear',
-                      eventType: 'Issue.create',
-                      payload: { data: { id: `i${i}` } },
-                      sourceEventId: `i${i}`,
-                    }),
-                  ),
-                ),
-              i * 250,
-            );
-          }
+          stream = res;
         },
       ]);
       servers.push(s);
-      const { prompts, notifications } = opsAgent(s.url, {
+      const { agent, prompts } = opsAgent(s.url, {
         target: { threadId: 'ops', resourceId: 'team-ops' },
         ...(rateLimit ? { rateLimit } : {}),
       });
-      await vi.waitFor(async () => expect(await notifications()).toHaveLength(4), { timeout: 5_000 });
-      await new Promise(resolve => setTimeout(resolve, 300));
+      const done: Promise<void>[] = [];
+      const send = agent.sendNotificationSignal.bind(agent) as (
+        ...args: Parameters<typeof agent.sendNotificationSignal>
+      ) => Promise<Awaited<ReturnType<typeof agent.sendNotificationSignal>>>;
+      vi.spyOn(agent, 'sendNotificationSignal').mockImplementation((async (
+        ...args: Parameters<typeof agent.sendNotificationSignal>
+      ) => {
+        const result = await send(...args);
+        done.push(
+          (async () => {
+            const accepted = await result.accepted;
+            if (accepted?.action === 'wake') await accepted.output.getFullOutput();
+            await result.persisted;
+          })(),
+        );
+        return result;
+      }) as typeof agent.sendNotificationSignal);
+
+      await vi.waitFor(() => expect(stream).toBeDefined());
+      for (let i = 0; i < 4; i++) {
+        stream!.write(
+          event(
+            String(11 + i),
+            fields({
+              provider: 'linear',
+              eventType: 'Issue.create',
+              payload: { data: { id: `i${i}` } },
+              sourceEventId: `i${i}`,
+            }),
+          ),
+        );
+        await vi.waitFor(() => expect(done).toHaveLength(i + 1), { timeout: 5_000 });
+        await done[i];
+      }
       return prompts.length;
     }
 
@@ -400,7 +445,10 @@ describe('ConnectEventSignals', () => {
       },
     ]);
     servers.push(s);
-    const { notifications } = opsAgent(s.url, { target: ops, rateLimit: { limit: 1, windowMs: 200 } });
+    const { notifications } = opsAgent(s.url, {
+      target: { threadId: 'ops', resourceId: 'team-ops' },
+      rateLimit: { limit: 1, windowMs: 200 },
+    });
 
     await vi.waitFor(async () => expect(await notifications()).toHaveLength(4), { timeout: 5_000 });
     const limited = (await notifications()).map(n => [

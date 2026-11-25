@@ -19,7 +19,9 @@ export interface ConnectEventSignalsOptions<
    * Caps how many events of one connection can wake an idle agent: at most
    * `limit` per `windowMs`. Later events in the window are still stored on
    * the thread, marked `rateLimited` in their metadata, but don't start a
-   * run; the agent sees them on its next one. No limit by default.
+   * run; the agent sees them on its next one. Events whose target sets
+   * `ifIdle.behavior` to `persist` or `discard` never wake the agent, so they
+   * don't count. No limit by default.
    */
   rateLimit?: ConnectEventRateLimit;
 }
@@ -122,7 +124,9 @@ export class ConnectEventSignals<
       const destination = typeof target === 'function' ? target(event) : target;
       if (!destination) return;
       const notification = { ...defaultNotification(event), ...this.#options.notification?.(event) };
-      if (this.#mayWake(event.connectionId)) {
+      // A destination that never wakes an idle agent doesn't use up the connection's rate limit.
+      const mayWakeIdle = destination.ifIdle?.behavior !== 'persist' && destination.ifIdle?.behavior !== 'discard';
+      if (!mayWakeIdle || this.#mayWake(event.connectionId)) {
         await this.notify(notification, destination);
       } else {
         await this.notify(
