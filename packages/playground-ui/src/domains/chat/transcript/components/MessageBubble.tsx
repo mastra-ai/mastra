@@ -1,0 +1,323 @@
+import type { PlanResume } from '@mastra/client-js';
+import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { MessageFactory } from '@mastra/react/ui';
+import type {
+  DataPart,
+  FilePart,
+  MessageRoleRenderers,
+  ReasoningPart,
+  TextPart,
+  ToolInvocationPart,
+} from '@mastra/react/ui';
+import { channelOrigin, messageAuthor } from '../services/message-author';
+import { replyCredentialLabel } from '../services/reply-credential';
+import type { ThreadOwner } from '../services/reply-credential';
+import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
+import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
+import type { EntryActivity } from './activity/activity-plan';
+import { HostedStretch } from './activity/HostedStretch';
+import { messageEntryView } from './message-entry-view';
+import type { StatusMetadata } from './message-entry-view';
+import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
+import { DefaultNotification, DefaultRunError, useTranscriptSlots } from './slots';
+import { ToolCard } from './tool/ToolCard';
+import { ToolFactory } from './ToolFactory';
+
+import {
+  draws,
+  hasVisibleText,
+  messageText,
+  reasoningWithState,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
+import type { MessagePart } from './transcript-parts';
+import { useTurnLanded } from './TurnReveal';
+import { MessageAttachments } from '@/domains/chat/attachments/message-attachments';
+import { splitMessageAttachments } from '@/domains/chat/attachments/split-message-attachments';
+import { PinnedKnowledgeActivity } from '@/domains/chat/knowledge';
+import { ReasoningPartRenderer } from '@/domains/chat/messages/renderers/reasoning-part-renderer';
+import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
+import { parseSkillActivation } from '@/domains/chat/messages/skill-activation';
+import { SkillMessage } from '@/domains/chat/messages/skill-message';
+import { SignalActivity } from '@/ds/components/ai/activity';
+import { useRevealedParts } from '@/ds/components/ai/message-reveal';
+import { TranscriptDivider } from '@/ds/components/ai/transcript-divider';
+import { Arriving } from '@/ds/components/Arrival';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Message, MessageActions, MessageCopyButton, MessageMetadata, MessageTimestamp } from '@/ds/components/Message';
+import { Metadata } from '@/ds/components/Metadata';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
+import { cn } from '@/utils/cn';
+import { formatModelName } from '@/utils/model';
+
+function steeringLabel(entry: MessageEntry): string | undefined {
+  if (!entry.steer) return undefined;
+  if (entry.deliveryStatus === 'pending') return 'Steering…';
+  if (entry.deliveryStatus === 'failed') return 'Not sent';
+  return 'Steered message';
+}
+
+function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: string): string | undefined {
+  if (entry.message.role === 'user') return prose || undefined;
+
+  return settled ? reply : undefined;
+}
+
+/** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
+function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePart[], activity: EntryActivity) {
+  const host = written.findIndex(
+    (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
+  );
+  const hosted = written[host];
+  return hosted === undefined ? paced : [...paced, hosted];
+}
+
+export function MessageBubble({
+  entry,
+  suspensions,
+  reply,
+  isSubmitting,
+  onRespond,
+  viewerId,
+  owner,
+  activity = NO_ACTIVITY,
+}: {
+  entry: MessageEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  reply?: string;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  viewerId?: string;
+  owner?: ThreadOwner;
+  /** The stretches of tool work this entry hosts, and the parts an earlier entry's stretch draws instead. */
+  activity?: EntryActivity;
+}) {
+  const slots = useTranscriptSlots();
+  const RunError = slots.RunError ?? DefaultRunError;
+  const NotificationCard = slots.Notification ?? DefaultNotification;
+  const NotificationSummaryCard = slots.NotificationSummary ?? DefaultNotification;
+  const drawsData = slots.DataPart?.draws;
+  const DataPartView = slots.DataPart?.Component;
+  const written = renderableParts(entry, drawsData);
+  const paced = useRevealedParts(written, Boolean(entry.streaming));
+  const parts = withLiveHost(entry.id, written, paced, activity);
+  const { attachments, content } =
+    entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
+  const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
+  const hasRenderablePart = written.some(part => draws(part, entry, suspensions, drawsData));
+  const drawsOwnPart = written.some((part, index) => {
+    const key = activityPartKey(entry.id, part, index);
+    if (activity.hosts.has(key)) return true;
+    return draws(part, entry, suspensions, drawsData) && !activity.hidden.has(key);
+  });
+  const revealed = new Map<string, MessagePart>(
+    paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
+  );
+  const keyed = (list: MessagePart[]) =>
+    list.map((part, index) => [part, activityPartKey(entry.id, part, index)] as const);
+  const keyOfPart = new Map<object, string>([...keyed(written), ...keyed(paced)]);
+
+  const origin = channelOrigin(entry.message);
+  const author = messageAuthor(entry.message);
+  const sender = author && author.id !== viewerId ? author : undefined;
+  const prose = messageText(entry.message.role === 'user' ? content : written);
+  const settled = !entry.streaming && paced === written;
+  const turnLanded = useTurnLanded(entry.id, !settled);
+  const meta = metaText(entry, prose, settled && turnLanded, reply);
+  const showsReplyFooter = Boolean(meta);
+  const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
+  const steeringStatus = steeringLabel(entry);
+  const steeringPending = entry.deliveryStatus === 'pending';
+  const steeringFailed = entry.deliveryStatus === 'failed';
+  const metadata = entry.message.content.metadata;
+  const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelLabel = modelId && (
+    <MessageMetadata>
+      <Metadata>
+        <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+        {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+      </Metadata>
+    </MessageMetadata>
+  );
+  const replyFooter = (text: string) => ({
+    model: modelLabel,
+    actions: (
+      <MessageActions>
+        <MessageCopyButton text={text} />
+        <MessageTimestamp value={entry.message.createdAt} />
+      </MessageActions>
+    ),
+  });
+  const messageActions = meta ? (
+    <MessageActions>
+      <MessageCopyButton text={meta} />
+      <MessageTimestamp value={entry.message.createdAt} />
+    </MessageActions>
+  ) : undefined;
+  const roles: MessageRoleRenderers = {
+    User: ({ children }) => (
+      <Message
+        from="user"
+        pending={steeringPending}
+        attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
+        avatar={!origin && sender && <SenderAvatar author={sender} />}
+        footer={
+          <>
+            {steeringStatus && (
+              <Txt
+                as="span"
+                variant="meta"
+                tone="muted"
+                className={cn(steeringFailed && 'text-destructive-foreground')}
+                aria-live="polite"
+              >
+                {steeringStatus}
+              </Txt>
+            )}
+            {origin && <ChannelOriginBadge origin={origin} author={author} />}
+            {messageActions}
+          </>
+        }
+      >
+        {(attachments.length === 0 || content.length > 0) && children}
+      </Message>
+    ),
+    Assistant: ({ children }) => (
+      <Message
+        from="assistant"
+        footer={
+          messageActions && (
+            <div className="flex flex-wrap items-center gap-2">
+              {modelLabel}
+              {messageActions}
+            </div>
+          )
+        }
+      >
+        {children}
+      </Message>
+    ),
+    System: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
+    Signal: ({ children }) => <div className={textStyle({ variant: 'caption', tone: 'muted' })}>{children}</div>,
+  };
+
+  const renderers = {
+    Error: (part: MastraErrorPart) => <RunError error={part.error} entryId={entry.id} />,
+    Text: (part: TextPart) => {
+      if (!hasVisibleText(part.text)) return null;
+      if (entry.message.role === 'user') {
+        const activation = parseSkillActivation(part.text);
+        return activation ? (
+          <SkillMessage activation={activation} appearance="inline" />
+        ) : (
+          <MarkdownRenderer>{part.text}</MarkdownRenderer>
+        );
+      }
+
+      return (
+        <MarkdownRenderer className="my-3" streaming={entry.streaming}>
+          {part.text}
+        </MarkdownRenderer>
+      );
+    },
+    Reasoning: (part: ReasoningPart) => {
+      const key = keyOfPart.get(part);
+      const stretch = key === undefined ? undefined : activity.hosts.get(key);
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (key !== undefined && activity.hidden.has(key)) return null;
+      return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
+    },
+    ToolInvocation: (part: ToolInvocationPart) => {
+      const toolCallId = part.toolInvocation.toolCallId;
+      const stretch = activity.hosts.get(toolCallId);
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (activity.hidden.has(toolCallId)) return null;
+
+      const runtime = entry.runtimeTools?.[toolCallId];
+      const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
+      const suspension = suspensions.get(tool.toolCallId);
+      return (
+        <Arriving>
+          <ToolFactory
+            toolName={tool.toolName}
+            toolCallId={tool.toolCallId}
+            input={suspension?.suspendPayload ?? tool.args}
+            argsText={tool.argsText}
+            replyFooter={replyFooter}
+            output={tool.result}
+            status={suspension ? 'running' : tool.status}
+            isSubmitting={isSubmitting}
+            onRespond={suspension ? response => onRespond(tool.toolCallId, response, suspension.id) : undefined}
+            fallback={() => <ToolCard tool={tool} />}
+          />
+        </Arriving>
+      );
+    },
+    File: (part: FilePart) => <UserFilePartRenderer part={part} />,
+    Data: (part: DataPart) => (DataPartView ? <DataPartView part={part} /> : null),
+  };
+
+  const view = messageEntryView(entry, parts);
+  switch (view.kind) {
+    case 'skill':
+      return <SkillMessage activation={view.activation} appearance="inline" />;
+    case 'hidden':
+      return null;
+    case 'notifications':
+      return (
+        <div className="flex flex-col">
+          {view.notifications.map(notification =>
+            notification.kind === 'notification' ? (
+              <NotificationCard key={notification.id} entry={notification} />
+            ) : (
+              <NotificationSummaryCard key={notification.id} entry={notification} />
+            ),
+          )}
+          {hasRenderablePart && entry.message.role !== 'signal' && (
+            <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
+          )}
+        </div>
+      );
+    case 'signal': {
+      const { row } = view;
+      if (row.kind === 'pinned') return <PinnedKnowledgeActivity pinned={row.pinned} />;
+      if (row.kind === 'state') {
+        return (
+          <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
+        );
+      }
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
+      if (row.kind === 'reminder') {
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+            appearance="inline"
+          />
+        );
+      }
+      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
+    }
+    case 'status':
+      return <StatusMetadataCard status={view.status} />;
+    case 'parts':
+      break;
+  }
+  if (!drawsAnything) return null;
+
+  return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function StatusMetadataCard({ status }: { status: StatusMetadata }) {
+  return (
+    <Notice className="my-2" variant={status.level === 'error' ? 'destructive' : 'info'}>
+      {status.text}
+    </Notice>
+  );
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt } from '../../services/transcript';
 import type { MessagePart } from '../transcript-parts';
+import { drawsModelFallback } from '../ModelFallbackActivity';
 import { planTurnActivity, sameEntryActivity } from './activity-plan';
 import type { EntryActivity } from './activity-plan';
 
@@ -70,7 +71,12 @@ describe('planTurnActivity', () => {
         failure: { kind: 'rate_limited' },
       },
     };
-    const plan = planTurnActivity([assistant('s1', [tool('a'), hop, tool('b')])], NO_SUSPENSIONS, false);
+    const plan = planTurnActivity(
+      [assistant('s1', [tool('a'), hop, tool('b')])],
+      NO_SUSPENSIONS,
+      false,
+      drawsModelFallback,
+    );
     expect(stretches(plan)).toEqual([['a'], ['b']]);
   });
 
