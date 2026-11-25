@@ -377,15 +377,16 @@ export class ObservationStep {
             statusSnapshot.threshold,
           );
 
+          // Re-check right before removal: output merged in place while the Observer ran (e.g.
+          // a background task result) has not been read either.
+          const cleanupPreserveIds = [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)];
           await om.cleanupMessages({
             threadId,
             resourceId,
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            // Re-check right before removal: output merged in place while the Observer ran (e.g.
-            // a background task result) has not been read either.
-            preserveMessageIds: [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)],
+            preserveMessageIds: cleanupPreserveIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -399,9 +400,12 @@ export class ObservationStep {
           }
 
           await this.turn.refreshRecord();
+          // Observed messages cleanup kept for the floor. Ids it kept only because they were in
+          // flight are left out: once the model has read them, the cursor may drop them.
           const remainingIds = new Set(getObservableMessages(messageList).map(msg => msg.id));
+          const preservedIds = new Set(cleanupPreserveIds);
           this.turn.floorRetained = {
-            ids: observedIds.filter(id => remainingIds.has(id)),
+            ids: minRemaining > 0 ? observedIds.filter(id => remainingIds.has(id) && !preservedIds.has(id)) : [],
             lastObservedAt: this.turn.record.lastObservedAt?.getTime(),
           };
           if (this.turn.record.generationCount > preObsGeneration) {

@@ -30,84 +30,90 @@ const textStream = (text: string) =>
     finish('stop'),
   ]);
 
+async function runLookups(observation: Record<string, unknown>) {
+  let observerCalls = 0;
+  const observerText = () => `<observations>\nDate: Nov 11, 2026\n* 🟡 (10:00) Agent ran a lookup.\n</observations>`;
+  const observer = new MockLanguageModelV3({
+    doStream: async () => {
+      observerCalls++;
+      return textStream(observerText()) as any;
+    },
+    doGenerate: async () => {
+      observerCalls++;
+      return {
+        content: [{ type: 'text', text: observerText() }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage,
+        warnings: [],
+      } as any;
+    },
+  });
+
+  const requests: { results: number[]; observerCalls: number }[] = [];
+  const actor = new MockLanguageModelV3({
+    doStream: async ({ prompt }) => {
+      const step = requests.length;
+      const rawText = JSON.stringify(prompt.filter(m => m.role !== 'system'));
+      requests.push({
+        results: [...new Set([...rawText.matchAll(/RESULT-(\d+)/g)].map(m => Number(m[1])))],
+        observerCalls,
+      });
+      if (step < TOOL_CALLS) {
+        return streamOf([
+          {
+            type: 'tool-call',
+            toolCallId: `call-${step + 1}`,
+            toolName: 'lookup',
+            input: JSON.stringify({ n: step + 1 }),
+          },
+          finish('tool-calls'),
+        ]) as any;
+      }
+      return textStream('done') as any;
+    },
+  });
+
+  const filler = 'alpha bravo charlie delta echo foxtrot golf hotel '.repeat(90);
+  const lookup = createTool({
+    id: 'lookup',
+    description: 'Look up item n.',
+    inputSchema: z.object({ n: z.number() }),
+    execute: async ({ n }) => {
+      // Let the fire-and-forget buffer call store its chunk before the next step.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return n >= SHORT_FROM ? `RESULT-${n} ok` : `RESULT-${n} ${filler}`;
+    },
+  });
+
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: { observationalMemory: { model: observer as any, observation } },
+  });
+  const agent = new Agent({
+    id: 'issue-30079',
+    name: 'issue-30079',
+    instructions: 'Look up the items the user asks for.',
+    model: actor as any,
+    tools: { lookup },
+    memory,
+  });
+
+  const output = await agent.stream('USER-REQUEST: look up the items one by one.', {
+    memory: { thread: 'thread-1', resource: 'resource-1' },
+    maxSteps: TOOL_CALLS + 2,
+  });
+  const activatedBeforeRequest = new Set<number>();
+  for await (const chunk of output.fullStream as any) {
+    if (chunk.type === 'data-om-activation') activatedBeforeRequest.add(requests.length);
+  }
+  await (memory as any).settled?.();
+
+  return { requests, activatedBeforeRequest };
+}
+
 describe('retention floor after a mid-turn activation (#30079)', () => {
   it('keeps the floor-retained tail on the step after cleanup', async () => {
-    let observerCalls = 0;
-    const observerText = () => `<observations>\nDate: Nov 11, 2026\n* 🟡 (10:00) Agent ran a lookup.\n</observations>`;
-    const observer = new MockLanguageModelV3({
-      doStream: async () => {
-        observerCalls++;
-        return textStream(observerText()) as any;
-      },
-      doGenerate: async () => {
-        observerCalls++;
-        return {
-          content: [{ type: 'text', text: observerText() }],
-          finishReason: { unified: 'stop', raw: 'stop' },
-          usage,
-          warnings: [],
-        } as any;
-      },
-    });
-
-    const requests: { results: number[]; observerCalls: number }[] = [];
-    const actor = new MockLanguageModelV3({
-      doStream: async ({ prompt }) => {
-        const step = requests.length;
-        const rawText = JSON.stringify(prompt.filter(m => m.role !== 'system'));
-        requests.push({
-          results: [...new Set([...rawText.matchAll(/RESULT-(\d+)/g)].map(m => Number(m[1])))],
-          observerCalls,
-        });
-        if (step < TOOL_CALLS) {
-          return streamOf([
-            {
-              type: 'tool-call',
-              toolCallId: `call-${step + 1}`,
-              toolName: 'lookup',
-              input: JSON.stringify({ n: step + 1 }),
-            },
-            finish('tool-calls'),
-          ]) as any;
-        }
-        return textStream('done') as any;
-      },
-    });
-
-    const filler = 'alpha bravo charlie delta echo foxtrot golf hotel '.repeat(90);
-    const lookup = createTool({
-      id: 'lookup',
-      description: 'Look up item n.',
-      inputSchema: z.object({ n: z.number() }),
-      execute: async ({ n }) => {
-        // Let the fire-and-forget buffer call store its chunk before the next step.
-        await new Promise(resolve => setTimeout(resolve, 300));
-        return n >= SHORT_FROM ? `RESULT-${n} ok` : `RESULT-${n} ${filler}`;
-      },
-    });
-
-    const memory = new Memory({
-      storage: new InMemoryStore(),
-      options: { observationalMemory: { model: observer as any, observation: { messageTokens: MESSAGE_TOKENS } } },
-    });
-    const agent = new Agent({
-      id: 'issue-30079',
-      name: 'issue-30079',
-      instructions: 'Look up the items the user asks for.',
-      model: actor as any,
-      tools: { lookup },
-      memory,
-    });
-
-    const output = await agent.stream('USER-REQUEST: look up the items one by one.', {
-      memory: { thread: 'thread-1', resource: 'resource-1' },
-      maxSteps: TOOL_CALLS + 2,
-    });
-    const activatedBeforeRequest = new Set<number>();
-    for await (const chunk of output.fullStream as any) {
-      if (chunk.type === 'data-om-activation') activatedBeforeRequest.add(requests.length);
-    }
-    await (memory as any).settled?.();
+    const { requests, activatedBeforeRequest } = await runLookups({ messageTokens: MESSAGE_TOKENS });
 
     expect(activatedBeforeRequest.size).toBeGreaterThan(0);
 
@@ -120,5 +126,15 @@ describe('retention floor after a mid-turn activation (#30079)', () => {
       const dropped = prev.results.filter(n => !cur.results.includes(n));
       expect({ request: i, dropped }).toEqual({ request: i, dropped: [] });
     }
+  }, 60_000);
+
+  it('still drops observed messages the model already read when there is no floor', async () => {
+    const { requests } = await runLookups({ messageTokens: 3_000, bufferTokens: false });
+    // The request that observed kept its newest tool result only because the model had not read it
+    // yet. Once read, it leaves the prompt on the next call like the rest of the observed messages.
+    const observedAt = requests.findIndex((r, i) => i > 0 && r.observerCalls > requests[i - 1]!.observerCalls);
+    expect(observedAt).toBeGreaterThan(0);
+    const readInFlight = Math.max(...requests[observedAt]!.results);
+    expect(requests[observedAt + 1]!.results).not.toContain(readInFlight);
   }, 60_000);
 });
