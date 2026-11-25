@@ -112,11 +112,11 @@ export interface ZendeskWebhookPayloads {
     ZendeskOrganizationDetail,
     Record<string, never>
   >;
-  /** Agent and group ids: numbers in Zendesk's field table, strings in its examples. */
+  /** Agent, group and custom status ids: numbers in Zendesk's field table, strings in its examples. */
   'zen:event-type:ticket.agent_assignment_changed': TicketChange<'agent_assignment_changed', string | number | null>;
   'zen:event-type:ticket.comment_added': TicketEvent<'comment_added', Meta & { comment: ZendeskComment }>;
   'zen:event-type:ticket.created': TicketEvent<'created', Meta>;
-  'zen:event-type:ticket.custom_status_changed': TicketChange<'custom_status_changed'>;
+  'zen:event-type:ticket.custom_status_changed': TicketChange<'custom_status_changed', string | number | null>;
   'zen:event-type:ticket.group_assignment_changed': TicketChange<'group_assignment_changed', string | number | null>;
   'zen:event-type:ticket.merged': TicketEvent<
     'merged',
