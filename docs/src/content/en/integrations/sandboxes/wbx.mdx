@@ -58,11 +58,11 @@ export const agent = new Agent({
 Ask the agent to run a command in the sandbox:
 
 ```typescript
-const response = await agent.generate('Run `node --version`.')
+const response = await agent.generate('Run `uname -a`.')
 console.log(response.text)
 ```
 
-The response includes the Node.js version installed in the sandbox.
+The response includes the sandbox's Linux kernel version.
 
 The `id` is the sandbox name. Starting a sandbox with the same `id` reconnects to the existing sandbox and its files instead of creating a new one. Every request that uses this agent shares the same sandbox. To give each user or thread its own sandbox, see [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 
