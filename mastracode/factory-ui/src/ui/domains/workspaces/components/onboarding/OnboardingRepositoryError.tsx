@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function OnboardingRepositoryError({
@@ -16,13 +15,7 @@ export function OnboardingRepositoryError({
       <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
         {message}
       </Txt>
-      <Button
-        icon={retrying ? <Spinner size="sm" aria-hidden="true" /> : undefined}
-        variant="ghost"
-        size="sm"
-        disabled={retrying}
-        onClick={onRetry}
-      >
+      <Button variant="ghost" size="sm" onClick={onRetry} loading={retrying}>
         Retry
       </Button>
     </div>

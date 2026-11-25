@@ -136,6 +136,7 @@ class DurableChunkPublishError extends Error {
 const durableLLMInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
+  agentVersionId: z.string().optional(),
   agentName: z.string().optional(),
   messageListState: z.any(), // SerializedMessageListState
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
@@ -405,7 +406,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const emitFatalErrorBail = async (
         fatalError: Error,
         modelId: string,
-        signalPreempted = false,
+        { signalPreempted = false, modelRejectedBeforeStream = false } = {},
       ): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
         // Even an empty failing request must replace the previous step's request.
@@ -445,7 +446,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               runId,
               from: ChunkFrom.AGENT,
               payload: {
-                stepResult: { reason: 'error', isContinued: false },
+                stepResult: {
+                  reason: 'error',
+                  isContinued: false,
+                  // Plain supplies an empty array for a rejected request, but omits it for stream errors.
+                  ...(modelRejectedBeforeStream && !isMastraTimeoutError(fatalError) ? { warnings: [] } : {}),
+                },
                 output: { usage },
                 metadata: {},
               },
@@ -485,11 +491,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // abort (#21724).
         const earlyTimeout = resolveTotalTimeoutAbort(executionAbortSignalEarly);
         if (earlyTimeout) {
-          return emitFatalErrorBail(
-            earlyTimeout,
-            typedInput.modelConfig?.modelId ?? 'unknown',
-            inputData.signalPreempted === true,
-          );
+          return emitFatalErrorBail(earlyTimeout, typedInput.modelConfig?.modelId ?? 'unknown', {
+            signalPreempted: inputData.signalPreempted === true,
+          });
         }
         return {
           ...(await storeStepTranscript()),
@@ -586,6 +590,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // errors away from processors (#21738) — durable is immune by
       // construction, don't port that guard here.
       let lastError: Error | undefined;
+      let modelRejectedBeforeStream = false;
       let skipUnavailableAttachments = false;
       const maxProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries: typedInput.options?.maxProcessorRetries,
@@ -653,7 +658,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           executionAbortSignalEarly,
           error instanceof Error ? error : undefined,
         );
-        if (totalTimeout) return emitFatalErrorBail(totalTimeout, modelId, true);
+        if (totalTimeout) return emitFatalErrorBail(totalTimeout, modelId, { signalPreempted: true });
         return {
           ...(await storeStepTranscript()),
           text: '',
@@ -746,6 +751,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           : (typedInput.options?.modelSettings?.maxRetries ?? modelEntry.maxRetries ?? 0);
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          let modelRequestRejected = false;
           ownership?.throwIfLost();
           request = {};
           fallbackVetoedModelId = undefined;
@@ -1748,6 +1754,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       includeRawChunks: execOptions.includeRawChunks,
                       methodType: 'stream',
                       structuredOutput: structuredOutput as any,
+                      onRequestFailed: () => {
+                        modelRequestRejected = true;
+                      },
                       onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
                         warnings = w || [];
                         request = r || {};
@@ -2662,6 +2671,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               lastError = errorObj;
+              modelRejectedBeforeStream = modelRequestRejected;
 
               // Try processAPIError before deciding retry/break
               const registryEntryInner = getRunRegistryEntry(runId, mastra as Mastra | undefined);
@@ -2699,7 +2709,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     continue;
                   }
                   if (fallback === false) {
-                    fallbackVetoedModelId = currentModel.modelId;
+                    fallbackVetoedModelId = modelEntry.config.modelId;
                   }
                 } catch (processorError) {
                   ownership?.throwIfLost();
@@ -2757,6 +2767,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               lastError = streamErrorObj;
+              modelRejectedBeforeStream = modelRequestRejected;
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
             }
@@ -3124,6 +3135,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             lastError = error instanceof Error ? error : new Error(String(error));
+            modelRejectedBeforeStream = modelRequestRejected;
 
             // Confirmed aborts bypass all retry / fallback / processAPIError
             // handling — the user (or upstream caller) explicitly cancelled the
@@ -3274,7 +3286,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Must run before emitFatalErrorBail, which serializes the list.
       terminalAttemptContext?.recordTerminalError(fatalError);
 
-      return emitFatalErrorBail(fatalError, fallbackVetoedModelId ?? modelList.at(-1)?.config.modelId ?? 'unknown');
+      return emitFatalErrorBail(fatalError, fallbackVetoedModelId ?? modelList.at(-1)?.config.modelId ?? 'unknown', {
+        modelRejectedBeforeStream,
+      });
     }),
   });
 }

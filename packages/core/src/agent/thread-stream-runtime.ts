@@ -2472,6 +2472,20 @@ export class AgentThreadStreamRuntime {
     for (const key of state.threadControlSubscriptions.keys()) this.#releaseUnusedThreadControlSubscription(state, key);
   }
 
+  /**
+   * A `runId` target that also names a `resourceId` must name the run's own resource. Without this, the signal
+   * would be created for the caller's resource and delivered into another resource's run. Core cannot know who the
+   * caller is: a target naming only a `runId` is trusted, so callers exposing `runId` targets to untrusted input
+   * must pass the caller's `resourceId` or check ownership with `getThreadRunTarget()` first.
+   */
+  #assertRunTargetOwner(state: AgentThreadRuntimeState, target: { runId?: string; resourceId?: string }): void {
+    if (!target.runId || !target.resourceId) return;
+    const owner = state.threadRunsById.get(target.runId)?.resourceId;
+    if (owner && owner !== target.resourceId) {
+      throw new Error(`Agent run ${target.runId} belongs to a different resource`);
+    }
+  }
+
   #threadKey(resourceId: string | undefined, threadId: string): string {
     return agentThreadStreamKey(resourceId, threadId);
   }
@@ -4443,6 +4457,12 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** The resource and thread a `runId`-only signal or message target resolves to in this process. */
+  getThreadRunTarget(runId: string, pubsub?: PubSub): { resourceId?: string; threadId: string } | undefined {
+    const record = this.#getState(pubsub).threadRunsById.get(runId);
+    return record ? { resourceId: record.resourceId, threadId: record.threadId } : undefined;
   }
 
   /** Whether the run's original stream is still live and carries its resumed segments. */
@@ -7943,6 +7963,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {
@@ -8159,6 +8180,7 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    this.#assertRunTargetOwner(state, target);
     const resourceId = target.resourceId ?? activeRecord?.resourceId;
     const threadId = target.threadId ?? activeRecord?.threadId;
     if (!resourceId || !threadId) {

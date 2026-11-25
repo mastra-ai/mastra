@@ -263,6 +263,11 @@ const sidebars = {
               label: 'Load your content',
             },
             {
+              type: 'doc',
+              id: 'knowledge/importers',
+              label: 'Importers',
+            },
+            {
               type: 'link',
               label: 'Studio',
               href: '/docs/studio/knowledge',

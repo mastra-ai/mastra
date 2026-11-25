@@ -3,7 +3,6 @@ import type { ZodSchema } from 'zod';
 
 import { WorkflowInputData } from './workflow-input-data';
 import { Button } from '@/ds/components/Button';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconPlay } from '@/ds/icons/central/IconPlay';
 
 export interface WorkflowTriggerFormProps {
@@ -64,12 +63,7 @@ export function WorkflowTriggerForm({
         {leftActions ?? <div />}
         <div className="flex items-center gap-1">
           {submitActions}
-          <Button
-            icon={isStreaming ? <IconLoadingCircle className="animate-spin" /> : <IconPlay />}
-            variant="primary"
-            disabled={isStreaming}
-            onClick={() => onExecute(null)}
-          >
+          <Button variant="primary" onClick={() => onExecute(null)} icon={<IconPlay />} loading={isStreaming}>
             {submitButtonLabel}
           </Button>
         </div>

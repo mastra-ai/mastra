@@ -6,9 +6,20 @@ import './brand-loader.css';
 
 export type BrandLoaderProps = {
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
   'aria-label'?: string;
-};
+} & (
+  | { fill?: false; size?: 'sm' | 'md' | 'lg' }
+  | {
+      /**
+       * For a whole page that hasn't shown yet: centers the loader in the page's area, or in the window with `screen`.
+       * Directly inside `PageLayout` it centers on the whole page, where the route's loader sits. It is one size on
+       * every page, and its label is for screen readers only.
+       * Anything inside a page that already shows keeps its own loading state.
+       */
+      fill: true | 'screen';
+      size?: never;
+    }
+);
 
 const sizeClasses = {
   sm: 'w-6',
@@ -30,12 +41,17 @@ const bubbleBySize = {
   lg: 4.498,
 };
 
-function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loading' }: BrandLoaderProps) {
+function BrandLoader({
+  className,
+  fill = false,
+  size = fill ? 'lg' : 'md',
+  'aria-label': ariaLabel = 'Loading',
+}: BrandLoaderProps) {
   const reactId = useId();
   const filterId = `brand-loader-${reactId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const r = bubbleBySize[size];
 
-  return (
+  const loader = (
     <div
       role="status"
       aria-label={ariaLabel}
@@ -66,6 +82,17 @@ function BrandLoader({ className, size = 'md', 'aria-label': ariaLabel = 'Loadin
           <circle className="brand-loader-b5" cx="28.57" cy="16.192" r={r} />
         </g>
       </svg>
+    </div>
+  );
+
+  if (!fill) return loader;
+
+  return (
+    <div
+      data-slot="brand-loader-fill"
+      className={cn('flex w-full items-center justify-center', fill === 'screen' ? 'h-dvh' : 'h-full flex-1')}
+    >
+      {loader}
     </div>
   );
 }

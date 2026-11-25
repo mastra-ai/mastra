@@ -1,3 +1,5 @@
+import { playRigs } from './art-rigs';
+
 const MOVERS = '.hold, .drawer, .swing, .rays, .bob, .flip, .lamp, .raise, .file, .filein, .mbfly, .mbin, .fx';
 const FLOWS = '.reelspin, .stream, .belt, .job, .tick, .lamp4, .cart, .mdlamp path, .packet, .packet > *';
 const PROPERTIES = [
@@ -111,7 +113,9 @@ export function trackArtMotion(art: HTMLElement | null) {
   host.addEventListener('pointerleave', onLeave);
   host.addEventListener('focusin', onFocusIn);
   host.addEventListener('focusout', onFocusOut);
+  const stopRigs = playRigs(art);
   return () => {
+    stopRigs();
     host.removeEventListener('pointerenter', onEnter);
     host.removeEventListener('pointerleave', onLeave);
     host.removeEventListener('focusin', onFocusIn);
