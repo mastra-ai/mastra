@@ -77,25 +77,58 @@ describe('resource-scoped observational-memory authorization', () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it('refuses both routes without a user when FGA is configured', async () => {
-    const { mastra, listThreads } = await setup();
-    const require = vi.fn().mockResolvedValue(undefined);
-    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+  for (const provider of ['server', 'studio'] as const) {
+    it(`refuses both routes without a user when ${provider} FGA applies`, async () => {
+      const { mastra, listThreads } = await setup();
+      const require = vi.fn().mockResolvedValue(undefined);
+      const fgaOwner = provider === 'server' ? 'getServer' : 'getStudio';
+      vi.spyOn(mastra, fgaOwner).mockReturnValue({ fga: { require } } as any);
+      const context = () => {
+        const ctx = createTestServerContext({ mastra });
+        if (provider === 'studio') ctx.requestContext.set('mastra__authMode', 'studio');
+        return ctx;
+      };
 
-    await expect(
-      GET_OBSERVATIONAL_MEMORY_ROUTE.handler({ ...createTestServerContext({ mastra }), ...omArgs } as any),
-    ).rejects.toMatchObject({ status: 403 });
-    await expect(
-      AWAIT_BUFFER_STATUS_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        agentId: 'agent',
-        resourceId: 'resource',
-      } as any),
-    ).rejects.toMatchObject({ status: 403 });
+      await expect(GET_OBSERVATIONAL_MEMORY_ROUTE.handler({ ...context(), ...omArgs } as any)).rejects.toMatchObject({
+        status: 403,
+      });
+      await expect(
+        AWAIT_BUFFER_STATUS_ROUTE.handler({ ...context(), agentId: 'agent', resourceId: 'resource' } as any),
+      ).rejects.toMatchObject({ status: 403 });
 
-    expect(require).not.toHaveBeenCalled();
-    for (const [args] of listThreads.mock.calls) {
-      expect(args?.perPage).not.toBe(false);
+      expect(require).not.toHaveBeenCalled();
+      for (const [args] of listThreads.mock.calls) {
+        expect(args?.perPage).not.toBe(false);
+      }
+    });
+  }
+
+  it('refuses both routes when the threads disappear between the existence read and the full listing', async () => {
+    for (const route of ['get', 'await'] as const) {
+      const { mastra, listThreads } = await setup();
+      const memory = (await mastra.getAgent('agent').getMemory())!;
+      listThreads.mockRestore();
+      const listAll = memory.listThreads.bind(memory);
+      let first = true;
+      vi.spyOn(memory, 'listThreads').mockImplementation(async args => {
+        const result = await listAll(args);
+        if (first) {
+          first = false;
+          for (let index = 0; index < 3; index += 1) await memory.deleteThread(`thread-${index}`);
+        }
+        return result;
+      });
+      const require = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const ctx = createTestServerContext({ mastra });
+      ctx.requestContext.set('user', { id: 'user-1' });
+
+      const result =
+        route === 'get'
+          ? GET_OBSERVATIONAL_MEMORY_ROUTE.handler({ ...ctx, ...omArgs } as any)
+          : AWAIT_BUFFER_STATUS_ROUTE.handler({ ...ctx, agentId: 'agent', resourceId: 'resource' } as any);
+      await expect(result).rejects.toMatchObject({ status: 404 });
+      expect(require).not.toHaveBeenCalled();
     }
   });
 });
