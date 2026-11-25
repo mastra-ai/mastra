@@ -334,14 +334,16 @@ export interface MastraCodeConfig {
    * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
    */
   inputProcessors?:
-    InputProcessor[] | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
+    | InputProcessor[]
+    | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
   /**
    * Output processor instances appended after Mastra Code's built-in output processors,
    * or a per-request resolver. They run before the memory layers the Agent appends,
    * so changes they make to response messages are persisted.
    */
   outputProcessors?:
-    OutputProcessor[] | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
+    | OutputProcessor[]
+    | ((args: { requestContext: RequestContext }) => OutputProcessor[] | Promise<OutputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -419,7 +421,8 @@ export interface MastraCodeConfig {
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
-    string | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+    | string
+    | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
   /** Whether approving a plan starts it as a goal in this host's clients. Set false when plan approval does not start a goal (Factory). Default: true */
   planApprovalStartsGoal?: boolean;
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
@@ -1399,7 +1402,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const resolveTenantSessionModel = withCredentialTenantPreparation(async (ctx: { requestContext: RequestContext }) => {
     // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
     const controller = ctx.requestContext.get('controller') as
-      AgentControllerRequestContext<{ thinkingLevel?: unknown }> | undefined;
+      | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+      | undefined;
     const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
     setHostModelRoute(ctx.requestContext, await config?.resolveModelRoute?.(ctx));
     return getDynamicModel(ctx, config?.settingsPath, {
@@ -1425,7 +1429,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // private to the run, matching the inspector, which refuses to read for it.
           scopes: ({ scopes, requestContext }) => {
             const controller = requestContext.get('controller') as
-              AgentControllerRequestContext<MastraCodeState> | undefined;
+              | AgentControllerRequestContext<MastraCodeState>
+              | undefined;
             const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
             return session.resolved ? [...scopes, ...session.scopes] : scopes;
           },
