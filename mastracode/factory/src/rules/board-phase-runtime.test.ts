@@ -83,9 +83,9 @@ function sse(events: unknown[]): Response {
 
 type ToolCall = { name: string; args: Record<string, unknown> };
 
-/** The latest `expectedRevision` the factory-phase signal gave the agent. */
-function latestRevision(text: string): number {
-  return Number([...text.matchAll(/expectedRevision (\d+)/g)].at(-1)?.[1]);
+/** The first outcome the factory-phase signal lists for the agent to report. */
+function firstOutcome(text: string): string | undefined {
+  return [...text.matchAll(/Outcomes: ([a-z-]+):/g)].at(-1)?.[1];
 }
 
 /** A fake OpenAI model: `decide` picks a tool call for each request, or the model answers "Done.". */
@@ -143,8 +143,8 @@ function fakeModel(requests: string[], decide: (text: string) => ToolCall | unde
 }
 
 /**
- * Asked to publish, the agent runs `factory_list_work_items` and then moves the card with
- * `factory_transition_work_item` to the first phase the factory-phase signal offers.
+ * Asked to publish, the agent runs `factory_list_work_items` and then reports the first outcome
+ * the factory-phase signal offers with `factory_report_outcome`.
  */
 function publisher(): (text: string) => ToolCall | undefined {
   const steps = new Map<string, number>();
@@ -154,11 +154,7 @@ function publisher(): (text: string) => ToolCall | undefined {
     if (!title || step >= 2) return undefined;
     steps.set(title, step + 1);
     if (step === 0) return { name: 'factory_list_work_items', args: {} };
-    const stage = text.match(/to one of: ([a-z-]+)/)?.[1];
-    return {
-      name: 'factory_transition_work_item',
-      args: { stage, expectedRevision: latestRevision(text), rationale: 'Published.' },
-    };
+    return { name: 'factory_report_outcome', args: { outcome: firstOutcome(text), reason: 'Published.' } };
   };
 }
 
@@ -293,7 +289,7 @@ const deliverySkills = [
   createSkill({ name: 'build-feature', description: 'Build a feature', instructions: 'Build the feature.' }),
 ];
 
-/** Plans by moving the card to Building, then builds by moving it to Delivered. */
+/** Plans by reporting the outcome into Building, then builds by reporting the one into Delivered. */
 function builder(): (text: string) => ToolCall | undefined {
   const moved = new Set<string>();
   return text => {
@@ -304,15 +300,12 @@ function builder(): (text: string) => ToolCall | undefined {
         : undefined;
     if (!next || moved.has(next)) return undefined;
     moved.add(next);
-    return {
-      name: 'factory_transition_work_item',
-      args: { stage: next, expectedRevision: latestRevision(text), rationale: `Moved to ${next}.` },
-    };
+    return { name: 'factory_report_outcome', args: { outcome: next, reason: `Ready for ${next}.` } };
   };
 }
 
 describe('board phase fields at runtime', () => {
-  it('starts a phase only for the cards its condition matches, and the agent moves the card after the exit tool', async () => {
+  it('starts a phase only for the cards its condition matches, and moves the card on the outcome the agent reports after the exit tool', async () => {
     const requests: string[] = [];
     fakeModel(requests, publisher());
     const runtime = await startFactory(release, 'build', [publishSkill]);
@@ -324,14 +317,15 @@ describe('board phase fields at runtime', () => {
       const large = await card('large rewrite', ['effort:high']);
 
       // The low-effort card starts on its own and its run carries the phase instructions. The
-      // factory-phase signal names the exit tool and where the card may go; after the exit tool
-      // the agent moves the card with factory_transition_work_item.
+      // factory-phase signal names the exit tool and the outcomes; after the exit tool the agent
+      // reports one, and Factory moves the card once the run ends.
       await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 15_000 });
       const publishRequest = requests.find(text => text.includes(PUBLISH) && text.includes('quick fix'));
       expect(publishRequest).toContain('Keep it short.');
       expect(publishRequest).toContain(
-        'This phase ends when factory_list_work_items succeeds; until then the card stays here. Then move the card with factory_transition_work_item to one of: done, backlog.',
+        'This phase ends when factory_list_work_items succeeds; until then the card stays here. Then report an outcome with factory_report_outcome.',
       );
+      expect(publishRequest).toContain('Outcomes: done: Done → Done; backlog: Backlog → Backlog');
 
       // The high-effort card reaches Build too, but its run waits for a person: nothing ran.
       await vi.waitFor(
@@ -349,7 +343,7 @@ describe('board phase fields at runtime', () => {
       await runtime.close();
     }
   }, 60_000);
-  it("starts the next phase's run in the same session when the agent moves its own card within one context", async () => {
+  it("starts the next phase's run in the same session when the agent's reported outcome moves its own card within one context", async () => {
     const requests: string[] = [];
     fakeModel(requests, builder());
     const runtime = await startFactory(delivery, 'planning', deliverySkills);
@@ -395,16 +389,13 @@ describe('board phase fields at runtime', () => {
     });
     const SKILL_RULE = 'Group the release notes by package and end with a one-line summary.';
 
-    /** Following the release-notes skill, the agent moves the card to Published. */
+    /** Following the release-notes skill, the agent reports the outcome into Published. */
     function writer(): (text: string) => ToolCall | undefined {
       let moved = false;
       return text => {
         if (moved || !text.includes(SKILL_RULE)) return undefined;
         moved = true;
-        return {
-          name: 'factory_transition_work_item',
-          args: { stage: 'published', expectedRevision: latestRevision(text), rationale: 'Notes drafted.' },
-        };
+        return { name: 'factory_report_outcome', args: { outcome: 'published', reason: 'Notes drafted.' } };
       };
     }
 
@@ -437,7 +428,7 @@ describe('board phase fields at runtime', () => {
         createSkill({ name: 'release-notes', description: 'Draft release notes', instructions: SKILL_RULE }),
       ]);
       expect(start).toMatchObject({ status: 'succeeded', decision: { skillName: 'release-notes' } });
-      // The model received the app skill's instructions, then moved the card.
+      // The model received the app skill's instructions, then reported the outcome that moved the card.
       expect(requests.find(text => text.includes(SKILL_RULE))).toContain('release-notes');
       expect(stages).toEqual(['published']);
     }, 60_000);

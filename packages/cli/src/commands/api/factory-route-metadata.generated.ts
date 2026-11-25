@@ -1886,6 +1886,28 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "string"
                       }
                     },
+                    "outcomes": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "label",
+                          "to"
+                        ]
+                      }
+                    },
                     "transitions": {
                       "type": "array",
                       "items": {
@@ -2274,6 +2296,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -6296,6 +6348,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "outcomes": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "label",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -6622,6 +6704,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -8728,6 +8840,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
+            },
+            "outcomes": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "key": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "key",
+                      "label",
+                      "to"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -9054,6 +9196,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {
@@ -9498,6 +9670,36 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                             "factory_record_review_verdict",
                             "factory_review_source"
                           ]
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "outcomes": {
+                    "anyOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "key": {
+                              "type": "string"
+                            },
+                            "label": {
+                              "type": "string"
+                            },
+                            "to": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "key",
+                            "label",
+                            "to"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       {

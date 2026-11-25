@@ -482,9 +482,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const cases = [
       {
         ...editPhase(work, 'planning', () => undefined),
+        // A phase's outcomes follow its moves, so the ones into Planning go too.
         phases: editPhase(work, 'planning', () => undefined).phases.map(phase => ({
           ...phase,
           nextPhases: phase.nextPhases?.filter(next => next !== 'planning'),
+          ...(phase.outcomes ? { outcomes: phase.outcomes.filter(outcome => outcome.to !== 'planning') } : {}),
         })),
       },
       editPhase(work, 'planning', phase => ({
@@ -492,6 +494,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
         // The exit tool's next phase must be one of nextPhases, so it goes too.
         exitTool: { id: 'submit_plan', autoApprove: false },
         nextPhases: phase.nextPhases?.filter(next => next !== 'execute'),
+        outcomes: phase.outcomes?.filter(outcome => outcome.to !== 'execute'),
       })),
       editPhase(work, 'done', phase => ({ ...phase, kind: 'resting' })),
     ];
@@ -832,6 +835,40 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const response = await replicaA.send('POST', base, { key: 'broken', name: 'Broken', phases });
     expect(response).toEqual({ status: 422, body: { error: 'invalid_board', message: expected } });
     expect(await catalogBoard(replicaA.send, base, 'broken')).toBeUndefined();
+  });
+
+  it("stores a phase's outcomes, lists them in the catalog, and refuses one going to a phase it cannot move to", async () => {
+    const { base, replicaA } = await setup();
+    const phases = (to: string) => [
+      { key: 'backlog', name: 'Backlog', kind: 'resting' as const, nextPhases: ['build'] },
+      {
+        key: 'build',
+        name: 'Build',
+        kind: 'working' as const,
+        runner: { context: 'work' },
+        nextPhases: ['done'],
+        outcomes: [{ key: 'ship', label: 'Ready to ship', to }],
+      },
+      { key: 'done', name: 'Done', kind: 'terminal' as const },
+    ];
+
+    const refused = await replicaA.send('POST', base, { key: 'shipping', name: 'Shipping', phases: phases('backlog') });
+    expect(refused).toEqual({
+      status: 422,
+      body: {
+        error: 'invalid_board',
+        message: 'Phase "build" outcome "ship" goes to "backlog", which is not one of its nextPhases (done).',
+      },
+    });
+    expect(await catalogBoard(replicaA.send, base, 'shipping')).toBeUndefined();
+
+    expect(
+      (await replicaA.send('POST', base, { key: 'shipping', name: 'Shipping', phases: phases('done') })).status,
+    ).toBe(201);
+    const catalog = await catalogBoard(replicaA.send, base, 'shipping');
+    expect(catalog?.phases.find((phase: { id: string }) => phase.id === 'build')?.outcomes).toEqual([
+      { key: 'ship', label: 'Ready to ship', to: 'done' },
+    ]);
   });
 
   it('refuses a runner skill that does not exist, and warns about a review skill outside review', async () => {

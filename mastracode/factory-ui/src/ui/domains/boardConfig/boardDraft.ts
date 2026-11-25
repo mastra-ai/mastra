@@ -101,13 +101,23 @@ export function canRemovePhase(phases: StoredPhaseInfo[], phaseKey: string, code
   return phases[0]?.key !== phaseKey || phases[1]?.kind === 'resting';
 }
 
+/** A phase with other moves. Its outcomes follow them: one going to a phase it no longer moves to is dropped. */
+export function withNextPhases(phase: StoredPhaseInfo, nextPhases: string[]): StoredPhaseInfo {
+  if (!phase.outcomes?.length) return { ...phase, nextPhases };
+  const outcomes = phase.outcomes.filter(outcome => nextPhases.includes(outcome.to));
+  return { ...phase, nextPhases, outcomes: outcomes.length > 0 ? outcomes : null };
+}
+
 /** Takes a phase out, and out of every move other phases list. Unset moves already mean "every other phase". */
 export function removePhase(phases: StoredPhaseInfo[], phaseKey: string): StoredPhaseInfo[] {
   return phases
     .filter(phase => phase.key !== phaseKey)
     .map(phase =>
       phase.nextPhases?.includes(phaseKey)
-        ? { ...phase, nextPhases: phase.nextPhases.filter(key => key !== phaseKey) }
+        ? withNextPhases(
+            phase,
+            phase.nextPhases.filter(key => key !== phaseKey),
+          )
         : phase,
     );
 }
