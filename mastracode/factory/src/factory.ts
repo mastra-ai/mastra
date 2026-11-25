@@ -147,7 +147,6 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { buildFeedEventsRoutes } from './routes/feed-events.js';
-import { readSessionWorkspaceFile, sessionWorkspaceRoot } from './routes/fs.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { createRunStopMarker } from './routes/run-stop-marker.js';
@@ -258,7 +257,6 @@ import {
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
 import type { FactoryToolDependencies } from './tools/index.js';
-import { readPlanDigest } from './tools/plan-digest.js';
 import {
   createSessionApprovalNotifier,
   createSessionRunEndReporter,
@@ -1514,8 +1512,6 @@ export class MastraFactory {
       sessions: sourceControlSessions,
       workItems: workItemsStorage,
       reporting: factoryReporting,
-      readPlan: (session: SourceControlSession, path: string) =>
-        readPlanDigest(path, relative => readSessionWorkspaceFile(session, relative), sessionWorkspaceRoot(session)),
     };
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
     // Repeated attempts of one delivery send one report: identical failures to

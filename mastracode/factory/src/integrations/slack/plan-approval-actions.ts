@@ -6,7 +6,7 @@ import type { AuditRecorder } from '../../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../../storage/domains/channel-identity/base.js';
 import type { SourceControlSession } from '../../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import { answerParkedCall } from '../../tools/approval-tools.js';
+import { answerParkedCall, ParkedCallStillWaitingError } from '../../tools/approval-tools.js';
 import type { FactoryApprovalToolDependencies } from '../../tools/approval-tools.js';
 import { parsePlanApproveActionId, planResolvedCard } from './plan-approval-card.js';
 import type { PlanCardResolution } from './plan-approval-card.js';
@@ -112,8 +112,11 @@ export async function handlePlanApproveAction(
     ));
   } catch (error) {
     forget();
-    await settle({ kind: 'stale' });
-    await deps.cards.resolve(toolCallId, { kind: 'stale' }, event.threadId);
+    // A call that still waits keeps its cards, so the plan can be approved again.
+    if (!(error instanceof ParkedCallStillWaitingError)) {
+      await settle({ kind: 'stale' });
+      await deps.cards.resolve(toolCallId, { kind: 'stale' }, event.threadId);
+    }
     await tell(error instanceof Error ? error.message : String(error));
     return true;
   }

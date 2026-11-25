@@ -54,7 +54,7 @@ describe('observeSessionRunReports', () => {
     );
   });
 
-  it('carries the plan file of a parked submit_plan call, and of no other tool', () => {
+  it('carries the plan a parked submit_plan call paused with, and of no other tool', () => {
     const session = fakeSession();
     const report = vi.fn(async () => {});
     observeSessionRunReports(session, report);
@@ -69,7 +69,11 @@ describe('observeSessionRunReports', () => {
       toolCallId: 'plan-1',
       toolName: 'submit_plan',
       args: { path: '.artifacts/plans/a.md' },
-      suspendPayload: { path: '.artifacts/plans/a.md' },
+      suspendPayload: {
+        path: '.artifacts/plans/a.md',
+        title: 'Add dark mode',
+        plan: '## Goal\nLet people switch to a dark theme.',
+      },
       resumeSchema: decision,
     } as AgentControllerEvent);
     session.emit(end('suspended'));
@@ -90,6 +94,11 @@ describe('observeSessionRunReports', () => {
         toolCallId: 'plan-1',
         decision: true,
         planPath: '.artifacts/plans/a.md',
+        plan: expect.objectContaining({
+          ok: true,
+          title: 'Add dark mode',
+          goal: 'Let people switch to a dark theme.',
+        }),
       },
       { status: 'blocked', toolName: 'sign_off', toolCallId: 'other-1', decision: true },
     ]);
@@ -377,7 +386,7 @@ describe('createSessionRunEndReporter', () => {
 });
 
 describe('createSessionRunEndReporter with a submitted plan', () => {
-  it('reads the plan from the session that submitted it and quotes it to the follower', async () => {
+  it('quotes the plan the session submitted to the follower', async () => {
     const deliver = vi.fn(async () => ({ delivered: 'woken' as const, notificationId: 'n-1' }));
     const row = {
       sessionId: 'side',
@@ -389,14 +398,14 @@ describe('createSessionRunEndReporter with a submitted plan', () => {
       originMutedAt: null,
       title: 'Plan it',
     };
-    const readPlan = vi.fn(async (_session: unknown, path: string) => ({
+    const plan = {
       ok: true as const,
-      path,
+      path: '.artifacts/plans/a.md',
       title: 'Add dark mode',
       goal: 'Let people switch to a dark theme.',
       phases: [],
       body: '',
-    }));
+    };
     const reporter = createSessionRunEndReporter({
       sessions: { getBySessionId: async () => row as never },
       workItems: {
@@ -406,7 +415,6 @@ describe('createSessionRunEndReporter with a submitted plan', () => {
         getForProject: vi.fn(),
       } as never,
       reporting: async () => ({ deliver, notifications: new InMemoryNotificationsStorage() }),
-      readPlan,
     });
 
     await reporter({
@@ -418,11 +426,11 @@ describe('createSessionRunEndReporter with a submitted plan', () => {
         toolCallId: 'plan-1',
         decision: true,
         planPath: '.artifacts/plans/a.md',
+        plan,
       },
       since: new Date(),
     });
 
-    expect(readPlan).toHaveBeenCalledWith(row, '.artifacts/plans/a.md');
     expect(deliver).toHaveBeenCalledWith(
       { sessionId: 'origin', threadId: 'origin-thread' },
       expect.objectContaining({

@@ -1,15 +1,13 @@
 /**
- * A plan a session submitted with `submit_plan`, read back from its file so
- * the people asked to approve it see what it says. Every value is quoted from
- * the file (cut short with "…"), never paraphrased.
+ * A plan a session submitted with `submit_plan`, digested so the people asked
+ * to approve it see what it says. Every value is quoted from the submitted
+ * text (cut short with "…"), never paraphrased.
  */
-
-import { posix as posixPath } from 'node:path';
 
 /** What a plan file says, split by the headings Factory plans use. */
 export interface PlanDigest {
   ok: true;
-  /** The workspace-relative path the plan was read from. */
+  /** The plan file the session submitted. */
   path: string;
   /** The leading `# Title`, as the web card and the TUI read it. */
   title?: string;
@@ -25,12 +23,6 @@ export interface PlanDigest {
 
 export type PlanDigestResult = PlanDigest | { ok: false; path: string; reason: string };
 
-/** Reads a workspace-relative file of the session that submitted the plan. */
-export type PlanFileRead = (relativePath: string) => Promise<{ content?: string; contentType?: string }>;
-
-/** Where plans live, relative to the workspace or to one checkout in it. */
-const PLANS_DIR_PATTERN = /^(?:[^/]+\/)?\.artifacts\/plans\/[^/].*$/;
-
 /** How long a section may run in the text digest before it is cut. */
 const SECTION_LENGTH = { goal: 800, scope: 1000, risks: 600, openQuestions: 500, excerpt: 1500 } as const;
 
@@ -38,36 +30,15 @@ const SECTION_LENGTH = { goal: 800, scope: 1000, risks: 600, openQuestions: 500,
 const PHASE_COUNT = 12;
 
 /**
- * The workspace-relative path of a plan file, or `null` when it is not under a
- * plans directory. An absolute path is read against the workspace root.
+ * The plan a `submit_plan` call paused with: the text the session read when
+ * it submitted, which is exactly what an approval resumes. Never re-read from
+ * the file, which can change while the plan waits.
  */
-export function planFilePath(path: string, root?: string): string | null {
-  const trimmed = path.trim();
-  if (!trimmed) return null;
-  let relative = trimmed;
-  if (posixPath.isAbsolute(trimmed)) {
-    if (!root) return null;
-    relative = posixPath.relative(root, trimmed);
-  }
-  relative = posixPath.normalize(relative).replace(/^\.\//, '');
-  if (relative.split('/').includes('..')) return null;
-  return PLANS_DIR_PATTERN.test(relative) ? relative : null;
-}
-
-/** Read and digest the plan at `path`; never throws. */
-export async function readPlanDigest(path: string, read: PlanFileRead, root?: string): Promise<PlanDigestResult> {
-  const relative = planFilePath(path, root);
-  if (!relative) return { ok: false, path, reason: 'it is not in the plans directory' };
-  try {
-    const file = await read(relative);
-    if (file.contentType === 'unsupported' || typeof file.content !== 'string') {
-      return { ok: false, path: relative, reason: 'it is not a text file' };
-    }
-    if (!file.content.trim()) return { ok: false, path: relative, reason: 'it is empty' };
-    return parsePlanDigest(relative, file.content);
-  } catch (error) {
-    return { ok: false, path: relative, reason: error instanceof Error ? error.message : String(error) };
-  }
+export function submittedPlanDigest(path: string, payload: { title?: unknown; plan?: unknown }): PlanDigestResult {
+  const plan = typeof payload.plan === 'string' ? payload.plan : '';
+  if (!plan.trim()) return { ok: false, path, reason: 'the plan text was not sent with the submission' };
+  const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+  return parsePlanDigest(path, title ? `# ${title}\n\n${plan}` : plan);
 }
 
 type SectionKey = 'goal' | 'scope' | 'phases' | 'risks' | 'openQuestions';
@@ -172,5 +143,5 @@ export function formatPlanDigestText(digest: PlanDigest, budget = 3500): string 
 
 /** What a report says about a plan it could not read. */
 export function unreadablePlanText(result: { path: string; reason: string }): string {
-  return `The plan file \`${result.path}\` could not be read (${result.reason}); open the session to review it before approving.`;
+  return `The plan in \`${result.path}\` can't be shown here (${result.reason}); open the session to review it before approving.`;
 }

@@ -171,6 +171,23 @@ describe('PlanApprovalCards', () => {
     expect(store.rows).toEqual([]);
   });
 
+  it('settles a card that was still being posted when its plan was answered', async () => {
+    const { cards, post, edit } = setup();
+    let land!: () => void;
+    post.mockImplementationOnce(() => new Promise(resolve => (land = () => resolve({ id: 'msg-1', edit }))) as never);
+    const posting = cards.post(REQUEST);
+    await vi.waitFor(() => expect(post).toHaveBeenCalled());
+
+    await cards.resolve('call-1', { kind: 'approved', by: '<@U1>' });
+    land();
+    await posting;
+
+    expect(edit).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(edit.mock.calls[0])).toContain('Approved by <@U1>.');
+    expect(JSON.stringify(edit.mock.calls[0])).not.toContain('factory_plan:approve');
+    expect(cards.posted('call-1')).toBeUndefined();
+  });
+
   it('ignores tool ends for calls that are not parked plans', async () => {
     const { cards, edit } = setup();
     await cards.post(REQUEST);

@@ -44,6 +44,11 @@ interface ApprovalGateSession {
   }): Promise<void>;
 }
 
+/** An answer that did not get through while the call still waits, so it can be answered again. */
+export class ParkedCallStillWaitingError extends Error {
+  override readonly name = 'ParkedCallStillWaitingError';
+}
+
 const ALREADY_ANSWERED = 'That call was already answered: someone else got there first.';
 
 /** A tool call waiting for a yes or no, and which of the session's two channels answers it. */
@@ -82,7 +87,7 @@ export async function answerParkedCall(
 ): Promise<{ toolCallId: string; toolName: string }> {
   const { session, decision, declineReason } = input;
   const messaging = await deps.messaging();
-  if (!messaging) throw new Error('Answering approvals is not available on this server.');
+  if (!messaging) throw new ParkedCallStillWaitingError('Answering approvals is not available on this server.');
   const live = (await messaging.controller.getSession(session.sessionId)) as ApprovalGateSession | null;
   const waiting = live ? waitingApprovals(live) : [];
   const matches = input.toolCallId ? waiting.filter(call => call.toolCallId === input.toolCallId) : waiting;
@@ -118,7 +123,7 @@ export async function answerParkedCall(
     }
     // A resume that fails to start reports its error to the session and leaves the call waiting.
     if (live.suspensions.has(claim.address)) {
-      throw new Error(
+      throw new ParkedCallStillWaitingError(
         `The answer did not reach ${toolName}: the session could not carry on and still waits on it. Open the session to see why.`,
       );
     }

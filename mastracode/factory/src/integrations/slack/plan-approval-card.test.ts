@@ -105,11 +105,11 @@ describe('planApprovalCard', () => {
 
   it('offers no Approve button for a plan nobody could read, and says why', () => {
     const card = planApprovalCard(
-      { ok: false, path: '.artifacts/plans/a.md', reason: 'Session workspace is not available' },
+      { ok: false, path: '.artifacts/plans/a.md', reason: 'the plan text was not sent with the submission' },
       TARGET,
     ) as unknown as Node;
     expect(texts(card).join('\n')).toContain(
-      'The plan file `.artifacts/plans/a.md` could not be read (Session workspace is not available)',
+      "The plan in `.artifacts/plans/a.md` can't be shown here (the plan text was not sent with the submission)",
     );
     expect(buttons(card)).toEqual([expect.objectContaining({ type: 'link-button', label: 'Open full plan' })]);
   });

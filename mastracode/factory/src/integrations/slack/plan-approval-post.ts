@@ -59,6 +59,8 @@ export class PlanApprovalCards {
   readonly #posted = new Map<string, Map<string, PostedPlanCard>>();
   /** `toolCallId:threadId` pairs being posted right now. */
   readonly #posting = new Set<string>();
+  /** How calls answered while one of their cards was still being posted were settled. */
+  readonly #answeredWhilePosting = new Map<string, PlanCardResolution>();
   /** Who is approving a call from a card right now, so every card can name them. */
   readonly #approvers = new Map<string, string>();
 
@@ -92,8 +94,15 @@ export class PlanApprovalCards {
             card: planApprovalCard(request.plan, target),
             fallbackText: planApprovalText(request.plan, target),
           });
-          this.#remember(request.toolCallId, recipient.threadId, { message, plan: request.plan, target });
           carded.add(recipient.threadId);
+          const answered = this.#answeredWhilePosting.get(request.toolCallId);
+          if (answered) {
+            await message
+              .edit(planResolvedCard(request.plan, target, answered))
+              .catch(error => console.warn('[Factory Slack] Unable to settle a plan approval card.', error));
+            continue;
+          }
+          this.#remember(request.toolCallId, recipient.threadId, { message, plan: request.plan, target });
           if (orgId) await this.#store(orgId, request, recipient.threadId, message.id, target);
         } catch (error) {
           console.warn('[Factory Slack] Unable to post a plan approval card; posting it as text.', error);
@@ -105,6 +114,7 @@ export class PlanApprovalCards {
         this.#posting.delete(key);
       }
     }
+    if (!this.#isPosting(request.toolCallId)) this.#answeredWhilePosting.delete(request.toolCallId);
     return carded;
   }
 
@@ -116,6 +126,8 @@ export class PlanApprovalCards {
     const by = this.#approvers.get(toolCallId);
     this.#approvers.delete(toolCallId);
     if (resolution.kind === 'approved' && !resolution.by && by) resolution = { kind: 'approved', by };
+    // A card still on its way is settled as soon as it lands.
+    if (this.#isPosting(toolCallId)) this.#answeredWhilePosting.set(toolCallId, resolution);
     const cards = this.#posted.get(toolCallId) ?? new Map<string, PostedPlanCard>();
     this.#posted.delete(toolCallId);
     const stored = await this.#stored(toolCallId);
@@ -166,6 +178,10 @@ export class PlanApprovalCards {
   posted(toolCallId: string): { plan: PlanDigestResult; target: PlanCardTarget } | undefined {
     const card = this.#posted.get(toolCallId)?.values().next().value;
     return card && { plan: card.plan, target: card.target };
+  }
+
+  #isPosting(toolCallId: string): boolean {
+    return [...this.#posting].some(key => key.startsWith(`${toolCallId}:`));
   }
 
   #remember(toolCallId: string, threadId: string, card: PostedPlanCard) {

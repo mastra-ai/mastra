@@ -192,4 +192,23 @@ describe('handlePlanApproveAction', () => {
     await bare.handlers!.onAction!({ ...event, actionId: 'run_continue' } as never, defaultHandler, {} as never);
     expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the cards and their Approve button when the answer did not reach a call that still waits', async () => {
+    const parked = parkedSession();
+    // The resume fails to start: the call stays parked.
+    parked.respondToToolSuspension.mockImplementation(async () => {});
+    const { deps, event, editMessage, postEphemeral, record, edit } = await setup({ live: parked.live });
+
+    expect(await handlePlanApproveAction(deps, event)).toBe(true);
+
+    expect(postEphemeral).toHaveBeenCalledWith(
+      event.user,
+      expect.stringContaining('The answer did not reach submit_plan'),
+      expect.anything(),
+    );
+    expect(editMessage).not.toHaveBeenCalled();
+    expect(edit).not.toHaveBeenCalled();
+    expect(deps.cards.posted('call-1')).toBeDefined();
+    expect(record).not.toHaveBeenCalled();
+  });
 });

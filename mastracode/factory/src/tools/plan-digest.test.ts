@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { formatPlanDigestText, parsePlanDigest, planFilePath, readPlanDigest } from './plan-digest.js';
+import { formatPlanDigestText, parsePlanDigest, submittedPlanDigest } from './plan-digest.js';
 
 const PLAN = `# Add dark mode
 
@@ -33,23 +33,6 @@ Changes: add the toggle.
 ## Open questions
 - Follow the OS setting by default?
 `;
-
-describe('planFilePath', () => {
-  it('accepts plans under the workspace or a checkout plans directory, relative or under the root', () => {
-    expect(planFilePath('.artifacts/plans/a.md')).toBe('.artifacts/plans/a.md');
-    expect(planFilePath('./.artifacts/plans/a.md')).toBe('.artifacts/plans/a.md');
-    expect(planFilePath('mastra/.artifacts/plans/a.md')).toBe('mastra/.artifacts/plans/a.md');
-    expect(planFilePath('/workspace/.artifacts/plans/a.md', '/workspace')).toBe('.artifacts/plans/a.md');
-  });
-
-  it('refuses anything outside a plans directory', () => {
-    expect(planFilePath('.env')).toBeNull();
-    expect(planFilePath('.artifacts/plans/../../.env')).toBeNull();
-    expect(planFilePath('/etc/.artifacts/plans/a.md', '/workspace')).toBeNull();
-    // An absolute path can't be placed without the workspace root.
-    expect(planFilePath('/workspace/.artifacts/plans/a.md')).toBeNull();
-  });
-});
 
 describe('parsePlanDigest', () => {
   it('quotes the title, goal, scope, phases, risks and open questions from the file', () => {
@@ -103,36 +86,39 @@ describe('formatPlanDigestText', () => {
   });
 });
 
-describe('readPlanDigest', () => {
-  it('reads the plan through the session workspace', async () => {
-    const read = vi.fn(async () => ({ contentType: 'text', content: PLAN }));
-    const digest = await readPlanDigest('/workspace/.artifacts/plans/a.md', read, '/workspace');
-    expect(read).toHaveBeenCalledWith('.artifacts/plans/a.md');
-    expect(digest).toMatchObject({ ok: true, title: 'Add dark mode', path: '.artifacts/plans/a.md' });
-  });
-
-  it('never reads a path outside the plans directory', async () => {
-    const read = vi.fn();
-    await expect(readPlanDigest('.env', read)).resolves.toEqual({
-      ok: false,
-      path: '.env',
-      reason: 'it is not in the plans directory',
+describe('submittedPlanDigest', () => {
+  it('digests the text the submit_plan call paused with, title included', () => {
+    const [heading, ...rest] = PLAN.split('\n');
+    const digest = submittedPlanDigest('.artifacts/plans/a.md', {
+      title: heading!.slice(2),
+      plan: rest.join('\n'),
     });
-    expect(read).not.toHaveBeenCalled();
-  });
-
-  it('says why a plan could not be read instead of throwing', async () => {
-    const unavailable = async () => {
-      throw new Error('Session workspace is not available');
-    };
-    await expect(readPlanDigest('.artifacts/plans/a.md', unavailable)).resolves.toEqual({
-      ok: false,
+    expect(digest).toMatchObject({
+      ok: true,
       path: '.artifacts/plans/a.md',
-      reason: 'Session workspace is not available',
+      title: 'Add dark mode',
+      goal: 'Let people switch the UI to a dark theme.',
+      phases: ['Phase 1: Theme tokens', 'Phase 2: Toggle'],
     });
-    await expect(readPlanDigest('.artifacts/plans/a.md', async () => ({ content: '  ' }))).resolves.toMatchObject({
-      ok: false,
-      reason: 'it is empty',
+  });
+
+  it('keeps an untitled plan untitled', () => {
+    expect(submittedPlanDigest('.artifacts/plans/a.md', { title: '', plan: 'Just do it.' })).toMatchObject({
+      ok: true,
+      body: 'Just do it.',
     });
+    expect(submittedPlanDigest('.artifacts/plans/a.md', { title: '', plan: 'Just do it.' })).not.toHaveProperty(
+      'title',
+    );
+  });
+
+  it('says the plan is missing, never reads the file, when the call paused without its text', () => {
+    for (const payload of [{}, { plan: '   ' }, { plan: 42 }]) {
+      expect(submittedPlanDigest('.artifacts/plans/a.md', payload)).toEqual({
+        ok: false,
+        path: '.artifacts/plans/a.md',
+        reason: 'the plan text was not sent with the submission',
+      });
+    }
   });
 });

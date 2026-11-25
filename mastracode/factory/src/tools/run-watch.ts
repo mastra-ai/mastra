@@ -1,6 +1,8 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 
+import { submittedPlanDigest } from './plan-digest.js';
+import type { PlanDigestResult } from './plan-digest.js';
 import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
@@ -38,6 +40,8 @@ export interface ParkedTool {
   decision?: boolean;
   /** The plan file a `submit_plan` call asks to have approved. */
   planPath?: string;
+  /** What that plan says, as the call paused with it. */
+  plan?: PlanDigestResult;
 }
 
 export interface RunReportSession {
@@ -92,7 +96,7 @@ export function observeSessionRunReports(
         toolCallId: event.toolCallId,
         approval: event.type === 'tool_approval_required',
         ...(event.type === 'tool_suspended' && resumesOnDecision(event.resumeSchema) ? { decision: true } : {}),
-        ...(event.type === 'tool_suspended' ? submittedPlanPath(event.toolName, event.suspendPayload) : {}),
+        ...(event.type === 'tool_suspended' ? submittedPlan(event.toolName, event.suspendPayload) : {}),
       };
       // An approval gate holds the run open, so it is announced now, not at the run's end.
       if (event.type === 'tool_approval_required' && onApprovalRequested) {
@@ -123,11 +127,13 @@ export function observeSessionRunReports(
   });
 }
 
-/** The plan file a paused `submit_plan` call carries, read off its suspend payload. */
-function submittedPlanPath(toolName: string, payload: unknown): { planPath?: string } {
+/** The plan a paused `submit_plan` call carries on its suspend payload. */
+function submittedPlan(toolName: string, payload: unknown): { planPath?: string; plan?: PlanDigestResult } {
   if (toolName !== SUBMIT_PLAN_TOOL_NAME || !payload || typeof payload !== 'object') return {};
-  const path = (payload as { path?: unknown }).path;
-  return typeof path === 'string' && path.trim() ? { planPath: path } : {};
+  const submitted = payload as { path?: unknown; title?: unknown; plan?: unknown };
+  const path = submitted.path;
+  if (typeof path !== 'string' || !path.trim()) return {};
+  return { planPath: path, plan: submittedPlanDigest(path, submitted) };
 }
 
 /**
@@ -163,6 +169,7 @@ export function runOutcome(
               ...(parked.approval ? { approval: true } : {}),
               ...(parked.decision ? { decision: true } : {}),
               ...(parked.planPath ? { planPath: parked.planPath } : {}),
+              ...(parked.plan ? { plan: parked.plan } : {}),
             }
           : {}),
       };
