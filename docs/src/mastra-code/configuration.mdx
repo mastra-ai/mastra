@@ -201,7 +201,7 @@ Select a provider in `/custom-providers` to manage it. Besides adding, removing,
 - **Headers**: Adds or removes extra headers sent on every call to the provider. Each header is saved as secret or plain. Secret values show as `••••` in the list.
 - **Auth scheme**: Chooses how the API key is sent: **Bearer token** sends `Authorization: Bearer <key>`, and **x-api-key header** sends `x-api-key: <key>`. Bearer token is the default.
 
-When a check fails, Mastra Code shows what went wrong, such as the HTTP status and the URL it called, followed by the error text the endpoint returned. The API key and secret header values are removed from that text. Checks don't follow redirects.
+When a check fails, Mastra Code shows what went wrong, such as the HTTP status and the URL it called, followed by the error text the endpoint returned. Mastra Code keeps the API key and secret header values out of that text. Checks don't follow redirects.
 
 Header names must be valid HTTP header names and unique regardless of case. A provider can send up to 20 custom headers, and each value can be up to 4,096 characters. Headers that the HTTP client sets, such as `Host` and `Content-Type`, are refused, as is the header that carries the API key for the chosen auth scheme.
 
