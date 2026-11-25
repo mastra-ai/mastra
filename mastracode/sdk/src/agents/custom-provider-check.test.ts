@@ -368,6 +368,21 @@ describe('listing the models of a custom endpoint', () => {
     expect(reply).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
   });
 
+  it.each([
+    ['stalls', () => {}],
+    ['drops the connection', (res: ServerResponse) => setTimeout(() => res.socket?.destroy(), 20)],
+  ])('keeps the 403 status when the error body %s', async (_, afterHeaders) => {
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(403, { 'content-type': 'text/plain', 'content-length': '1000' });
+      res.write('Forbid');
+      afterHeaders(res);
+    });
+
+    const result = await listCustomProviderModels({ url: endpoint.url }, { timeoutMs: 300 });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 403 } });
+  });
+
   it('reports a refused connection as a network failure', async () => {
     const closed = await startEndpoint(() => {});
     await closed.close();

@@ -463,12 +463,18 @@ export async function listCustomProviderModels(
       headers: mergeHeadersIgnoringCase({ Accept: 'application/json' }, customProviderRequestHeaders(connection)),
       signal,
     });
-    body = await readCappedBody(response, MAX_LIST_BODY_BYTES);
   } catch (error) {
     return fail(connectionFailure(error, url, abortState()));
   }
-
   const contentType = response.headers.get('content-type') ?? undefined;
+  try {
+    body = await readCappedBody(response, MAX_LIST_BODY_BYTES);
+  } catch (error) {
+    // The status already says what went wrong, so an error body that breaks off only costs the detail.
+    if (!response.ok) return fail(httpFailure({ status: response.status, url, body: '', summaryOnly, secrets }));
+    return fail(connectionFailure(error, url, abortState()));
+  }
+
   if (!response.ok) {
     return fail(
       httpFailure({
