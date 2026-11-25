@@ -458,10 +458,23 @@ function MultipleCombobox({
   popupWidth,
   showChevron = true,
   iconOnlyValue = false,
+  allowCustomValue = false,
+  onInputValueChange,
 }: ComboboxMultipleProps & ShapeProps) {
+  // Mirrors the search text, which Base UI owns here, so the typed value can be offered as an option.
+  const [inputValue, setInputValue] = React.useState('');
   const filter = useOptionFilter();
   const selectedValues = new Set(value);
   const selectedOptions = options.filter(option => selectedValues.has(option.value));
+  const customOption = allowCustomValue ? getCustomOption(options, inputValue) : undefined;
+  const items = customOption ? [customOption, ...options] : options;
+
+  /** Keeps the mirrored search text in step with Base UI, which also clears it after each pick. */
+  function handleInputValueChange(next: string) {
+    setInputValue(next);
+    onInputValueChange?.(next);
+  }
+
   const footer =
     clearLabel && selectedOptions.length > 0 ? (
       <ComboboxClearFooter label={clearLabel} onClear={() => onValueChange?.([])} />
@@ -471,10 +484,11 @@ function MultipleCombobox({
     <ComboboxRoot
       multiple
       autoHighlight
-      items={options}
+      items={items}
       filter={filter}
       value={selectedOptions}
-      onValueChange={items => onValueChange?.(items.map(item => item.value))}
+      onInputValueChange={handleInputValueChange}
+      onValueChange={picked => onValueChange?.(picked.map(item => item.value))}
       disabled={disabled}
       open={open}
       onOpenChange={onOpenChange}
