@@ -14,12 +14,7 @@ import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
-import {
-  DEFAULT_SESSION,
-  PHASE_TOOLS,
-  nextPhasesOf,
-  withAutoStart,
-} from '../boardDraft';
+import { DEFAULT_SESSION, PHASE_TOOLS, nextPhasesOf, withAutoStart } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
