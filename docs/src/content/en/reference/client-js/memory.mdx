@@ -207,7 +207,7 @@ const workingMemory = await mastraClient.getWorkingMemory({
 
 The response includes:
 
-- `workingMemory`: The current working memory content: a string, a structured object, or `null`
+- `workingMemory`: The current working memory content: a string (JSON-encoded for schema-based working memory) or `null`
 - `source`: Whether the memory is from `"thread"` or `"resource"` scope
 - `workingMemoryTemplate`: The template used for working memory (if configured)
 - `threadExists`: Whether the thread exists

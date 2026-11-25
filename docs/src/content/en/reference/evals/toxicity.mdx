@@ -119,8 +119,11 @@ The scorer evaluates toxicity through multiple dimensions:
    - Counts verdicts marked toxic
    - Divides by the total number of verdicts
    - Multiplies by scale
+   - Rounds to two decimal places
 
-Final score: `(toxic_verdicts / total_verdicts) * scale`
+If the judge returns no verdicts, the score is `1`. A `scale` of `0` falls back to `1`.
+
+Final score: `round((toxic_verdicts / total_verdicts) * scale, 2)`
 
 ### Score interpretation
 
