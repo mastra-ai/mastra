@@ -18,10 +18,22 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  setTabVisibility('visible');
   vi.useRealTimers();
 });
 
 const elapse = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
+
+function setTabVisibility(state: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
+async function switchTabsAndBack() {
+  act(() => setTabVisibility('hidden'));
+  await elapse(WRITE_EVERY_MS);
+  act(() => setTabVisibility('visible'));
+}
 
 async function openKnowledgePage() {
   const encoder = new TextEncoder();
@@ -126,6 +138,20 @@ it('shows a write that lands while a new search loads', async () => {
   page.search('deploy');
   await elapse(READ_MS / 2);
   page.write();
+  await elapse(3 * READ_MS);
+
+  expect(page.pagesFound()).toBe(1);
+});
+
+it('shows a write that lands while a new search loads, across a quick tab switch', async () => {
+  const page = await openKnowledgePage();
+  await elapse(3 * READ_MS);
+
+  page.search('deploy');
+  await elapse(READ_MS / 3);
+  page.write();
+  await elapse(READ_MS / 3);
+  await switchTabsAndBack();
   await elapse(3 * READ_MS);
 
   expect(page.pagesFound()).toBe(1);
