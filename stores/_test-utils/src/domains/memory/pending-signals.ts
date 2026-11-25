@@ -156,6 +156,7 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(ids(await claim(thread, earlier))).toEqual([taken.id]);
 
         const later = await startRun(thread);
+        expect(await claim(thread, earlier)).toEqual([]);
         const fresh = await send(thread);
         expect(ids(await claim(thread, later))).toEqual([fresh.id]);
         expect(await pendingIds(thread)).toEqual([]);
@@ -646,16 +647,18 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         await claim(thread, runId);
         const first = await send(thread);
         const second = await send(thread);
+        const third = await send(thread);
         const kept = await send(thread);
         const message = createSampleMessageV2({ ...scope(thread) });
         await memory.saveMessages({ messages: [message] });
 
+        // Neither the send order nor its reverse.
         const cancelled = await memory.cancelPendingSignals({
           ...onThread(thread),
-          ids: [second.id, claimed.id, `unknown-${randomUUID()}`, message.id, first.id],
+          ids: [second.id, claimed.id, `unknown-${randomUUID()}`, first.id, message.id, third.id],
         });
 
-        expect(cancelled).toEqual([second.id, first.id]);
+        expect(cancelled).toEqual([second.id, first.id, third.id]);
         expect(await pendingIds(thread)).toEqual([kept.id]);
         expect(await visibleIds(thread)).toEqual([message.id]);
         expect(ids(await claim(thread, runId))).toEqual([claimed.id, kept.id]);
