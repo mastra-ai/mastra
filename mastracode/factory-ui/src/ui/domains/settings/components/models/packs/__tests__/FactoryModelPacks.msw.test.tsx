@@ -227,6 +227,26 @@ describe('FactoryModelPacks', () => {
     expect(screen.getByText(`Up to ${MODEL_PACKS_MAX} packs. Delete one to add another.`)).toBeInTheDocument();
   });
 
+  it('keeps keyboard focus on the model that fills the pack', async () => {
+    const user = userEvent.setup();
+    const threeModels: ModelPack = {
+      ...build,
+      models: [
+        build.models[0],
+        { modelId: 'openai/gpt-5', thinkingLevel: 'medium' },
+        { modelId: 'openai/gpt-5.5', thinkingLevel: 'medium' },
+      ],
+    };
+    const { client } = renderPacks({ packSet: { modelPacks: [threeModels], defaultModelPackId: build.id } });
+
+    await user.click(await screen.findByRole('button', { name: 'Add model' }));
+    await user.click(await screen.findByRole('option', { name: 'GPT-4o Mini' }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.queryByRole('button', { name: 'Add model' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Fallback 3: GPT-4o Mini/ })).toHaveFocus();
+  });
+
   it('explains a refused change inline', async () => {
     const user = userEvent.setup();
     const { client } = renderPacks({

@@ -7,11 +7,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { fetchFactoryProject, updateFactoryProject } from '../ui/domains/workspaces/services/github';
-import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
+import type { FactoryModelScope, FactoryProjectPayload } from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -31,13 +32,30 @@ export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
   return useQuery(factoryProjectQueryOptions(baseUrl, factoryProjectId));
 }
 
+function mergeSavedFields(
+  queryClient: QueryClient,
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  saved: Partial<FactoryProjectPayload>,
+) {
+  queryClient.setQueryData(
+    factoryProjectQueryOptions(baseUrl, factoryProjectId).queryKey,
+    project => project && { ...project, ...saved },
+  );
+}
+
 export function useSetFactoryModelPacksMutation(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (set: ModelPackSet) => updateFactoryProject(baseUrl, factoryProjectId, set),
-    onSuccess: project => {
-      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    onSuccess: ({ modelPacks, defaultModelPackId, defaultModelId, defaultThinkingLevel }) => {
+      mergeSavedFields(queryClient, baseUrl, factoryProjectId, {
+        modelPacks,
+        defaultModelPackId,
+        defaultModelId,
+        defaultThinkingLevel,
+      });
       return queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
     },
   });
@@ -52,8 +70,8 @@ export function useSetFactoryModelScopeMutation(factoryProjectId: string | undef
   return useMutation({
     mutationKey: modelScopeMutationKey(factoryProjectId),
     mutationFn: (modelScope: FactoryModelScope) => updateFactoryProject(baseUrl, factoryProjectId!, { modelScope }),
-    onSuccess: project => {
-      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    onSuccess: ({ modelScope }) => {
+      mergeSavedFields(queryClient, baseUrl, factoryProjectId, { modelScope });
       // The scope picks which credentials serve this Factory's models, voice input included.
       void queryClient.invalidateQueries({ queryKey: queryKeys.availableModels({ factoryProjectId }) });
       void queryClient.invalidateQueries({ queryKey: queryKeys.voiceSettingsAll() });

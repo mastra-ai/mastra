@@ -6,6 +6,7 @@ import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
@@ -14,6 +15,10 @@ import { ModelPackEntryLabel } from './ModelPackEntryLabel';
 import { ModelPackModelPicker } from './ModelPackModelPicker';
 
 const EMPTY_CATALOG: AvailableModelOption[] = [];
+
+function focusModelPicker(item: HTMLLIElement | null) {
+  item?.querySelector('button')?.focus();
+}
 
 interface ModelPackTimelineProps {
   entries: ModelPackModel[];
@@ -32,6 +37,7 @@ export function ModelPackTimeline({
 }: ModelPackTimelineProps) {
   const occupiedIds = new Set(entries.map(entry => entry.modelId));
   const addLabel = entries.length ? 'Add model' : 'Choose a model';
+  const [focusIndex, setFocusIndex] = useState<number>();
 
   return (
     <div className="min-w-0">
@@ -48,17 +54,21 @@ export function ModelPackTimeline({
             };
 
             return (
-              <li key={label} className={cn('group/model relative min-w-0', index > 0 && 'ms-5 ps-2')}>
+              <li
+                key={label}
+                ref={index === focusIndex ? focusModelPicker : undefined}
+                className={cn('group/model relative min-w-0', index > 0 && 'ms-5 ps-2')}
+              >
                 {index > 0 && (
                   <span
                     aria-hidden
-                    className="border-border-strong inset-s-0 pointer-events-none absolute top-0 h-1/2 w-2 rounded-es-md border-s border-b"
+                    className="border-border-strong pointer-events-none absolute inset-s-0 top-0 h-1/2 w-2 rounded-es-md border-s border-b"
                   />
                 )}
                 {index > 0 && index < entries.length - 1 && (
                   <span
                     aria-hidden
-                    className="bg-border-strong inset-s-0 pointer-events-none absolute inset-y-0 w-px"
+                    className="bg-border-strong pointer-events-none absolute inset-y-0 inset-s-0 w-px"
                   />
                 )}
                 {onChange ? (
@@ -120,7 +130,10 @@ export function ModelPackTimeline({
           label={addLabel}
           models={models}
           occupiedIds={occupiedIds}
-          onChange={entry => onChange([...entries, entry])}
+          onChange={entry => {
+            if (entries.length + 1 === MODEL_PACK_MODELS_MAX) setFocusIndex(entries.length);
+            return onChange([...entries, entry]);
+          }}
           disabled={disabled}
         />
       )}
