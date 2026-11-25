@@ -263,7 +263,7 @@ const listInputSchema = z
   .strict();
 
 /** A board id, or the displayed name of exactly one installed board, as the board's id. */
-function resolveBoardRef(boards: BoardRegistry, ref: string): string {
+export function resolveBoardRef(boards: BoardRegistry, ref: string): string {
   if (boards.has(ref)) return ref;
   const wanted = ref.toLowerCase();
   const named = [...boards].filter(([, board]) => board.name.trim().toLowerCase() === wanted);
