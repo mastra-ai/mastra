@@ -721,15 +721,11 @@ export const useChat = ({
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
-                  const previousHistory = lastHydration.current?.formattedMessages ?? [];
-                  setMessages(current =>
-                    catchingUp
-                      ? catchUpWithHistory({ conversation: current, history, activeRunId: chunk.payload.activeRunId })
-                      : mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
-                  );
-                  // A catch-up is applied once, here: the page's hydration stays the first history's, which merging
-                  // the catch-up again would undo.
                   if (catchingUp) {
+                    // Applied once, here: the page's hydration stays the first history's, which merging the catch-up
+                    // again would undo.
+                    const { activeRunId } = chunk.payload;
+                    setMessages(current => catchUpWithHistory({ conversation: current, history, activeRunId }));
                     // The newest task list the page can know of, as live results follow it: unless the list lies in
                     // messages older than the history page.
                     const storedTasks = findLatestTasksInMessages(history);
@@ -739,6 +735,10 @@ export const useChat = ({
                     }
                     return;
                   }
+                  const previousHistory = lastHydration.current?.formattedMessages ?? [];
+                  setMessages(current =>
+                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
+                  );
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
