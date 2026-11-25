@@ -174,7 +174,7 @@ The buffer flushes when any of these conditions are met:
 
 Failed flushes are retried with exponential backoff:
 
-- Retry delay: `retryDelayMs * 2^(attempt - 1)`, so the first retry waits `retryDelayMs`
+- Retry delay: `retryDelayMs * 2^(attempt - 1)`. The first retry waits `retryDelayMs`.
 - Maximum attempts: `maxRetries`
 - Batch is dropped after all retries fail
 
