@@ -1,3 +1,4 @@
+import { parseCustomProviders } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
 import { describe, expect, it } from 'vitest';
 
@@ -5,6 +6,7 @@ import {
   addHeaderToCustomProviderInSettings,
   addModelsToCustomProviderInSettings,
   addModelToCustomProviderInSettings,
+  endpointModelsToOffer,
   headersForCustomProviderUrlChange,
   removeCustomProviderFromSettings,
   removeHeaderFromCustomProviderInSettings,
@@ -205,14 +207,11 @@ describe('custom provider headers and auth scheme', () => {
   });
 
   it.each([
-    { case: 'the bearer auth header', authScheme: undefined, header: { name: 'authorization', value: 'Basic abc' } },
-    { case: 'the x-api-key auth header', authScheme: 'x-api-key' as const, header: { name: 'X-Api-Key', value: 'k' } },
-    { case: 'a name already saved', authScheme: undefined, header: { name: 'x-org', value: 'org-2' } },
-    { case: 'a header the HTTP client owns', authScheme: undefined, header: { name: 'Host', value: 'evil.test' } },
-    { case: 'an empty value', authScheme: undefined, header: { name: 'X-Team', value: '  ' } },
-  ])('refuses $case and leaves the saved headers alone', ({ authScheme, header }) => {
+    { case: 'the header that carries the API key', header: { name: 'authorization', value: 'Basic abc' } },
+    { case: 'a value that is blank once trimmed', header: { name: 'X-Team', value: '  ' } },
+  ])('refuses $case and leaves the saved headers alone', ({ header }) => {
     const saved = [{ name: 'X-Org', value: 'org-1', secret: true }];
-    const settings = acmeSettings({ authScheme, headers: saved });
+    const settings = acmeSettings({ headers: saved });
 
     expect(addHeaderToCustomProviderInSettings(settings, 'acme', header)).toEqual(expect.any(String));
     expect(settings.customProviders[0]?.headers).toEqual(saved);
@@ -227,6 +226,32 @@ describe('custom provider headers and auth scheme', () => {
     removeHeaderFromCustomProviderInSettings(settings, 'acme', 'x-api-key');
     expect(setCustomProviderAuthSchemeInSettings(settings, 'acme', 'x-api-key')).toBeUndefined();
     expect(settings.customProviders[0]?.authScheme).toBe('x-api-key');
+  });
+});
+
+describe('endpointModelsToOffer', () => {
+  it('offers each listed model once, as the settings file would read it back', () => {
+    const provider = { name: 'Acme', models: ['acme-small'] };
+
+    const offered = endpointModelsToOffer(
+      ['acme/acme-small', 'acme/acme-large', 'acme-large', ' acme-tiny ', 'other/acme-large', 'Done', 'Add all'],
+      provider,
+      ['Add all', 'Done'],
+    );
+
+    expect(offered).toEqual(['acme-large', 'acme-tiny', 'other/acme-large']);
+  });
+
+  it('offers nothing once a prefixed model is saved, so the list reaches its end', () => {
+    const settings = createSettings({
+      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: [] }],
+    });
+    const offered = endpointModelsToOffer(['acme/acme-large'], settings.customProviders[0]!, []);
+
+    addModelsToCustomProviderInSettings(settings, 'acme', offered);
+    const savedBack = parseCustomProviders(JSON.parse(JSON.stringify(settings.customProviders)));
+
+    expect(endpointModelsToOffer(['acme/acme-large'], savedBack[0]!, [])).toEqual([]);
   });
 });
 

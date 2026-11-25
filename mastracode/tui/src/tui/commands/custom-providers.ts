@@ -81,6 +81,28 @@ export function addModelsToCustomProviderInSettings(
 }
 
 /**
+ * The model IDs from an endpoint's list that are worth offering to add.
+ *
+ * IDs are read the way `parseCustomProviders` reads saved models: trimmed, and
+ * with a leading `<providerId>/` removed. Otherwise `acme/foo` would be saved,
+ * read back as `foo`, and offered again forever. IDs already configured are
+ * left out, and so are IDs equal to a label in `reservedLabels`, because the
+ * menu matches picks by label and such an ID would trigger that action.
+ */
+export function endpointModelsToOffer(
+  listed: readonly string[],
+  provider: Pick<CustomProviderSetting, 'name' | 'models'>,
+  reservedLabels: readonly string[],
+): string[] {
+  const providerPrefix = `${getCustomProviderId(provider.name)}/`;
+  const offered = listed
+    .map(model => model.trim())
+    .map(model => (model.startsWith(providerPrefix) ? model.slice(providerPrefix.length) : model))
+    .filter(model => model.length > 0 && !provider.models.includes(model) && !reservedLabels.includes(model));
+  return [...new Set(offered)];
+}
+
+/**
  * Change how a provider sends its API key. Returns why the change is refused,
  * or undefined once it is applied. A saved custom header may already use the
  * header the new scheme writes, so the headers are checked against it first.
@@ -272,7 +294,9 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
   if (removed.length > 0) {
     const names = removed.map(header => header.name).join(', ');
     ctx.showInfo(
-      `Removed secret headers because the URL moved to another origin: ${names}. Add them again under "Headers".`,
+      removed.length === 1
+        ? `Removed secret header ${names} because the base URL moved to another origin. Add it again under Headers.`
+        : `Removed secret headers ${names} because the base URL moved to another origin. Add them again under Headers.`,
     );
   }
 }
@@ -336,29 +360,46 @@ function savedConnection(provider: CustomProviderSetting): CustomProviderConnect
   return { url: provider.url, apiKey: provider.apiKey, authScheme: provider.authScheme, headers: provider.headers };
 }
 
-/** Show a failed check as the SDK reports it, with the upstream detail on its own line. */
-function showCheckFailure(ctx: SlashCommandContext, failure: CustomProviderCheckFailure): void {
-  ctx.showError(failure.detail ? `${failure.message}\n${failure.detail}` : failure.message);
+/**
+ * Text that came from an endpoint, made safe to print on one line. Escape
+ * sequences in it would act on the terminal instead of being shown.
+ */
+function printableText(text: string): string {
+  return text
+    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-/** Menu action values. The NUL character keeps them apart from any model id or header name. */
+/**
+ * Show a failed check as the SDK reports it, with the upstream detail on its
+ * own line. The SDK already cleans both, and cleaning again here keeps the
+ * terminal safe if that ever changes.
+ */
+function showCheckFailure(ctx: SlashCommandContext, failure: CustomProviderCheckFailure): void {
+  const message = printableText(failure.message);
+  const detail = failure.detail ? printableText(failure.detail) : '';
+  ctx.showError(detail ? `${message}\n${detail}` : message);
+}
+
+/**
+ * Menu action values, prefixed with NUL so no model ID or header name can equal them.
+ * Labels must still be unique, since askSelect matches by label.
+ */
 const ADD_ALL = '\u0000add-all';
 const DONE = '\u0000done';
 const ADD_HEADER = '\u0000add-header';
 
+/** Labels of the actions in the "Add models from endpoint" list. A model ID with one of these labels is not offered. */
+const ADD_ALL_LABEL = 'Add all';
+const DONE_LABEL = 'Done';
+
 /** The longest model reply shown after a model test. */
 const MAX_SHOWN_REPLY_LENGTH = 200;
 
-/**
- * A model reply made safe to print. The reply is text from the endpoint, and
- * escape sequences in it would act on the terminal instead of being shown.
- */
+/** A model reply made safe to print and cut to a length that fits one message. */
 function shownReply(reply: string): string {
-  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
-  const text = reply
-    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const text = printableText(reply);
   return text.length > MAX_SHOWN_REPLY_LENGTH ? `${text.slice(0, MAX_SHOWN_REPLY_LENGTH)}...` : text;
 }
 
@@ -382,14 +423,15 @@ function loadProvider(
 }
 
 /**
- * Ask the endpoint for its model list, with a spinner while the call runs.
- * Shows the failure and returns undefined when the call fails.
+ * Ask the endpoint for its model list, with a spinner labelled `progressLabel`
+ * while the call runs. Shows the failure and returns undefined when the call fails.
  */
 async function listModelsWithProgress(
   ctx: SlashCommandContext,
   provider: CustomProviderSetting,
+  progressLabel: string,
 ): Promise<{ models: string[]; latencyMs: number } | undefined> {
-  const stopProgress = showProgress(ctx.state, `Testing connection to ${provider.url}`);
+  const stopProgress = showProgress(ctx.state, progressLabel);
   let result: CustomProviderModelsResult;
   try {
     result = await listCustomProviderModels(savedConnection(provider));
@@ -407,7 +449,7 @@ async function listModelsWithProgress(
 async function testConnectionFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const loaded = loadProvider(ctx, providerId);
   if (!loaded) return;
-  const result = await listModelsWithProgress(ctx, loaded.provider);
+  const result = await listModelsWithProgress(ctx, loaded.provider, `Testing connection to ${loaded.provider.url}`);
   if (!result) return;
   ctx.showInfo(
     `${loaded.provider.name} answered in ${result.latencyMs} ms and lists ${modelCount(result.models.length)}.`,
@@ -460,32 +502,40 @@ async function testModelFlow(ctx: SlashCommandContext, providerId: string): Prom
 async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const loaded = loadProvider(ctx, providerId);
   if (!loaded) return;
-  const listed = await listModelsWithProgress(ctx, loaded.provider);
+  const listed = await listModelsWithProgress(ctx, loaded.provider, `Listing models from ${loaded.provider.url}`);
   if (!listed) return;
   if (listed.models.length === 0) {
     ctx.showInfo(`${loaded.provider.name} lists no models.`);
     return;
   }
 
+  let cursorLabel: string | undefined;
   for (;;) {
     // Settings are read again each round, so a model added on the last round is not offered twice.
     const current = loadProvider(ctx, providerId);
     if (!current) return;
-    const { settings, provider } = current;
-    const available = listed.models.filter(model => !provider.models.includes(model));
+    const { provider } = current;
+    const available = endpointModelsToOffer(listed.models, provider, [ADD_ALL_LABEL, DONE_LABEL]);
     if (available.length === 0) {
-      ctx.showInfo(`Every model ${provider.name} lists is already added.`);
+      ctx.showInfo(`All models ${provider.name} lists are already added.`);
       return;
     }
 
-    const choice = await askSelect(ctx, `Add models from ${provider.name}`, [
-      { label: 'Add all', value: ADD_ALL, description: `Add the ${modelCount(available.length)} below` },
-      { label: 'Done', value: DONE, description: 'Stop adding models' },
-      ...available.map(model => ({ label: model, value: model })),
-    ]);
+    const choice = await askSelect(
+      ctx,
+      `Add models from ${provider.name}`,
+      [
+        { label: ADD_ALL_LABEL, value: ADD_ALL, description: `Add the ${modelCount(available.length)} below` },
+        { label: DONE_LABEL, value: DONE, description: 'Stop adding models' },
+        ...available.map(model => ({ label: model, value: model })),
+      ],
+      cursorLabel,
+    );
     if (!choice || choice === DONE) return;
 
     const picked = choice === ADD_ALL ? available : [choice];
+    // Read settings again: the list stayed open while another process may have saved changes.
+    const settings = loadSettings();
     addModelsToCustomProviderInSettings(settings, providerId, picked);
     saveSettings(settings);
     if (choice === ADD_ALL) {
@@ -493,6 +543,10 @@ async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: s
       return;
     }
     ctx.showInfo(`Added model: ${toCustomProviderModelId(provider.name, choice)}`);
+    // Keep the cursor where the user was: on the model that followed the one just added,
+    // or the one before it when the last model was picked.
+    const index = available.indexOf(choice);
+    cursorLabel = available[index + 1] ?? available[index - 1];
   }
 }
 
@@ -530,7 +584,7 @@ async function headersFlow(ctx: SlashCommandContext, providerId: string): Promis
     const latest = loadSettings();
     if (removeHeaderFromCustomProviderInSettings(latest, providerId, choice)) {
       saveSettings(latest);
-      ctx.showInfo(`Removed header ${choice} from ${provider.name}.`);
+      ctx.showInfo(`Removed header: ${choice}`);
     }
   }
 }
@@ -572,7 +626,7 @@ async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Prom
     return 'refused';
   }
   saveSettings(settings);
-  ctx.showInfo(`Added header ${name} to ${provider.name}.`);
+  ctx.showInfo(`Added header: ${name}`);
   return 'added';
 }
 
@@ -600,13 +654,15 @@ const AUTH_SCHEME_OPTIONS: Array<{
 async function authSchemeFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const loaded = loadProvider(ctx, providerId);
   if (!loaded) return;
-  const { settings, provider } = loaded;
+  const { provider } = loaded;
   const current = AUTH_SCHEME_OPTIONS.find(option => option.value === (provider.authScheme ?? 'bearer'));
 
   const choice = await askSelect(ctx, `Auth scheme for ${provider.name}`, AUTH_SCHEME_OPTIONS, current?.label);
   const option = AUTH_SCHEME_OPTIONS.find(entry => entry.value === choice);
   if (!option) return;
 
+  // Read settings again: the menu stayed open while another process may have saved changes.
+  const settings = loadSettings();
   const problem = setCustomProviderAuthSchemeInSettings(settings, providerId, option.value);
   if (problem) {
     ctx.showError(problem);
@@ -640,8 +696,8 @@ async function manageProviderFlow(ctx: SlashCommandContext, providerId: string):
       value: 'add-models-from-endpoint',
       description: 'Pick model IDs from the list the endpoint returns',
     },
-    { label: 'Headers', value: 'headers', description: 'Extra headers sent on every call' },
-    { label: 'Auth scheme', value: 'auth-scheme', description: 'How the API key is sent' },
+    { label: 'Headers', value: 'headers', description: 'Add or remove headers sent on every call' },
+    { label: 'Auth scheme', value: 'auth-scheme', description: 'Choose how the API key is sent' },
   ]);
 
   switch (action) {
