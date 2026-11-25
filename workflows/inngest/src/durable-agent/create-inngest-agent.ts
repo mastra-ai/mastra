@@ -1744,12 +1744,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             const reason = registryEntry.abortSignal?.reason;
             return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
           };
+          // No worker will run, so the spans opened at prepare end here.
+          const endTimedOutSpans = () => endRunSpansWithError(runId, registryEntry.abortSignal!.reason as Error);
           // The deadline already reported the timeout and cleared the run's rows; don't start it.
-          if (deadlineFired()) return;
+          if (deadlineFired()) return endTimedOutSpans();
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           // The deadline can also fire while that row is being written; its cleanup may have run first.
           if (deadlineFired()) {
+            endTimedOutSpans();
             if (persistedRunning) await deleteRunSnapshots(runId);
             return;
           }
@@ -2074,6 +2077,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Steps and stream-side processors on this segment see the merged
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
+      existingEntry.requestContextRebuilt = false;
       // The resumed execution reports under its own span pair. The claim is held, so this resume is
       // the one the workers run; they end the pair where the run finishes or parks again.
       const resumeSegment = openResumeSegment(runId, suspendedSnapshot, callbackOptions.requestContext);

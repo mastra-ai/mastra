@@ -70,7 +70,9 @@ Extra scheduler instances add availability, not throughput. Each one polls stora
 
 ### Background task worker
 
-Executes agent tool calls marked with `background: { enabled: true }`. When an agent invokes a background tool, the API dispatches the task to this worker instead of blocking the response stream.
+Executes agent tool calls marked with `background: { enabled: true }` without blocking the response stream.
+
+A background tool call is bound to the agent run that made it, so it runs on the process that executes the agent loop. An API server with `MASTRA_WORKERS=false` doesn't hand its agents' tool calls to a dedicated background task worker: a durable agent runs the tool inline, and a regular agent returns a dispatch error as the tool result unless you pass `disableBackgroundTasks: true`. See [BackgroundTaskWorker](/reference/workers/overview#backgroundtaskworker).
 
 The background task worker manages concurrency limits, task lifecycle, and result delivery through the PubSub bus.
 

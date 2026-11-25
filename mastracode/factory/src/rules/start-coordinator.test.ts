@@ -239,7 +239,7 @@ describe('FactoryStartCoordinator', () => {
     const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
     expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
-      toolName: 'factory_transition_work_item',
+      toolName: 'factory_report_outcome',
       policy: 'allow',
     });
     expect(session.state.set).toHaveBeenCalledWith(

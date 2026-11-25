@@ -491,7 +491,7 @@ describe('bundled Factory skill assets', () => {
           ? 'factory_record_review_verdict'
           : skillName === 'factory-plan'
             ? 'submit_plan'
-            : 'factory_transition_work_item',
+            : 'factory_report_outcome',
       );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
@@ -551,9 +551,8 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('Await approval');
     expect(triage).toContain('No transition / refresh');
     expect(triage).toContain(
-      'Features and every other open non-bug classification default to `Route: Await approval` and request the `rest` phase (`intake` on the default board)',
+      'Features and every other open non-bug classification default to `Route: Await approval` and report the outcome going to the `rest` phase (`intake` on the default board)',
     );
-    expect(triage).toContain('never pass a `triageType` argument');
     expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
       'After a GitHub comment is posted or updated, reconcile the labels',
@@ -629,57 +628,57 @@ describe('bundled Factory skill assets', () => {
 
     const plan = await read('factory-plan');
     expect(plan).toContain('if this conversation already contains a triage/understanding pass');
-    // Planning holds the card until submit_plan comes back approved; then the planner moves it.
+    // Planning holds the card until submit_plan comes back approved; the approval is the phase's outcome.
     expect(plan).toContain('make `submit_plan` your terminal step');
-    expect(plan).toContain('Moving the card before then is refused.');
-    expect(plan).toContain(
-      'When `submit_plan` returns `Plan approved.`, move the card with `factory_transition_work_item`',
-    );
-    // One instruction for an approved plan: report, then move (no "report and stop").
-    expect(plan).not.toContain('report the plan headline and stop');
+    expect(plan).toContain('No outcome moves the card before then.');
+    expect(plan).toContain("When `submit_plan` returns `Plan approved.`, the approval is the phase's outcome");
+    expect(plan).toContain('Report the plan headline and stop; Factory moves the card when your run ends.');
+    expect(plan).toContain('You never move the card yourself.');
+    expect(plan).not.toContain('factory_transition_work_item');
 
     // Building runs as a goal: it may ask a person, but only through ask_user. It opens the change
     // request itself, unless the card's board has a self-review phase: no project setting decides it.
     const build = await read('factory-build');
     expect(build).toContain('only with `ask_user`');
-    expect(build).toContain('Do not open a pull or merge request. Move the card to its `self-review` phase');
+    expect(build).toContain('Do not open a pull or merge request. Report the outcome going to its `self-review` phase');
     // The phase's own moves pick the hand-off: a move to self-review means no change request is
     // opened, even where the board also allows the move to pull request review.
     expect(build).toContain(
-      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and it is in `Next phases`): this path comes before opening the change request, even when the `pull request review` phase is in `Next phases` too',
+      '- **The board has a self-review phase** (`Board phases by part:` names a `self-review` phase and an outcome goes to it): this path comes before opening the change request, even when an outcome goes to the `pull request review` phase too',
     );
     expect(build).toContain(
-      'it needs the `pull request review` phase in `Next phases`, and a board whose `Board phases by part:` names no `self-review` phase',
+      'it needs an outcome going to the `pull request review` phase, and a board whose `Board phases by part:` names no `self-review` phase',
     );
     // Factory's gate refuses the change request on any board with a self-review phase, so the
     // builder asks instead of opening one when it can't move there.
-    expect(build).toContain(
-      '- **The board has a self-review phase that is not in `Next phases`:** open no change request',
-    );
+    expect(build).toContain('- **The board has a self-review phase no outcome goes to:** open no change request');
     // An open change request of this session decides before the self-review path.
     expect(build).toContain('A change request of this session that is already open decides first');
     expect(build).not.toContain('Self-review: on');
     expect(build).not.toContain('whatever the setting says');
-    // A push to an open change request with no move to pull request review asks a person; self-review stops on an open one.
+    // A push to an open change request with no outcome to pull request review asks a person; self-review stops on an open one.
     expect(build).toContain(
-      'If the `pull request review` phase is not in `Next phases`, move nothing and ask the person with `ask_user`',
+      'If no outcome goes to the `pull request review` phase, report no outcome and ask the person with `ask_user`',
     );
-    // With no review move at all, the builder asks a person, which parks the run as Waiting.
+    // With no review outcome at all, the builder asks a person, which parks the run as Waiting.
     expect(build).toContain(
-      '- **Neither review phase is in `Next phases`:** open no change request and move nothing. Ask the person with `ask_user`',
+      '- **No outcome goes to either review phase:** open no change request and report no outcome. Ask the person with `ask_user`',
     );
     expect(build).toContain('**Open the change request** (the usual path, and the only one on the default Work board');
-    // Review takes the card only once the change request it just opened is attached: the builder retries.
+    // Review takes the card only once the change request it just opened is attached: the builder waits for it.
     expect(build).toContain(
-      'If the move is refused because the card has no pull request yet, wait briefly (`sleep 20`), re-read the revision',
+      'before reporting, wait until the `factory-work-item` signal lists the change request under Sources (`sleep 20` between checks, up to three times)',
     );
     expect(build).toContain('say it is tracked on its own card and that a person should confirm it is reviewed there');
-    expect(build).toContain('Then move the card to its `pull request review` phase');
+    expect(build).toContain('Then report the outcome going to its `pull request review` phase');
     expect(build).toContain('`Board phases by part:` line names each phase');
     expect(build).not.toMatch(/stage: "(review|pr-review|planning)"/);
-    expect(build).toContain('**Before moving to the completed phase:**');
+    expect(build).toContain('**Before reporting the completed phase:**');
+    expect(build).not.toContain('factory_transition_work_item');
     // A push to an open change request sends the card back to its review phase so it is reviewed again.
-    expect(build).toContain('Otherwise move the card to its `pull request review` phase so it is reviewed again.');
+    expect(build).toContain(
+      'Otherwise report the outcome going to its `pull request review` phase so it is reviewed again.',
+    );
     // Both hand-offs that leave the card in Building say it the way Building's goal counts as done.
     expect(
       build.match(
@@ -690,15 +689,14 @@ describe('bundled Factory skill assets', () => {
     expect(build).toContain('belongs to someone else: never push to it');
     // A manual card's change request is not under Sources: look it up by branch first.
     expect(build).toContain('look for a change request already open from your branch');
-    // A change request is opened only where the phase may then move the card to pull request review.
-    expect(build).toContain('it needs the `pull request review` phase in `Next phases`');
+    // A change request is opened only where the phase has an outcome going to pull request review.
+    expect(build).toContain('it needs an outcome going to the `pull request review` phase');
     // The review phase takes the card only once the change request is attached: self-review retries.
     const selfReview = await read('factory-self-review');
-    expect(selfReview).toContain('wait briefly (`sleep 20`)');
-    // Attaching the change request moves the revision on: a stale refusal still in self-review is retried once.
-    expect(selfReview).toContain(
-      'if the refusal shows the card still in this self-review phase, retry once with the `expectedRevision` it names',
-    );
+    expect(selfReview).toContain('(`sleep 20` between checks, up to three times)');
+    // Self-review reports the outcome; Factory moves the card when its run ends.
+    expect(selfReview).toContain('Factory moves the card when your run ends');
+    expect(selfReview).not.toContain('factory_transition_work_item');
     // A change request that never attaches is reviewed on its own card.
     expect(selfReview).toContain(
       'say it is tracked on its own card and that a person should confirm it is reviewed there',
@@ -4421,7 +4419,7 @@ describe('factory environment sandbox context', () => {
      */
     async function boot(
       resolver: (args: any) => Promise<any>,
-      markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
+      markers: { repos?: Record<string, boolean | 'failed-in-build'>; workspace?: boolean } = {},
     ) {
       const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
       const sandbox = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
@@ -4430,7 +4428,8 @@ describe('factory environment sandbox context', () => {
         const text = String(command);
         const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
         if (repoProbe) {
-          return { exitCode: markers.repos?.[repoProbe[1]!] ? 0 : 1, stdout: '', stderr: '' };
+          const marker = markers.repos?.[repoProbe[1]!];
+          return { exitCode: marker === 'failed-in-build' ? 3 : marker ? 0 : 1, stdout: '', stderr: '' };
         }
         if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
           return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
@@ -5042,6 +5041,28 @@ describe('factory environment sandbox context', () => {
           error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
         },
       ]);
+      warn.mockRestore();
+    });
+
+    it('starts without running a setup command the environment build already saw fail, and reports it failed', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await expect(
+        boot(resolver, { repos: { hello: 'failed-in-build', docs: 'failed-in-build' }, workspace: true }),
+      ).resolves.toBeDefined();
+
+      expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+      expect(peekSessionEnvironment('session-a')?.repositories).toMatchObject([
+        { slug: 'octocat/hello', setupStatus: 'failed' },
+        { slug: 'octocat/docs', setupStatus: 'failed' },
+      ]);
+      // The build's own result stays on the repository: a session start has nothing new to record.
+      expect((github.sourceControlStorage.projectRepositories as any).setBuildStatus).not.toHaveBeenCalled();
       warn.mockRestore();
     });
 

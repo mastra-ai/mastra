@@ -277,6 +277,8 @@ function isStaleRequest(expiresAt: number | undefined): boolean {
 /** Thread lease TTL and renew interval; shared with the durable execution lease. */
 const AGENT_THREAD_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
 const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = AGENT_LEASE_RENEW_INTERVAL_MS;
+const DURABLE_THREAD_CLAIM_WAIT_MS = 5_000;
+const DURABLE_THREAD_CLAIM_POLL_MS = 100;
 /**
  * TTL for a suspended run's warm in-memory state — the parked thread-run record
  * (swept by #sweepStaleSuspendedRecords). The Mastra internal-workflow registry
@@ -1240,21 +1242,33 @@ export class AgentThreadStreamRuntime {
     generation: number | undefined,
     executionId?: string,
   ): Promise<void> {
-    const lease = await this.#acquireThreadLease(
-      pubsub,
-      this.#threadKey(resourceId, threadId),
-      runId,
-      threadLeaseOwner(runId, generation, executionId),
-    );
+    const key = this.#threadKey(resourceId, threadId);
+    const owner = threadLeaseOwner(runId, generation, executionId);
+    let lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+    const previousOwner = parseThreadLeaseOwner(lease.owner);
+    if (
+      !lease.acquired &&
+      (lease.owner === undefined ||
+        (previousOwner &&
+          previousOwner[0] !== runId &&
+          (previousOwner[1] === 'generation' || previousOwner[1] === 'execution')))
+    ) {
+      // A shared evented worker can publish finish before releasing the thread. An
+      // ownerless failure can mean the lease disappeared between the claim and owner lookup.
+      // Retry within the same deadline, but don't wait behind a new owner.
+      const blockingOwner = lease.owner;
+      const deadline = Date.now() + DURABLE_THREAD_CLAIM_WAIT_MS;
+      while (!lease.acquired && (lease.owner === undefined || lease.owner === blockingOwner)) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        await new Promise(resolve => setTimeout(resolve, Math.min(remaining, DURABLE_THREAD_CLAIM_POLL_MS)));
+        lease = await this.#acquireThreadLease(pubsub, key, runId, owner);
+      }
+    }
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
     if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
       this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-      );
+      this.#startLeaseRenewal(pubsub, key, runId, owner);
     }
   }
 
@@ -1752,6 +1766,16 @@ export class AgentThreadStreamRuntime {
       if (state.leaseRenewalTimers.get(runId) === timer) {
         this.#stopLeaseRenewal(pubsub, runId, timer);
         this.#abortLeaseLostRun(state, runId);
+      }
+      // A parked run calls no tools, so this call belongs to a resume of it. A resume on another server holds the
+      // lease under this run id (a newer generation), and its step's delivery ownership is checked on its own, so
+      // the parked registration doesn't stop it. A different run holding the thread is still a takeover.
+      if (
+        state.threadRunsById.get(runId)?.lifecycle === 'suspended' &&
+        typeof owner === 'string' &&
+        threadLeaseRunId(owner) === runId
+      ) {
+        return;
       }
       throw new AgentThreadLeaseLostError(runId);
     };

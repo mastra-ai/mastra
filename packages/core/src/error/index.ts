@@ -12,6 +12,7 @@ export { toPersistedErrorIdentity } from '../loop/shared/record-terminal-error-m
 export {
   classifyProviderError,
   PROVIDER_CALL_ERROR_NAME,
+  PROVIDER_FAILURE_KINDS,
   providerErrorReason,
   providerModelId,
   providerRequestId,

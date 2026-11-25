@@ -88,6 +88,18 @@ describe('when logs are sorted from the Date column', () => {
   });
 });
 
+describe('when the URL filters logs on the MCP Server primitive type', () => {
+  it('asks the server only for logs rooted at an MCP server', async () => {
+    const urls: string[] = [];
+    useHandlers(urls);
+
+    renderWithProviders(<LogsPage />, { router: { initialEntries: ['/logs?rootEntityType=mcp_server'] } });
+
+    await waitFor(() => expect(urls.length).toBeGreaterThan(0));
+    expect(new URL(urls[urls.length - 1] ?? '').searchParams.get('rootEntityType')).toBe('mcp_server');
+  });
+});
+
 const LocationProbe = () => {
   const location = useLocation();
   return <div data-testid="location">{location.search}</div>;

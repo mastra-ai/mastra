@@ -29,6 +29,7 @@ import type {
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
+import { KnowledgeNotesSkeleton, KnowledgePageSkeleton } from './KnowledgePageSkeleton';
 import { KNOWLEDGE_TREE_ROOT, KnowledgePageTree } from './KnowledgePageTree';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
@@ -43,6 +44,7 @@ import { SearchInput } from '@/ds/components/SearchInput';
 import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tree } from '@/ds/components/Tree';
+import { useTreeFileIndent } from '@/ds/components/Tree/tree-context';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
@@ -334,54 +336,38 @@ function withinScope(pages: KnowledgePagePayload[], scopeId: string | null): Kno
 }
 
 const SKELETON_ROW_WIDTHS = ['w-32', 'w-24', 'w-40', 'w-28', 'w-36', 'w-20'];
+const skeletonBar = 'motion-reduce:before:animate-none';
+const CHILD_PAGES_CARD = cn('rounded-xl p-1', raisedSurfaceStyle);
+const CHILD_PAGES_TREE = 'rounded-lg bg-nested p-1';
 
-function TreeRowsSkeleton({ label, rows }: { label: string; rows: number }) {
+function PageTreeSkeleton({ rows }: { rows: number }) {
   return (
-    <div role="status" aria-label={label} className="flex flex-col">
+    <div role="status" aria-label="Loading pages" className="flex flex-col py-1">
       {SKELETON_ROW_WIDTHS.slice(0, rows).map((width, index) => (
         <div
           key={width}
-          className="flex h-8 items-center gap-2 px-1"
+          className="flex h-8 items-center gap-2 pr-2"
           style={{ paddingLeft: `${(index % 3) * 12 + 4}px` }}
         >
-          <Skeleton className="size-3.5 shrink-0" />
-          <SkeletonText className={width} />
+          <span className="size-3 shrink-0" />
+          <Skeleton className={cn('size-icon-sm shrink-0', skeletonBar)} />
+          <SkeletonText className={cn(width, skeletonBar)} />
         </div>
       ))}
     </div>
   );
 }
 
-function NotesSkeleton() {
+function ChildPageRowsSkeleton({ rows, className }: { rows: number; className?: string }) {
+  const indent = useTreeFileIndent();
   return (
-    <div role="status" aria-label="Loading notes" className="flex flex-col gap-2">
-      {[0, 1].map(index => (
-        <div key={index} className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <SkeletonText className="w-24" />
-          <SkeletonText className="w-full" />
-          <SkeletonText className="w-2/3" />
+    <div role="status" aria-label="Loading pages" className={cn('flex flex-col', className)}>
+      {SKELETON_ROW_WIDTHS.slice(0, rows).map(width => (
+        <div key={width} className="flex h-7 items-center gap-1.5 pr-1" style={{ paddingLeft: indent }}>
+          <Skeleton className={cn('size-icon-sm shrink-0', skeletonBar)} />
+          <SkeletonText line="text-caption" className={cn(width, skeletonBar)} />
         </div>
       ))}
-    </div>
-  );
-}
-
-function PageSkeleton({ compact }: { compact?: boolean }) {
-  return (
-    <div role="status" aria-label="Loading page" className="flex flex-col">
-      <div
-        className={`flex flex-col gap-2 border-b border-border ${compact ? 'px-4 pt-3 pb-4' : 'bg-fill-subtle px-6 pt-5 pb-4'}`}
-      >
-        <SkeletonText line="text-caption" className="w-28" />
-        {compact ? null : <SkeletonText line="text-title" className="h-5 w-56" />}
-        <SkeletonText className="w-72 max-w-full" />
-        <SkeletonText line="text-caption" className="w-40" />
-      </div>
-      <div className={`flex flex-col gap-3 ${compact ? 'p-4' : 'p-6'}`}>
-        <SkeletonText className="w-full max-w-3xl" />
-        <SkeletonText className="w-5/6 max-w-2xl" />
-        <SkeletonText className="w-2/3 max-w-xl" />
-      </div>
     </div>
   );
 }
@@ -415,7 +401,7 @@ function MoreNotes({
   const chunk = source.usePage(pageId, cursor);
   const [showNext, setShowNext] = useState(false);
   const known = useMemo(() => withPages(pagesById, chunk.data?.related ?? []), [chunk.data, pagesById]);
-  if (chunk.isPending) return <NotesSkeleton />;
+  if (chunk.isPending) return <KnowledgeNotesSkeleton className="gap-3" />;
   if (!chunk.data) return null;
   const next = chunk.data.notesNextCursor;
   return (
@@ -454,7 +440,9 @@ function ChildPages({
   if (levels[0]?.isPending) {
     return (
       <KnowledgeDetailSection label="Pages">
-        <TreeRowsSkeleton label="Loading pages" rows={3} />
+        <div className={CHILD_PAGES_CARD}>
+          <ChildPageRowsSkeleton rows={3} className={CHILD_PAGES_TREE} />
+        </div>
       </KnowledgeDetailSection>
     );
   }
@@ -462,8 +450,8 @@ function ChildPages({
   if (pages.length === 0 && !next) return null;
   return (
     <KnowledgeDetailSection label="Pages">
-      <div className={`rounded-xl p-1 ${raisedSurfaceStyle}`}>
-        <Tree className="rounded-lg bg-nested p-1" onSelect={onOpen}>
+      <div className={CHILD_PAGES_CARD}>
+        <Tree className={CHILD_PAGES_TREE} onSelect={onOpen}>
           <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
         </Tree>
       </div>
@@ -561,8 +549,8 @@ function ChildPageLevel({
   const next = levels[levels.length - 1]?.data?.nextCursor;
   if (levels[0]?.isPending) {
     return (
-      <li role="none" className="pl-6">
-        <TreeRowsSkeleton label="Loading pages" rows={2} />
+      <li role="none">
+        <ChildPageRowsSkeleton rows={2} />
       </li>
     );
   }
@@ -650,7 +638,7 @@ function MentionPopup({
       </div>
       <div className="min-h-0 overflow-y-auto">
         {detail.isPending ? (
-          <NotesSkeleton />
+          <KnowledgeNotesSkeleton compact />
         ) : notes.length === 0 ? (
           <Txt variant="caption" tone="muted">
             The notes that make this mention aren't in the first page of notes. Open {mention.source.name} to read them
@@ -704,7 +692,7 @@ function SelectedPage({
     [detail.data, pagesById],
   );
 
-  if (detail.isPending) return <PageSkeleton compact={compact} />;
+  if (detail.isPending) return <KnowledgePageSkeleton compact={compact} />;
   if (detail.isError || !detail.data) {
     const notFound = isNotFound(detail.error);
     return (
@@ -1355,9 +1343,7 @@ export function KnowledgePageExplorer({
       ) : null}
       <div className="min-h-0 flex-1 overflow-auto">
         {source.useTreeLevels && lazy.rootsPending ? (
-          <div className="p-2">
-            <TreeRowsSkeleton label="Loading pages" rows={6} />
-          </div>
+          <PageTreeSkeleton rows={6} />
         ) : (
           <KnowledgePageTree
             key={focusScope ? focusScope.id : 'all'}

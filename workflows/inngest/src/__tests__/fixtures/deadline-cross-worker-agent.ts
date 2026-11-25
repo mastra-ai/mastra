@@ -73,7 +73,35 @@ export function buildDeadlineCrossWorkerAgent({
     name: 'Deadline Cross Worker Agent',
     instructions: 'Call slow, then reply.',
     model: provider.chat('deadline-cross-worker-model'),
-    tools: { slow },
+    tools: {
+      slow,
+      approve: createTool({
+        id: 'approve',
+        description: 'Approval probe',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => ({ approved: true }),
+      }),
+    },
+    inputProcessors: [
+      {
+        id: 'resume-context-probe',
+        processInputStep: ({ requestContext }) => {
+          const controller = requestContext?.get('probe-controller');
+          log({
+            event: 'resume-context',
+            marker: requestContext?.get('probe-marker'),
+            value:
+              controller &&
+              typeof controller === 'object' &&
+              'getState' in controller &&
+              typeof controller.getState === 'function'
+                ? controller.getState()
+                : undefined,
+          });
+        },
+      },
+    ],
     memory,
     outputProcessors: [
       {

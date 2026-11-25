@@ -5,7 +5,7 @@ import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 interface LogStreamRowTone {
-  level: LogLevel;
+  level?: LogLevel;
   featured?: boolean;
 }
 
@@ -13,7 +13,7 @@ function rowClass({ level, featured }: LogStreamRowTone, interactive: boolean, c
   return cn(
     'relative col-span-full grid min-h-6 grid-cols-subgrid items-start gap-x-4 gap-y-1 px-3 py-0.5 text-left',
     "before:absolute before:inset-y-1 before:left-1 before:w-0.5 before:rounded-full before:content-['']",
-    logLevelBarClass[level],
+    level ? logLevelBarClass[level] : 'before:bg-border-strong',
     (level === 'error' || level === 'fatal') && 'bg-destructive-subtle',
     featured && 'bg-surface-panel',
     interactive && [

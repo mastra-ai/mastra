@@ -9,6 +9,8 @@ export { ObservabilityListBody } from './components/observability-list-body';
 export type { ObservabilityListBodyProps } from './components/observability-list-body';
 export { useObservabilityViews } from './hooks/use-observability-views';
 export type { ObservabilityViewsState, UseObservabilityViewsArgs } from './hooks/use-observability-views';
+export { useTraceAsItemData } from './hooks/use-trace-as-item-data';
+export type { UseTraceAsItemDataArgs } from './hooks/use-trace-as-item-data';
 export { observabilityListQueryOptions, useObservabilityListFilters } from './hooks/use-observability-list-filters';
 export { listHeadQueryKey, useListAnchor, useListHeadPoll, windowEndingAt } from './hooks/use-list-head-poll';
 export type { ListHeadStore, ListWindow, UseListHeadPollArgs } from './hooks/use-list-head-poll';

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { DragPayload } from './board-drag';
 import { BoardStageIcon, stageHeaderTintClass } from './board-icons';
 import type { BoardPhaseKind, BoardStageId } from './board-icons';
+import { BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS } from './board-layout';
 import { useBoardDropZone } from './use-board-drop-zone';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DataList } from '@/ds/components/DataList';
@@ -68,7 +69,8 @@ export function BoardListGroup({
     >
       <div
         className={cn(
-          'col-span-full mb-1 flex min-h-9 items-center gap-2 rounded-lg py-1 pr-1 pl-3 transition-colors motion-reduce:transition-none',
+          'col-span-full transition-colors motion-reduce:transition-none',
+          BOARD_LIST_GROUP_HEADER_LAYOUT_CLASS,
           dropZone.isDragOver ? 'bg-fill-hover' : stageHeaderTintClass(stage, phaseKind),
         )}
       >
