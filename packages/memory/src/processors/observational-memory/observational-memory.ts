@@ -4,13 +4,7 @@ import { coreFeatures } from '@mastra/core/features';
 import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import { modelSupportsTemperature, resolveModelConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
-import {
-  MASTRA_THREAD_BRANCH_METADATA_KEY,
-  createThreadBranchError,
-  getThreadOMMetadata,
-  setThreadOMMetadata,
-} from '@mastra/core/memory';
-import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
@@ -26,6 +20,12 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
+import {
+  createThreadBranchError,
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  persistGeneratedMessages,
+  persistMessagesWithThreadCreation,
+} from '../../branching/core-compat';
 import { compareMessageTuples, parseThreadBranchMetadata } from '../../branching/lineage';
 import { getThreadBranchParticipation } from '../../branching/query';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';

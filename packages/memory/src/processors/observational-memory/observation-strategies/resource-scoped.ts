@@ -1,9 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { createThreadBranchError, getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { StorageThreadType, ThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
+import { createThreadBranchError } from '../../../branching/core-compat';
 import { parseThreadBranchMetadata } from '../../../branching/lineage';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {

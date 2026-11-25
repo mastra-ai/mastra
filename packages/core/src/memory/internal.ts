@@ -4,6 +4,8 @@ import type { ObservabilityContext } from '../observability';
 import type { MastraMemory } from './memory';
 import type { MemoryConfig, StorageThreadType } from './types';
 
+// Compatibility note: @mastra/memory keeps a copy of these values in
+// packages/memory/src/branching/core-compat.ts so it loads on older @mastra/core versions. Keep both in sync.
 export type GeneratedMessagePersistenceInput = {
   messages: MastraDBMessage[];
   memoryConfig?: MemoryConfig;
