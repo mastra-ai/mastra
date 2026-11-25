@@ -658,10 +658,10 @@
       "reason": "seed-rule-b"
     },
     "client-sdks/client-js/src/resources/agent.cancellation.test.ts": {
-      "tier": "out",
-      "since": "2026-11-22",
-      "last_failure": null,
-      "reason": "clean-30-days"
+      "tier": "in",
+      "since": "2026-11-25",
+      "last_failure": "2026-11-25",
+      "reason": "versioning-fail"
     },
     "client-sdks/client-js/src/resources/agent.client-tools.test.ts": {
       "tier": "out",
