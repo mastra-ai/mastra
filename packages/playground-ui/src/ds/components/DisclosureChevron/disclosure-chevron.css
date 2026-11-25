@@ -1,0 +1,27 @@
+/*
+ * The down/up chevron as one number: 1 points down, -1 up, 0 is flat. Safari can't transition `d`, so each
+ * half is a line that turns around the tip and trims its length to keep the ends in their columns.
+ */
+@property --disclosure-chevron-bend {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
+.disclosure-chevron-arm {
+  transform: translateY(calc(var(--disclosure-chevron-bend) * 3.5px))
+    rotate(atan2(calc(var(--disclosure-chevron-bend) * -1), 1));
+  transform-origin: 12px 12px;
+  stroke-dasharray: calc(hypot(1, var(--disclosure-chevron-bend)) * 6px) 24px;
+}
+
+/* At rest the single Central path shows instead, so both ends match the icon to the pixel. */
+.disclosure-chevron-rest {
+  transform: scaleY(var(--disclosure-chevron-bend));
+  transform-origin: 12px 12px;
+  opacity: calc((var(--disclosure-chevron-bend) * var(--disclosure-chevron-bend) - 1) * 1000000 + 1);
+}
+
+.disclosure-chevron-arms {
+  opacity: calc((1 - var(--disclosure-chevron-bend) * var(--disclosure-chevron-bend)) * 1000000);
+}

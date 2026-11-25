@@ -5,12 +5,12 @@ import { Badge } from '@/ds/components/Badge';
 import { Button, buttonVariants } from '@/ds/components/Button';
 import { CommittedInput } from '@/ds/components/CommittedInput';
 import { ContentBlock, ContentBlocks } from '@/ds/components/ContentBlocks';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Notice } from '@/ds/components/Notice';
 import { Switch } from '@/ds/components/Switch';
 import { InfoTooltip, Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { IconBrokenChainLink3 } from '@/ds/icons/central/IconBrokenChainLink3';
-import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
 import { GitlabIcon } from '@/ds/icons/GitlabIcon';
@@ -237,7 +237,7 @@ function RepositoryRow({
             <span className="min-w-0 truncate" title={label}>
               {label}
             </span>
-            <IconChevronDownMedium aria-hidden className={cn('size-icon-md shrink-0', expanded && 'rotate-180')} />
+            <DisclosureChevron className="size-icon-md" />
           </button>
         }
         description={repository.preClone ? undefined : 'Skipped'}

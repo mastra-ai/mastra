@@ -1,3 +1,4 @@
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
@@ -17,7 +18,6 @@ import { ActivityPeriodMenu } from './ActivityPeriodMenu';
 import { ActivityReveal } from './ActivityReveal';
 import { ActivityTotals } from './ActivityTotals';
 import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
-import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
   today: { label: 'Recap today', since: 'today' },
@@ -99,13 +99,9 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
                 <RecapButton period={period} />
               </div>
             )}
-            <IconChevronDownMedium
-              aria-hidden
-              className={cn(
-                'text-muted-foreground duration-slow ease-out-custom size-icon-sm transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
-                open && 'rotate-180',
-              )}
-            />
+            <span className="text-muted-foreground duration-slow ease-out-custom group-has-[[aria-controls]:hover]/band:text-foreground flex transition-colors motion-reduce:transition-none">
+              <DisclosureChevron open={open} className="duration-slow size-icon-sm" />
+            </span>
           </div>
         </div>
         <ActivityChart id={chartId} open={open} period={period} activity={activity} runs={runs} />
