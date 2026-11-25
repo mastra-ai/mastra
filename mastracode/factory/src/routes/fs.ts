@@ -1012,6 +1012,11 @@ export async function listSessionWorkspaceFiles(session: SourceControlSession): 
  * root, or anything the tree would list (not git internals, not ignored by its
  * checkout).
  */
+/** The absolute directory a session's workspace paths are relative to, while its sandbox is live in this process. */
+export function sessionWorkspaceRoot(session: Pick<SourceControlSession, 'id'>): string | undefined {
+  return sessionLayout(peekSessionSandbox(session.id))?.root;
+}
+
 export async function readSessionWorkspaceFile(session: SourceControlSession, path: string): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
 

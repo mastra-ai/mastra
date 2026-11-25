@@ -330,6 +330,108 @@ describe('sendRunEndReport', () => {
     });
   });
 
+  const PLAN_OUTCOME = {
+    status: 'blocked',
+    toolName: 'submit_plan',
+    toolCallId: 'plan-1',
+    decision: true,
+    planPath: '.artifacts/plans/a.md',
+  } as const;
+
+  it('quotes a submitted plan in the blocked report, before how to answer it', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: {
+        ...PLAN_OUTCOME,
+        plan: {
+          ok: true,
+          path: '.artifacts/plans/a.md',
+          title: 'Add dark mode',
+          goal: 'Let people switch to a dark theme.',
+          scope: 'In: a toggle.',
+          phases: ['Phase 1: Tokens'],
+          body: '',
+        },
+      },
+      subject: 'The work session for #7',
+    });
+    const summary = env.deliveries[0]!.notification.summary;
+    expect(summary).toBe(
+      [
+        'The work session for #7 submitted a plan and is waiting for it to be approved.',
+        'Plan: "Add dark mode" (`.artifacts/plans/a.md`)\n\nGoal:\nLet people switch to a dark theme.\n\nScope:\nIn: a toggle.\n\nPhases:\n- Phase 1: Tokens',
+        'Approve or decline it with factory_answer_approval (sessionId "session-w", toolCallId "plan-1"); to ask for changes, decline it with the requested changes as the reason.',
+      ].join('\n\n'),
+    );
+    expect(env.deliveries[0]!.notification.attributes).toMatchObject({ 'plan-path': '.artifacts/plans/a.md' });
+  });
+
+  it('says when the submitted plan could not be read, and never that it was approved', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: {
+        ...PLAN_OUTCOME,
+        plan: { ok: false, path: '.artifacts/plans/a.md', reason: 'Session workspace is not available' },
+      },
+      subject: 'The work session for #7',
+    });
+    const summary = env.deliveries[0]!.notification.summary!;
+    expect(summary).toContain(
+      'The plan file `.artifacts/plans/a.md` could not be read (Session workspace is not available); open the session to review it before approving.',
+    );
+    expect(summary).not.toContain('was approved');
+  });
+
+  it('posts an approval card to every follower thread, and tells those threads it is there', async () => {
+    const env = reporting();
+    const other = { sessionId: 'session-2', threadId: 'thread-session-2' };
+    // The agent already told PARENT it is blocked: the thread still gets its card.
+    await env.agentReport('blocked');
+    const postPlanApproval = vi.fn(async () => new Set([PARENT.threadId, other.threadId]));
+    await sendRunEndReport(
+      { ...env.reporting, postPlanApproval },
+      {
+        sender: SENDER,
+        recipients: [PARENT, other],
+        since: new Date(Date.now() - 1000),
+        outcome: { ...PLAN_OUTCOME, plan: { ok: true, path: '.artifacts/plans/a.md', phases: [], body: 'Do it.' } },
+        subject: 'The work session for #7',
+      },
+    );
+    expect(postPlanApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ recipients: [PARENT, other], toolCallId: 'plan-1', sender: SENDER }),
+    );
+    expect(env.deliveries.map(d => d.target)).toEqual([other]);
+    expect(env.deliveries[0]!.notification.summary).toContain('An approval card with this plan and an Approve button');
+    expect(env.deliveries[0]!.notification.attributes).toMatchObject({ 'plan-card': 'posted' });
+  });
+
+  it('still reports the plan when posting its cards fails', async () => {
+    const env = reporting();
+    const postPlanApproval = vi.fn(async () => {
+      throw new Error('Slack is down');
+    });
+    await sendRunEndReport(
+      { ...env.reporting, postPlanApproval },
+      {
+        sender: SENDER,
+        recipients: [PARENT],
+        since: new Date(Date.now() - 1000),
+        outcome: { ...PLAN_OUTCOME, plan: { ok: true, path: '.artifacts/plans/a.md', phases: [], body: 'Do it.' } },
+        subject: 'The work session for #7',
+      },
+    );
+    expect(env.deliveries).toHaveLength(1);
+    expect(env.deliveries[0]!.notification.summary).toContain('Plan excerpt:\nDo it.');
+    expect(env.deliveries[0]!.notification.summary).not.toContain('approval card');
+  });
+
   it('sends a question to the session that asked it, with no approval to answer', async () => {
     const env = reporting();
     await sendRunEndReport(env.reporting, {

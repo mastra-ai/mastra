@@ -12,6 +12,7 @@ import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-rel
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import { seedSessionOrg } from '../session/org-seed.js';
+import { followsCard } from '../session/parked-approval-access.js';
 import {
   isRunBound,
   isWorkerSession,
@@ -99,26 +100,6 @@ const parkedApprovalAnswerSchema = z
     toolCallId: z.string().trim().min(1).max(200).optional(),
   })
   .strict();
-
-/** Whether the viewer asked for the card's work: they filed it, or a session of theirs follows it. */
-async function followsCard(
-  options: SourceControlSessionRoutesOptions,
-  workItemId: string | undefined,
-  tenant: { orgId: string; userId: string },
-): Promise<boolean> {
-  const workItems = options.workItems;
-  if (!workItemId || !workItems?.get || !workItems.listWorkItemSubscribers) return false;
-  const item = await workItems.get({ orgId: tenant.orgId, id: workItemId });
-  if (!item) return false;
-  if (item.createdBy === tenant.userId) return true;
-  // A follow belongs to its session, and a session can change hands: ask who owns it now.
-  const followers = await workItems.listWorkItemSubscribers({ orgId: tenant.orgId, workItemId });
-  for (const sessionId of new Set(followers.map(follower => follower.sessionId))) {
-    const following = (await resolveSession(options.sourceControls, sessionId))?.session;
-    if (following?.orgId === tenant.orgId && following.userId === tenant.userId) return true;
-  }
-  return false;
-}
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
@@ -560,7 +541,17 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
                 sessionId: session.sessionId,
               })
             : null;
-        if (permission !== 'allowed' && !(await followsCard(options, binding?.workItemId, resolved.tenant))) {
+        if (
+          permission !== 'allowed' &&
+          !(await followsCard(
+            {
+              ...(options.workItems ? { workItems: options.workItems } : {}),
+              getSession: async id => (await resolveSession(options.sourceControls, id))?.session ?? null,
+            },
+            binding?.workItemId,
+            resolved.tenant,
+          ))
+        ) {
           return c.json(
             { error: "Only the session's owner, an organization admin, or someone following its card can answer." },
             403,

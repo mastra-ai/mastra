@@ -12,10 +12,13 @@ import type {
 } from '@mastra/core/notifications';
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemNumber } from '../work-items/card-number.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE } from './deliver.js';
 import type { FactoryDeliveryResult, FactoryDeliveryTarget } from './deliver.js';
+import { formatPlanDigestText, unreadablePlanText } from './plan-digest.js';
+import type { PlanDigestResult } from './plan-digest.js';
 
 export type FactoryReportStatus = 'progress' | 'blocked' | 'done' | 'failed';
 
@@ -47,9 +50,24 @@ export type FactoryReportDeliver = (
   options?: { onlyIfLive?: boolean },
 ) => Promise<FactoryDeliveryResult>;
 
+/** A plan a parked `submit_plan` call waits on, for the followers asked to approve it. */
+export interface FactoryPlanApprovalRequest {
+  sender: FactoryReportSender;
+  recipients: FactoryDeliveryTarget[];
+  toolCallId: string;
+  plan: PlanDigestResult;
+  /** Who submitted it, e.g. "The work session for #12". */
+  subject: string;
+}
+
 export interface FactoryReporting {
   deliver: FactoryReportDeliver;
   notifications: Pick<NotificationsStorage, 'listNotifications'>;
+  /**
+   * Puts an approval card for the plan in each recipient thread that can show
+   * one (Slack), and returns those threads. Never throws.
+   */
+  postPlanApproval?: (request: FactoryPlanApprovalRequest) => Promise<ReadonlySet<string>>;
 }
 
 /**
@@ -237,6 +255,10 @@ export type FactoryRunOutcome =
       approval?: boolean;
       /** The tool paused itself, and a yes or no from a follower is all it needs. */
       decision?: boolean;
+      /** The plan file a `submit_plan` call asks to have approved. */
+      planPath?: string;
+      /** What that plan says, read when the run parked. */
+      plan?: PlanDigestResult;
     };
 
 /** `waiting`: the session is waiting for an answer, so a later run owes the final report. */
@@ -273,6 +295,8 @@ export async function sendRunEndReport(
   },
 ): Promise<FactoryRunEndResult> {
   const kinds = outcome.status === 'blocked' ? ['blocked'] : ['done', 'failed'];
+  const plan = outcome.status === 'blocked' ? outcome.plan : undefined;
+  const answerable = outcome.status === 'blocked' && outcome.decision && outcome.toolCallId;
   const message =
     outcome.status === 'done'
       ? `${subject} finished.`
@@ -280,11 +304,33 @@ export async function sendRunEndReport(
         ? `${subject} failed${outcome.failureCode ? ` (${outcome.failureCode})` : ''}: ${outcome.reason}`
         : outcome.approval
           ? `${subject} is waiting for someone to approve ${outcome.toolName ?? 'a tool call'} in that session.`
-          : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.${
-              outcome.decision && outcome.toolCallId
-                ? ` Approve or decline it with factory_answer_approval (sessionId "${sender.sessionId}", toolCallId "${outcome.toolCallId}").`
-                : ''
-            }`;
+          : plan
+            ? [
+                `${subject} submitted a plan and is waiting for it to be approved.`,
+                plan.ok ? formatPlanDigestText(plan) : unreadablePlanText(plan),
+                ...(answerable
+                  ? [
+                      `Approve or decline it with factory_answer_approval (sessionId "${sender.sessionId}", toolCallId "${outcome.toolCallId}"); to ask for changes, decline it with the requested changes as the reason.`,
+                    ]
+                  : []),
+              ].join('\n\n')
+            : `${subject} is waiting${outcome.toolName ? ` on ${outcome.toolName}` : ''} and needs an answer.${
+                answerable
+                  ? ` Approve or decline it with factory_answer_approval (sessionId "${sender.sessionId}", toolCallId "${outcome.toolCallId}").`
+                  : ''
+              }`;
+  // Each follower thread that can show one gets an approval card, even one the agent already told it was blocked.
+  const carded =
+    plan && answerable && reporting.postPlanApproval
+      ? await reporting
+          .postPlanApproval({ sender, recipients, toolCallId: outcome.toolCallId!, plan, subject })
+          .catch(error => {
+            console.warn('[Factory reports] Unable to post the plan approval cards.', error);
+            return new Set<string>();
+          })
+      : new Set<string>();
+  const notificationFor = (recipient: FactoryDeliveryTarget) =>
+    carded.has(recipient.threadId) ? cardedNotification : notification;
   const notification = reportNotification({
     sender,
     status: outcome.status,
@@ -296,7 +342,14 @@ export async function sendRunEndReport(
       ...(outcome.status === 'blocked' && outcome.toolName ? { 'parked-tool': outcome.toolName } : {}),
       ...(outcome.status === 'blocked' && outcome.toolCallId ? { 'tool-call-id': outcome.toolCallId } : {}),
       ...(outcome.status === 'blocked' && (outcome.approval || outcome.decision) ? { 'waiting-for': 'approval' } : {}),
+      ...(plan ? { 'plan-path': plan.path } : {}),
     },
+  });
+  const cardedNotification = reportNotification({
+    sender,
+    status: outcome.status,
+    message: `${message}\n\nAn approval card with this plan and an Approve button is already in this thread: don't repeat the plan there. A reply asking for changes is a decline with those changes as the reason.`,
+    attributes: { ...notification.attributes!, 'plan-card': 'posted' },
   });
   const report = (recipient: FactoryDeliveryTarget, reportKinds: string[], agentOnly = false) =>
     hasFinalReport(reporting.notifications, {
@@ -336,7 +389,7 @@ export async function sendRunEndReport(
     ) {
       continue;
     }
-    deliveries.push(await reporting.deliver(recipient, notification));
+    deliveries.push(await reporting.deliver(recipient, notificationFor(recipient)));
   }
   return { waiting, deliveries };
 }
@@ -483,6 +536,8 @@ interface SessionReportDependencies {
     'findActiveRunBindingForSession' | 'findRunBindingBySession' | 'listWorkItemSubscribers' | 'getForProject'
   >;
   reporting: () => Promise<FactoryReporting | null>;
+  /** Reads the plan a parked `submit_plan` call submitted, from the session's workspace. Never throws. */
+  readPlan?: (session: SourceControlSession, path: string) => Promise<PlanDigestResult>;
 }
 
 /** How much of a gated call's arguments an approval notice quotes. */
@@ -504,6 +559,7 @@ async function sessionAudience(
       kind: 'work-item';
       binding: NonNullable<Awaited<ReturnType<WorkItemsStorage['findActiveRunBindingForSession']>>>;
       sender: FactoryReportSender;
+      row: SourceControlSession;
     }
   | {
       kind: 'origin';
@@ -512,6 +568,7 @@ async function sessionAudience(
       subject: string;
       /** Set while the origin has muted this side session's reports (approval notices still go through). */
       mutedAt: Date | null;
+      row: SourceControlSession;
     }
   | null
 > {
@@ -544,6 +601,7 @@ async function sessionAudience(
       kind: 'work-item',
       binding,
       sender: { sessionId: row.sessionId, threadId: binding.threadId, userId: row.userId },
+      row,
     };
   }
   if (!row.originSessionId || !row.originThreadId || !threadId) return null;
@@ -553,6 +611,7 @@ async function sessionAudience(
     recipient: { sessionId: row.originSessionId, threadId: row.originThreadId },
     subject: `The side session "${row.title ?? row.sessionId}"`,
     mutedAt: row.originMutedAt ?? null,
+    row,
   };
 }
 
@@ -562,6 +621,9 @@ export function createSessionRunEndReporter(deps: SessionReportDependencies): Fa
   return async ({ sessionId, threadId, outcome, since }) => {
     const audience = await sessionAudience(deps, sessionId, threadId, since);
     if (!audience) return;
+    if (outcome.status === 'blocked' && outcome.planPath && !outcome.plan && deps.readPlan) {
+      outcome = { ...outcome, plan: await deps.readPlan(audience.row, outcome.planPath) };
+    }
     if (audience.kind === 'work-item') {
       const { binding, sender } = audience;
       await workItemRunEnd({

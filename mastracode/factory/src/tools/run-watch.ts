@@ -36,6 +36,8 @@ export interface ParkedTool {
   approval: boolean;
   /** The tool paused itself, and a bare yes or no is all it needs to carry on. */
   decision?: boolean;
+  /** The plan file a `submit_plan` call asks to have approved. */
+  planPath?: string;
 }
 
 export interface RunReportSession {
@@ -47,6 +49,9 @@ export type SessionRunEndReport = (outcome: FactoryRunOutcome, since: Date) => P
 
 /** Told when the run holds a tool call for approval; the run stays open meanwhile. */
 export type SessionApprovalReport = (request: { toolName: string; toolCallId: string; args: unknown }) => Promise<void>;
+
+/** The tool a session submits its plan for approval with. */
+export const SUBMIT_PLAN_TOOL_NAME = 'submit_plan';
 
 /** How core's `agent_end.abortReason` says an observational-memory failure stopped the run. */
 export const MEMORY_FAILURE_ABORT_REASON = 'memory-failure';
@@ -87,6 +92,7 @@ export function observeSessionRunReports(
         toolCallId: event.toolCallId,
         approval: event.type === 'tool_approval_required',
         ...(event.type === 'tool_suspended' && resumesOnDecision(event.resumeSchema) ? { decision: true } : {}),
+        ...(event.type === 'tool_suspended' ? submittedPlanPath(event.toolName, event.suspendPayload) : {}),
       };
       // An approval gate holds the run open, so it is announced now, not at the run's end.
       if (event.type === 'tool_approval_required' && onApprovalRequested) {
@@ -115,6 +121,13 @@ export function observeSessionRunReports(
     since = new Date(Date.now() + 1);
     settle(report(outcome, runSince));
   });
+}
+
+/** The plan file a paused `submit_plan` call carries, read off its suspend payload. */
+function submittedPlanPath(toolName: string, payload: unknown): { planPath?: string } {
+  if (toolName !== SUBMIT_PLAN_TOOL_NAME || !payload || typeof payload !== 'object') return {};
+  const path = (payload as { path?: unknown }).path;
+  return typeof path === 'string' && path.trim() ? { planPath: path } : {};
 }
 
 /**
@@ -149,6 +162,7 @@ export function runOutcome(
               toolCallId: parked.toolCallId,
               ...(parked.approval ? { approval: true } : {}),
               ...(parked.decision ? { decision: true } : {}),
+              ...(parked.planPath ? { planPath: parked.planPath } : {}),
             }
           : {}),
       };
