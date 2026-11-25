@@ -87,7 +87,7 @@ Choose the engine based on where the agent should run:
 | Native agent setting | Wrapper equivalent | Where it runs |
 | - | - | - |
 | `durable.executionEngine: 'default'` | `createDurableAgent()` from `@mastra/core/agent/durable` | In the caller's process. Consume the stream directly. |
-| `durable.executionEngine: 'evented'` | `createEventedAgent()` from `@mastra/core/agent/durable` | On Mastra workers. Follow the run through PubSub. Running across processes requires a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
+| `durable.executionEngine: 'evented'` | `createEventedAgent()` from `@mastra/core/agent/durable` | Runs in the background, and you can follow the run through PubSub. It can run in one process or across multiple processes with a [supported PubSub backend and storage adapter](/docs/server/pubsub#evented-workflows-and-agents). |
 | No native setting | `createInngestAgent()` from `@mastra/inngest` | On Inngest, with step memoization, retries, and a monitoring dashboard. |
 
 To set a default for registered native agents, use `durable.executionEngine` on [Mastra](/reference/core/mastra-class). An explicit agent setting overrides it. The choice is fixed at registration or first execution. Wrapper factories select their own engine without changing the wrapped agent's selection.
