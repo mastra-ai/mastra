@@ -85,6 +85,7 @@ import type {
   SqliteInValue as InValue,
   SqliteTransaction as Transaction,
 } from '../../db/client';
+import { isRemoteClient } from '../../db/client';
 import { assertRunFence, DB_NOW_MS, inWriteTransaction, withRunFence } from '../../db/run-fencing';
 import type { RunFenceCheck, SqliteWriter } from '../../db/run-fencing';
 import { buildSelectColumns } from '../../db/utils';
@@ -166,6 +167,11 @@ export class MemoryLibSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
+  override readonly supportsPendingSignals: boolean = true;
+
+  override get pendingSignalsSharedAcrossProcesses(): boolean {
+    return this.#sharedAcrossProcesses;
+  }
 
   /**
    * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
@@ -185,6 +191,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   #client: Client;
   #embeddedReplica: boolean;
+  #sharedAcrossProcesses: boolean;
   #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
@@ -192,6 +199,10 @@ export class MemoryLibSQL extends MemoryStorage {
     const client = resolveClient(config);
     this.#client = client;
     this.#embeddedReplica = config.embeddedReplica === true;
+    // `LibSQLStore` passes what it knows of the whole connection config. Built directly, a domain on a url
+    // is shared unless the database lives in memory, and a client passed in only when it is remote.
+    this.#sharedAcrossProcesses =
+      config.sharedAcrossProcesses ?? ('url' in config ? !config.url.includes(':memory:') : isRemoteClient(client));
     this.#db = new LibSQLDB({
       client,
       maxRetries: config.maxRetries,
@@ -1874,6 +1885,230 @@ export class MemoryLibSQL extends MemoryStorage {
         error,
       );
     }
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  // A method that checks the thread's signal run and writes runs as one write batch: a single
+  // transaction opened with BEGIN IMMEDIATE, so no other connection or process writes between
+  // its check and its writes. The batch is one request, so no transaction stays open across
+  // round trips. None of these methods touches the thread's updatedAt.
+  // ============================================
+
+  async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    try {
+      await this.#write('setSignalRun', () =>
+        this.#client.execute({
+          sql: `UPDATE "${TABLE_THREADS}" SET "signalRunId" = ? WHERE id = ?`,
+          args: [runId, threadId],
+        }),
+      );
+    } catch (error) {
+      throw this.#pendingSignalError('SET_SIGNAL_RUN', error, { threadId, runId });
+    }
+  }
+
+  async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT "signalRunId" FROM "${TABLE_THREADS}" WHERE id = ?`,
+        args: [threadId],
+      });
+      const runId = result.rows[0]?.signalRunId;
+      return typeof runId === 'string' ? runId : null;
+    } catch (error) {
+      throw this.#pendingSignalError('GET_SIGNAL_RUN', error, { threadId });
+    }
+  }
+
+  async enqueuePendingSignal({
+    message,
+    toRunId,
+  }: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<'accepted' | 'run-closed' | 'thread-not-found'> {
+    if (!message.threadId) throw new Error('Thread ID is required');
+    if (!message.resourceId) throw new Error('Resource ID is required');
+
+    const createdAt = message.createdAt || new Date();
+    const row: InValue[] = [
+      message.id,
+      message.threadId,
+      typeof message.content === 'object' ? JSON.stringify(message.content) : message.content,
+      message.role,
+      message.type || 'v2',
+      createdAt instanceof Date ? createdAt.toISOString() : createdAt,
+      message.resourceId,
+    ];
+    // An existing id, in any thread or state, writes nothing.
+    const insert = `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId", "signalStatus")`;
+
+    try {
+      if (toRunId === undefined) {
+        await this.#write('enqueuePendingSignal', () =>
+          this.#client.execute({
+            sql: `${insert} VALUES (?, ?, ?, ?, ?, ?, ?, 'pending') ON CONFLICT(id) DO NOTHING`,
+            args: row,
+          }),
+        );
+        return 'accepted';
+      }
+
+      // The read reports why the insert's condition failed; both run in one transaction, so they agree.
+      const [threadResult] = await this.#write('enqueuePendingSignal', () =>
+        this.#client.batch(
+          [
+            {
+              sql: `SELECT "resourceId", "signalRunId" FROM "${TABLE_THREADS}" WHERE id = ?`,
+              args: [message.threadId!],
+            },
+            {
+              sql: `${insert} SELECT ?, ?, ?, ?, ?, ?, ?, 'pending'
+                    WHERE EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "resourceId" = ? AND "signalRunId" = ?)
+                    ON CONFLICT(id) DO NOTHING`,
+              args: [...row, message.threadId!, message.resourceId!, toRunId],
+            },
+          ],
+          'write',
+        ),
+      );
+      const thread = threadResult!.rows[0];
+      if (!thread || thread.resourceId !== message.resourceId) return 'thread-not-found';
+      return thread.signalRunId === toRunId ? 'accepted' : 'run-closed';
+    } catch (error) {
+      throw this.#pendingSignalError('ENQUEUE_PENDING_SIGNAL', error, { threadId: message.threadId, id: message.id });
+    }
+  }
+
+  async claimPendingSignals({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    const isSignalRun = `EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "signalRunId" = ?)`;
+    try {
+      const [, claimed] = await this.#write('claimPendingSignals', () =>
+        this.#client.batch(
+          [
+            {
+              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalStatus" = 'claimed', "signalClaimedBy" = ?
+                    WHERE thread_id = ? AND ${SIGNAL_ROW_CONDITION} AND "signalStatus" = 'pending' AND ${isSignalRun}`,
+              args: [runId, threadId, threadId, runId],
+            },
+            {
+              // consumedIds can hold every signal a long run consumed, so it is bound as one JSON array.
+              sql: `SELECT id, content, role, type, "createdAt", thread_id, "resourceId" FROM "${TABLE_MESSAGES}"
+                    WHERE thread_id = ? AND ${SIGNAL_ROW_CONDITION} AND "signalClaimedBy" = ?
+                      AND id NOT IN (SELECT value FROM json_each(?)) AND ${isSignalRun}
+                    ORDER BY "createdAt" ASC, id ASC`,
+              args: [threadId, runId, JSON.stringify(consumedIds), threadId, runId],
+            },
+          ],
+          'write',
+        ),
+      );
+      return this.#parseSignalRows(claimed!.rows);
+    } catch (error) {
+      throw this.#pendingSignalError('CLAIM_PENDING_SIGNALS', error, { threadId, runId });
+    }
+  }
+
+  async closeSignalRun({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<void> {
+    const claimedByRun = `thread_id = ? AND ${SIGNAL_ROW_CONDITION} AND "signalClaimedBy" = ?`;
+    try {
+      await this.#write('closeSignalRun', () =>
+        this.#client.batch(
+          [
+            {
+              sql: `DELETE FROM "${TABLE_MESSAGES}"
+                    WHERE ${claimedByRun} AND "signalStatus" = 'claimed' AND id IN (SELECT value FROM json_each(?))`,
+              args: [threadId, runId, JSON.stringify(consumedIds)],
+            },
+            {
+              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalStatus" = 'pending', "signalClaimedBy" = NULL
+                    WHERE ${claimedByRun} AND "signalStatus" = 'claimed'`,
+              args: [threadId, runId],
+            },
+            {
+              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = NULL WHERE ${claimedByRun} AND "signalStatus" IS NULL`,
+              args: [threadId, runId],
+            },
+            {
+              sql: `UPDATE "${TABLE_THREADS}" SET "signalRunId" = NULL WHERE id = ? AND "signalRunId" = ?`,
+              args: [threadId, runId],
+            },
+          ],
+          'write',
+        ),
+      );
+    } catch (error) {
+      throw this.#pendingSignalError('CLOSE_SIGNAL_RUN', error, { threadId, runId });
+    }
+  }
+
+  async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const named = `thread_id = ? AND ${SIGNAL_ROW_CONDITION} AND "signalStatus" = 'pending' AND id IN (SELECT value FROM json_each(?))`;
+    const args = [threadId, JSON.stringify(ids)];
+    try {
+      const [found] = await this.#write('cancelPendingSignals', () =>
+        this.#client.batch(
+          [
+            { sql: `SELECT id FROM "${TABLE_MESSAGES}" WHERE ${named}`, args },
+            { sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE ${named}`, args },
+          ],
+          'write',
+        ),
+      );
+      const deleted = new Set(found!.rows.map(row => row.id as string));
+      return ids.filter(id => deleted.delete(id));
+    } catch (error) {
+      throw this.#pendingSignalError('CANCEL_PENDING_SIGNALS', error, { threadId });
+    }
+  }
+
+  async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT id, content, role, type, "createdAt", thread_id, "resourceId" FROM "${TABLE_MESSAGES}"
+              WHERE thread_id = ? AND ${SIGNAL_ROW_CONDITION} AND "signalStatus" = 'pending'
+              ORDER BY "createdAt" ASC, id ASC`,
+        args: [threadId],
+      });
+      return this.#parseSignalRows(result.rows);
+    } catch (error) {
+      throw this.#pendingSignalError('LIST_PENDING_SIGNALS', error, { threadId });
+    }
+  }
+
+  /** Rows in the shape message reads return, kept in the order the query gave. */
+  #parseSignalRows(rows: Record<string, unknown>[]): MastraDBMessage[] {
+    return rows.map(row => this.parseRow(row));
+  }
+
+  #pendingSignalError(operation: string, error: unknown, details: Record<string, string>): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('LIBSQL', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details,
+      },
+      error,
+    );
   }
 
   // ============================================
