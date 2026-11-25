@@ -6,6 +6,10 @@ import { createThreadBranchError } from './branching';
 import type { MastraMemory } from './memory';
 import type { MemoryConfig, StorageThreadType } from './types';
 
+// Compatibility note: @mastra/memory and @mastra/server keep copies of these values in
+// packages/memory/src/branching/core-compat.ts and
+// packages/server/src/server/handlers/thread-branching-compat.ts so they load on older @mastra/core
+// versions. Keep all three in sync.
 export type GeneratedMessagePersistenceInput = {
   messages: MastraDBMessage[];
   memoryConfig?: MemoryConfig;

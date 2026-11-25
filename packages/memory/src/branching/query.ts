@@ -1,6 +1,6 @@
-import { createThreadBranchError } from '@mastra/core/memory';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { MemoryStorage, StorageListMessagesInput, StorageListMessagesOutput } from '@mastra/core/storage';
+import { createThreadBranchError } from './core-compat';
 import {
   compareMessageTuples,
   hasChildThread,

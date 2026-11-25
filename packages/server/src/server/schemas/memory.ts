@@ -1,5 +1,5 @@
-import { MASTRA_THREAD_BRANCH_METADATA_KEYS } from '@mastra/core/memory';
 import { z } from 'zod/v4';
+import { MASTRA_THREAD_BRANCH_METADATA_KEYS } from '../handlers/thread-branching-compat';
 import { paginationInfoSchema, createPagePaginationSchema, paginationNumber, successResponseSchema } from './common';
 import { lastMessagesSchema, messageHistorySchema } from './message-history';
 

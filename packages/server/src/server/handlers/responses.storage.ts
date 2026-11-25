@@ -1,7 +1,6 @@
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
-import { inspectThreadBranchState, persistGeneratedMessages } from '@mastra/core/memory/internal';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -15,6 +14,7 @@ import type {
 } from '../schemas/responses';
 import { listAgentsVisibleTo } from './agent-access';
 import { authorizeMemoryThreadAccess, throwThreadBranchNotFound } from './thread-branching';
+import { inspectThreadBranchState, persistGeneratedMessages } from './thread-branching-compat';
 import { getEffectiveResourceId, validateThreadOwnership } from './utils';
 
 export type ThreadExecutionContext = {

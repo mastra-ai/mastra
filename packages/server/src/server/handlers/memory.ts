@@ -2,11 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
-import {
-  assertNoReservedThreadBranchMetadata,
-  createThreadBranchError,
-  stripClientAuthoredTurnMarks,
-} from '@mastra/core/memory';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type {
   BranchThreadOutput,
   MastraMemory,
@@ -14,11 +10,6 @@ import type {
   ObservationalMemorySettings,
   StorageThreadType,
 } from '@mastra/core/memory';
-import {
-  branchThreadWithGeneratedId,
-  getThreadBranchAuthorizationCandidates,
-  persistGeneratedMessages,
-} from '@mastra/core/memory/internal';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MASTRA_USER_KEY } from '../constants';
@@ -80,8 +71,8 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { assertStoredAgentAccess } from './agent-access';
-
 import { handleError } from './error';
+
 import {
   getGatewayClient,
   isGatewayAgentAsync,
@@ -105,6 +96,13 @@ import {
   sanitizeThreadForResponse,
   throwThreadBranchNotFound,
 } from './thread-branching';
+import {
+  assertNoReservedThreadBranchMetadata,
+  branchThreadWithGeneratedId,
+  createThreadBranchError,
+  getThreadBranchAuthorizationCandidates,
+  persistGeneratedMessages,
+} from './thread-branching-compat';
 import {
   validateBody,
   getEffectiveResourceId,
