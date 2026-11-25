@@ -126,6 +126,8 @@ export interface AgentStreamPublisherCoordinator {
   listenForAbort(
     pubsub: PubSub,
     onAbortRequested: () => boolean | void,
+    /** Hears the run's `signal-available` events while the listener is attached. */
+    onSignalAvailable?: (signalId: string) => void,
   ): {
     ready: Promise<void>;
     detach(): Promise<void>;
@@ -205,13 +207,21 @@ export function createAgentStreamPublisherCoordinator(
       owners.set(publisherId, handle);
       return handle;
     },
-    listenForAbort(pubsub, onAbortRequested) {
+    listenForAbort(pubsub, onAbortRequested, onSignalAvailable) {
       let released = false;
       let unsubscribe: (() => Promise<void>) | undefined;
-      const ready = subscribeToAbortRequests(pubsub, runId, () => {
-        if (released) return false;
-        return onAbortRequested();
-      }).then(stop => {
+      const ready = subscribeToAbortRequests(
+        pubsub,
+        runId,
+        () => {
+          if (released) return false;
+          return onAbortRequested();
+        },
+        onSignalAvailable &&
+          (signalId => {
+            if (!released) onSignalAvailable(signalId);
+          }),
+      ).then(stop => {
         unsubscribe = stop;
       });
       let detached: Promise<void> | undefined;

@@ -123,17 +123,33 @@ export async function requestAcknowledgedAbort(
  *
  * @returns An unsubscribe function. Callers must invoke it when the run leaves
  * this process, otherwise the subscription outlives the work it guards.
+ *
+ * `onSignalAvailable` hears the run's `signal-available` events on the same
+ * subscription.
  */
 export async function subscribeToAbortRequests(
   pubsub: PubSub,
   runId: string,
   onAbortRequested: () => boolean | void,
+  onSignalAvailable?: (signalId: string) => void,
 ): Promise<() => Promise<void>> {
   const topic = AGENT_CONTROL_TOPIC(runId);
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
+  const handler = async (
+    event: { type?: string; data?: { requestId?: string; signalId?: unknown } },
+    ack?: () => Promise<void>,
+  ) => {
+    if (event?.type === AgentControlEventTypes.SIGNAL_AVAILABLE) {
+      try {
+        const signalId = event.data?.signalId;
+        if (typeof signalId === 'string') onSignalAvailable?.(signalId);
+      } finally {
+        await ack?.();
+      }
+      return;
+    }
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
       const stopped = onAbortRequested() !== false;
       const requestId = event.data?.requestId;
