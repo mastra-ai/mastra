@@ -163,6 +163,23 @@ describe('Exa tools', () => {
       expect(requests[0]!.body).toMatchObject({ type: 'lite' });
     });
 
+    it('refuses a summary on a lite search before calling Exa', async () => {
+      await expect(run('exa_search', { query: 'agents', type: 'lite', summary: {} })).rejects.toThrow(
+        /failed validation/,
+      );
+      expect(requests).toEqual([]);
+    });
+
+    it.each([
+      ['lite', { text: { maxCharacters: 200 } }],
+      ['lite', { highlights: { query: 'frameworks' } }],
+      ['auto', { summary: {} }],
+    ])('still sends a %s search with %j', async (type, contents) => {
+      await run('exa_search', { query: 'agents', type, ...contents });
+
+      expect(requests[0]!.body).toMatchObject({ type, contents });
+    });
+
     it.each([
       ['company', { startPublishedDate: '2026-01-01' }],
       ['people', { endPublishedDate: '2026-01-01' }],
@@ -207,6 +224,23 @@ describe('Exa tools', () => {
         path: '/contents',
         body: { ids: ['https://example.com'], text: { maxCharacters: 100 }, maxAgeHours: 0 },
       });
+    });
+
+    it('refuses a content age over 720 hours before calling Exa', async () => {
+      await expect(
+        run('exa_get_contents', { ids: ['https://example.com'], summary: {}, maxAgeHours: 721 }),
+      ).rejects.toThrow(/failed validation/);
+      expect(requests).toEqual([]);
+    });
+
+    it.each([undefined, -1, 0, 720])('sends a content age of %s', async maxAgeHours => {
+      answer = () => ({ status: 200, body: { results: [], statuses: [] } });
+
+      await run('exa_get_contents', { ids: ['https://example.com'], summary: {}, maxAgeHours });
+
+      expect(requests).toHaveLength(1);
+      if (maxAgeHours === undefined) expect(requests[0]!.body).not.toHaveProperty('maxAgeHours');
+      else expect(requests[0]!.body).toMatchObject({ maxAgeHours });
     });
 
     it('does not offer the livecrawl option Exa replaced', async () => {

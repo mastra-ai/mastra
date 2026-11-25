@@ -2004,7 +2004,8 @@ const EXA_CATEGORY_ENUM = "z.enum(['company', 'people', 'publication', 'news', '
  * - Titles, URLs, dates, images, and favicons can be `null`, and one such
  *   result failed a whole search or answer.
  * - get_contents checked for a content option in execute, and Exa refuses
- *   category/filter combinations search let through; the schemas say so now.
+ *   category/filter combinations, summaries on `lite`, and content ages over
+ *   720 hours that the templates let through; the schemas say so now.
  * Drop an entry once the upstream template is fixed.
  */
 const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: string }>> = {
@@ -2016,7 +2017,7 @@ const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: s
         pattern:
           /type: z\s*\.enum\(\['auto', 'neural', 'keyword', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning'\]\)\s*\.optional\(\)\s*\.describe\(\s*"[^"]*"\s*\)/,
         replacement:
-          "type: z.enum(['auto', 'lite', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning']).optional().describe(\"Search type: 'auto' (default), 'lite' or 'instant' for the lowest latency, 'fast', or 'deep-lite', 'deep', or 'deep-reasoning' for multi-step search that takes several seconds and costs more.\")",
+          "type: z.enum(['auto', 'lite', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning']).optional().describe(\"Search type: 'auto' (default), 'lite' or 'instant' for the lowest latency ('lite' returns no summaries), 'fast', or 'deep-lite', 'deep', or 'deep-reasoning' for multi-step search that takes several seconds and costs more.\")",
         count: 1,
         what: 'search types',
       },
@@ -2037,7 +2038,8 @@ const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: s
         pattern: /(summary: SummaryInputSchema\.optional\(\)\.describe\('[^']*'\)\s*\}\))/,
         replacement: `$1
     .refine(input => !['company', 'people'].includes(input.category ?? '') || (input.startPublishedDate === undefined && input.endPublishedDate === undefined), { message: 'The company and people categories do not accept published-date filters.', path: ['category'] })
-    .refine(input => input.category !== 'people' || input.excludeDomains === undefined, { message: 'The people category does not accept excludeDomains.', path: ['excludeDomains'] })`,
+    .refine(input => input.category !== 'people' || input.excludeDomains === undefined, { message: 'The people category does not accept excludeDomains.', path: ['excludeDomains'] })
+    .refine(input => input.type !== 'lite' || input.summary === undefined, { message: 'The lite search type does not return summaries; use auto or ask for text or highlights.', path: ['summary'] })`,
         count: 1,
         what: 'category filters',
       },
@@ -2061,7 +2063,7 @@ const EXA_FIXES: Readonly<Record<string, ProviderActionFixes & { description?: s
     statements: [
       {
         pattern: /livecrawl: z\.enum\(\['never', 'fallback', 'always', 'auto'\]\)\.optional\(\)\s*\}\)/,
-        replacement: `maxAgeHours: z.number().int().min(-1).optional().describe('Maximum age in hours of cached content Exa may return before crawling the page again. 0 always crawls; -1 only uses the cache.')
+        replacement: `maxAgeHours: z.number().int().min(-1).max(720).optional().describe('Maximum age in hours (up to 720) of cached content Exa may return before crawling the page again. 0 always crawls; -1 only uses the cache.')
 }).refine(input => input.text !== undefined || input.highlights !== undefined || input.summary !== undefined, { message: 'Provide at least one of text, highlights, or summary.' })`,
         count: 1,
         what: 'content age and options',

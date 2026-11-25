@@ -1,12 +1,19 @@
 import type { Scenario, ScenarioStep } from '../scenario.js';
-import { errorMessage, makeStep, requireTools } from '../scenario.js';
+import { errorMessage, makeStep, probeTool, requireTools } from '../scenario.js';
 
 /**
- * Exa scenario: searches the web, reads the first result's contents, and
- * answers a question with citations. Every Exa tool is a read, so the
- * scenario creates nothing and has nothing to clean up. Exa bills each call,
- * so the scenario asks for as few results and as little text as the checks
- * need. When search fails, the contents read uses https://mastra.ai.
+ * Exa scenario. Exa bills every search, contents, and answer call, so nothing
+ * here spends credits unless `MASTRA_SMOKE_EXA_ALLOW_BILLED=1`.
+ *
+ * - Unset, each tool is sent a blank query or id, which Exa refuses before
+ *   doing any work. That still proves routing, auth, and serialization.
+ * - With it, the scenario searches the web, reads the first result's contents,
+ *   and answers a question with citations, asking for as few results and as
+ *   little text as the checks need. When search fails, the contents read uses
+ *   https://mastra.ai.
+ *
+ * Every Exa tool is a read, so the scenario creates nothing and has nothing to
+ * clean up.
  */
 
 const EXA_TOOLS = ['exa_search', 'exa_get_contents', 'exa_answer'] as const;
@@ -29,6 +36,13 @@ export const exaScenario: Scenario = {
     const missing = requireTools(tools, EXA_TOOLS);
     if (missing) {
       steps.push({ name: 'preflight', status: 'skip', detail: missing });
+      return steps;
+    }
+
+    if (process.env.MASTRA_SMOKE_EXA_ALLOW_BILLED !== '1') {
+      steps.push(await probeTool(call, tools, 'search (probe)', 'exa_search', { query: ' ' }));
+      steps.push(await probeTool(call, tools, 'get contents (probe)', 'exa_get_contents', { ids: [''], text: {} }));
+      steps.push(await probeTool(call, tools, 'answer (probe)', 'exa_answer', { query: '' }));
       return steps;
     }
 

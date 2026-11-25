@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ScenarioContext, ScenarioStep } from '../../scripts/smoke-test/scenario.js';
 import { exaScenario } from '../../scripts/smoke-test/scenarios/exa.js';
@@ -40,7 +40,42 @@ async function runScenario({
   return { steps, calls };
 }
 
-describe('Exa smoke scenario', () => {
+describe('Exa smoke scenario without billed calls', () => {
+  beforeEach(() => vi.stubEnv('MASTRA_SMOKE_EXA_ALLOW_BILLED', ''));
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('sends every tool only blank input that Exa refuses before doing work', async () => {
+    const { steps, calls } = await runScenario({
+      fail: {
+        exa_search: 'exa_search failed: status=400 query cannot be empty',
+        exa_get_contents: 'exa_get_contents failed: status=400 ids cannot be empty',
+        exa_answer: 'exa_answer failed: status=400 query cannot be empty',
+      },
+    });
+
+    expect(steps.map(step => [step.toolId, step.status])).toEqual([
+      ['exa_search', 'pass'],
+      ['exa_get_contents', 'pass'],
+      ['exa_answer', 'pass'],
+    ]);
+    expect(calls).toEqual([
+      { toolId: 'exa_search', input: { query: ' ' } },
+      { toolId: 'exa_get_contents', input: { ids: [''], text: {} } },
+      { toolId: 'exa_answer', input: { query: '' } },
+    ]);
+  });
+
+  it('fails a probe that Exa refuses for a reason other than the blank input', async () => {
+    const { steps } = await runScenario({ fail: { exa_search: 'exa_search failed: status=401 invalid API key' } });
+
+    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'exa_search', status: 'fail' }));
+  });
+});
+
+describe('Exa smoke scenario with billed calls allowed', () => {
+  beforeEach(() => vi.stubEnv('MASTRA_SMOKE_EXA_ALLOW_BILLED', '1'));
+  afterEach(() => vi.unstubAllEnvs());
+
   it('passes every tool and reads the contents of the first search result', async () => {
     const { steps, calls } = await runScenario();
 

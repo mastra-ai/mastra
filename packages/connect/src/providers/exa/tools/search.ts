@@ -24,7 +24,7 @@ export const searchInputSchema = z
       .enum(['auto', 'lite', 'fast', 'instant', 'deep-lite', 'deep', 'deep-reasoning'])
       .optional()
       .describe(
-        "Search type: 'auto' (default), 'lite' or 'instant' for the lowest latency, 'fast', or 'deep-lite', 'deep', or 'deep-reasoning' for multi-step search that takes several seconds and costs more.",
+        "Search type: 'auto' (default), 'lite' or 'instant' for the lowest latency ('lite' returns no summaries), 'fast', or 'deep-lite', 'deep', or 'deep-reasoning' for multi-step search that takes several seconds and costs more.",
       ),
     numResults: z.number().int().min(1).max(100).optional().describe('Number of results to return (default 10).'),
     category: z
@@ -62,6 +62,10 @@ export const searchInputSchema = z
   .refine(input => input.category !== 'people' || input.excludeDomains === undefined, {
     message: 'The people category does not accept excludeDomains.',
     path: ['excludeDomains'],
+  })
+  .refine(input => input.type !== 'lite' || input.summary === undefined, {
+    message: 'The lite search type does not return summaries; use auto or ask for text or highlights.',
+    path: ['summary'],
   });
 
 const ProviderResultSchema = z.object({

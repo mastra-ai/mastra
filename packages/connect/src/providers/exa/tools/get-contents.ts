@@ -38,9 +38,10 @@ export const getContentsInputSchema = z
       .number()
       .int()
       .min(-1)
+      .max(720)
       .optional()
       .describe(
-        'Maximum age in hours of cached content Exa may return before crawling the page again. 0 always crawls; -1 only uses the cache.',
+        'Maximum age in hours (up to 720) of cached content Exa may return before crawling the page again. 0 always crawls; -1 only uses the cache.',
       ),
   })
   .refine(input => input.text !== undefined || input.highlights !== undefined || input.summary !== undefined, {
