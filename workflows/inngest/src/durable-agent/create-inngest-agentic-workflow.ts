@@ -880,6 +880,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               })),
             );
             const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            // The span was opened for the run's first model, maybe on another worker. Name the
+            // model that answered, so the generation and its cost are not booked on a model that failed.
+            const servedBy = state.lastResponse?.servedBy;
+            const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+            if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
               output: { text: finalText, object: finishResult.object, ...(toolCalls.length ? { toolCalls } : {}) },
@@ -889,8 +894,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 ...clocks,
                 responseId: state.lastResponse?.id,
                 responseModel: state.lastResponse?.modelId,
+                ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
               },
               usage,
+              // Cost the provider reported itself is used in place of an estimate.
+              stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
             });
           }
 
