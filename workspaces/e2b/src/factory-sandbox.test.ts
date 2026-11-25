@@ -146,6 +146,12 @@ describe('E2BFactorySandbox', () => {
     expect(cpu.default).toBe(2);
   });
 
+  it('advertises the built-in CPU default when the configured default is undefined', () => {
+    const cpu = describeFactorySandbox(new E2BFactorySandbox({ apiKey: 'e2b_test', defaults: { cpuCount: undefined } }))
+      .settingsSchema.properties?.cpuCount as { default: number };
+    expect(cpu.default).toBe(2);
+  });
+
   it.each([
     [3, 2],
     [7, 6],
