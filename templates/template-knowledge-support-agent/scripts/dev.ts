@@ -32,8 +32,9 @@ if (!configuredFile) {
   await chmod(file, 0o600);
 }
 console.log(
-  `Local Studio credentials are available privately in ${file}. Open this file locally to copy a profile token. Tokens expire after eight hours.`,
+  `Local Studio credentials are available privately in ${file}. Open this file locally to copy a profile token.`,
 );
+if (!configuredFile) console.log('Generated tokens expire after eight hours.');
 const child = spawn(process.execPath, ['node_modules/mastra/dist/index.js', 'dev'], {
   stdio: 'inherit',
   env: {
