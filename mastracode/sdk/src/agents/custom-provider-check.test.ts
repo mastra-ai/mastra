@@ -427,6 +427,22 @@ describe('listing the models of a custom endpoint', () => {
     expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 403 } });
   });
 
+  // Connections often come straight from a request body, where the types do not hold.
+  it.each([
+    ['headers that are not a list', { headers: {} }],
+    ['a key that is not text', { apiKey: 5 }],
+  ])('answers both checks for %s', async (_, malformed) => {
+    const endpoint = await startEndpoint(json(200, { data: [{ id: 'model-x' }] }));
+    const connection = { url: endpoint.url, ...malformed } as unknown as CustomProviderConnection;
+
+    const list = await listCustomProviderModels(connection);
+    const reply = await testCustomProviderModel({ providerId: 'acme', connection, modelId: 'model-x' });
+
+    expect(list).toMatchObject({ ok: true, models: ['model-x'] });
+    // The endpoint answers chat calls with a model list, so the test message fails, as a result and not a throw.
+    expect(reply).toMatchObject({ ok: false, failure: { kind: 'invalid_response' } });
+  });
+
   it('reports a refused connection as a network failure', async () => {
     const closed = await startEndpoint(() => {});
     await closed.close();

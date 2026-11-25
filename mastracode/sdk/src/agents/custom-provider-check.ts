@@ -42,12 +42,32 @@ export interface CustomProviderConnection {
 export const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
 
 /**
+ * The headers of a connection that is typed but may come straight from a
+ * request body. Anything that is not a list of objects counts as no headers,
+ * so a check returns a result instead of throwing on it.
+ */
+function headerList(connection: CustomProviderConnection): CustomProviderHeader[] {
+  const headers: unknown = connection.headers;
+  if (!Array.isArray(headers)) return [];
+  return headers.filter((header): header is CustomProviderHeader => typeof header === 'object' && header !== null);
+}
+
+/** `value` when it is a string, for connection fields that may come from a request body. */
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
  * The custom headers of a connection plus the header that carries its key.
  * The auth header comes last so that nothing can replace it.
  */
 export function customProviderRequestHeaders(connection: CustomProviderConnection): Record<string, string> {
-  const custom = Object.fromEntries((connection.headers ?? []).map(header => [header.name, header.value]));
-  const apiKey = connection.apiKey?.trim();
+  const custom = Object.fromEntries(
+    headerList(connection)
+      .filter(header => typeof header.name === 'string' && typeof header.value === 'string')
+      .map(header => [header.name, header.value]),
+  );
+  const apiKey = stringOrUndefined(connection.apiKey)?.trim();
   if (!apiKey) return mergeHeadersIgnoringCase(custom);
   const authValue = connection.authScheme === 'x-api-key' ? apiKey : `Bearer ${apiKey}`;
   return mergeHeadersIgnoringCase(custom, { [customProviderAuthHeaderName(connection.authScheme)]: authValue });
@@ -140,8 +160,10 @@ interface SentSecrets {
  */
 function secretsSent(connection: CustomProviderConnection): SentSecrets {
   const values = [
-    connection.apiKey?.trim(),
-    ...(connection.headers ?? []).filter(header => header.secret !== false).map(header => header.value),
+    stringOrUndefined(connection.apiKey)?.trim(),
+    ...headerList(connection)
+      .filter(header => header.secret !== false)
+      .map(header => header.value),
   ].filter((value): value is string => typeof value === 'string' && value.length > 0);
   const forms = [...new Set(values.flatMap(value => [value, oneLine(value)]))].filter(Boolean);
   return {
@@ -490,7 +512,7 @@ export async function listCustomProviderModels(
   const secrets = secretsSent(connection);
   const summaryOnly = options.summaryDetailOnly ?? false;
   const timeoutMs = checkTimeoutMs(options.timeoutMs, LIST_TIMEOUT_MS);
-  const url = `${connection.url.trim().replace(/\/+$/, '')}/models`;
+  const url = `${(stringOrUndefined(connection.url) ?? '').trim().replace(/\/+$/, '')}/models`;
   const fail = (failure: CustomProviderCheckFailure): CustomProviderModelsResult => ({
     ok: false,
     failure: finishFailure(failure, secrets),
@@ -690,7 +712,7 @@ export async function testCustomProviderModel(
   const latencyMs = () => Math.round(performance.now() - started);
   const secrets = secretsSent(args.connection);
   const timeoutMs = checkTimeoutMs(options.timeoutMs, MODEL_TEST_TIMEOUT_MS);
-  const chatUrl = `${args.connection.url.trim().replace(/\/+$/, '')}/chat/completions`;
+  const chatUrl = `${(stringOrUndefined(args.connection.url) ?? '').trim().replace(/\/+$/, '')}/chat/completions`;
   const { signal, abortState } = checkSignal(timeoutMs, options.signal);
 
   let reply = '';
