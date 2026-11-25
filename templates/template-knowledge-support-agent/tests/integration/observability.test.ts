@@ -28,9 +28,12 @@ test('Knowledge tools persist matching trace and metric outcomes without payload
     instance
       .startSpan({ name: 'knowledge_read', type: SpanType.TOOL_CALL })
       .end({ outcome: 'success', attributes: { success: true }, output: { error: 'PRIVATE_READ_ERROR' } });
-    instance
-      .startSpan({ name: 'knowledge_read', type: SpanType.TOOL_CALL })
-      .end({ outcome: 'success', attributes: { success: true }, output: { page: { body: 'PRIVATE_READ_BODY' } } });
+    const reviewedWindow = { lines: '1│<!-- knowledge-review:PRIVATE_READ_MARKER -->', range: { start: { col: 0 } } };
+    instance.startSpan({ name: 'knowledge_read', type: SpanType.TOOL_CALL }).end({
+      outcome: 'success',
+      attributes: { success: true },
+      output: { page: { body: 'PRIVATE_READ_BODY', matches: [reviewedWindow, reviewedWindow] } },
+    });
     await instance.flush();
     const { rows } = await client.execute(`
       SELECT name, outcome, json(error) AS error, json(output) AS output,
@@ -42,7 +45,7 @@ test('Knowledge tools persist matching trace and metric outcomes without payload
              json_type(metadata, '$.value') AS valueType
       FROM mastra_ai_spans
       WHERE name IN ('knowledge-list', 'knowledge-read')
-        OR json_extract(metadata, '$.labels.operation') IN ('knowledge-list', 'knowledge-read')
+        OR json_extract(metadata, '$.labels.operation') IN ('knowledge-list', 'knowledge-read', 'resolution-reuse')
       ORDER BY name, status
     `);
     assert.ok(rows.some(row => row.name === 'knowledge-list' && row.outcome === 'abort' && !row.error));
@@ -61,6 +64,10 @@ test('Knowledge tools persist matching trace and metric outcomes without payload
         .filter(row => row.operation === 'knowledge-read' && row.name === 'support_operation_count')
         .map(row => row.status),
       ['error', 'success'],
+    );
+    assert.deepEqual(
+      rows.filter(row => row.operation === 'resolution-reuse').map(row => row.value),
+      [1],
     );
     const metrics = rows.filter(row => row.operation === 'knowledge-list');
     assert.deepEqual(
