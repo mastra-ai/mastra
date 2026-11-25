@@ -96,9 +96,12 @@ describe('Tooltip', () => {
   it('explains a disabled button, which gets no mousemove to start a wait', async () => {
     const user = userEvent.setup();
     render(
-      <Button disabled tooltip="Save the agent first">
-        Run
-      </Button>,
+      // oxlint-disable-next-line playground-ui/no-hover-delay-numbers -- a published app's delay doesn't apply either
+      <TooltipProvider delay={300}>
+        <Button disabled tooltip="Save the agent first">
+          Run
+        </Button>
+      </TooltipProvider>,
     );
 
     await user.hover(screen.getByRole('button', { name: 'Run' }));
