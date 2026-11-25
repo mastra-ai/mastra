@@ -20,7 +20,9 @@ export interface SegmentSpanData {
   stepParentId?: string;
   /** Recovery: it finishes the MODEL_STEP the crashed execution left open. */
   adoptsOpenSteps?: boolean;
-  /** Recovery: the MODEL_GENERATION a suspension ended before the crash, whose steps stay ended. */
+  /** Recovery: the only generations whose MODEL_STEP the crash left open, when the snapshot names them. */
+  openStepsOf?: string[];
+  /** Recovery without `openStepsOf`: the MODEL_GENERATION a suspension ended before the crash, whose steps stay ended. */
   endedStepsOf?: string;
 }
 
@@ -95,6 +97,21 @@ export function segmentSpanData(
   };
 }
 
+/**
+ * The generations whose MODEL_STEP the execution that persisted `requestContext` left open: its own
+ * pair's, plus those it was itself finishing after an earlier crash. Every other step was ended by
+ * the suspension before a resume. Undefined when that execution carried no pair.
+ */
+export function openStepsOfCrashedSegment(
+  requestContext: Record<string, unknown> | undefined,
+  runId: string,
+): string[] | undefined {
+  const all = requestContext?.[MASTRA_DURABLE_SEGMENTS_KEY] as Record<string, SegmentSpanData | null> | undefined;
+  const crashed = all?.[runId];
+  if (!crashed?.stepParentId || (crashed.adoptsOpenSteps && !crashed.openStepsOf)) return undefined;
+  return [crashed.stepParentId, ...(crashed.openStepsOf ?? [])];
+}
+
 /** The live span behind `data` when this process holds it, so it is ended in place; otherwise undefined. */
 export function liveSegmentSpan<S extends { id: string }>(
   data: { id: string } | undefined,
@@ -112,6 +129,8 @@ export function liveSegmentSpan<S extends { id: string }>(
 export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }, stepSpanData: unknown): boolean {
   if (!segment.carried) return true;
   const parent = (stepSpanData as { parentSpanId?: string | null } | undefined)?.parentSpanId ?? undefined;
+  if (segment.openStepsOf)
+    return parent !== undefined && [segment.stepParentId, ...segment.openStepsOf].includes(parent);
   if (segment.adoptsOpenSteps) return segment.endedStepsOf === undefined || parent !== segment.endedStepsOf;
   return parent === segment.stepParentId;
 }

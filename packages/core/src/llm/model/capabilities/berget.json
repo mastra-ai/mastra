@@ -22,10 +22,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.2": [
+    "Qwen/Qwen3.8-27B-FP8": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -34,10 +34,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-27B-FP8": [
+    "zai-org/GLM-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "high"]
       }
     ]
   }

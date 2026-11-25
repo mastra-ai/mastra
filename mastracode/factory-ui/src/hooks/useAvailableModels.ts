@@ -62,10 +62,9 @@ export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
   });
 }
 
-/** Catalog reachable with the caller's own credentials, for personal defaults. */
-export function usePersonalAvailableModelsQuery() {
+export function useScopeModelCatalogQuery(scope: 'org' | 'user') {
   const { baseUrl } = useApiConfig();
-  return useQuery({ ...availableModelsQueryOptions(baseUrl, { scope: 'user' }), select: catalog => catalog.models });
+  return useQuery(availableModelsQueryOptions(baseUrl, { scope }));
 }
 
 export function useFallbackModelQuery(target: AvailableModelsTarget) {

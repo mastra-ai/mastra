@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix durable AgentController plan approvals so a parked tool call resumes on its original agent after the execution scope ends.
+Fix evented AgentController plan approvals so a parked run resumes on its original agent even after the session switches to build mode.

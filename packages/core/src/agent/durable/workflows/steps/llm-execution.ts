@@ -97,6 +97,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
+import { reportedCost } from '../shared/reported-cost';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
@@ -300,7 +301,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: withStepLifetime(async (params: LLMExecutionParams, stepLifetime) => {
-      const { inputData, mastra, tracingContext, abortSignal } = params;
+      const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
       const ownership = getExecutionOwnershipGuard(params);
 
       // Access pubsub via symbol
@@ -309,8 +310,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const typedInput = inputData as DurableAgenticWorkflowInput & z.infer<typeof durableLLMInputSchema>;
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
-      const requestContext =
-        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.requestContext ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
@@ -3066,6 +3065,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       deferredStepFinishChunk.payload?.metadata?.providerMetadata,
                       deferredStepFinishChunk.payload?.metadata?.modelId,
                     ),
+                    // After a fallback or a prepareStep change this is not the run's first model.
+                    // A cached response replays without a model call, so no model served it.
+                    ...(cachedResponse
+                      ? {}
+                      : { servedBy: { provider: currentModel.provider, modelId: currentModel.modelId } }),
+                    reportedCost: reportedCost(deferredStepFinishChunk.payload?.metadata?.providerMetadata),
                   }
                 : undefined,
               state: typedInput.state,

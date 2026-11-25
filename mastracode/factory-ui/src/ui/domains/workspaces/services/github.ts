@@ -14,7 +14,9 @@
  */
 
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { ModelPack } from '@mastra/factory/model-packs';
+import type { FACTORY_ROUTE_CONTRACTS, ProjectListRepository } from '@mastra/factory/routes/contracts';
+import type { z } from 'zod';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
@@ -252,6 +254,8 @@ export interface FactoryProjectPayload {
   modelScope?: FactoryModelScope;
   /** Thinking level every session and run uses until it picks its own. */
   defaultThinkingLevel?: ThinkingLevelSetting;
+  modelPacks?: ModelPack[];
+  defaultModelPackId?: string | null;
 }
 
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
@@ -337,22 +341,18 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
   }));
 }
 
+export type FactoryProjectCreateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema>;
+
 /** Create a named Factory project. The name is user-chosen, not derived from a repo. */
 export async function createFactoryProject(
   baseUrl: string,
-  name: string,
-  description?: string,
-  modelScope?: FactoryModelScope,
+  body: FactoryProjectCreateBody,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      name,
-      ...(description ? { description } : {}),
-      ...(modelScope ? { modelScope } : {}),
-    }),
+    body: JSON.stringify(body),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
   return project;
@@ -368,97 +368,21 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
   return project;
 }
 
-/** Set (or clear, with null) the Factory's default model for factory runs. */
-export async function updateFactoryDefaultModel(
+type FactoryProjectUpdateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema>;
+
+export async function updateFactoryProject(
   baseUrl: string,
   factoryProjectId: string,
-  defaultModelId: string | null,
+  changes: FactoryProjectUpdateBody,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultModelId }),
+    body: JSON.stringify(changes),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory default model',
-  );
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory');
   return project;
-}
-
-export async function renameFactoryProject(
-  baseUrl: string,
-  factoryProjectId: string,
-  name: string,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ name }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory name');
-  return project;
-}
-
-/** Set where the Factory's sessions and runs get their model and credentials. */
-export async function updateFactoryModelScope(
-  baseUrl: string,
-  factoryProjectId: string,
-  modelScope: FactoryModelScope,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ modelScope }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory model scope',
-  );
-  return project;
-}
-
-/** Set the thinking level this Factory's sessions and runs use until they pick their own. Admin-only. */
-export async function updateFactoryThinkingDefault(
-  baseUrl: string,
-  factoryProjectId: string,
-  defaultThinkingLevel: ThinkingLevelSetting,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultThinkingLevel }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory thinking level',
-  );
-  return project;
-}
-
-export interface ApplyFactoryDefaultModelResult {
-  modelId: string;
-  status: 'started';
-}
-
-/** Start applying the Factory default model to currently running work and review sessions. */
-export async function applyFactoryDefaultModelToSessions(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<ApplyFactoryDefaultModelResult> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    },
-  );
-  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
 }
 
 /**

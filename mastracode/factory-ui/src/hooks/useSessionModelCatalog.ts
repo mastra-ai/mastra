@@ -1,4 +1,4 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { SessionModelPolicy } from '@mastra/factory/routes/config';
 import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import type { ApiClient } from '../api/client';
@@ -14,11 +14,8 @@ export interface SessionModelCatalogTarget extends AvailableModelsFilter {
   enabled?: boolean;
 }
 
-export interface SessionModelCatalog {
+export interface SessionModelCatalog extends Partial<Omit<SessionModelPolicy, 'models'>> {
   models: AvailableModelOption[];
-  modelScope?: 'factory' | 'user';
-  defaultModelId?: string | null;
-  personalThinkingLevel?: ThinkingLevelSetting | null;
 }
 
 export function fetchSessionModelCatalog(client: ApiClient, target: SessionModelCatalogTarget) {

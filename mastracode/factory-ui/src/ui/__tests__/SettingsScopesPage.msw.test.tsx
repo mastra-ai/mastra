@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { ModelPackSet } from '@mastra/factory/model-packs';
+import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
-import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
+import { pickPackModel } from '../domains/settings/components/models/packs/__tests__/pack-model-test-utils';
 import { environmentPayload } from '../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../router';
 import {
@@ -197,17 +199,17 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {
+  it('lets a Personal-routed Factory with no Factory default start chats once the user creates a personal pack', async () => {
     const project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
-    let personalDefaultModelId: string | null = null;
+    let personalDefaults: PersonalModelDefaultsResponse = settingsDefaultModel;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
-      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: personalDefaultModelId, thinkingLevel: null }),
-      ),
-      http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
-        personalDefaultModelId = (await request.json()).modelId;
-        return HttpResponse.json({ ok: true, modelId: personalDefaultModelId });
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(personalDefaults)),
+      http.put<never, ModelPackSet>(`${TEST_BASE_URL}/web/config/model-packs`, async ({ request }) => {
+        const packs = await request.json();
+        const first = packs.modelPacks[0].models[0];
+        personalDefaults = { ...packs, modelId: first.modelId, thinkingLevel: first.thinkingLevel };
+        return HttpResponse.json(personalDefaults);
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
       http.get(PROVIDERS_URL, () =>
@@ -228,8 +230,9 @@ describe('Settings ownership', () => {
 
     await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
     expect(router.state.location.hash).toBe('#personal-defaults');
-    await pickModel(user, 'Personal default model', 'openai/gpt-5');
-    await waitFor(() => expect(personalDefaultModelId).toBe('openai/gpt-5'));
+    const personal = await screen.findByRole('region', { name: 'Personal defaults' });
+    await pickPackModel(user, 'Choose a model', 'GPT-5', personal);
+    await waitFor(() => expect(personalDefaults.modelId).toBe('openai/gpt-5'));
     await act(() => router.navigate(-1));
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();

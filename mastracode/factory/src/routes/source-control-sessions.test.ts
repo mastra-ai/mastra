@@ -248,10 +248,11 @@ describe('source-control session routes', () => {
     ).resolves.toMatchObject({ address, binding: { id: prepared.binding.id } });
     expect(session.state.get()).toMatchObject({ untrustedCheckout: true, baseRef: 'main' });
 
-    const unsubscribe = observeSessionRunEnd(session, { audit: seed.audit });
+    const unsubscribe = observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
     onTestFinished(unsubscribe);
     await recordSessionRunStart(session, {
       audit: seed.audit,
+      openRuns: seed.openRuns,
       actorType: 'human',
       observedEnd: () => undefined,
       run: {
@@ -267,20 +268,17 @@ describe('source-control session routes', () => {
         branch: row.branch,
       },
     });
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([
+    await expect(listSessionOpenRuns(session, seed.openRuns)).resolves.toEqual([
       expect.objectContaining({ sessionId, threadId, kickoffId: 'review-kickoff' }),
     ]);
+    await expect(seed.openRuns.listByThread(sessionId)).resolves.toEqual([]);
     const memory = await storage.getStore('memory');
     const persistedThread = await memory!.getThreadById({ threadId });
-    expect(persistedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([
-      expect.objectContaining({ sessionId, threadId }),
-    ]);
+    expect(persistedThread?.metadata).not.toHaveProperty(FACTORY_OPEN_RUNS_SETTING);
     await expect(memory!.getThreadById({ threadId: sessionId })).resolves.toBeNull();
     session.emit({ type: 'agent_end', reason: 'complete' });
     await waitForSessionRunAudit(session);
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([]);
-    const endedThread = await memory!.getThreadById({ threadId });
-    expect(endedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    await expect(listSessionOpenRuns(session, seed.openRuns)).resolves.toEqual([]);
     const { events } = await seed.audit.list({ orgId: 'org-1' });
     expect(events.filter(event => event.action === 'factory.run.started')).toHaveLength(1);
     expect(events.filter(event => event.action === 'factory.run.ended')).toHaveLength(1);

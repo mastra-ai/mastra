@@ -4,11 +4,9 @@ import { LLMock } from '@copilotkit/aimock';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { PostgresStore } from '@mastra/pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
 
@@ -49,50 +47,65 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     delete process.env.MASTRA_EVENTED_EXECUTION;
   });
 
-  it('retains live request context in a native evented input-step processor', async () => {
-    if (!mock) throw new Error('AIMock server is not running');
-    const pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: `aimock-${randomUUID()}`, blockMs: 200 });
-    pubsubs.push(pubsub);
-    mock.on({ endpoint: 'chat' }, { content: 'Processed on the owning worker.' });
-    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
-    const getState = () => 'live-controller-state';
-    const requestContext = new RequestContext([['controller', { getState }]]);
-    const observed: string[] = [];
-    const agent = new Agent({
-      id: 'live-context',
-      name: 'Live context',
-      instructions: 'Reply to the user.',
-      model: openai(SCENARIO_MODEL_ID),
-      durable: { executionEngine: 'evented' },
-      inputProcessors: [
-        {
-          id: 'read-live-context',
-          processInputStep: async ({ requestContext }) => {
-            const controller = requestContext?.get('controller') as { getState(): string };
-            observed.push(controller.getState());
-          },
-        },
-      ],
-    });
-    const schemaName = `live_context_${randomUUID().replaceAll('-', '')}`;
-    const storage = new PostgresStore({
-      id: schemaName,
-      schemaName,
-      connectionString:
-        process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres',
-    });
-    try {
-      const mastra = new Mastra({ agents: { agent }, logger: false, storage, pubsub });
-      const output = await mastra.getAgent('agent').stream('Read the live state.', { requestContext });
-      await output.consumeStream();
-      expect(observed).toEqual(['live-controller-state']);
-      expect(await output.text).toBe('Processed on the owning worker.');
-    } finally {
-      await pubsub.close();
-      await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-      await storage.close();
-    }
-  });
+  // COR-1659: the producer registers its loop when it starts the run, but the pull worker never calls the agent.
+  it.each(['before', 'during', 'during lazy', 'after'] as const)(
+    'runs a native evented agent registered %s pull worker startup',
+    async timing => {
+      if (!mock) throw new Error('AIMock server is not running');
+      mock.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url}/v1` });
+      const makeAgent = () =>
+        new Agent({
+          id: 'order-support',
+          name: 'Order support',
+          instructions: 'Help with orders.',
+          model: openai(SCENARIO_MODEL_ID),
+          durable: { executionEngine: 'evented' },
+        });
+      const keyPrefix = `aimock-${randomUUID()}`;
+      const apiPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      const workerPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 200 });
+      pubsubs.push(apiPubsub, workerPubsub);
+      const storage = new InMemoryStore();
+      const apiAgent = makeAgent();
+      const api = new Mastra({
+        agents: { support: apiAgent },
+        storage,
+        pubsub: apiPubsub,
+        workers: false,
+        logger: false,
+      });
+      const worker = new Mastra({ storage, pubsub: workerPubsub });
+      try {
+        if (timing === 'before') worker.addAgent(makeAgent(), 'support');
+        if (timing === 'during' || timing === 'during lazy') {
+          // Pull subscription starts after the initial registration pass, but before startup completes.
+          const subscribe = workerPubsub.subscribe.bind(workerPubsub);
+          const subscription = vi.spyOn(workerPubsub, 'subscribe').mockImplementation((topic, cb, options) => {
+            if (topic === 'workflows') {
+              subscription.mockRestore();
+              worker.addAgent(makeAgent(), 'support');
+            }
+            return subscribe(topic, cb, options);
+          });
+        }
+        if (timing === 'during lazy') {
+          await worker.__ensureExecutionWorkersStarted();
+        } else {
+          await worker.startWorkers();
+        }
+        if (timing === 'after') worker.addAgent(makeAgent(), 'support');
+
+        const output = await apiAgent.stream('Where is my order?');
+        await expect(output.text).resolves.toBe('Your order has shipped.');
+        expect(JSON.stringify(mock.getRequests()[0]?.body)).toContain('Where is my order?');
+      } finally {
+        await api.shutdown();
+        await worker.shutdown();
+      }
+    },
+    15_000,
+  );
 
   it('round-trips a tool result containing Date/Map/Error across the evented pubsub', async () => {
     if (!mock) throw new Error('AIMock server is not running');

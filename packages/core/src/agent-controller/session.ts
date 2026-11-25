@@ -6101,11 +6101,11 @@ export class Session<TState = unknown> {
   #threadOwnerIdsByRunId = new Map<string, string>();
 
   /** @internal Keep the owning agent with the parked call after its execution scope is released. */
-  __registerStreamSuspension(suspension: PendingSuspension, agent: Agent): void {
+  __registerStreamSuspension(suspension: PendingSuspension, agent?: Agent): void {
     const previous = this.suspensions.get(suspension);
     const owner = (previous && this.#suspensionAgents.get(previous)) ?? agent;
     this.suspensions.register(suspension);
-    this.#suspensionAgents.set(this.suspensions.get(suspension)!, owner);
+    if (owner) this.#suspensionAgents.set(this.suspensions.get(suspension)!, owner);
   }
 
   /** @internal Capture the trusted owner snapshot while processing a run's stream. */

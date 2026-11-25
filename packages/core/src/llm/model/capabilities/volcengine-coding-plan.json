@@ -39,24 +39,7 @@
     "kimi-k3.1-pro"
   ],
   "reasoning": {
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-evolving": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "glm-5.3-flash": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -65,24 +48,6 @@
     "deepseek-v4-pro": [
       {
         "type": "toggle"
-      }
-    ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "doubao-seed-2.1-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "doubao-seed-2.1-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -94,16 +59,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k2.8-preview": [
+    "deepseek-v4-flash": [
       {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "kimi-k3": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-2.1-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "doubao-seed-2.0-mini": [
@@ -112,10 +82,40 @@
         "values": ["none", "low", "high"]
       }
     ],
+    "kimi-k2.8-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-v4.1-flash-economy": [
       {
         "type": "toggle"
       },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-2.1-lite": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-evolving": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "kimi-k3.1-pro": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

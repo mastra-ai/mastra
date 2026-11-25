@@ -33,6 +33,14 @@
     "zenifra/qwen3.8-max"
   ],
   "reasoning": {
+    "zenifra/qwen3.6-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "zenifra/qwen3.7-max": [
       {
         "type": "toggle"
@@ -41,12 +49,22 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/kimi-k2.5": [
+    "zenifra/kimi-k3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "zenifra/qwen3.8-flash": [
+    "zenifra/deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zenifra/qwen3.8-max": [
       {
         "type": "toggle"
       },
@@ -59,14 +77,6 @@
       }
     ],
     "zenifra/qwen3.6-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zenifra/qwen3.7-plus": [
       {
         "type": "toggle"
       },
@@ -88,24 +98,7 @@
         "values": ["high", "max"]
       }
     ],
-    "zenifra/deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zenifra/qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zenifra/qwen3.8-max": [
+    "zenifra/qwen3.8-flash": [
       {
         "type": "toggle"
       },
@@ -117,10 +110,12 @@
         "type": "budget_tokens"
       }
     ],
-    "zenifra/kimi-k3": [
+    "zenifra/qwen3.7-plus": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "zenifra/deepseek-v4-flash-0731": [
@@ -130,6 +125,11 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zenifra/kimi-k2.5": [
+      {
+        "type": "toggle"
       }
     ]
   }
