@@ -8,8 +8,11 @@ import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { Memory } from '../../../../../memory/src';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
+import type { MastraMemory } from '../../../memory/memory';
 import { MockMemory } from '../../../memory/mock';
 import type { MastraDBMessage } from '../../../memory/types';
 import type { Processor } from '../../../processors';
@@ -199,10 +202,13 @@ function setup({
   totalMs,
   inputProcessors,
   pubsub = new EventEmitterPubSub(),
+  createMemory = storage => new MockMemory({ storage }),
 }: {
   memoryStore?: InMemoryMemory;
   /** Give the agent no memory at all. */
   withMemory?: boolean;
+  /** The agent's memory over the test's storage. */
+  createMemory?: (storage: InMemoryStore) => MastraMemory;
   /** The model call after the tool asks for a tool that needs approval, so the run parks there. */
   park?: boolean;
   /** This model call streams nothing and ends only when its request is aborted. */
@@ -284,7 +290,7 @@ function setup({
   });
   const storage = new InMemoryStore();
   storage.stores.memory = memoryStore;
-  const memory = new MockMemory({ storage });
+  const memory = createMemory(storage);
   const agent = createEventedAgent({
     agent: new Agent({
       id: 'stored-signals',
@@ -342,6 +348,7 @@ function setup({
   return {
     agent,
     mastra,
+    storage,
     memoryStore,
     scope,
     prompts,
@@ -775,6 +782,101 @@ describe('drains of a storage-backed run', () => {
     expect(signalAt).toBeGreaterThan(toolCallAt);
     expect(toolCallAt).toBeGreaterThanOrEqual(0);
     expect(answerAt).toBeGreaterThan(signalAt);
+  });
+});
+
+/** A pubsub whose next publish that `refuseOnce` picks fails, as a broker that dropped its connection does. */
+class RefusingPubSub extends EventEmitterPubSub {
+  refuseOnce?: (topic: string, event: Omit<Event, 'id' | 'createdAt'>) => Promise<boolean>;
+
+  override async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }) {
+    if (this.refuseOnce && (await this.refuseOnce(topic, event))) {
+      this.refuseOnce = undefined;
+      throw new Error('pubsub unavailable');
+    }
+    return super.publish(topic, event, options);
+  }
+}
+
+/** An observer model for observational memory that always reports the same observation. */
+function observerModel() {
+  const text = '<observations>\n* The user started a job\n</observations>';
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      finishReason: 'stop',
+      usage,
+      warnings: [],
+      content: [{ type: 'text', text }],
+    }),
+    doStream: async () => ({
+      warnings: [],
+      stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'observation' },
+        { type: 'text-delta', id: 'observation', delta: text },
+        { type: 'text-end', id: 'observation' },
+        { type: 'finish', finishReason: 'stop', usage },
+      ]),
+    }),
+  });
+}
+
+describe('a storage-backed run with observational memory', () => {
+  it('delivers a signal once when the step that saved it to memory is delivered again', async () => {
+    const memoryStore = new ObservedMemory();
+    const pubsub = new RefusingPubSub();
+    const { agent, scope, prompts, toolGate, start, savedMessages } = setup({
+      memoryStore,
+      pubsub,
+      // Buffers observations at every model request, which saves the request's messages to memory inside the
+      // step. The threshold is never reached, so no observation replaces a message in the model's context.
+      createMemory: memoryStorage =>
+        new Memory({
+          storage: memoryStorage,
+          options: {
+            observationalMemory: {
+              enabled: true,
+              observation: { model: observerModel(), messageTokens: 100_000, bufferTokens: 1 },
+              reflection: { model: observerModel(), observationTokens: 100_000 },
+            },
+          },
+        }),
+    });
+    const { stream, done } = await start();
+    // Sent right before the model request after the tool claims, so that step takes it: the first claim is the
+    // first request's, then the signal-drain step's and the continuation check's.
+    let sent: ReturnType<typeof agent.sendSignal> | undefined;
+    memoryStore.beforeClaim = async ({ runId }) => {
+      if (runId !== stream.runId || memoryStore.claimsBy(runId) !== 3) return;
+      sent = agent.sendSignal({ type: 'user', contents: 'SAVED_BEFORE_THE_STATE' }, scope);
+      await sent.accepted;
+    };
+    // The end of the model request after the tool, which carries that step's state, fails to publish once, so
+    // the step is delivered again. When it fails, memory already holds the signal as a message.
+    let refused: { visible: boolean } | undefined;
+    pubsub.refuseOnce = async (topic, event) => {
+      if (topic !== 'workflows' || event.type !== 'workflow.step.end' || !JSON.stringify(event).includes('answer 2')) {
+        return false;
+      }
+      refused = { visible: (await savedMessages()).some(message => message.id === sent!.signal.id) };
+      return true;
+    };
+    toolGate.release();
+    await done;
+
+    expect(refused).toEqual({ visible: true });
+    expect(prompts).toHaveLength(3);
+    expect(occurrences(prompts[1], 'SAVED_BEFORE_THE_STATE')).toBe(1);
+    expect(occurrences(prompts[2], 'SAVED_BEFORE_THE_STATE')).toBe(1);
+    expect((await savedMessages()).filter(message => message.id === sent!.signal.id)).toHaveLength(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).toBeNull();
+    // Nothing the run claimed is left hidden: a claim by the thread's next signal run returns nothing.
+    await memoryStore.setSignalRun({ threadId: scope.threadId, runId: 'next-run' });
+    expect(
+      await memoryStore.claimPendingSignals({ threadId: scope.threadId, runId: 'next-run', consumedIds: [] }),
+    ).toEqual([]);
   });
 });
 
