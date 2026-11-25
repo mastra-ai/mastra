@@ -76,10 +76,12 @@ export type InternalThreadBranchAuthorizationCandidate = {
 };
 
 export const MASTRA_THREAD_BRANCH_METADATA_KEY = '__mastra_thread_branch';
+export const MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY = '__mastra_thread_branch_parent';
+export const MASTRA_THREAD_BRANCH_STATE_METADATA_KEY = '__mastra_thread_branch_state';
 export const MASTRA_THREAD_BRANCH_METADATA_KEYS = [
   MASTRA_THREAD_BRANCH_METADATA_KEY,
-  '__mastra_thread_branch_parent',
-  '__mastra_thread_branch_state',
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
 ] as const;
 const MASTRA_MEMORY_TOKEN_LIMITER_METADATA_KEY = 'memoryTokenLimiter';
 
