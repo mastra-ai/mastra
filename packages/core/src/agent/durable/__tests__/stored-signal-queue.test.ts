@@ -1316,6 +1316,70 @@ describe('a parked run resumed in the process that parked it', () => {
   });
 });
 
+describe('a run started on a thread whose run of the same agent is parked', () => {
+  it("becomes the thread's signal run, and the parked run, resumed afterwards, takes nothing", async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, mastra, scope, prompts, toolGate, start, begin, afterFollowUps } = setup({
+      memoryStore,
+      park: true,
+    });
+    const suspended = gate();
+    let parkedRunId: string | undefined;
+    await mastra.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.suspend' && event.runId === parkedRunId) suspended.release();
+    });
+    const parked = await start();
+    parkedRunId = parked.stream.runId;
+    toolGate.release();
+    await parked.stream.output.suspendPayload;
+    await suspended.promise;
+
+    // Sent once the new run claims for its first model request, so it is sent while that run is running.
+    let duringNewRun: ReturnType<typeof agent.sendSignal> | undefined;
+    memoryStore.beforeClaim = async ({ runId }) => {
+      if (runId === parkedRunId || duringNewRun) return;
+      duringNewRun = agent.sendSignal({ type: 'user', contents: 'SENT_TO_THE_NEW_RUN' }, scope);
+      await duringNewRun.accepted;
+    };
+    const next = await begin();
+    await next.done;
+    expect(duringNewRun).toBeDefined();
+    await expect(duringNewRun!.accepted).resolves.toEqual({ action: 'deliver', runId: next.stream.runId });
+    expect(memoryStore.calls).toContainEqual({
+      op: 'enqueue',
+      id: duringNewRun!.signal.id,
+      toRunId: next.stream.runId,
+    });
+    expect(occurrences(prompts[2], 'SENT_TO_THE_NEW_RUN')).toBe(1);
+
+    // The parked run is no longer the thread's signal run: a send to it while it runs again is kept for the
+    // thread's next turn.
+    let duringResume: ReturnType<typeof agent.sendSignal> | undefined;
+    memoryStore.beforeClaim = async ({ runId }) => {
+      if (runId !== parkedRunId || duringResume) return;
+      duringResume = agent.sendSignal({ type: 'user', contents: 'SENT_TO_THE_RESUMED_RUN' }, scope);
+      await duringResume.accepted;
+    };
+    const resumed = await agent.approveToolCall({ runId: parkedRunId, toolCallId: 'call-confirm' });
+    const followUpsDone = afterFollowUps();
+    await resumed.consumeStream();
+    await followUpsDone;
+
+    expect(duringResume).toBeDefined();
+    await expect(duringResume!.accepted).resolves.toEqual({ action: 'deliver', runId: parkedRunId });
+    expect(memoryStore.calls.filter(call => call.op === 'enqueue' && call.id === duringResume!.signal.id)).toEqual([
+      { op: 'enqueue', id: duringResume!.signal.id, toRunId: parkedRunId },
+      { op: 'enqueue', id: duringResume!.signal.id },
+    ]);
+    const resumedClaims = memoryStore.calls.filter(call => call.op === 'claim' && call.runId === parkedRunId);
+    expect(resumedClaims.length).toBeGreaterThan(0);
+    expect(resumedClaims.every(call => call.op === 'claim' && call.ids.length === 0)).toBe(true);
+    // The resumed run's model request doesn't have it; the thread's next turn has it once.
+    const afterResume = prompts.slice(3).filter(prompt => !textOf(prompt).includes(BARRIER));
+    expect(afterResume.map(prompt => occurrences(prompt, 'SENT_TO_THE_RESUMED_RUN'))).toEqual([0, 1]);
+  });
+});
+
 describe('a parked run resumed in another process', () => {
   it('receives a signal sent after its first resolution of the memory storage failed, and is closed', async () => {
     const memoryStore = new ObservedMemory();
