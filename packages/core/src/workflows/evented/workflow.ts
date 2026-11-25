@@ -724,7 +724,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   unknown,
   unknown,
   DefaultEngineType
-> {
+> & { processorId: TProcessorId } {
   // Helper to map phase to entity type
   const getProcessorEntityType = (phase: string): EntityType => {
     switch (phase) {
@@ -790,6 +790,7 @@ function createStepFromProcessor<TProcessorId extends string>(
   // when it already implements StandardSchemaWithJSON.
   return {
     id: `processor:${processor.id}`,
+    processorId: processor.id,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepSchema) as StandardSchemaWithJSON<z.infer<typeof ProcessorStepSchema>>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
@@ -1715,7 +1716,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     unknown,
     DefaultEngineType
-  >;
+  > & { processorId: TProcessorId };
 }
 
 /**

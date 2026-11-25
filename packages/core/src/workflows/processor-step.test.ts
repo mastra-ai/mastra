@@ -397,6 +397,18 @@ describe('createStep with Processor', () => {
     expect(step.id).toBe('processor:my-processor');
   });
 
+  it('keeps the processor id on the step so it survives a step id rewrite', () => {
+    const processor: Processor = {
+      id: 'my-processor',
+      processInput: async ({ messages }) => messages,
+    };
+
+    for (const step of [createStep(processor), createEventedStep(processor)]) {
+      const renamed = { ...step, id: 'processor:graph-step-1' };
+      expect(renamed.processorId).toBe('my-processor');
+    }
+  });
+
   it('should use processor name as description if available', () => {
     const processor: Processor = {
       id: 'my-processor',
