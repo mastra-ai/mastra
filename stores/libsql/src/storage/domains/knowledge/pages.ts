@@ -93,6 +93,29 @@ export async function upgradeKnowledgePinKinds(tx: PageExecutor): Promise<void> 
   await tx.execute(`ALTER TABLE "${next}" RENAME TO "${T.pins}"`);
 }
 
+/**
+ * Activity tables from before feed positions have no `seq`. Adds it, numbers existing events in
+ * insertion (rowid) order, which is the order they committed in, and indexes it. Run after
+ * {@link KNOWLEDGE_PAGE_DDL}, in the same transaction; idempotent.
+ */
+export async function upgradeKnowledgeActivityFeed(tx: PageExecutor): Promise<void> {
+  const columns = await tx.execute(`SELECT name FROM pragma_table_info('${T.activity}')`);
+  if (!columns.rows.some(row => String(row.name) === 'seq')) {
+    await tx.execute(`ALTER TABLE "${T.activity}" ADD COLUMN seq INTEGER`);
+    await tx.execute(`UPDATE "${T.activity}" SET seq = rowid WHERE seq IS NULL`);
+  }
+  await tx.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_kactivity_seq ON "${T.activity}" (seq)`);
+}
+
+/** An oldest-first feed position: the event's `seq`, as a decimal string. */
+function parseActivityPosition(position: string): number {
+  if (/^\d{1,16}$/.test(position)) {
+    const seq = Number(position);
+    if (Number.isSafeInteger(seq)) return seq;
+  }
+  throw new RangeError('Knowledge activity position is not one this store issued');
+}
+
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
 export const KNOWLEDGE_PAGE_DDL: string[] = [
   `CREATE TABLE IF NOT EXISTS "mastra_knowledge_access_state" (
@@ -172,7 +195,8 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     pageId TEXT NOT NULL,
     noteId TEXT,
     provenance TEXT NOT NULL,
-    createdAt TEXT NOT NULL
+    createdAt TEXT NOT NULL,
+    seq INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_kactivity_page ON "${T.activity}" (pageId, id DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_kactivity_created ON "${T.activity}" (createdAt DESC, id DESC)`,
@@ -418,7 +442,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     now: string,
   ): Promise<void> {
     await tx.execute({
-      sql: `INSERT INTO "${T.activity}" (id, action, scopeId, pageId, noteId, provenance, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      // seq is numbered inside the write transaction. SQLite lets one writer at a time hold the
+      // database, across clients and processes, so seq follows commit order whatever each clock says.
+      sql: `INSERT INTO "${T.activity}" (id, action, scopeId, pageId, noteId, provenance, createdAt, seq) VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM "${T.activity}"))`,
       args: [
         createKnowledgeUlid(),
         action,
@@ -1497,7 +1523,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     if (input.before !== undefined && input.order === 'asc') {
       throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
     }
-    const cursor = decodeCursor(input.cursor, dated ? 2 : 1);
+    const after = ascending ? (input.after ?? input.cursor) : undefined;
+    const seqAfter = after === undefined ? undefined : parseActivityPosition(after);
+    const cursor = ascending ? undefined : decodeCursor(input.cursor, dated ? 2 : 1);
     const readable = pageReadable('p', input.read);
     const noteVisible = noteReadable('n', input.read);
     const args: InValue[] = [...readable.args];
@@ -1518,11 +1546,16 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       filters += ` AND e.createdAt < ?`;
       args.push(input.until.toISOString());
     }
-    const from = input.before ?? input.after;
-    const position = from ? [from.createdAt.toISOString(), from.id] : dated && cursor ? cursor : undefined;
-    if (position) {
-      const op = ascending ? '>' : '<';
-      filters += ` AND (e.createdAt ${op} ? OR (e.createdAt = ? AND e.id ${op} ?))`;
+    const position = input.before
+      ? [input.before.createdAt.toISOString(), input.before.id]
+      : dated
+        ? cursor
+        : undefined;
+    if (seqAfter !== undefined) {
+      filters += ` AND e.seq > ?`;
+      args.push(seqAfter);
+    } else if (position) {
+      filters += ` AND (e.createdAt < ? OR (e.createdAt = ? AND e.id < ?))`;
       args.push(position[0]!, position[0]!, position[1]!);
     } else if (!dated && cursor) {
       filters += ` AND e.id < ?`;
@@ -1531,7 +1564,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     args.push(...noteVisible.args, limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.createdAt ASC, e.id ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
+      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
       args,
     );
     const page = rows.slice(0, limit);
@@ -1545,9 +1578,14 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         ...(row.noteId ? { noteId: String(row.noteId) } : {}),
         provenance: provenance(row.provenance),
         createdAt: new Date(String(row.createdAt)),
+        ...(ascending ? { position: String(row.seq) } : {}),
       })),
       ...(rows.length > limit && last
-        ? { nextCursor: encodeCursor(dated ? [String(last.createdAt), String(last.id)] : [String(last.id)]) }
+        ? {
+            nextCursor: ascending
+              ? String(last.seq)
+              : encodeCursor(dated ? [String(last.createdAt), String(last.id)] : [String(last.id)]),
+          }
         : {}),
     };
   }

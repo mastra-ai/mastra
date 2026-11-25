@@ -245,6 +245,16 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#pages.clearAll();
   }
 
+  /**
+   * Run once after restoring this database from a logical dump (`pg_dump`/`pg_restore`). Until it
+   * runs, restored activity stays hidden from oldest-first reads; afterwards, positions handed out
+   * before the restore are refused and readers restart from `since`. Not needed after `pg_upgrade`
+   * or a physical restore.
+   */
+  rebaseActivityFeed(): Promise<void> {
+    return this.#pages.rebaseActivityFeed();
+  }
+
   override materializeScope(
     input: Parameters<KnowledgePageStore['materializeScope']>[0],
   ): ReturnType<KnowledgePageStore['materializeScope']> {

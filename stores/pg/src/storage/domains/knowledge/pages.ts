@@ -139,7 +139,9 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
       "pageId" text NOT NULL,
       "noteId" text,
       "provenance" jsonb NOT NULL,
-      "createdAt" timestamptz NOT NULL
+      "createdAt" timestamptz NOT NULL,
+      "xact" xid8 NOT NULL DEFAULT pg_current_xact_id(),
+      "seq" bigserial NOT NULL
     )`,
     `CREATE TABLE IF NOT EXISTS ${q(t.state)} (
       "id" text PRIMARY KEY,
@@ -183,6 +185,16 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_page_links_ref_idx', t.links, '"ref"', '"toPageId" IS NULL'),
     index('mastra_knowledge_activity_page_idx', t.activity, '"pageId","createdAt","id"'),
     index('mastra_knowledge_activity_created_idx', t.activity, '"createdAt","id"'),
+    // Commit-safe feed positions arrived after schema 4 shipped: additive, idempotent, no version
+    // bump. Rows from before get the migrating transaction's id, ordered among themselves by seq.
+    `DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('${q(t.activity)}') AND attname = 'seq' AND NOT attisdropped) THEN
+        ALTER TABLE ${q(t.activity)} ADD COLUMN "xact" xid8 NOT NULL DEFAULT pg_current_xact_id();
+        ALTER TABLE ${q(t.activity)} ADD COLUMN "seq" bigserial NOT NULL;
+      END IF;
+    END $$`,
+    index('mastra_knowledge_activity_feed_idx', t.activity, '"xact","seq"'),
+    `ALTER TABLE ${q(t.state)} ADD COLUMN IF NOT EXISTS "activityGeneration" integer NOT NULL DEFAULT 1`,
   ];
 }
 
@@ -289,6 +301,22 @@ function prefixUpperBound(prefix: string): string | null {
   const last = points.pop()?.codePointAt(0);
   if (last === undefined || last >= 0x10ffff || (last >= 0xd7ff && last < 0xe000)) return null;
   return points.join('') + String.fromCodePoint(last + 1);
+}
+
+const PG_XID8_MAX = 2n ** 64n - 1n;
+const PG_BIGINT_MAX = 2n ** 63n - 1n;
+const PG_INTEGER_MAX = 2n ** 31n - 1n;
+
+/** An oldest-first feed position: `<generation>:<xact>:<seq>`. */
+function parseActivityPosition(position: string): { generation: number; xact: string; seq: string } {
+  const match = /^(\d{1,10}):(\d{1,20}):(\d{1,19})$/.exec(position);
+  if (match) {
+    const [, generation, xact, seq] = match as unknown as [string, string, string, string];
+    if (BigInt(generation) <= PG_INTEGER_MAX && BigInt(xact) <= PG_XID8_MAX && BigInt(seq) <= PG_BIGINT_MAX) {
+      return { generation: Number(generation), xact, seq };
+    }
+  }
+  throw new RangeError('Knowledge activity position is not one this store issued');
 }
 
 function encodeCursor(parts: unknown[]): string {
@@ -1774,36 +1802,93 @@ export class PgKnowledgePages implements KnowledgePageStore {
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
     if (input.since) where.push(`a."createdAt" >= ${params.add(iso(input.since))}::timestamptz`);
     if (input.until) where.push(`a."createdAt" < ${params.add(iso(input.until))}::timestamptz`);
-    const from = input.before ?? input.after;
-    const position = from ? [iso(from.createdAt), from.id] : input.cursor ? decodeCursor(input.cursor, 2) : undefined;
+    const toEvent = (row: Row): KnowledgePageActivityEvent => ({
+      id: String(row.id),
+      action: String(row.action) as KnowledgePageActivityAction,
+      scopeId: String(row.scopeId),
+      pageId: String(row.pageId),
+      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+      provenance: parseJson<KnowledgeProvenance>(row.provenance),
+      createdAt: new Date(row.createdAt as string | Date),
+    });
+    const join = `${this.#activity} a JOIN ${this.#pages} p ON p."id" = a."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"`;
+
+    if (ascending) {
+      // Ordered by (transaction id, sequence) and capped at the snapshot horizon: every transaction
+      // below it has committed or aborted, so no event can later appear behind a position handed out.
+      const from = input.after ?? input.cursor;
+      const after = from === undefined ? undefined : parseActivityPosition(from);
+      const generation = await this.#activityGeneration();
+      if (after && after.generation !== generation) {
+        throw new RangeError(
+          'Knowledge activity position is from before the feed was rebased (after a database restore); restart from since',
+        );
+      }
+      where.push(`a."xact" < pg_snapshot_xmin(pg_current_snapshot())`);
+      if (after)
+        where.push(`(a."xact", a."seq") > (${params.add(after.xact)}::xid8, ${params.add(after.seq)}::bigint)`);
+      const rows = await this.#rows(
+        this.#client,
+        `SELECT a.*, a."xact"::text AS "xactText", a."seq"::text AS "seqText" FROM ${join}
+         WHERE ${where.join(' AND ')} ORDER BY a."xact" ASC, a."seq" ASC LIMIT ${limit + 1}`,
+        params.values,
+      );
+      const events = rows.slice(0, limit).map(row => ({
+        ...toEvent(row),
+        position: `${generation}:${String(row.xactText)}:${String(row.seqText)}`,
+      }));
+      const last = events[events.length - 1];
+      return { events, ...(rows.length > limit && last ? { nextCursor: last.position } : {}) };
+    }
+
+    const position = input.before
+      ? [iso(input.before.createdAt), input.before.id]
+      : input.cursor
+        ? decodeCursor(input.cursor, 2)
+        : undefined;
     if (position) {
       const [createdAt, id] = position;
-      where.push(
-        `(a."createdAt", a."id") ${ascending ? '>' : '<'} (${params.add(createdAt)}::timestamptz, ${params.add(id)})`,
-      );
+      where.push(`(a."createdAt", a."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(
       this.#client,
-      `SELECT a.* FROM ${this.#activity} a JOIN ${this.#pages} p ON p."id" = a."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"
-       WHERE ${where.join(' AND ')} ORDER BY a."createdAt" ${ascending ? 'ASC' : 'DESC'}, a."id" ${ascending ? 'ASC' : 'DESC'} LIMIT ${limit + 1}`,
+      `SELECT a.* FROM ${join}
+       WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const events = rows.slice(0, limit).map(
-      (row): KnowledgePageActivityEvent => ({
-        id: String(row.id),
-        action: String(row.action) as KnowledgePageActivityAction,
-        scopeId: String(row.scopeId),
-        pageId: String(row.pageId),
-        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-        provenance: parseJson<KnowledgeProvenance>(row.provenance),
-        createdAt: new Date(row.createdAt as string | Date),
-      }),
-    );
+    const events = rows.slice(0, limit).map(toEvent);
     const last = events[events.length - 1];
     return {
       events,
       ...(rows.length > limit && last ? { nextCursor: encodeCursor([iso(last.createdAt), last.id]) } : {}),
     };
+  }
+
+  async #activityGeneration(): Promise<number> {
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT "activityGeneration" FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge'`,
+      [],
+    );
+    return rows[0] ? Number(rows[0].activityGeneration) : 1;
+  }
+
+  /**
+   * Run once after restoring this database from a logical dump (`pg_dump`/`pg_restore`) into another
+   * cluster. Oldest-first positions are built from transaction ids, which a logical restore doesn't
+   * carry over: restored events keep the old cluster's ids and stay hidden from oldest-first reads
+   * until this runs. It renumbers them into the new cluster, keeping their order, and moves the feed
+   * to a new generation, so positions handed out before are refused and readers restart from `since`.
+   * Not needed after `pg_upgrade` or a physical backup restore, which keep transaction ids.
+   */
+  async rebaseActivityFeed(): Promise<void> {
+    await this.#tx(async tx => {
+      await tx.query(`LOCK TABLE ${this.#activity} IN EXCLUSIVE MODE`);
+      await tx.query(`UPDATE ${this.#activity} SET "xact" = pg_current_xact_id()`);
+      await tx.query(
+        `UPDATE ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} SET "activityGeneration" = "activityGeneration" + 1 WHERE "id" = 'knowledge'`,
+      );
+    });
   }
 
   // Pins -----------------------------------------------------------------------------------------

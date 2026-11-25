@@ -269,6 +269,8 @@ A change to a page or note the run can no longer read is left out. A result stop
 
 The tool needs a store that filters activity by date: the in-memory store, LibSQL and PostgreSQL. On other stores it refuses rather than return the whole history. `order: 'oldest'` needs the same stores.
 
+With `order: 'oldest'`, changes come in the order their writes committed, so a change that committed late, or came from a server whose clock is behind, still comes after a cursor the agent already holds. The result always has a `cursor`, even once the agent has caught up: keep it, and continue with it later to get only the changes made since. On PostgreSQL, a change stays out of the results while a transaction that started before it remains open on the database server. A page moved into a scope the run can read brings its earlier changes with it, and those can land behind a cursor already held.
+
 ## `knowledge_page`
 
 Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`, and a delete ignores it. All three act on the page's own scope.

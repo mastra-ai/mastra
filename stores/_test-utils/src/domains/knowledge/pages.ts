@@ -1405,23 +1405,21 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
 
         describe('oldest first (stores reporting supportsActivityAscending)', () => {
           const ascending = () => store.getCapabilities().supportsActivityAscending === true;
-          const oldestOrder = <E extends { createdAt: Date; id: string }>(events: E[]) => datedOrder(events).reverse();
-          const positionOf = (event: { createdAt: Date; id: string }) => ({ createdAt: event.createdAt, id: event.id });
+          const names = async (events: Array<{ pageId: string }>) =>
+            Promise.all(events.map(async event => (await store.getPage({ id: event.pageId, read: 'all' }))?.name));
 
           it('refuses order asc and after on a store that does not report it, instead of answering newest first', async () => {
             if (ascending()) return;
-            const position = { createdAt: new Date(T0), id: 'x' };
             await expect(store.listPageActivity({ read: 'all', order: 'asc' })).rejects.toThrow(RangeError);
-            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: position })).rejects.toThrow(
-              RangeError,
-            );
+            await expect(store.listPageActivity({ read: 'all', order: 'asc', after: '1' })).rejects.toThrow(RangeError);
           });
 
-          it('orders by createdAt then id ascending, and pages with after through ties and out-of-order ids without skipping or repeating', async () => {
+          it('lists in the order writes committed, not createdAt order, and pages with after positions without skipping or repeating', async () => {
             if (!ascending()) return;
             const acme = await scopeAt('org:acme');
             const r = read(['org:acme']);
-            await at(T0 + 5000, () => page(acme.id, 'late'));
+            // Written one after another, so commit order is this order, whatever the clocks said.
+            await at(T0 + 5000, () => page(acme.id, 'late clock'));
             await at(T0 + 3000, async () => {
               await page(acme.id, 'tie a');
               await page(acme.id, 'tie b');
@@ -1431,24 +1429,24 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
             await at(T0 + 4000, () => page(acme.id, 'middle'));
             const since = new Date(T0);
             const whole = (await store.listPageActivity({ read: r, since, order: 'asc', limit: 100 })).events;
-            expect(whole).toHaveLength(6);
-            expect(keyed(whole)).toEqual(keyed(oldestOrder(whole)));
-            expect(whole[0]!.createdAt.getTime()).toBeLessThan(whole[5]!.createdAt.getTime());
+            expect(await names(whole)).toEqual(['late clock', 'tie a', 'tie b', 'tie c', 'stepped back', 'middle']);
+            expect(whole.every(event => typeof event.position === 'string' && event.position.length > 0)).toBe(true);
+            expect(new Set(whole.map(event => event.position)).size).toBe(whole.length);
 
             for (const limit of [1, 2, 4]) {
               const walked: typeof whole = [];
-              let after: { createdAt: Date; id: string } | undefined;
+              let after: string | undefined;
               for (let guard = 0; guard < 20; guard++) {
                 const { events } = await store.listPageActivity({ read: r, since, order: 'asc', limit, after });
                 walked.push(...events);
                 if (events.length < limit) break;
-                after = positionOf(events[events.length - 1]!);
+                after = events[events.length - 1]!.position;
               }
-              expect(keyed(walked)).toEqual(keyed(whole));
+              expect(walked.map(event => event.id)).toEqual(whole.map(event => event.id));
             }
 
             // after is exclusive: continuing from the last event returns nothing new.
-            const tail = await store.listPageActivity({ read: r, since, order: 'asc', after: positionOf(whole[5]!) });
+            const tail = await store.listPageActivity({ read: r, since, order: 'asc', after: whole[5]!.position });
             expect(tail.events).toEqual([]);
 
             // The store's own cursor pages oldest first too.
@@ -1460,7 +1458,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
               limit: 4,
               cursor: first.nextCursor,
             });
-            expect(keyed([...first.events, ...second.events])).toEqual(keyed(whole));
+            expect([...first.events, ...second.events].map(event => event.id)).toEqual(whole.map(event => event.id));
           });
 
           it('picks up an event written after the reader stopped, from where it stopped', async () => {
@@ -1470,11 +1468,12 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
             await at(T0 + 1000, () => page(acme.id, 'one'));
             await at(T0 + 2000, () => page(acme.id, 'two'));
             const seen = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
-            const later = await at(T0 + 3000, () => page(acme.id, 'three'));
+            // A clock behind the events already read: still after them in the feed.
+            const later = await at(T0 + 500, () => page(acme.id, 'three'));
             const next = await store.listPageActivity({
               read: r,
               order: 'asc',
-              after: positionOf(seen[seen.length - 1]!),
+              after: seen[seen.length - 1]!.position,
             });
             expect(next.events.map(event => event.pageId)).toEqual([later.id]);
           });
@@ -1503,16 +1502,24 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
             expect(all.events.map(event => event.pageId)).toEqual([stays.id]);
           });
 
-          it('refuses after without order asc, after with a cursor, and before with order asc', async () => {
+          it('refuses after without order asc, after with a cursor, before with order asc, and a position it did not issue', async () => {
             if (!ascending()) return;
-            const position = { createdAt: new Date(T0), id: 'x' };
+            const acme = await scopeAt('org:acme');
+            await at(T0 + 1000, () => page(acme.id, 'one'));
+            const [event] = (await store.listPageActivity({ read: 'all', since: new Date(T0), order: 'asc' })).events;
+            const position = event!.position!;
             await expect(store.listPageActivity({ read: 'all', after: position })).rejects.toThrow(RangeError);
             await expect(
-              store.listPageActivity({ read: 'all', order: 'asc', after: position, cursor: 'x' }),
+              store.listPageActivity({ read: 'all', order: 'asc', after: position, cursor: position }),
             ).rejects.toThrow(RangeError);
-            await expect(store.listPageActivity({ read: 'all', order: 'asc', before: position })).rejects.toThrow(
-              RangeError,
-            );
+            await expect(
+              store.listPageActivity({ read: 'all', order: 'asc', before: { createdAt: new Date(T0), id: 'x' } }),
+            ).rejects.toThrow(RangeError);
+            for (const bad of ['', 'not a position', '-1', '1.5', '99999999999999999999999999']) {
+              await expect(store.listPageActivity({ read: 'all', order: 'asc', after: bad })).rejects.toThrow(
+                RangeError,
+              );
+            }
           });
 
           it('leaves the default order newest first', async () => {
@@ -1524,7 +1531,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
             const desc = (await store.listPageActivity({ read: r, since: new Date(T0) })).events;
             const asc = (await store.listPageActivity({ read: r, since: new Date(T0), order: 'asc' })).events;
             expect(keyed(desc)).toEqual(keyed(datedOrder(desc)));
-            expect(keyed(asc)).toEqual(keyed([...desc].reverse()));
+            expect(asc.map(event => event.id)).toEqual([...desc].reverse().map(event => event.id));
           });
         });
       });

@@ -1578,7 +1578,8 @@ function activityDate(name: 'since' | 'until', value: string): Date {
   return date;
 }
 
-type ActivityCursor = { v: 1; before: [string, string]; bind: string };
+/** v1 continues newest first before an event; v2 continues oldest first after a store position. */
+type ActivityCursor = { v: 1; before: [string, string]; bind: string } | { v: 2; after: string; bind: string };
 
 async function activityBinding(parts: Array<string | undefined>): Promise<string> {
   const bytes = new TextEncoder().encode(JSON.stringify(parts.map(part => part ?? null)));
@@ -1599,6 +1600,14 @@ function decodeActivityCursor(value: string): ActivityCursor {
       typeof cursor.before[0] === 'string' &&
       typeof cursor.before[1] === 'string' &&
       !Number.isNaN(new Date(cursor.before[0]).getTime()) &&
+      typeof cursor.bind === 'string'
+    ) {
+      return cursor;
+    }
+    if (
+      cursor?.v === 2 &&
+      typeof cursor.after === 'string' &&
+      cursor.after.length > 0 &&
       typeof cursor.bind === 'string'
     ) {
       return cursor;
@@ -1625,7 +1634,8 @@ function activityTool(host: KnowledgePageToolHost) {
       'What changed in Knowledge over a period: page creates, edits, moves, merges and deletes, and notes added, restamped, removed or restored, newest first (or oldest first with `order: "oldest"`), with who made each change. ' +
       'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
-      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order).`,
+      `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order). ` +
+      'Oldest first also returns a `cursor` when it has caught up: keep it, and a later call with it returns only the changes recorded since, none missed or repeated.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1644,7 +1654,8 @@ function activityTool(host: KnowledgePageToolHost) {
         order: {
           type: 'string',
           enum: ['newest', 'oldest'],
-          description: 'newest (default) lists the latest changes first; oldest lists them in the order they happened.',
+          description:
+            'newest (default) lists the latest changes first; oldest lists them in the order they were committed, so a change still being saved shows up on a later call rather than being skipped.',
         },
         limit: {
           type: 'integer',
@@ -1689,6 +1700,11 @@ function activityTool(host: KnowledgePageToolHost) {
         throw new KnowledgeUnsupportedCapabilityError('listPageActivity oldest first');
       }
       const cursor = args.cursor === undefined ? undefined : decodeActivityCursor(args.cursor);
+      if (cursor && (cursor.v === 2) !== oldest) {
+        throw new Error(
+          'knowledge_activity: this cursor came from a call with different since, until, from or order. Pass the same ones as the call that returned it.',
+        );
+      }
 
       const run = await start(host, context);
       const origin = args.from ? await run.pageOrCloseMatches(args.from) : undefined;
@@ -1709,7 +1725,18 @@ function activityTool(host: KnowledgePageToolHost) {
 
       const entries: ActivityEntry[] = [];
       let used = 0;
-      let position = cursor ? { createdAt: new Date(cursor.before[0]), id: cursor.before[1] } : undefined;
+      // Newest first continues before an event; oldest first continues after the store's position.
+      let position: { createdAt: Date; id: string } | string | undefined = !cursor
+        ? undefined
+        : cursor.v === 2
+          ? cursor.after
+          : { createdAt: new Date(cursor.before[0]), id: cursor.before[1] };
+      const passed = (event: KnowledgePageActivityEvent) => {
+        if (!oldest) return { createdAt: event.createdAt, id: event.id };
+        if (!event.position)
+          throw new Error('knowledge_activity: the store returned an oldest-first change without a position.');
+        return event.position;
+      };
       let more = false;
       let stopped = false;
       let batches = 0;
@@ -1721,8 +1748,9 @@ function activityTool(host: KnowledgePageToolHost) {
           ...filter,
           ...(since ? { since } : {}),
           ...(until ? { until } : {}),
-          ...(oldest ? { order: 'asc' as const } : {}),
-          ...(position ? (oldest ? { after: position } : { before: position }) : {}),
+          ...(typeof position === 'string' ? { order: 'asc' as const, after: position } : {}),
+          ...(position && typeof position !== 'string' ? { before: position } : {}),
+          ...(oldest && !position ? { order: 'asc' as const } : {}),
           limit: limit - entries.length,
         });
         more = batch.nextCursor !== undefined;
@@ -1745,7 +1773,7 @@ function activityTool(host: KnowledgePageToolHost) {
           const note = event.noteId ? notes.get(event.noteId) : undefined;
           if (!page || (event.noteId && !note)) {
             // Consumed, so the cursor moves past it, but never shown.
-            position = { createdAt: event.createdAt, id: event.id };
+            position = passed(event);
             continue;
           }
           const entry: ActivityEntry = {
@@ -1778,7 +1806,7 @@ function activityTool(host: KnowledgePageToolHost) {
           }
           entries.push(entry);
           used += size;
-          position = { createdAt: event.createdAt, id: event.id };
+          position = passed(event);
           if (entries.length >= limit) break;
         }
         if (!more) break;
@@ -1794,12 +1822,15 @@ function activityTool(host: KnowledgePageToolHost) {
           ? { from: { ref: (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id, name: origin.name } }
           : {}),
         changes: entries,
-        ...(hasMore && position
-          ? {
-              more: true,
-              cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
-            }
-          : {}),
+        ...(typeof position === 'string'
+          ? // Oldest first keeps a cursor even when caught up, so a later call returns only what came after.
+            { ...(hasMore ? { more: true } : {}), cursor: encodeActivityCursor({ v: 2, after: position, bind }) }
+          : hasMore && position
+            ? {
+                more: true,
+                cursor: encodeActivityCursor({ v: 1, before: [position.createdAt.toISOString(), position.id], bind }),
+              }
+            : {}),
       };
     },
   });

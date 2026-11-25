@@ -67,6 +67,15 @@ const byName = (a: KnowledgePage, b: KnowledgePage) =>
   a.name < b.name ? -1 : a.name > b.name ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const newestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) =>
   b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+/** An oldest-first position: the event's insertion counter as plain decimal text. */
+function activityPosition(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const n = /^(0|[1-9]\d*)$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(n))
+    throw new RangeError(`Knowledge activity position is not one this store issued: ${value}`);
+  return n;
+}
+
 const oldestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) => newestFirst(b, a);
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -95,6 +104,8 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #activity: KnowledgePageActivityEvent[] = [];
   #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
+  /** Insertion counter behind each event's `position`; never reset, so a held position can't be reused. */
+  #activitySeq = 0;
 
   /** A deep copy of every page, note, pin, body link and event, for {@link restore}. */
   snapshot(): InMemoryKnowledgePageSnapshot {
@@ -115,6 +126,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     this.#pins = copy.pins;
     this.#activity = copy.activity;
     this.#bodyLinks = copy.bodyLinks;
+    for (const event of this.#activity) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
   }
 
   /** Drops every page, note, pin, body link and event. */
@@ -146,6 +158,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       ...(noteId ? { noteId } : {}),
       provenance: clone(provenance),
       createdAt: this.#now(),
+      position: String(++this.#activitySeq),
     });
   }
 
@@ -910,25 +923,45 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       throw new RangeError('Knowledge activity takes a before position only newest first; use after with order asc');
     }
     const ascending = input.order === 'asc';
+    if (ascending) {
+      // Writes here are synchronous, so insertion order is commit order.
+      const after = activityPosition(input.after ?? input.cursor);
+      const size = pageSize(input.limit);
+      const matched = this.#activity.filter(
+        event => this.#activityMatches(event, input) && (after === undefined || Number(event.position) > after),
+      );
+      const items = matched.slice(0, size);
+      const last = items[items.length - 1];
+      return {
+        events: items.map(clone),
+        ...(matched.length > size && last ? { nextCursor: last.position! } : {}),
+      };
+    }
     const events = this.#activity
-      .filter(event => {
-        const page = this.#pages.get(event.pageId);
-        if (!page || !this.#pageReadable(page, input.read)) return false;
-        if (input.pageId !== undefined && event.pageId !== input.pageId) return false;
-        if (input.scopeId !== undefined && page.scopeId !== input.scopeId) return false;
-        if (event.noteId !== undefined) {
-          const note = this.#notes.get(event.noteId);
-          if (!note || !this.#noteVisible(note, input.read)) return false;
-        }
-        if (input.since !== undefined && event.createdAt.getTime() < input.since.getTime()) return false;
-        if (input.until !== undefined && event.createdAt.getTime() >= input.until.getTime()) return false;
-        if (input.before !== undefined && newestFirst(event, input.before) <= 0) return false;
-        if (input.after !== undefined && oldestFirst(event, input.after) <= 0) return false;
-        return true;
-      })
-      .sort(ascending ? oldestFirst : newestFirst);
+      .filter(
+        event =>
+          this.#activityMatches(event, input) && (input.before === undefined || newestFirst(event, input.before) > 0),
+      )
+      .sort(newestFirst);
     const { items, nextCursor } = paginate(events, input.cursor, input.limit);
-    return { events: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
+    return {
+      events: items.map(({ position: _position, ...event }) => clone(event)),
+      ...(nextCursor ? { nextCursor } : {}),
+    };
+  }
+
+  #activityMatches(event: KnowledgePageActivityEvent, input: Parameters<Store['listPageActivity']>[0]): boolean {
+    const page = this.#pages.get(event.pageId);
+    if (!page || !this.#pageReadable(page, input.read)) return false;
+    if (input.pageId !== undefined && event.pageId !== input.pageId) return false;
+    if (input.scopeId !== undefined && page.scopeId !== input.scopeId) return false;
+    if (event.noteId !== undefined) {
+      const note = this.#notes.get(event.noteId);
+      if (!note || !this.#noteVisible(note, input.read)) return false;
+    }
+    if (input.since !== undefined && event.createdAt.getTime() < input.since.getTime()) return false;
+    if (input.until !== undefined && event.createdAt.getTime() >= input.until.getTime()) return false;
+    return true;
   }
 
   // Pins

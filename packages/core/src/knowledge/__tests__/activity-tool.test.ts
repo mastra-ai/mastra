@@ -303,14 +303,26 @@ describe('knowledge_activity: continuation', () => {
       expect(result.changes.length).toBeGreaterThan(0);
       if (result.cursor && result.changes.length < 7) stoppedMidBatch = true;
       walk.push(...result.changes.map((change: any) => `${change.at}|${change.action}`));
+      // Oldest first returns a cursor even once caught up; more says whether to keep going now.
+      expect(result.cursor).toEqual(expect.any(String));
       cursor = result.cursor;
-    } while (cursor && calls < 100);
+      if (!result.more) break;
+    } while (calls < 100);
     const { events } = await store.listPageActivity({ read: 'all', since: new Date(T0), order: 'asc', limit: 100 });
     const reference = events.map(event => `${event.createdAt.toISOString()}|${event.action}`);
     expect(reference).toHaveLength(31);
     expect(reference[0]).toMatch(/\|page-created$/);
     expect(walk).toEqual(reference);
     expect(stoppedMidBatch).toBe(true);
+
+    // The caught-up cursor returns nothing until a change lands, then exactly that change,
+    // even when its clock reads earlier than everything already listed.
+    const idle: any = await call({ since: day(T0), order: 'oldest', cursor });
+    expect(idle.changes).toEqual([]);
+    expect(idle.more).toBeUndefined();
+    await note(T0 + 500, p.id, 'late clock');
+    const fresh: any = await call({ since: day(T0), order: 'oldest', cursor: idle.cursor });
+    expect(fresh.changes.map((change: any) => change.note?.text)).toEqual(['late clock']);
   });
 
   it('refuses a cursor from the other order, either way', async () => {

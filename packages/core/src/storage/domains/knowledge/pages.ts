@@ -657,6 +657,11 @@ export interface KnowledgePageActivityEvent {
   noteId?: string;
   provenance: KnowledgeProvenance;
   createdAt: Date;
+  /**
+   * Set on events from oldest-first reads (`order: 'asc'`): this event's place in the feed, an
+   * opaque string. Pass it as `after` to continue from here.
+   */
+  position?: string;
 }
 
 /** @experimental */
@@ -673,12 +678,12 @@ export interface KnowledgePageActivityInput {
   /** Events strictly older than this one in dated `(createdAt, id)` order (dated mode). */
   before?: { createdAt: Date; id: string };
   /**
-   * `asc` reads oldest first in `(createdAt, id)` order (dated mode, on stores reporting
+   * `asc` reads oldest first in the store's commit-safe feed order (on stores reporting
    * `supportsActivityAscending`). Defaults to `desc`.
    */
   order?: 'desc' | 'asc';
-  /** Events strictly newer than this one in `(createdAt, id)` order. Only with `order: 'asc'`. */
-  after?: { createdAt: Date; id: string };
+  /** Events after this `position` from an earlier oldest-first read. Only with `order: 'asc'`. */
+  after?: string;
 }
 
 /** @experimental */
@@ -898,14 +903,17 @@ export interface KnowledgePageStore {
    * that event in this order. `before` can't be combined with `cursor`. Without any of them the
    * store's existing order and cursor are unchanged.
    *
-   * `order: 'asc'`, only on stores reporting `supportsActivityAscending`, reads in dated mode oldest
-   * first: `createdAt` then `id`, both ascending, with `since`/`until` still applying. `after`
-   * returns only events strictly newer than that event in this order, so a reader can continue from
-   * the last event it handled. `after` needs `order: 'asc'` and can't be combined with `cursor`;
-   * `before` can't be used with `order: 'asc'`. Invalid combinations throw a `RangeError`, and so
-   * do `order: 'asc'` and `after` on a store that doesn't report the capability. For a read that
-   * resumes later, continue with `after` rather than the store cursor: the cursor can be a plain
-   * offset, which shifts if an event lands inside the range already read.
+   * `order: 'asc'`, only on stores reporting `supportsActivityAscending`, reads oldest first in a
+   * commit-safe order: an event never appears behind a position a reader already holds, even when
+   * its write committed after later-stamped ones. Each event carries a `position`; `after` returns
+   * only events past that position, so a reader can store the last position it handled and continue
+   * from it later without missing or repeating events. The order follows commits, not `createdAt`
+   * (`since`/`until` still filter by `createdAt`), and a store may hold back events until earlier
+   * writes have committed. `after` needs `order: 'asc'` and can't be combined with `cursor`;
+   * `before` can't be used with `order: 'asc'`. Invalid combinations and malformed positions throw
+   * a `RangeError`, and so do `order: 'asc'` and `after` on a store that doesn't report the
+   * capability. A store can also refuse a position it no longer recognises (for example after its
+   * feed was rebuilt by a database restore) with a `RangeError`; restart from `since` then.
    */
   listPageActivity(
     input: KnowledgePageActivityInput,
