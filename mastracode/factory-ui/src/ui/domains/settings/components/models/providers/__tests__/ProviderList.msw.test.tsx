@@ -4,7 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
 import type {
   CustomProviderCheckFailedResponse,
   CustomProviderCheckFailure,
@@ -631,7 +631,7 @@ describe('ProviderList custom endpoints', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ProviderList credentialScope="user" />);
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
     const form = await openCustomEndpointForm(user, await openAddProvider(user));
 
     // A typed ID the endpoint does not list is kept next to a listed one.
@@ -646,6 +646,7 @@ describe('ProviderList custom endpoints', () => {
     await user.click(within(form).getByRole('button', { name: 'Save anyway' }));
 
     await waitFor(() => expect(bodies).toHaveLength(2));
+    await waitForMutationsIdle(client);
     const saved = {
       name: 'my-llm',
       url: URL_UNDER_TEST,
@@ -668,7 +669,7 @@ describe('ProviderList custom endpoints', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<ProviderList credentialScope="user" />);
+    const { client } = renderWithProviders(<ProviderList credentialScope="user" />);
 
     await pickCustomRowAction(user, 'my-llm', 'Edit');
     const form = await screen.findByRole('dialog', { name: 'Edit my-llm' });
@@ -687,6 +688,7 @@ describe('ProviderList custom endpoints', () => {
         }),
       ),
     );
+    await waitForMutationsIdle(client);
   });
 
   it('does not add the models listed for one URL in bulk after the URL changes', async () => {

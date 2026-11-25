@@ -209,6 +209,8 @@ export function CustomProviderForm({
   /** Lists the endpoint's models with the draft settings. The result keeps the settings it was produced with. */
   const test = async () => {
     if (!connectionReady()) return;
+    // A retry that is refused or fails must not sit next to the previous result.
+    setConnection(undefined);
     try {
       const response = await connectionCheck.mutateAsync({ ...connectionFields(draft), ...target });
       recordListing(response.check.models);
@@ -223,6 +225,9 @@ export function CustomProviderForm({
    */
   const sendTestMessage = async () => {
     if (!testModel || !connectionReady()) return;
+    // A retry without a reply must not leave an earlier reply or listing on screen.
+    setConnection(undefined);
+    setModelTest(undefined);
     try {
       const response = await modelCheck.mutateAsync({ ...connectionFields(draft), ...target, model: testModel });
       const { models, reply } = response.check;
@@ -274,8 +279,9 @@ export function CustomProviderForm({
     };
     try {
       const result = await (check ? checkedSave : uncheckedSave).mutateAsync(body);
+      // Worded from the saved row: an edit racing the save can leave a different check on it than was asked for.
       toast.success(
-        check
+        result.provider.lastCheck?.ok
           ? `Saved ${result.provider.name}. The connection test passed.`
           : `Saved ${result.provider.name} without a passing connection test.`,
       );
