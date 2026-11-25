@@ -74,6 +74,7 @@
     "chat": "catalog:",
     "fetch-to-node": "^2.1.0",
     "hono": "^4.13.13",
+    "jose": "^6.2.12",
     "posthog-node": "^5.57.1",
     "zod": "catalog:"
   },
