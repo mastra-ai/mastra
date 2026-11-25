@@ -283,6 +283,23 @@ describe('listing the models of a custom endpoint', () => {
     expect(result).toMatchObject({ ok: false, failure: { status: 401, detail: 'bad token [redacted]' } });
   });
 
+  // Only the start of the encoded secret falls inside the 32 KB scan, so no full form can match it.
+  it('drops the start of an entity-encoded secret cut by the scan limit', async () => {
+    const opening = '<html><body><p>bad token ';
+    const encodedStart = 'tenant&#9;tok';
+    const padding = ' '.repeat(32 * 1024 - opening.length - encodedStart.length);
+    const endpoint = await startEndpoint(
+      text(401, `${opening}${padding}tenant&#9;token-1</p></body></html>`, 'text/html'),
+    );
+
+    const result = await listCustomProviderModels({
+      url: endpoint.url,
+      headers: [{ name: 'X-Tenant', value: 'tenant\ttoken-1', secret: true }],
+    });
+
+    expect(result).toMatchObject({ ok: false, failure: { status: 401, detail: 'bad token' } });
+  });
+
   // The body is cut and its whitespace collapsed before the final redaction.
   it('redacts a key that sits across the read limit or is echoed with its spacing collapsed', async () => {
     const key = 'sk-SUPERSECRETVALUE1234';

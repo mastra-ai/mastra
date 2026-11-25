@@ -323,13 +323,18 @@ function upstreamDetail(
       parsed = undefined;
     }
     const message = jsonErrorMessage(parsed);
-    // JSON escapes can spell out a secret, so the parsed message is redacted again.
-    if (message !== undefined) return oneLine(redact(message, secrets).slice(0, DETAIL_SCAN_CHARS)) || undefined;
-    const head = trimmed.slice(0, DETAIL_SCAN_CHARS);
-    if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(head)) {
-      return htmlDetail(head, summaryOnly, secrets);
+    if (message !== undefined) {
+      // JSON escapes can spell out a secret, so the parsed message is redacted again.
+      const kept = oneLine(redact(message, secrets).slice(0, DETAIL_SCAN_CHARS));
+      return dropCutSecretStart(kept, secrets, message.length > DETAIL_SCAN_CHARS) || undefined;
     }
-    return summaryOnly ? undefined : oneLine(head);
+    const head = trimmed.slice(0, DETAIL_SCAN_CHARS);
+    const cut = trimmed.length > DETAIL_SCAN_CHARS;
+    if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(head)) {
+      // An encoded secret cut by the scan limit decodes to a piece that neither full form matches.
+      return dropCutSecretStart(htmlDetail(head, summaryOnly, secrets) ?? '', secrets, cut) || undefined;
+    }
+    return summaryOnly ? undefined : dropCutSecretStart(oneLine(head), secrets, cut) || undefined;
   } catch {
     return undefined;
   }
@@ -812,9 +817,18 @@ const REPLY_CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
  * prints the reply.
  */
 function safeReply(reply: string, secrets: SentSecrets, cut: boolean): string {
-  let kept = redact(reply, secrets).slice(0, MAX_REPLY_CHARS);
-  if (cut) kept = kept.slice(0, kept.length - trailingSecretPrefixLength(kept, secrets));
+  const kept = dropCutSecretStart(redact(reply, secrets).slice(0, MAX_REPLY_CHARS), secrets, cut);
   return kept.replace(REPLY_CONTROL_CHARACTERS, ' ').trim();
+}
+
+/**
+ * `text` without a trailing piece that begins a sent secret, when the text was
+ * cut. Only the start of such a secret arrived, so no redaction could match it.
+ * Both the sent and the collapsed form of each secret are checked.
+ */
+function dropCutSecretStart(text: string, secrets: SentSecrets, cut: boolean): string {
+  if (!cut) return text;
+  return text.slice(0, text.length - trailingSecretPrefixLength(text, secrets)).trim();
 }
 
 /**
