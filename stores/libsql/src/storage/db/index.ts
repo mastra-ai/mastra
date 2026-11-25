@@ -17,6 +17,9 @@ import type {
   StorageColumn,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { gateIfLocalFile } from '../../shared/file-transaction-gate';
+import { resetConnectionsAfterBusy } from '../../shared/reset-after-busy-client';
+import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../../shared/single-connection-client';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import { withRunFence } from './run-fencing';
 import type { RunFenceCheck } from './run-fencing';
@@ -105,13 +108,22 @@ export function resolveClient(config: LibSQLDomainConfig): Client {
   }
   const isLocal = config.url.startsWith('file:') || config.url.includes(':memory:');
   const timeout = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
-  return createClient({
+  const client = createClient({
     url: config.url,
     ...(config.authToken ? { authToken: config.authToken } : {}),
     // Only local sqlite3 connections honor `busy_timeout`; remote contention is
     // resolved server-side, so passing it there is meaningless.
     ...(isLocal ? { timeout } : {}),
   });
+  if (!isLocal) return client;
+  // Wrap a local client exactly as `LibSQLStore` wraps the one it builds from a url. A domain built
+  // from a `url` gets its own client, but nothing stops another client in this process from opening
+  // the same file, and a write transaction held here would otherwise stall that client in SQLite's
+  // busy handler: that spins the one event-loop thread, so the transaction holding the lock cannot
+  // commit and the blocked call fails on its timeout.
+  return isSingleConnectionDatabase({ url: config.url })
+    ? gateSingleConnectionClient(client)
+    : gateIfLocalFile(resetConnectionsAfterBusy(client, { maxWaitMs: timeout }), config.url, { maxWaitMs: timeout });
 }
 
 /**
