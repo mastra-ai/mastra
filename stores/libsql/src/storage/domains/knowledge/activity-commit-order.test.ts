@@ -61,8 +61,9 @@ it('upgrades an activity table from before feed positions, numbering its events 
   const since = new Date(T - 1000);
   const late = await at(T, () => a.createPage({ parentId: scope.id, name: 'late clock', provenance: alex }));
   const early = await at(T - 500, () => a.createPage({ parentId: scope.id, name: 'early clock', provenance: alex }));
-  // Back to the pre-position shape: no seq column, no index.
+  // Back to the pre-position shape: no seq column, index or trigger.
   const raw = createClient({ url });
+  await raw.execute('DROP TRIGGER trg_kactivity_seq');
   await raw.execute('DROP INDEX idx_kactivity_seq');
   await raw.execute('ALTER TABLE mastra_knowledge_activity DROP COLUMN seq');
   raw.close();
@@ -76,4 +77,27 @@ it('upgrades an activity table from before feed positions, numbering its events 
   );
   const resumed = await upgraded.listPageActivity({ read, since, order: 'asc', after: events.at(-1)!.position });
   expect(resumed.events.map(event => event.pageId)).toEqual([next.id]);
+});
+
+it('numbers an event written by an older writer that leaves seq empty, after a position the reader holds', async () => {
+  const url = `file:${join(dir, 'mixed.db')}`;
+  const a = await open(url, 'new');
+  const { scope } = await at(T - 60_000, () =>
+    a.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'org:acme', provenance: alex }),
+  );
+  const since = new Date(T - 1000);
+  const x = await at(T, () => a.createPage({ parentId: scope.id, name: 'from new writer', provenance: alex }));
+  const held = (await a.listPageActivity({ read, since, order: 'asc' })).events.at(-1)!.position;
+
+  // An older writer's insert: every column but seq, its clock behind.
+  const raw = createClient({ url });
+  await raw.execute({
+    sql: `INSERT INTO mastra_knowledge_activity (id, action, scopeId, pageId, provenance, createdAt) VALUES (?, 'page-updated', ?, ?, ?, ?)`,
+    args: ['01OLDWRITER0000000000000000', scope.id, x.id, JSON.stringify(alex), new Date(T - 50).toISOString()],
+  });
+  raw.close();
+
+  const later = await a.listPageActivity({ read, since, order: 'asc', after: held });
+  expect(later.events.map(event => event.id)).toEqual(['01OLDWRITER0000000000000000']);
+  expect(later.events[0]!.position).toEqual(expect.any(String));
 });

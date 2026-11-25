@@ -105,6 +105,11 @@ export async function upgradeKnowledgeActivityFeed(tx: PageExecutor): Promise<vo
     await tx.execute(`UPDATE "${T.activity}" SET seq = rowid WHERE seq IS NULL`);
   }
   await tx.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_kactivity_seq ON "${T.activity}" (seq)`);
+  // A writer from before feed positions inserts without seq. Number its event in the same write
+  // transaction, so it still lands in commit order instead of staying invisible to oldest-first reads.
+  await tx.execute(
+    `CREATE TRIGGER IF NOT EXISTS trg_kactivity_seq AFTER INSERT ON "${T.activity}" WHEN NEW.seq IS NULL BEGIN UPDATE "${T.activity}" SET seq = (SELECT COALESCE(MAX(seq), 0) + 1 FROM "${T.activity}") WHERE rowid = NEW.rowid; END`,
+  );
 }
 
 /** An oldest-first feed position: the event's `seq`, as a decimal string. */
