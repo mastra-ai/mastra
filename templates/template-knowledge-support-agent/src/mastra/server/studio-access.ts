@@ -6,6 +6,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
 } from '@mastra/server/handlers/agents';
+import { GET_EDITOR_BUILDER_SETTINGS_ROUTE } from '@mastra/server/handlers/editor-builder';
 import {
   GET_KNOWLEDGE_ACTIVITY_ROUTE,
   GET_KNOWLEDGE_GRAPH_ROUTE,
@@ -169,6 +170,7 @@ export function createStudioAccess(memory: Memory) {
       GET_MEMORY_CONFIG_ROUTE,
       GET_MEMORY_STATUS_ROUTE,
       GET_SYSTEM_PACKAGES_ROUTE,
+      GET_EDITOR_BUILDER_SETTINGS_ROUTE,
     ].map(route => [route, () => true] as const),
     ...[
       GET_KNOWLEDGE_ACTIVITY_ROUTE,

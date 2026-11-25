@@ -275,6 +275,11 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
   try {
     await fixture.start();
     assert.equal((await fetch(`${fixture.base}/api/knowledge`)).status, 401);
+    const settingsPath = '/editor/builder/settings';
+    assert.equal((await fetch(`${fixture.base}/api${settingsPath}`)).status, 401);
+    const settings = await json(await fixture.request(settingsPath));
+    assert.equal(settings.enabled, false);
+    assert.deepEqual(settings.modelPolicy, { active: false });
     assert.equal(
       (await fetch(`${fixture.base}/api/knowledge`, { headers: { authorization: `Bearer ${fixture.expired.token}` } }))
         .status,
@@ -292,7 +297,12 @@ test('http_agent_and_memory_reject_foreign_scope_and_thread', { timeout: 120000 
         } as never),
       /not mapped/u,
     );
-    for (const path of ['/workflows', '/observability/traces', '/tools/knowledge_page/execute']) {
+    for (const path of [
+      '/workflows',
+      '/observability/traces',
+      '/tools/knowledge_page/execute',
+      '/editor/builder/models/available',
+    ]) {
       assert.ok(
         [403, 404].includes(
           (
