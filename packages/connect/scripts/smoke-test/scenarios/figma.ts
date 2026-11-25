@@ -20,6 +20,13 @@ import { errorMessage, makeStep, probeTool, refusedByPlatform, requireTools, run
  * and the write deletes a made-up collection instead of creating one. Any
  * other 403, such as a missing scope or an expired token, fails.
  *
+ * Dev resources need Dev Mode, which needs a paid plan and a Full or Dev seat.
+ * Without it Figma answers "File not found" for a file the other tools read,
+ * so the scenario records that, checks the create writes nothing, and probes
+ * rename and delete with a made-up id. A file can also have no versions in its
+ * history window, and the API can't save one, so `get_version` then probes a
+ * made-up id.
+ *
  * Everything the run creates is named or tagged `mastra-smoke-<runId>`. Writes
  * are sent once, so when a create fails the scenario looks for a record with
  * its tag and deletes it, in case Figma kept it. Comments are visible to the
@@ -60,8 +67,18 @@ const FIGMA_TOOLS = [
 
 /** Figma's 403 for variables outside an Enterprise organization or on a seat that can't use them. */
 const ENTERPRISE_ONLY = /Limited by Figma plan|Incorrect account type/i;
-/** A made-up library key Figma does not know. */
-const MISSING_KEY = /status=(400|404)|not found/i;
+/**
+ * A made-up library key Figma does not know. The styles endpoint answers an
+ * unknown key with 403 "You don't have permission to view this style" instead
+ * of 404; other 403s (bad scope, expired token) still fail.
+ */
+const MISSING_KEY = /status=(400|404)|not found|permission to view this style/i;
+/**
+ * Without Dev Mode on a file (a Starter team, or a View or Collab seat), Figma
+ * answers the dev resource endpoints with 404 "File not found", even for a file
+ * the other tools read fine.
+ */
+const NO_DEV_MODE = /status=404.*File not found|File not found.*status=404/i;
 
 type Call = ScenarioContext['call'];
 type Log = ScenarioContext['log'];
@@ -165,11 +182,28 @@ async function runFileReads(call: Call, tools: ScenarioContext['tools'], fileKey
       [
         ['figma_list_comments', { file_key: fileKey }],
         ['figma_get_file_node', { file_key: fileKey, node_id: '0:0' }],
-        ['figma_list_dev_resources', { file_key: fileKey }],
       ],
       tools,
     )),
   );
+
+  const fileReadable = steps.some(step => step.toolId === 'figma_list_comments' && step.status === 'pass');
+  let devMode = true;
+  try {
+    await call('figma_list_dev_resources', { file_key: fileKey });
+    steps.push(makeStep('list_dev_resources', 'figma_list_dev_resources', 'pass'));
+  } catch (error) {
+    const message = errorMessage(error);
+    devMode = !(fileReadable && NO_DEV_MODE.test(message) && !refusedByPlatform(message));
+    steps.push(
+      makeStep(
+        'list_dev_resources',
+        'figma_list_dev_resources',
+        devMode ? 'fail' : 'pass',
+        devMode ? message : `no Dev Mode on this file (404): ${message.slice(0, 120)}`,
+      ),
+    );
+  }
 
   let frameId: string | undefined;
   let pageId: string | undefined;
@@ -202,7 +236,8 @@ async function runFileReads(call: Call, tools: ScenarioContext['tools'], fileKey
       page_size: 5,
     });
     versionId = result.versions[0]?.id;
-    if (!versionId) throw new Error('file has no versions');
+    // Figma's API can't save a version, and a file can have none in its history window.
+    return versionId ? undefined : 'file has no versions';
   });
   if (versionId) {
     const id = versionId;
@@ -211,10 +246,19 @@ async function runFileReads(call: Call, tools: ScenarioContext['tools'], fileKey
       return id;
     });
   } else {
-    steps.push(makeStep('read a version', 'figma_get_version', 'fail', 'no version to read'));
+    steps.push(
+      await probeTool(
+        call,
+        tools,
+        'read a version (made-up id)',
+        'figma_get_version',
+        { file_key: fileKey, version_id: '1' },
+        /not found/i,
+      ),
+    );
   }
 
-  return target;
+  return { target, devMode };
 }
 
 interface LibraryKeys {
@@ -390,13 +434,16 @@ async function runCommentLifecycle(call: Call, log: Log, runId: string, fileKey:
 
 async function runDevResourceLifecycle(
   call: Call,
+  tools: ScenarioContext['tools'],
   log: Log,
   runId: string,
   fileKey: string,
   nodeId: string,
+  devMode: boolean,
   steps: ScenarioStep[],
 ) {
   let resourceId: string | undefined;
+  let refused = false;
   await attempt(steps, 'attach dev resource', 'figma_create_dev_resources', async () => {
     const result = await call<{ links_created: Array<{ id: string }>; errors?: Array<{ error: string }> }>(
       'figma_create_dev_resources',
@@ -412,10 +459,33 @@ async function runDevResourceLifecycle(
       },
     );
     resourceId = result.links_created[0]?.id;
-    if (!resourceId)
-      throw new Error(`no link created: ${result.errors?.map(error => error.error).join('; ') ?? 'no error'}`);
-    return resourceId;
+    if (resourceId) return resourceId;
+    const reasons = result.errors?.map(error => error.error) ?? [];
+    // Figma answered per resource that it created nothing, so there is nothing to reconcile.
+    if (!devMode && reasons.length > 0 && reasons.every(reason => /File not found/i.test(reason))) {
+      refused = true;
+      return 'no Dev Mode on this file; Figma created nothing';
+    }
+    throw new Error(`no link created: ${reasons.join('; ') || 'no error'}`);
   });
+  if (refused) {
+    steps.push(
+      await probeTool(call, tools, 'rename dev resource (made-up id)', 'figma_update_dev_resources', {
+        dev_resources: [
+          {
+            id: '9007199254740991',
+            name: `mastra-smoke-${runId}`,
+            url: `https://example.com/mastra-smoke-${runId}`,
+          },
+        ],
+      }),
+      await probeTool(call, tools, 'delete dev resource (made-up id)', 'figma_delete_dev_resource', {
+        file_key: fileKey,
+        dev_resource_id: '9007199254740991',
+      }),
+    );
+    return;
+  }
   if (!resourceId) {
     await reconcile(
       steps,
@@ -485,7 +555,8 @@ async function runVariables(
         'update variables (made-up collection)',
         'figma_update_variables',
         { file_key: fileKey, variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:0:0' }] },
-        /status=(400|403|404)/,
+        // A plan-limit 403 is the endpoint reached; a missing-scope 403 is a broken connection.
+        new RegExp(`status=(400|404)|${ENTERPRISE_ONLY.source}`, 'i'),
       ),
     );
     return;
@@ -571,10 +642,10 @@ export const figmaScenario: Scenario = {
       return steps;
     }
 
-    const nodeId = await runFileReads(call, tools, fileKey, steps);
+    const { target: nodeId, devMode } = await runFileReads(call, tools, fileKey, steps);
     await runCommentLifecycle(call, log, runId, fileKey, steps);
     if (nodeId) {
-      await runDevResourceLifecycle(call, log, runId, fileKey, nodeId, steps);
+      await runDevResourceLifecycle(call, tools, log, runId, fileKey, nodeId, devMode, steps);
     } else {
       steps.push(
         makeStep('attach dev resource', 'figma_create_dev_resources', 'fail', 'file has no node to attach to'),

@@ -193,6 +193,65 @@ describe('Figma smoke scenario', () => {
     );
   });
 
+  it('probes a made-up version when the file has none', async () => {
+    const { steps, calls } = await runScenario({
+      responses: { figma_list_versions: { versions: [] } },
+      fail: { figma_get_version: 'Version 1 not found for file FILE.' },
+    });
+
+    expect(steps.filter(step => step.status === 'fail')).toEqual([]);
+    expect(calls).toContainEqual({ toolId: 'figma_get_version', input: { file_key: 'FILE', version_id: '1' } });
+  });
+
+  describe('a file without Dev Mode', () => {
+    const notFound = 'Provider request failed (404): File not found [status=404, code=proxy_error]';
+    const noDevMode = {
+      responses: {
+        figma_create_dev_resources: { links_created: [], errors: [{ error: 'File not found' }] },
+        figma_update_dev_resources: { links_updated: [], errors: [{ error: 'Dev resource not found' }] },
+      },
+      fail: { figma_list_dev_resources: notFound, figma_delete_dev_resource: notFound },
+    };
+
+    it('passes every dev resource tool, creates nothing, and touches no real record', async () => {
+      const { steps, calls, errors } = await runScenario(noDevMode);
+
+      expect(steps.filter(step => step.status !== 'pass')).toEqual([]);
+      expect(new Set(steps.map(step => step.toolId))).toEqual(new Set(TOOL_IDS));
+      expect(errors).toEqual([]);
+      expect(calls.filter(call => call.toolId === 'figma_create_dev_resources')).toHaveLength(1);
+      expect(calls).toContainEqual({
+        toolId: 'figma_delete_dev_resource',
+        input: { file_key: 'FILE', dev_resource_id: '9007199254740991' },
+      });
+    });
+
+    it('still fails when the other file reads failed too', async () => {
+      const { steps } = await runScenario({
+        ...noDevMode,
+        fail: { ...noDevMode.fail, figma_list_comments: notFound },
+      });
+
+      expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_list_dev_resources', status: 'fail' }));
+      expect(steps).toContainEqual(expect.objectContaining({ name: 'attach dev resource', status: 'fail' }));
+    });
+  });
+
+  it('fails the variables write probe on a missing scope', async () => {
+    const scope =
+      'status=403 Invalid scope(s): file_comments:read. This endpoint requires the file_variables:write scope';
+
+    const { steps } = await runScenario({
+      fail: {
+        figma_get_local_variables: scope,
+        figma_get_published_variables: scope,
+        figma_update_variables: scope,
+      },
+    });
+
+    expect(steps).toContainEqual(expect.objectContaining({ toolId: 'figma_update_variables', status: 'fail' }));
+  });
+
   describe('a create whose outcome is unknown', () => {
     it.each([
       [
