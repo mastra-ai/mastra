@@ -2436,7 +2436,7 @@ export class MessageList {
 
   /**
    * Sealing is not optional for this run's messages: a moved id whose boundary is missing folds the next response
-   * into the previous row. A memory or context tail is never sealed, because that would pull an earlier turn into this response.
+   * into the previous row. Without an id, the fallback never seals a memory or context tail, because that would pull an earlier turn into this response.
    */
   public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
