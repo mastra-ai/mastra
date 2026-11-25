@@ -32,7 +32,46 @@ export type {
   ListConnectionsInput,
 } from './connect-client.js';
 export { ConnectEvents } from './events.js';
-export type { ConnectEvent, ConnectEventsOptions, EventCursor, EventCursorStore, EventStreamGap } from './events.js';
+export { ConnectEventSignals } from './event-signals.js';
+export type { ConnectEventRateLimit, ConnectEventSignalsOptions } from './event-signals.js';
+export type { ConnectEventFilter, ConnectEventFilterOptions, FilteredConnectEvent } from './event-filter.js';
+export type {
+  ConnectEvent,
+  ConnectEventEnvelope,
+  ConnectEventProvider,
+  ConnectEventOf,
+  ConnectEventsOptions,
+  ConnectEventType,
+  EventCursor,
+  EventCursorStore,
+  EventStreamGap,
+  KnownConnectEvent,
+  TypedConnectEvent,
+  UntypedConnectEvent,
+} from './events.js';
+export type {
+  ClerkWebhookPayloads,
+  ConnectEventPayloads,
+  ElevenLabsWebhookPayloads,
+  FirefliesWebhookPayloads,
+  GithubWebhookPayloads,
+  GitlabWebhookPayloads,
+  HubspotWebhookPayloads,
+  IncidentIoWebhookPayloads,
+  JiraWebhookPayloads,
+  LinearWebhookPayloads,
+  NotionWebhookPayloads,
+  OpenAiWebhookPayloads,
+  OutlookWebhookPayloads,
+  ResendWebhookPayloads,
+  SendgridWebhookPayloads,
+  SlackEventCallback,
+  SlackWebhookPayloads,
+  SupabaseWebhookPayloads,
+  TelegramWebhookPayloads,
+  WorkosWebhookPayloads,
+  ZendeskWebhookPayloads,
+} from './event-payloads/index.js';
 export type {
   ConnectClientOptions,
   ConnectionContext,
