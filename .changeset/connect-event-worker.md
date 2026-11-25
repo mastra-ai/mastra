@@ -11,10 +11,16 @@ import { ConnectEventWorker } from '@mastra/connect';
 const connectEvents = new ConnectEventWorker({
   github: {
     'pull_request.opened': async ({ event, mastra }) => {
-      const run = await mastra.getWorkflow('reviewPullRequest').createRun({ resourceId: event.resourceId });
-      await run.startAsync({
-        inputData: { repo: event.payload.repository.full_name, number: event.payload.number },
+      // A run id from the delivery id, so a redelivered webhook doesn't start a second run.
+      const run = await mastra.getWorkflow('reviewPullRequest').createRun({
+        runId: `github:${event.sourceEventId ?? event.id}`,
+        resourceId: event.resourceId,
       });
+      if (run.workflowRunStatus === 'pending') {
+        await run.startAsync({
+          inputData: { repo: event.payload.repository.full_name, number: event.payload.number },
+        });
+      }
     },
   },
   linear: async ({ event, logger }) => {

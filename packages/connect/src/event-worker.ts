@@ -68,8 +68,14 @@ type AnyHandler = ConnectEventHandler<ConnectEvent>;
  * const connectEvents = new ConnectEventWorker({
  *   linear: {
  *     'Issue.create': async ({ event, mastra }) => {
- *       const run = await mastra.getWorkflow('triageIssue').createRun({ resourceId: event.resourceId });
- *       await run.startAsync({ inputData: { issueId: event.payload.data.id } });
+ *       // A run id from the delivery id, so a redelivered webhook doesn't start a second run.
+ *       const run = await mastra.getWorkflow('triageIssue').createRun({
+ *         runId: `linear:${event.sourceEventId ?? event.id}`,
+ *         resourceId: event.resourceId,
+ *       });
+ *       if (run.workflowRunStatus === 'pending') {
+ *         await run.startAsync({ inputData: { issueId: event.payload.data.id } });
+ *       }
  *     },
  *   },
  * });
