@@ -260,12 +260,15 @@ An unknown ID in the experiment's `scorers` option rejects `startExperiment()`, 
 
 If an item's scorer can't be found once the experiment is running, that item fails with the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code. This happens for a stale item-level or dataset-level ID, or for a scorer deleted after the experiment started. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
 
-A scorer lookup that fails for another reason, such as unavailable storage, isn't reported as a missing ID:
+A scorer lookup that fails for another reason, such as unavailable storage, isn't reported as a missing ID. Mastra surfaces the original error instead. Where you see it depends on when the lookup runs:
 
-- If the lookup fails while Mastra starts or creates the experiment, the call rejects with the original error.
-- If the lookup fails while items run, Mastra marks the experiment `failed` instead of failing only that item. `startExperiment()` returns a summary with `status: 'failed'` instead of rejecting, and the `experiment.run.finished` event carries the original error when an event observer is configured.
+- `startExperiment()` and `createExperiment()` reject when the lookup for the experiment's `scorers` option fails. `startExperiment()` also rejects when the lookup for the dataset's scorers fails.
+- `startExperimentAsync()` rejects when the lookup for the experiment's `scorers` option fails. The other lookups run after the call returns. A failure in one of them marks the experiment `failed`.
+- If a lookup for an item's scorers fails while `startExperiment()` runs items, Mastra marks the experiment `failed`. `startExperiment()` returns a summary with `status: 'failed'` instead of rejecting, and the `experiment.run.finished` event carries the original error when an event observer is configured.
+- In a durable experiment, a failed lookup marks the experiment `failed`.
+- `runExperimentItem()` rejects with the original error and doesn't mark the experiment `failed`. The caller decides whether to retry the item.
 
-Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
+Workflow step scorers are available only through a run-level categorized `scorers` configuration, and their IDs follow the same lookup and start-time check as the other run-level IDs. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
 ## Control persistence per run
 

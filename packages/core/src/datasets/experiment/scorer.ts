@@ -183,7 +183,10 @@ export async function assertExperimentScorersExist(
   mastra: Mastra,
   scorers: ExperimentConfig['scorers'],
 ): Promise<void> {
-  const ids = flattenScorerConfig(scorers).flat.filter((scorer): scorer is string => typeof scorer === 'string');
+  const { flat, steps } = flattenScorerConfig(scorers);
+  const ids = [...flat, ...Object.values(steps ?? {}).flat()].filter(
+    (scorer): scorer is string => typeof scorer === 'string',
+  );
   if (ids.length === 0) return;
   const { missingIds } = await createScorerResolver(mastra)(ids);
   if (missingIds.length > 0) throw experimentScorerNotFoundError(missingIds);
@@ -544,24 +547,6 @@ async function runScorerSafe(
       promptMetadata: {},
     };
   }
-}
-
-/**
- * Resolve step-scoped scorers from a `Record<stepId, (MastraScorer | string)[]>`.
- * String IDs are looked up from Mastra's scorer registry; missing IDs are skipped
- * with a warning (matching `resolveScorers`).
- */
-export function resolveStepScorers(
-  mastra: Mastra,
-  stepsConfig?: Record<string, (MastraScorer<any, any, any, any> | string)[]>,
-): Record<string, MastraScorer<any, any, any, any>[]> {
-  if (!stepsConfig) return {};
-  const resolved: Record<string, MastraScorer<any, any, any, any>[]> = {};
-  for (const [stepId, scorers] of Object.entries(stepsConfig)) {
-    const stepScorers = resolveScorers(mastra, scorers);
-    if (stepScorers.length > 0) resolved[stepId] = stepScorers;
-  }
-  return resolved;
 }
 
 /**

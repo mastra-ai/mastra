@@ -15,7 +15,6 @@ import {
   flattenScorerConfig,
   flushForTrajectoryScorers,
   itemScorerNotFoundError,
-  resolveStepScorers,
   runScorersForItem,
   runStepScorersForItem,
 } from './scorer';
@@ -392,7 +391,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
   const resolveScorerEntries = createScorerResolver(mastra);
   let runLevelScorers: MastraScorer<any, any, any, any>[] = [];
-  let runLevelStepScorers = {} as ReturnType<typeof resolveStepScorers>;
+  let runLevelStepScorers: Record<string, MastraScorer<any, any, any, any>[]> = {};
   let datasetScorers: MastraScorer<any, any, any, any>[] = [];
   // Ids missing during the run fail the items that use them, not the whole experiment.
   let runLevelMissingIds: string[] = [];
@@ -400,14 +399,24 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   try {
     if (hasRunLevelScorers) {
       const resolution = await resolveScorerEntries(flatScorerInput);
+      const stepResolutions = await Promise.all(
+        Object.entries(stepsConfigInput ?? {}).map(
+          async ([stepId, entries]) => [stepId, await resolveScorerEntries(entries)] as const,
+        ),
+      );
+      const missingIds = [
+        ...new Set([...resolution.missingIds, ...stepResolutions.flatMap(([, step]) => step.missingIds)]),
+      ];
       // Starting a new experiment with an unknown scorer is a setup error. A pre-created
       // experiment was validated at start, so a scorer missing now was deleted mid-run.
-      if (resolution.missingIds.length > 0 && !providedExperimentId) {
-        throw experimentScorerNotFoundError(resolution.missingIds);
+      if (missingIds.length > 0 && !providedExperimentId) {
+        throw experimentScorerNotFoundError(missingIds);
       }
       runLevelScorers = resolution.scorers;
-      runLevelMissingIds = resolution.missingIds;
-      runLevelStepScorers = resolveStepScorers(mastra, stepsConfigInput);
+      runLevelMissingIds = missingIds;
+      for (const [stepId, step] of stepResolutions) {
+        if (step.scorers.length > 0) runLevelStepScorers[stepId] = step.scorers;
+      }
     } else if (items.some(item => item.scorerIds === undefined)) {
       const resolution = await resolveScorerEntries(datasetRecord?.scorerIds ?? []);
       datasetScorers = resolution.scorers;
@@ -519,7 +528,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             metadata: cloneMetadataSnapshot(),
           });
           let itemScorers: MastraScorer<any, any, any, any>[];
-          let itemStepScorers = {} as ReturnType<typeof resolveStepScorers>;
+          let itemStepScorers: Record<string, MastraScorer<any, any, any, any>[]> = {};
           let scorerConfigError: ExecutionResult['error'] = null;
 
           if (hasRunLevelScorers) {

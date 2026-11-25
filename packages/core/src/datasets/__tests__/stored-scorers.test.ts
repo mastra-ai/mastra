@@ -169,6 +169,45 @@ describe('stored scorers in experiments', () => {
     ]);
   });
 
+  it('an in-process run scores a workflow step with a stored scorer that was never loaded', async () => {
+    const { mastra } = await setup([judge('step-judge', 0.9)]);
+
+    const summary = await (
+      await seedDataset(mastra)
+    ).startExperiment({ targetType: 'workflow', targetId: 'upper', scorers: { steps: { upper: ['step-judge'] } } });
+
+    expect(summary.status).toBe('completed');
+    expect(summary.results.map(item => item.scores.map(score => [score.scorerId, score.stepId, score.score]))).toEqual([
+      [['step-judge', 'upper', 0.9]],
+      [['step-judge', 'upper', 0.9]],
+    ]);
+  });
+
+  it('rejects an unknown step scorer before creating the experiment', async () => {
+    const { mastra, storage } = await setup([judge('step-judge', 1)]);
+    const dataset = await seedDataset(mastra);
+
+    await expect(
+      dataset.startExperiment({
+        targetType: 'workflow',
+        targetId: 'upper',
+        scorers: { steps: { upper: ['step-judge', 'typo-step-judge'] } },
+      }),
+    ).rejects.toMatchObject({ id: 'EXPERIMENT_SCORER_NOT_FOUND', message: expect.stringContaining('typo-step-judge') });
+    await expect(
+      dataset.startExperimentAsync({
+        targetType: 'workflow',
+        targetId: 'upper',
+        scorers: { steps: { upper: ['typo-step-judge'] } },
+      }),
+    ).rejects.toMatchObject({ id: 'EXPERIMENT_SCORER_NOT_FOUND' });
+
+    const { experiments } = await (await storage.getStore('experiments'))!.listExperiments({
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(experiments).toHaveLength(0);
+  });
+
   it('rejects an unknown run-level scorer before creating the experiment', async () => {
     const { mastra, storage } = await setup([judge('managed-judge', 1)]);
     const dataset = await seedDataset(mastra);
