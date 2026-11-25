@@ -34,7 +34,10 @@ export const reviewInputSchema = z
   .strict();
 const referenceRequest = z
   .object({
-    confirmationReference: confirmationReferenceString,
+    confirmationReference: confirmationReferenceString.refine(
+      value => confirmationReferenceSchema.safeParse(value).success,
+      'Invalid confirmation reference',
+    ),
     audience: z.enum(['private', 'tenant']),
   })
   .strict();
