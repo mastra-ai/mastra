@@ -318,6 +318,18 @@ describe('Combobox', () => {
 
       expect(onValueChange).toHaveBeenLastCalledWith(['google']);
     });
+
+    it('adds the typed text with Enter when it matches no option in a multiple select', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField allowCustomValue onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.keyboard('new-model');
+      await screen.findByRole('option', { name: 'Use “new-model”' });
+      await user.keyboard('{Enter}');
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['new-model']);
+    });
   });
 
   describe('when a multiple select has a value its options do not list', () => {
@@ -657,7 +669,7 @@ describe('Combobox', () => {
       await user.click(await screen.findByRole('option', { name: 'Use “mistral”' }));
 
       expect(onValueChange).toHaveBeenLastCalledWith(['mistral']);
-      // Base UI also reports '' when the popup opens; the pick clears the search after the typed text.
+      // Base UI also reports '' when the popup opens, so only the last two calls are checked: the typed text, then the cleared search after the pick.
       expect(onInputValueChange.mock.calls.slice(-2)).toEqual([['mistral'], ['']]);
     });
 

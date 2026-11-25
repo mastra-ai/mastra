@@ -499,8 +499,8 @@ function MultipleCombobox({
   const selectedOptions = getSelectedOptions(options, value, unlistedOptions);
   // A typed value that is already picked is listed checked in the popup; offering it again would unpick it.
   const customOption = allowCustomValue ? getCustomOption([...options, ...unlistedOptions], inputValue) : undefined;
-  // Unlisted picks follow the caller's options so those keep their order, and the compact trigger, which has
-  // no chips, can still untick them. The custom option comes last, unlike the single select: `autoHighlight`
+  // Unlisted picks go after the caller's options, which keep their order. Listing them lets a compact trigger,
+  // which has no chips, untick them. The custom option comes last, unlike the single select: `autoHighlight`
   // highlights the first item, so someone who types "gpt-4" to narrow the list down to "gpt-4o" and presses
   // Enter picks "gpt-4o" instead of adding the literal text.
   const extraItems = customOption ? [...unlistedOptions, customOption] : unlistedOptions;
