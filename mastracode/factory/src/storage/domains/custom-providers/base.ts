@@ -353,7 +353,11 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     return headers.length === 0 ? null : this.encryption.encrypt(headers);
   }
 
-  /** Re-encrypt the row's key and header list when they were written under an older key or none. One atomic write per row, so a concurrent edit is not overwritten. */
+  /**
+   * Re-encrypt the row's key and header list when they were written under an
+   * older key or none. One atomic write per row, so a concurrent edit is not
+   * overwritten.
+   */
   async #migrateSecrets(collection: string, id: string): Promise<void> {
     await this.#db.updateAtomic<CustomProviderDbRow>(collection, { id }, async row => {
       const set: Partial<CustomProviderDbRow> = {};

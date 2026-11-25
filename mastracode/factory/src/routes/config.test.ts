@@ -2837,12 +2837,16 @@ describe('custom provider routes', () => {
       ] as const;
 
       for (const [, res] of responses) expect(res.status).toBe(400);
-      expect(await Promise.all(responses.map(async ([route, res]) => [route, (await res.json()).error]))).toEqual([
-        ['save', 'check must be true or false'],
-        ['save', 'check must be true or false'],
-        ['save', 'header_refused'],
-        ['check', 'model must be a string'],
-        ['check', 'header_refused'],
+      const secretRefusal = {
+        error: 'header_refused',
+        message: 'The secret flag of the X-Tenant header must be true or false.',
+      };
+      expect(await Promise.all(responses.map(async ([route, res]) => [route, await res.json()]))).toEqual([
+        ['save', { error: 'check must be true or false' }],
+        ['save', { error: 'check must be true or false' }],
+        ['save', secretRefusal],
+        ['check', { error: 'model must be a string' }],
+        ['check', secretRefusal],
       ]);
       expect(endpoint.requests).toEqual([]);
       expect(await ownList(userA)).toEqual([]);

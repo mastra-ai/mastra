@@ -594,7 +594,10 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettin
   // the saved flag, which is not what the client asked for.
   const malformed = entries.find(({ secret }) => secret !== undefined && typeof secret !== 'boolean');
   if (malformed) {
-    return { error: 'header_refused', message: `The ${malformed.name} header secret flag must be true or false.` };
+    return {
+      error: 'header_refused',
+      message: `The secret flag of the ${malformed.name} header must be true or false.`,
+    };
   }
   const headers = entries.map(
     ({ name, value, secret }): CustomProviderHeaderInput => ({
