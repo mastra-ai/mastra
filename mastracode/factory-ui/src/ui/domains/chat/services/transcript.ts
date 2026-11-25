@@ -230,7 +230,7 @@ function applyEvent(
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
-      return { ...startQueuedFollowUp(state), lastEntryBeforeRun: state.entries.at(-1)?.id };
+      return { ...state, lastEntryBeforeRun: state.entries.at(-1)?.id };
 
     case 'agent_end':
       return { ...state, pending: false };
@@ -1236,14 +1236,19 @@ function showPendingUserMessages(
       createdAt: new Date(),
       content: { format: 2, parts: [{ type: 'text', text: content }] },
     };
-    if (kept.some(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id))) continue;
-    const texts = new Set(drawableTexts(message));
-    const copy = kept.findIndex((entry, at) => !claimed.has(at) && isUnclaimedOptimisticCopy(entry, texts));
-    if (copy !== -1) {
-      claimed.add(copy);
-      const local = kept[copy];
-      if (kind === 'follow-up' && local.kind === 'message' && !local.queuedFollowUp) {
-        kept[copy] = { ...local, queuedFollowUp: true };
+    let shownAt = kept.findIndex(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id));
+    if (shownAt === -1) {
+      const texts = new Set(drawableTexts(message));
+      shownAt = kept.findIndex((entry, at) => !claimed.has(at) && isUnclaimedOptimisticCopy(entry, texts));
+    }
+    if (shownAt !== -1) {
+      claimed.add(shownAt);
+      // The server says whether a follow-up still waits behind a reply or its own run has started.
+      const shown = kept[shownAt];
+      const queued = kind === 'follow-up';
+      if (shown.kind === 'message' && Boolean(shown.queuedFollowUp) !== queued) {
+        const { queuedFollowUp: _, ...rest } = shown;
+        kept[shownAt] = queued ? { ...rest, queuedFollowUp: true } : rest;
         marked = true;
       }
       continue;
@@ -1262,17 +1267,6 @@ function showPendingUserMessages(
       : { ...state, entries: [...kept, ...beforeLive] };
   const live = followLive(shown);
   return afterLive.length === 0 ? live : { ...live, entries: [...live.entries, ...afterLive] };
-}
-
-// Queued follow-ups run in order, so a new run takes the oldest one: it now starts that run's turn.
-function startQueuedFollowUp(state: TranscriptState): TranscriptState {
-  const index = state.entries.findIndex(entry => entry.kind === 'message' && entry.queuedFollowUp);
-  const entry = state.entries[index];
-  if (entry?.kind !== 'message') return state;
-  const { queuedFollowUp: _, ...started } = entry;
-  const entries = [...state.entries];
-  entries[index] = started;
-  return { ...state, entries };
 }
 
 // The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.

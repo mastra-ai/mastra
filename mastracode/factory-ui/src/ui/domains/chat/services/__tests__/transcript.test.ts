@@ -2715,7 +2715,19 @@ describe('sent messages the server has not stored yet', () => {
     });
     const ended = transcriptReducer(reloaded, { type: 'event', event: { type: 'agent_end', reason: 'complete' } });
     const started = transcriptReducer(ended, { type: 'event', event: { type: 'agent_start' } });
-    const withTool = transcriptReducer(started, {
+    // The server lists the follow-up as its run's message once that run starts.
+    const ownRun = transcriptReducer(started, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: null,
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'message' }],
+        },
+      },
+    });
+    const withTool = transcriptReducer(ownRun, {
       type: 'event',
       event: { type: 'tool_start', toolCallId: 'tool-2', toolName: 'view', args: { path: 'src/index.ts' } },
     });
@@ -2727,6 +2739,46 @@ describe('sent messages the server has not stored yet', () => {
     expect(previous?.kind === 'message' ? Object.keys(previous.runtimeTools ?? {}) : []).toEqual([]);
     const own = withTool.entries[3];
     expect(own?.kind === 'message' ? Object.keys(own.runtimeTools ?? {}) : []).toEqual(['tool-2']);
+  });
+
+  it("keeps a follow-up queued behind a resumed tool's run, so that run's tools stay above it", () => {
+    const reloaded = transcriptReducer(createInitialTranscript({ messages: [stored[0]] }), {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+    const suspended = transcriptReducer(reloaded, {
+      type: 'event',
+      event: { type: 'agent_end', reason: 'suspended' },
+    });
+    const resumed = transcriptReducer(suspended, { type: 'event', event: { type: 'agent_start' } });
+    // A resumed run is not the follow-up's run, so the server still lists it as queued.
+    const listed = transcriptReducer(resumed, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: null,
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+    const withTool = transcriptReducer(listed, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-2', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+
+    const ids = withTool.entries.map(entry => (entry.kind === 'message' ? entry.message.id : entry.kind));
+    expect(ids.at(-1)).toBe('sig-2');
+    const followUp = withTool.entries.at(-1);
+    expect(followUp?.kind === 'message' ? Object.keys(followUp.runtimeTools ?? {}) : []).toEqual([]);
   });
 
   it('shows two pending messages with the same text when only one was sent from this page', () => {

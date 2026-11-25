@@ -3601,10 +3601,27 @@ export class SessionDisplayState {
   }
 
   /** Record the run a pending message was handed to; that run's end drops it. */
-  setPendingUserMessageRun(id: string, runId: string): void {
-    if (this.#state.pendingUserMessages.some(message => message.id === id)) {
-      this.#pendingUserMessageRuns.set(id, runId);
-    }
+  setPendingUserMessageRun(id: string, runId: string): boolean {
+    if (!this.#state.pendingUserMessages.some(message => message.id === id)) return false;
+    this.#pendingUserMessageRuns.set(id, runId);
+    return this.#state.isRunning && this.#startPendingFollowUps();
+  }
+
+  /**
+   * A follow-up whose own run is the one now running no longer waits behind a reply, so list it as
+   * that run's message. Other runs, such as a resumed suspended tool, leave queued follow-ups alone.
+   * Returns whether any follow-up changed.
+   */
+  #startPendingFollowUps(): boolean {
+    const runId = this.deps.getRunId();
+    if (!runId) return false;
+    let changed = false;
+    this.#state.pendingUserMessages = this.#state.pendingUserMessages.map(message => {
+      if (message.kind !== 'follow-up' || this.#pendingUserMessageRuns.get(message.id) !== runId) return message;
+      changed = true;
+      return { ...message, kind: 'message' };
+    });
+    return changed;
   }
 
   /** Drop pending messages; true when any was listed. The caller dispatches `display_state_changed`. */
@@ -3721,13 +3738,7 @@ export class SessionDisplayState {
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
-        // Follow-ups run in order: the oldest one now has its own run, so it no longer waits behind a reply.
-        const next = ds.pendingUserMessages.findIndex(message => message.kind === 'follow-up');
-        if (next !== -1) {
-          ds.pendingUserMessages = ds.pendingUserMessages.map((message, at) =>
-            at === next ? { ...message, kind: 'message' } : message,
-          );
-        }
+        this.#startPendingFollowUps();
         // Parked approvals are deliberately NOT cleared here either: a run on
         // another thread may still be waiting on one, and resuming a parked tool
         // restarts the run (a fresh agent_start) whose own gate must stay armed
@@ -6128,7 +6139,9 @@ export class Session<TState = unknown> {
 
   #handPendingUserMessageToRun(pending: PendingSend, runId: string): void {
     pending.handedToRun = true;
-    this.displayState.setPendingUserMessageRun(pending.id, runId);
+    if (this.displayState.setPendingUserMessageRun(pending.id, runId)) {
+      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
+    }
     this.#watchPendingSaves();
   }
 

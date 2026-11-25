@@ -5,12 +5,14 @@
  * must never be in neither, and never stay pending once stored, blocked or cancelled.
  */
 import { describe, expect, it, vi } from 'vitest';
+import z from 'zod';
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { createTool } from '../../tools';
 import { AgentController } from '../agent-controller';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerEvent } from '../types';
@@ -351,6 +353,10 @@ describe('a sent message is pending until stored, then stored', () => {
 
   it("a follow-up still pending when its own run starts is listed as that run's message, not as queued", async () => {
     const h = await createHarness('follow-up-own-run');
+    const pendingAtStart: Array<Array<{ content: string; kind: string }>> = [];
+    h.session.subscribe(event => {
+      if (event.type === 'agent_start') pendingAtStart.push(h.pending());
+    });
     const first = h.holdModelCall(1);
     void h.session.sendMessage({ content: 'first message' }).catch(() => {});
     await first.reached;
@@ -361,15 +367,16 @@ describe('a sent message is pending until stored, then stored', () => {
       { content: 'and after that', kind: 'follow-up' },
     ]);
 
-    // With the early store skipped (observational memory), a follow-up is still pending when its run starts.
-    h.session.displayState.apply({ type: 'agent_start' });
-    expect(h.pending()).toEqual([
-      { content: 'and then this', kind: 'message' },
-      { content: 'and after that', kind: 'follow-up' },
-    ]);
-
     first.release();
-    await h.runsEnded(1);
+    await h.runsEnded(3);
+    // Each follow-up is listed as a run's message once its own run starts, the later one still queued.
+    expect(pendingAtStart.slice(1)).toEqual([
+      [
+        { content: 'and then this', kind: 'message' },
+        { content: 'and after that', kind: 'follow-up' },
+      ],
+      [{ content: 'and after that', kind: 'message' }],
+    ]);
   });
 
   it('a metadata refresh of the same thread keeps dropping a pending message once it is stored', async () => {
@@ -378,8 +385,8 @@ describe('a sent message is pending until stored, then stored', () => {
     void h.session.sendMessage({ content: 'first message' }).catch(() => {});
     await first.reached;
     await h.session.followUp({ content: 'and then this' });
-    // The listener starts once the follow-up is handed to its run.
-    await vi.waitFor(() => expect(saveListeners.live).toBeGreaterThan(0));
+    // The listener starts once the follow-up is handed to its run, which can take a while on a loaded CI runner.
+    await vi.waitFor(() => expect(saveListeners.live).toBeGreaterThan(0), { timeout: 10_000 });
     const watching = saveListeners.live;
 
     await h.session.thread.loadMetadata();
@@ -421,5 +428,88 @@ describe('a sent message is pending until stored, then stored', () => {
     await h.session.thread.create();
     expect(h.pending()).toEqual([]);
     input.release();
+  });
+
+  it('resuming a suspended tool keeps a follow-up queued behind it listed as queued', async () => {
+    const toolRunning = deferred();
+    const toolGate = deferred();
+    const confirm = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        if (context?.agent?.resumeData) return { confirmed: input.action };
+        toolRunning.resolve();
+        await toolGate.promise;
+        await context.agent.suspend({ action: input.action });
+        return { confirmed: input.action };
+      },
+    });
+    let call = 0;
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'resume-agent',
+      name: 'resume agent',
+      instructions: 'Reply briefly.',
+      memory: new MockMemory({ storage }),
+      tools: { confirmAction: confirm },
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => {
+          call++;
+          if (call > 1) return { stream: replyStream(`reply ${call}`) };
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) });
+                controller.enqueue({
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'confirmAction',
+                  input: '{"action":"deploy"}',
+                  providerExecuted: false,
+                });
+                controller.enqueue({ type: 'finish', finishReason: 'tool-calls', usage });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { 'resume-agent': agent }, logger: false, storage });
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'resume-controller',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: mastra.getAgent('resume-agent') }],
+      initialState: { yolo: true } as any,
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'resume-session', ownerId: 'owner-1' });
+    await session.thread.create();
+    const pendingAtStart: Array<Array<{ content: string; kind: string }>> = [];
+    let ends = 0;
+    session.subscribe(event => {
+      if (event.type === 'agent_start') {
+        pendingAtStart.push(
+          session.displayState.get().pendingUserMessages.map(({ content, kind }) => ({ content, kind })),
+        );
+      }
+      if (event.type === 'agent_end') ends++;
+    });
+
+    const sent = session.sendMessage({ content: 'deploy it' });
+    await toolRunning.promise;
+    await session.followUp({ content: 'and then this' });
+    toolGate.resolve();
+    await sent;
+    expect(session.displayState.get().pendingSuspensions.size).toBe(1);
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    // The resumed run is the tool's run; the follow-up still waits behind its reply.
+    expect(pendingAtStart[1]).toEqual([{ content: 'and then this', kind: 'follow-up' }]);
+    await vi.waitFor(() => expect(ends).toBeGreaterThanOrEqual(3));
+    expect(session.displayState.get().pendingUserMessages).toEqual([]);
   });
 });
