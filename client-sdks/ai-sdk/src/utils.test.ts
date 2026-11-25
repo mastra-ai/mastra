@@ -55,7 +55,7 @@ describe('safeParseErrorObject', () => {
     });
   });
 
-  it('drops stack traces, including nested cause stacks (#3922)', () => {
+  it('drops stack traces, including nested cause stacks', () => {
     const inner = new APICallError({
       message: 'upstream 529 overloaded',
       url: 'https://api.example.com/v1/messages',

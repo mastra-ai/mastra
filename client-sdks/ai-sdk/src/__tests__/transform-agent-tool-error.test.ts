@@ -121,7 +121,7 @@ describe('transformAgent tool-error (issue #23022)', () => {
     expect(wire.data.toolErrors[0].errorText).toBe('Error: weather API 500');
   });
 
-  it('keeps name and message from the durable path error shape but drops its stack (#3922)', () => {
+  it('keeps name and message from the durable path error shape but drops its stack', () => {
     const bufferedSteps = new Map<string, any>();
     startRun(bufferedSteps, 'run-2');
 

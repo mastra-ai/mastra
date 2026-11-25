@@ -14,7 +14,7 @@ import { chatRoute } from '../chat-route';
 
 // A failing model or tool must not stream server stack traces (absolute file
 // paths, usernames, code layout) to the chat client through the default
-// `errorText` serializer. (#3922)
+// `errorText` serializer.
 
 const STACK_MARKERS = ['"stack"', '    at ', 'file://', __filename];
 
@@ -156,56 +156,53 @@ function expectNoStackTrace(text: string) {
   }
 }
 
-describe.each<Engine>(['normal', 'durable'])(
-  'chatRoute default error serialization over HTTP, %s agent (#3922)',
-  engine => {
-    it('a model that fails mid-stream sends the client its name and message, not the server stack', async () => {
-      const mastra = createMastra(engine, failingModel());
-      const baseUrl = await serve(chatRoute({ path: '/chat/:agentId' }), mastra);
+describe.each<Engine>(['normal', 'durable'])('chatRoute default error serialization over HTTP, %s agent', engine => {
+  it('a model that fails mid-stream sends the client its name and message, not the server stack', async () => {
+    const mastra = createMastra(engine, failingModel());
+    const baseUrl = await serve(chatRoute({ path: '/chat/:agentId' }), mastra);
 
-      const { raw, events } = await postChat(baseUrl);
+    const { raw, events } = await postChat(baseUrl);
 
-      expect(events.filter(e => e.type === 'text-delta').map(e => e.delta)).toEqual(['Hello']);
-      const errorEvent = events.find(e => e.type === 'error');
-      expect(errorEvent).toBeDefined();
-      expect(JSON.parse(errorEvent.errorText)).toEqual({ name: 'Error', message: 'upstream 529 overloaded' });
-      expectNoStackTrace(raw);
-    });
+    expect(events.filter(e => e.type === 'text-delta').map(e => e.delta)).toEqual(['Hello']);
+    const errorEvent = events.find(e => e.type === 'error');
+    expect(errorEvent).toBeDefined();
+    expect(JSON.parse(errorEvent.errorText)).toEqual({ name: 'Error', message: 'upstream 529 overloaded' });
+    expectNoStackTrace(raw);
+  });
 
-    it('a tool that throws sends the client its error message, not the server stack', async () => {
-      const mastra = createMastra(engine, toolCallingModel());
-      const baseUrl = await serve(chatRoute({ path: '/chat/:agentId' }), mastra);
+  it('a tool that throws sends the client its error message, not the server stack', async () => {
+    const mastra = createMastra(engine, toolCallingModel());
+    const baseUrl = await serve(chatRoute({ path: '/chat/:agentId' }), mastra);
 
-      const { raw, events } = await postChat(baseUrl);
+    const { raw, events } = await postChat(baseUrl);
 
-      const toolError = events.find(e => e.type === 'tool-output-error');
-      expect(toolError).toBeDefined();
-      expect(toolError.errorText).toContain('orders database unreachable');
-      expectNoStackTrace(raw);
-    });
+    const toolError = events.find(e => e.type === 'tool-output-error');
+    expect(toolError).toBeDefined();
+    expect(toolError.errorText).toContain('orders database unreachable');
+    expectNoStackTrace(raw);
+  });
 
-    it('a custom onError still receives the full error, stack included', async () => {
-      const received: unknown[] = [];
-      const mastra = createMastra(engine, failingModel());
-      const baseUrl = await serve(
-        chatRoute({
-          path: '/chat/:agentId',
-          onError: error => {
-            received.push(error);
-            return 'custom';
-          },
-        }),
-        mastra,
-      );
+  it('a custom onError still receives the full error, stack included', async () => {
+    const received: unknown[] = [];
+    const mastra = createMastra(engine, failingModel());
+    const baseUrl = await serve(
+      chatRoute({
+        path: '/chat/:agentId',
+        onError: error => {
+          received.push(error);
+          return 'custom';
+        },
+      }),
+      mastra,
+    );
 
-      const { events } = await postChat(baseUrl);
+    const { events } = await postChat(baseUrl);
 
-      expect(events.find(e => e.type === 'error')?.errorText).toBe('custom');
-      // The durable engine hands over its serialized { name, message, stack } shape
-      // rather than an Error instance; either way the stack reaches onError intact.
-      const error = received[0] as { message: string; stack: string };
-      expect(error.message).toBe('upstream 529 overloaded');
-      expect(error.stack).toContain('    at ');
-    });
-  },
-);
+    expect(events.find(e => e.type === 'error')?.errorText).toBe('custom');
+    // The durable engine hands over its serialized { name, message, stack } shape
+    // rather than an Error instance; either way the stack reaches onError intact.
+    const error = received[0] as { message: string; stack: string };
+    expect(error.message).toBe('upstream 529 overloaded');
+    expect(error.stack).toContain('    at ');
+  });
+});
