@@ -11,6 +11,7 @@ import { ConnectClient } from '../connect-client.js';
 import { ConnectEventWorker, Dispatcher } from '../event-worker.js';
 import type { ConnectEventHandlers, ConnectEventWorkerOptions } from '../event-worker.js';
 import { event, eventsServer, ready, startStream } from './events-server.js';
+import type { Handler } from './events-server.js';
 
 const servers: Array<{ close(): Promise<void> }> = [];
 const instances: Mastra[] = [];
@@ -405,25 +406,178 @@ describe('ConnectEventWorker', () => {
     await vi.waitFor(() => expect(inputs).toEqual([{ issueId: 'iss_1' }, { issueId: 'iss_2' }]));
   });
 
-  it('logs a failing handler and keeps handling events', async () => {
+  it('retries a failing handler, then logs and skips the event, holding later events of its connection', async () => {
     const service = await eventsService([
       { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'bad' } } },
       { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'good' } } },
     ]);
-    const handled: string[] = [];
-    const { mastra } = await run(service.url, {
-      linear: ({ event }) => {
-        if (event.eventType === 'Issue.create' && event.payload.data.id === 'bad') throw new Error('boom');
-        handled.push(event.id);
+    const calls: string[] = [];
+    const { mastra } = await run(
+      service.url,
+      {
+        linear: ({ event }) => {
+          if (event.eventType !== 'Issue.create') return;
+          calls.push(event.payload.data.id);
+          if (event.payload.data.id === 'bad') throw new Error('boom');
+        },
       },
-    });
+      { retry: { attempts: 3, delayMs: 1 } },
+    );
     const error = vi.spyOn(mastra.getLogger(), 'error');
 
-    await vi.waitFor(() => expect(handled).toEqual(['12']));
+    await vi.waitFor(() => expect(calls).toEqual(['bad', 'bad', 'bad', 'good']));
     expect(error).toHaveBeenCalledWith(
-      'Connect event handler failed',
-      expect.objectContaining({ eventId: '11', provider: 'linear', eventType: 'Issue.create' }),
+      'Connect event handler failed; skipping the event',
+      expect.objectContaining({ eventId: '11', provider: 'linear', eventType: 'Issue.create', attempt: 3 }),
     );
+  });
+
+  it('handles an event once a retry of its handler succeeds', async () => {
+    const service = await eventsService([
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'flaky' } } },
+    ]);
+    let calls = 0;
+    const handled: string[] = [];
+    const { mastra } = await run(
+      service.url,
+      {
+        linear: ({ event }) => {
+          if (++calls === 1) throw new Error('rate limited');
+          handled.push(event.id);
+        },
+      },
+      { retry: { delayMs: 1 } },
+    );
+    const error = vi.spyOn(mastra.getLogger(), 'error');
+
+    await vi.waitFor(() => expect(handled).toEqual(['11']));
+    expect(calls).toBe(2);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('leaves an event unhandled when stopped while its handler waits to be retried', async () => {
+    const service = await eventsService([
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'a1' } } },
+      { provider: 'linear', eventType: 'Issue.create', payload: { data: { id: 'a2' } } },
+    ]);
+    const saved: Array<string | undefined> = [];
+    const calls: string[] = [];
+    const { worker } = await run(
+      service.url,
+      {
+        linear: ({ event }) => {
+          calls.push(event.id);
+          if (event.id === '12') throw new Error('down');
+        },
+      },
+      { retry: { delayMs: 60_000 }, cursorStore: { load: () => undefined, save: c => void saved.push(c.eventId) } },
+    );
+    await vi.waitFor(() => expect(calls).toEqual(['11', '12']));
+
+    await worker.stop({ drainTimeout: 5_000 });
+
+    // A restart must see event 12 again.
+    expect(saved.at(-1)).toBe('11');
+    expect(calls).toEqual(['11', '12']);
+  });
+
+  it('rejects retry options that could never be met', () => {
+    expect(() => new ConnectEventWorker({ linear: () => {} }, { retry: { attempts: 0 } })).toThrow('retry.attempts');
+    expect(() => new ConnectEventWorker({ linear: () => {} }, { retry: { attempts: 1.5 } })).toThrow('retry.attempts');
+    expect(() => new ConnectEventWorker({ linear: () => {} }, { retry: { delayMs: -1 } })).toThrow('retry.delayMs');
+  });
+
+  describe('when its subscription ends', () => {
+    const issue = (id: string): Delivery => ({
+      provider: 'linear',
+      eventType: 'Issue.create',
+      payload: { data: { id } },
+    });
+
+    /** Streams `ids` on the first request, then ends the stream; later requests get `then` in order. */
+    async function endingService(ids: string[], then: Handler[]) {
+      const s = await eventsServer([
+        (_req, res) => {
+          startStream(res);
+          res.write(ready('10'));
+          ids.forEach(id => res.write(event(id, fields(issue(id)))));
+          setTimeout(() => res.end(), 20);
+        },
+        ...then,
+      ]);
+      servers.push(s);
+      return s;
+    }
+
+    const refuse: Handler = (_req, res) => void res.writeHead(401).end();
+    const rejectCursor: Handler = (_req, res) => void res.writeHead(400).end();
+    const stream =
+      (...ids: string[]): Handler =>
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('20'));
+        ids.forEach(id => res.write(event(id, fields(issue(id)))));
+      };
+
+    it('logs it and subscribes again, after the last event it handled', async () => {
+      const service = await endingService(['11', '12'], [refuse, stream('13')]);
+      const handled: string[] = [];
+      const { mastra } = await run(service.url, { linear: ({ event }) => void handled.push(event.id) });
+      const error = vi.spyOn(mastra.getLogger(), 'error');
+
+      await vi.waitFor(() => expect(handled).toEqual(['11', '12', '13']));
+      expect(service.requests).toHaveLength(3);
+      expect(service.requests[2]!.headers['last-event-id']).toBe('12');
+      expect(error).toHaveBeenCalledWith(
+        'Connect event worker subscription ended; subscribing again',
+        expect.objectContaining({ error: expect.objectContaining({ code: 'unauthorized' }) }),
+      );
+    });
+
+    it('subscribes again from its cursor rather than `after`', async () => {
+      const service = await endingService(['11'], [refuse, stream('12')]);
+      const handled: string[] = [];
+      await run(service.url, { linear: ({ event }) => void handled.push(event.id) }, { after: '5' });
+
+      await vi.waitFor(() => expect(handled).toEqual(['11', '12']));
+      expect(service.requests[0]!.headers['last-event-id']).toBe('5');
+      expect(service.requests[2]!.headers['last-event-id']).toBe('11');
+    });
+
+    it('starts at the newest event once the service rejects its cursor', async () => {
+      const service = await endingService(['11'], [rejectCursor, stream('21')]);
+      const handled: string[] = [];
+      const load = vi.fn(() => ({ eventId: '10' }));
+      const { mastra } = await run(
+        service.url,
+        { linear: ({ event }) => void handled.push(event.id) },
+        { cursorStore: { load, save: () => {} } },
+      );
+      const error = vi.spyOn(mastra.getLogger(), 'error');
+
+      await vi.waitFor(() => expect(handled).toEqual(['11', '21']));
+      expect(service.requests[2]!.headers['last-event-id']).toBeUndefined();
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(error).toHaveBeenCalledWith(
+        'Connect event worker subscription ended; subscribing again',
+        expect.objectContaining({ error: expect.objectContaining({ code: 'invalid_cursor' }) }),
+      );
+    });
+
+    it('backs off while the service keeps refusing it, and stops trying when stopped', async () => {
+      const service = await endingService([], [refuse]);
+      const { worker } = await run(
+        service.url,
+        { linear: () => {} },
+        { reconnectDelayMs: 20, maxReconnectDelayMs: 40 },
+      );
+
+      await vi.waitFor(() => expect(service.requests.length).toBeGreaterThanOrEqual(4));
+      await worker.stop();
+      const requests = service.requests.length;
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(service.requests).toHaveLength(requests);
+    });
   });
 
   it('passes unverified events to handlers when asked to', async () => {

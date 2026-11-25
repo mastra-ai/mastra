@@ -4,6 +4,7 @@ import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerStopOptions } from '@mastra/core/worker';
 
 import { ConnectClient } from './connect-client.js';
+import { MastraConnectError } from './errors.js';
 import type { ConnectEventFilter, FilteredConnectEvent } from './event-filter.js';
 import { ConnectEvents } from './events.js';
 import type {
@@ -31,7 +32,7 @@ export interface ConnectEventHandlerContext<E> {
   connect: ConnectClient;
 }
 
-/** Handles one event. Throwing logs the error, and the worker moves on to the next event. */
+/** Handles one event. A handler that throws is retried, then logged and skipped. */
 export type ConnectEventHandler<E> = (context: ConnectEventHandlerContext<E>) => void | Promise<void>;
 
 type HandlerFor<F extends ConnectEventFilter, U extends boolean> = ConnectEventHandler<FilteredConnectEvent<F, U>>;
@@ -51,18 +52,32 @@ export type ConnectEventHandlers<H = Record<string, unknown>, U extends boolean 
   [P in keyof H & string]: ConnectEventProviderHandlers<P, U>;
 };
 
+/** How a failing handler is retried. */
+export interface ConnectEventRetry {
+  /** Times a handler is called for one event before it's logged and skipped. Defaults to 3. */
+  attempts?: number;
+  /** Delay before the first retry, in milliseconds, doubling for each one after. Defaults to 1000. */
+  delayMs?: number;
+}
+
 export interface ConnectEventWorkerOptions<U extends boolean = false> extends Omit<
   ConnectEventsOptions<undefined, U>,
-  'events'
+  'events' | 'signal'
 > {
   /** Per-request timeout for `connect`, in milliseconds. Defaults to 15000. */
   timeoutMs?: number;
+  /** How a failing handler is retried. */
+  retry?: ConnectEventRetry;
 }
 
 type AnyHandler = ConnectEventHandler<ConnectEvent>;
 
 /** Events read ahead of their handlers, across all connections, before the worker waits for one to finish. */
 const MAX_PENDING_EVENTS = 100;
+const DEFAULT_RETRY_ATTEMPTS = 3;
+const DEFAULT_RETRY_DELAY_MS = 1_000;
+const DEFAULT_RESUBSCRIBE_DELAY_MS = 1_000;
+const DEFAULT_MAX_RESUBSCRIBE_DELAY_MS = 30_000;
 
 /**
  * Runs handlers concurrently across connections and in order within one. The
@@ -74,7 +89,7 @@ const MAX_PENDING_EVENTS = 100;
  * @internal Exported for tests.
  */
 export class Dispatcher {
-  readonly #store: EventCursorStore | undefined;
+  readonly #store: EventCursorStore;
   readonly #logger: IMastraLogger;
   /** The last handler queued for each connection. */
   readonly #tails = new Map<string, Promise<void>>();
@@ -90,15 +105,14 @@ export class Dispatcher {
   #saving: Promise<void> = Promise.resolve();
   #waiters: Array<() => void> = [];
 
-  constructor(store: EventCursorStore | undefined, logger: IMastraLogger) {
+  constructor(store: EventCursorStore, logger: IMastraLogger) {
     this.#store = store;
     this.#logger = logger;
   }
 
   /** The store to give the subscription. */
-  get cursorStore(): EventCursorStore | undefined {
+  get cursorStore(): EventCursorStore {
     const store = this.#store;
-    if (!store) return undefined;
     return {
       load: () => store.load(),
       save: cursor => {
@@ -119,15 +133,19 @@ export class Dispatcher {
     return false;
   }
 
-  /** Queues `handle` behind the connection's earlier events. Waits while too many events are pending. */
-  async dispatch(connectionId: string, handle: () => Promise<void>): Promise<void> {
+  /**
+   * Queues `handle` behind the connection's earlier events. Waits while too
+   * many events are pending. When `handle` resolves `false`, the event stays
+   * unhandled, so the cursor is never saved past it.
+   */
+  async dispatch(connectionId: string, handle: () => Promise<boolean | void>): Promise<void> {
     while (this.#pending.size >= MAX_PENDING_EVENTS) {
       await new Promise<void>(resolve => this.#waiters.push(resolve));
     }
     const order = this.#read++;
     this.#pending.add(order);
-    const done: Promise<void> = (this.#tails.get(connectionId) ?? Promise.resolve()).then(handle).finally(() => {
-      this.#pending.delete(order);
+    const done: Promise<void> = (this.#tails.get(connectionId) ?? Promise.resolve()).then(handle).then(handled => {
+      if (handled !== false) this.#pending.delete(order);
       if (this.#tails.get(connectionId) === done) this.#tails.delete(connectionId);
       for (const wake of this.#waiters.splice(0)) wake();
       this.#flush();
@@ -144,7 +162,6 @@ export class Dispatcher {
   /** Writes the newest save whose earlier events have all been handled, and drops the saves it covers. */
   #flush(): void {
     const store = this.#store;
-    if (!store) return;
     const unhandled = this.#pending.size > 0 ? Math.min(...this.#pending) : this.#read;
     let ready = -1;
     while (ready + 1 < this.#saves.length && this.#saves[ready + 1]!.read <= unhandled) ready++;
@@ -170,8 +187,16 @@ export class Dispatcher {
  * Events from different connections are handled concurrently, and one
  * connection's events one at a time, in order. Delivery is at least once:
  * the cursor moves past an event once it and every event before it have been
- * handled, so a handler can see an event again after a restart. Run the
- * worker in one process.
+ * handled, so a handler can see an event again after a restart. A failing
+ * handler is retried (`retry`), then logged and skipped. When the
+ * subscription ends, for example because the events service refused the
+ * token, the worker logs it and subscribes again, backing off, from the last
+ * event it handled.
+ *
+ * The cursor is kept in memory, so each process reads every event and a
+ * restarted one starts at the newest. Give `cursorStore` to resume across
+ * restarts; a store is one process's cursor, so don't share one between
+ * processes.
  *
  * @example
  * ```ts
@@ -198,22 +223,33 @@ export class ConnectEventWorker<const H = Record<string, unknown>, U extends boo
 
   readonly #handlers: Record<string, AnyHandler | Record<string, AnyHandler>>;
   readonly #options: ConnectEventWorkerOptions<U>;
-  #events?: ConnectEvents<ConnectEventFilter, boolean>;
+  /** The last event that it and every event before it were handled, kept across subscriptions. */
+  #cursor?: EventCursor;
+  /** Set once the service rejected the stored cursor: start at the newest event instead of loading it again. */
+  #atTail = false;
+  #abort?: AbortController;
   #delivery?: Promise<void>;
 
   constructor(handlers: ConnectEventHandlers<H, U>, options: ConnectEventWorkerOptions<U> = {}) {
     super();
+    const { attempts, delayMs } = options.retry ?? {};
+    if (attempts !== undefined && !(Number.isInteger(attempts) && attempts >= 1)) {
+      throw new MastraConnectError('invalid_options', 'retry.attempts must be a whole number of 1 or more.');
+    }
+    if (delayMs !== undefined && !(Number.isFinite(delayMs) && delayMs >= 0)) {
+      throw new MastraConnectError('invalid_options', 'retry.delayMs must be a finite number of 0 or more.');
+    }
     this.#handlers = handlers as Record<string, AnyHandler | Record<string, AnyHandler>>;
     this.#options = options;
   }
 
   get isRunning(): boolean {
-    return this.#events !== undefined;
+    return this.#abort !== undefined;
   }
 
   /** Subscribes to the project's Connect events. Called when Mastra starts its workers. */
   async start(): Promise<void> {
-    if (this.#events) return;
+    if (this.#abort) return;
     const mastra = this.mastra;
     if (!mastra) {
       console.error('Connect event worker is not registered on a Mastra, so it is not listening');
@@ -223,31 +259,27 @@ export class ConnectEventWorker<const H = Record<string, unknown>, U extends boo
     if (Object.keys(events).length === 0) return;
 
     const logger = mastra.getLogger();
-    const dispatcher = new Dispatcher(this.#options.cursorStore, logger);
-    let subscription: ConnectEvents<ConnectEventFilter, boolean>;
     let connect: ConnectClient;
     try {
       connect = new ConnectClient(this.#options);
-      subscription = new ConnectEvents<ConnectEventFilter, boolean>({
-        ...this.#options,
-        cursorStore: dispatcher.cursorStore,
-        events,
-      });
+      // Checks the options up front, so a missing token is logged once rather than retried.
+      new ConnectEvents<ConnectEventFilter, boolean>({ ...this.#options, events }).close();
     } catch (error) {
       logger.error('Connect event worker could not subscribe', { error });
       return;
     }
-    this.#events = subscription;
-    this.#delivery = this.#deliver(subscription, dispatcher, { mastra, logger, connect });
+    const abort = new AbortController();
+    this.#abort = abort;
+    this.#delivery = this.#run(events, { mastra, logger, connect }, abort.signal);
   }
 
   /** Ends the subscription and waits for the events being handled, up to `drainTimeout` ms. */
   async stop(options?: WorkerStopOptions): Promise<void> {
-    const events = this.#events;
+    const abort = this.#abort;
     const delivery = this.#delivery;
-    this.#events = undefined;
+    this.#abort = undefined;
     this.#delivery = undefined;
-    events?.close();
+    abort?.abort();
     if (!delivery) return;
     if (options?.drainTimeout === undefined) return delivery;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -271,38 +303,112 @@ export class ConnectEventWorker<const H = Record<string, unknown>, U extends boo
     return typeof handlers === 'function' ? handlers : handlers?.[event.eventType];
   }
 
-  async #handle(event: ConnectEvent, context: Omit<ConnectEventHandlerContext<ConnectEvent>, 'event'>) {
-    try {
-      const connect = event.resourceId ? context.connect.withResource(event.resourceId) : context.connect;
-      await this.#handler(event)?.({ ...context, connect, event });
-    } catch (error) {
-      // One failing event must not end the subscription.
-      context.logger.error('Connect event handler failed', {
-        error,
-        eventId: event.id,
-        provider: event.provider,
-        eventType: event.eventType,
-      });
+  /**
+   * Calls the event's handler, retrying it. Resolves `false` when the worker
+   * stopped before the handler succeeded, so the event stays unhandled.
+   */
+  async #handle(
+    event: ConnectEvent,
+    context: Omit<ConnectEventHandlerContext<ConnectEvent>, 'event'>,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    const handler = this.#handler(event);
+    if (!handler) return true;
+    const connect = event.resourceId ? context.connect.withResource(event.resourceId) : context.connect;
+    const attempts = this.#options.retry?.attempts ?? DEFAULT_RETRY_ATTEMPTS;
+    const delayMs = this.#options.retry?.delayMs ?? DEFAULT_RETRY_DELAY_MS;
+    const about = { eventId: event.id, provider: event.provider, eventType: event.eventType };
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await handler({ ...context, connect, event });
+        return true;
+      } catch (error) {
+        // One failing event must not end the subscription.
+        if (attempt >= attempts) {
+          context.logger.error('Connect event handler failed; skipping the event', { error, ...about, attempt });
+          return true;
+        }
+        context.logger.warn('Connect event handler failed; retrying', { error, ...about, attempt });
+        await sleep(delayMs * 2 ** (attempt - 1), signal);
+        if (signal.aborted) return false;
+      }
     }
   }
 
-  async #deliver(
-    events: ConnectEvents<ConnectEventFilter, boolean>,
-    dispatcher: Dispatcher,
+  /** Subscribes, and subscribes again whenever the subscription ends, until the worker stops. */
+  async #run(
+    events: ConnectEventFilter,
     context: Omit<ConnectEventHandlerContext<ConnectEvent>, 'event'>,
+    signal: AbortSignal,
   ): Promise<void> {
-    try {
-      for await (const event of events as AsyncIterable<ConnectEvent>) {
-        await dispatcher.dispatch(event.connectionId, () => this.#handle(event, context));
-      }
-    } catch (error) {
-      context.logger.error('Connect event worker subscription ended', { error });
-    } finally {
-      await dispatcher.drain();
-      if (this.#events === events) {
-        this.#events = undefined;
-        this.#delivery = undefined;
+    const { logger } = context;
+    const base = this.#options.reconnectDelayMs ?? DEFAULT_RESUBSCRIBE_DELAY_MS;
+    const max = this.#options.maxReconnectDelayMs ?? DEFAULT_MAX_RESUBSCRIBE_DELAY_MS;
+    let failures = 0;
+    while (!signal.aborted) {
+      const dispatcher = new Dispatcher(this.#cursorStore(), logger);
+      let read = false;
+      try {
+        // `after` and `afterTimestamp` only place the first subscription; later ones resume from the cursor.
+        const resume = this.#cursor || this.#atTail ? { after: undefined, afterTimestamp: undefined } : {};
+        const subscription = new ConnectEvents<ConnectEventFilter, boolean>({
+          ...this.#options,
+          ...resume,
+          cursorStore: dispatcher.cursorStore,
+          events,
+          signal,
+        });
+        for await (const event of subscription as AsyncIterable<ConnectEvent>) {
+          read = true;
+          await dispatcher.dispatch(event.connectionId, () => this.#handle(event, context, signal));
+        }
+      } catch (error) {
+        if (!signal.aborted) {
+          if (error instanceof MastraConnectError && error.code === 'invalid_cursor') {
+            // Nothing to resume from: start at the newest event. Events since the rejected cursor are missed.
+            this.#cursor = undefined;
+            this.#atTail = true;
+          }
+          if (read) failures = 0;
+          const retryInMs = Math.min(max, base * 2 ** Math.min(failures++, 20));
+          logger.error('Connect event worker subscription ended; subscribing again', { error, retryInMs });
+          await dispatcher.drain();
+          await sleep(retryInMs, signal);
+          continue;
+        }
+      } finally {
+        await dispatcher.drain();
       }
     }
   }
+
+  /** The cursor kept in memory, backed by `cursorStore` when given. */
+  #cursorStore(): EventCursorStore {
+    const store = this.#options.cursorStore;
+    return {
+      load: async () => {
+        if (this.#cursor) return this.#cursor;
+        if (this.#atTail || !store) return null;
+        return store.load();
+      },
+      save: async cursor => {
+        this.#cursor = cursor;
+        this.#atTail = false;
+        await store?.save(cursor);
+      },
+    };
+  }
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise(resolve => {
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', done);
+      resolve();
+    }
+    signal.addEventListener('abort', done, { once: true });
+  });
 }
