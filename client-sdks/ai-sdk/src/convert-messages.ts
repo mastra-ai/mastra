@@ -28,16 +28,40 @@ function isSystemReminderUIMessage(message: {
   return isSystemReminderElement(message.content);
 }
 
-// Core serializes the wrapper canonically and, in signalToXmlMarkup, escapes `</system-reminder\s*>` (case-insensitive)
-// inside the contents. A body that still contains such a closing tag holds more than one element, for example user
-// text between two reminders, so it is not a reminder.
-const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:\s[^<>]*)?(?:>([\s\S]*)<\/system-reminder>|\/>)$/;
+// Recognizes exactly the shapes core's signalToXmlMarkup emits for a reminder: `<system-reminder{attrs} />`, or
+// `<system-reminder{attrs}>{contents}</system-reminder>` with non-empty contents. Each attribute is ` name="value"`
+// with a unique name and `&`, `<`, `>` and `"` escaped in the value, and contents have every
+// `</system-reminder\s*>` escaped. The opening tag is read one attribute at a time, then the self-closing and paired
+// forms are checked separately, so one form cannot match as the other.
+const SYSTEM_REMINDER_OPEN = '<system-reminder';
+const SYSTEM_REMINDER_ATTRIBUTE = / ([A-Za-z_][A-Za-z0-9_.-]*)="(?:[^"<>&]|&(?:amp|lt|gt|quot);)*"/y;
+const SYSTEM_REMINDER_SELF_CLOSE = ' />';
+const SYSTEM_REMINDER_CLOSE = '</system-reminder>';
 const SYSTEM_REMINDER_CLOSING_TAG = /<\/system-reminder\s*>/i;
 
 function isSystemReminderElement(text: unknown) {
   if (typeof text !== 'string') return false;
-  const match = SYSTEM_REMINDER_ELEMENT.exec(text.trim());
-  return match !== null && !SYSTEM_REMINDER_CLOSING_TAG.test(match[1] ?? '');
+  const trimmed = text.trim();
+  if (!trimmed.startsWith(SYSTEM_REMINDER_OPEN)) return false;
+
+  const names = new Set<string>();
+  let index = SYSTEM_REMINDER_OPEN.length;
+  for (;;) {
+    SYSTEM_REMINDER_ATTRIBUTE.lastIndex = index;
+    const attribute = SYSTEM_REMINDER_ATTRIBUTE.exec(trimmed);
+    if (!attribute) break;
+    if (names.has(attribute[1]!)) return false;
+    names.add(attribute[1]!);
+    index = SYSTEM_REMINDER_ATTRIBUTE.lastIndex;
+  }
+
+  if (trimmed.startsWith(SYSTEM_REMINDER_SELF_CLOSE, index)) {
+    return index + SYSTEM_REMINDER_SELF_CLOSE.length === trimmed.length;
+  }
+  if (trimmed[index] !== '>') return false;
+
+  const body = trimmed.slice(index + 1, -SYSTEM_REMINDER_CLOSE.length);
+  return body.length > 0 && trimmed.endsWith(SYSTEM_REMINDER_CLOSE) && !SYSTEM_REMINDER_CLOSING_TAG.test(body);
 }
 
 function filterSystemReminderUIMessages<

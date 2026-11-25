@@ -221,6 +221,78 @@ describe('toAISdkFormat', () => {
       expect(toAISdkV5Messages([legacy])).toEqual([]);
     });
 
+    describe('first text part classification', () => {
+      const hidden = [
+        '<system-reminder />',
+        '<system-reminder kind="reference-image" />',
+        '<system-reminder a="1" b="x &amp; y" />',
+        '<system-reminder>continue</system-reminder>',
+        '<system-reminder type="dynamic-agents-md">ctx</system-reminder>',
+        '<system-reminder a="1" b="&quot;q&quot;">ctx</system-reminder>',
+        '<system-reminder>see &lt;/system-reminder&gt; in docs</system-reminder>',
+        '<system-reminder>close the </system-reminders> list</system-reminder>',
+        '<system-reminder>A<system-reminder>B</system-reminder>',
+        '<system-reminder>ends with </system-reminder</system-reminder>',
+        '<system-reminder a="x/&gt;y">ctx</system-reminder>',
+        '<system-reminder a="x &quot;b=&quot;y">ctx</system-reminder>',
+        '<system-reminder> </system-reminder>',
+        '<system-reminder a="x a=">ctx</system-reminder>',
+        '<system-reminder a="1" b="2" />',
+        '  \n<system-reminder>continue</system-reminder>\n  ',
+        '\t<system-reminder kind="x" />\n',
+      ];
+      const shown = [
+        '<system-reminder /><system-reminder>B</system-reminder>',
+        '<system-reminder />What is this?</system-reminder>',
+        '<system-reminder /> and then my question',
+        '<system-reminder/>',
+        '<system-reminder></system-reminder>',
+        '<system-reminder a="x&y" />',
+        '<system-reminder a="1" a="2" />',
+        '<system-reminder a="&copy;">x</system-reminder>',
+        '<system-reminder>x</system-reminder',
+        '<system-reminder kind="x" /><system-reminder />',
+        '<system-reminder/>What?</system-reminder>',
+        '<system-reminder>A</system-reminder> trailing question',
+        '<system-reminder>A</system-reminder><system-reminder>B</system-reminder>',
+        '<system-reminder>A</system-reminder>\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</SYSTEM-REMINDER >\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</system-reminder ><system-reminder>B</system-reminder>',
+        '<SYSTEM-REMINDER>Is this valid?</SYSTEM-REMINDER>',
+        '<System-Reminder />',
+        '<system-reminder>Is this valid?</SYSTEM-REMINDER >',
+        '<system-reminder> shows up in my logs, what is it?',
+        '<system-reminder means what?</system-reminder>',
+        '<system-reminder/help</system-reminder>',
+        '<system-reminder / >',
+        '<system-reminders>x</system-reminders>',
+        '<system-reminder a=">">x</system-reminder>',
+        '<system-reminder a="/>" />',
+        "<system-reminder a='1'>x</system-reminder>",
+        '<system-reminder a=1>x</system-reminder>',
+        '<system-reminder  a="1">x</system-reminder>',
+        '<system-reminder a="1"b="2">x</system-reminder>',
+        '<system-reminder >x</system-reminder>',
+        'What does <system-reminder mean in the logs?',
+        'Why did the agent see this?\n<system-reminder>continue</system-reminder>',
+      ];
+      const convertAll = (text: string) =>
+        [[userMessage([{ type: 'text', text }])], text].flatMap(messages => [
+          toAISdkV4Messages(messages).length,
+          toAISdkV5Messages(messages).length,
+          toAISdkMessages(messages, { version: 'v6' }).length,
+          toAISdkMessages(messages, { version: 'v7' }).length,
+        ]);
+
+      it.each(hidden)('hides %j in every version', text => {
+        expect(convertAll(text)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+      });
+
+      it.each(shown)('keeps %j in every version', text => {
+        expect(convertAll(text)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+      });
+    });
+
     it('still hides file-only legacy reminders marked with a self-closing tag', () => {
       const legacy = {
         id: 'msg-reminder',
