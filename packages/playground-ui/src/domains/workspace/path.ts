@@ -15,10 +15,6 @@ export const parentOf = (path: string) => {
   return index === -1 ? ROOT_PATH : path.slice(0, index);
 };
 
-/**
- * The workspace path a link in `fromFile` points to, or `undefined` for a web URL, an absolute
- * path, or a path that climbs out of the workspace.
- */
 export const resolveRelativePath = (fromFile: string, link: string): string | undefined => {
   if (!link || /^[a-z][a-z0-9+.-]*:|^\/|^#/i.test(link)) return undefined;
   const parts = parentOf(fromFile) === ROOT_PATH ? [] : parentOf(fromFile).split('/');

@@ -93,7 +93,6 @@ export type HighlightLanguage = keyof typeof loaders;
 
 const languages = new Map<HighlightLanguage, Promise<Language>>();
 
-/** The CodeMirror language for `lang`, loaded once and shared by every caller. */
 export function loadLanguage(lang: HighlightLanguage): Promise<Language> {
   let language = languages.get(lang);
   if (!language) {

@@ -4,7 +4,6 @@ import type { ExtraProps } from 'react-markdown';
 import { resolveRelativePath } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 
-/** A markdown image; one pointing at a workspace file next to the open file is read from the workspace. */
 export function WorkspaceMarkdownImage({ node: _node, src, alt, ...props }: ComponentProps<'img'> & ExtraProps) {
   const { activeFilePath } = useWorkspaceContext();
   const imagePath = activeFilePath && src ? resolveRelativePath(activeFilePath, src) : undefined;
