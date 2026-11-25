@@ -134,7 +134,7 @@ describe('WorkspaceTreeView', () => {
       const paths = spyListedPaths({ '.': rootListing, src: srcListing });
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       expect(await screen.findByRole('treeitem', { name: /^index\.ts/ })).toBeTruthy();
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('true');
@@ -150,11 +150,59 @@ describe('WorkspaceTreeView', () => {
       );
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       const folder = screen.getByRole('treeitem', { name: /^src/ });
       expect(await within(folder).findByRole('status', { name: 'Loading src' })).toBeTruthy();
       expect(screen.queryByTestId('workspace-folder-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when a folder holds thousands of files', () => {
+    const FILE_COUNT = 3_000;
+    const logsListing = {
+      path: 'logs',
+      entries: Array.from({ length: FILE_COUNT }, (_, i) => ({ name: `run-${i}.json`, type: 'file' as const })),
+    };
+    const withLogs = {
+      ...rootListing,
+      entries: [{ name: 'logs', type: 'directory' as const }, ...rootListing.entries],
+    };
+
+    it('draws only the rows near the view, each with its place in the folder', async () => {
+      server.use(listHandler({ '.': withLogs, logs: logsListing }));
+      renderView();
+
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^logs/ }));
+
+      const first = await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      expect(first.getAttribute('aria-level')).toBe('2');
+      expect(first.getAttribute('aria-posinset')).toBe('1');
+      expect(first.getAttribute('aria-setsize')).toBe(String(FILE_COUNT));
+      expect(screen.getAllByRole('treeitem').length).toBeLessThan(60);
+      expect(screen.queryByRole('treeitem', { name: new RegExp(`^run-${FILE_COUNT - 1}\\.json`) })).toBeNull();
+    });
+
+    it('moves one tab stop with the arrow keys, up to the parent with Left, and closes it with Left again', async () => {
+      server.use(listHandler({ '.': withLogs, logs: logsListing }));
+      renderView();
+      const folder = await screen.findByRole('treeitem', { name: /^logs/ });
+      fireEvent.click(folder);
+      await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      folder.focus();
+
+      fireEvent.keyDown(folder, { key: 'ArrowDown' });
+      const first = screen.getByRole('treeitem', { name: /^run-0\.json/ });
+      expect(document.activeElement).toBe(first);
+      expect(first.tabIndex).toBe(0);
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).tabIndex).toBe(-1);
+
+      fireEvent.keyDown(first, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /^logs/ }));
+
+      fireEvent.keyDown(document.activeElement ?? folder, { key: 'ArrowLeft' });
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('treeitem', { name: /^run-0\.json/ })).toBeNull();
     });
   });
 
@@ -253,7 +301,7 @@ describe('WorkspaceTreeView', () => {
         </MastraReactProvider>
       );
       const { rerender } = render(view());
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await screen.findByRole('treeitem', { name: /^index\.ts/ });
 
       rerender(view('docs/guides/intro.md'));
@@ -268,7 +316,7 @@ describe('WorkspaceTreeView', () => {
       server.use(listHandler({ '.': rootListing, src: srcListing }), readHandler());
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       const file = await screen.findByRole('treeitem', { name: /^index\.ts/ });
       fireEvent.click(file);
 
