@@ -87,11 +87,17 @@ export function buildDeadlineCrossWorkerAgent({
       {
         id: 'resume-context-probe',
         processInputStep: ({ requestContext }) => {
-          const controller = requestContext?.get<{ getState?: () => string }>('probe-controller');
+          const controller = requestContext?.get('probe-controller');
           log({
             event: 'resume-context',
             marker: requestContext?.get('probe-marker'),
-            value: controller?.getState?.(),
+            value:
+              controller &&
+              typeof controller === 'object' &&
+              'getState' in controller &&
+              typeof controller.getState === 'function'
+                ? controller.getState()
+                : undefined,
           });
         },
       },
