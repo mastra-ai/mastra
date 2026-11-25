@@ -17,4 +17,9 @@ API changes:
 - `POST /web/factory/projects/:id/apply-default-model`, `POST /web/config/default-model/apply` and `DELETE /web/config/default-model` are removed. Sessions follow pack edits on their own; to change your default, edit your packs with `PUT /web/config/model-packs`.
 - `PUT /web/config/default-model/thinking` and the `defaultThinkingLevel` field of `PATCH /web/factory/projects/:id` are removed. Each model in a pack carries its own thinking level.
 
-Model IDs must use the `provider/model` form, for example `anthropic/claude-opus-5.5` or `openai/gpt-5.6-sol`. The settings API rejects any other value with a 400.
+Model IDs must use the `provider/model` form. The settings API rejects any other value with a 400, so add the provider to a bare ID before sending it:
+
+```diff
+- { "defaultModelId": "claude-opus-5.5" }
++ { "defaultModelId": "anthropic/claude-opus-5.5" }
+```
