@@ -74,6 +74,7 @@ export function BoardListRow({
   /** Selecting the row (not its title link) opens the card. */
   onOpen: () => void;
 }) {
+  const draggedPayload = locked ? undefined : dragPayload;
   const rowCells = (
     <>
       <DataList.Cell className="empty:before:content-none max-sm:col-start-1 max-sm:row-start-1">
@@ -136,7 +137,7 @@ export function BoardListRow({
             tone="muted"
             className={cn(
               'pointer-events-none col-start-1 row-start-1 tabular-nums max-sm:hidden pointer-coarse:hidden',
-              HIDE_WHILE_ROW_CONTROLS_SHOW,
+              menu !== undefined && HIDE_WHILE_ROW_CONTROLS_SHOW,
             )}
           >
             <time dateTime={createdAt.dateTime}>{createdAt.label}</time>
@@ -179,9 +180,9 @@ export function BoardListRow({
       data-highlighted={highlighted || undefined}
       aria-busy={busy || locked || undefined}
       tabIndex={-1}
-      draggable={dragPayload !== undefined}
+      draggable={draggedPayload !== undefined}
       onDragStart={event => {
-        if (dragPayload) setDragPayload(event, dragPayload);
+        if (draggedPayload) setDragPayload(event, draggedPayload);
       }}
       onSelectRow={onOpen}
       className={cn(

@@ -78,6 +78,10 @@ function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>
   return actors[event.actorId];
 }
 
+function RelativeTime({ iso }: { iso: string }) {
+  return relativeTime(iso);
+}
+
 function activityEntry(
   event: AuditEvent,
   actors: Record<string, AuditActorProfile>,
@@ -102,7 +106,7 @@ function activityEntry(
         )}
       </span>
     ),
-    ...(isCreated ? {} : { time: { dateTime: event.occurredAt, label: relativeTime(event.occurredAt) } }),
+    ...(isCreated ? {} : { time: { dateTime: event.occurredAt, label: <RelativeTime iso={event.occurredAt} /> } }),
   };
 }
 

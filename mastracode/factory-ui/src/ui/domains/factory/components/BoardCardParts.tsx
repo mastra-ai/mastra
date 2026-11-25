@@ -49,11 +49,6 @@ export function BoardTooltipDelay({ children }: { children: ReactNode }) {
   return <TooltipProvider delay={400}>{children}</TooltipProvider>;
 }
 
-/**
- * Card chrome a hover can reveal: the actions menu. Gated on `pointer-fine`
- * because a touch screen has no hover to reveal it with, and stays up while
- * its menu is open.
- */
 export { CardStatus, REVEAL_ON_CARD_HOVER, SessionBadge } from '@mastra/playground-ui/domains/factory';
 
 export function MetadataLabels({ metadata, className }: { metadata: Record<string, unknown>; className?: string }) {

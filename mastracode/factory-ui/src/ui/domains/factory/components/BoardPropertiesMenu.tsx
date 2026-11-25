@@ -29,8 +29,8 @@ export function boardPropertiesMenuProps(view: BoardView, fields: readonly Board
       const Icon = SORT_ICONS[option.value];
       return { ...option, icon: <Icon aria-hidden /> };
     }),
-    onFilterChange: (fieldId: string, values: string[]) =>
-      view.setFilters(withBoardFilterValues(view.filters, fieldId as BoardFilterFieldId, values)),
+    onFilterChange: (fieldId: BoardFilterFieldId, values: string[]) =>
+      view.setFilters(withBoardFilterValues(view.filters, fieldId, values)),
   };
 }
 
