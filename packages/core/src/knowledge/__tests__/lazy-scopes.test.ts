@@ -39,7 +39,7 @@ describe('Knowledge scopes materialize on first write', () => {
     const { knowledge, call, context, scopes } = setup();
     const held = ['org:acme', 'project:p1'];
 
-    expect(knowledge.__principalsKey(context(held, SLACK_USER)).split('\n')).toEqual([
+    expect((await knowledge.__principalsKey(context(held, SLACK_USER))).split('\n')).toEqual([
       'org:acme',
       'project:p1',
       'resource:slack%3AU123',

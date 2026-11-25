@@ -438,8 +438,12 @@ export class Knowledge extends MastraBase {
     return { read, write };
   }
 
-  /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
-  __principalsKey(context: KnowledgeRunContext): string {
+  /**
+   * The run's principals as a stable key; throws when the run has none or holds an undeclared scope.
+   * Loads the store's declarations first, so a scope only the store declares counts. @internal
+   */
+  async __principalsKey(context: KnowledgeRunContext): Promise<string> {
+    await this.#runtime.resolve();
     return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
   }
 
