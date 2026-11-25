@@ -119,6 +119,7 @@ export function createReviewWorkflow(service: ReviewService) {
     id: 'review',
     inputSchema: reviewStartRequestSchema,
     outputSchema: publicationSchema,
+    // Recovery is explicit through the owner-authorized restart route. Boot-time replay has no reviewer grant.
     options: { autoRestartActiveRuns: false, shouldPersistSnapshot: () => true },
   })
     .then(prepare)
