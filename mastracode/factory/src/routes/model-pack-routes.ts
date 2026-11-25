@@ -1,17 +1,34 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
-import { EMPTY_MODEL_PACK_SET, FACTORY_MODEL_PACK_SETTING } from '../model-packs.js';
+import {
+  defaultModelPack,
+  EMPTY_MODEL_PACK_SET,
+  FACTORY_MODEL_SELECTION_SETTING,
+  parseStoredModelSelection,
+  resolvedModelSelection,
+  resolveModelSelection,
+} from '../model-packs.js';
+import type {
+  ModelPackSet,
+  ModelSelectionRequest,
+  ResolvedModelSelection,
+  StoredModelSelection,
+} from '../model-packs.js';
+import { resolveRoutedModelDefaults } from '../session/routed-model-defaults.js';
 import type { ModelDefaultRecord, ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type {
   ConfigRoutesDeps,
   ModelCatalog,
   PersonalModelDefaultsResponse,
+  SessionModelContext,
   SessionModelContextResolver,
 } from './config.js';
-import { modelPackSetSchema } from './contracts.js';
+import { modelIdSchema, modelPackSetSchema, THINKING_LEVELS } from './contracts.js';
 import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -66,14 +83,70 @@ function modelDefaultsUnavailable(c: Context): Response {
   );
 }
 
-export async function readSessionModelPackId(
+const modelSelectionRequestSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('default') }),
+  z.object({ kind: z.literal('pack'), packId: z.string().min(1) }),
+  z.object({ kind: z.literal('model'), modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVELS).optional() }),
+]);
+
+interface SessionModelTarget {
+  stored: StoredModelSelection;
+  modelId: string;
+  thinkingLevel?: ThinkingLevelSetting;
+  modelSelection: ResolvedModelSelection;
+}
+
+function sessionModelTarget(set: ModelPackSet, selection: ModelSelectionRequest): SessionModelTarget | undefined {
+  if (selection.kind === 'model') {
+    return {
+      stored: { kind: 'model' },
+      modelId: selection.modelId,
+      ...(selection.thinkingLevel ? { thinkingLevel: selection.thinkingLevel } : {}),
+      modelSelection: { kind: 'model' },
+    };
+  }
+  const pack =
+    selection.kind === 'default'
+      ? defaultModelPack(set)
+      : set.modelPacks.find(candidate => candidate.id === selection.packId);
+  const head = pack?.models[0];
+  if (!pack || !head) return undefined;
+  return {
+    stored: selection,
+    modelId: head.modelId,
+    thinkingLevel: head.thinkingLevel,
+    modelSelection: { kind: 'pack', packId: pack.id },
+  };
+}
+
+export async function resolveSessionModelPackSet(
+  options: ConfigRoutesDeps,
+  context: SessionModelContext | undefined,
+  address: SessionAddress,
+): Promise<ModelPackSet> {
+  if (context) return context.modelPackSet;
+  const { factoryProjects, sourceControlSessions, workItems, modelDefaults } = options;
+  if (!factoryProjects || !sourceControlSessions || !workItems || !modelDefaults) return EMPTY_MODEL_PACK_SET;
+  const requestContext = new RequestContext();
+  requestContext.set('controller', address);
+  const routed = await resolveRoutedModelDefaults(requestContext, {
+    projects: factoryProjects,
+    sourceControl: sourceControlSessions,
+    workItems,
+    modelDefaults,
+  });
+  return routed.modelPackSet;
+}
+
+export async function readSessionModelSelection(
   controller: ModelCatalog,
   { sessionId, threadId }: SessionAddress,
-): Promise<string | null> {
+  set: ModelPackSet,
+): Promise<ResolvedModelSelection> {
   const session = await controller.getSession?.(sessionId);
   const thread = await session?.thread?.getById?.({ threadId });
-  const packId = thread?.metadata?.[FACTORY_MODEL_PACK_SETTING];
-  return typeof packId === 'string' ? packId : null;
+  const stored = parseStoredModelSelection(thread?.metadata?.[FACTORY_MODEL_SELECTION_SETTING]);
+  return resolvedModelSelection(resolveModelSelection(set, stored, session?.model.get() || undefined));
 }
 
 function personalModelDefaults(record: ModelDefaultRecord | null): PersonalModelDefaultsResponse {
@@ -143,35 +216,37 @@ export function modelPackRoutes(
       },
     }),
 
-    registerApiRoute('/web/config/session-model-pack', {
+    registerApiRoute('/web/config/session-model', {
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
         const json = await readJsonBody(c);
         if ('response' in json) return json.response;
         const address = sessionAddressSchema.safeParse(json.body);
-        const choice = z.object({ modelPackId: z.string().min(1) }).safeParse(json.body);
-        if (!address.success || !choice.success) return c.json({ error: 'invalid_session_model_pack' }, 400);
-        const { modelPackId } = choice.data;
+        const request = z.object({ selection: modelSelectionRequestSchema }).safeParse(json.body);
+        if (!address.success || !request.success) return c.json({ error: 'invalid_session_model' }, 400);
         const context = await resolveSessionModelContext(c, address.data);
         if (context && 'response' in context) return context.response;
-        const pack = (context?.modelPackSet ?? EMPTY_MODEL_PACK_SET).modelPacks.find(
-          candidate => candidate.id === modelPackId,
-        );
-        const head = pack?.models[0];
-        if (!head) return c.json({ error: 'model_pack_not_found' }, 404);
+        const set = await resolveSessionModelPackSet(options, context, address.data);
+        const target = sessionModelTarget(set, request.data.selection);
+        if (!target) return c.json({ error: 'model_pack_not_found' }, 404);
         const session = await options.controller.getSession?.(address.data.sessionId);
-        if (!session?.model.switch || !session.thread?.setSettingOn) {
-          return c.json({ error: 'session_not_running' }, 409);
-        }
+        const thread = session?.thread;
+        if (!session?.model.switch || !thread?.setSettingOn) return c.json({ error: 'session_not_running' }, 409);
+        if (thread.getId() !== address.data.threadId) return c.json({ error: 'session_thread_mismatch' }, 409);
+        const { threadId } = address.data;
         try {
-          await session.thread.setSettingOn({
-            threadId: address.data.threadId,
-            key: FACTORY_MODEL_PACK_SETTING,
-            value: modelPackId,
-          });
-          await session.model.switch(head.modelId, { thinkingLevel: head.thinkingLevel });
-          return c.json({ ok: true, modelPackId, modelId: head.modelId, thinkingLevel: head.thinkingLevel });
+          const previous = (await thread.getById?.({ threadId }))?.metadata?.[FACTORY_MODEL_SELECTION_SETTING];
+          await thread.setSettingOn({ threadId, key: FACTORY_MODEL_SELECTION_SETTING, value: target.stored });
+          try {
+            await (target.thinkingLevel
+              ? session.model.switch(target.modelId, { thinkingLevel: target.thinkingLevel })
+              : session.model.switch(target.modelId));
+          } catch (error) {
+            await thread.setSettingOn({ threadId, key: FACTORY_MODEL_SELECTION_SETTING, value: previous });
+            throw error;
+          }
+          return c.json({ modelSelection: target.modelSelection });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }

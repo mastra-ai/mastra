@@ -1,11 +1,11 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { ModelPack, ModelPackSet } from '../model-packs.js';
+import type { ModelPack, ModelPackSet, StoredModelSelection } from '../model-packs.js';
 import type { FactoryModelScope } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { createSourceControlSessionLookup } from './factory-session.js';
-import { resolveRoutedModelDefaults, resolveSessionModelFallbacks } from './routed-model-defaults.js';
+import { resolveRoutedModelDefaults, resolveSessionModelRoute } from './routed-model-defaults.js';
 import type { RoutedModelDefaults } from './routed-model-defaults.js';
 
 function contextFor(controller: Record<string, unknown> | undefined, userId: string | null = 'owner') {
@@ -269,7 +269,7 @@ describe('resolveRoutedModelDefaults', () => {
   });
 });
 
-describe('resolveSessionModelFallbacks', () => {
+describe('resolveSessionModelRoute', () => {
   const reviewPack: ModelPack = {
     id: 'factory-review',
     name: 'Review',
@@ -279,38 +279,68 @@ describe('resolveSessionModelFallbacks', () => {
     ],
   };
 
-  async function fallbacksFor(modelId: string, sessionPackId?: string) {
+  async function routeSetup() {
     const { project, deps } = await setup('factory');
     await deps.projects.update({
       orgId: 'org-1',
       id: project.id,
       input: { modelPackSet: { modelPacks: [factoryPack, reviewPack], defaultModelPackId: factoryPack.id } },
     });
-    const chat = contextFor({
-      sessionId: 'session-1',
-      resourceId: 'session-1',
-      threadId: 'chat-thread',
-      session: { modelId },
-      getThreadSetting: async (key: string) => (key === 'factoryModelPackId' ? sessionPackId : undefined),
-    });
-    return resolveSessionModelFallbacks(chat, deps);
+    const settings = new Map<string, unknown>();
+    const route = (modelId: string) =>
+      resolveSessionModelRoute(
+        contextFor({
+          sessionId: 'session-1',
+          resourceId: 'session-1',
+          threadId: 'chat-thread',
+          session: { modelId },
+          getThreadSetting: async (key: string) => settings.get(key),
+          setThreadSetting: async ({ key, value }: { key: string; value: unknown }) => {
+            settings.set(key, value);
+          },
+        }),
+        deps,
+      );
+    const select = (selection: StoredModelSelection) => settings.set('factoryModelSelection', selection);
+    return { project, deps, settings, route, select };
   }
 
-  it("falls back through the default pack when the session never picked one and is on that pack's model", async () => {
-    expect(await fallbacksFor('deepseek/deepseek-flash')).toEqual([
-      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
-      { modelId: 'google/gemini-3.8-flash', thinkingLevel: 'medium' },
-    ]);
+  it('runs the default pack for an unset session on its first model and records the default selection', async () => {
+    const { route, settings } = await routeSetup();
+    expect(await route('deepseek/deepseek-flash')).toEqual(factoryPack.models);
+    expect(settings.get('factoryModelSelection')).toEqual({ kind: 'default' });
   });
 
-  it('falls back through the pack the session picked, with that pack thinking levels', async () => {
-    expect(await fallbacksFor('anthropic/claude-opus-5.5', 'factory-review')).toEqual([
-      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'xhigh' },
-    ]);
+  it('runs the exact model for an unset session on another model and records it', async () => {
+    const { route, settings } = await routeSetup();
+    expect(await route('openai/gpt-5.5')).toEqual([]);
+    expect(settings.get('factoryModelSelection')).toEqual({ kind: 'model' });
   });
 
-  it("has no fallbacks once the session switched off its pack's model", async () => {
-    expect(await fallbacksFor('openai/gpt-5.5', 'factory-review')).toEqual([]);
-    expect(await fallbacksFor('openai/gpt-5.5')).toEqual([]);
+  it('runs the picked pack in order whatever model the session shows', async () => {
+    const { route, select } = await routeSetup();
+    select({ kind: 'pack', packId: 'factory-review' });
+    expect(await route('openai/gpt-5.5')).toEqual(reviewPack.models);
+  });
+
+  it("follows an edit to the picked pack's first model on the next request", async () => {
+    const { project, deps, route, select } = await routeSetup();
+    select({ kind: 'pack', packId: 'factory-review' });
+    const edited: ModelPack = {
+      ...reviewPack,
+      models: [{ modelId: 'moonshot/kimi-k3', thinkingLevel: 'high' }, ...reviewPack.models],
+    };
+    await deps.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { modelPackSet: { modelPacks: [factoryPack, edited], defaultModelPackId: factoryPack.id } },
+    });
+    expect(await route('anthropic/claude-opus-5.5')).toEqual(edited.models);
+  });
+
+  it("runs no route for an exact model even when it is the default pack's first model", async () => {
+    const { route, select } = await routeSetup();
+    select({ kind: 'model' });
+    expect(await route('deepseek/deepseek-flash')).toEqual([]);
   });
 });

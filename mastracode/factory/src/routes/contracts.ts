@@ -1564,13 +1564,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: sandboxEnvPathSchema,
     responseSchema: z.null(),
   },
-  projectApplyDefaultModel: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/apply-default-model',
-    description: 'Start applying the Factory default model to running work and review threads in the background',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ modelId: z.string(), status: z.literal('started') }),
-  },
   projectDelete: {
     method: 'DELETE',
     path: '/web/factory/projects/:id',
