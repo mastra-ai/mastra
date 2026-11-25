@@ -86,6 +86,12 @@ export type KnowledgeCreateToolsOptions = KnowledgeToolSelection & {
   principals?: readonly string[];
   /** Author recorded on writes made through these tools. Defaults to `agent:<id>` of the run, or `agent`. */
   author?: string;
+  /**
+   * Refuse page edits, moves, merges and deletes that don't pass `expectedVersion`, instead of using
+   * the version the tool just read. For unattended writers, so a write planned from an older read
+   * can't overwrite a newer change. Creating a page needs no version. Defaults to `false`.
+   */
+  requireExpectedVersion?: boolean;
 };
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
@@ -278,6 +284,7 @@ export class Knowledge extends MastraBase {
         maxTokens: this.#tools.maxTokens,
         ...(principals ? { principals } : {}),
         ...(options?.author ? { author: options.author } : {}),
+        ...(options?.requireExpectedVersion ? { requireExpectedVersion: true } : {}),
       },
       this.#groups(options),
       // A pin write changes what the pins lane shows; drop the turn's memoized read.
