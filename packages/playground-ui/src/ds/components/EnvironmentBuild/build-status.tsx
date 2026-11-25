@@ -1,10 +1,9 @@
+import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
+import type { EnvironmentBuild, EnvironmentLastBuild } from './environment-build';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
-
-import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
-import type { EnvironmentBuild, EnvironmentLastBuild } from './environment-build';
 
 /**
  * Build now beside the last build's live status; sits in the Template

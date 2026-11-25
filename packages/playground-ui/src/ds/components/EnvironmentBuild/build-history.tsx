@@ -1,16 +1,14 @@
 import { useState } from 'react';
-
+import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
+import type { EnvironmentBuild } from './environment-build';
 import { Badge } from '@/ds/components/Badge';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 import { SettingsContainer, SettingsEmptyRow, SettingsNoticeRow, SettingsSkeleton } from '@/ds/new/settings';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
-
-import { ENVIRONMENT_BUILD_STATUS, formatEnvironmentBuildTime } from './environment-build';
-import type { EnvironmentBuild } from './environment-build';
-import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
-import { IconChevronRightMedium } from '@/ds/icons/central/IconChevronRightMedium';
 
 /** The provider's build history, newest first; a row opens to its error and logs. */
 export function EnvironmentBuildHistory({
@@ -91,7 +89,7 @@ function BuildHistoryRows({ builds, error }: { builds: EnvironmentBuild[] | unde
                   </Txt>
                 )}
                 {build.logs && build.logs.length > 0 && (
-                  <pre className="bg-surface2 max-h-64 overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
+                  <pre className="bg-surface2 max-h-64 overflow-auto rounded-md p-3 font-mono text-caption whitespace-pre-wrap">
                     {build.logs.join('\n')}
                   </pre>
                 )}
