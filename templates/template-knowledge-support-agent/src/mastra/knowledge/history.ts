@@ -75,7 +75,7 @@ export async function prepareHistory(
     if (!customer) return finish('empty');
     const historyScope = { scopeId: customer.id, read };
     history = knowledge.openHistoryStorage();
-    let historyReadable = false;
+    let enumerated = false;
     const candidateIds = new Set<string>();
     const noteHits = new Map<string, Set<string>>();
     const add = (id: string) => {
@@ -92,7 +92,6 @@ export async function prepareHistory(
     for (const query of queries.slice(0, bounds.queries)) {
       try {
         const hits = await history.search(historyScope, query, bounds.hits);
-        historyReadable = true;
         for (const hit of hits) {
           add(hit.pageId);
           if (hit.noteId && candidateIds.has(hit.pageId)) {
@@ -109,20 +108,21 @@ export async function prepareHistory(
     // unusual tags. The extra result signals incomplete enumeration.
     try {
       const listed = await history.list(historyScope, bounds.enumeration + 1);
-      historyReadable = true;
+      enumerated = true;
       for (const { id } of listed.slice(0, bounds.enumeration)) add(id);
       if (listed.length > bounds.enumeration) partial = true;
     } catch {
       partial = true;
     }
-    if (!historyReadable) return finish('unavailable');
     // A search or list snapshot can outlive a deletion. Use only the pages still readable here.
     const ids = [...candidateIds];
+    if (!ids.length) return finish(enumerated ? 'empty' : 'unavailable');
     const candidateRecords = new Map<string, PageRecord>();
     const pages = new Map<string, PageLocation>();
     // A UTF-16 code unit accounts for at most three UTF-8 bytes. The aggregate limit also
     // bounds reads when many individually valid pages match.
     let remainingBytes = bounds.bodyBytes;
+    let candidatesReadable = false;
     for (let index = 0; index < ids.length; index += bounds.pageBatch) {
       try {
         const current = await history.candidates(
@@ -131,6 +131,7 @@ export async function prepareHistory(
           MAX_SUPPORT_RECORD_BODY_LENGTH * 3,
           remainingBytes,
         );
+        candidatesReadable = true;
         for (const page of current) {
           const { body, bodyOmitted, ...location } = page;
           pages.set(page.id, location);
@@ -145,6 +146,7 @@ export async function prepareHistory(
         partial = true;
       }
     }
+    if (!candidatesReadable) return finish('unavailable');
     // Search hits have no canonical path. Resolve parents in metadata batches,
     // then reject foreign scopes, missing/deleted ancestors, cycles, and paths outside allowed roots.
     for (let depth = 0; depth < MAX_KNOWLEDGE_PAGE_DEPTH; depth++) {
