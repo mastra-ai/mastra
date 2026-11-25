@@ -31,9 +31,6 @@ export function createActiveRunSignalQueues() {
   };
 
   return {
-    pendingSignalsByThread,
-    preRunSignalsByThread,
-
     /** Appends to the thread's queue for `scope`. */
     enqueue(scope: ActiveRunSignalScope, key: string, signal: CreatedAgentSignal): void {
       const queues = queuesFor(scope);
