@@ -79,6 +79,18 @@ export const OM_MIGRATION_COLUMNS: string[] = [
 ];
 
 /**
+ * Pending-signal columns. They are not part of core's shared table schemas, so
+ * `init()` adds them to new and existing tables alike.
+ */
+const SIGNAL_MESSAGE_COLUMNS: Record<string, StorageColumn> = {
+  signalStatus: { type: 'text', nullable: true },
+  signalClaimedBy: { type: 'text', nullable: true },
+};
+const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
+  signalRunId: { type: 'text', nullable: true },
+};
+
+/**
  * The OM schema is imported statically above: the peer dependency range
  * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
  * dynamic `require` guarded by `typeof require === 'function'` for older core
@@ -117,6 +129,7 @@ import type {
   PruneResult,
   RetentionTablesDescriptor,
   RunFence,
+  StorageColumn,
   TableRetentionPolicy,
   TABLE_NAMES,
 } from '@mastra/core/storage';
@@ -292,6 +305,16 @@ export class MemoryPG extends MemoryStorage {
       schema: TABLE_SCHEMAS[TABLE_MESSAGES],
       ifNotExists: ['resourceId'],
     });
+    await this.#db.alterTable({
+      tableName: TABLE_MESSAGES,
+      schema: SIGNAL_MESSAGE_COLUMNS,
+      ifNotExists: Object.keys(SIGNAL_MESSAGE_COLUMNS),
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: SIGNAL_THREAD_COLUMNS,
+      ifNotExists: Object.keys(SIGNAL_THREAD_COLUMNS),
+    });
     if (omSchema) {
       // Create index on lookupKey for efficient OM queries
       const omTableName = getTableName({
@@ -361,6 +384,13 @@ export class MemoryPG extends MemoryStorage {
         table: TABLE_MESSAGES,
         columns: ['thread_id', 'createdAt DESC'],
       },
+      // Pending-signal claims, closes and lists only look at a thread's rows that carry a status or a claimant.
+      {
+        name: `${schemaPrefix}mastra_messages_signal_thread_idx`,
+        table: TABLE_MESSAGES,
+        columns: ['thread_id'],
+        where: '"signalStatus" IS NOT NULL OR "signalClaimedBy" IS NOT NULL',
+      },
     ];
   }
 
@@ -384,6 +414,15 @@ export class MemoryPG extends MemoryStorage {
           includeAllConstraints: true,
         }),
       );
+    }
+    for (const [tableName, columns] of [
+      [TABLE_MESSAGES, SIGNAL_MESSAGE_COLUMNS],
+      [TABLE_THREADS, SIGNAL_THREAD_COLUMNS],
+    ] as const) {
+      const fullTableName = dbGetTableName({ indexName: tableName, schemaName: quotedSchemaName });
+      for (const column of Object.keys(columns)) {
+        statements.push(`ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${column}" TEXT;`);
+      }
     }
 
     // Observational memory table (if schema available in this version of core)
