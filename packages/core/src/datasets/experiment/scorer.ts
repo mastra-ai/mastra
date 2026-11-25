@@ -78,35 +78,65 @@ export interface ScorerResolution {
 
 export type ScorerResolver = (scorers: (ResolvedScorer | string)[]) => Promise<ScorerResolution>;
 
+/** Stored-scorer versions pinned on an experiment, keyed by scorer id. */
+export type ScorerVersions = Record<string, string>;
+
+/** Version ids of scorers built from a pinned stored version, recorded on their score rows. */
+const pinnedScorerVersionIds = new WeakMap<ResolvedScorer, string>();
+
 /**
- * Create a run-scoped scorer resolver. Instances pass through; string ids are
- * looked up in Mastra's registry, then loaded as stored scorers through the
- * editor (which registers them). Resolutions, including misses, are cached so
- * concurrent items hydrate a stored scorer at most once per run.
+ * Build a stored scorer at a specific version without registering it, so a
+ * pinned (possibly older) version never replaces the current one in Mastra's registry.
  */
-export function createScorerResolver(mastra: Mastra): ScorerResolver {
+async function loadPinnedScorer(mastra: Mastra, scorerId: string, versionId: string): Promise<ResolvedScorer | null> {
+  const editor = mastra.getEditor?.();
+  const store = await mastra.getStorage()?.getStore('scorerDefinitions');
+  if (!editor || !store) return null;
+  try {
+    const definition = await store.getByIdResolved(scorerId, { versionId });
+    if (definition?.resolvedVersionId !== versionId) return null;
+    const scorer = editor.scorer.resolve(definition);
+    if (scorer) pinnedScorerVersionIds.set(scorer, versionId);
+    return scorer;
+  } catch {
+    // A missing or unavailable stored scorer is reported through missingIds.
+    return null;
+  }
+}
+
+/**
+ * Create a run-scoped scorer resolver. Instances pass through. String ids
+ * pinned in `scorerVersions` load that stored version; other ids are looked up
+ * in Mastra's registry, then loaded as stored scorers through the editor (which
+ * registers them). Resolutions, including misses, are cached so concurrent items
+ * load a stored scorer at most once per run.
+ */
+export function createScorerResolver(mastra: Mastra, scorerVersions?: ScorerVersions | null): ScorerResolver {
   const resolutionCache = new Map<string, Promise<ResolvedScorer | null>>();
 
   const resolveById = (scorerId: string): Promise<ResolvedScorer | null> => {
     const cached = resolutionCache.get(scorerId);
     if (cached) return cached;
 
-    const resolution = (async () => {
-      let scorer = getItemScorerById(mastra, scorerId);
-      if (scorer) return scorer;
+    const pinnedVersionId = scorerVersions?.[scorerId];
+    const resolution = pinnedVersionId
+      ? loadPinnedScorer(mastra, scorerId, pinnedVersionId)
+      : (async () => {
+          let scorer = getItemScorerById(mastra, scorerId);
+          if (scorer) return scorer;
 
-      const editor = mastra.getEditor?.();
-      if (editor) {
-        try {
-          await editor.scorer.getById(scorerId);
-        } catch {
-          // A missing or unavailable stored scorer is reported through missingIds.
-        }
-        scorer = getItemScorerById(mastra, scorerId);
-      }
+          const editor = mastra.getEditor?.();
+          if (editor) {
+            try {
+              await editor.scorer.getById(scorerId);
+            } catch {
+              // A missing or unavailable stored scorer is reported through missingIds.
+            }
+            scorer = getItemScorerById(mastra, scorerId);
+          }
 
-      return scorer;
-    })();
+          return scorer;
+        })();
 
     resolutionCache.set(scorerId, resolution);
     return resolution;
@@ -131,6 +161,28 @@ export function createScorerResolver(mastra: Mastra): ScorerResolver {
       missingIds: resolved.flatMap(({ id, scorer }) => (scorer ? [] : [id])),
     };
   };
+}
+
+/**
+ * Pin the current version of every stored scorer among `scorerIds`, so all
+ * items of an experiment are scored by the same definition even if the stored
+ * scorer is edited mid-run. Ids served by a code scorer are not pinned.
+ */
+export async function pinStoredScorerVersions(
+  mastra: Mastra,
+  scorerIds: Iterable<string>,
+): Promise<ScorerVersions | null> {
+  const store = mastra.getEditor?.() ? await mastra.getStorage()?.getStore('scorerDefinitions') : undefined;
+  if (!store) return null;
+
+  const pins: ScorerVersions = {};
+  for (const scorerId of new Set(scorerIds)) {
+    const registered = getItemScorerById(mastra, scorerId);
+    if (registered && registered.source !== 'stored') continue;
+    const definition = await store.getByIdResolved(scorerId);
+    if (definition?.resolvedVersionId) pins[scorerId] = definition.resolvedVersionId;
+  }
+  return Object.keys(pins).length > 0 ? pins : null;
 }
 
 /**
@@ -344,6 +396,7 @@ export async function runScorersForItem(
               name: scorer.name,
               description: scorer.description ?? '',
               hasJudge: !!scorer.judge,
+              ...(pinnedScorerVersionIds.has(scorer) ? { versionId: pinnedScorerVersionIds.get(scorer) } : {}),
             },
             entity: {
               id: targetId,

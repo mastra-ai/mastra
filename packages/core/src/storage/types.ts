@@ -3077,6 +3077,12 @@ export interface Experiment {
    * falls through to item-level then dataset-level scorer IDs.
    */
   scorerIds?: string[] | null;
+  /**
+   * Stored-scorer versions pinned at create time, keyed by scorer ID. Every item
+   * is scored by these versions even if the stored scorer is edited during the
+   * run. Code scorers have no entry. `null` resolves each scorer's current version.
+   */
+  scorerVersions?: Record<string, string> | null;
   status: ExperimentStatus;
   totalItems: number;
   succeededCount: number;
@@ -3161,6 +3167,8 @@ export interface CreateExperimentInput {
   targetId: string | null;
   /** Run-level scorer IDs pinned at create time. See {@link Experiment.scorerIds}. */
   scorerIds?: string[] | null;
+  /** Stored-scorer versions pinned at create time. See {@link Experiment.scorerVersions}. */
+  scorerVersions?: Record<string, string> | null;
   totalItems: number;
   /**
    * Multi-tenant organization/account scope. Should be hydrated from the parent

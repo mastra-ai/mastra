@@ -15,10 +15,12 @@ import {
   flattenScorerConfig,
   flushForTrajectoryScorers,
   itemScorerNotFoundError,
+  pinStoredScorerVersions,
   resolveStepScorers,
   runScorersForItem,
   runStepScorersForItem,
 } from './scorer';
+import type { ScorerResolver, ScorerVersions } from './scorer';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -390,7 +392,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const hasRunLevelScorers = scorerInput !== undefined;
   const { flat: flatScorerInput, steps: stepsConfigInput } = flattenScorerConfig(scorerInput);
 
-  const resolveScorerEntries = createScorerResolver(mastra);
+  let scorerVersions: ScorerVersions | null = null;
+  let resolveScorerEntries: ScorerResolver;
   let runLevelScorers: MastraScorer<any, any, any, any>[] = [];
   let runLevelStepScorers = {} as ReturnType<typeof resolveStepScorers>;
   let datasetScorers: MastraScorer<any, any, any, any>[] = [];
@@ -398,6 +401,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let runLevelMissingIds: string[] = [];
   let datasetMissingIds: string[] = [];
   try {
+    // A pre-created record already pinned stored-scorer versions; otherwise pin them for the record created below.
+    scorerVersions = providedExperimentId
+      ? ((await experimentsStore?.getExperimentById({ id: experimentId }))?.scorerVersions ?? null)
+      : await pinStoredScorerVersions(mastra, [
+          ...flatScorerInput.filter((scorer): scorer is string => typeof scorer === 'string'),
+          ...(datasetRecord?.scorerIds ?? []),
+          ...items.flatMap(item => item.scorerIds ?? []),
+        ]);
+    resolveScorerEntries = createScorerResolver(mastra, scorerVersions);
     if (hasRunLevelScorers) {
       const resolution = await resolveScorerEntries(flatScorerInput);
       // Starting a new experiment with an unknown scorer is a setup error. A pre-created
@@ -438,6 +450,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetId: targetId ?? 'inline',
         totalItems: items.length,
         agentVersion,
+        scorerVersions,
         organizationId: datasetRecord?.organizationId ?? null,
         projectId: datasetRecord?.projectId ?? null,
       });
