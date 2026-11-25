@@ -126,7 +126,8 @@ A workflow run's `status` indicates its current execution state. The possible va
   {
     name: 'paused',
     type: 'string',
-    description: 'Workflow execution stopped after a single step because the run uses per-step execution',
+    description:
+      'Workflow execution stopped after a single step because the run uses per-step execution. Continue it with `run.timeTravel()`, not `run.resume()`. See [Run one step at a time](./run-methods/start#run-one-step-at-a-time)',
   },
   {
     name: 'canceled',

@@ -19,7 +19,6 @@ import {
 import { InlineCode } from '@/ds/components/InlineCode';
 
 import { Metadata } from '@/ds/components/Metadata';
-import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -174,7 +173,6 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
           <JSONImportStatus validation={validation} />
           <DialogCancel>Cancel</DialogCancel>
           <DialogAction onConfirm={handleImport} disabled={validation.status !== 'ready'}>
-            {isImporting && <Spinner />}
             {validation.status === 'ready'
               ? `Import ${validation.total} item${validation.total !== 1 ? 's' : ''}`
               : 'Import'}

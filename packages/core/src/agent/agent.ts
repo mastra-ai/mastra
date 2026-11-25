@@ -1403,7 +1403,7 @@ export class Agent<
 
     const durable = config.durable;
     if (durable && typeof durable === 'object') {
-      const legacyKeys = ['maxSteps', 'id', 'name'].filter(key => Object.hasOwn(durable, key));
+      const legacyKeys = ['id', 'name'].filter(key => Object.hasOwn(durable, key));
       if (legacyKeys.length) {
         this.logger.warn(
           `Agent "${this.id}" ignores durable execution options: ${legacyKeys.join(', ')}. ` +
@@ -2114,7 +2114,7 @@ export class Agent<
     this.logger.warn(`Agent "${this.id}": ${message}`);
   }
 
-  #warnInheritedExecutionOptions(options: PublicAgentExecutionOptions<TOutput>): void {
+  #warnInheritedExecutionOptions(options: { eagerToolExecution?: boolean; stopWhen?: unknown }): void {
     if (!this.#executionEnginePolicy.inherited) return;
     if (options.eagerToolExecution === true) {
       this.#warnExecutionPolicy(
@@ -2123,7 +2123,10 @@ export class Agent<
       );
     }
     if (this.#executionEnginePolicy.engine === 'evented' && options.stopWhen !== undefined) {
-      this.#warnExecutionPolicy('stopWhen', 'Mastra-inherited evented policy does not support stopWhen.');
+      this.#warnExecutionPolicy(
+        'stopWhen',
+        'Mastra-inherited evented execution does not carry stopWhen to another process. Set maxSteps to bound the run across processes.',
+      );
     }
   }
 
@@ -2541,6 +2544,7 @@ export class Agent<
         new PinnedStateProcessor({
           principalsKey: context => knowledge.__principalsKey(context),
           readPins: context => knowledge.__deliveredPins(context),
+          ...knowledge.__toolGroups,
         }),
       );
     }
@@ -10678,6 +10682,39 @@ export class Agent<
     }
   }
 
+  /**
+   * Runs the agent to completion and resolves with a {@link FullOutput}: final `text`, every
+   * step, all tool calls and results, usage, and `object` when `structuredOutput` is set.
+   * Use `stream()` instead to consume output as it is produced.
+   *
+   * - `messages`: a string, a message object (`{ role, content }`, AI SDK UI/model messages
+   *   included), or an array mixing both.
+   * - `options`: per-call {@link AgentExecutionOptionsBase} (`maxSteps`, `memory`,
+   *   `requestContext`, `modelSettings`, `toolChoice`, ...). They are merged over the
+   *   agent's `defaultOptions`.
+   * - Tool calls loop until the model stops calling tools or the step limit is hit
+   *   (`maxSteps`; 5 steps when neither `maxSteps` nor `stopWhen` is set).
+   * - Rejects with the run's error if the run fails.
+   * - Tool data is wrapped in `payload`: read `result.toolCalls[i].payload.args` and
+   *   `result.toolResults[i].payload.result`.
+   *
+   * This overload: `structuredOutput.schema` is a schema such as a Zod object, so
+   * `result.object` is typed from that schema.
+   *
+   * @example
+   * ```ts
+   * const result = await agent.generate('What is the weather in Paris?', { maxSteps: 3 });
+   * console.log(result.text);
+   * for (const call of result.toolCalls) console.log(call.payload.toolName, call.payload.args);
+   * for (const res of result.toolResults) console.log(res.payload.toolName, res.payload.result);
+   *
+   * const { object } = await agent.generate('List three colors', {
+   *   structuredOutput: { schema: z.object({ colors: z.array(z.string()) }) },
+   * });
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
@@ -10687,18 +10724,44 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
+  /**
+   * Runs the agent to completion with `structuredOutput`, typing `result.object` as `OUTPUT`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
+  /**
+   * Runs the agent to completion with per-call options and no `structuredOutput`; resolves
+   * with a {@link FullOutput} (`text`, `steps`, `toolCalls`, `toolResults`, `usage`, ...).
+   * Tool data is under `payload`, e.g. `result.toolCalls[0].payload.args`.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
+  /**
+   * Runs the agent to completion using its `defaultOptions`; resolves with a {@link FullOutput}.
+   * `messages` is a string, a message object, or an array of either.
+   * See the first `generate()` overload for full behavior.
+   *
+   * @example
+   * ```ts
+   * const { text } = await agent.generate('Hello!');
+   * ```
+   *
+   * @see [Agent.generate() reference](https://mastra.ai/reference/agents/generate)
+   */
   async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
   async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
@@ -10791,6 +10854,18 @@ export class Agent<
 
   listActiveThreadRuns(): ActiveThreadRun[] {
     return agentThreadStreamRuntime.listActiveThreadRuns(this.getPubSub());
+  }
+
+  /**
+   * The resource and thread that a `runId`-only `sendSignal`, `sendMessage` or `queueMessage`
+   * target resolves to, or undefined when this process doesn't track the run. Servers use it to
+   * check that a caller owns the run before sending to it. Core rejects a target whose `resourceId` doesn't own
+   * its `runId`, but that is a consistency check, not authorization: Core doesn't know who is calling and trusts a
+   * `runId`-only target. Callers that take `runId` from untrusted input must authenticate the caller and compare
+   * this owner with the caller's trusted resource before sending.
+   */
+  getThreadRunTarget(runId: string): { resourceId?: string; threadId: string } | undefined {
+    return agentThreadStreamRuntime.getThreadRunTarget(runId, this.getPubSub());
   }
 
   /**
@@ -12959,6 +13034,7 @@ export class Agent<
       - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
+      - write the title in the same language the user's messages are written in
       - do not use quotes or colons
       - the entire text you return will be used as the title`;
 
@@ -12992,10 +13068,13 @@ export class Agent<
     return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
   }
   protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
+    const durable = this.durable;
+    const config = typeof durable === 'object' ? durable : undefined;
     return this.executionEngine.getWorkflow({
+      maxSteps: config?.maxSteps,
       workflowEngine: this.workflowEngine,
-      storesRunsInJournal: false,
-      shouldPersistSnapshot: typeof this.durable === 'object' ? this.durable.shouldPersistSnapshot : undefined,
+      storesRunsInJournal: config?.storageVersion === 2,
+      shouldPersistSnapshot: config?.shouldPersistSnapshot,
       logger: this.logger,
       guardrailLogger: this.guardrailLogger,
     });
@@ -14383,11 +14462,11 @@ export class Agent<
     }
 
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
-    this.#warnInheritedExecutionOptions(defaultOptions);
     const resolvedOptions = deepMerge(
       withDefaultToolCallConcurrencyLimit(defaultOptions ?? {}, options) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
+    this.#warnInheritedExecutionOptions(resolvedOptions);
     // Actor is a per-call trust signal, so an explicit value replaces the
     // default actor as a whole rather than inheriting any of its fields.
     if (options?.actor !== undefined) {
@@ -14830,6 +14909,13 @@ export class Agent<
         optionsAreResolved: true,
         resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
+        onRequestContextEntryOmitted: this.#executionEnginePolicy.inherited
+          ? () =>
+              this.#warnExecutionPolicy(
+                'requestContextSnapshot',
+                'Mastra-inherited durable execution omitted a value from the request context snapshot. Use JSON-safe values that fit in the snapshot if another process needs them.',
+              )
+          : undefined,
         mastra: this.#mastra,
         methodType,
         durableAgentId: this.id,

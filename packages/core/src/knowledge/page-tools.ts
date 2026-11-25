@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 import type {
@@ -38,6 +39,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeBodyHit, knowledgeSearchQuery } from './search-snippet';
 import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -100,6 +102,8 @@ type Tools = Record<string, ToolAction<any, any, any>>;
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+/** The most words knowledge_read's `match` accepts; a search hint never emits a longer array. */
+const READ_MATCH_MAX_WORDS = 10;
 const MENTION = /\[\[([^\]]+)\]\]/g;
 /** Misses a note's mention linking may spend beyond its stored mentions (renamed or ambiguous refs). */
 const MENTION_LOOKUP_SLACK = 2;
@@ -140,6 +144,15 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
     ...(page.isScope ? { address: page.address } : { scope: scopes.get(page.scopeId) }),
     ...(page.description ? { description: page.description } : {}),
   };
+}
+
+/**
+ * A page search hit: its summary, plus, when the body contains a matched word, a short excerpt around
+ * it with every line numbered, the line it is centred on, and how many lines have a match.
+ */
+function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
+  const hit = knowledgeBodyHit(page.body, words);
+  return { ...pageSummary(page, refs), ...(hit ?? {}) };
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -258,7 +271,7 @@ function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -276,7 +289,7 @@ function searchTool(host: KnowledgePageToolHost) {
       const max = limitOf(limit);
       // Keyword search has no quoting: a quote mark would be matched as a literal character, so
       // `"api" "responses"` would find nothing. Search the quoted words instead.
-      const words = query.replace(/["`\u201C\u201D]/g, ' ').trim();
+      const words = knowledgeSearchQuery(query);
       const lexical = words
         ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
         : [];
@@ -319,34 +332,43 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(hit => hit.page),
       );
       const mentionCache: MentionCache = new Map();
-      return {
-        results: await Promise.all(
-          hits.map(async hit =>
-            hit.type === 'page'
-              ? { type: 'page' as const, page: pageSummary(hit.page, addresses) }
-              : {
-                  type: 'note' as const,
-                  page: pageSummary(hit.page, addresses),
-                  note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
-                },
-          ),
+      const results = await Promise.all(
+        hits.map(async hit =>
+          hit.type === 'page'
+            ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
+            : {
+                type: 'note' as const,
+                page: pageSummary(hit.page, addresses),
+                note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
+              },
         ),
+      );
+      const matched = results.some(result => result.type === 'page' && 'line' in result.page);
+      const readWords = knowledgeSearchWords(words);
+      const readMatch =
+        readWords.length <= READ_MATCH_MAX_WORDS
+          ? JSON.stringify(readWords)
+          : `${JSON.stringify(readWords.slice(0, READ_MATCH_MAX_WORDS))} (the first ${READ_MATCH_MAX_WORDS} of your ${readWords.length} search words; search again with fewer words to see the rest)`;
+      const readOn = matched
+        ? [
+            `snippet: each page hit's \`line\` is the line its snippet is centred on (numbered as in the snippet), and \`matchingLines\` how many lines have a matched word. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${readMatch} }.`,
+          ]
+        : [];
+      const more = [
         ...(hits.length === 0
-          ? {
-              more: [
-                `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
-              ],
-            }
+          ? [
+              `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
+            ]
           : hits.length === max
-            ? {
-                more: [
-                  max < MAX_LIMIT
-                    ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
-                    : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
-                ],
-              }
-            : {}),
-      };
+            ? [
+                max < MAX_LIMIT
+                  ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
+                  : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+              ]
+            : []),
+        ...readOn,
+      ];
+      return { results, ...(more.length ? { more } : {}) };
     },
   });
 }
@@ -391,6 +413,7 @@ function bodyView(
     from?: KnowledgeLinePosition;
     more: string[];
     maxTokens: number;
+    canEdit: boolean;
   },
 ): {
   body?: string;
@@ -480,7 +503,7 @@ function bodyView(
       : undefined;
     if (skeleton !== undefined) {
       more.push(
-        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer. To edit, read that part first: this view has no range to write back.`,
+        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer.${input.canEdit ? ' To edit, read that part first: this view has no range to write back.' : ''}`,
       );
       return { lines: skeleton, lineCount: lines.count };
     }
@@ -515,7 +538,7 @@ function bodyView(
   };
 }
 
-function readTool(host: KnowledgePageToolHost) {
+function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
   return createTool({
     id: 'knowledge_read',
     description:
@@ -523,7 +546,8 @@ function readTool(host: KnowledgePageToolHost) {
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
-      'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
+      'Those part reads return just that part of the body.' +
+      (canEdit ? ' To edit part of a long body, pass the `range` a read gave you to knowledge_page.' : ''),
     inputSchema: {
       type: 'object',
       properties: {
@@ -559,7 +583,7 @@ function readTool(host: KnowledgePageToolHost) {
         match: {
           anyOf: [
             { type: 'string', minLength: 1 },
-            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 10 },
+            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: READ_MATCH_MAX_WORDS },
           ],
           description:
             'Like grep: return only the lines that contain this term, or any of these terms (case-insensitive), as numbered lines with the range each covers.',
@@ -649,6 +673,7 @@ function readTool(host: KnowledgePageToolHost) {
           from,
           more,
           maxTokens: maxTokensOf(host),
+          canEdit,
         });
         return {
           page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
@@ -728,7 +753,7 @@ function readTool(host: KnowledgePageToolHost) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host) });
+      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host), canEdit });
       const noteList = await noteSummaries(run, notes.notes, mentionCache);
       const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
         ...note,
@@ -1091,13 +1116,14 @@ const NUMBERED_LINE = /^\s*\d+\u2502/;
  * Without one, a body longer than one read returns is refused: the writer can only have seen part
  * of it, and writing that part back would drop the rest.
  */
-function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): string | undefined {
+function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number, canRead: boolean): string | undefined {
+  const read = canRead ? 'knowledge_read' : 'read';
   const stored = page.body ?? '';
   if (args.body !== undefined) {
     const written = args.body.split('\n').filter(line => line.trim());
     if (written.length && written.every(line => NUMBERED_LINE.test(line))) {
       throw new Error(
-        'This body still has the line numbers a knowledge_read put in front of each line ("12│"). Write the text without them.',
+        `This body still has the line numbers a ${read} put in front of each line ("12│"). Write the text without them.`,
       );
     }
   }
@@ -1112,12 +1138,12 @@ function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): s
     let start = lines.startOffset(args.range.start);
     let end = lines.endOffset(args.range.end);
     if (start > end) {
-      throw new Error(`The range starts after it ends. Pass the range a knowledge_read returned.`);
+      throw new Error(`The range starts after it ends. Pass the range a ${read} returned.`);
     }
     // A read from `start` returns at most this window, so a wider range can't be one a read gave.
     if (end > knowledgeBodyWindow(lines, start, stored.length, maxTokens).end) {
       throw new Error(
-        `Lines ${args.range.start.line}–${args.range.end.line} run past what one knowledge_read from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
+        `Lines ${args.range.start.line}–${args.range.end.line} run past what one ${read} from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
           'Edit the body part by part: write each part back with the range its own read returned.',
       );
     }
@@ -1131,9 +1157,11 @@ function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): s
   }
   if (args.body !== undefined && estimateTokenCount(stored) > maxTokens) {
     throw new Error(
-      `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write without a range replaces all of it. ` +
-        'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
-        'read other parts with from, section or match and write each back with its own range.',
+      `This page's body is ${stored.length} characters, more than one ${read} returns, and a body write without a range replaces all of it. ` +
+        (canRead
+          ? 'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
+            'read other parts with from, section or match and write each back with its own range.'
+          : 'Without a read there is no range to write it back with, so leave this page unchanged.'),
     );
   }
   return args.body;
@@ -1153,7 +1181,7 @@ type PageInput = {
   expectedVersion?: number;
 };
 
-function pageTool(host: KnowledgePageToolHost) {
+function pageTool(host: KnowledgePageToolHost, canRead: boolean) {
   return createTool({
     id: 'knowledge_page',
     description:
@@ -1190,8 +1218,7 @@ function pageTool(host: KnowledgePageToolHost) {
         },
         range: {
           type: 'object',
-          description:
-            'Edit: a range a knowledge_read returned (or part of one), e.g. {"start": {"line": 12}, "end": {"line": 14}}. `body` then replaces lines 12 through 14; an empty body removes them. A `col` limits it to part of a very long line. Needs expectedVersion.',
+          description: `Edit: a range a ${canRead ? 'knowledge_read' : 'read'} returned (or part of one), e.g. {"start": {"line": 12}, "end": {"line": 14}}. \`body\` then replaces lines 12 through 14; an empty body removes them. A \`col\` limits it to part of a very long line. Needs expectedVersion.`,
           properties: { start: linePositionSchema, end: linePositionSchema },
           required: ['start', 'end'],
           additionalProperties: false,
@@ -1233,7 +1260,7 @@ function pageTool(host: KnowledgePageToolHost) {
             expectedVersion: args.expectedVersion ?? page.version,
             name: args.name,
             description: args.description,
-            body: writtenBody(args, page, maxTokensOf(host)),
+            body: writtenBody(args, page, maxTokensOf(host), canRead),
             provenance,
           });
           await embed(host, index => index.indexPage(updated), pageEmbedFailed(storage, updated));
@@ -1449,11 +1476,11 @@ function noteTool(host: KnowledgePageToolHost) {
   });
 }
 
-function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => void) {
+function pinTool(host: KnowledgePageToolHost, canRead: boolean, onChange?: (context: unknown) => void) {
   return createTool({
     id: 'knowledge_pin',
     description:
-      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, like knowledge_list from it, `depth` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ' +
+      `Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, ${canRead ? 'like knowledge_list from it, ' : ''}\`depth\` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ` +
       "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it, and a listing shows only the pages they can read.",
     inputSchema: {
       type: 'object',
@@ -1789,13 +1816,13 @@ export function buildKnowledgePageTools(
   if (groups.read) {
     tools.knowledge_list = listTool(host);
     tools.knowledge_search = searchTool(host);
-    tools.knowledge_read = readTool(host);
+    tools.knowledge_read = readTool(host, groups.write);
     tools.knowledge_activity = activityTool(host);
   }
   if (groups.write) {
-    tools.knowledge_page = pageTool(host);
+    tools.knowledge_page = pageTool(host, groups.read);
     tools.knowledge_note = noteTool(host);
   }
-  if (groups.pins) tools.knowledge_pin = pinTool(host, onPinChange);
+  if (groups.pins) tools.knowledge_pin = pinTool(host, groups.read, onPinChange);
   return tools;
 }

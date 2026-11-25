@@ -1,11 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
+import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -569,6 +570,17 @@ export class DefaultAgentExecutionEngine {
 
   getWorkflow(options: DurableWorkflowOptions) {
     if (!this.#workflow) {
+      if (options.storesRunsInJournal) {
+        // Workflow creation is synchronous; inspect the registered store without initializing it.
+        const storage = this.mastra?.getStorage();
+        const workflowsStore = storage?.stores?.workflows;
+        if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+          options.guardrailLogger?.warn(
+            `DurableAgent '${this.id}' sets storageVersion: 2, which ${storage?.name ?? 'the configured'} storage ` +
+              `doesn't support yet; storing new runs as version 1.`,
+          );
+        }
+      }
       this.#workflow = this.createWorkflow(options);
       this.warnOnRiskyPersistencePolicy(options.shouldPersistSnapshot, options.guardrailLogger);
       // Register mastra on the workflow so execution steps can access agents/tools.
@@ -1025,8 +1037,15 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
     guardrailLogger: IMastraLogger | undefined,
   ): { sharedExecution: boolean; usesRunPubSub: boolean } {
     const engine = this.resolveWorkflowEngine(workflowEngine, logger);
-    const sharedTransport =
-      engine === 'evented' && pubsub !== undefined && !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
+    if (sharedTransport && this.mastra) {
+      const mastra = this.mastra;
+      // The store resolves asynchronously and this path is sync. The warning never gates the run.
+      void Promise.resolve(mastra.getStorage()?.getStore('workflows'))
+        .catch(() => undefined)
+        .then(store => warnUnsupportedEventedSetup(mastra, store))
+        .catch(() => {});
+    }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
       this.#warnedUnfencedSharedExecution = true;

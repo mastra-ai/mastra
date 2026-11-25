@@ -4,7 +4,7 @@ import { start } from '../start';
 export const startProject = async (args: { dir?: string; env?: string; customArgs?: string }) => {
   await analytics.trackCommandExecution({
     command: 'start',
-    args,
+    args: { dir: args.dir, env: args.env },
     execution: async () => {
       await start({
         dir: args.dir,

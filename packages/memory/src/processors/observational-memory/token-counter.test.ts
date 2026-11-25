@@ -965,7 +965,8 @@ describe('TokenCounter', () => {
         ...entry,
         v: entry.v + 1,
       };
-      counter.countMessage(message);
+      // A fresh counter, because the same counter remembers its count for an unchanged part.
+      new TokenCounter().countMessage(message);
       const versionRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(versionRefreshed.v).toBe(entry.v);
 
@@ -973,7 +974,7 @@ describe('TokenCounter', () => {
         ...versionRefreshed,
         source: `${versionRefreshed.source}-mismatch`,
       };
-      counter.countMessage(message);
+      new TokenCounter().countMessage(message);
       const sourceRefreshed = message.content.parts[0].providerMetadata.mastra.tokenEstimate as any;
       expect(sourceRefreshed.source).toBe(entry.source);
     });
@@ -1012,6 +1013,21 @@ describe('TokenCounter', () => {
       expect(message.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
       expect(message.content.parts[1].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
       expect(message.content.parts[2].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
+    });
+
+    it('counts step-start parts as zero and stores no estimate on them', () => {
+      const counter = new TokenCounter();
+      const withSteps = createMessage({
+        format: 2,
+        parts: [{ type: 'step-start' }, { type: 'text', text: 'count me' }, { type: 'step-start' }],
+      });
+      const withoutSteps = createMessage({ format: 2, parts: [{ type: 'text', text: 'count me' }] });
+
+      expect(counter.countMessage(withSteps)).toBe(counter.countMessage(withoutSteps));
+
+      expect(withSteps.content.parts[0].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
+      expect(withSteps.content.parts[2].providerMetadata?.mastra?.tokenEstimate).toBeUndefined();
+      expect(withSteps.content.parts[1].providerMetadata?.mastra?.tokenEstimate).toBeTruthy();
     });
 
     it('caches string-content fallback on content.metadata.mastra', () => {
@@ -1573,7 +1589,7 @@ describe('TokenCounter', () => {
       counter.countMessage(message);
       const keysAfterRequest = Object.keys(message.content.parts[0].providerMetadata.mastra.tokenEstimate);
       // Watch the second pass only, so a re-estimate of the call signature is visible.
-      const countString = vi.spyOn(counter, 'countString');
+      const countString = vi.spyOn(TokenCounter.prototype, 'countString');
 
       message.content.parts[0].toolInvocation.state = 'approval-responded';
       counter.countMessage(message);

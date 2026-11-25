@@ -93,7 +93,7 @@ export interface LoopScenarioResult {
  *   `setScenarioEngineHost`); the host then replaces the four in-repo variants.
  *   Skipping `'durable'` also skips `'inngest'`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs' | 'inngest';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'native-default' | 'native-evented' | 'fs' | 'inngest';
 
 /**
  * An engine provided from outside core (e.g. `@mastra/inngest`). When set, scenarios run only on
@@ -108,16 +108,28 @@ export interface ScenarioEngineHost {
 }
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = [
+  'normal',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+  'fs',
+] as const;
 
-/**
- * `true` for variants that run through the durable execution path
- * (`createDurableAgent` / `createEventedAgent`). Use this instead of
- * `engine === 'durable'` in scenarios so durable-conditional behavior
- * automatically covers the evented variant too.
- */
+export function nativeExecutionEngine(engine: EngineVariant | undefined): 'default' | 'evented' | undefined {
+  return engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
+}
+
+/** Whether the variant runs through durable execution, with or without a wrapper. */
 export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
-  return engine === 'durable' || engine === 'evented' || engine === 'inngest';
+  return (
+    engine === 'durable' ||
+    engine === 'evented' ||
+    engine === 'native-default' ||
+    engine === 'native-evented' ||
+    engine === 'inngest'
+  );
 }
 
 export interface RunLoopScenarioOptions {

@@ -204,7 +204,7 @@ describe('CommentEditor', () => {
     type('after');
     fireEvent.keyDown(screen.getByRole('textbox', { name: 'Edit comment' }), { key: 'Enter' });
 
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Saving…' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Save' }).getAttribute('aria-busy')).toBe('true');
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Edit comment' }).readOnly).toBe(true);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Cancel' }).disabled).toBe(true);
     expect(onSave).not.toHaveBeenCalled();

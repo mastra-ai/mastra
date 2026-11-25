@@ -32,7 +32,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4-flash": [
       {
         "type": "toggle"
       },
@@ -41,7 +41,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },

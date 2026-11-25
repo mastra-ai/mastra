@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
+import type { DialogIntent } from './dialog-context';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
 import { cn } from '@/lib/utils';
@@ -27,16 +28,22 @@ export type DialogActionProps = DialogConfirmActionProps | DialogSubmitActionPro
 
 const ARM_WINDOW_MS = 4000;
 
+// Once confirmed, a hold is a loading button like any other.
+function holdVariant(intent: DialogIntent, loading: boolean | undefined) {
+  if (intent === 'destructive') return loading ? 'destructive' : 'destructive-ghost';
+  return loading ? 'primary' : 'ghost';
+}
+
 function HoldAction({
   onConfirm,
   children,
   disabled,
+  loading,
   holdSeconds = 1.5,
   ...props
 }: Omit<DialogConfirmActionProps, 'confirmation' | 'type'>) {
-  const { intent, pending } = useDialogContext();
+  const { intent } = useDialogContext();
   const [holding, setHolding] = useState(false);
-  const [completed, setCompleted] = useState(false);
   const [armed, setArmed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const armTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -55,8 +62,8 @@ function HoldAction({
   }
 
   function complete() {
+    active.current = false;
     setHolding(false);
-    setCompleted(true);
     disarm();
     onConfirm();
   }
@@ -80,14 +87,28 @@ function HoldAction({
   }
 
   useEffect(() => {
+    if (!loading) return;
+    clearTimeout(timer.current);
+    active.current = false;
+  }, [loading]);
+
+  useEffect(() => {
     function onVisibilityChange() {
       if (document.hidden) cancel();
     }
+    // Released while loading, when the button's own handlers are off.
+    function onWindowKeyUp(event: globalThis.KeyboardEvent) {
+      if (event.key === ' ' || event.key === 'Enter') cancel();
+    }
+    window.addEventListener('keyup', onWindowKeyUp, true);
+    window.addEventListener('pointerup', cancel, true);
     window.addEventListener('blur', cancel);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       clearTimeout(timer.current);
       clearTimeout(armTimer.current);
+      window.removeEventListener('keyup', onWindowKeyUp, true);
+      window.removeEventListener('pointerup', cancel, true);
       window.removeEventListener('blur', cancel);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
@@ -118,11 +139,11 @@ function HoldAction({
           props.className,
         )}
         type="button"
-        variant={intent === 'destructive' ? 'destructive-ghost' : 'ghost'}
+        variant={holdVariant(intent, loading)}
         disabled={disabled}
+        loading={loading}
         aria-describedby={[props['aria-describedby'], hintId].filter(Boolean).join(' ')}
-        data-holding={holding || undefined}
-        data-completed={completed || pending || undefined}
+        data-holding={(holding && !loading) || undefined}
         onClick={onClick}
         onPointerDown={onPointerDown}
         onPointerUp={event => {
@@ -157,7 +178,6 @@ function HoldAction({
             'pointer-events-none absolute inset-0 flex items-center justify-center px-[inherit] [clip-path:inset(0_100%_0_0)]',
             'transition-[clip-path] ease-linear motion-reduce:transition-none',
             'group-data-[holding]/hold:[clip-path:inset(0)] motion-reduce:group-data-[holding]/hold:[clip-path:inset(0_50%_0_0)]',
-            'group-data-[completed]/hold:[clip-path:inset(0)]',
             intent === 'destructive'
               ? 'bg-fill-destructive text-fill-destructive-foreground'
               : 'bg-foreground text-sidebar',
@@ -184,17 +204,22 @@ export function DialogAction({
   onConfirm,
   disabled,
   type = 'button',
+  loading,
   ...props
 }: DialogActionProps) {
   const { intent, pending } = useDialogContext();
-  const isDisabled = disabled || pending;
+  const isLoading = loading ?? pending;
+  // An action that isn't the one in progress waits for it.
+  const isDisabled = disabled || (pending && !isLoading);
   if (onConfirm && confirmation === 'hold') {
     return (
       <HoldAction
+        // Not keyed on loading: the button keeps focus when its own action starts.
         key={`${isDisabled}-${holdSeconds}`}
         holdSeconds={holdSeconds}
         {...props}
         disabled={isDisabled}
+        loading={isLoading}
         onConfirm={onConfirm}
       />
     );
@@ -207,6 +232,7 @@ export function DialogAction({
       type={type}
       variant={intent === 'destructive' ? 'destructive' : 'primary'}
       disabled={isDisabled}
+      loading={isLoading}
       onClick={onConfirm}
     />
   );

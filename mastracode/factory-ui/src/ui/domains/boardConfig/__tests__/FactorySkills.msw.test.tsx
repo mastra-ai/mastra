@@ -309,7 +309,7 @@ describe("a skill's page", () => {
     const description = await screen.findByRole('textbox', { name: 'Description' });
     await user.type(description, '!');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save', busy: true })).toBeInTheDocument();
     await user.type(description, '?');
     answer();
 
@@ -332,7 +332,7 @@ describe("a skill's page", () => {
     const description = await screen.findByRole('textbox', { name: 'Description' });
     await user.type(description, '!');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Save', busy: true })).toBeInTheDocument();
     await user.type(description, '{Backspace}');
     answer();
 
@@ -621,7 +621,7 @@ describe('the new skill page', () => {
     const description = screen.getByRole('textbox', { name: 'Description' });
     await user.type(description, 'Mine');
     await user.click(screen.getByRole('button', { name: 'Create' }));
-    expect(await screen.findByRole('button', { name: 'Creating…' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'Create', busy: true })).toBeInTheDocument();
     expect(description.closest('[inert]')).not.toBeNull();
     answer();
 

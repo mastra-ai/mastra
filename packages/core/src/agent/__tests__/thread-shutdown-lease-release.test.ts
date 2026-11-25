@@ -30,7 +30,7 @@ vi.hoisted(() => {
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -155,7 +155,13 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: base });
     return { mastra, pubsub, agent: mastra.getAgent('agent') };
   }
@@ -187,7 +193,7 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
       memory: { thread: threadId, resource: RESOURCE },
       ...extra,
     });
-    const output = isDurableEngineVariant(engine) && 'output' in result ? result.output : result;
+    const output = 'output' in result ? result.output : result;
     void output.consumeStream().catch(() => undefined);
     return output;
   }
@@ -281,6 +287,51 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     expect(follower.types).not.toContain('error');
 
     follower.unsubscribe();
+    await observer.mastra.shutdown({ drainTimeout: 200 });
+  }, 20_000);
+
+  // #30480: recovery can continue a handed-back durable run under the same runId, so the hand-back isn't its final
+  // outcome. Nothing recovers a regular agent's run, so its hand-back stays a failure.
+  const handBackStatus = isDurableEngineVariant(engine) ? 'interrupted' : 'failed';
+  it(`reports a handed-back run as ${handBackStatus} to run-status followers`, async () => {
+    const threadId = `shutdown-status-${engine}`;
+    for (let i = 0; i < 60; i++) {
+      llm.on(
+        { userMessage: 'keep running for status', sequenceIndex: i },
+        { toolCalls: [{ id: `call_status_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+    const running = replica(shared, events, memory, { tick: tickTool(counter) });
+    const observer = replica(shared, events, memory, {});
+    const subscription = await observer.agent.subscribeToThread({
+      resourceId: RESOURCE,
+      threadId,
+      withRunStatus: true,
+    });
+    const statuses: string[] = [];
+    void (async () => {
+      for await (const part of subscription.stream) {
+        if (part.type === 'thread-run-status') statuses.push(part.payload.status);
+      }
+    })();
+
+    await startStream(running.agent, 'keep running for status', threadId, {});
+    await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    await running.mastra.shutdown({ drainTimeout: 200 });
+    running.pubsub.dead = true;
+
+    await vi.waitFor(() => expect(statuses).toEqual([handBackStatus]), { timeout: 5_000 });
+    // Past the lease TTL: the lease watch reports nothing more.
+    await new Promise(resolve => setTimeout(resolve, 900));
+    expect(statuses).toEqual([handBackStatus]);
+
+    subscription.unsubscribe();
     await observer.mastra.shutdown({ drainTimeout: 200 });
   }, 20_000);
 

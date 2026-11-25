@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { FactorySessionOwner } from '../subscription-session.js';
 import type { GitLabSignalSubscriptionRow } from './subscriptions.js';
 import { classifyGitLabWebhook, dispatchGitLabWebhook } from './webhook-dispatch.js';
 import type { GitLabWebhookDispatchIntegration } from './webhook-dispatch.js';
@@ -82,7 +83,7 @@ function controllerStub(overrides: Record<string, unknown>, threads: Record<stri
 const getProjectMemberAccessLevel = vi.fn(async (): Promise<number | undefined> => 40);
 const resolveActiveConnectionForHost = vi.fn(async (connectionId: string) => connectionId);
 
-function gitlabStub(sessionRow: { userId: string; orgId: string } | null = null): GitLabWebhookDispatchIntegration {
+function gitlabStub(sessionRow: FactorySessionOwner | null = null): GitLabWebhookDispatchIntegration {
   return {
     integrationStorage: {} as never,
     sourceControlStorage: { sessions: { getBySessionId: async () => sessionRow } },
@@ -425,7 +426,7 @@ describe('dispatchGitLabWebhook', () => {
     await expect(
       dispatchGitLabWebhook(mergeRequest('close'), {
         controller: controllerStub({ getSession: async () => undefined, createSession }),
-        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1' }),
+        gitlab: gitlabStub({ userId: 'owner-1', orgId: 'org-1', projectRepositoryId: 'project-repository-1' }),
         listSubscriptions: async () => [subscription('a', 'thread-a')],
         retireSubscription: async () => undefined,
       }),

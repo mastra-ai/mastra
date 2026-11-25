@@ -44,8 +44,8 @@ export function DeleteDatasetDialog({
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <AlertDialog.Action onClick={handleDelete} disabled={deleteDataset.isPending}>
-            {deleteDataset.isPending ? 'Deleting...' : 'Delete'}
+          <AlertDialog.Action onClick={handleDelete} loading={deleteDataset.isPending}>
+            Delete
           </AlertDialog.Action>
         </AlertDialog.Footer>
       </AlertDialog.Content>

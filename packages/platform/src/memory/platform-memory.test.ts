@@ -1,4 +1,4 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -615,6 +615,52 @@ describe('PlatformMemoryClient', () => {
   it('defaults to the hosted Memory API', () => {
     const client = new PlatformMemoryClient({ accessToken: 't', instanceId: 'mem_1' });
     expect(client.mcpUrl).toBe('https://memory-api.mastra.ai/v1/memory/mem_1/mcp');
+  });
+
+  it('calls an access token getter before every request', async () => {
+    const auth: (string | null)[] = [];
+    let minted = 0;
+    const client = new PlatformMemoryClient({
+      accessToken: async () => `tok_${++minted}`,
+      instanceId: 'mem_1',
+      apiUrl: 'https://platform.test',
+      fetch: async (_url, init) => {
+        auth.push(new Headers(init?.headers).get('authorization'));
+        return new Response(JSON.stringify({ id: 'thread_1' }));
+      },
+    });
+
+    await client.getThread('thread_1');
+    await client.getThread('thread_1');
+
+    expect(auth).toEqual(['Bearer tok_1', 'Bearer tok_2']);
+  });
+
+  it.each([true, false])('cancels a processor request without a token (already aborted: %s)', async alreadyAborted => {
+    const controller = new AbortController();
+    const reason = new DOMException('Canceled', 'AbortError');
+    const { promise: token, resolve: releaseToken } = Promise.withResolvers<string>();
+    const accessToken = vi.fn(() => token);
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response('{}'));
+    const client = new PlatformMemoryClient({
+      accessToken,
+      instanceId: 'mem_1',
+      apiUrl: 'https://platform.test',
+      fetch,
+    });
+    const body = { phase: 'output' as const, resourceId: 'user_1', messageList: new MessageList().serialize() };
+
+    try {
+      if (alreadyAborted) controller.abort(reason);
+      const outcome = client.runProcessors('thread_1', body, controller.signal).catch(error => error);
+      if (!alreadyAborted) controller.abort(reason);
+      expect(await Promise.race([outcome, new Promise(resolve => setImmediate(resolve))])).toBe(reason);
+      expect(accessToken).toHaveBeenCalledTimes(alreadyAborted ? 0 : 1);
+    } finally {
+      releaseToken('late_token');
+    }
+    await new Promise(resolve => setImmediate(resolve));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('requires an access token and instance id', () => {

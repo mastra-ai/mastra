@@ -40,7 +40,7 @@ Your server needs a public URL that Slack can reach for webhook delivery and OAu
 
 1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
 
-1. Generate an app configuration token for the workspace where the agent will run.
+1. Generate an app configuration token for the workspace where the agent will run. Slack shows an access token (`xoxe.xoxp-1-...`) that expires in 12 hours, followed by a refresh token (`xoxe-1-...`). Copy the refresh token. Mastra rotates it after you connect, so don't use it anywhere else.
 
 1. Run `mastra connect add slack-channels` and complete the authorization flow. The platform stores and rotates the configuration credential.
 
@@ -61,9 +61,11 @@ Your server needs a public URL that Slack can reach for webhook delivery and OAu
 
 1. Start your Mastra application.
 
-1. In Studio, connect the Slack channel to an agent. Mastra creates a Slack app and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
+1. In Studio, connect the Slack channel to an agent. The Connect page on the Mastra platform only stores the connection, so you link it to an agent in Studio. Mastra creates a Slack app and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
 
 The [default Slack manifest](/reference/channels/slack-provider#default-manifest) lists the requested scopes and event subscriptions.
+
+To let the agent post structured cards with tables, charts, and fields, see [Generative UI cards](/reference/agents/channels#generative-ui-cards).
 
 ## Self-managed setup
 

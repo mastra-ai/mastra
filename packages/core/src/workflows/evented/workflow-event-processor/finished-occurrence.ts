@@ -1,6 +1,7 @@
 import { getEntryId } from '../../step-entry';
 import type { RestartExecutionParams, StepResult, WorkflowRunState } from '../../types';
 import type { LeafEntry } from './routing';
+import { samePath } from './run-status';
 
 type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; metadata?: Record<string, any> };
 
@@ -20,11 +21,6 @@ const BRANCH_SETTLED_STATUSES = new Set(['success', 'skipped', 'suspended']);
  * or continue the run from the result the occurrence saved.
  */
 export type FinishedOccurrence = 'run' | 'drop' | { continueFrom: StepResult<any, any, any, any> };
-
-/** Whether two execution paths name the same position in the step graph. */
-function samePath(a: number[] | undefined, b: number[]): boolean {
-  return !!a && a.length === b.length && a.every((index, depth) => index === b[depth]);
-}
 
 /** The record of one foreach item, kept in the foreach step's resume metadata. */
 function foreachItem(result: unknown, index: number | undefined): StoredRecord | undefined {

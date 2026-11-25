@@ -34,6 +34,7 @@ function buildApp(
     missing?: ConnectToolsSetupMissing;
     resolveTools?: ConnectToolsSource['resolveTools'];
     isAdmin?: boolean;
+    reconnectParams?: (connectionId: string) => Promise<Record<string, string>>;
   } = {},
 ): Hono {
   const app = new Hono();
@@ -56,6 +57,7 @@ function buildApp(
     integrationId,
     connectionIntegrationIds: [integrationId],
     binding: new PlatformConnectBinding({ integrationId, providerKeys: [integrationId], connect: client }),
+    ...(integrationId === 'gitlab' && options.reconnectParams ? { reconnectParams: options.reconnectParams } : {}),
   }));
   const projectId = options.connectToolsProjectId;
   const source: ConnectToolsSource | { missing: ConnectToolsSetupMissing } = projectId
@@ -77,7 +79,7 @@ function buildApp(
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
 describe('platform connect routes', () => {
-  it("lists the project's connections that sessions use, not the organization's or GitHub's", async () => {
+  it("lists the project's connections that sessions use, not the organization's or source control's", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
       if (url.endsWith('/v2/projects/proj_1/connections')) {
@@ -86,6 +88,8 @@ describe('platform connect routes', () => {
             connection('conn-mcp', 'neon-mcp', 'needs_reauth'),
             connection('conn-linear', 'linear'),
             connection('conn-github', 'github'),
+            connection('conn-gitlab', 'gitlab'),
+            connection('conn-gitlab-self-hosted', 'gitlab-self-hosted'),
           ],
         });
       }
@@ -293,6 +297,27 @@ describe('platform connect routes', () => {
     );
     expect(crossProvider.status).toBe(404);
     await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
+  });
+
+  it('returns the settings a reconnect must keep, so the form cannot change the instance', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/v2/projects/proj_factory/connections')) {
+        return json({ connections: [connection('conn-gitlab', 'gitlab', 'needs_reauth')] });
+      }
+      if (url.endsWith('/v2/connections/conn-gitlab/reconnect-session')) return json(SESSION, 201);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const reconnectParams = vi.fn(async () => ({ hostname: 'gitlab.example.com' }));
+    const app = buildApp(org1(), fetchImpl, { reconnectParams });
+
+    const response = await app.request('/web/integrations/platform/gitlab/connections/conn-gitlab/reconnect-session', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ ...SESSION, params: { hostname: 'gitlab.example.com' } });
+    expect(reconnectParams).toHaveBeenCalledWith('conn-gitlab');
   });
 
   it("refuses to reconnect an organization connection that isn't linked to the Factory's project", async () => {

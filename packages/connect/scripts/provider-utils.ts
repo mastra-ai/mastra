@@ -26,6 +26,12 @@ export interface ProviderManifest {
   toolCount: number;
   skippedActions: { action: string; reason: string }[];
   files: Record<string, string>;
+  /**
+   * Files in the provider directory the generator did not write, such as
+   * hand-written tools for endpoints no template covers. Regeneration keeps
+   * them and registers every `tools/*.ts` among them.
+   */
+  handwrittenFiles?: string[];
 }
 
 export function validateProviderId(id: string, label: string): void {
@@ -95,8 +101,21 @@ export function updateProviderIndex(): void {
   writeFileSync(providerIndexPath, body);
 }
 
+/**
+ * The files in an installed provider that its manifest says the generator did
+ * not write: the ones it recorded as hand-written, plus any added since.
+ */
+export function listHandwrittenFiles(directory: string, manifest: ProviderManifest | undefined): string[] {
+  if (!manifest) return [];
+  return Object.keys(calculateFileChecksums(directory)).filter(file => !Object.hasOwn(manifest.files, file));
+}
+
 export function readManifest(localId: string): ProviderManifest | undefined {
-  const path = resolve(providerDir(localId), '.manifest.json');
+  return readManifestIn(providerDir(localId));
+}
+
+export function readManifestIn(directory: string): ProviderManifest | undefined {
+  const path = resolve(directory, '.manifest.json');
   if (!existsSync(path)) return undefined;
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as ProviderManifest;
@@ -114,7 +133,8 @@ function listFilesRecursive(root: string, current = root): string[] {
   for (const entry of readdirSync(current, { withFileTypes: true })) {
     const path = resolve(current, entry.name);
     if (entry.isDirectory()) files.push(...listFilesRecursive(root, path));
-    else if (entry.isFile() && entry.name !== '.manifest.json') files.push(relative(root, path));
+    // Manifest keys always use `/`, whatever the platform's separator.
+    else if (entry.isFile() && entry.name !== '.manifest.json') files.push(relative(root, path).split(sep).join('/'));
   }
   return files.sort();
 }
@@ -130,7 +150,11 @@ export function calculateFileChecksums(root: string): Record<string, string> {
 
 export function findModifiedFiles(localId: string, manifest: ProviderManifest): string[] {
   const current = calculateFileChecksums(providerDir(localId));
-  const paths = new Set([...Object.keys(manifest.files), ...Object.keys(current)]);
+  const handwritten = new Set(manifest.handwrittenFiles);
+  const paths = new Set([
+    ...Object.keys(manifest.files),
+    ...Object.keys(current).filter(path => !handwritten.has(path)),
+  ]);
   return [...paths].filter(path => manifest.files[path] !== current[path]).sort();
 }
 

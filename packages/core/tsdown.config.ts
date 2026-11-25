@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as babel from '@babel/core';
 import { generateTypes } from '@internal/types-builder';
+import { assertLatin1Dist } from '@internal/types-builder/check-ascii-output';
 import { defineConfig } from 'tsdown';
-import { findNonLatin1InDist } from './scripts/check-ascii-output.ts';
 
 const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'package.json'), 'utf-8'));
 const { default: treeshakeDecoratorsBabelPlugin } = await import(
@@ -142,7 +142,7 @@ export default defineConfig({
   // Escape non-ASCII in strings, templates, regex literals and identifiers (core's own code and
   // the third-party code inlined via `alwaysBundle`, such as tokenx). V8 stores a script at one
   // byte per character only when every character is Latin-1, so a single wider character doubles
-  // the memory a bundled Worker spends holding its own source. `findNonLatin1InDist` enforces it in
+  // the memory a bundled Worker spends holding its own source. `assertLatin1Dist` enforces it in
   // `onSuccess`.
   outputOptions: {
     charset: 'ascii',
@@ -239,14 +239,6 @@ export default defineConfig({
     }
     console.info(`✓ Checked browser-safe entries: ${browserSafeEntries.join(', ')}`);
 
-    const nonLatin1 = findNonLatin1InDist(distDir);
-    if (nonLatin1.length > 0) {
-      throw new Error(
-        `Published JavaScript contains characters above U+00FF in code. Write them as \\u escapes in source; ` +
-          `in bundled third-party code, check that \`charset: 'ascii'\` still applies:\n${nonLatin1.slice(0, 50).join('\n')}` +
-          (nonLatin1.length > 50 ? `\n...and ${nonLatin1.length - 50} more` : ''),
-      );
-    }
-    console.info('✓ Checked published JavaScript holds no characters above U+00FF outside comments');
+    assertLatin1Dist(distDir);
   },
 });

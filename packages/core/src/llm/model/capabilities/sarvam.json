@@ -19,10 +19,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseekv4.1-flash-1017-interactive": [
+    "glm5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "gemma4": [
@@ -43,10 +43,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm5.3": [
+    "deepseekv4.1-flash-1017-interactive": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

@@ -1,7 +1,6 @@
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 
 import { useCallback, useMemo } from 'react';
@@ -42,7 +41,6 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <IconPlusMedium className="mr-1 size-icon-xs" />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -78,10 +76,7 @@ export function VariablesPage() {
             </JSONSchemaForm.FieldList>
 
             <div className="p-2">
-              <JSONSchemaForm.AddField>
-                <IconPlusMedium />
-                Add variable
-              </JSONSchemaForm.AddField>
+              <JSONSchemaForm.AddField>Add variable</JSONSchemaForm.AddField>
             </div>
           </JSONSchemaForm.Root>
         </div>

@@ -64,12 +64,22 @@ function GitLabAction({
     );
   }
   return (
-    <ProviderConnectControl
-      provider="gitlab"
-      label="Connect GitLab"
-      variant="default"
-      size="md"
-      onCompleted={onConnected}
-    />
+    <>
+      <ProviderConnectControl
+        provider="gitlab"
+        label="Connect GitLab"
+        variant="default"
+        size="md"
+        onCompleted={onConnected}
+      />
+      <ProviderConnectControl
+        provider="gitlab-self-hosted"
+        label="Connect self-hosted GitLab"
+        buttonLabel="Self-hosted"
+        variant="ghost"
+        size="md"
+        onCompleted={onConnected}
+      />
+    </>
   );
 }
