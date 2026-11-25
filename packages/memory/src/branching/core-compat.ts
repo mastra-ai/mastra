@@ -10,8 +10,79 @@
  */
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import type { MastraMemory, ThreadBranchErrorCode } from '@mastra/core/memory';
-import type { GeneratedMessagePersistenceInput } from '@mastra/core/memory/internal';
+import type { MastraMemory, MemoryConfig, StorageThreadType } from '@mastra/core/memory';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import type { PaginationInfo } from '@mastra/core/storage';
+
+// Type copies: the published declarations must not reference branch types that older @mastra/core
+// versions lack, or they would resolve to `any` and drop type checking of the branch API.
+
+export type ThreadBranchErrorCode =
+  | 'BRANCHING_UNSUPPORTED'
+  | 'BRANCH_INVALID_REQUEST'
+  | 'BRANCH_NOT_FOUND'
+  | 'BRANCH_LINEAGE_CORRUPT'
+  | 'BRANCH_MUTATION_CONFLICT';
+
+export type BranchThreadInput = {
+  threadId: string;
+  branchPointMessageId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type PublicThreadBranchMetadata = {
+  parentThreadId: string;
+  branchPointMessageId: string;
+  branchPointCreatedAt: Date;
+  branchCreatedAt: Date;
+};
+
+/** @internal Framework-owned branch state persisted in thread metadata. */
+export type InternalThreadBranchMetadata = PublicThreadBranchMetadata & {
+  observationalMemoryThreadId: string;
+  state: 'pending' | 'ready';
+};
+
+export type BranchThreadOutput = {
+  thread: StorageThreadType;
+  branch: PublicThreadBranchMetadata;
+};
+
+export type GetThreadBranchInput = {
+  threadId: string;
+};
+
+export type ListThreadBranchesInput = {
+  threadId: string;
+  page?: number;
+  perPage?: number | false;
+};
+
+export type ListThreadBranchesOutput = PaginationInfo & {
+  branches: BranchThreadOutput[];
+};
+
+export type ThreadBranchHistoryOutput = {
+  history: Array<{
+    thread: StorageThreadType;
+    branch: PublicThreadBranchMetadata | null;
+  }>;
+};
+
+export type GeneratedMessagePersistenceInput = {
+  messages: MastraDBMessage[];
+  memoryConfig?: MemoryConfig;
+  observabilityContext?: Partial<ObservabilityContext>;
+  /** @internal See `MastraMemory.saveMessages`. */
+  embeddedMessages?: Map<string, string>;
+  /** @internal Thread to create atomically with validated message persistence when absent. */
+  thread?: StorageThreadType;
+  /** @internal Reject when `thread` already exists instead of persisting into it. */
+  requireThreadCreation?: boolean;
+  /** @internal Store the messages without writing semantic recall vectors; the SemanticRecall processor writes them. */
+  skipVectors?: boolean;
+};
 
 export const MASTRA_THREAD_BRANCH_METADATA_KEY = '__mastra_thread_branch';
 export const MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY = '__mastra_thread_branch_parent';
