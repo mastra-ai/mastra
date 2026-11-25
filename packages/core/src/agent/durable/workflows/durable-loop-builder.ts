@@ -52,13 +52,11 @@ import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '
 import { liveSegmentSpan, segmentSpanData } from '../segment-spans';
 import {
   CONSUMED_SIGNAL_IDS_KEY,
-  claimStoredSignals,
   closeStoredSignalRun,
   inputSignalIds,
-  readConsumedSignalIds,
-  storedSignalQueueForRun,
+  storedSignalDrain,
 } from '../stored-signal-drain';
-import type { durableRunThreadKey, StoredSignalDrain } from '../stored-signal-drain';
+import type { StoredSignalDrain } from '../stored-signal-drain';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -384,30 +382,25 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
     params: { getInitData(): unknown; getState(keys?: readonly string[]): Promise<unknown>; requestContext?: any },
     rt: DurableLoopRuntime,
   ) {
-    const queue = storedSignalQueueForRun({
+    const claim = storedSignalDrain({
       mastra: rt.mastra,
       runId: rt.runId,
-      input: params.getInitData() as Parameters<typeof durableRunThreadKey>[0],
-      claim: getExecutionClaim(params.requestContext, rt.runId),
-      hasLocalDrain: !!rt.drainPendingSignals,
+      input: params.getInitData() as Parameters<typeof storedSignalDrain>[0]['input'],
+      requestContext: params.requestContext,
+      getState: keys => params.getState(keys),
     });
-    if (!queue) return undefined;
+    if (!claim) return undefined;
     let drained: StoredSignalDrain | undefined;
     return {
       drain: async (): Promise<CreatedAgentSignal[]> => {
         if (rt.abortSignal?.aborted) return [];
-        drained = await claimStoredSignals({
-          queue,
-          runId: rt.runId,
-          consumed: readConsumedSignalIds(await params.getState([CONSUMED_SIGNAL_IDS_KEY])),
-          claims: [{ scope: 'pending' }],
-        });
-        return drained.signals;
+        drained = await claim();
+        return drained?.signals ?? [];
       },
       state: () => drained?.state,
       /**
-       * Call with the transcript holding what the drain took, before its state is saved. The next drain deletes
-       * those rows, so a total deadline this process runs from then on must save them too.
+       * Call with the transcript holding what the drain took, before its state is saved, so a total deadline this
+       * process runs from then on saves those signals with the transcript.
        */
       captureForDeadline: (messageListState: SerializedMessageListState) => {
         const entry = getRunRegistryEntry(rt.runId, rt.mastra);
@@ -487,13 +480,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             errorPolicy: 'best-effort',
             logger: rt.logger,
           });
-          if (!outcome.drained || !drainList) {
-            // Nothing was claimed: save the emptied set, since its rows are gone. After a failed drain the
-            // claimed rows stay with the run and come back from the next drain, so nothing is saved.
-            const cleared = stored?.state();
-            if (cleared && cleared[CONSUMED_SIGNAL_IDS_KEY].length === 0) await stepParams.setState(cleared);
-            return execOutput;
-          }
+          if (!outcome.drained || !drainList) return execOutput;
           const drainedState = drainList.serialize();
           stored?.captureForDeadline(drainedState);
           return {
@@ -942,9 +929,6 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               state.lastStepResult.isContinued = true;
             }
             drainForcedContinue = true;
-          } else if (consumed && consumed[CONSUMED_SIGNAL_IDS_KEY].length === 0) {
-            // Nothing was claimed and the saved set's rows are gone, so save it emptied.
-            transcript.writeState(consumed);
           }
         } catch {
           // serialize() is best-effort too; state keeps the pre-drain
@@ -1192,9 +1176,9 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             await params.setState({
               accumulatedSteps: [],
               messageListState: await dehydrateMessageListState(params, messageListState),
-              // A follow-up turn starts with its first signal as input. The run's first request claims
-              // that signal's row with the rest, so listing it here keeps it from being added twice
-              // and gets the row deleted by the next drain.
+              // A follow-up turn starts with its first signal as input. When memory didn't save that
+              // signal's row before the start, the run's first request claims it with the rest, so
+              // listing it here keeps it from being added twice and lets the run's close settle it.
               ...(input.signalsStored ? { [CONSUMED_SIGNAL_IDS_KEY]: inputSignalIds(initialMessageList) } : {}),
             });
             const iterationState: IterationState = {
@@ -1353,12 +1337,12 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
 
             // Before FINISH: the process that started the run reacts to it by looking for the thread's
-            // next turn, which needs this run's untaken signals released as leftovers.
+            // next turn, and a send after the close gets `run-closed` instead of waiting on this run.
             const closing = closeStoredSignalRun({
               mastra: mastra as Mastra | undefined,
               runId: state.runId,
               input: initData,
-              claim: getExecutionClaim(requestContext, state.runId),
+              requestContext,
               state: () => params.getState([CONSUMED_SIGNAL_IDS_KEY]),
             });
             if (closing) await closing;

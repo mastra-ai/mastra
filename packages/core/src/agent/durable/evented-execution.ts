@@ -262,13 +262,14 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     await assertExecutionOwned({ mastra, runId: event.runId, agentId: claim.agentId, requestContext: context });
   }
   if (event.type !== 'workflow.suspend') {
-    // Before the terminal event and the snapshot delete. The finish event carries the run's latest saved state.
+    // Before the terminal event and the snapshot delete, with the consumed ids of the state the event carries. A
+    // failure event without state returns the signals the run consumed but never saved to the thread as pending.
     const data = event.data ?? {};
     const closing = closeStoredSignalRun({
       mastra,
       runId: event.runId,
-      input: data.stepResults?.input ?? { messageListState: data.state?.messageListState },
-      claim,
+      input: data.stepResults?.input,
+      requestContext: context,
       state: data.state,
     });
     if (closing) await closing;

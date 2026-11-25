@@ -213,6 +213,26 @@ async function rebuildProcessorPipeline(options: {
   }
 }
 
+/**
+ * The memory of a run on this process: the registry entry's when this process
+ * prepared or rebuilt the run, else the agent's, resolved with the request
+ * context entries the run carries, as {@link resolveRuntimeDependencies} does.
+ */
+export async function resolveRunMemory(options: {
+  mastra: Mastra;
+  runId: string;
+  input: Pick<DurableAgenticWorkflowInput, 'agentId' | 'agentVersionId' | 'requestContextEntries'>;
+  requestContext?: RequestContext;
+}): Promise<MastraMemory | undefined> {
+  const { mastra, runId, input } = options;
+  const entry = getRunRegistryEntry(runId, mastra);
+  if (entry?.memory) return entry.memory;
+  const agent = await resolveRunAgent(mastra, input.agentId, runId, input.agentVersionId);
+  return agent.getMemory({
+    requestContext: restoreRequestContext(input.requestContextEntries, options.requestContext),
+  });
+}
+
 /** True when the registry entry was seeded in this process (not a cross-process placeholder). */
 function isHydratedRegistryEntry(entry: RunRegistryEntry | undefined): boolean {
   const model = entry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;

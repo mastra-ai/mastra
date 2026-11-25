@@ -90,7 +90,6 @@ export async function openMessageListState(
   read(): SerializedMessageListState;
   /** `extraState` lands in workflow state with the transcript, as in {@link storeMessageListState}. */
   write(next: SerializedMessageListState, extraState?: Record<string, unknown>): void;
-  writeState(extraState: Record<string, unknown>): void;
 }> {
   // The predicate can't call setState, so `write` edits the state object itself:
   // only the whole state is that object, a picked key would be a copy.
@@ -106,7 +105,6 @@ export async function openMessageListState(
         stepPayload.messageListState = next;
         writeState(extraState);
       },
-      writeState,
     };
   }
   const run = runTranscriptRefs(params);
@@ -121,7 +119,6 @@ export async function openMessageListState(
       workflowState.messageListState = state?.fixedMemory ? run.refs.dehydrate(next) : next;
       writeState(extraState);
     },
-    writeState,
   };
 }
 
