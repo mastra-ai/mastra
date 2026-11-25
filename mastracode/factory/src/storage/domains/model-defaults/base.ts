@@ -4,7 +4,13 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
-import { defaultModelPack, LEGACY_MODEL_PACK_ID, legacyModelPackSet, withDefaultModel } from '../../../model-packs.js';
+import {
+  defaultModelPack,
+  EMPTY_MODEL_PACK_SET,
+  LEGACY_MODEL_PACK_ID,
+  legacyModelPackSet,
+  withDefaultModel,
+} from '../../../model-packs.js';
 import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
 
 export interface ModelDefaultRecord {
@@ -111,28 +117,8 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
     modelId: string;
   }): Promise<ModelDefaultRecord> {
     return this.#upsert({ orgId, userId }, current =>
-      current
-        ? withDefaultModel(current, { modelId }, DEFAULT_THINKING_LEVEL)
-        : legacyModelPackSet(modelId, DEFAULT_THINKING_LEVEL),
+      withDefaultModel(current ?? EMPTY_MODEL_PACK_SET, modelId, DEFAULT_THINKING_LEVEL),
     );
-  }
-
-  async setThinkingLevel({
-    orgId,
-    userId,
-    thinkingLevel,
-  }: {
-    orgId: string;
-    userId: string;
-    thinkingLevel: ThinkingLevelSetting | null;
-  }): Promise<ModelDefaultRecord | null> {
-    const level = thinkingLevel ?? DEFAULT_THINKING_LEVEL;
-    const updated = await this.#db.updateAtomic<ModelDefaultDbRow>(
-      'user_default_models',
-      { org_id: orgId, user_id: userId },
-      current => toColumns(withDefaultModel(toRecord(current), { thinkingLevel: level }, level)),
-    );
-    return updated ? toRecord(updated) : null;
   }
 
   async setModelPacks({

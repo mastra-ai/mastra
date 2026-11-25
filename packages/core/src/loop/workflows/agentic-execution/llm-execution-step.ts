@@ -2740,22 +2740,31 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           const isUpstreamError = APICallError.isInstance(error);
           const isTerminalAttempt = isLastModel || eagerCoordinator?.hasSuspendedHandback;
 
-          const logTerminalFailure = () => {
-            const failure = {
+          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
+          if (isTerminalAttempt && isUpstreamError) {
+            const providerInfo = provider ? ` from ${provider}` : '';
+            const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
+            logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, {
               error,
               runId,
               ...(provider && { provider }),
               ...(modelIdStr && { modelId: modelIdStr }),
-            };
-            if (isUpstreamError) {
-              const providerInfo = provider ? ` from ${provider}` : '';
-              const modelInfo = modelIdStr ? ` (model: ${modelIdStr})` : '';
-              logger?.error(`Upstream LLM API error${providerInfo}${modelInfo}`, failure);
-            } else {
-              logger?.error('Error in LLM execution', failure);
-            }
-          };
-          const deferTerminalError = () =>
+            });
+          } else if (isTerminalAttempt) {
+            logger?.error('Error in LLM execution', {
+              error,
+              runId,
+              ...(provider && { provider }),
+              ...(modelIdStr && { modelId: modelIdStr }),
+            });
+          }
+
+          // A call that already ran up to a runtime suspend() would run that work again in
+          // a retried or failed-over attempt, so the attempt ends here and the foreach
+          // raises the suspension instead.
+          if (isLastModel || eagerCoordinator?.hasSuspendedHandback) {
+            // Defer enqueueing the error chunk — processAPIError handlers may intercept it
+            // and signal a retry instead.
             runState.setState({
               hasErrored: true,
               apiError: error,
@@ -2770,16 +2779,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 reason: 'error',
               },
             });
-
-          // Non-terminal failures are rethrown and logged once as a failover warning by the fallback runner.
-          // A call that already ran up to a runtime suspend() would run that work again in
-          // a retried or failed-over attempt, so the attempt ends here and the foreach
-          // raises the suspension instead.
-          if (isTerminalAttempt) {
-            logTerminalFailure();
-            // Defer enqueueing the error chunk — processAPIError handlers may intercept it
-            // and signal a retry instead.
-            deferTerminalError();
           } else {
             // For non-last models, try processAPIError before falling through to next model
             // This allows error processors to fix the request and retry with the SAME model
@@ -2827,13 +2826,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               },
             });
 
-            const retrying = errorResult.retry && canRetryError;
-            const fallbackVetoed = !retrying && errorResult.fallback === false;
-            // Retried or failed over: this attempt's calls are dropped. A vetoed fallback ends
-            // the attempt like a last model, which keeps them for the foreach.
-            if (!fallbackVetoed) {
-              await discardAttemptEagerWork();
-            }
+            // Retried or failed over: this attempt's calls are dropped either way.
+            await discardAttemptEagerWork();
             if (runAbortSignal?.aborted) {
               await options?.onAbort?.({
                 steps: inputData?.output?.steps ?? [],
@@ -2850,7 +2844,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               };
             }
 
-            if (retrying) {
+            if (errorResult.retry && canRetryError) {
               // Signal retry - store on runState so it's handled after the callback returns
               runState.setState({
                 hasErrored: false,
@@ -2871,20 +2865,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               };
             }
 
-            if (!fallbackVetoed) {
-              throw error;
-            }
-
-            logTerminalFailure();
-            deferTerminalError();
-            return {
-              outputStream,
-              callBail: false,
-              runState,
-              stepTools: currentStep.tools,
-              stepWorkspace: currentStep.workspace,
-              processAPIErrorRetry: { retry: false },
-            };
+            throw error;
           }
         }
 
@@ -3059,10 +3040,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         return bailFromExecution(bailReason);
       }
 
-      // The id this attempt streamed under. processAPIError may have rotated the
-      // active response id since, but the attempt's partial output was stored
-      // under this id, so a terminal error part has to land on that same record.
-      const attemptMessageId = transcriptStep.messageId;
+      // The failed attempt's materialization id, captured before processAPIError
+      // can rotate the active response id. This attempt's partial output was
+      // stored under this id, so a terminal error part has to land on that same
+      // record instead of a fresh one.
+      const attemptMessageId = currentMessageId;
 
       // Handle processAPIError for API rejections
       // This covers two cases:

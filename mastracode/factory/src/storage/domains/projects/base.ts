@@ -116,9 +116,8 @@ export interface CreateFactoryProjectInput {
 export interface UpdateFactoryProjectInput {
   name?: string;
   description?: string | null;
-  defaultModelId?: string | null;
+  defaultModelId?: string;
   modelScope?: FactoryModelScope;
-  defaultThinkingLevel?: ThinkingLevelSetting;
   modelPackSet?: ModelPackSet;
   sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
@@ -211,18 +210,20 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
 }
 
 function nextModelPackColumns(current: FactoryProject, changes: UpdateFactoryProjectInput) {
-  const thinkingLevel = changes.defaultThinkingLevel ?? current.defaultThinkingLevel;
-  const set = withDefaultModel(
-    changes.modelPackSet ?? { modelPacks: current.modelPacks, defaultModelPackId: current.defaultModelPackId },
-    { modelId: changes.defaultModelId, thinkingLevel: changes.defaultThinkingLevel },
-    thinkingLevel,
-  );
+  const packs = changes.modelPackSet ?? {
+    modelPacks: current.modelPacks,
+    defaultModelPackId: current.defaultModelPackId,
+  };
+  const set =
+    changes.defaultModelId === undefined
+      ? packs
+      : withDefaultModel(packs, changes.defaultModelId, current.defaultThinkingLevel);
   const first = defaultModelPack(set)?.models[0];
   return {
     model_packs: set.modelPacks,
     default_model_pack_id: set.defaultModelPackId,
     default_model_id: first?.modelId ?? null,
-    default_thinking_level: first?.thinkingLevel ?? thinkingLevel,
+    default_thinking_level: first?.thinkingLevel ?? current.defaultThinkingLevel,
   };
 }
 
@@ -377,10 +378,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         const project = toFactoryProject(current);
         const changes = typeof input === 'function' ? await input(project, ops) : input;
         if (changes === null) return null;
-        const touchesModelPacks =
-          changes.modelPackSet !== undefined ||
-          changes.defaultModelId !== undefined ||
-          changes.defaultThinkingLevel !== undefined;
+        const touchesModelPacks = changes.modelPackSet !== undefined || changes.defaultModelId !== undefined;
         return {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
           ...(changes.description !== undefined ? { description: changes.description } : {}),

@@ -168,7 +168,6 @@ export const stateSchema = z
               id: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
               label: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
               modelId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH),
-              thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional(),
               accountId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH).optional(),
               memoryModelId: z.string().max(MODEL_ROUTE_MAX_FIELD_LENGTH).optional(),
             }),
@@ -256,7 +255,6 @@ export const stateSchema = z
       .default([]),
     // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
     sandboxAllowedPaths: z.array(z.string()).default([]),
-    // Pending route hop; a host route from `resolveModelRoute` ignores it.
     mastracodePendingModelFallback: pendingModelFallbackSchema.nullish(),
     // Asset directories contributed by active plugins.
     pluginSkillPaths: z.array(z.string()).default([]),

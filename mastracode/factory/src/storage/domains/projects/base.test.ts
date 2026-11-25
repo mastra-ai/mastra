@@ -176,12 +176,12 @@ describe('FactoryProjectsStorage', () => {
     });
 
     await update({ modelPackSet: { modelPacks: [build, cheap], defaultModelPackId: 'build' } });
-    await update({ defaultModelId: 'moonshot/kimi-k3', defaultThinkingLevel: 'xhigh' });
+    await update({ defaultModelId: 'moonshot/kimi-k3' });
     expect(await seed.projects.getById({ id: project.id })).toMatchObject({
       defaultModelId: 'moonshot/kimi-k3',
-      defaultThinkingLevel: 'xhigh',
+      defaultThinkingLevel: 'medium',
       modelPacks: [
-        { ...build, models: [{ modelId: 'moonshot/kimi-k3', thinkingLevel: 'xhigh' }, build.models[1]] },
+        { ...build, models: [{ modelId: 'moonshot/kimi-k3', thinkingLevel: 'medium' }, build.models[1]] },
         cheap,
       ],
     });
@@ -189,19 +189,8 @@ describe('FactoryProjectsStorage', () => {
     await update({ name: 'Renamed' });
     expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.defaultModelPackId).toBe('build');
 
-    expect(await update({ defaultModelId: null })).toMatchObject({
-      defaultModelId: 'deepseek/deepseek-flash',
-      modelPacks: [cheap],
-      defaultModelPackId: 'cheap',
-    });
-
-    const cleared = await update({
-      modelPackSet: { modelPacks: [], defaultModelPackId: null },
-      defaultThinkingLevel: 'high',
-    });
-    expect(cleared).toMatchObject({
+    expect(await update({ modelPackSet: { modelPacks: [], defaultModelPackId: null } })).toMatchObject({
       defaultModelId: null,
-      defaultThinkingLevel: 'high',
       modelPacks: [],
       defaultModelPackId: null,
     });

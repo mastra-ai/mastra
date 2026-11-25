@@ -1,3 +1,4 @@
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
@@ -5,6 +6,13 @@ export const MODEL_PACK_MODELS_MAX = 4;
 export const MODEL_PACKS_MAX = 8;
 export const MODEL_PACK_NAME_MAX = 40;
 export const FACTORY_MODEL_SELECTION_SETTING = 'factoryModelSelection';
+export const MODEL_ID_PATTERN = /^[^\s/]+\/\S(?:.*\S)?$/;
+
+export const modelIdSchema = z
+  .string()
+  .trim()
+  .max(256)
+  .regex(MODEL_ID_PATTERN, 'Use a provider/model ID, e.g. "anthropic/claude-opus-5.5"');
 
 export interface ModelPackModel {
   modelId: string;
@@ -22,27 +30,27 @@ export interface ModelPackSet {
   defaultModelPackId: string | null;
 }
 
-export type StoredModelSelection = { kind: 'default' } | { kind: 'pack'; packId: string } | { kind: 'model' };
-
-export type ModelSelection = { kind: 'pack'; pack: ModelPack } | { kind: 'model' };
-
 export type ResolvedModelSelection = { kind: 'pack'; packId: string } | { kind: 'model' };
 
-export type ModelSelectionRequest =
-  | { kind: 'default' }
-  | { kind: 'pack'; packId: string }
-  | { kind: 'model'; modelId: string; thinkingLevel?: ThinkingLevelSetting };
+const defaultSelectionSchema = z.object({ kind: z.literal('default') });
+const packSelectionSchema = z.object({ kind: z.literal('pack'), packId: z.string().min(1) });
+const modelSelectionSchema = z.object({ kind: z.literal('model') });
 
 const storedModelSelectionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('default') }),
-  z.object({ kind: z.literal('pack'), packId: z.string().min(1) }),
-  z.object({ kind: z.literal('model') }),
+  defaultSelectionSchema,
+  packSelectionSchema,
+  modelSelectionSchema,
 ]);
 
-export interface DefaultModelChange {
-  modelId?: string | null;
-  thinkingLevel?: ThinkingLevelSetting;
-}
+export type StoredModelSelection = z.infer<typeof storedModelSelectionSchema>;
+
+export const modelSelectionRequestSchema = z.discriminatedUnion('kind', [
+  defaultSelectionSchema,
+  packSelectionSchema,
+  modelSelectionSchema.extend({ modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVEL_VALUES).optional() }),
+]);
+
+export type ModelSelectionRequest = z.infer<typeof modelSelectionRequestSchema>;
 
 export const LEGACY_MODEL_PACK_ID = 'default';
 const LEGACY_MODEL_PACK_NAME = 'Default';
@@ -58,28 +66,16 @@ export function parseStoredModelSelection(value: unknown): StoredModelSelection 
   return parsed.success ? parsed.data : undefined;
 }
 
-function packSelection(pack: ModelPack | undefined): ModelSelection {
-  return pack ? { kind: 'pack', pack } : { kind: 'model' };
-}
-
 export function resolveModelSelection(
   set: ModelPackSet,
   stored: StoredModelSelection | undefined,
   sessionModelId: string | undefined,
-): ModelSelection {
+): ModelPack | undefined {
   const defaultPack = defaultModelPack(set);
-  if (!stored) {
-    return defaultPack && defaultPack.models[0]?.modelId === sessionModelId
-      ? packSelection(defaultPack)
-      : { kind: 'model' };
-  }
-  if (stored.kind === 'model') return { kind: 'model' };
-  if (stored.kind === 'default') return packSelection(defaultPack);
-  return packSelection(set.modelPacks.find(pack => pack.id === stored.packId) ?? defaultPack);
-}
-
-export function resolvedModelSelection(selection: ModelSelection): ResolvedModelSelection {
-  return selection.kind === 'pack' ? { kind: 'pack', packId: selection.pack.id } : { kind: 'model' };
+  if (!stored) return defaultPack && defaultPack.models[0]?.modelId === sessionModelId ? defaultPack : undefined;
+  if (stored.kind === 'model') return undefined;
+  if (stored.kind === 'default') return defaultPack;
+  return set.modelPacks.find(pack => pack.id === stored.packId) ?? defaultPack;
 }
 
 export function legacyModelPackSet(modelId: string | null, thinkingLevel: ThinkingLevelSetting): ModelPackSet {
@@ -92,27 +88,16 @@ export function legacyModelPackSet(modelId: string | null, thinkingLevel: Thinki
 
 export function withDefaultModel(
   set: ModelPackSet,
-  change: DefaultModelChange,
+  modelId: string,
   newPackThinkingLevel: ThinkingLevelSetting,
 ): ModelPackSet {
   const pack = defaultModelPack(set);
-  if (change.modelId === null) {
-    if (!pack) return set;
-    const modelPacks = set.modelPacks.filter(candidate => candidate.id !== pack.id);
-    return { modelPacks, defaultModelPackId: modelPacks[0]?.id ?? null };
-  }
-  if (!pack) {
-    return change.modelId === undefined
-      ? set
-      : legacyModelPackSet(change.modelId, change.thinkingLevel ?? newPackThinkingLevel);
-  }
+  if (!pack) return legacyModelPackSet(modelId, newPackThinkingLevel);
   const [first, ...rest] = pack.models;
-  if (!first) return set;
-  const head = {
-    modelId: change.modelId ?? first.modelId,
-    thinkingLevel: change.thinkingLevel ?? first.thinkingLevel,
-  };
-  const models = [head, ...rest.filter(model => model.modelId !== head.modelId)];
+  const models = [
+    { modelId, thinkingLevel: first?.thinkingLevel ?? newPackThinkingLevel },
+    ...rest.filter(model => model.modelId !== modelId),
+  ];
   return {
     ...set,
     modelPacks: set.modelPacks.map(candidate => (candidate.id === pack.id ? { ...pack, models } : candidate)),

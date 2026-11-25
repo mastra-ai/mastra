@@ -9,8 +9,9 @@ import {
   defaultModelPack,
   EMPTY_MODEL_PACK_SET,
   FACTORY_MODEL_SELECTION_SETTING,
+  modelIdSchema,
+  modelSelectionRequestSchema,
   parseStoredModelSelection,
-  resolvedModelSelection,
   resolveModelSelection,
 } from '../model-packs.js';
 import type {
@@ -25,30 +26,37 @@ import type {
   ConfigRoutesDeps,
   ModelCatalog,
   PersonalModelDefaultsResponse,
-  SessionModelContext,
   SessionModelContextResolver,
 } from './config.js';
-import { modelIdSchema, modelPackSetSchema, THINKING_LEVELS } from './contracts.js';
+import { modelPackSetSchema } from './contracts.js';
 import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
-export interface ModelDefaultsContext {
+interface ModelDefaultsContext {
   storage: ModelDefaultsStorage;
   orgId: string;
   userId: string;
 }
 
-export const sessionAddressSchema = z
-  .object({
-    resourceId: z.string().trim().min(1),
-    threadId: z.string().trim().min(1),
-    sessionId: z.string().trim().min(1).optional(),
-  })
-  .transform(data => ({ ...data, sessionId: data.sessionId ?? data.resourceId }));
+const sessionAddressFieldsSchema = z.object({
+  resourceId: z.string().trim().min(1),
+  threadId: z.string().trim().min(1),
+  sessionId: z.string().trim().min(1).optional(),
+});
+
+function withSessionId<T extends { resourceId: string; sessionId?: string }>(address: T) {
+  return { ...address, sessionId: address.sessionId ?? address.resourceId };
+}
+
+export const sessionAddressSchema = sessionAddressFieldsSchema.transform(withSessionId);
+
+const sessionModelBodySchema = sessionAddressFieldsSchema
+  .extend({ selection: modelSelectionRequestSchema })
+  .transform(withSessionId);
 
 export type SessionAddress = z.output<typeof sessionAddressSchema>;
 
-export async function resolveModelDefaultsContext({
+async function resolveModelDefaultsContext({
   c,
   auth,
   modelDefaults,
@@ -83,12 +91,6 @@ function modelDefaultsUnavailable(c: Context): Response {
   );
 }
 
-const modelSelectionRequestSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('default') }),
-  z.object({ kind: z.literal('pack'), packId: z.string().min(1) }),
-  z.object({ kind: z.literal('model'), modelId: modelIdSchema, thinkingLevel: z.enum(THINKING_LEVELS).optional() }),
-]);
-
 interface SessionModelTarget {
   stored: StoredModelSelection;
   modelId: string;
@@ -121,13 +123,14 @@ function sessionModelTarget(set: ModelPackSet, selection: ModelSelectionRequest)
 
 export async function resolveSessionModelPackSet(
   options: ConfigRoutesDeps,
-  context: SessionModelContext | undefined,
+  c: Context,
   address: SessionAddress,
 ): Promise<ModelPackSet> {
-  if (context) return context.modelPackSet;
   const { factoryProjects, sourceControlSessions, workItems, modelDefaults } = options;
   if (!factoryProjects || !sourceControlSessions || !workItems || !modelDefaults) return EMPTY_MODEL_PACK_SET;
   const requestContext = new RequestContext();
+  const tenant = options.auth.tenant(c);
+  if (tenant) requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
   requestContext.set('controller', address);
   const routed = await resolveRoutedModelDefaults(requestContext, {
     projects: factoryProjects,
@@ -146,7 +149,8 @@ export async function readSessionModelSelection(
   const session = await controller.getSession?.(sessionId);
   const thread = await session?.thread?.getById?.({ threadId });
   const stored = parseStoredModelSelection(thread?.metadata?.[FACTORY_MODEL_SELECTION_SETTING]);
-  return resolvedModelSelection(resolveModelSelection(set, stored, session?.model.get() || undefined));
+  const pack = resolveModelSelection(set, stored, session?.model.get() || undefined);
+  return pack ? { kind: 'pack', packId: pack.id } : { kind: 'model' };
 }
 
 function personalModelDefaults(record: ModelDefaultRecord | null): PersonalModelDefaultsResponse {
@@ -191,6 +195,26 @@ export function modelPackRoutes(
       },
     }),
 
+    registerApiRoute('/web/config/default-model', {
+      method: 'PUT',
+      requiresAuth: false,
+      handler: async c => {
+        const context = await defaultsContext(c);
+        if ('response' in context) return context.response;
+        const json = await readJsonBody(c);
+        if ('response' in json) return json.response;
+        const parsed = z.object({ modelId: modelIdSchema }).safeParse(json.body);
+        if (!parsed.success) return c.json({ error: 'Invalid modelId' }, 400);
+        const { modelId } = parsed.data;
+        try {
+          await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
+          return c.json({ ok: true, modelId });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
     registerApiRoute('/web/config/model-packs', {
       method: 'PUT',
       requiresAuth: false,
@@ -222,19 +246,44 @@ export function modelPackRoutes(
       handler: async c => {
         const json = await readJsonBody(c);
         if ('response' in json) return json.response;
-        const address = sessionAddressSchema.safeParse(json.body);
-        const request = z.object({ selection: modelSelectionRequestSchema }).safeParse(json.body);
-        if (!address.success || !request.success) return c.json({ error: 'invalid_session_model' }, 400);
-        const context = await resolveSessionModelContext(c, address.data);
+        const parsed = sessionModelBodySchema.safeParse(json.body);
+        if (!parsed.success) {
+          return c.json({ error: 'invalid_session_model', message: parsed.error.issues[0]?.message }, 400);
+        }
+        const { selection, ...address } = parsed.data;
+        const context = await resolveSessionModelContext(c, address);
         if (context && 'response' in context) return context.response;
-        const set = await resolveSessionModelPackSet(options, context, address.data);
-        const target = sessionModelTarget(set, request.data.selection);
-        if (!target) return c.json({ error: 'model_pack_not_found' }, 404);
-        const session = await options.controller.getSession?.(address.data.sessionId);
+        const target = sessionModelTarget(await resolveSessionModelPackSet(options, c, address), selection);
+        if (!target) {
+          return c.json(
+            {
+              error: 'model_pack_not_found',
+              message: 'That model pack no longer exists. Reopen the model menu to see the current packs.',
+            },
+            404,
+          );
+        }
+        const session = await options.controller.getSession?.(address.sessionId);
         const thread = session?.thread;
-        if (!session?.model.switch || !thread?.setSettingOn) return c.json({ error: 'session_not_running' }, 409);
-        if (thread.getId() !== address.data.threadId) return c.json({ error: 'session_thread_mismatch' }, 409);
-        const { threadId } = address.data;
+        if (!session?.model.switch || !thread?.setSettingOn) {
+          return c.json(
+            {
+              error: 'session_not_running',
+              message: 'This session is not running yet. Try again once it has started.',
+            },
+            409,
+          );
+        }
+        const { threadId } = address;
+        if (thread.getId() !== threadId) {
+          return c.json(
+            {
+              error: 'session_thread_mismatch',
+              message: 'This session moved to another thread. Reload it and pick the model again.',
+            },
+            409,
+          );
+        }
         try {
           const previous = (await thread.getById?.({ threadId }))?.metadata?.[FACTORY_MODEL_SELECTION_SETTING];
           await thread.setSettingOn({ threadId, key: FACTORY_MODEL_SELECTION_SETTING, value: target.stored });

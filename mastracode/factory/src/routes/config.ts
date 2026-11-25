@@ -22,7 +22,6 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { EMPTY_MODEL_PACK_SET } from '../model-packs.js';
 import type { ModelPackSet, ResolvedModelSelection } from '../model-packs.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
@@ -47,14 +46,12 @@ import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/do
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { modelIdSchema, THINKING_LEVELS } from './contracts.js';
 import { customEndpointUrlProblem } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
   modelPackRoutes,
   readSessionModelSelection,
-  resolveModelDefaultsContext,
   resolveSessionModelPackSet,
   sessionAddressSchema,
 } from './model-pack-routes.js';
@@ -95,15 +92,7 @@ import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
  * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
-  | 'deployment'
-  | 'oauth'
-  | 'stored'
-  | 'env'
-  | 'none'
-  | 'oauth-user'
-  | 'oauth-org'
-  | 'stored-user'
-  | 'stored-org';
+  'deployment' | 'oauth' | 'stored' | 'env' | 'none' | 'oauth-user' | 'oauth-org' | 'stored-user' | 'stored-org';
 
 /** A model provider with the current source of its credentials. */
 export interface ProviderInfo {
@@ -914,7 +903,7 @@ export interface PersonalModelDefaultsResponse extends ModelPackSet {
   thinkingLevel: ThinkingLevelSetting | null;
 }
 
-export interface SessionModelPackSelection extends ModelPackSet {
+interface SessionModelPackSelection extends ModelPackSet {
   modelSelection: ResolvedModelSelection;
 }
 
@@ -929,7 +918,6 @@ export interface SessionModelContext {
   tenantCredentials: CredentialRecord[];
   modelScope: 'factory' | 'user';
   defaultModelId: string | null;
-  modelPackSet: ModelPackSet;
   personalThinkingLevel: ThinkingLevelSetting | null;
   credentialTenant: CredentialTenant;
 }
@@ -1070,13 +1058,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         modelScope,
       });
       let defaultModelId = policy.factoryDefaultModelId ?? null;
-      let modelPackSet = policy.factoryModelPackSet ?? EMPTY_MODEL_PACK_SET;
       let personalThinkingLevel: ThinkingLevelSetting | null = null;
       if (modelScope === 'user' && includeDefaultModel) {
         if (!options.modelDefaults) return { response: c.json({ error: 'model_defaults_unavailable' }, 503) };
         const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
         defaultModelId = ownerDefaults?.modelId ?? null;
-        modelPackSet = ownerDefaults ?? EMPTY_MODEL_PACK_SET;
         personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
       }
       const credentialTenant: CredentialTenant = { orgId, userId: policy.tenant.userId, credentialScope: modelScope };
@@ -1084,7 +1070,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         tenantCredentials,
         modelScope,
         defaultModelId,
-        modelPackSet,
         personalThinkingLevel,
         credentialTenant,
       };
@@ -1514,7 +1499,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
               const context = await resolveSessionModelContext(c, address.data);
               if (context && 'response' in context) return context.response;
-              const modelPackSet = await resolveSessionModelPackSet(options, context, address.data);
+              const modelPackSet = await resolveSessionModelPackSet(options, c, address.data);
               const packSelection: SessionModelPackSelection = {
                 modelPacks: modelPackSet.modelPacks,
                 defaultModelPackId: modelPackSet.defaultModelPackId,
@@ -1584,67 +1569,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               })) ?? modeModelId;
             const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
             return c.json({ fallbackModelId, models });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ modelId: modelIdSchema }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Invalid modelId' }, 400);
-          const { modelId } = parsed.data;
-          try {
-            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
-            return c.json({ ok: true, modelId });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/default-model/thinking', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const context = await resolveModelDefaultsContext({
-            c: loose(c),
-            auth,
-            modelDefaults: options.modelDefaults,
-          });
-          if ('response' in context) return context.response;
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
-          const { thinkingLevel } = parsed.data;
-          try {
-            const record = await context.storage.setThinkingLevel({
-              orgId: context.orgId,
-              userId: context.userId,
-              thinkingLevel,
-            });
-            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
-            return c.json({ ok: true, thinkingLevel });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

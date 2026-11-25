@@ -737,7 +737,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             recordTerminalError: (error: unknown) => void;
           }
         | undefined;
-      let fallbackVetoedModelId: string | undefined;
 
       for (let modelIndex = 0; modelIndex < modelList.length; modelIndex++) {
         const modelEntry = modelList[modelIndex]!;
@@ -754,7 +753,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           let modelRequestRejected = false;
           ownership?.throwIfLost();
           request = {};
-          fallbackVetoedModelId = undefined;
           // Capture this attempt before processors can rotate the active id. The
           // fallback callback covers failures before a stream can materialize;
           // it resolves currentMessageId only when the terminal error is known.
@@ -2689,7 +2687,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     agent: registryEntryInner?.agent,
                     processorStates: registryEntryInner.processorStates,
                   });
-                  const { retry, fallback } = await runner.runProcessAPIError({
+                  const { retry } = await runner.runProcessAPIError({
                     error: lastError,
                     messages: messageList.get.all.db(),
                     messageList,
@@ -2707,9 +2705,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     // Decrement attempt so the `for` loop increment restores it.
                     attempt--;
                     continue;
-                  }
-                  if (fallback === false) {
-                    fallbackVetoedModelId = modelEntry.config.modelId;
                   }
                 } catch (processorError) {
                   ownership?.throwIfLost();
@@ -3212,7 +3207,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   agent: registryEntry?.agent,
                   processorStates: registryEntry.processorStates,
                 });
-                const { retry, fallback } = await runner.runProcessAPIError({
+                const { retry } = await runner.runProcessAPIError({
                   error: lastError,
                   messages: messageList.get.all.db(),
                   messageList,
@@ -3231,9 +3226,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   attempt--;
                   continue;
                 }
-                if (fallback === false) {
-                  fallbackVetoedModelId = modelId;
-                }
               } catch (processorError) {
                 ownership?.throwIfLost();
                 logger?.debug?.(`processAPIError handler failed: ${processorError}`, { runId });
@@ -3245,7 +3237,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // model once with unavailable attachments replaced by a placeholder.
             if (
               attempt >= maxRetries &&
-              (modelIndex === modelList.length - 1 || fallbackVetoedModelId !== undefined) &&
+              modelIndex === modelList.length - 1 &&
               !skipUnavailableAttachments &&
               isDownloadAssetsError(lastError)
             ) {
@@ -3259,7 +3251,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             if (attempt >= maxRetries) {
-              logger?.debug?.(`Exhausted retries for model ${modelId}`, { runId });
+              logger?.debug?.(`Exhausted retries for model ${modelId}, trying next model`, { runId });
               break;
             }
 
@@ -3270,9 +3262,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             removeAttemptAbortListener?.();
           }
         } // end retry loop
-        if (fallbackVetoedModelId !== undefined) {
-          break;
-        }
       } // end model loop
 
       // All models exhausted (or the run-level budget expired) - emit error +
@@ -3286,7 +3275,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Must run before emitFatalErrorBail, which serializes the list.
       terminalAttemptContext?.recordTerminalError(fatalError);
 
-      return emitFatalErrorBail(fatalError, fallbackVetoedModelId ?? modelList.at(-1)?.config.modelId ?? 'unknown', {
+      return emitFatalErrorBail(fatalError, modelList.at(-1)?.config.modelId ?? 'unknown', {
         modelRejectedBeforeStream,
       });
     }),

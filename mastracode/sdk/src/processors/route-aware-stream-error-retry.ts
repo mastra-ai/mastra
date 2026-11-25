@@ -14,5 +14,5 @@ export class RouteAwareStreamErrorRetryProcessor extends StreamErrorRetryProcess
 
 function routeCanHop({ requestContext }: ProcessAPIErrorArgs): boolean {
   const controller = requestContext?.get('controller') as RoutingControllerContext | undefined;
-  return (requestModelRoute(requestContext, controller).entries?.length ?? 0) > 1;
+  return requestModelRoute(requestContext, controller).entries.length > 1;
 }

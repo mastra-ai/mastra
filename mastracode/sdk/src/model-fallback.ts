@@ -29,18 +29,12 @@ export const pendingModelFallbackSchema = z.object({
   threadId: z.string().optional(),
   reason: modelFallbackReasonSchema,
   at: z.string(),
-  failure: modelRouteFailureSchema.optional().catch(undefined),
 });
 
 export type PendingModelFallback = z.infer<typeof pendingModelFallbackSchema>;
 
 export function parsePendingModelFallback(value: unknown): PendingModelFallback | null {
   return pendingModelFallbackSchema.safeParse(value).data ?? null;
-}
-
-export function pendingModelFallbackForThread(value: unknown, threadId: unknown): PendingModelFallback | null {
-  const pending = parsePendingModelFallback(value);
-  return pending && (pending.threadId === undefined || pending.threadId === threadId) ? pending : null;
 }
 
 const routeEndpointSchema = z.object({ entryId: z.string(), label: z.string() });
@@ -75,23 +69,6 @@ export function modelFallbackNoticeText(
 export interface ModelFallback {
   modelId: string;
   thinkingLevel?: ThinkingLevelSetting;
-}
-
-export function modelFallbacksToTry(
-  primaryModelId: string,
-  fallbacks: readonly ModelFallback[],
-  canUse: (modelId: string) => boolean,
-  limit = Number.POSITIVE_INFINITY,
-): ModelFallback[] {
-  const usable: ModelFallback[] = [];
-  const seen = new Set([primaryModelId]);
-  for (const fallback of fallbacks) {
-    if (usable.length >= limit) break;
-    if (seen.has(fallback.modelId)) continue;
-    seen.add(fallback.modelId);
-    if (canUse(fallback.modelId)) usable.push(fallback);
-  }
-  return usable;
 }
 
 export function parseModelFallbackPart(data: unknown): ModelFallbackPartData | null {
