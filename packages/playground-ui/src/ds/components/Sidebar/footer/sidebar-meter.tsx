@@ -12,13 +12,6 @@ import './sidebar-meter.css';
 
 export type SidebarMeterTone = 'neutral' | 'warning' | 'danger';
 
-/** A tinted card needs attention; the neutral one is its plain fill. */
-const TONES = {
-  neutral: { surface: 'bg-nested', text: 'text-muted-foreground' },
-  warning: { surface: 'bg-badge-amber-subtle', text: 'text-badge-amber-foreground' },
-  danger: { surface: 'bg-badge-red-subtle', text: 'text-badge-red-foreground' },
-};
-
 // Each line is cropped to its letters (cap height to baseline), so the card's padding is the space you see above
 // the first line and below the last.
 const trimToLetters = '[text-box:trim-both_cap_alphabetic]';
@@ -41,6 +34,7 @@ interface SidebarMeterBaseProps extends Omit<ComponentPropsWithoutRef<'div'>, 'c
   /** A shorter amount for the rail, where the card is 40px wide (`$7K` for `$6,649.10`). Defaults to `value`. */
   railValue?: ReactNode;
   status?: ReactNode;
+  /** Anything but `neutral` shows `icon`, the card's only status color. */
   tone?: SidebarMeterTone;
   icon?: ReactNode;
   action?: ReactNode;
@@ -85,7 +79,6 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';
-  const current = TONES[tone];
 
   return (
     <div
@@ -95,8 +88,7 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       data-state={state}
       aria-busy={loading || undefined}
       className={cn(
-        'relative isolate flex flex-col overflow-hidden rounded-lg px-2.25 py-2.5',
-        current.surface,
+        'relative isolate flex flex-col overflow-hidden rounded-lg bg-nested px-2.25 py-2.5',
         href && surfaceStateLayerStyle,
         className,
       )}
@@ -154,9 +146,8 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
               // Descenders hang below the crop, so a status that truncates clips only sideways.
               <p
                 className={cn(
-                  'min-w-0 overflow-x-clip text-meta text-ellipsis whitespace-nowrap',
+                  'min-w-0 overflow-x-clip text-meta text-ellipsis whitespace-nowrap text-muted-foreground',
                   trimToLetters,
-                  current.text,
                 )}
               >
                 {status}

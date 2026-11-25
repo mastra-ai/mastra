@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Replaced the gradient behind empty state illustrations and on the sidebar credits card (warning and danger tones) with solid colors. The credits card's status text is also easier to read in light mode.
+Replaced the gradient behind empty state illustrations with a solid color. The sidebar credits card keeps its plain background and text when credits are low or out; only its icon is colored.
