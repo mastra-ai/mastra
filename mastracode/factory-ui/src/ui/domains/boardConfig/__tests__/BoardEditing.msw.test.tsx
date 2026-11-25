@@ -426,10 +426,14 @@ describe("Editing a phase's outcomes", () => {
 
     const defaults = within(await screen.findByRole('list', { name: 'Fixing outcomes' }));
     expect(defaults.getAllByRole('listitem').map(item => item.textContent)).toEqual([
-      'Reported → Reported',
-      'Fixed → Fixed',
+      'reported moves the card to Reported',
+      'fixed moves the card to Fixed',
     ]);
     await user.click(screen.getByRole('button', { name: 'Customize outcomes' }));
+    // Each field says what it means.
+    expect(screen.getAllByRole('button', { name: 'About Key' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'About Description' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'About Moves the card to' })).toHaveLength(2);
 
     const key = await screen.findByRole('textbox', { name: 'Fixing outcome 2 key' });
     await user.clear(key);
@@ -440,7 +444,7 @@ describe("Editing a phase's outcomes", () => {
     // Point the first outcome at Fixed instead, then back, through the target picker.
     await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
     await user.click(await screen.findByRole('option', { name: 'Fixed' }));
-    expect(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' })).toHaveTextContent('→ Fixed');
+    expect(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' })).toHaveTextContent('Fixed');
     await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
     await user.click(await screen.findByRole('option', { name: 'Reported' }));
     // Every move already has an outcome, so a new one reuses the first under a free key; it goes again.

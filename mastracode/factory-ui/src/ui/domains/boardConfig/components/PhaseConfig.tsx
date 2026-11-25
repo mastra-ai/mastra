@@ -331,7 +331,7 @@ export function PhaseConfig({
           {moves}
           <SettingsSubsection
             title="Outcomes"
-            description="What the agent may report when the phase's work ends. Factory moves the card to the outcome's phase once the run ends; people can still make any allowed move."
+            description="The ways this phase can end. The agent reports one by its key when its work is done, and Factory moves the card to that outcome's phase once the run ends. People can still make any allowed move."
           >
             <PhaseOutcomes
               phase={phase}

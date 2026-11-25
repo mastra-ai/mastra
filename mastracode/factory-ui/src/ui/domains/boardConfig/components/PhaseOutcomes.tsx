@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldError } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -10,6 +10,12 @@ import { MAX_OUTCOMES, defaultOutcomes, newOutcome, nextPhasesOf, outcomeProblem
 import type { PhaseOutcome } from '../boardDraft';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
+
+const KEY_INFO =
+  'What the agent passes to factory_report_outcome. Letters, digits, hyphens and underscores; unique in this phase.';
+const DESCRIPTION_INFO =
+  "Tells the agent when this outcome applies, and shows in the card's history when Factory moves the card.";
+const TARGET_INFO = 'Where Factory moves the card once the run that reported this outcome ends. Only allowed moves.';
 
 /**
  * The outcomes the session working a card in this phase may report; Factory moves the card to the outcome's phase
@@ -46,13 +52,14 @@ export function PhaseOutcomes({
           {defaults.map(outcome => (
             <li key={outcome.key}>
               <Txt as="span" variant="caption" tone="muted">
-                {outcome.label} → {nameOf(outcome.to)}
+                <code>{outcome.key}</code> moves the card to {nameOf(outcome.to)}
               </Txt>
             </li>
           ))}
         </ul>
         <Txt as="p" variant="caption" tone="muted">
-          One outcome per allowed move, named after it.
+          This phase lists no outcomes, so the agent may report any allowed move by the key of the phase it goes to.
+          Customize them to give each a description the agent reads, or to offer fewer moves than people have.
         </Txt>
         {!disabled && (
           <div>
@@ -82,43 +89,62 @@ export function PhaseOutcomes({
             const problem = problems[index] ?? {};
             const name = `outcome ${outcome.key || index + 1}`;
             return (
-              <li key={index} className="flex flex-wrap items-start gap-2 px-4 py-3">
+              <li key={index} className="flex flex-wrap items-start gap-3 px-4 py-3">
                 <Field invalid={Boolean(problem.key)} disabled={disabled} className="w-36">
+                  <FieldLabel size="smaller" info={KEY_INFO}>
+                    Key
+                  </FieldLabel>
                   <Input
                     aria-label={`${phase.name} outcome ${index + 1} key`}
                     value={outcome.key}
+                    placeholder="e.g. review"
                     disabled={disabled}
                     onChange={event => set(index, { key: event.target.value.trim() })}
                   />
                   {problem.key && <FieldError>{problem.key}</FieldError>}
                 </Field>
-                <Field invalid={Boolean(problem.label)} disabled={disabled} className="min-w-40 flex-1">
+                <Field invalid={Boolean(problem.label)} disabled={disabled} className="min-w-48 flex-1">
+                  <FieldLabel size="smaller" info={DESCRIPTION_INFO}>
+                    Description
+                  </FieldLabel>
                   <Input
                     aria-label={`${phase.name} outcome ${index + 1} label`}
                     value={outcome.label}
+                    placeholder="e.g. Change request opened for review"
                     disabled={disabled}
                     onChange={event => set(index, { label: event.target.value })}
                   />
                   {problem.label && <FieldError>{problem.label}</FieldError>}
                 </Field>
-                <Select
-                  value={outcome.to}
-                  disabled={disabled}
-                  onValueChange={value => set(index, { to: String(value) })}
-                >
-                  <SelectTrigger size="sm" aria-label={`${phase.name} ${name} goes to`} className="w-40">
-                    <span className="truncate">→ {nameOf(outcome.to)}</span>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {next.map(key => (
-                      <SelectItem key={key} value={key}>
-                        {nameOf(key)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Field disabled={disabled} className="w-44">
+                  <FieldLabel size="smaller" info={TARGET_INFO}>
+                    Moves the card to
+                  </FieldLabel>
+                  <Select
+                    value={outcome.to}
+                    disabled={disabled}
+                    onValueChange={value => set(index, { to: String(value) })}
+                  >
+                    <SelectTrigger size="sm" aria-label={`${phase.name} ${name} goes to`} className="w-full">
+                      <span className="truncate">{nameOf(outcome.to)}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {next.map(key => (
+                        <SelectItem key={key} value={key}>
+                          {nameOf(key)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
                 {!disabled && (
-                  <Button size="icon-sm" variant="ghost" tooltip={`Remove ${name}`} onClick={() => remove(index)}>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    tooltip={`Remove ${name}`}
+                    className="mt-6"
+                    onClick={() => remove(index)}
+                  >
                     <TrashIcon />
                   </Button>
                 )}
