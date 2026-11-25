@@ -41,6 +41,7 @@ import type {
   PruneResult,
   RetentionTablesDescriptor,
   RunFence,
+  StorageColumn,
   TableRetentionPolicy,
   TABLE_NAMES,
 } from '@mastra/core/storage';
@@ -89,6 +90,26 @@ import type { RunFenceCheck, SqliteWriter } from '../../db/run-fencing';
 import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
+
+/**
+ * Pending agent signals live in the messages table. These columns are not in core's shared
+ * schema, so `init()` adds them here. A message row with a `signalStatus` is a signal not
+ * saved as a message yet; `signalClaimedBy` is the run that claimed it. The thread's
+ * `signalRunId` is the only run allowed to insert for a run or to claim.
+ */
+const SIGNAL_MESSAGE_COLUMNS = {
+  signalStatus: { type: 'text', nullable: true },
+  signalClaimedBy: { type: 'text', nullable: true },
+} satisfies Record<string, StorageColumn>;
+const SIGNAL_THREAD_COLUMNS = {
+  signalRunId: { type: 'text', nullable: true },
+} satisfies Record<string, StorageColumn>;
+/**
+ * Rows the pending-signal methods act on, and the predicate of their partial index. SQLite uses
+ * a partial index only for a query whose WHERE clause implies its condition, so the queries
+ * meant for the index state the condition itself rather than rely on the planner proving it.
+ */
+const SIGNAL_ROW_CONDITION = `("signalStatus" IS NOT NULL OR "signalClaimedBy" IS NOT NULL)`;
 
 function addSqliteMetadataFilter(
   conditions: string[],
@@ -246,11 +267,16 @@ export class MemoryLibSQL extends MemoryStorage {
         ],
       });
     }
-    // Add resourceId column for backwards compatibility
+    // Add resourceId column for backwards compatibility, and the pending-signal columns to new and existing tables
     await this.#db.alterTable({
       tableName: TABLE_MESSAGES,
-      schema: TABLE_SCHEMAS[TABLE_MESSAGES],
-      ifNotExists: ['resourceId'],
+      schema: { ...TABLE_SCHEMAS[TABLE_MESSAGES], ...SIGNAL_MESSAGE_COLUMNS },
+      ifNotExists: ['resourceId', ...Object.keys(SIGNAL_MESSAGE_COLUMNS)],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_THREADS,
+      schema: { ...TABLE_SCHEMAS[TABLE_THREADS], ...SIGNAL_THREAD_COLUMNS },
+      ifNotExists: Object.keys(SIGNAL_THREAD_COLUMNS),
     });
 
     await this.#client.batch(
@@ -261,6 +287,12 @@ export class MemoryLibSQL extends MemoryStorage {
         },
         {
           sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_resource_created_at ON ${TABLE_MESSAGES} (thread_id, "resourceId", "createdAt")`,
+          args: [],
+        },
+        // Only pending-signal rows and saved rows a run still claims, so it stays small. It serves claims,
+        // closes, cancels and lists, and returns a thread's rows in claim order without a sort.
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_messages_thread_signal ON ${TABLE_MESSAGES} (thread_id, "createdAt", id) WHERE ${SIGNAL_ROW_CONDITION}`,
           args: [],
         },
       ],
