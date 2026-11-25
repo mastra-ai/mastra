@@ -72,7 +72,12 @@ export async function persistGeneratedMessages(
   generatedMessageIds: readonly string[],
 ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
   if (generatedMessageIds.length === 0) {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
 
@@ -80,7 +85,12 @@ export async function persistGeneratedMessages(
 
   const hook = getGeneratedMessagePersistenceHook(memory);
   if (typeof hook !== 'function') {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
   return (
@@ -100,7 +110,12 @@ export async function persistMessagesWithThreadCreation(
   if (generatedMessageIds.length > 0) assertGeneratedMessageIds(input, generatedMessageIds);
   const hook = getGeneratedMessagePersistenceHook(memory);
   if (typeof hook !== 'function') {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
   return (
