@@ -230,6 +230,56 @@ function paginateThreads({
   };
 }
 
+const THREAD_LIST_BATCH_SIZE = 100;
+
+/**
+ * Pages a thread listing that has to be filtered in process (FGA, branch ancestry, legacy branch
+ * rows): reads storage in fixed batches, filters each batch, and keeps only the requested page, so
+ * memory stays bounded by one batch plus one page. Every matching row is still read, which keeps
+ * `total` exact. Thread IDs are deduplicated in case a batch boundary repeats a row whose sort key ties.
+ */
+async function listFilteredThreadsInBatches({
+  listBatch,
+  filterBatch,
+  page,
+  perPage,
+}: {
+  listBatch: (batch: { page: number; perPage: number }) => Promise<StorageListThreadsOutput>;
+  filterBatch: (threads: StorageThreadType[]) => Promise<StorageThreadType[]> | StorageThreadType[];
+  page?: number;
+  perPage?: number | false;
+}): Promise<StorageListThreadsOutput> {
+  const effectivePage = page ?? 0;
+  const effectivePerPage: number | false = perPage ?? 100;
+  const start = effectivePerPage === false ? 0 : effectivePage * effectivePerPage;
+  const end = effectivePerPage === false ? Number.POSITIVE_INFINITY : start + effectivePerPage;
+
+  const seenIds = new Set<string>();
+  const pagedThreads: StorageThreadType[] = [];
+  let total = 0;
+  for (let batchPage = 0; ; batchPage++) {
+    const batch = await listBatch({ page: batchPage, perPage: THREAD_LIST_BATCH_SIZE });
+    const unseen = batch.threads.filter(thread => {
+      if (seenIds.has(thread.id)) return false;
+      seenIds.add(thread.id);
+      return true;
+    });
+    for (const thread of await filterBatch(unseen)) {
+      if (total >= start && total < end) pagedThreads.push(thread);
+      total++;
+    }
+    if (!batch.hasMore || batch.threads.length === 0) break;
+  }
+
+  return {
+    threads: pagedThreads,
+    page: effectivePage,
+    perPage: effectivePerPage,
+    total,
+    hasMore: start + pagedThreads.length < total,
+  };
+}
+
 async function enforceDeleteMessagesThreadAccess({
   mastra,
   requestContext,
@@ -1418,21 +1468,23 @@ export const LIST_THREADS_ROUTE = createRoute({
           if (legacyPage) return legacyPage;
         }
 
-        const result = await memory.listThreads({ filter, perPage: false, orderBy });
-        const authorizedThreads = filterWithFGA
-          ? await filterAccessibleThreads({ mastra, requestContext, threads: result.threads })
-          : result.threads;
-        const ancestryAuthorizedThreads = await filterThreadsByBranchAccess({
-          mastra,
-          requestContext,
-          memory,
-          threads: authorizedThreads,
-          effectiveResourceId,
-        });
-        return paginateThreads({
-          threads: memory.supportsThreadBranching
-            ? ancestryAuthorizedThreads.map(sanitizeThreadForResponse)
-            : sanitizeLegacyThreadListOrThrow(ancestryAuthorizedThreads),
+        return listFilteredThreadsInBatches({
+          listBatch: batch => memory.listThreads({ filter, ...batch, orderBy }),
+          filterBatch: async threads => {
+            const authorizedThreads = filterWithFGA
+              ? await filterAccessibleThreads({ mastra, requestContext, threads })
+              : threads;
+            const ancestryAuthorizedThreads = await filterThreadsByBranchAccess({
+              mastra,
+              requestContext,
+              memory,
+              threads: authorizedThreads,
+              effectiveResourceId,
+            });
+            return memory.supportsThreadBranching
+              ? ancestryAuthorizedThreads.map(sanitizeThreadForResponse)
+              : sanitizeLegacyThreadListOrThrow(ancestryAuthorizedThreads);
+          },
           page,
           perPage,
         });
@@ -1458,12 +1510,12 @@ export const LIST_THREADS_ROUTE = createRoute({
             });
             if (legacyPage) return legacyPage;
           }
-          const result = await memoryStore.listThreads({ filter, perPage: false, orderBy });
-          const authorizedThreads = filterWithFGA
-            ? await filterAccessibleThreads({ mastra, requestContext, threads: result.threads })
-            : result.threads;
-          return paginateThreads({
-            threads: sanitizeLegacyThreadListOrThrow(authorizedThreads),
+          return listFilteredThreadsInBatches({
+            listBatch: batch => memoryStore.listThreads({ filter, ...batch, orderBy }),
+            filterBatch: async threads =>
+              sanitizeLegacyThreadListOrThrow(
+                filterWithFGA ? await filterAccessibleThreads({ mastra, requestContext, threads }) : threads,
+              ),
             page,
             perPage,
           });
