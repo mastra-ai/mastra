@@ -91,6 +91,30 @@ const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
 };
 
 /**
+ * Lock order of message rows. Every statement that locks several message rows
+ * locks them by `id COLLATE "C"`, and `saveMessages` and `updateMessages` write
+ * them in the same order, so two writers cannot wait on each other's rows.
+ * Thread rows are always locked before message rows.
+ */
+const MESSAGE_LOCK_ORDER = `id COLLATE "C"`;
+
+/** `items` sorted by `MESSAGE_LOCK_ORDER`: `COLLATE "C"` compares the UTF-8 bytes of the ids. */
+function sortInMessageLockOrder<T>(items: T[], idOf: (item: T) => string): T[] {
+  return items
+    .map(item => ({ item, key: Buffer.from(idOf(item)) }))
+    .sort((a, b) => Buffer.compare(a.key, b.key))
+    .map(({ item }) => item);
+}
+
+/**
+ * For transactions that wait for a row lock and then read or write rows another
+ * transaction may have changed during the wait. Under a REPEATABLE READ session
+ * default the snapshot predates the wait, so later statements would miss those
+ * rows or fail with serialization errors.
+ */
+const READ_COMMITTED: TxOptions = { isolationLevel: 'read committed' };
+
+/**
  * The OM schema is imported statically above: the peer dependency range
  * (`@mastra/core >= 1.49.0`) guarantees the export exists. This used to be a
  * dynamic `require` guarded by `typeof require === 'function'` for older core
@@ -134,7 +158,7 @@ import type {
   TABLE_NAMES,
 } from '@mastra/core/storage';
 import { schemaNamePrefix } from '../../../shared/schema-name';
-import type { TxClient } from '../../client';
+import type { TxClient, TxOptions } from '../../client';
 import {
   PgDB,
   resolvePgConfig,
@@ -778,7 +802,7 @@ export class MemoryPG extends MemoryStorage {
         await t.none(`UPDATE ${messagesTable} SET "resourceId" = $1 WHERE thread_id = $2`, [resourceId, threadId]);
 
         return { ...normalized, resourceId, updatedAt: new Date() };
-      });
+      }, READ_COMMITTED);
     } catch (error) {
       throw new MastraError(
         {
@@ -1020,6 +1044,22 @@ export class MemoryPG extends MemoryStorage {
   }
 
   /**
+   * Locks thread rows before any of their message rows, as every writer of a thread's messages
+   * does, so two writers of one thread run one after the other instead of waiting on each other's
+   * message rows.
+   */
+  async #lockThreads(t: Queryable, threadIds: string[]): Promise<void> {
+    if (threadIds.length === 0) return;
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const ids = [...new Set(threadIds)];
+    // Rows are locked in the order the plan returns them; ORDER BY keeps two writes that span the
+    // same threads (two multi-thread saves) in one order whatever plan each gets.
+    await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = ANY($1::text[]) ORDER BY id COLLATE "C" FOR NO KEY UPDATE`, [
+      ids,
+    ]);
+  }
+
+  /**
    * Writes `title` (when given) and the full `metadata` value (when given).
    * Callers that merge metadata must hold the row lock from `#lockThread`.
    */
@@ -1164,7 +1204,15 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
-        await t.none(`DELETE FROM ${tableName} WHERE thread_id = $1`, [threadId]);
+        // The thread row first, then its messages in lock order, as every other writer takes them.
+        await t.none(`SELECT 1 FROM ${threadTableName} WHERE id = $1 FOR UPDATE`, [threadId]);
+        await t.none(
+          `WITH locked AS (
+             SELECT id FROM ${tableName} WHERE thread_id = $1 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           DELETE FROM ${tableName} m USING locked WHERE m.id = locked.id`,
+          [threadId],
+        );
 
         const schemaName = this.#schema || 'public';
         const vectorTables = await t.manyOrNone<{ tablename: string }>(
@@ -1183,7 +1231,7 @@ export class MemoryPG extends MemoryStorage {
         }
 
         await t.none(`DELETE FROM ${threadTableName} WHERE id = $1`, [threadId]);
-      });
+      }, READ_COMMITTED);
     } catch (error) {
       throw new MastraError(
         {
@@ -1973,9 +2021,12 @@ export class MemoryPG extends MemoryStorage {
         }
       }
 
-      const messagesToSave = dedupeMessagesForSave(messages);
+      // Sorted because a save can move rows out of a thread it does not lock: unsorted, it could
+      // deadlock with a deleteThread of that thread or another save of the same rows.
+      const messagesToSave = sortInMessageLockOrder(dedupeMessagesForSave(messages), message => message.id);
       await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'saveMessages');
+        await this.#lockThreads(t, [...threadIds]);
         for (let offset = 0; offset < messagesToSave.length; offset += MAX_MESSAGES_PER_INSERT) {
           const batch = messagesToSave.slice(offset, offset + MAX_MESSAGES_PER_INSERT);
           const values: unknown[] = [];
@@ -2026,7 +2077,7 @@ export class MemoryPG extends MemoryStorage {
             [now, now, threadIdToUpdate],
           );
         }
-      });
+      }, READ_COMMITTED);
 
       const messagesWithParsedContent = messages.map(message => {
         if (typeof message.content === 'string') {
@@ -2087,7 +2138,8 @@ export class MemoryPG extends MemoryStorage {
       return [];
     }
 
-    const existingMessages: MastraDBMessage[] = existingMessagesDb.map(msg => {
+    // Updated in lock order: a concurrent save can be moving these rows without holding their thread.
+    const existingMessages: MastraDBMessage[] = sortInMessageLockOrder(existingMessagesDb, row => row.id).map(msg => {
       if (typeof msg.content === 'string') {
         try {
           msg.content = JSON.parse(msg.content);
@@ -2102,6 +2154,10 @@ export class MemoryPG extends MemoryStorage {
 
     await this.#db.client.tx(async t => {
       if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateMessages');
+      await this.#lockThreads(t, [
+        ...existingMessages.map(message => message.threadId!),
+        ...messages.flatMap(message => (message.threadId ? [message.threadId] : [])),
+      ]);
       const queries = [];
       const columnMapping: Record<string, string> = {
         threadId: 'thread_id',
@@ -2171,7 +2227,7 @@ export class MemoryPG extends MemoryStorage {
       if (queries.length > 0) {
         await t.batch(queries);
       }
-    });
+    }, READ_COMMITTED);
 
     const updatedMessages = await this.#db.client.manyOrNone<MessageRowFromDB>(selectQuery, messageIds);
 
@@ -2208,7 +2264,14 @@ export class MemoryPG extends MemoryStorage {
 
         const threadIds = messages?.map(msg => msg.thread_id).filter(Boolean) || [];
 
-        await t.none(`DELETE FROM ${messageTableName} WHERE id IN (${placeholders})`, messageIds);
+        await this.#lockThreads(t, threadIds);
+        await t.none(
+          `WITH locked AS (
+             SELECT id FROM ${messageTableName} WHERE id IN (${placeholders}) ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           DELETE FROM ${messageTableName} m USING locked WHERE m.id = locked.id`,
+          messageIds,
+        );
 
         if (threadIds.length > 0) {
           await t.none(
@@ -2216,7 +2279,7 @@ export class MemoryPG extends MemoryStorage {
             threadIds,
           );
         }
-      });
+      }, READ_COMMITTED);
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
