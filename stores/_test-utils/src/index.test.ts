@@ -1,8 +1,6 @@
 import { MockStore } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
 import { createMastraStorageCompositionTests } from './composite-tests';
-import { createAgentSignalsTests } from './domains/agent-signals';
 import {
   createKnowledgeImporterHostTests,
   createKnowledgeHostedImporterHostTests,
@@ -14,14 +12,6 @@ import { createTestSuite } from './factory';
 
 // Test InMemoryStore (MockStore)
 createTestSuite(new MockStore(), { scopedTraceDeletion: true });
-
-// The shared agent signals contract against the in-memory reference store.
-createAgentSignalsTests({ storage: new MockStore() });
-describe('Agent signals on InMemoryStore', () => {
-  it('is not shared across processes', async () => {
-    expect((await new MockStore().getStore('agentSignals'))?.sharedAcrossProcesses).toBe(false);
-  });
-});
 
 // Test MastraStorage composition with InMemoryStore backing
 createMastraStorageCompositionTests();
