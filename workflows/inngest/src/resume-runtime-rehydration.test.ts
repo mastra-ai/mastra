@@ -38,7 +38,9 @@ describe('InngestAgent resume runtime rehydration', () => {
       await expect(globalRunRegistry.get(runId)!.workflowExecution).resolves.toBeUndefined();
 
       const workflowInput = sendSpy.mock.calls[0]?.[0]?.data?.inputData;
-      expect(workflowInput?.requestContextEntries).toEqual({ tenantId: 'tenant-1' });
+      // The durable snapshot always records the run's scope set, `[]` included, so a
+      // cold resume can tell "held no scopes" apart from a pre-upgrade snapshot.
+      expect(workflowInput?.requestContextEntries).toEqual({ tenantId: 'tenant-1', mastra__scopes: [] });
 
       initialResult.cleanup();
       expect(globalRunRegistry.has(runId)).toBe(false);
@@ -60,6 +62,7 @@ describe('InngestAgent resume runtime rehydration', () => {
       };
       const snapshot = {
         value: {},
+        status: 'suspended',
         context: { input: workflowInput },
         suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
       };

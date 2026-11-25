@@ -9,9 +9,7 @@ afterEach(() => {
 });
 
 const gridOf = (container: HTMLElement) => {
-  const grid = Array.from(container.querySelectorAll('div')).find(div =>
-    div.style.gridTemplateColumns ? true : false,
-  );
+  const grid = Array.from(container.querySelectorAll('div')).find(div => !!div.style.gridTemplateColumns);
   if (!grid) throw new Error('DataList grid element not found');
   return grid;
 };

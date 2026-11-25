@@ -1,16 +1,16 @@
-import { createAlibaba } from '@ai-sdk/alibaba-v6';
+import { createAlibaba } from '@ai-sdk/alibaba-v7';
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createCerebras } from '@ai-sdk/cerebras-v6';
-import { createDeepInfra } from '@ai-sdk/deepinfra-v6';
+import { createCerebras } from '@ai-sdk/cerebras-v7';
+import { createDeepInfra } from '@ai-sdk/deepinfra-v7';
 import { createDeepSeek } from '@ai-sdk/deepseek-v7';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
-import { createGroq } from '@ai-sdk/groq-v6';
+import { createGroq } from '@ai-sdk/groq-v7';
 import { createMistral } from '@ai-sdk/mistral-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import { createPerplexity } from '@ai-sdk/perplexity-v6';
-import { createTogetherAI } from '@ai-sdk/togetherai-v6';
-import { createXai } from '@ai-sdk/xai-v6';
+import { createTogetherAI } from '@ai-sdk/togetherai-v7';
+import { createXai } from '@ai-sdk/xai-v7';
 import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { parseModelRouterId } from '../gateway-resolver.js';
@@ -26,11 +26,13 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { interpolateUrlTemplate } from './url-template.js';
 
 interface ModelsDevModelInfo {
   id: string;
   name?: string;
   status?: string;
+  release_date?: string;
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
   temperature?: boolean;
@@ -95,19 +97,6 @@ function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; provi
   }
 
   return envVars[0] || fallbackEnvVar;
-}
-
-function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
-  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
-    const key = envVarName.trim();
-    const value = envVars?.[key] ?? process.env[key];
-
-    if (value === undefined || value === null) {
-      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
-    }
-
-    return value;
-  });
 }
 
 function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): string | undefined {
@@ -211,6 +200,11 @@ export class ModelsDevGateway extends MastraModelGateway {
         // offer models for *new* selection can hide or mark them.
         const allModels = Object.entries(providerInfo.models);
         const modelIds = allModels.map(([modelId]) => modelId).sort();
+        const modelReleaseDates = Object.fromEntries(
+          allModels.flatMap(([modelId, info]) =>
+            typeof info?.release_date === 'string' && info.release_date ? [[modelId, info.release_date]] : [],
+          ),
+        );
         const deprecatedModelIds = allModels
           .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
           .map(([modelId]) => modelId)
@@ -277,6 +271,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
+          ...(Object.keys(modelReleaseDates).length > 0 ? { modelReleaseDates } : {}),
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
@@ -480,6 +475,10 @@ export class ModelsDevGateway extends MastraModelGateway {
           baseURL,
           headers: mastraHeaders,
           supportsStructuredOutputs: true,
+          // Kimi's coding endpoint only reports usage at the standard top level of a stream chunk when
+          // asked; without stream_options.include_usage it nests usage inside choices[0], which the AI
+          // SDK never reads, so every Kimi step's token counts came back undefined (r325).
+          ...(providerId.startsWith('kimi-code-plan') ? { includeUsage: true } : {}),
         }).chatModel(modelId);
       }
     }

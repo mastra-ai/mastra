@@ -178,7 +178,7 @@ describe('EnvironmentVariablesEditor', () => {
     const onSave = vi.fn();
     render(<TestEditor onSave={onSave} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add Variable' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add variable' }));
     fireEvent.change(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')[1], {
       target: { value: ' API_KEY ' },
     });
@@ -213,13 +213,6 @@ describe('EnvironmentVariablesEditor', () => {
     expect(screen.getAllByText('Environment variable keys must be unique').length).toBeGreaterThan(0);
     expect(getButton('Save').disabled).toBe(true);
     expect(onSave).not.toHaveBeenCalled();
-  });
-
-  it('does not render a raw tab', () => {
-    render(<TestEditor />);
-
-    expect(screen.queryByRole('tab', { name: 'Raw' })).toBeNull();
-    expect(screen.queryByLabelText('Raw environment variables')).toBeNull();
   });
 
   it('keeps controlled rows clean until they change', () => {

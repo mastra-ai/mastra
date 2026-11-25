@@ -75,27 +75,6 @@ const mockHeights = (heights: Record<string, number>) => {
   });
 };
 
-// jsdom has no IntersectionObserver. Several observers are created (infinite scroll sentinel, visible
-// rows, in-view hooks); `intersect` notifies whichever ones watch the given element.
-const stubIntersectionObserver = () => {
-  type Callback = (entries: Array<Pick<IntersectionObserverEntry, 'target' | 'isIntersecting'>>) => void;
-  const observers: Array<{ cb: Callback; targets: Element[] }> = [];
-  vi.stubGlobal(
-    'IntersectionObserver',
-    class {
-      targets: Element[] = [];
-      constructor(cb: Callback) {
-        observers.push({ cb, targets: this.targets });
-      }
-      observe = (el: Element) => this.targets.push(el);
-      disconnect = vi.fn();
-    },
-  );
-  const intersect = (target: Element) =>
-    observers.filter(o => o.targets.includes(target)).forEach(o => o.cb([{ target, isIntersecting: true }]));
-  return { intersect };
-};
-
 const viewportOf = () => {
   const viewport = screen
     .getByTestId('thread-view-by-trace')
@@ -184,25 +163,30 @@ const installScore = () => {
 
 const renderView = ({
   withFeedback = true,
+  feedbackOptions,
   withQueryTrace = true,
   onOpenScore = () => {},
   paths,
+  navigate,
   pageSize,
 }: {
   withFeedback?: boolean;
+  feedbackOptions?: ComponentProps<typeof ThreadViewByTrace>['feedbackOptions'];
   withQueryTrace?: boolean;
   onOpenScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
+  navigate?: ComponentProps<typeof TestLinkProvider>['navigate'];
   pageSize?: number;
 } = {}) =>
   renderWithProviders(
-    <TestLinkProvider paths={paths}>
+    <TestLinkProvider paths={paths} navigate={navigate}>
       <BrowserToolCallsProvider>
         <ActivatedSkillsProvider>
           <ThreadViewByTrace
             threadId={THREAD_ID}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
+            feedbackOptions={feedbackOptions}
             pageSize={pageSize}
             onOpenScore={onOpenScore}
           />
@@ -210,6 +194,13 @@ const renderView = ({
       </BrowserToolCallsProvider>
     </TestLinkProvider>,
   );
+
+/** A span row in the tree, not the open span panel's header that repeats its title. */
+const treeRow = (title: string) => {
+  const row = screen.getAllByText(title).find(element => !element.closest('[data-slot="span-data-panel"]'));
+  if (!row) throw new Error(`No tree row titled ${title}`);
+  return row;
+};
 
 describe('ThreadViewByTrace', () => {
   describe('when the thread contains historical traces', () => {
@@ -281,19 +272,38 @@ describe('ThreadViewByTrace', () => {
         });
       await refocus();
       expect(requested).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      fireEvent.click(treeRow('Chef agent run'));
+      await screen.findByRole('region', { name: 'Chef agent run' });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls).toEqual([['trace-a']]);
       requested.mockClear();
       await refocus();
       expect(requested.mock.calls).toEqual([['trace-a']]);
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(treeRow('Chef agent run'));
       requested.mockClear();
       await refocus();
       expect(requested).not.toHaveBeenCalled();
     });
   });
+  describe('when a thread with several traces loads', () => {
+    it('hands every row plain spans, without building a search haystack', async () => {
+      installHandlers();
+      const { queryClient } = renderView();
+      await screen.findByText('Chef agent follow-up');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      // What each mounted observer actually receives (after any `select`): the thread view
+      // has no search, so flattening span payloads here is pure memory cost on long threads.
+      const observedSpans = ['trace-a', 'trace-b'].flatMap(traceId => {
+        const query = queryClient.getQueryCache().find({ queryKey: ['trace-spans', traceId] });
+        return (query?.observers ?? []).flatMap(observer => observer.getCurrentResult().data?.spans ?? []);
+      });
+
+      expect(observedSpans.length).toBeGreaterThan(0);
+      for (const span of observedSpans) expect(span).not.toHaveProperty('searchText');
+    });
+  });
+
   it('renders one row per trace, oldest first', async () => {
     installHandlers();
     const { queryClient } = renderView();
@@ -308,7 +318,7 @@ describe('ThreadViewByTrace', () => {
     expect(rows).toEqual(['trace-a', 'trace-b']);
   });
 
-  it('announces each turn with a divider holding its tabs and shows the trace in a card', async () => {
+  it('announces each turn with a divider holding its tabs', async () => {
     installHandlers();
     const { queryClient } = renderView();
 
@@ -322,8 +332,6 @@ describe('ThreadViewByTrace', () => {
     for (const [index, row] of rows.entries()) {
       const divider = within(row).getByRole('group', { name: `Turn ${index + 1}` });
       expect(within(divider).getByRole('tab', { name: /Scores/ })).not.toBeNull();
-      expect(row.className).not.toContain('border-b');
-      expect(row.querySelector('[data-slot=thread-trace-details]')?.className).toContain('rounded-xl');
     }
   });
 
@@ -351,11 +359,9 @@ describe('ThreadViewByTrace', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(screen.getByRole('status', { name: 'Loading thread' })).not.toBeNull();
       expect(document.querySelector('[data-trace-id]')).toBeNull();
-      // Same boxes as the resolved rows: a `px-4` messages column and one tab pill per tab.
+      // Same boxes as the resolved rows: a messages column and one tab pill per tab.
       const skeleton = screen.getByRole('status', { name: 'Loading thread' });
-      const messagesColumns = skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]');
-      expect(messagesColumns.length).toBeGreaterThan(0);
-      messagesColumns.forEach(column => expect(column.classList.contains('px-4')).toBe(true));
+      expect(skeleton.querySelectorAll('[data-slot="thread-messages-skeleton"]').length).toBeGreaterThan(0);
       const firstDivider = skeleton.querySelector('[data-slot="thread-trace-divider-skeleton"]');
       expect(firstDivider?.querySelectorAll('[data-slot="thread-tab-skeleton"]')).toHaveLength(3);
       expect(screen.queryByText('No traces found for this thread.')).toBeNull();
@@ -429,15 +435,15 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Re-clicking the selected span toggles the span panel off.
-    fireEvent.click(screen.getByText('Chef agent run'));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+    fireEvent.click(treeRow('Chef agent run'));
+    await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
   });
 
   it('keeps the row of the selected span highlighted while its details are open', async () => {
@@ -448,13 +454,13 @@ describe('ThreadViewByTrace', () => {
       screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
 
     fireEvent.click(await screen.findByText('Chef agent run'));
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
 
     expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
     expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByText('Chef agent run'));
+    fireEvent.click(treeRow('Chef agent run'));
     await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
   });
 
@@ -469,10 +475,10 @@ describe('ThreadViewByTrace', () => {
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
       await screen.findByLabelText('View details for span Recipe lookup');
 
-      fireEvent.click(within(toolBadge).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -495,7 +501,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
@@ -552,30 +558,11 @@ describe('ThreadViewByTrace', () => {
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
       fireEvent.click(spanLabel('Recipe lookup'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).not.toBeNull());
       fireEvent.click(spanLabel('Recipe lookup'));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
-  });
-
-  it('keeps every row at full opacity, whichever is in view', async () => {
-    const { intersect } = stubIntersectionObserver();
-    installHandlers();
-    const { queryClient } = renderView();
-
-    await screen.findByText('Chef agent follow-up');
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-    const rowOf = (traceId: string) =>
-      screen
-        .getByTestId('thread-view-by-trace')
-        .querySelector<HTMLElement>(`[data-trace-id="${traceId}"]`) as HTMLElement;
-
-    act(() => intersect(rowOf('trace-a')));
-
-    expect(rowOf('trace-a').className).not.toMatch(/opacity/);
-    expect(rowOf('trace-b').className).not.toMatch(/opacity/);
-    vi.unstubAllGlobals();
   });
 
   describe('truncating a long trace to the height of its messages', () => {
@@ -632,7 +619,7 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await screen.findByRole('region', { name: 'Chef agent run' });
 
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
@@ -641,8 +628,8 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+      fireEvent.click(treeRow('Chef agent run'));
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
       ).toBe('');
@@ -651,14 +638,16 @@ describe('ThreadViewByTrace', () => {
   });
 
   describe('the trace panel tabs', () => {
-    it('links each row to its trace on the traces page', async () => {
+    it('opens each row’s trace on the traces page', async () => {
       installHandlers();
       installFeedbackHandlers();
-      renderView();
+      const navigate = vi.fn();
+      renderView({ navigate });
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
+      fireEvent.click(firstRow.getByRole('button', { name: 'Go to trace' }));
 
-      expect(firstRow.getByRole('link', { name: 'Go to trace' }).getAttribute('href')).toBe('/traces?traceId=trace-a');
+      expect(navigate).toHaveBeenCalledWith('/traces?traceId=trace-a');
     });
 
     it('hides "Go to trace" when the app has no trace route', async () => {
@@ -668,7 +657,7 @@ describe('ThreadViewByTrace', () => {
 
       const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
 
-      expect(firstRow.queryByRole('link', { name: 'Go to trace' })).toBeNull();
+      expect(firstRow.queryByRole('button', { name: 'Go to trace' })).toBeNull();
     });
 
     describe('given a scored trace', () => {
@@ -686,6 +675,35 @@ describe('ThreadViewByTrace', () => {
       });
     });
 
+    it('keeps host feedback configuration when opening a thread turn', async () => {
+      installHandlers();
+      installFeedbackHandlers();
+      const onPost = vi.fn<(body: unknown) => void>();
+      server.use(
+        http.post(FEEDBACK_URL, async ({ request }) => {
+          onPost(await request.json());
+          return HttpResponse.json({ success: true });
+        }),
+      );
+      renderView({
+        feedbackOptions: { contextMode: 'resolve', feedbackUserId: null, allowDelete: false, allowReview: false },
+      });
+      const element = (await screen.findByText('Chef agent run')).closest<HTMLElement>('[data-trace-id]');
+      if (!element) throw new Error('Expected trace row');
+      const row = within(element);
+      fireEvent.click(row.getByRole('tab', { name: /Feedback/ }));
+      await row.findByText('Needs review');
+      expect(row.queryByRole('button', { name: 'Feedback actions' })).toBeNull();
+      fireEvent.change(row.getByPlaceholderText('Leave feedback'), { target: { value: 'Thread note' } });
+      fireEvent.click(row.getByRole('button', { name: 'Send feedback' }));
+      await waitFor(() =>
+        expect(onPost).toHaveBeenCalledWith({
+          contextMode: 'resolve',
+          feedback: expect.objectContaining({ feedbackUserId: null, value: 'Thread note' }),
+        }),
+      );
+    });
+
     it('shows the messages by default and swaps them for the feedback thread on the Feedback tab, keeping the span tree', async () => {
       installHandlers();
       installFeedbackHandlers();
@@ -697,25 +715,13 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
       expect(firstRow.queryByRole('tab', { name: /Spans/ })).toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
-      expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      expect(firstRow.queryByPlaceholderText('Leave feedback')).toBeNull();
 
       fireEvent.click(await firstRow.findByRole('tab', { name: /Feedback/ }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
       expect(firstRow.getByText('Chef agent run')).not.toBeNull();
-    });
-
-    it('shows the scores of the root span on the Scores tab', async () => {
-      installHandlers();
-      installFeedbackHandlers();
-      renderView();
-
-      const firstRow = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-
-      fireEvent.click(firstRow.getByRole('tab', { name: /Scores/ }));
-
-      expect(await firstRow.findByText('No scores yet')).not.toBeNull();
     });
 
     it('fetches scores only once a Scores tab is opened', async () => {
@@ -774,7 +780,7 @@ describe('ThreadViewByTrace', () => {
 
       fireEvent.click(firstRow.getByRole('tab', { name: 'Feedback' }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       await waitFor(() => expect(onFeedbackRequest).toHaveBeenCalled());
     });
 
@@ -794,7 +800,7 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent run');
       fireEvent.click((await screen.findAllByRole('tab', { name: /Feedback/ }))[0]);
 
-      const input = await screen.findByPlaceholderText('Leave feedback...');
+      const input = await screen.findByPlaceholderText('Leave feedback');
       fireEvent.change(input, { target: { value: 'great turn' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
 
@@ -884,11 +890,11 @@ describe('ThreadViewByTrace', () => {
       expect(rowIds()).toEqual(['trace-a', 'trace-b']);
     });
 
-    it('loads 10 turns per page by default, or the given pageSize', async () => {
+    it('loads 3 turns per page by default, or the given pageSize', async () => {
       const requests = installPagedHandlers();
       const { unmount } = renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
-      expect(requests[0]?.size).toBe(10);
+      expect(requests[0]?.size).toBe(3);
       unmount();
 
       renderView({ withQueryTrace, pageSize: 4 });

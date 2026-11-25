@@ -1,0 +1,10 @@
+import { createCentralIcon } from './create-central-icon';
+
+export const IconThumbUpSimple = createCentralIcon('IconThumbUpSimple', () => (
+  <path
+    d="M6 11H6.84598C7.24328 11 7.6029 10.7648 7.76214 10.4008L10.7983 3.46098C10.9208 3.18095 11.1975 3 11.5032 3C13.3418 3 14.7479 4.63889 14.4683 6.45617L14 9.5H16.4176C18.7254 9.5 20.4015 11.6944 19.7943 13.9209L18.5062 19.1439C18.2073 20.2398 17.212 21 16.0761 21C14.0304 21 10.9896 20.7979 8.98362 20.3967L7.19419 20.0388C7.06505 20.013 6.93367 20 6.80196 20H6C4.89543 20 4 19.1046 4 18V13C4 11.8954 4.89543 11 6 11Z"
+    strokeWidth="2"
+    strokeLinejoin="round"
+    stroke="currentColor"
+  />
+));

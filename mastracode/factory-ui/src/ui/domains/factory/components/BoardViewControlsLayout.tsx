@@ -4,12 +4,12 @@ export function BoardViewControlsLayout({
   views,
   search,
   aside,
-  filters,
+  editor,
 }: {
   views: ReactNode;
   search: ReactNode;
   aside?: ReactNode;
-  filters: ReactNode;
+  editor?: ReactNode;
 }) {
   return (
     <div className="flex w-full min-w-0 flex-col gap-3">
@@ -18,7 +18,7 @@ export function BoardViewControlsLayout({
         {search}
         {aside && <div className="shrink-0">{aside}</div>}
       </div>
-      {filters}
+      {editor}
     </div>
   );
 }

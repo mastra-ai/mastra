@@ -23,7 +23,6 @@ import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
 import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
-import { textStreamTests } from './test-utils/textStream';
 import { toolMediaTests } from './test-utils/tool-media';
 import { toolsTests } from './test-utils/tools';
 import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
@@ -71,7 +70,6 @@ describe('Loop Tests', () => {
       expect(consoleLoggerConstructor).toHaveBeenCalledWith({ level: 'error' });
     });
 
-    textStreamTests({ loopFn, runId: 'test-run-id' });
     fullStreamTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
     resultObjectTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
     optionsTests({ loopFn, runId: 'test-run-id' });

@@ -1,238 +1,40 @@
-import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
-import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Bot, GitBranch } from 'lucide-react';
-import { Link, useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
-import { FolderIcon } from '../ui/icons';
-import { useFactoryQuery } from '../../hooks/useFactories';
-import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
-import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { useUserSessionQuery } from '../../hooks/useWorkspaces';
-import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
-import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
-import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
-import { TranscriptEntries } from '../domains/chat/components/Transcript';
+import { DraftStart } from '../domains/chat/components/DraftStart';
+import { StarterBoard } from '../domains/chat/components/starters/StarterBoard';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
-import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
-import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-
-const draftStartClass = 'flex min-w-0 w-full max-w-xl flex-col items-stretch gap-6';
+import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
+import type { DraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
+import { FactoryActivity } from '../domains/factory/components/activity/FactoryActivity';
 
 export function NewPage() {
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
-  const activeFactory = factoryQuery.data;
-  const projectQuery = useFactoryProjectQuery(activeFactory?.id);
-  const providersQuery = useProvidersQuery();
-  const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
-  const defaultModelProvider = defaultModelId
-    ? providersQuery.data?.find(entry => entry.provider === defaultModelId.split('/')[0])
-    : undefined;
-  const missingCredential =
-    Boolean(activeFactory) && defaultModelId && defaultModelProvider?.source === 'none'
-      ? { modelId: defaultModelId, provider: defaultModelProvider.provider }
-      : undefined;
-  const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
+  const guards = useDraftModelGuards(factoryId, 'user');
 
   return (
-    <ChatPageLayout
-      crumbs={
-        <>
-          <Crumb as="span">User sessions</Crumb>
-          <Crumb as="span" isCurrent>
-            New session
-          </Crumb>
-        </>
-      }
-    >
+    <ChatPageLayout title="New session">
       {/* Remount only the chat content per draft, never the app shell. */}
       <ChatSessionBoundary key={draftSessionId}>
-        <NewPageContent
-          activeFactory={activeFactory}
-          missingDefaultModel={missingDefaultModel}
-          missingCredential={missingCredential}
-          configurationError={configurationError}
-        />
+        <NewPageContent guards={guards} userDraft={draftSessionId !== undefined} />
       </ChatSessionBoundary>
     </ChatPageLayout>
   );
 }
 
-interface MissingCredentialGuard {
-  modelId: string;
-  provider: string;
-}
-
-function readRouteErrorNotice(state: unknown): string | undefined {
-  if (typeof state !== 'object' || state === null || !('routeErrorNotice' in state)) return undefined;
-  const { routeErrorNotice } = state;
-  return typeof routeErrorNotice === 'string' ? routeErrorNotice : undefined;
-}
-
-function NewPageContent({
-  activeFactory,
-  missingDefaultModel,
-  missingCredential,
-  configurationError,
-}: {
-  activeFactory: FactoryProject | undefined;
-  missingDefaultModel: boolean;
-  missingCredential: MissingCredentialGuard | undefined;
-  configurationError: Error | undefined;
-}) {
-  useGlobalShortcuts();
-  const { transcript } = useChatTranscript();
-  const location = useLocation();
-  const routeErrorNotice = readRouteErrorNotice(location.state);
-  const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
-  const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+function NewPageContent({ guards, userDraft }: { guards: DraftModelGuards; userDraft: boolean }) {
+  const firstName = useFactoryAuth().data?.user?.name?.trim().split(/\s+/)[0];
+  const { activeFactory, missingModel, missingCredential } = guards;
+  const startsFromPrompt = userDraft && activeFactory && !missingModel && !missingCredential;
 
   return (
-    <div className="grid min-h-full place-items-center px-4 py-10 md:px-6">
-      <div className="flex w-full max-w-xl min-w-0 flex-col items-center gap-4">
-        <DraftStart
-          activeFactory={activeFactory}
-          configurationError={configurationError}
-          missingDefaultModel={missingDefaultModel}
-          missingCredential={missingCredential}
-        />
-        {hasNotices && (
-          <div className="flex w-full flex-col gap-4">
-            {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DraftStart({
-  activeFactory,
-  configurationError,
-  missingDefaultModel,
-  missingCredential,
-}: {
-  activeFactory: FactoryProject | undefined;
-  configurationError: Error | undefined;
-  missingDefaultModel: boolean;
-  missingCredential: MissingCredentialGuard | undefined;
-}) {
-  if (activeFactory && missingDefaultModel) {
-    return (
-      <section className={draftStartClass} aria-label="Model setup required">
-        <MissingDefaultModelState factoryId={activeFactory.id} />
-      </section>
-    );
-  }
-
-  if (activeFactory && missingCredential) {
-    return (
-      <section className={draftStartClass} aria-label="Provider credential required">
-        <MissingCredentialState factoryId={activeFactory.id} guard={missingCredential} />
-      </section>
-    );
-  }
-
-  return (
-    <section className={draftStartClass} aria-labelledby="draft-start-heading">
-      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0 text-center">
-        What do you want to work on?
-      </Txt>
-      {configurationError && (
-        <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
-      )}
-
-      <div className="flex min-w-0 flex-col gap-2">
-        {activeFactory && <ComposerPanel composerVariant="textarea" />}
-        <FactoryContext activeFactory={activeFactory} />
-      </div>
-    </section>
-  );
-}
-
-function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
-  const authQuery = useFactoryAuth();
-  const providerName = providerDisplayName(guard.provider);
-  const orgHint =
-    authQuery.data?.authEnabled === true ? ', or ask an org admin to share an org-wide key with your team' : '';
-  return (
-    <EmptyState
-      as="h2"
-      iconSlot={<Bot />}
-      titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Your models settings${orgHint}.`}
-      actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
-          Open Models settings
-        </Link>
-      }
-    />
-  );
-}
-
-function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
-  return (
-    <EmptyState
-      as="h2"
-      iconSlot={<Bot />}
-      titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
-      actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
-          Open Models settings
-        </Link>
-      }
-    />
-  );
-}
-
-function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
-  const { sessionId } = useParams<{ sessionId: string }>();
-  const sessionQuery = useUserSessionQuery(sessionId);
-  const repository = activeFactory?.repositories.find(
-    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
-  );
-  const projectPath = sessionQuery.data?.sessionId;
-  const gitBranch = repository?.gitBranch;
-  return (
-    <div className="text-muted-foreground flex max-w-full items-center gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <Txt as="span" variant="column" title={activeFactory?.name} className="min-w-0 truncate">
-          {activeFactory?.name ?? 'Factory'}
-        </Txt>
-        {projectPath && (
-          <>
-            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
-              ·
-            </Txt>
-            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
-              {projectPath}
-            </Txt>
-          </>
-        )}
-      </div>
-      {gitBranch && (
-        <>
-          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
-            ·
-          </Txt>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
-              {gitBranch}
-            </Txt>
-          </div>
-        </>
-      )}
-    </div>
+    <DraftStart
+      heading={firstName ? `What should we ship, ${firstName}?` : 'What should we ship?'}
+      guards={guards}
+      starters={startsFromPrompt && <StarterBoard factoryId={activeFactory.id} />}
+    >
+      {startsFromPrompt && <FactoryActivity factoryId={activeFactory.id} />}
+    </DraftStart>
   );
 }

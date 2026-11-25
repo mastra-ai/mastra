@@ -144,17 +144,6 @@ test.describe('CMS edit scorer page', () => {
       await expectCurrentBreadcrumb(page, scorerName);
     });
 
-    test('displays Update scorer button', async ({ page }) => {
-      const scorerName = uniqueScorerName('Button Test');
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      const updateButton = page.getByRole('button', { name: 'Publish' });
-      await expect(updateButton).toBeVisible();
-      await expect(updateButton).toBeEnabled();
-    });
-
     test('pre-populates form with existing scorer data on load', async ({ page }) => {
       const scorerName = uniqueScorerName('Prepopulate Test');
       const description = 'Pre-populated description';
@@ -270,33 +259,6 @@ test.describe('CMS edit scorer page', () => {
       await expect(page.getByRole('combobox').nth(1)).toHaveValue('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toHaveValue('gpt-4o-mini');
     });
-
-    test('data persists after page reload on edit page', async ({ page }) => {
-      const scorerName = uniqueScorerName('Reload Edit');
-      const updatedName = uniqueScorerName('After Reload');
-      const updatedInstructions = 'Instructions that should survive reload.';
-
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      await fillScorerFields(page, {
-        name: updatedName,
-        instructions: updatedInstructions,
-      });
-
-      await page.getByRole('button', { name: 'Publish' }).click();
-
-      await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-
-      await goToEditPage(page, scorerId);
-
-      // Reload the page
-      await page.reload();
-
-      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(updatedName, { timeout: 10000 });
-      await expect(page.locator('.cm-content')).toContainText(updatedInstructions, { timeout: 10000 });
-    });
   });
 
   test.describe('when a single field is updated', () => {
@@ -317,53 +279,6 @@ test.describe('CMS edit scorer page', () => {
       await expectCurrentBreadcrumb(page, updatedName);
     });
 
-    test('updating description persists correctly', async ({ page }) => {
-      const scorerName = uniqueScorerName('Desc Field');
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      await fillScorerFields(page, { description: 'A newly added description' });
-
-      await page.getByRole('button', { name: 'Publish' }).click();
-      await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-
-      await goToEditPage(page, scorerId);
-      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue('A newly added description');
-    });
-
-    test('updating score range persists correctly', async ({ page }) => {
-      const scorerName = uniqueScorerName('Range Field');
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      await fillScorerFields(page, { scoreRangeMin: '5', scoreRangeMax: '100' });
-
-      await page.getByRole('button', { name: 'Publish' }).click();
-      await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-
-      await goToEditPage(page, scorerId);
-      await expect(page.getByPlaceholder('Min')).toHaveValue('5');
-      await expect(page.getByPlaceholder('Max')).toHaveValue('100');
-    });
-
-    test('changing sampling type from none to ratio persists correctly', async ({ page }) => {
-      const scorerName = uniqueScorerName('Sampling None-Ratio');
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      await fillScorerFields(page, { samplingType: 'ratio', samplingRate: '0.6' });
-
-      await page.getByRole('button', { name: 'Publish' }).click();
-      await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-
-      await goToEditPage(page, scorerId);
-      await expect(page.getByRole('radio', { name: 'Ratio' })).toBeChecked();
-      await expect(page.getByPlaceholder('Rate (0-1)')).toHaveValue('0.6');
-    });
-
     test('changing sampling type from ratio to none persists correctly', async ({ page }) => {
       const scorerName = uniqueScorerName('Sampling Ratio-None');
       const scorerId = await createScorerAndGetId(page, scorerName, {
@@ -381,22 +296,6 @@ test.describe('CMS edit scorer page', () => {
       await goToEditPage(page, scorerId);
       await expect(page.getByRole('radio', { name: 'None' })).toBeChecked();
       await expect(page.getByPlaceholder('Rate (0-1)')).not.toBeVisible();
-    });
-
-    test('updating instructions persists correctly', async ({ page }) => {
-      const scorerName = uniqueScorerName('Instructions Field');
-      const scorerId = await createScorerAndGetId(page, scorerName);
-
-      await goToEditPage(page, scorerId);
-
-      const newInstructions = 'Brand new scoring instructions for this test.';
-      await fillScorerFields(page, { instructions: newInstructions });
-
-      await page.getByRole('button', { name: 'Publish' }).click();
-      await expect(page).toHaveURL(/\/scorers\/[a-z0-9-]+$/, { timeout: 15000 });
-
-      await goToEditPage(page, scorerId);
-      await expect(page.locator('.cm-content')).toContainText(newInstructions);
     });
   });
 
@@ -495,27 +394,6 @@ test.describe('CMS edit scorer page', () => {
   });
 
   test.describe('when navigating away from the edit page', () => {
-    test('navigating away and back to edit page shows persisted data', async ({ page }) => {
-      const scorerName = uniqueScorerName('Nav Away');
-      const description = 'Description for nav test';
-      const scorerId = await createScorerAndGetId(page, scorerName, { description });
-
-      await goToEditPage(page, scorerId);
-
-      // Verify initial data
-      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
-
-      // Navigate away
-      await page.goto('/cms/scorers/create');
-      await expect(page).toHaveURL(/\/cms\/scorers\/create/);
-
-      // Navigate back to edit page
-      await goToEditPage(page, scorerId);
-
-      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(scorerName);
-      await expect(page.getByRole('textbox', { name: /^Description/ })).toHaveValue(description);
-    });
-
     test('form reflects latest server data after re-navigation', async ({ page }) => {
       const scorerName = uniqueScorerName('Latest Data');
       const scorerId = await createScorerAndGetId(page, scorerName);

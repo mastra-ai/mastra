@@ -2,13 +2,7 @@ import { expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { MockMemory } from '../../../../memory/mock';
 import type { ChunkType } from '../../../../stream/types';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: what a failed or cancelled turn leaves in the memory thread.
@@ -67,6 +61,38 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
     expect(JSON.stringify(messages[0]!.content)).toContain('FAILED_BEFORE_OUTPUT_PROMPT');
     expect(messages[1]!.content.parts.map(part => part.type)).toEqual(['error']);
     expect(JSON.stringify(errorParts(messages))).toContain('PERSISTENCE_PROVIDER_BOOM');
+  });
+
+  it('a provider HTTP failure saves its status code and response body with the error', async () => {
+    const memory = new MockMemory();
+    const threadId = `provider-http-details-${engine}`;
+    const resourceId = 'customer-http-details';
+
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'HTTP_DETAILS_PROMPT',
+      memory,
+      threadId,
+      resourceId,
+      maxRetries: 0,
+      errorProcessors: [],
+      fixtures: llm => {
+        llm.onMessage(/.*/, {
+          error: { message: 'PROVIDER_400_EXPLANATION', type: 'invalid_request_error' },
+          status: 400,
+        });
+      },
+    });
+
+    await expect
+      .poll(async () => (await memory.recall({ threadId, resourceId })).messages.map(m => m.role))
+      .toEqual(['user', 'assistant']);
+    const [errorPart] = errorParts((await memory.recall({ threadId, resourceId })).messages);
+    expect(errorPart).toMatchObject({ type: 'error', error: { statusCode: 400 } });
+    expect(JSON.parse((errorPart as { error: { responseBody: string } }).error.responseBody)).toMatchObject({
+      error: { message: 'PROVIDER_400_EXPLANATION', type: 'invalid_request_error' },
+    });
   });
 
   it('saves the provider error even when an output processor rewrites the streamed error chunk', async () => {
@@ -145,12 +171,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
     expect(errorParts(messages)).toEqual([]);
   });
 
-  // In-process loop (normal/fs) only materializes streamed text on text-end, and the
-  // terminal-error branch does not flush pending deltas, so a reply cut mid-stream loses
-  // its partial text. Durable/evented materialize first. Deterministic; tracked in #27427.
-  const itFailsOnInProcessLoop = engine === 'normal' || engine === 'fs' ? it.fails : it;
-
-  itFailsOnInProcessLoop('a reply dropped mid-stream keeps the partial text next to the error', async () => {
+  it('a reply dropped mid-stream keeps the partial text next to the error', async () => {
     const memory = new MockMemory();
     const threadId = `dropped-mid-reply-${engine}`;
     const resourceId = 'customer-dropped';
@@ -208,7 +229,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
       memory: { thread: threadId, resource: resourceId },
       abortSignal: controller.signal,
     });
-    const firstOutput = isDurableEngineVariant(engine) ? (first as unknown as { output: typeof first }).output : first;
+    const firstOutput = 'output' in first ? (first.output as typeof first) : first;
     let firstText = '';
     try {
       for await (const chunk of firstOutput.fullStream) {
@@ -227,9 +248,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
     const second = await agent.stream('MESSAGE_AFTER_ABORT', {
       memory: { thread: threadId, resource: resourceId },
     });
-    const secondOutput = isDurableEngineVariant(engine)
-      ? (second as unknown as { output: typeof second }).output
-      : second;
+    const secondOutput = 'output' in second ? (second.output as typeof second) : second;
     expect(await secondOutput.text).toBe('Second reply.');
 
     const requests = llm.getRequests();

@@ -34,7 +34,6 @@ function buildApp(
       audit,
       projects: seed.projects,
       workItems: seed.workItems,
-      configVersion: 'factory-config-v1',
     }).routes(),
   );
   return app;

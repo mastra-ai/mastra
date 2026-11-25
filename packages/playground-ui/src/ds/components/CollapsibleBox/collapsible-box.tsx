@@ -1,8 +1,8 @@
-import { Maximize2 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import type { ComponentProps } from 'react';
 import type { CollapsibleBoxState } from './use-collapsible-box';
 import { Button } from '@/ds/components/Button';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { cn } from '@/lib/utils';
 
 export interface CollapsibleBoxProps extends ComponentProps<'div'> {
@@ -61,7 +61,7 @@ export function CollapsibleBox({ state, expandLabel, children, className, style,
             <Button
               variant="default"
               size="sm"
-              icon={<Maximize2 />}
+              icon={<IconExpand45 />}
               className="relative"
               onClick={event => {
                 event.stopPropagation();

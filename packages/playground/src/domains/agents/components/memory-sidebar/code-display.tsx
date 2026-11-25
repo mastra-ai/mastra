@@ -40,7 +40,7 @@ export function CodeDisplay({
                 variant="meta"
                 className="rounded-full bg-warning-subtle px-1.5 py-0.5 text-warning-subtle-foreground"
               >
-                Draft - Save changes to apply
+                Draft: save changes to apply
               </Txt>
             </div>
           )}

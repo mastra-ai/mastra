@@ -209,6 +209,12 @@ export const FLAGS: FlagSpec[] = [
     type: 'boolean',
     help: 'Show this help and exit',
   },
+  {
+    key: 'version',
+    short: 'v',
+    type: 'boolean',
+    help: 'Print the Mastra Code version and exit',
+  },
 ];
 
 /** `parseArgs` option config derived from {@link FLAGS}. */

@@ -3,7 +3,12 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import {
+  runLoopScenario,
+  useLoopScenarioAimock,
+  describeForAllEngines,
+  isDurableEngineVariant,
+} from '../aimock-scenario';
 
 /**
  * Story: a support agent saves each step as it goes (savePerStep). The database blips once
@@ -34,8 +39,10 @@ describeForAllEngines('Save per step: a failed step save is retried', engine => 
     const realSave = store.saveMessages.bind(store);
     let calls = 0;
     let failures = 0;
+    // Durable engines persist accepted input before the first step begins.
+    const initialSaveCount = isDurableEngineVariant(engine) ? 1 : 0;
     vi.spyOn(store, 'saveMessages').mockImplementation(async args => {
-      if (calls++ === failOnCall) {
+      if (calls++ === failOnCall + initialSaveCount) {
         failures++;
         throw new Error('storage unavailable');
       }

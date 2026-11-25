@@ -1,8 +1,8 @@
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalLifelines } from './signal-lifelines';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
@@ -76,7 +76,7 @@ export function ThemeLifelines({
       </div>
       {snapshots[selectedIndex] ? (
         <Txt variant="caption" tone="muted" data-testid="snapshot-summary">
-          {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
+          <SnapshotSummary snapshot={snapshots[selectedIndex]} flow={flows[selectedIndex]} />
         </Txt>
       ) : null}
       {signalNames.map(signalName => (

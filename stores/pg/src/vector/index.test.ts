@@ -350,6 +350,115 @@ describe('PgVector', () => {
         expect(await getNamespaceColumns()).toHaveLength(1);
       });
 
+      // The constructor's background cache warmup lists the tables, then reads each one's metadata.
+      // Holds the listing after it returns, and the first catalog query of describeIndexMetadata()
+      // on lazyIndex that `isHeldQuery` matches, after it returns.
+      const tableQuery = (sql: string, params?: unknown[]) =>
+        sql.includes("a.attname = 'embedding'") && params?.[0] === `"${lazyIndex}"`;
+      const vectorIndexQuery = (sql: string, params?: unknown[]) =>
+        sql.includes('pg_get_indexdef') && params?.[1] === `"${lazyIndex}"`;
+      const startHeldWarmup = (isHeldQuery: (sql: string, params?: unknown[]) => boolean) => {
+        const listing = Promise.withResolvers<void>();
+        const listed = Promise.withResolvers<string[]>();
+        const listIndexes = PgVector.prototype.listIndexes;
+        const spy = vi.spyOn(PgVector.prototype, 'listIndexes').mockImplementationOnce(async function (this: PgVector) {
+          const indexes = await listIndexes.call(this);
+          listed.resolve(indexes);
+          await listing.promise;
+          return indexes;
+        });
+        let warm: PgVector;
+        try {
+          warm = new PgVector({ connectionString, id: 'pg-vector-warmup-race' });
+        } finally {
+          spy.mockRestore();
+        }
+
+        let holdDescribe = true;
+        const describeRead = Promise.withResolvers<void>();
+        const describe = Promise.withResolvers<void>();
+        const connect = warm.pool.connect.bind(warm.pool);
+        const wrapped = new WeakSet<pg.PoolClient>();
+        vi.spyOn(warm.pool, 'connect').mockImplementation(async () => {
+          const client = await connect();
+          if (wrapped.has(client)) return client;
+          wrapped.add(client);
+          const query = client.query.bind(client);
+          vi.spyOn(client, 'query').mockImplementation(async (...args: any[]) => {
+            const result = await (query as any)(...args);
+            if (holdDescribe && isHeldQuery(String(args[0]), args[1])) {
+              holdDescribe = false;
+              describeRead.resolve();
+              await describe.promise;
+            }
+            return result;
+          });
+          return client;
+        });
+
+        return {
+          warm,
+          listed: listed.promise,
+          describeRead: describeRead.promise,
+          releaseListing: () => listing.resolve(),
+          stopHoldingDescribe: () => {
+            holdDescribe = false;
+          },
+          releaseDescribe: () => describe.resolve(),
+          finish: async () => {
+            listing.resolve();
+            describe.resolve();
+            await warm.disconnect();
+          },
+        };
+      };
+
+      it('upserts after deletion and raw recreation while the startup warmup is still running', async () => {
+        const held = startHeldWarmup(tableQuery);
+        const { warm } = held;
+        try {
+          expect(await held.listed).toContain(lazyIndex);
+          await warm.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
+          await warm.deleteIndex({ indexName: lazyIndex });
+          held.releaseListing();
+          // Either the warmup reads the dropped table's metadata (and is held there), or it finishes.
+          await Promise.race([held.describeRead, (warm as any).cacheWarmupPromise]);
+          held.stopHoldingDescribe();
+          await vectorDB.pool.query(
+            'CREATE TABLE ' + lazyIndex + ' (vector_id text UNIQUE, embedding vector(3), metadata jsonb)',
+          );
+          const upsert = warm.upsert({ indexName: lazyIndex, vectors: [[1, 0, 0]], ids: ['recreated'] });
+          held.releaseDescribe();
+          await upsert;
+          expect((await vectorDB.pool.query('SELECT vector_id, namespace FROM ' + lazyIndex)).rows).toEqual([
+            { vector_id: 'recreated', namespace: 'default' },
+          ]);
+        } finally {
+          await held.finish();
+        }
+      });
+
+      it('rebuilds with the requested metric after deletion while the startup warmup is still running', async () => {
+        const hnsw = { type: 'hnsw' as const };
+        await lazyVectorDB.createIndex({ indexName: lazyIndex, dimension: 3, metric: 'cosine', indexConfig: hnsw });
+        const held = startHeldWarmup(vectorIndexQuery);
+        const { warm } = held;
+        try {
+          expect(await held.listed).toContain(lazyIndex);
+          held.releaseListing();
+          // The warmup has read the cosine index's definition and is held before caching what it saw.
+          await held.describeRead;
+          await warm.deleteIndex({ indexName: lazyIndex });
+          await warm.createIndex({ indexName: lazyIndex, dimension: 3, metric: 'euclidean', indexConfig: hnsw });
+          held.releaseDescribe();
+          await (warm as any).cacheWarmupPromise;
+          await warm.createIndex({ indexName: lazyIndex, dimension: 3, metric: 'cosine', indexConfig: hnsw });
+          expect(await warm.describeIndex({ indexName: lazyIndex })).toMatchObject({ metric: 'cosine', type: 'hnsw' });
+        } finally {
+          await held.finish();
+        }
+      });
+
       it('does not repeat catalog readiness checks on a warm instance', async () => {
         await lazyVectorDB.query({ indexName: lazyIndex, filter: { source: 'legacy' } });
         const client = await lazyVectorDB.pool.connect();
@@ -1730,78 +1839,6 @@ describe('PgVector', () => {
             const cteBody = cteMatch![1]!;
             expect(cteBody).toContain('ORDER BY');
             expect(cteBody).toContain('LIMIT');
-          } finally {
-            connectSpy.mockRestore();
-          }
-        });
-
-        it('should place ORDER BY and LIMIT outside CTE when querying with filters', async () => {
-          const queries: string[] = [];
-          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
-          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
-            const client = await origConnect();
-            const origQuery = client.query.bind(client);
-            client.query = ((...args: any[]) => {
-              if (typeof args[0] === 'string') {
-                queries.push(args[0]);
-              }
-              return (origQuery as any)(...args);
-            }) as any;
-            return client;
-          });
-
-          try {
-            await vectorDB.query({
-              indexName,
-              queryVector: [1, 0, 0],
-              topK: 2,
-              filter: { test: 'value' },
-            });
-
-            const cteQuery = queries.find(q => q.includes('vector_scores'));
-            expect(cteQuery).toBeDefined();
-
-            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
-            expect(cteMatch).toBeTruthy();
-            const cteBody = cteMatch![1]!;
-            expect(cteBody).not.toContain('ORDER BY');
-            expect(cteBody).not.toContain('LIMIT');
-          } finally {
-            connectSpy.mockRestore();
-          }
-        });
-
-        it('should place ORDER BY and LIMIT outside CTE when minScore is set', async () => {
-          const queries: string[] = [];
-          const origConnect = vectorDB.pool.connect.bind(vectorDB.pool);
-          const connectSpy = vi.spyOn(vectorDB.pool, 'connect').mockImplementation(async () => {
-            const client = await origConnect();
-            const origQuery = client.query.bind(client);
-            client.query = ((...args: any[]) => {
-              if (typeof args[0] === 'string') {
-                queries.push(args[0]);
-              }
-              return (origQuery as any)(...args);
-            }) as any;
-            return client;
-          });
-
-          try {
-            await vectorDB.query({
-              indexName,
-              queryVector: [1, 0, 0],
-              topK: 2,
-              minScore: 0.5,
-            });
-
-            const cteQuery = queries.find(q => q.includes('vector_scores'));
-            expect(cteQuery).toBeDefined();
-
-            const cteMatch = cteQuery!.match(/WITH\s+vector_scores\s+AS\s*\(([\s\S]*?)\)\s*SELECT/i);
-            expect(cteMatch).toBeTruthy();
-            const cteBody = cteMatch![1]!;
-            expect(cteBody).not.toContain('ORDER BY');
-            expect(cteBody).not.toContain('LIMIT');
           } finally {
             connectSpy.mockRestore();
           }

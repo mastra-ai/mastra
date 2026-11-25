@@ -37,7 +37,7 @@ export const mastra = new Mastra({
 The deployer accepts the following options:
 
 - `studio?: boolean`: Deploy [Studio](/docs/studio/overview) alongside your API as static assets served from Vercel's Edge CDN. Defaults to `false`.
-- `maxDuration?: number`: Function execution timeout (in seconds)
+- `maxDuration?: number`: Function execution timeout (in seconds). This sets Vercel's limit only; Mastra's own request timeout is configured separately, see [Request timeouts](#request-timeouts).
 - `memory?: number`: Function memory (in MB)
 - `regions?: string[]`: Regions to deploy the function (e.g. `['sfo1','iad1']`)
 
@@ -56,6 +56,29 @@ export const mastra = new Mastra({
     memory: 1536,
     regions: ['sfo1', 'iad1'],
   }),
+})
+```
+
+## Request timeouts
+
+Vercel's function execution time and Mastra's request timeout are enforced separately:
+
+- **Vercel function execution time**: set by the deployer's `maxDuration` option, in seconds.
+- **Mastra request timeout**: set by `server.timeout` in your `Mastra` config, in milliseconds. When unset it defaults to `180000` (180 seconds), and requests that exceed it are answered with `504 Gateway Timeout`.
+
+`maxDuration` doesn't change `server.timeout`. A request that takes longer than 180 seconds fails even if `maxDuration` is higher, so raise both when you run long requests such as workflow runs or streaming agents:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { VercelDeployer } from '@mastra/deployer-vercel'
+
+export const mastra = new Mastra({
+  deployer: new VercelDeployer({
+    maxDuration: 600, // seconds
+  }),
+  server: {
+    timeout: 600_000, // milliseconds, keep at or below maxDuration
+  },
 })
 ```
 

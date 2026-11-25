@@ -21,6 +21,7 @@ import {
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
+import type { toolsConfigSchema } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
@@ -72,6 +73,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -92,11 +94,21 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
 
 const CODE_AGENT_OVERRIDE_FIELDS = [
   'instructions',
+  'modelList',
   'tools',
   'integrationTools',
   'mcpClients',
   'requestContextSchema',
 ] as const;
+
+/**
+ * Whether a registered agent is defined by the project: in code (`'code'`) or in an
+ * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides whose
+ * fields are limited by the agent's editor config.
+ */
+function isCodeBackedAgent<TAgent extends { source?: string }>(agent: TAgent | undefined): agent is TAgent {
+  return agent?.source === 'code' || agent?.source === 'fs';
+}
 
 /**
  * Derive ownership flags from a code agent's editor config.
@@ -106,26 +118,50 @@ const CODE_AGENT_OVERRIDE_FIELDS = [
  */
 function getCodeAgentOwnership(editorConfig: unknown): {
   ownsInstructions: boolean;
+  ownsModel: boolean;
   ownsTools: boolean;
   ownsToolDescriptionsOnly: boolean;
 } {
   if (editorConfig === false) {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
   if (editorConfig === undefined || editorConfig === null) {
     // Legacy default: code agents without explicit editor config behave as fully editable.
-    return { ownsInstructions: true, ownsTools: true, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: true, ownsModel: false, ownsTools: true, ownsToolDescriptionsOnly: false };
   }
   if (typeof editorConfig !== 'object') {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
-  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const cfg = editorConfig as { instructions?: unknown; model?: unknown; tools?: unknown };
   const ownsInstructions = cfg.instructions === true;
+  const ownsModel = cfg.model === true;
   const toolsCfg = cfg.tools;
   const ownsTools = toolsCfg === true;
   const ownsToolDescriptionsOnly =
     typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
-  return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+  return { ownsInstructions, ownsModel, ownsTools, ownsToolDescriptionsOnly };
+}
+
+type StoredTools = z.infer<typeof updateStoredAgentBodySchema>['tools'];
+
+/** Keep description overrides from changing tool availability or conditional rules. */
+function toolDescriptionsOnly(tools: StoredTools): StoredTools {
+  const descriptions = (value: z.infer<typeof toolsConfigSchema>) =>
+    Object.fromEntries(
+      Object.entries(value)
+        .filter(([, config]) => config.description !== undefined)
+        .map(([id, config]) => [id, { description: config.description }]),
+    );
+
+  if (tools === undefined) return undefined;
+  if (Array.isArray(tools)) {
+    // Request rules are caller-owned, and the registered agent does not expose
+    // project-owned variant rules. Reject instead of widening a scoped override.
+    throw new HTTPException(400, {
+      message: 'Conditional tool description overrides require project-owned rules and are not supported',
+    });
+  }
+  return descriptions(tools);
 }
 
 function hasNonEmptyInstructions(value: unknown): boolean {
@@ -179,7 +215,7 @@ function buildExportConfig(
   agent?: { __getEditorConfig?: () => unknown; source?: string },
 ) {
   const editorConfig = agent?.__getEditorConfig?.();
-  const isCodeAgent = agent?.source === 'code';
+  const isCodeAgent = isCodeBackedAgent(agent);
   const allowedFields = isCodeAgent ? CODE_AGENT_OVERRIDE_FIELDS : AGENT_SNAPSHOT_CONFIG_FIELDS;
   const ownership = isCodeAgent ? getCodeAgentOwnership(editorConfig) : null;
   const config: Record<string, unknown> = {};
@@ -188,15 +224,19 @@ function buildExportConfig(
     if (input[field] === undefined) continue;
     if (ownership) {
       if (field === 'instructions' && !ownership.ownsInstructions) continue;
+      if (field === 'modelList' && !ownership.ownsModel) continue;
       if (
         (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
         !ownership.ownsTools &&
-        !ownership.ownsToolDescriptionsOnly
+        (field !== 'tools' || !ownership.ownsToolDescriptionsOnly)
       ) {
         continue;
       }
     }
-    config[field] = input[field];
+    config[field] =
+      field === 'tools' && ownership?.ownsToolDescriptionsOnly && !ownership.ownsTools
+        ? toolDescriptionsOnly(updateStoredAgentBodySchema.shape.tools.parse(input[field]))
+        : input[field];
   }
 
   return sortForStableJson(config) as Record<string, unknown>;
@@ -228,6 +268,12 @@ function sourceChangeRequestMessage(agentId: string, userName?: string, changeMe
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_stored_agents',
+    description: 'List agents created in the editor or agent builder that you can see.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
@@ -394,7 +440,7 @@ async function buildStoredAgentExport({
     throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
   }
 
-  const config = buildExportConfig(body, codeAgent);
+  const config = buildExportConfig({ ...storedAgent, ...body }, codeAgent);
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   return {
@@ -490,6 +536,12 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'get_stored_agent',
+    description: "Get a stored agent's full configuration.",
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   queryParamSchema: statusQuerySchema,
@@ -545,6 +597,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'POST',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'create_stored_agent',
+    description:
+      'Create an agent (instructions, model, tools, memory). Call list_available_models first. The new agent can be called with call_agent right away.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
@@ -563,6 +622,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     description,
     instructions,
     model,
+    modelList,
     tools,
     defaultOptions,
     workflows,
@@ -628,23 +688,25 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       let createTools = tools;
       let createIntegrationTools = integrationTools;
       let createMcpClients = mcpClients;
+      let createToolProviders = toolProviders;
       let codeAgentForCreate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
       try {
         codeAgentForCreate = mastra.getAgentById?.(id) as typeof codeAgentForCreate;
       } catch {
         codeAgentForCreate = undefined;
       }
-      if (codeAgentForCreate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForCreate)) {
         const ownership = getCodeAgentOwnership(codeAgentForCreate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           assertOwnedInstructionsNotEmpty(createInstructions);
         } else {
           createInstructions = undefined;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          createTools = undefined;
+        if (!ownership.ownsTools) {
+          createTools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(createTools) : undefined;
           createIntegrationTools = undefined;
           createMcpClients = undefined;
+          createToolProviders = undefined;
         }
       }
 
@@ -654,21 +716,18 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         requestContext,
       });
 
-      const input = {
-        id,
-        authorId,
-        visibility,
-        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+      const snapshotInput = {
         name,
         description,
         instructions: createInstructions,
         model,
+        modelList,
         tools: createTools,
         defaultOptions,
         workflows,
         agents,
         integrationTools: createIntegrationTools,
-        toolProviders,
+        toolProviders: createToolProviders,
         mcpClients: createMcpClients,
         inputProcessors,
         outputProcessors,
@@ -679,6 +738,17 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         browser: resolvedBrowser,
         durable,
         requestContextSchema,
+      };
+      const snapshot =
+        codeAgentForCreate?.source === 'code'
+          ? { name, ...buildExportConfig(snapshotInput, codeAgentForCreate) }
+          : snapshotInput;
+      const input = {
+        id,
+        authorId,
+        visibility,
+        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+        ...snapshot,
       } as StorageCreateAgentInput;
 
       // Use editor.agent.create() when available to apply builder defaults
@@ -750,6 +820,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'PATCH',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'update_stored_agent',
+    description: 'Update a stored agent. Only the fields you pass change.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -846,7 +922,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       } catch {
         codeAgentForUpdate = undefined;
       }
-      if (codeAgentForUpdate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForUpdate)) {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           if (instructions !== undefined) {
@@ -856,10 +932,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
           instructions = undefined;
           shouldValidateStoredInstructions = false;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          tools = undefined;
+        if (!ownership.ownsTools) {
+          tools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(tools) : undefined;
           integrationTools = undefined;
           mcpClients = undefined;
+          toolProviders = undefined;
         }
       }
 
@@ -970,9 +1047,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {
+          // Same as create: publishing a version also publishes the agent, otherwise a
+          // draft agent keeps status 'draft' with a live active version.
           await agentsStore.update({
             id: storedAgentId,
             activeVersionId: latestVersion.id,
+            status: 'published',
           });
         }
       }
@@ -1051,8 +1131,34 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
+      // A record with the id of a code-defined agent is only an override; the code agent and the workspace it
+      // registered stay. Check before clearCache, which unregisters stored agents.
+      let overridesCodeAgent = false;
+      try {
+        overridesCodeAgent = mastra.getAgentById(storedAgentId).source !== 'stored';
+      } catch {
+        // Not registered: a stored agent that hasn't been loaded yet.
+      }
+
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
+
+      // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
+      // see it, so unregister it. The record is already gone, so a cleanup failure is logged rather than failing the
+      // delete.
+      try {
+        if (!overridesCodeAgent && typeof mastra.listWorkspaces === 'function') {
+          for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+            if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+              await mastra.removeWorkspace(workspaceId);
+            }
+          }
+        }
+      } catch (cleanupError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to unregister workspace of deleted agent', { storedAgentId, error: cleanupError });
+      }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

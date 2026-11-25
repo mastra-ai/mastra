@@ -8,7 +8,7 @@ import routing from './ci-routing.cjs';
 const { discoverWorkspacePackages, qualityAssuranceInputs, selectWorkspacePackages, validateWorkspacePackages } =
   routing;
 const majorVersionWorkflow = readFileSync(new URL('../workflows/major-version-check.yml', import.meta.url), 'utf8');
-const prebuildWorkflow = readFileSync(new URL('../workflows/prebuild.yml', import.meta.url), 'utf8');
+const affectedTestSelection = readFileSync(new URL('./select-affected-tests.cjs', import.meta.url), 'utf8');
 const workspaceCloudWorkflow = readFileSync(
   new URL('../workflows/secrets.test-workspaces.yml', import.meta.url),
   'utf8',
@@ -84,6 +84,7 @@ describe('workspace CI routing', () => {
   test.each([
     ['workspaces/_test-utils/src/index.ts'],
     ['.github/scripts/ci-routing.cjs'],
+    ['.github/scripts/select-affected-tests.cjs'],
     ['.github/workflows/prebuild.yml'],
     ['.github/workflows/test-workspaces.yml'],
     ['.github/workflows/secrets.test-workspaces.yml'],
@@ -143,7 +144,7 @@ describe('workspace CI routing', () => {
       workspacePackages: {},
     });
     expect(invalidObjectSelection).toEqual({ all: true, packages: discoveredPackages, reason: 'invalid-input' });
-    expect(prebuildWorkflow).toContain('const workspacesChanged = workspaceSelection.packages.length > 0;');
+    expect(affectedTestSelection).toContain('workspaces_changed: workspaceSelection.packages.length > 0,');
     expect(invalidObjectSelection.packages.length > 0).toBe(true);
 
     expect(
@@ -328,7 +329,9 @@ describe('quality assurance CI routing', () => {
     expect(workflow).toContain('discoverPackages(process.cwd())');
     expect(workflow).toContain('findPackagesMissingDocs(process.cwd())');
     expect(workflow).toContain('has_readme_inputs: ${{ steps.filter.outputs.has_readme_inputs }}');
-    expect(workflow).toContain("if: needs.changes.outputs.has_readme_inputs == 'true'");
+    expect(workflow).toMatch(
+      /- name: Run README validator\n\s+if: \$\{\{[^\n]*needs\.changes\.outputs\.has_readme_inputs == 'true'/,
+    );
     expect(workflow).toContain('run: node .github/scripts/check-package-readmes.mjs');
   });
 

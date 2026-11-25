@@ -37,6 +37,17 @@ export interface Environment {
   updatedAt: string;
 }
 
+/**
+ * Value the platform returns in place of a write-only secret. Sending it back
+ * on a save keeps the stored secret. It is a sentinel, never a real value, so
+ * it must not be written to env files or shown to users.
+ */
+export const SECRET_VALUE_PLACEHOLDER = '__mastra_secret__';
+
+export function isSecretPlaceholder(value: string | undefined): boolean {
+  return value === SECRET_VALUE_PLACEHOLDER;
+}
+
 export type EnvironmentDeployStatus =
   | 'queued'
   | 'uploading'
@@ -205,6 +216,40 @@ export async function restartEnvironment(
     const err = await resp.json().catch(() => ({}));
     throwApiError('Failed to restart environment', resp.status, extractApiErrorDetail(err));
   }
+}
+
+/**
+ * Save an environment's env vars and/or their kinds.
+ *
+ * `envVars` replaces the whole stored map, so callers must send every var
+ * they want to keep. Write-only secrets can be kept by sending
+ * `SECRET_VALUE_PLACEHOLDER` as their value. `envVarMeta` flags apply to the
+ * named vars only; other vars keep their stored kind.
+ */
+export async function updateEnvironmentVars(
+  token: string,
+  orgId: string,
+  projectId: string,
+  envId: string,
+  updates: { envVars?: Record<string, string>; envVarMeta?: Record<string, { secret: boolean }> },
+): Promise<Environment> {
+  const resp = await fetch(`${getApiUrl()}/v1/projects/${projectId}/environments/${envId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      'x-organization-id': orgId,
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    throwApiError('Failed to update environment variables', resp.status, extractApiErrorDetail(err));
+  }
+
+  const data = (await resp.json()) as { environment: Environment };
+  return data.environment;
 }
 
 export async function deleteEnvironment(token: string, orgId: string, projectId: string, envId: string): Promise<void> {

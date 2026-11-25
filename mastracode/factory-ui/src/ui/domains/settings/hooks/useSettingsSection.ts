@@ -1,6 +1,7 @@
 import { matchPath, useLocation } from 'react-router';
 
-import { isSettingsSection, type SettingsSection } from '../settingsSections';
+import { isSettingsSection } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 /**
  * The active settings section is the `:section` URL segment of
@@ -16,5 +17,5 @@ export function useSettingsSection(): SettingsSection {
     matchPath('/factories/:factoryId/settings/:section/*', pathname)?.params.section ??
     matchPath('/factories/:factoryId/settings/:section', pathname)?.params.section ??
     matchPath('/settings/:section', pathname)?.params.section;
-  return isSettingsSection(section) ? section : 'preferences';
+  return isSettingsSection(section) ? section : 'account';
 }

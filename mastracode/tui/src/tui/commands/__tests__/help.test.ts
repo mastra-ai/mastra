@@ -8,6 +8,8 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: loadSettingsMock,
 }));
 
+vi.mock('../../utils/experimental-features.js', () => ({ isKnowledgeEnabled: () => false }));
+
 import { handleHelpCommand } from '../help.js';
 
 function createCtx(modeCount = 2) {

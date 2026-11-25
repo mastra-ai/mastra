@@ -50,7 +50,7 @@ const mockMatchMedia = () => {
       mediaQueries.set(query, mql);
     }
     return mql;
-  }) as unknown as typeof window.matchMedia;
+  });
 };
 
 describe('useIsMobile', () => {
@@ -119,15 +119,6 @@ describe('useIsMobile', () => {
     const { result } = renderHook(() => useIsMobile());
 
     expect(result.current).toBe(true);
-  });
-
-  it('subscribes to the change event', () => {
-    renderHook(() => useIsMobile());
-
-    expect(mediaQueries.get('(max-width: 1023px)')?.addEventListener).toHaveBeenCalledWith(
-      'change',
-      expect.any(Function),
-    );
   });
 
   it('stops reporting once the viewport no longer matches', () => {

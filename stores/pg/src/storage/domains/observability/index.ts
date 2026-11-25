@@ -16,6 +16,7 @@ import type {
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   BatchCreateSpansArgs,
   CreateSpanArgs,
   GetSpanArgs,
@@ -353,6 +354,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -400,6 +402,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -447,6 +450,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           "environment", "source", "serviceName", "scope",
           "spanType", "attributes", "metadata", "tags", "links",
           "input", "output", "error", "isEvent",
+          "outcome", "stopReason", "stopReasonContext", "resumedFromSpanId",
           "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
           "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
         FROM ${tableName}
@@ -765,6 +769,7 @@ export class ObservabilityPG extends ObservabilityStorage {
           r."environment", r."source", r."serviceName", r."scope",
           r."spanType", r."attributes", r."metadata", r."tags", r."links",
           r."input", r."output", r."error", r."isEvent",
+          r."outcome", r."stopReason", r."stopReasonContext", r."resumedFromSpanId",
           r."startedAtZ" as "startedAt", r."endedAtZ" as "endedAt",
           r."createdAtZ" as "createdAt", r."updatedAtZ" as "updatedAt"
         FROM ${tableName} r
@@ -833,33 +838,59 @@ export class ObservabilityPG extends ObservabilityStorage {
     }
   }
 
+  #toSpanUpdates(records: BatchUpdateSpansArgs['records']) {
+    return records.map(record => {
+      const data: Record<string, any> = { ...record.updates };
+      if (data.endedAt instanceof Date) {
+        const endedAt = data.endedAt.toISOString();
+        data.endedAt = endedAt;
+        data.endedAtZ = endedAt;
+      }
+      if (data.startedAt instanceof Date) {
+        const startedAt = data.startedAt.toISOString();
+        data.startedAt = startedAt;
+        data.startedAtZ = startedAt;
+      }
+
+      return {
+        keys: { spanId: record.spanId, traceId: record.traceId },
+        data,
+      };
+    });
+  }
+
   async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
       return this.#db.batchUpdate({
         tableName: TABLE_SPANS,
-        updates: args.records.map(record => {
-          const data: Record<string, any> = { ...record.updates };
-          if (data.endedAt instanceof Date) {
-            const endedAt = data.endedAt.toISOString();
-            data.endedAt = endedAt;
-            data.endedAtZ = endedAt;
-          }
-          if (data.startedAt instanceof Date) {
-            const startedAt = data.startedAt.toISOString();
-            data.startedAt = startedAt;
-            data.startedAtZ = startedAt;
-          }
-
-          return {
-            keys: { spanId: record.spanId, traceId: record.traceId },
-            data,
-          };
-        }),
+        updates: this.#toSpanUpdates(args.records),
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BATCH_UPDATE_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    try {
+      const applied = await this.#db.batchUpdateWhereNull({
+        tableName: TABLE_SPANS,
+        updates: this.#toSpanUpdates(args.records),
+        nullColumns: ['endedAt'],
+      });
+      return {
+        updated: args.records.filter((_, index) => applied[index]).map(({ traceId, spanId }) => ({ traceId, spanId })),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_UNENDED_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

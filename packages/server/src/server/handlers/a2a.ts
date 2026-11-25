@@ -19,11 +19,13 @@ import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
 import { signAgentCard } from '../a2a/agent-card-signing';
-import { createV1AgentCard, type AgentCardV1 } from '../a2a/agent-card-v1';
+import { createV1AgentCard } from '../a2a/agent-card-v1';
+import type { AgentCardV1 } from '../a2a/agent-card-v1';
 import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
-import { TaskStoreVersionConflictError, type InMemoryTaskStore } from '../a2a/store';
+import { TaskStoreVersionConflictError } from '../a2a/store';
+import type { InMemoryTaskStore } from '../a2a/store';
 import { isInterruptedTaskState, isTerminalTaskState } from '../a2a/task-state';
 import { applyUpdateToTask, loadOrCreateTask, resolveTaskMemory } from '../a2a/tasks';
 import {
@@ -391,7 +393,7 @@ export async function getAgentCardByIdHandler({
   requestContext,
   protocolVersion = '0.3',
 }: AgentCardOptions): Promise<AgentCard | AgentCardV1> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
+  const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
   const [instructions, tools]: [
     Awaited<ReturnType<typeof agent.getInstructions>>,
@@ -2263,7 +2265,7 @@ export async function getAgentExecutionHandler({
   abortSignal?: AbortSignal;
   protocolVersion?: A2AProtocolVersion;
 }): Promise<any> {
-  const agent = await getAgentFromSystem({ mastra, agentId });
+  const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
   const protocolParams = protocolVersion === '1.0' ? normalizeV1Params(method, params) : params;
   const {
     pushNotificationStore: resolvedPushNotificationStore,

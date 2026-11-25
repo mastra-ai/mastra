@@ -1,5 +1,45 @@
 # @mastra/codemod
 
+## 1.1.9
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.1.9-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.1.8
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`jscodeshift@^17.4.0` ↗︎](https://www.npmjs.com/package/jscodeshift/v/17.4.0) (from `^17.3.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.8-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`jscodeshift@^17.4.0` ↗︎](https://www.npmjs.com/package/jscodeshift/v/17.4.0) (from `^17.3.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.7
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 1.1.7-alpha.0
 
 ### Patch Changes

@@ -13,10 +13,6 @@ vi.mock('@/ds/components/CodeEditor', () => ({
   CodeEditor: () => null,
 }));
 
-vi.mock('@/ds/icons/AgentIcon', () => ({
-  AgentIcon: () => null,
-}));
-
 vi.mock('@/domains/chat/components/badge-wrapper', () => ({
   BadgeWrapper: ({ extraInfo }: { extraInfo: ReactNode }) => {
     return extraInfo;
@@ -63,6 +59,7 @@ describe('AgentBadge routing decision', () => {
         toolName: 'agent-call',
         isNetwork: true,
         toolApprovalMetadata: undefined,
+        renderToolCard: () => null,
       }),
     );
 
@@ -91,6 +88,7 @@ describe('AgentBadge routing decision', () => {
         toolName: 'agent-call',
         isNetwork: true,
         toolApprovalMetadata: undefined,
+        renderToolCard: () => null,
       }),
     );
 

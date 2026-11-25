@@ -339,8 +339,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       {
         id: 'obs-threshold',
         label: 'Messages before observation',
-        description:
-          'Message tokens before the Observer runs. ' + 'More means a larger message window per observation.',
+        description: 'Message tokens before the Observer runs. More means a larger message window per observation.',
         currentValue: formatTokens(config.observationThreshold),
         submenu: (_currentValue, done) =>
           new ThresholdSubmenu(
@@ -400,8 +399,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       {
         id: 'observe-attachments',
         label: 'Observe attachments',
-        description:
-          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        description: 'Forward image and file attachments to the Observer LLM. Auto checks model capabilities to decide',
         currentValue: formatAttachmentValue(config.observeAttachments),
         submenu: (_currentValue, done) => {
           const items: SelectItem[] = [

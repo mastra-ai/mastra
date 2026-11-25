@@ -31,7 +31,7 @@ const mockMatchMedia = (matchesDark: boolean): SystemPreference => {
     dispatchEvent: () => false,
     onchange: null,
   };
-  window.matchMedia = vi.fn().mockReturnValue(mql) as unknown as typeof window.matchMedia;
+  window.matchMedia = vi.fn().mockReturnValue(mql);
 
   return {
     set(next: boolean) {

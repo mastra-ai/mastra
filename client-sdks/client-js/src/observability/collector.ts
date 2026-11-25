@@ -226,6 +226,17 @@ class ObservabilityCollectorImpl implements ObservabilityCollector {
     }
     this.#flushed = true;
 
+    // Reject the whole telemetry payload to avoid leaving children with missing parents.
+    if (
+      this.#spans.some(span => span.endTimeNs < span.startTimeNs) ||
+      (this.#executionStartMs !== undefined &&
+        this.#executionEndMs !== undefined &&
+        this.#executionEndMs < this.#executionStartMs)
+    ) {
+      console.warn('Client observability timing ends before it starts; dropping telemetry.');
+      return {};
+    }
+
     const payload: ClientObservabilityPayload = {};
 
     if (this.#executionStartMs !== undefined && this.#executionEndMs !== undefined) {

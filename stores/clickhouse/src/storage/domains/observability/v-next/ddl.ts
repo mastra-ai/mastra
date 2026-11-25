@@ -172,6 +172,17 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
 
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
+
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
   metadataSearch     Map(LowCardinality(String), String) DEFAULT map(),
@@ -250,6 +261,17 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -354,6 +376,17 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -1249,6 +1282,26 @@ export type MigrationEntry =
   | { kind: 'column'; table: string; name: string; sql: string }
   | { kind: 'index'; table: string; name: string; sql: string };
 
+/**
+ * Span columns added after the first span tables shipped, with their types.
+ * Present on span events, trace roots and trace branches.
+ */
+export const ADDED_SPAN_COLUMNS = [
+  ['inputPreview', 'Nullable(String)'],
+  ['outputPreview', 'Nullable(String)'],
+  ['errorPreview', 'Nullable(String)'],
+  ['timeToFirstChunkMs', 'Nullable(Float64)'],
+  ['externalParentSpanId', 'Nullable(String)'],
+  ['resumedFromSpanId', 'Nullable(String)'],
+  ['model', 'LowCardinality(Nullable(String))'],
+  ['provider', 'LowCardinality(Nullable(String))'],
+  ['outcome', 'LowCardinality(Nullable(String))'],
+  ['stopReason', 'LowCardinality(Nullable(String))'],
+  ['stopReasonContext', 'Nullable(String)'],
+  ['timeToFirstTokenMs', 'Nullable(Float64)'],
+  ['errorCount', 'Nullable(UInt32)'],
+] as const;
+
 const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
   kind: 'column',
   table,
@@ -1276,15 +1329,20 @@ const LOG_SKIP_INDEX_COLUMNS = [
 ] as const;
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
-  // Stored previews. The view targets first, so the `SELECT *` views have somewhere to put the
-  // values once span_events carries them.
-  ...(['inputPreview', 'outputPreview', 'errorPreview'] as const).flatMap(column => [
-    addColumn(TABLE_TRACE_ROOTS, column, 'Nullable(String)'),
-    addColumn(TABLE_TRACE_BRANCHES, column, 'Nullable(String)'),
+  // Added span columns. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets get each column first and no write lands
+  // while the source has a column its targets lack.
+  ...ADDED_SPAN_COLUMNS.flatMap(([column, type]) => [
+    addColumn(TABLE_TRACE_ROOTS, column, type),
+    addColumn(TABLE_TRACE_BRANCHES, column, type),
+    addColumn(TABLE_SPAN_EVENTS, column, type),
   ]),
-  addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
-  addColumn(TABLE_SPAN_EVENTS, 'outputPreview', 'Nullable(String)'),
-  addColumn(TABLE_SPAN_EVENTS, 'errorPreview', 'Nullable(String)'),
+  // Trace branches, before span_events: its view copies span_events with SELECT *, so the target
+  // needs each column first. CREATE has always included these; listed so a table lacking them
+  // still gains them.
+  addColumn(TABLE_TRACE_BRANCHES, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'rootEntityVersionId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1337,12 +1395,6 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),
-  // Time to first chunk. The trace_roots / trace_branches views copy span_events
-  // with SELECT *, so both targets need the column too. They get it first so no
-  // write lands while the source has a column its targets lack.
-  addColumn(TABLE_TRACE_ROOTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
-  addColumn(TABLE_TRACE_BRANCHES, 'timeToFirstChunkMs', 'Nullable(Float64)'),
-  addColumn(TABLE_SPAN_EVENTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
 ];
 
 /**

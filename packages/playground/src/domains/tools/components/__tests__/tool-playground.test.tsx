@@ -85,7 +85,8 @@ describe('ToolPlayground', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
       expect(await screen.findByText('Success')).not.toBeNull();
-      expect(screen.getByText(/"dish": "pasta"/)).not.toBeNull();
+      const editors = screen.getAllByRole<HTMLTextAreaElement>('textbox', { name: 'Code editor' });
+      expect(editors.map(editor => editor.value)).toContain(JSON.stringify({ dish: 'pasta' }, null, 2));
     });
   });
 

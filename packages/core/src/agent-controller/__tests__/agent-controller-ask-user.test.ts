@@ -670,14 +670,9 @@ describe('AgentController: ask_user native suspension', () => {
       globalRunRegistry.clear();
     }
   });
-  it('emits tool_suspended carrying the question payload when ask_user suspends', async () => {
-    const { session } = await buildController(
-      'emit',
-      JSON.stringify({
-        question: 'Which environment?',
-        options: [{ label: 'staging' }, { label: 'production' }],
-      }),
-    );
+  it('emits tool_suspended carrying the question and its recommended choice', async () => {
+    const options = [{ label: 'staging', recommended: true }, { label: 'production' }];
+    const { session } = await buildController('emit', JSON.stringify({ question: 'Which environment?', options }));
 
     const events: any[] = [];
     session.subscribe(event => events.push(event));
@@ -689,7 +684,7 @@ describe('AgentController: ask_user native suspension', () => {
     expect(suspendEvent.toolName).toBe('ask_user');
     expect(suspendEvent.toolCallId).toBe('call-1');
     expect(suspendEvent.suspendPayload.question).toBe('Which environment?');
-    expect(suspendEvent.suspendPayload.options).toEqual([{ label: 'staging' }, { label: 'production' }]);
+    expect(suspendEvent.suspendPayload.options).toEqual(options);
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.
@@ -698,6 +693,29 @@ describe('AgentController: ask_user native suspension', () => {
     );
     expect(pending?.toolCallId).toBe('call-1');
     expect(pending?.toolName).toBe('ask_user');
+  });
+
+  it('ends the assistant message of a turn that suspends on a tool', async () => {
+    const { session } = await buildController('suspend-message-end', JSON.stringify({ question: 'Your name?' }), true);
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(structuredClone(event)));
+
+    await session.sendMessage({ content: 'Ask my name' });
+
+    const types = events.map(event => event.type);
+    const started = events.flatMap(event => (event.type === 'message_start' ? [event.message.id] : []));
+    const ended = events.flatMap(event => (event.type === 'message_end' ? [event.id] : []));
+    const toolCallMessage = events.find(
+      event =>
+        event.type === 'message_start' &&
+        event.message.role === 'assistant' &&
+        event.message.content.parts.some(part => part.type === 'tool-invocation'),
+    );
+    expect(toolCallMessage?.type === 'message_start' && ended.includes(toolCallMessage.message.id)).toBe(true);
+    expect(started.filter(id => !ended.includes(id))).toEqual([]);
+    expect(types.indexOf('tool_suspended')).toBeGreaterThan(-1);
+    expect(types.lastIndexOf('message_end')).toBeLessThan(types.indexOf('agent_end'));
+    expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'suspended' });
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {

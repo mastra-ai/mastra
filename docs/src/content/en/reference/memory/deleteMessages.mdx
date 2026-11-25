@@ -13,6 +13,9 @@ The `.deleteMessages()` method deletes multiple messages by their IDs.
 
 ```typescript
 await memory?.deleteMessages(['671ae63f-3a91-4082-a907-fe7de78e10ec'])
+
+// You can also pass message objects with an `id` property
+await memory?.deleteMessages([{ id: '671ae63f-3a91-4082-a907-fe7de78e10ec' }])
 ```
 
 ## Parameters
@@ -21,8 +24,8 @@ await memory?.deleteMessages(['671ae63f-3a91-4082-a907-fe7de78e10ec'])
   content={[
   {
     name: 'messageIds',
-    type: 'string[]',
-    description: 'Array of message IDs to delete',
+    type: 'string[] | { id: string }[]',
+    description: 'Array of message IDs, or message objects with an `id` property, to delete',
     isOptional: false,
   },
 ]}

@@ -1,6 +1,6 @@
 import { transformSync } from '@babel/core';
 import { describe, it, expect } from 'vitest';
-import { detectPinoTransports } from './detect-pino-transports';
+import { detectPinoTransports, mayContainPinoTransport } from './detect-pino-transports';
 
 /**
  * Helper to run the plugin and return detected transports
@@ -18,6 +18,10 @@ function runDetection(code: string): Set<string> {
     });
   } catch {
     // Return empty set on parse errors
+  }
+  // The pre-check gates the Babel scan in analyze, so it must never reject code the plugin detects.
+  if (transports.size > 0) {
+    expect(mayContainPinoTransport(code)).toBe(true);
   }
   return transports;
 }
@@ -458,5 +462,14 @@ describe('detectPinoTransports', () => {
     const transports = runDetection(code);
     expect(transports.has('from-pino')).toBe(true);
     expect(transports.has('from-logger')).toBe(true);
+  });
+
+  it.each([
+    ['a member chain split across lines', `import p from "pino";\np\n  .transport({ target: "x" })`],
+    ['an unbound global pino', `pino.default\n  .transport({ target: "x" })`],
+    ['a computed member named transport', `import pino from 'pino';\npino[transport]({ target: "x" })`],
+    ['a computed member on an unbound global pino', `pino.default[transport]({ target: "x" })`],
+  ])('should detect %s', (_, code) => {
+    expect(runDetection(code)).toEqual(new Set(['x']));
   });
 });

@@ -6,6 +6,13 @@ import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
 import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
+import { createRunMessageList } from '../../utils/run-message-list';
+import {
+  foldBackgroundResults,
+  hasAppliedBackgroundResults,
+  settleFinishedBackgroundResults,
+} from '../shared/background-results';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 const BG_CHECK_STEP_ID = `${DurableStepIds.AGENTIC_EXECUTION}-bg-task-check`;
 
@@ -55,6 +62,7 @@ export function createDurableBackgroundTaskCheckStep() {
 
       const registryEntry = getRunRegistryEntry(runId, params.mastra);
       const bgManager = registryEntry?.backgroundTaskManager;
+      const waitTimeoutMs = registryEntry?.backgroundTasksConfig?.waitTimeoutMs ?? bgManager?.config?.waitTimeoutMs;
 
       const outcome = await checkBackgroundTasks({
         bgManager,
@@ -64,31 +72,52 @@ export function createDurableBackgroundTaskCheckStep() {
         resourceId: initData.state?.resourceId,
         skipWait: initData.options?.skipBgTaskWait,
         retryCount,
-        resolveWaitMs: rc => {
-          const waitTimeoutMs = registryEntry?.backgroundTasksConfig?.waitTimeoutMs ?? bgManager?.config?.waitTimeoutMs;
-          return rc === 0 && waitTimeoutMs ? undefined : (waitTimeoutMs ?? 1000);
-        },
+        resolveWaitMs: rc => (rc === 0 && waitTimeoutMs ? undefined : (waitTimeoutMs ?? 1000)),
         emitChunk: chunk => {
           if (!pubsub) return;
           return emitChunkEvent(pubsub, runId, chunk as any);
         },
       });
 
+      // A task's status turns terminal before its onResult hook runs, so wait for the hooks of
+      // finished tasks. Cancelled tasks never call it.
+      if (bgManager) {
+        await settleFinishedBackgroundResults(
+          registryEntry,
+          async taskId => {
+            // A failed read only skips the wait for this task; its result still folds in if its hook has run.
+            const status = (await bgManager.getTask(taskId).catch(() => undefined))?.status;
+            return status === 'completed' || status === 'failed' || status === 'timed_out';
+          },
+          waitTimeoutMs ?? 1000,
+        );
+      }
+      // onResult wrote finished results into the tool-call step's message list, not into the
+      // transcript in workflow state that the next model call reads.
+      let output = typedInput;
+      if (hasAppliedBackgroundResults(registryEntry)) {
+        const transcript = await readMessageListState(params, typedInput);
+        const list = createRunMessageList({ mastra: params.mastra }).deserialize(transcript);
+        if (await foldBackgroundResults(registryEntry, list)) {
+          output = { ...typedInput, ...(await storeMessageListState(params, list.serialize())) };
+        }
+      }
+
       switch (outcome.status) {
         case 'pass-through':
         case 'timeout':
-          return typedInput;
+          return output;
         case 'pending':
-          return { ...typedInput, backgroundTaskPending: true };
+          return { ...output, backgroundTaskPending: true };
         case 'completed':
-          if (typedInput.stepResult) {
+          if (output.stepResult) {
             return {
-              ...typedInput,
+              ...output,
               backgroundTaskPending: true,
-              stepResult: { ...typedInput.stepResult, isContinued: true },
+              stepResult: { ...output.stepResult, isContinued: true },
             };
           }
-          return { ...typedInput, backgroundTaskPending: true };
+          return { ...output, backgroundTaskPending: true };
       }
     },
   });

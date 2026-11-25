@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  BoundedTail,
-  createBuildEventNormalizer,
-  decodeBuildkitStatus,
-  type DockerTemplateBuildEvent,
-} from './build-progress';
+import { BoundedTail, createBuildEventNormalizer, decodeBuildkitStatus } from './build-progress';
+import type { DockerTemplateBuildEvent } from './build-progress';
 
 // Minimal protobuf encoder for BuildKit StatusResponse fixtures.
 function varint(value: number): Buffer {

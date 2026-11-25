@@ -129,7 +129,7 @@ export class LangfuseExporter extends BaseExporter {
       packageName: '@mastra/langfuse',
       serviceName: options.config?.serviceName,
       config: { resourceAttributes: this.#resourceAttributes },
-      format: 'GenAI_v1_38_0',
+      format: 'GenAI_v1_41_0',
     });
   }
 
@@ -147,7 +147,7 @@ export class LangfuseExporter extends BaseExporter {
         packageName: '@mastra/langfuse',
         serviceName: 'mastra-service',
         config: { resourceAttributes: this.#resourceAttributes },
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
       });
     }
 
@@ -297,11 +297,6 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
-  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
-    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
-    delete attributes['gen_ai.usage.reasoning_tokens'];
-  }
-
   // A run attached under an existing span (tracingOptions.nestUnderParent) does
   // not own the trace. Langfuse applies trace-level attributes from any span,
   // so none of its spans may write them: they would replace the outer run's.
@@ -439,7 +434,15 @@ function mapMastraToLangfuseAttributes(
     // evaluators mapped to Trace input/output and leaves the trace view without
     // the top-level request/response. Serialization failures (circular refs,
     // bigint) skip the attribute rather than failing the span export.
-    const traceInput = serializeTraceIo(span.input);
+    // A resumed run (after a suspend such as tool-call approval) continues the
+    // original trace: core marks it with parentSpanId === resumedFromSpanId.
+    // Its input is the resume payload, not the user's message, and Langfuse
+    // applies trace-level attributes from any span (last writer wins), so it
+    // must not replace the trace input the original run already set. Its
+    // output IS the turn's final reply, so trace output is still written.
+    const resumedContinuation =
+      span.parentSpanId !== undefined && span.parentSpanId === span.metadata?.resumedFromSpanId;
+    const traceInput = resumedContinuation ? undefined : serializeTraceIo(span.input);
     if (traceInput !== undefined) {
       attributes['langfuse.trace.input'] = traceInput;
     }

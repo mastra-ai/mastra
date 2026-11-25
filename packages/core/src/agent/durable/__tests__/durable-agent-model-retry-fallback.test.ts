@@ -17,17 +17,16 @@
  * ladder treats as retryable (an `APICallError`-tagged Error with `isRetryable`), so the
  * recording model's own request array tells how many attempts the loop made.
  *
- * COR-1390 is declared below for the other four variants, on durable and evented, twice over:
+ * COR-1390 is declared below for `retry`, `call-time` and `fallback`, on durable and evented:
+ * durable and evented own the retry loop, so every model attempt emits its own `step-start`;
+ * plain injects a single `step-start` from the AI SDK's result callback. Each failed attempt
+ * therefore adds one `step-start` chunk to the public stream that plain never streams
+ * (`retry` and `call-time` two, `fallback` one) while the requests the model sees stay
+ * identical.
  *
- *  - durable and evented own the retry loop, so every model attempt emits its own
- *    `step-start`; plain injects a single `step-start` from the AI SDK's result callback.
- *    Each failed attempt therefore adds one `step-start` chunk to the public stream that
- *    plain never streams (`retry` and `call-time` two, `fallback` one) while the requests
- *    the model sees stay identical.
- *  - `retry-zero-defaults`, whose default error-processor stack retries the failed step,
- *    diverges the other way: plain closes the failed step (an extra `step-finish` carrying
- *    `reason: 'retry'`, `stepCount` 2) and drops the terminating step's usage, where durable
- *    and evented keep one step and report the usage the model returned.
+ * `retry-zero-defaults`, whose default error-processor stack retries the failed step, needs no
+ * declaration: every engine re-attempts the request within the same step, so each streams one
+ * `step-start` per attempt, counts one step and reports the usage the model returned (COR-1554).
  *
  * Each declaration derives those values from plain's own observation instead of ignoring the
  * fields, so the leg fails again the moment either side is fixed, and the helper refuses a
@@ -44,14 +43,15 @@ import { describe, expect, it } from 'vitest';
 import {
   chunksOfType,
   createRecordingModel,
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   expectEngineParity,
   textOnlyTape,
-  type EngineObservation,
-  type EngineParityResults,
-  type ModelScript,
-  type ParityEngine,
-  type ParitySnapshot,
+} from '../../../loop/test-utils/aimock/parity';
+import type {
+  EngineObservation,
+  EngineParityResults,
+  ModelScript,
+  ParityEngine,
+  ParitySnapshot,
 } from '../../../loop/test-utils/aimock/parity';
 import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
@@ -138,10 +138,6 @@ async function runRetryZero() {
         memory: { thread: 't27-thread-retry-zero', resource: 't27-resource-retry-zero' },
       });
     },
-    differences: {
-      durable: FAILED_STEP_WARNINGS_DIFFERENCE,
-      evented: FAILED_STEP_WARNINGS_DIFFERENCE,
-    },
   });
   return { results, served };
 }
@@ -178,56 +174,6 @@ function withExtraAttemptStarts(plain: EngineObservation, attempts: number): Eng
   };
 }
 
-/**
- * The usage plain drops on the failed-step path, restored to the counts the model
- * reported. Plain still carries the full object under `raw`, so the expectation is
- * derived from plain's own observation rather than a literal.
- */
-function reportedUsage(usage: unknown): ParitySnapshot['usage'] {
-  const current = usage as Partial<ParitySnapshot['usage']>;
-  const raw = current.raw as { inputTokens?: number; outputTokens?: number; totalTokens?: number } | undefined;
-  if (raw === undefined) {
-    return {
-      inputTokens: current.inputTokens,
-      outputTokens: current.outputTokens,
-      totalTokens: current.totalTokens,
-      raw: current.raw,
-    };
-  }
-  return {
-    inputTokens: raw.inputTokens,
-    outputTokens: raw.outputTokens,
-    totalTokens: raw.totalTokens,
-    raw,
-  };
-}
-
-/**
- * `retry-zero-defaults`: plain closes the failed step and drops the terminating
- * step's usage; durable and evented do neither. The transform removes the extra
- * `step-finish`, drops the step plain closed, and restores the usage.
- */
-function withFailedStepClosed(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const at = turn.chunkTypes.indexOf('step-finish');
-      if (at < 0) return turn;
-      const drop = <T>(values: readonly T[]): T[] => [...values.slice(0, at), ...values.slice(at + 1)];
-      return {
-        ...turn,
-        chunkTypes: drop(turn.chunkTypes),
-        chunks: drop(turn.chunks),
-        chunkPayloads: drop(turn.chunkPayloads),
-        stepCount: turn.stepCount - 1,
-        usage: reportedUsage(turn.usage),
-        finishChunk: { ...turn.finishChunk, usage: reportedUsage(turn.finishChunk.usage) },
-        fullOutput: { ...turn.fullOutput, usage: reportedUsage(turn.fullOutput.usage) },
-      };
-    }),
-  };
-}
-
 function extraStepStartDifference(attempts: number): EngineDifference {
   return {
     reason:
@@ -238,26 +184,14 @@ function extraStepStartDifference(attempts: number): EngineDifference {
   };
 }
 
-const closedFailedStepDifference: EngineDifference = {
-  reason:
-    'COR-1390: with the default error-processor stack plain closes the failed step — an extra step-finish with ' +
-    "reason 'retry' and a step count of 2 — and drops the terminating step's usage, where durable and evented " +
-    'keep one step and report the usage the model returned.',
-  expect: withFailedStepClosed,
-};
-
 function heldDifferences(variant: HeldVariant): Partial<Record<Exclude<ParityEngine, 'plain'>, EngineDifference>> {
-  const difference =
-    variant === 'retry' || variant === 'call-time'
-      ? extraStepStartDifference(3)
-      : variant === 'fallback'
-        ? extraStepStartDifference(2)
-        : closedFailedStepDifference;
+  if (variant === 'retry-zero-defaults') return {};
+  const difference = extraStepStartDifference(variant === 'fallback' ? 2 : 3);
   return { durable: difference, evented: difference };
 }
 
 // ---------------------------------------------------------------------------
-// The four variants the COR-1390 declaration unblocks
+// The four variants that succeed after a failed attempt
 // ---------------------------------------------------------------------------
 
 type HeldVariant = 'retry' | 'retry-zero-defaults' | 'call-time' | 'fallback';
@@ -403,15 +337,13 @@ describe('T27 model retry and fallback (plain, durable, evented)', () => {
     }
     const plain = turnOf(results, 'plain');
     expect(plain.text).toBe('recovered after retries');
-    // Plain closes the failed step, so it counts two steps and reports no usage counts on
-    // any surface — the second half of the declared COR-1390 difference, which removes that
-    // middle step-finish for durable and evented and restores the usage.
-    expect(plain.stepCount).toBe(2);
-    expect(plain.usage).toEqual({ raw: REPORTED_USAGE });
+    // The failed request is re-attempted within the same step (COR-1554): one step-start per
+    // attempt, one step, and the usage the model reported.
+    expect(plain.stepCount).toBe(1);
+    expect(plain.usage).toEqual({ ...REPORTED_USAGE, raw: REPORTED_USAGE });
     expect(plain.chunkTypes).toEqual([
       'start',
       'step-start',
-      'step-finish',
       'step-start',
       'text-start',
       'text-delta',

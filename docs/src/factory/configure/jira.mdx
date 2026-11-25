@@ -1,0 +1,69 @@
+---
+title: Jira | Configuration
+description: Connect a Jira Cloud site, select projects for issue intake, and route their issues to a Factory.
+---
+
+# Jira
+
+Jira supplies project issues to Factory boards. Connect a Jira Cloud site before selecting projects for intake. Each selected project also needs a destination Factory under the organization's routing settings. The Factory's board rules determine which board receives the card.
+
+Platform-backed servers use their Platform connection. Servers with their own Jira credentials can use the [self-managed configuration](#use-your-own-credentials).
+
+## Connect a site
+
+You need a running [Factory](/) and a linked target repository. You also need permission to authorize the intended Jira site.
+
+1. Open **Settings → Work Intake**.
+1. Under **Jira issues**, select **Connect Jira**.
+1. Authorize the intended site in Atlassian and return to Factory.
+1. Confirm the connected site name and that projects are available.
+
+Select **Connect another site** to add more sites. Projects from every connected site appear in the picker, grouped by site.
+
+If the section says Jira isn't configured on the server, the server operator must enable a Platform-backed integration or configure a complete [credential group](#use-your-own-credentials).
+
+## Select projects and route issues
+
+In **Work Intake**, enable **Sync Jira issues** and select the projects you want to follow. Projects are grouped by their Jira sites. Selections are shared: they feed every member's board.
+
+On each selected project's row, choose a destination Factory. A project with **Not routed** selected isn't picked up. The Factory's board rules determine which board receives the card.
+
+| Setting | Scope | Expected result |
+| - | - | - |
+| Site connection | Connected sites | Lists each site's available projects. |
+| Sync and project selection | Organization | Factory imports active issues from the selected projects. |
+| Source routing | Organization | Each selected project has a destination Factory with the intended codebase. |
+
+Choose a Factory linked to the repository where the project's issues should be implemented. Confirm the destination before changing shared routing for teammates.
+
+## Verify issue intake
+
+1. Create one active issue in a selected, routed Jira project.
+1. Return to the destination Factory's **Work** board.
+1. Match the issue's Jira key, title, and source link.
+1. Select **Investigate** and inspect the session's understanding of the issue.
+
+Give synchronization time to run. Planning, implementation, and review then follow the [Work workflow](/using/work-and-approvals). When a linked Jira issue becomes completed or canceled, built-in rules can move its Work card to **Done** or **Canceled**. Those state changes are asynchronous.
+
+A reconciliation worker refreshes the status and metadata of imported issues every five minutes by default, without needing an open browser. Set `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to change the interval in milliseconds. To stop Jira intake for an organization, turn it off in **Settings → Work Intake**. See [Event delivery](/reference/environment-variables#event-delivery).
+
+Agents working on Jira-sourced runs can read the issue and post comments back to Jira through built-in tools.
+
+If issues don't appear in Factory, read [Troubleshooting](/troubleshooting#intake-is-empty).
+
+## Use your own credentials
+
+For a self-managed connection, create an API token at [id.atlassian.com](https://id.atlassian.com/manage-profile/security/api-tokens) under **Security → API tokens**. The integration supports Jira Cloud sites and authenticates with the account email and token.
+
+Set all three variables on the Factory Server and restart it:
+
+```dotenv title=".env"
+JIRA_BASE_URL=https://acme.atlassian.net
+JIRA_EMAIL=you@example.com
+JIRA_API_TOKEN=your-jira-api-token
+
+# Optional
+JIRA_API_BASE_URL=https://api.atlassian.com/ex/jira/your-cloud-id
+```
+
+The generated entry uses this explicit integration when all three required values are present. A partial group disables direct Jira and logs a warning. The credentials are deployment-global: every member reads Jira through the same account, and there is no per-user authorization step. Project selection and routing still happen in **Work Intake** after the server is configured.

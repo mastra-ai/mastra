@@ -5,11 +5,10 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   fixedExtension: false,
   nodeProtocol: 'strip',
-  dts: true,
-  sourcemap: true,
+  dts: { sourcemap: false },
   clean: true,
   treeshake: true,
   deps: {
-    neverBundle: ['@mastra/agent-browser', '@mastra/core', '@mastra/core/browser', 'agent-browser', 'firecrawl'],
+    neverBundle: ['@mastra/agent-browser', '@mastra/core', '@mastra/core/browser', 'firecrawl'],
   },
 });

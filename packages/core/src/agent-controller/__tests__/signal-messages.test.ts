@@ -22,6 +22,7 @@ function createAgentMock(activeRunId: () => string | null) {
       mastra = nextMastra;
     }),
     __registerPrimitives: vi.fn(),
+    __registerExecutionEnginePolicy: vi.fn(),
     getConfiguredProcessorWorkflows: vi.fn(async () => []),
     listScorers: vi.fn(async () => []),
     getChannels: vi.fn(() => null),
@@ -90,7 +91,10 @@ describe('AgentController signal messages', () => {
         resourceId: 'resource-1',
         threadId,
         ifActive: { attributes: { path: 'active' } },
-        ifIdle: { attributes: { path: 'idle' } },
+        // The active branch probes with an idle `discard` so a run that ended
+        // first falls back to the session's idle path instead of waking without
+        // stream options.
+        ifIdle: { attributes: { path: 'idle' }, behavior: 'discard' },
       }),
     );
   });

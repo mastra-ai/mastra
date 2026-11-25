@@ -3,7 +3,8 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes, useLocation } from 'react-router';
+import type { ReactNode } from 'react';
+import { Route, Routes, useLocation, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DatasetsPage from '..';
 import { emptyScorers } from './fixtures/query-loading';
@@ -34,16 +35,25 @@ function LocationProbe() {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 }
 
+function RouterLinkProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate();
+  return (
+    <LinkComponentProvider Link={Link} navigate={path => void navigate(path)} paths={stubLinkPaths}>
+      {children}
+    </LinkComponentProvider>
+  );
+}
+
 const renderPage = (initialEntry = '/datasets') =>
   renderWithProviders(
     <TooltipProvider>
-      <LinkComponentProvider Link={Link} navigate={() => {}} paths={stubLinkPaths}>
+      <RouterLinkProvider>
         <LocationProbe />
         <Routes>
           <Route path="/datasets" element={<DatasetsPage />} />
           <Route path="/datasets/:datasetId" element={<div>Dataset page</div>} />
         </Routes>
-      </LinkComponentProvider>
+      </RouterLinkProvider>
     </TooltipProvider>,
     { router: { initialEntries: [initialEntry] } },
   );
@@ -128,7 +138,7 @@ describe('Datasets page', () => {
       renderPage();
 
       fireEvent.click(await screen.findByRole('button', { name: 'New dataset' }));
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
 
       expect(await screen.findByText('Dataset page')).not.toBeNull();
       expect(screen.getByTestId('location').textContent).toBe('/datasets/created-dataset');

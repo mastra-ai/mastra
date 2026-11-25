@@ -10,6 +10,10 @@
  *  2. tracingContext — the resumed run mints a fresh root span in a NEW trace instead of continuing
  *     the original. We assert the resumed run's root-span traceId equals the one captured at suspend.
  *
+ * The resumed execution must also record its own AGENT_RUN + MODEL_GENERATION pair under the
+ * suspended one, each span ended exactly once: the suspended pair as `suspend`, the resumed pair
+ * with the run's outcome, by the worker that finishes it.
+ *
  * Why a separate connect() worker: the durable loop (and the tool call) run on the worker, whose
  * globalRunRegistry is empty. Only what the resume event carries survives — so an in-process
  * (serve-mode) test can't reproduce this.
@@ -25,6 +29,9 @@ import { DefaultStorage } from '@mastra/libsql';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { INNGEST_PORT, startConnectInngestDevServer, stopInngestDevServer } from './durable-agent.test.utils';
+import { SPAN_EVENTS_FILE } from './fixtures/resume-context-agent';
+import { describeSpans, readSpanLifecycles } from './fixtures/span-events';
+import type { SpanLifecycle } from './fixtures/span-events';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 120_000 });
 const AGENT_ID = 'resume-ctx-agent';
@@ -35,6 +42,26 @@ const LOOP_WORKFLOW = 'inngest:durable-agentic-loop';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKER = path.join(here, 'fixtures', 'resume-context-worker.ts');
+const EVENTS = path.join(OUT_DIR, SPAN_EVENTS_FILE);
+const ROOTS = new Set(['agent_run', 'model_generation']);
+
+/**
+ * The run's spans once no root span is still open and the exporters have gone quiet, or as they
+ * stand when the guard fires.
+ */
+async function settledSpans(runId: string): Promise<SpanLifecycle[]> {
+  const ends = (spans: SpanLifecycle[]) => spans.reduce((count, span) => count + span.endedBy.length, 0);
+  const deadline = Date.now() + 10_000;
+  let spans = readSpanLifecycles(EVENTS, runId);
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const next = readSpanLifecycles(EVENTS, runId);
+    const quiet = ends(next) === ends(spans) && next.length === spans.length;
+    spans = next;
+    if (quiet && !spans.some(span => ROOTS.has(span.type) && span.endedBy.length === 0)) break;
+  }
+  return spans;
+}
 
 let worker: ChildProcess | undefined;
 let devServer: ChildProcess | null = null;
@@ -96,11 +123,12 @@ describe('durable agent resume restores requestContext + tracingContext (cross-p
     const resourceId = `resource-${Date.now()}`;
 
     const { buildResumeContextAgent } = await import('./fixtures/resume-context-agent');
-    const { durableAgent } = buildResumeContextAgent({
+    const { durableAgent, mastra } = buildResumeContextAgent({
       dbUrl: DB_URL,
       agentId: AGENT_ID,
       inngestPort: INNGEST_PORT,
       outDir: OUT_DIR,
+      role: 'api',
     });
 
     // Initial run — requestContext carries the tenant. The mock model calls save_note, which suspends.
@@ -184,5 +212,28 @@ describe('durable agent resume restores requestContext + tracingContext (cross-p
       },
       { timeout: 30_000, interval: 1000 },
     );
+
+    // Assertion 3: one span pair per execution, each ended once, by the worker that finished it.
+    await vi.waitFor(() => expect(resumedChunkTypes).toContain('finish'), { timeout: 30_000, interval: 500 });
+    await mastra.observability?.flush?.();
+    const spans = await settledSpans(runId);
+    const [first, second, ...more] = spans.filter(span => span.type === 'agent_run');
+    expect(more, `two agent runs, one per execution\n${describeSpans(spans)}`).toEqual([]);
+    expect(first?.endedBy, describeSpans(spans)).toEqual([{ role: 'worker', outcome: 'suspend' }]);
+    expect(second, `the resume opened its own AGENT_RUN\n${describeSpans(spans)}`).toMatchObject({
+      startedBy: ['api'],
+      resumed: true,
+      parentSpanId: first!.spanId,
+      endedBy: [{ role: 'worker', outcome: 'success' }],
+    });
+    const [firstGeneration, secondGeneration] = spans.filter(span => span.type === 'model_generation');
+    expect(firstGeneration?.endedBy, describeSpans(spans)).toEqual([{ role: 'worker', outcome: 'suspend' }]);
+    expect(secondGeneration, describeSpans(spans)).toMatchObject({
+      parentSpanId: second!.spanId,
+      endedBy: [{ role: 'worker', outcome: 'success' }],
+    });
+    for (const span of spans.filter(span => ['agent_run', 'model_generation', 'model_step'].includes(span.type))) {
+      expect(span.endedBy, `${span.type} ${span.spanId} ended exactly once\n${describeSpans(spans)}`).toHaveLength(1);
+    }
   });
 });

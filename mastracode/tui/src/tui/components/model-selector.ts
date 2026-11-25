@@ -3,10 +3,12 @@
  * Uses pi-tui overlay pattern with search and fuzzy filtering.
  */
 
-import { Box, Container, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
 import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
 import chalk from 'chalk';
 import { theme } from '../theme.js';
+import { PickerList } from './picker-list.js';
 
 // =============================================================================
 // Types
@@ -74,6 +76,7 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
 }
 
 const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
+const FAST_SUFFIX = ':fast';
 
 /**
  * The shared catalog namespaces the MastraCode gateway's providers (the user's
@@ -105,7 +108,7 @@ export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
 
 export class ModelSelectorComponent extends Box implements Focusable {
   private searchInput!: Input;
-  private listContainer!: Container;
+  private list!: PickerList<ModelItem | null>;
   private allModels: ModelItem[];
   private filteredModels: ModelItem[];
   private selectedIndex = 0;
@@ -133,8 +136,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
-    this.currentModelId = options.currentModelId;
+    const models = toCanonicalModelItems(options.models);
+    // A Fast selection marks its own row when the picker offers one, else its standard model's row.
+    this.currentModelId =
+      options.currentModelId && !models.some(model => model.id === options.currentModelId)
+        ? parseCodexModelSelection(options.currentModelId).modelId
+        : options.currentModelId;
+    this.allModels = this.sortModels(models, this.currentModelId);
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;
@@ -170,9 +178,13 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.addChild(this.searchInput);
     this.addChild(new Spacer(1));
 
-    // List container
-    this.listContainer = new Container();
-    this.addChild(this.listContainer);
+    this.list = new PickerList<ModelItem | null>({
+      maxVisible: 12,
+      renderItem: (item, selected) => [this.renderRow(item, selected)],
+      onActivate: index => this.confirmIndex(index),
+      emptyText: () => 'No matching models',
+    });
+    this.addChild(this.list);
 
     // Initial render
     this.updateList();
@@ -206,7 +218,35 @@ export class ModelSelectorComponent extends Box implements Focusable {
       return a.modelName.localeCompare(b.modelName);
     });
 
-    return sorted;
+    return this.keepFastEntriesNextToStandard(sorted, currentModelId);
+  }
+
+  /**
+   * Puts each Codex Fast entry directly under its standard model. A Fast entry that is the current model stays first,
+   * with its standard model right below it. `:fast` on any other provider is part of the model name and stays put.
+   */
+  private keepFastEntriesNextToStandard(sorted: ModelItem[], currentModelId?: string): ModelItem[] {
+    const byId = new Map(sorted.map(model => [model.id, model]));
+    const isFastEntry = (model: ModelItem | undefined) =>
+      model !== undefined && parseCodexModelSelection(model.id).codexServiceTier === 'fast';
+    const standardOf = (model: ModelItem) =>
+      isFastEntry(model) ? byId.get(parseCodexModelSelection(model.id).modelId) : undefined;
+    const placed = new Set<string>();
+    const result: ModelItem[] = [];
+    for (const model of sorted) {
+      if (placed.has(model.id)) continue;
+      const standard = standardOf(model);
+      if (standard && model.id !== currentModelId) continue;
+      result.push(model);
+      placed.add(model.id);
+      const fastEntry = byId.get(`${model.id}${FAST_SUFFIX}`);
+      const partner = standard ?? (isFastEntry(fastEntry) ? fastEntry : undefined);
+      if (partner && !placed.has(partner.id)) {
+        result.push(partner);
+        placed.add(partner.id);
+      }
+    }
+    return result;
   }
 
   /** Whether the custom "Use: ..." item is showing at the top */
@@ -237,59 +277,35 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private updateList(): void {
-    this.listContainer.clear();
+    // `null` stands for the custom "Use: <query>" row shown first when active.
+    const rows: (ModelItem | null)[] = this.hasCustomItem ? [null, ...this.filteredModels] : this.filteredModels;
+    this.list.setItems(rows, this.selectedIndex);
+  }
 
-    const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
-    const maxVisible = 12;
-    const startIndex = Math.max(0, Math.min(this.selectedIndex - Math.floor(maxVisible / 2), totalItems - maxVisible));
-    const endIndex = Math.min(startIndex + maxVisible, totalItems);
-
-    for (let i = startIndex; i < endIndex; i++) {
-      // First item is the custom "Use: ..." entry when active
-      if (this.hasCustomItem && i === 0) {
-        const query = this.searchInput.getValue().trim();
-        const isSelected = this.selectedIndex === 0;
-        const line = isSelected
-          ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
-          : '  ' + theme.fg('muted', `Use: ${query}`);
-        this.listContainer.addChild(new Text(line, 0, 0));
-        continue;
-      }
-
-      // Offset into filteredModels (subtract 1 when custom item is present)
-      const modelIndex = this.hasCustomItem ? i - 1 : i;
-      const item = this.filteredModels[modelIndex];
-      if (!item) continue;
-
-      const isSelected = i === this.selectedIndex;
-      const isCurrent = item.id === this.currentModelId;
-      const label = item.displayName ?? item.id;
-      const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-      const noKeyIndicator = !item.hasApiKey
-        ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
-        : '';
-
-      let line = '';
-      if (isSelected) {
-        line = theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
-      } else {
-        const modelText = item.hasApiKey ? label : theme.fg('muted', label);
-        line = '  ' + modelText + checkmark + noKeyIndicator;
-      }
-
-      this.listContainer.addChild(new Text(line, 0, 0));
+  private renderRow(item: ModelItem | null, isSelected: boolean): string {
+    if (!item) {
+      const query = this.searchInput.getValue().trim();
+      return isSelected
+        ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
+        : '  ' + theme.fg('muted', `Use: ${query}`);
     }
 
-    // Scroll indicator
-    if (startIndex > 0 || endIndex < totalItems) {
-      const scrollInfo = theme.fg('muted', `(${this.selectedIndex + 1}/${totalItems})`);
-      this.listContainer.addChild(new Text(scrollInfo, 0, 0));
-    }
+    const isCurrent = item.id === this.currentModelId;
+    const label = item.displayName ?? item.id;
+    const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
+    const noKeyIndicator = !item.hasApiKey
+      ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
+      : '';
 
-    // Empty state
-    if (totalItems === 0) {
-      this.listContainer.addChild(new Text(theme.fg('muted', 'No matching models'), 0, 0));
-    }
+    if (isSelected) return theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
+    const modelText = item.hasApiKey ? label : theme.fg('muted', label);
+    return '  ' + modelText + checkmark + noKeyIndicator;
+  }
+
+  private confirmIndex(index: number): void {
+    this.selectedIndex = index;
+    this.updateList();
+    this.handleInput('\r');
   }
 
   handleInput(keyData: string): void {

@@ -7,15 +7,10 @@
  * Events are streamed via pubsub as the workflow executes.
  */
 
-import { createObservabilityContext } from '../../observability';
-import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import type { ToolsInput } from '../types';
 
 import { DurableAgent } from './durable-agent';
-import type { DurableAgentConfig } from './durable-agent';
-import { getRunRegistryEntry } from './run-registry';
-import type { DurableAgenticWorkflowInput } from './types';
-import { defaultShouldPersistSnapshot } from './workflows/create-durable-agentic-workflow';
+import type { DurableAgentConfig } from './types';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -100,135 +95,7 @@ export class EventedAgent<
    * in-process engine.
    * @internal
    */
-  protected override get workflowEngine(): 'default' | 'evented' {
-    return 'evented';
-  }
-
-  /**
-   * EventedAgent owns its snapshot-persistence policy and always persists the
-   * full set (`pending | paused | suspended | running`), ignoring any
-   * user-supplied `shouldPersistSnapshot`.
-   *
-   * This is structural, not a default: the evented engine's initial `running`
-   * write creates the base snapshot row that later suspend-merges build on,
-   * and the fire-and-forget model coordinates workers through storage rather
-   * than in-process state. Skipping `running` would break suspension and
-   * multi-worker coordination.
-   *
-   * @internal
-   */
-  protected override resolveShouldPersistSnapshot(): ShouldPersistSnapshotFn {
-    return defaultShouldPersistSnapshot;
-  }
-
-  /**
-   * EventedAgent ignores user-supplied persistence policies (see
-   * {@link EventedAgent.resolveShouldPersistSnapshot}), so instead of probing
-   * the predicate, warn that it has no effect.
-   *
-   * @internal
-   */
-  protected override warnOnRiskyPersistencePolicy(): void {
-    if (this.userShouldPersistSnapshot) {
-      this.guardrailLogger?.warn(
-        `EventedAgent '${this.id}': ignoring the shouldPersistSnapshot option. ` +
-          `The evented engine requires the full snapshot set (pending|paused|suspended|running) — ` +
-          `the initial 'running' write creates the base row that suspend-merges and multi-worker coordination build on.`,
-      );
-    }
-  }
-
-  /**
-   * Execute the durable workflow using the evented engine.
-   *
-   * The caller tracks this promise in the background without blocking stream(),
-   * then cleans up snapshots on a non-suspended terminal status.
-   *
-   * @param runId - The unique run ID
-   * @param workflowInput - The serialized workflow input
-   * @internal
-   */
-  // The evented engine may resolve before the suspended snapshot lands, so
-  // closeOnSuspend keeps closing on the SUSPENDED event.
-  protected override get suspendPersistedOnReturn(): boolean {
-    return false;
-  }
-
-  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    // Captured now: a later resume() replaces the registry's fence before this
-    // segment's background promise settles.
-    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
-    const executionFence = entry?.executionFence;
-    try {
-      const workflow = this.getWorkflow();
-      // The evented engine executes via pubsub events consumed by in-process
-      // workers — without them `run.start()` never resolves (it waits on the
-      // `workflows-finish` topic). Idempotent; a no-op when the server has
-      // already booted the workers.
-      await this.ensureEngineWorkersStarted();
-      // Populate the run row's resourceId column so storage-level resource
-      // filters (listSuspendedRuns / listActiveRuns) can narrow the query.
-      const memoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      // Note: unlike the default engine, evented `createRun` accepts no
-      // `pubsub` — the engine always publishes on `mastra.pubsub` so any
-      // worker in a fleet can execute a step. The agent's stream still sees
-      // those events because its CachingPubSub follows `mastra.pubsub` as its
-      // source (wired at registration; see #ensurePubsubInitialized).
-      //
-      // On the hostless fallback (default engine, see resolveWorkflowEngine)
-      // there is no `mastra.pubsub`: the default engine publishes on the
-      // pubsub handed to `createRun`, so pass the agent's own transport —
-      // otherwise the caller's stream never sees a single event and hangs.
-      // This mirrors the previously shipped standalone behavior.
-      const run = await workflow.createRun({
-        runId,
-        resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        ...(this.resolveWorkflowEngine() === 'default'
-          ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) }
-          : {}),
-      });
-      // stream() runs executeWorkflow in the background. Track the full run here
-      // so an immediate resume waits for the suspension snapshot to be persisted.
-      // Pass the caller's requestContext (so config selectors pick the same observability
-      // instance the root spans were created with) and parent the run under the AGENT_RUN span.
-      await run
-        .start({
-          inputData: workflowInput,
-          requestContext: entry?.requestContext,
-          actor: workflowInput.options?.actor,
-          ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
-        })
-        .then(
-          // A failure the loop itself didn't catch resolves (not rejects) with
-          // status 'failed' — mirror DurableAgent.executeWorkflow and publish
-          // an ERROR event, otherwise the caller's stream never terminates
-          // (#17727's idle-start gap on the evented transport). Non-suspended
-          // terminal runs also drop their snapshots so they stop being
-          // re-driven by recoverActiveRuns() (#22209). If the process dies
-          // before this fires, the recover path performs the same cleanup.
-          result =>
-            this.settleExecution(runId, executionFence, {
-              status: result?.status,
-              error:
-                result?.status === 'failed'
-                  ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
-                  : undefined,
-            }),
-          // settleExecution never rejects: a pubsub already closing during
-          // shutdown must not become an unhandledRejection (#23168).
-          error =>
-            this.settleExecution(runId, executionFence, {
-              error: this.workflowExecutionError(error, 'Workflow execution failed'),
-            }),
-        );
-    } catch (error) {
-      await this.settleExecution(runId, executionFence, {
-        error: this.workflowExecutionError(error, 'Workflow execution failed'),
-      });
-    }
-  }
+  protected static override readonly executionEngine = 'evented' as const;
 }
 
 /**

@@ -219,7 +219,7 @@ describe('agent connection tools', () => {
 
     await expect((tools.agent_signal_send as any).execute(input, unsaved.context)).resolves.toMatchObject({
       isError: true,
-      content: `Cannot send: peer is not saved: ${PEER_ID}`,
+      content: `Cannot send: no saved peer has id ${PEER_ID}`,
       replyTo: 'request-1',
       replyOutcome: 'peer-unavailable',
     });
@@ -841,7 +841,7 @@ describe('agent connection tools', () => {
     await (tools.agent_disconnect as any).execute({ ids: [PEER_ID] }, context);
     await expect((tools.agent_signal_send as any).execute(input, context)).resolves.toMatchObject({
       isError: true,
-      content: `Cannot send: peer is not saved: ${PEER_ID}`,
+      content: `Cannot send: no saved peer has id ${PEER_ID}`,
     });
 
     await (tools.agent_connect as any).execute({ ids: [PEER_ID] }, context);

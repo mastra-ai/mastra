@@ -1,11 +1,15 @@
-import { Brain, Eye, Unplug } from 'lucide-react';
+import { Unplug } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Extractions, ObservationSections, ObservationStats } from './observation-marker-details';
 import { compressionRatio, extractedValueEntries, formatTokens } from './observation-marker-format';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { ToolCallOutput } from '@/ds/components/ai/tool-call';
+
+const ThinkingGlyph = agentGlyph('thinking');
+const MemoryGlyph = agentGlyph('memory');
 
 export interface OmMarkerData {
   observedAt?: string;
@@ -78,7 +82,7 @@ function pendingTokens(tokens?: number): string | undefined {
 
 function markerLine(toolName: string, state: MarkerState, omData: OmMarkerData): MarkerLine {
   const isReflection = omData.operationType === 'reflection';
-  const icon = isReflection ? <Brain /> : <Eye />;
+  const icon = isReflection ? <ThinkingGlyph /> : <MemoryGlyph />;
   const doneLabel = isReflection ? 'Reflected' : 'Observed';
   const errorBody = omData.error ? <ToolCallOutput text={omData.error} error /> : undefined;
 
@@ -169,7 +173,7 @@ function markerLine(toolName: string, state: MarkerState, omData: OmMarkerData):
         ),
       };
     default:
-      return { icon: <Brain />, label: toolName, status: 'idle' };
+      return { icon: <MemoryGlyph />, label: toolName, status: 'idle' };
   }
 }
 
@@ -201,7 +205,7 @@ export const ObservationMarkerBadge = ({ toolName, omData }: ObservationMarkerBa
       data-om-no-highlight={state === 'activated' ? 'true' : undefined}
     >
       <ActivityTrigger>
-        <ActivityHeadline icon={icon} label={label} detail={detail} detailFont="sans" />
+        <ActivityHeadline icon={icon} label={label} detail={detail} />
       </ActivityTrigger>
       {body && <ActivityContent>{body}</ActivityContent>}
     </Activity>

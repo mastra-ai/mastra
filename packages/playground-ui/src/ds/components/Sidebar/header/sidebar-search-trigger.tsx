@@ -1,39 +1,35 @@
 import { forwardRef } from 'react';
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
-import { Kbd } from '@/ds/components/Kbd';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import type { ReactNode } from 'react';
+import { Button } from '@/ds/components/Button';
+import type { ButtonProps } from '@/ds/components/Button';
+import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 
-export type SidebarSearchTriggerProps = ComponentPropsWithoutRef<'button'> & {
+export type SidebarSearchTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'> & {
+  label?: string;
   shortcut?: ReactNode;
+  children?: ReactNode;
 };
 
 export const SidebarSearchTrigger = forwardRef<HTMLButtonElement, SidebarSearchTriggerProps>(
-  function SidebarSearchTrigger({ className, children, shortcut, type = 'button', ...props }, ref) {
+  function SidebarSearchTrigger(
+    { label = 'Search', shortcut, children, 'aria-label': ariaLabel, type = 'button', ...props },
+    ref,
+  ) {
     return (
-      <button
+      <Button
         ref={ref}
         data-slot="sidebar-search-trigger"
         type={type}
-        className={cn(
-          'group inline-flex size-control-md shrink-0 items-center justify-center gap-1.5 rounded-full border border-transparent hover:bg-fill-subtle',
-          quietTextHover,
-          controlStateColorTransition,
-          focusRing,
-          '[&_svg]:size-4 [&_svg]:shrink-0',
-          shortcut && 'w-auto px-2',
-          className,
-        )}
+        variant="ghost"
+        size="icon-sm"
+        aria-label={ariaLabel ?? label}
+        tooltip={<ShortcutHint label={label} shortcut={shortcut} />}
+        tooltipPosition="bottom"
         {...props}
       >
-        {children}
-        {shortcut ? (
-          <Kbd size="xs" className={cn('bg-surface-overlay-soft active:scale-100', quietTextHoverInGroup)}>
-            {shortcut}
-          </Kbd>
-        ) : null}
-      </button>
+        {children ?? <IconMagnifyingGlass />}
+      </Button>
     );
   },
 );
