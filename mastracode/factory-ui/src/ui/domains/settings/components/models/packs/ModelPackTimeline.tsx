@@ -17,8 +17,8 @@ const EMPTY_CATALOG: AvailableModelOption[] = [];
 
 interface ModelPackTimelineProps {
   entries: ModelPackModel[];
-  models: AvailableModelOption[] | undefined;
-  disabled: boolean;
+  models?: AvailableModelOption[];
+  disabled?: boolean;
   onChange?: (entries: ModelPackModel[]) => void | Promise<unknown>;
   renderProviderIcon?: (provider: string) => ReactNode;
 }
@@ -26,7 +26,7 @@ interface ModelPackTimelineProps {
 export function ModelPackTimeline({
   entries,
   models = EMPTY_CATALOG,
-  disabled,
+  disabled = false,
   onChange,
   renderProviderIcon,
 }: ModelPackTimelineProps) {

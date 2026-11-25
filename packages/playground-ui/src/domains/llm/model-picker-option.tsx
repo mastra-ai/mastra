@@ -2,14 +2,12 @@ import type { ReactNode } from 'react';
 import type { ModelPickerModel, ModelPickerProvider } from './model-picker-types';
 import { Badge } from '@/ds/components/Badge';
 import { CommandItem } from '@/ds/components/Command';
-import { Txt } from '@/ds/components/Txt';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { formatModelName } from '@/utils/model';
 
 interface ModelPickerOptionProps {
   provider: ModelPickerProvider;
   model: ModelPickerModel;
-  name: string;
-  showModelId: boolean;
   selected: boolean;
   isDefault: boolean;
   onSelect: () => void;
@@ -19,27 +17,23 @@ interface ModelPickerOptionProps {
 export function ModelPickerOption({
   provider,
   model,
-  name,
-  showModelId,
   selected,
   isDefault,
   onSelect,
   renderProviderIcon,
 }: ModelPickerOptionProps) {
-  const id = `${provider.id}/${model.id}`;
+  const name = formatModelName(model.id);
   return (
-    <CommandItem value={id} keywords={[provider.name, name]} title={id} onSelect={onSelect}>
+    <CommandItem
+      value={`${provider.id}/${model.id}`}
+      keywords={[provider.name, name]}
+      title={model.id}
+      onSelect={onSelect}
+    >
       <span aria-hidden className="flex shrink-0">
         {renderProviderIcon(provider.id)}
       </span>
-      <span className="grid min-w-0">
-        <span className="truncate">{name}</span>
-        {showModelId ? (
-          <Txt as="span" variant="caption" tone="muted" className="truncate">
-            {id}
-          </Txt>
-        ) : null}
-      </span>
+      <span className="truncate">{name}</span>
       {isDefault ? (
         <Badge variant="blue" size="xs">
           Default

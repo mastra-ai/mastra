@@ -7,7 +7,7 @@ export interface ChatModelsApi {
   modelPacks: readonly ModelPack[];
   defaultModelPack: ModelPack | undefined;
   selectedPack: ModelPack | undefined;
-  selection: ModelSelectionRequest | undefined;
+  selection: ModelSelectionRequest;
   selectedThinkingLevel: ThinkingLevelSetting | undefined;
   switching: boolean;
   isLoading: boolean;

@@ -156,7 +156,7 @@ describe('Composer on a lazy user-session draft', () => {
     const { client } = renderDraft();
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    await waitFor(() => expect(modelPicker).toHaveTextContent('GPT-4o Mini'));
     await user.click(modelPicker);
     await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));

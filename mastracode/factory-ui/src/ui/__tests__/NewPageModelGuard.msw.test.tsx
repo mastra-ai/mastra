@@ -32,11 +32,21 @@ function stubFactoryShell() {
   );
 }
 
-function stubFactory(project: Record<string, unknown> | null) {
+function packSetFor(modelId: string | null) {
+  if (!modelId) return { modelPacks: [], defaultModelPackId: null };
+  return {
+    modelPacks: [{ id: 'default', name: 'Default', models: [{ modelId, thinkingLevel: 'medium' }] }],
+    defaultModelPackId: 'default',
+  };
+}
+
+function stubFactory(project: { defaultModelId: string | null; [field: string]: unknown } | null) {
   stubFactoryShell();
   server.use(
     project
-      ? http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project }))
+      ? http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+          HttpResponse.json({ project: { ...project, ...packSetFor(project.defaultModelId) } }),
+        )
       : http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
           HttpResponse.json({ error: 'boom' }, { status: 500 }),
         ),
@@ -181,8 +191,7 @@ describe('NewPage credential guard', () => {
         HttpResponse.json({
           modelId: 'anthropic/claude-sonnet-4-5',
           thinkingLevel: null,
-          modelPacks: [],
-          defaultModelPackId: null,
+          ...packSetFor('anthropic/claude-sonnet-4-5'),
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>

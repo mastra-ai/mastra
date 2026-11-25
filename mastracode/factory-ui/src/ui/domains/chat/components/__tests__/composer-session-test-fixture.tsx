@@ -128,6 +128,10 @@ export function stubPreparingSession({
           name: 'Preparing',
           defaultModelId: 'openai/gpt-4o-mini',
           defaultThinkingLevel: 'medium',
+          modelPacks: [
+            { id: 'factory', name: 'Factory', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'factory',
         },
       }),
     ),
@@ -151,8 +155,10 @@ export function stubPreparingSession({
       return HttpResponse.json({
         modelId: 'openai/gpt-4o-mini',
         thinkingLevel: null,
-        modelPacks: [],
-        defaultModelPackId: null,
+        modelPacks: [
+          { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+        ],
+        defaultModelPackId: 'personal',
       });
     }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {

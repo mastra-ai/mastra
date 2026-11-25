@@ -253,7 +253,7 @@ describe('ModelRoutingSection', () => {
     await confirmSwitch(user);
     await waitForMutationsIdle(client);
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Failed to update Factory model scope (403)');
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to update Factory (403)');
     expect(routing('Hybrid')).toBeChecked();
   });
 

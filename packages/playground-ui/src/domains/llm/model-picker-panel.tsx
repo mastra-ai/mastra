@@ -24,7 +24,7 @@ import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRot
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
-import { compareModelReleaseDates, formatModelName } from '@/utils/model';
+import { compareModelReleaseDates } from '@/utils/model';
 
 // Catalogs run to thousands of models; rendering them all freezes the list.
 const MAX_SEARCH_RESULTS = 50;
@@ -117,12 +117,6 @@ export function ModelPickerPanel({
   const filtering = usable.length > 1 || others.length > 0;
   const shownProviders = providerFilter ? usable.filter(provider => provider.id === providerFilter) : usable;
   const matches = deferredQuery ? searchModels([...usable, ...others], deferredQuery) : [];
-  const searchResults = matches.slice(0, MAX_SEARCH_RESULTS).map(match => ({
-    ...match,
-    name: formatModelName(match.model.id),
-  }));
-  const searchNameCounts = new Map<string, number>();
-  for (const { name } of searchResults) searchNameCounts.set(name, (searchNameCounts.get(name) ?? 0) + 1);
   const custom = deferredQuery === query && query ? customModel?.(query.trim()) : undefined;
   const filterTo = (providerId: string | undefined) => {
     setProviderFilter(providerId);
@@ -130,18 +124,11 @@ export function ModelPickerPanel({
   };
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
-  const renderOption = (
-    provider: ModelPickerProvider,
-    model: ModelPickerModel,
-    name = formatModelName(model.id),
-    showModelId = false,
-  ) => (
+  const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
     <ModelPickerOption
       key={`${provider.id}/${model.id}`}
       provider={provider}
       model={model}
-      name={name}
-      showModelId={showModelId}
       selected={isSameModel(value, provider.id, model.id)}
       isDefault={isSameModel(defaultModel, provider.id, model.id)}
       onSelect={() => onSelect({ provider: provider.id, model: model.id })}
@@ -221,9 +208,7 @@ export function ModelPickerPanel({
             <CommandEmpty>No matching model.</CommandEmpty>
             {deferredQuery ? (
               <CommandGroup>
-                {searchResults.map(({ provider, model, name }) =>
-                  renderOption(provider, model, name, (searchNameCounts.get(name) ?? 0) > 1),
-                )}
+                {matches.slice(0, MAX_SEARCH_RESULTS).map(({ provider, model }) => renderOption(provider, model))}
                 {matches.length > MAX_SEARCH_RESULTS ? (
                   <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
                     Refine the search to see more.

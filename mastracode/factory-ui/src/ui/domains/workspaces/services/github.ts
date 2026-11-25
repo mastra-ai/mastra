@@ -341,22 +341,18 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
   }));
 }
 
+export type FactoryProjectCreateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema>;
+
 /** Create a named Factory project. The name is user-chosen, not derived from a repo. */
 export async function createFactoryProject(
   baseUrl: string,
-  name: string,
-  description?: string,
-  modelScope?: FactoryModelScope,
+  body: FactoryProjectCreateBody,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      name,
-      ...(description ? { description } : {}),
-      ...(modelScope ? { modelScope } : {}),
-    }),
+    body: JSON.stringify(body),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
   return project;
@@ -374,21 +370,10 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
 
 type FactoryProjectUpdateBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema>;
 
-const FACTORY_PROJECT_FIELD_LABELS = {
-  name: 'name',
-  defaultModelId: 'default model',
-  modelScope: 'model scope',
-  defaultThinkingLevel: 'thinking level',
-  modelPacks: 'model packs',
-  defaultModelPackId: 'model packs',
-} satisfies Partial<Record<keyof FactoryProjectUpdateBody, string>>;
-
-type FactoryProjectChanges = Pick<FactoryProjectUpdateBody, keyof typeof FACTORY_PROJECT_FIELD_LABELS>;
-
 export async function updateFactoryProject(
   baseUrl: string,
   factoryProjectId: string,
-  changes: FactoryProjectChanges,
+  changes: FactoryProjectUpdateBody,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
@@ -396,15 +381,7 @@ export async function updateFactoryProject(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(changes),
   });
-  const changed = new Set(
-    Object.entries(FACTORY_PROJECT_FIELD_LABELS)
-      .filter(([field]) => field in changes)
-      .map(([, label]) => label),
-  );
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    `Failed to update Factory ${[...changed].join(', ')}`,
-  );
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory');
   return project;
 }
 

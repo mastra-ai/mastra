@@ -1,5 +1,5 @@
 import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
-import { MODEL_ID_PATTERN } from '@mastra/factory/model-id';
+import { MODEL_ID_PATTERN } from '@mastra/factory/model-packs';
 import type { ModelPackModel } from '@mastra/factory/model-packs';
 import { ThinkingLevelRamp } from '@mastra/playground-ui/components/ThinkingLevel';
 import { ModelPicker } from '@mastra/playground-ui/domains/llm';

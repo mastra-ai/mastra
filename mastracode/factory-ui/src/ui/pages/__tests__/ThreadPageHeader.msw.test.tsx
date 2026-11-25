@@ -119,8 +119,10 @@ function stubThreadRoute({
       HttpResponse.json({
         modelId: 'openai/gpt-4o-mini',
         thinkingLevel: null,
-        modelPacks: [],
-        defaultModelPackId: null,
+        modelPacks: [
+          { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+        ],
+        defaultModelPackId: 'personal',
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>

@@ -85,7 +85,7 @@ describe('a model pack picked in a user session draft', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('starts the new session on the default selection when nothing is picked', async () => {
+  it('leaves the server default in place when nothing is picked', async () => {
     const route = stubPackRoute();
     const { user, client, message } = await openDraft();
 
@@ -93,7 +93,7 @@ describe('a model pack picked in a user session draft', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(route.posted).toEqual(['keep it simple']));
-    expect(route.bindingsBeforePrompt).toEqual(['default']);
+    expect(route.modelSwitchRequests).toBe(0);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);

@@ -145,7 +145,6 @@ async function openPacks(user: UserEvent) {
   return screen.findByRole('region', { name: 'Packs' });
 }
 
-/** Model rows that end in the picker's trailing checkmark. */
 function checkedModels(): string[] {
   return screen
     .getAllByRole('option')
@@ -164,7 +163,9 @@ describe('ModelPicker packs', () => {
     const packs = await openPacks(user);
     const buildPack = within(packs).getByRole('button', { name: 'Build' });
     expect(buildPack).toHaveAttribute('aria-pressed', 'true');
-    expect(buildPack).toHaveAccessibleDescription(/→/);
+    expect(within(packs).getAllByRole('list', { name: 'Models in this pack' })[0]).toHaveTextContent(
+      /Primary model: .*Fallback 1: /,
+    );
     expect(within(buildPack).getByText('Default')).toBeInTheDocument();
     expect(within(packs).getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-pressed', 'false');
     expect(checkedModels()).toEqual([]);
@@ -291,7 +292,13 @@ describe('ModelPicker packs', () => {
     renderPicker({ modelId: 'anthropic/claude-sonnet-4-6', modelSelection: { kind: 'pack', packId: build.id } });
     server.use(
       http.put(`${TEST_BASE_URL}/web/config/session-model`, () =>
-        HttpResponse.json({ error: 'model_pack_not_found' }, { status: 404 }),
+        HttpResponse.json(
+          {
+            error: 'model_pack_not_found',
+            message: 'That model pack no longer exists. Reopen the model menu to see the current packs.',
+          },
+          { status: 404 },
+        ),
       ),
     );
 

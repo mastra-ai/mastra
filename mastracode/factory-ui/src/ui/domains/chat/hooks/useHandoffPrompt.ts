@@ -102,6 +102,7 @@ export function useHandoffPrompt(): void {
   useEffect(() => {
     if (handedOff.current) return;
     const startOn = async (selection: ModelSelectionRequest) => {
+      if (selection.kind === 'default') return;
       await setSessionModel(selection).catch((error: unknown) =>
         pushNotice(error instanceof Error ? error.message : 'Could not start on the picked model.', 'error'),
       );

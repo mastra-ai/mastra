@@ -73,7 +73,7 @@ describe('ChatModelsProvider', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
         const params = new URL(request.url).searchParams;

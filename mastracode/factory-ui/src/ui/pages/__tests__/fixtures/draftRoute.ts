@@ -161,6 +161,10 @@ export function stubDraftRoute({
           modelScope: 'hybrid',
           defaultModelId: 'openai/gpt-4o-mini',
           defaultThinkingLevel: 'medium',
+          modelPacks: [
+            { id: 'factory', name: 'Factory', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'factory',
         },
       });
     }),
@@ -172,8 +176,10 @@ export function stubDraftRoute({
       return HttpResponse.json({
         modelId: defaultModelId,
         thinkingLevel: null,
-        modelPacks: [],
-        defaultModelPackId: null,
+        modelPacks: defaultModelId
+          ? [{ id: 'personal', name: 'Personal', models: [{ modelId: defaultModelId, thinkingLevel: 'medium' }] }]
+          : [],
+        defaultModelPackId: defaultModelId ? 'personal' : null,
       });
     }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>

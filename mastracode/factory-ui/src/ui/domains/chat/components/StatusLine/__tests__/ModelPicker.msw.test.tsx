@@ -101,7 +101,6 @@ function renderPicker({
   withChangeModelAction = false,
 }: {
   catalog?: AvailableModelOption[];
-  /** The packs the session catalog reports, with the session's stored selection. */
   packs?: SessionPacks;
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;

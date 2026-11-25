@@ -70,7 +70,7 @@ export function useCreateFactoryFromDraft({
 
       const factory = draft.factoryId
         ? { id: draft.factoryId, name: draft.name }
-        : await createFactory.mutateAsync({ name: draft.name });
+        : await createFactory.mutateAsync({ name: draft.name, defaultModelId: modelId });
       if (!draft.factoryId) await onFactoryCreated(factory);
 
       if (!draft.linkedRepositoryId) {
@@ -79,7 +79,7 @@ export function useCreateFactoryFromDraft({
       }
 
       await Promise.all([
-        updateFactoryProject(baseUrl, factory.id, { defaultModelId: modelId }),
+        draft.factoryId ? updateFactoryProject(baseUrl, factory.id, { defaultModelId: modelId }) : undefined,
         draft.linearProjectId
           ? feedProject({
               integrationId: 'linear',

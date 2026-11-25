@@ -62,7 +62,6 @@ export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
   });
 }
 
-/** A settings catalog for one credential scope, with the model a session without a pack starts on. */
 export function useScopeModelCatalogQuery(scope: 'org' | 'user') {
   const { baseUrl } = useApiConfig();
   return useQuery(availableModelsQueryOptions(baseUrl, { scope }));

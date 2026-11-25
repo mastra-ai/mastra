@@ -11,7 +11,7 @@ import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
 import { useChatSessionContext } from './useChatSessionContext';
 
-/** One provider for a draft and its thread, so a Start keeps the thinking control mounted. A pick runs the model exactly. */
+/** One provider for a draft and its thread, so a Start keeps the thinking control mounted. */
 export function ChatThinkingProvider({ children }: { children: ReactNode }) {
   const { draftSessionId } = useChatSessionContext();
   const draft = useDraftThinking();

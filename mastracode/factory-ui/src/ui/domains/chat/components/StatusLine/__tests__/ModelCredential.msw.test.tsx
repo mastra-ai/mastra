@@ -81,7 +81,7 @@ function renderModelCredential({
     modelPacks: [],
     defaultModelPack: undefined,
     selectedPack: undefined,
-    selection: modelId ? { kind: 'model', modelId } : undefined,
+    selection: { kind: 'default' },
     selectedThinkingLevel: undefined,
     switching: false,
     isLoading: false,

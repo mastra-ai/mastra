@@ -32,7 +32,7 @@ export function useCreateUserSessionFromDraft() {
     if (!draftSessionId || !factoryId || !projectRepositoryId) {
       throw new Error('Could not create the session. Reload the page and try again.');
     }
-    if (!activeModelId || !selection) {
+    if (!activeModelId) {
       throw new Error('Session configuration is not ready. Try again.');
     }
 

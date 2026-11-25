@@ -207,7 +207,7 @@ describe('Create Factory wizard', () => {
   it('creates the Factory, links the repository and saves the model on the last step', async () => {
     const calls: string[] = [];
     seedDraft('project-management');
-    const { patchedBodies, intakeConfigs } = stubModelStepEndpoints(calls);
+    const { createdBodies, patchedBodies, intakeConfigs } = stubModelStepEndpoints(calls);
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
@@ -229,7 +229,8 @@ describe('Create Factory wizard', () => {
 
     await waitForMutationsIdle(client);
     expect(calls).toEqual(['create', 'connect', 'link']);
-    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(createdBodies).toEqual([expect.objectContaining({ defaultModelId: 'anthropic/claude-sonnet-4-5' })]);
+    expect(patchedBodies).toEqual([]);
     expect(intakeConfigs).toEqual([]);
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1');
     expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
@@ -341,13 +342,15 @@ describe('Create Factory wizard', () => {
 
   it('leaves the user where they went when they leave while the Factory is being created', async () => {
     seedDraft('model-provider');
-    const { patchedBodies } = stubModelStepEndpoints([]);
+    stubModelStepEndpoints([]);
+    let createdBody: unknown;
     let finishCreate = () => {};
     const created = new Promise<void>(resolve => {
       finishCreate = resolve;
     });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
+        createdBody = await request.json();
         await created;
         return HttpResponse.json({ project: { id: 'fp-1', name: 'Acme' } });
       }),
@@ -373,7 +376,7 @@ describe('Create Factory wizard', () => {
     finishCreate();
     await waitForMutationsIdle(client);
 
-    expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]);
+    expect(createdBody).toMatchObject({ defaultModelId: 'anthropic/claude-sonnet-4-5' });
     expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-host');
   });
 
@@ -776,12 +779,12 @@ function stubIntakeConfig(initial: Record<string, unknown> = {}) {
 
 /**
  * Stub everything the last step writes: the Factory create, the repository
- * link, the intake wiring and the PATCH that saves the model pick — plus the
- * provider catalog the step lists. `calls`
- * records the write order; the returned arrays collect the PATCH and intake
- * bodies.
+ * link, the intake wiring and the PATCH that saves a resumed model pick — plus
+ * the provider catalog the step lists. `calls` records the write order; the
+ * returned arrays collect the create, PATCH and intake bodies.
  */
 function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, unknown> = {}) {
+  const createdBodies: unknown[] = [];
   const patchedBodies: unknown[] = [];
   const intakeConfigs = stubIntakeConfig(intakeConfig);
   let savedModelId: string | null = null;
@@ -790,10 +793,13 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: created ? [{ id: 'fp-1', name: 'Mastra', repositories: [] }] : [] }),
     ),
-    http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
+    http.post<never, { defaultModelId?: string }>(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
+      const body = await request.json();
       calls.push('create');
+      createdBodies.push(body);
       created = true;
-      return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra' } });
+      savedModelId = body.defaultModelId ?? null;
+      return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: savedModelId } });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({ connections: [] }),
@@ -839,7 +845,7 @@ function stubModelStepEndpoints(calls: string[], intakeConfig: Record<string, un
       }),
     ),
   );
-  return { patchedBodies, intakeConfigs };
+  return { createdBodies, patchedBodies, intakeConfigs };
 }
 
 function stubConnectedLinear() {

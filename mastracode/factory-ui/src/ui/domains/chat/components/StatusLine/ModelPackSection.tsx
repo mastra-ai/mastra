@@ -3,11 +3,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import { ModelPackTimeline } from '../../../settings/components/models/packs/ModelPackTimeline';
-import { modelPackChain } from '../../services/modelPacks';
 
 interface ModelPackSectionProps {
   packs: readonly ModelPack[];
@@ -28,7 +26,6 @@ export function ModelPackSection({
   onPick,
   renderProviderIcon,
 }: ModelPackSectionProps) {
-  const chainId = useId();
   if (!packs.length) return null;
   return (
     <section aria-label="Packs" className="flex flex-col gap-1 px-1.5 py-1.5">
@@ -53,7 +50,6 @@ export function ModelPackSection({
                 type="button"
                 aria-pressed={active}
                 aria-label={pack.name}
-                aria-describedby={`${chainId}-${pack.id}`}
                 disabled={disabled}
                 onClick={() => onPick(pack)}
                 className="text-body-sm flex w-full items-center gap-2.5 text-left outline-none after:absolute after:inset-0 after:rounded-lg"
@@ -68,17 +64,9 @@ export function ModelPackSection({
                 </span>
                 {active ? <IconCheckmark2Medium aria-hidden className="ml-auto shrink-0" /> : null}
               </button>
-              <div aria-hidden className="pointer-events-none">
-                <ModelPackTimeline
-                  entries={pack.models}
-                  models={undefined}
-                  disabled
-                  renderProviderIcon={renderProviderIcon}
-                />
+              <div className="pointer-events-none">
+                <ModelPackTimeline entries={pack.models} renderProviderIcon={renderProviderIcon} />
               </div>
-              <span id={`${chainId}-${pack.id}`} hidden>
-                {modelPackChain(pack)}
-              </span>
             </li>
           );
         })}

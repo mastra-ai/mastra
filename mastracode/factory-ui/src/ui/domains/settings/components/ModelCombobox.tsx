@@ -4,10 +4,9 @@ import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui
 import { useMemo, useState } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { MODEL_ID_PATTERN } from '@mastra/factory/model-id';
+import { MODEL_ID_PATTERN } from '@mastra/factory/model-packs';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 
@@ -66,10 +65,7 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
-  fallbackModelId,
   placeholder,
-  showChevron,
-  id,
   disabled,
   className,
   variant,
@@ -80,10 +76,7 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
-  fallbackModelId?: string;
-  placeholder?: ComboboxSingleProps['placeholder'];
-  showChevron?: boolean;
-  id?: string;
+  placeholder?: string;
   disabled?: boolean;
   className?: string;
   variant?: ComboboxSingleProps['variant'];
@@ -114,18 +107,12 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={
-        fallbackModelId
-          ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
-          : (placeholder ?? 'Select model')
-      }
+      placeholder={placeholder ?? 'Select model'}
       searchPlaceholder="Search models"
       emptyText="No matching model."
       allowCustomValue={MODEL_ID_PATTERN.test(customId)}
       onInputValueChange={setQuery}
       disabled={disabled}
-      showChevron={showChevron}
-      id={id}
       className={className}
       variant={variant}
       size={size}

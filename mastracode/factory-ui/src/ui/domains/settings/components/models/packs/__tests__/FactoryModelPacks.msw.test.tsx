@@ -122,8 +122,8 @@ describe('FactoryModelPacks', () => {
     fireEvent.change(newModelThinking, { target: { value: '3' } });
     fireEvent.keyUp(newModelThinking);
     expect(newModelThinking).toHaveAttribute('aria-valuetext', 'High');
-    await user.type(screen.getByPlaceholderText('Search models'), 'GPT-5.5');
-    await user.click(await screen.findByRole('option', { name: /openai-codex\/gpt-5\.5/ }));
+    await user.type(screen.getByPlaceholderText('Search models'), 'codex GPT-5.5');
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.5/ }));
     await waitForMutationsIdle(client);
     expect(patches[0]).toEqual({
       modelPacks: [{ ...build, models: [build.models[0], { modelId: 'openai-codex/gpt-5.5', thinkingLevel: 'high' }] }],

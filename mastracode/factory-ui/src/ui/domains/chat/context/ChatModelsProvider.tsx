@@ -7,7 +7,7 @@ import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { usePendingSessionModel, useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
 import { DEFAULT_MODEL_SELECTION, selectionPack } from '../services/modelSelection';
-import { routedDefaultModelId, routedModelDefaults } from './chatDefaultModel';
+import { routedModelDefaults } from './chatDefaultModel';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
 import { useChatConnection } from './useChatConnection';
@@ -26,7 +26,11 @@ export function ChatModelsProvider({
   const [draftSelection, setDraftSelection] = useState(initialDraftSelection ?? DEFAULT_MODEL_SELECTION);
   const draft = useDraftModels(draftSelection, setDraftSelection);
   const live = useLiveModels(draft.activeModelId);
-  return <ChatModelsContext.Provider value={draftSessionId ? draft : live}>{children}</ChatModelsContext.Provider>;
+  return (
+    <ChatModelsContext.Provider value={draftSessionId ? draft : { ...live, selection: draftSelection }}>
+      {children}
+    </ChatModelsContext.Provider>
+  );
 }
 
 function useDraftModels(
@@ -39,19 +43,15 @@ function useDraftModels(
   const defaults = routedModelDefaults(modelScope, projectQuery.data, defaultModelQuery.data);
   const selectedPack = selectionPack(selection, defaults);
   const exactModelId = selection.kind === 'model' ? selection.modelId : undefined;
-  const chosenModelId = selection.kind === 'default' ? routedDefaultModelId(defaults) : undefined;
   const personalDefaultUsed = modelScope !== 'factory';
-  const usesFallback = !selectedPack && !exactModelId && !chosenModelId;
-  const activeModelId = selectedPack?.models[0]?.modelId ?? exactModelId ?? chosenModelId ?? fallbackModelQuery.data;
+  const usesFallback = !selectedPack && !exactModelId;
+  const activeModelId = selectedPack?.models[0]?.modelId ?? exactModelId ?? fallbackModelQuery.data;
   return {
     activeModelId,
     modelPacks: defaults.modelPacks,
     defaultModelPack: defaultModelPack(defaults),
     selectedPack,
-    selection:
-      !selectedPack && selection.kind === 'default' && activeModelId
-        ? { kind: 'model', modelId: activeModelId }
-        : selection,
+    selection,
     selectedThinkingLevel:
       selectedPack?.models[0]?.thinkingLevel ?? (selection.kind === 'model' ? selection.thinkingLevel : undefined),
     switching: false,
@@ -70,7 +70,7 @@ function useDraftModels(
   };
 }
 
-function useLiveModels(draftModelId: string | undefined): ChatModelsApi {
+function useLiveModels(draftModelId: string | undefined): Omit<ChatModelsApi, 'selection'> {
   const { sessionId, resourceId, sessionThreadId } = useChatSessionContext();
   const { state } = useChatConnection();
   const { catalogTarget, sessionModelsQuery } = useChatModelScope();
@@ -98,13 +98,6 @@ function useLiveModels(draftModelId: string | undefined): ChatModelsApi {
     modelPacks: packSet.modelPacks,
     defaultModelPack: defaultModelPack(packSet),
     selectedPack,
-    selection:
-      pending ??
-      (selectedPack
-        ? { kind: 'pack', packId: selectedPack.id }
-        : activeModelId
-          ? { kind: 'model', modelId: activeModelId }
-          : undefined),
     selectedThinkingLevel: selectedPack?.models[0]?.thinkingLevel ?? pendingModel?.thinkingLevel,
     switching: pending !== undefined,
     isLoading: sessionModelsQuery.isPending,

@@ -68,7 +68,7 @@ export function useStartCardSessionFromDraft(
     if (!target) {
       throw new Error('Could not create the session. Reload the page and try again.');
     }
-    if (!activeModelId || !selection) {
+    if (!activeModelId) {
       throw new Error('Session configuration is not ready. Try again.');
     }
     const shownMessageId = localUser(prompt, false, files);

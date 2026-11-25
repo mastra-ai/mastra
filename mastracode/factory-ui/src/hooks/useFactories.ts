@@ -14,6 +14,7 @@ import {
 } from '../ui/domains/workspaces/services/github';
 import type {
   FactoryProject,
+  FactoryProjectCreateBody,
   LinkedRepositoryPayload,
   SourceControlRepository,
 } from '../ui/domains/workspaces/services/github';
@@ -68,8 +69,7 @@ export function useCreateFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, description }: { name: string; description?: string }) =>
-      createFactoryProject(baseUrl, name, description),
+    mutationFn: (body: FactoryProjectCreateBody) => createFactoryProject(baseUrl, body),
     onSuccess: () => refetchFactories(queryClient),
   });
 }
