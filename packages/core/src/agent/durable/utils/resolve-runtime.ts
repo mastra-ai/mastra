@@ -619,11 +619,7 @@ export async function rebuildRunToolsFromMastra(options: {
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
     existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
-      const needsProcessorPipeline = !existing.outputProcessors || !existing.processorStates;
-      if (
-        options.rehydrateProcessors &&
-        ((existing.isPlaceholder && needsProcessorPipeline) || !existing.requestContext)
-      ) {
+      if (options.rehydrateProcessors && !existing.requestContext) {
         existing.requestContext = resolveRequestContext;
         existing.requestContextRebuilt = true;
       }
