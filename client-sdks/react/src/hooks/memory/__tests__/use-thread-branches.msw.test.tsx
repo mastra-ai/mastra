@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraReactProvider } from '../../../mastra-react-provider';
-import { useBranchThread, useThreadBranches } from '../use-memory';
+import { THREAD_BRANCHES_PAGE_SIZE, useBranchThread, useThreadBranches } from '../use-memory';
 import {
   branchCreatedResponse,
   branchHistoryFromChild,
@@ -80,6 +80,32 @@ describe('useThreadBranches', () => {
       expect(result.current.data?.parentThread).toBeNull();
       expect(result.current.data?.fork).toBeNull();
       expect(result.current.data?.branches[0]?.branch.branchPointMessageId).toBe(FORK_MESSAGE_ID);
+    });
+  });
+
+  describe('when loading child branches', () => {
+    it('requests one bounded page and reports when more branches exist', async () => {
+      let requested: URLSearchParams | undefined;
+      server.use(
+        http.get(`${BASE_URL}/api/memory/threads/${SOURCE_THREAD_ID}/branch-history`, () =>
+          HttpResponse.json(branchHistoryOfRoot),
+        ),
+        http.get(`${BASE_URL}/api/memory/threads/${SOURCE_THREAD_ID}/branches`, ({ request }) => {
+          requested = new URL(request.url).searchParams;
+          return HttpResponse.json({ ...childBranchesOfSource, total: 250, perPage: 100, hasMore: true });
+        }),
+      );
+
+      const { result } = renderHook(() => useThreadBranches({ threadId: SOURCE_THREAD_ID, agentId: AGENT_ID }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => {
+        expect(result.current.data?.isSupported).toBe(true);
+      });
+      expect(requested?.get('page')).toBe('0');
+      expect(requested?.get('perPage')).toBe(String(THREAD_BRANCHES_PAGE_SIZE));
+      expect(result.current.data?.hasMoreBranches).toBe(true);
     });
   });
 

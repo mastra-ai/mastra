@@ -17,7 +17,7 @@ export function AgentMemoryBranches({ agentId, threadId }: AgentMemoryBranchesPr
   const { data } = useThreadBranches({ threadId, agentId });
 
   if (!data?.isSupported) return null;
-  const { parentThread, branches } = data;
+  const { parentThread, branches, hasMoreBranches } = data;
   if (!parentThread && branches.length === 0) return null;
 
   return (
@@ -50,6 +50,9 @@ export function AgentMemoryBranches({ agentId, threadId }: AgentMemoryBranchesPr
             </li>
           ))}
         </ul>
+      )}
+      {hasMoreBranches && (
+        <p className="text-neutral3 text-ui-xs mt-2">Showing the first {branches.length} branches.</p>
       )}
     </div>
   );

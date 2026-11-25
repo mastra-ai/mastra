@@ -240,9 +240,20 @@ export interface ThreadBranchesInfo {
   parentThread: BranchHistoryEntry['thread'] | null;
   fork: BranchHistoryEntry['branch'];
   branches: ListMemoryThreadBranchesResponse['branches'];
+  /** True when the thread has more direct branches than the first page returned. */
+  hasMoreBranches: boolean;
 }
 
-const NO_BRANCHING: ThreadBranchesInfo = { isSupported: false, parentThread: null, fork: null, branches: [] };
+/** Direct child branches loaded per thread view; matches the server's default page size. */
+export const THREAD_BRANCHES_PAGE_SIZE = 100;
+
+const NO_BRANCHING: ThreadBranchesInfo = {
+  isSupported: false,
+  parentThread: null,
+  fork: null,
+  branches: [],
+  hasMoreBranches: false,
+};
 
 /**
  * Extracts the server error code from a client error. client-js keeps the
@@ -274,7 +285,7 @@ const isBranchThreadNotFoundError = (error: unknown): boolean => {
 
 /**
  * Loads the shared-history lineage of a thread: its parent + own fork metadata
- * (from the root-to-current branch history) and its direct child branches.
+ * (from the root-to-current branch history) and the first page of its direct child branches.
  * Reports `isSupported: false` instead of erroring when the configured memory
  * has no branch support, so branch UI simply stays hidden for custom Memory.
  */
@@ -299,13 +310,19 @@ export const useThreadBranches = ({
       try {
         const [historyResult, childrenResult] = await Promise.all([
           thread.getBranchHistory({ requestContext }),
-          thread.listBranches({ perPage: false, requestContext }),
+          thread.listBranches({ page: 0, perPage: THREAD_BRANCHES_PAGE_SIZE, requestContext }),
         ]);
         const own = historyResult.history[historyResult.history.length - 1];
         const parentThread = own?.branch
           ? (historyResult.history[historyResult.history.length - 2]?.thread ?? null)
           : null;
-        return { isSupported: true, parentThread, fork: own?.branch ?? null, branches: childrenResult.branches };
+        return {
+          isSupported: true,
+          parentThread,
+          fork: own?.branch ?? null,
+          branches: childrenResult.branches,
+          hasMoreBranches: childrenResult.hasMore,
+        };
       } catch (error) {
         if (isBranchingUnsupportedError(error)) return NO_BRANCHING;
         throw error;

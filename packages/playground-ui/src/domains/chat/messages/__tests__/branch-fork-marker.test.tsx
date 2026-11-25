@@ -23,7 +23,13 @@ const supportedLineage = (
 ): ThreadBranchesInfo => {
   const own = history.history[history.history.length - 1];
   const parentThread = own?.branch ? (history.history[history.history.length - 2]?.thread ?? null) : null;
-  return { isSupported: true, parentThread, fork: own?.branch ?? null, branches: branches.branches };
+  return {
+    isSupported: true,
+    parentThread,
+    fork: own?.branch ?? null,
+    branches: branches.branches,
+    hasMoreBranches: branches.hasMore,
+  };
 };
 
 describe('buildBranchForkMarkers', () => {
