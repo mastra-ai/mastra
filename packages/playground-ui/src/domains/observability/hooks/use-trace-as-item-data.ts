@@ -8,7 +8,7 @@ export type UseTraceAsItemDataArgs = {
 };
 
 /**
- * What `TraceAsItemDialog` is prefilled from: the trace's root span and its trajectory, read through
+ * What `TraceDatasetItemDialog` is prefilled from: the trace's root span and its trajectory, read through
  * the Mastra client in context. Call it under the client that serves traces and pass the result down.
  */
 export function useTraceAsItemData({ traceId, rootSpanId, enabled = true }: UseTraceAsItemDataArgs) {

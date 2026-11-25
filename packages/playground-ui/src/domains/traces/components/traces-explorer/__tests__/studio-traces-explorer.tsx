@@ -30,7 +30,7 @@ import type {
   TracesRootSource,
   TracesSelection,
 } from '../index';
-import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
+import { TraceDatasetItemDialog } from '@/domains/observability/components/trace-dataset-item-dialog';
 import { useTraceAsItemData } from '@/domains/observability/hooks/use-trace-as-item-data';
 import { ScoreAsItemDialog } from '@/domains/scores/components/score-as-item-dialog';
 import { TraceScoresList } from '@/domains/scores/components/trace-scores-list';
@@ -203,7 +203,7 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
           onOpenScore={() => {}}
         />
       )}
-      renderDatasetDialog={dialog => <StudioTraceAsItemDialog {...dialog} />}
+      renderDatasetDialog={dialog => <StudioTraceDatasetItemDialog {...dialog} />}
       onOpenScoreTrace={(traceId, spanId) => navigate(paths.traceLink(traceId, spanId))}
       renderScoreDatasetDialog={dialog => <ScoreAsItemDialog {...dialog} />}
       {...props}
@@ -212,7 +212,7 @@ export function StudioPanel(props: Partial<TracesExplorerPanelProps>) {
 }
 
 /** Studio's dataset dialog: the trace loads once the dialog opens, and the dialog gets it as props. */
-function StudioTraceAsItemDialog({ traceId, rootSpanId, isOpen, onClose }: TracesExplorerPanelDatasetDialogArgs) {
+function StudioTraceDatasetItemDialog({ traceId, rootSpanId, isOpen, onClose }: TracesExplorerPanelDatasetDialogArgs) {
   const data = useTraceAsItemData({ traceId, rootSpanId, enabled: isOpen });
-  return <TraceAsItemDialog {...data} traceId={traceId} isOpen={isOpen} onClose={onClose} />;
+  return <TraceDatasetItemDialog {...data} traceId={traceId} isOpen={isOpen} onClose={onClose} />;
 }
