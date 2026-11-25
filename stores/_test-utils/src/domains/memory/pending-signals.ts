@@ -577,6 +577,48 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         await startRun(thread, runId);
         expect(await claim(thread, runId)).toEqual([]);
       });
+
+      it.each(['pending', 'claimed'] as const)(
+        'leaves a %s row unchanged when it is saved under another thread',
+        async state => {
+          const thread = await newThread();
+          const other = await newThread();
+          const runId = await startRun(thread);
+          const createdAt = new Date(Date.now() - 10_000);
+          const signal = await send(thread, { createdAt });
+          if (state === 'claimed') expect(ids(await claim(thread, runId))).toEqual([signal.id]);
+          const moving = createSampleMessageV2({ ...scope(thread), createdAt: new Date(Date.now() - 8_000) });
+          await memory.saveMessages({ messages: [moving] });
+          const fresh = createSampleMessageV2({ ...scope(other), createdAt: new Date(Date.now() - 6_000) });
+
+          await memory.saveMessages({
+            messages: [
+              {
+                ...signal,
+                ...scope(other),
+                createdAt: new Date(Date.now() - 4_000),
+                content: { ...signal.content, parts: [{ type: 'text', text: 'changed' }] },
+              },
+              fresh,
+              { ...moving, ...scope(other) },
+            ],
+          });
+
+          // The row without a status moved, the new message was saved, and the signal row stayed as it was.
+          expect(await visibleIds(thread)).toEqual([]);
+          expect(await visibleIds(other)).toEqual([moving.id, fresh.id]);
+          expect((await memory.listMessagesById({ messageIds: [signal.id] })).messages).toEqual([]);
+          expect(await memory.listPendingSignals(onThread(other))).toEqual([]);
+
+          const rows =
+            state === 'pending' ? await memory.listPendingSignals(onThread(thread)) : await claim(thread, runId);
+          expect(rows).toMatchObject([
+            { id: signal.id, threadId: thread.id, resourceId: thread.resourceId, content: signal.content },
+          ]);
+          expect(new Date(rows[0]!.createdAt).getTime()).toBe(createdAt.getTime());
+          if (state === 'claimed') expect(await pendingIds(thread)).toEqual([]);
+        },
+      );
     });
 
     describe('close', () => {
