@@ -40,6 +40,12 @@ export interface StepAgentOptions {
   onModelCall?: (call: number) => void;
   /** Receives each model call's prompt, so a test can check what the model was actually sent. */
   onModelPrompt?: (call: number, prompt: unknown) => void;
+  /**
+   * This model call streams reasoning and then holds until its request is aborted, as a model still thinking does.
+   * `onReasoning` runs once the reasoning is out, and again with `aborted` when the request is cut short.
+   */
+  reasoningAt?: number;
+  onReasoning?: (event: { call: number; aborted: boolean }) => void;
   inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
@@ -75,12 +81,14 @@ export function createStepAgent({
   onToolEvent,
   onModelCall,
   onModelPrompt,
+  reasoningAt,
+  onReasoning,
   inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
-    doStream: async ({ prompt }) => {
+    doStream: async ({ prompt, abortSignal }) => {
       const call = ++calls;
       onModelCall?.(call);
       onModelPrompt?.(call, prompt);
@@ -88,6 +96,27 @@ export function createStepAgent({
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
       ];
+      if (call === reasoningAt) {
+        return {
+          stream: new ReadableStream<any>({
+            start(controller) {
+              for (const part of head) controller.enqueue(part);
+              controller.enqueue({ type: 'reasoning-start', id: 'thinking' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'thinking', delta: 'thinking' });
+              abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  onReasoning?.({ call, aborted: true });
+                  controller.error(abortSignal.reason);
+                },
+                { once: true },
+              );
+              onReasoning?.({ call, aborted: false });
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
       if (call <= steps) {
         return {
           stream: chunks([

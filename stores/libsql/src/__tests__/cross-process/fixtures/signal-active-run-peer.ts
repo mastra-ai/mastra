@@ -14,6 +14,8 @@ import { createStepAgent, gate } from '../step-agent';
 
 export interface SignalActiveRunPeerArgs {
   agentId: string;
+  /** The first model call thinks until it is cut short, instead of calling the tool. */
+  reasoning?: boolean;
 }
 
 export interface ModelCallReport {
@@ -23,7 +25,7 @@ export interface ModelCallReport {
 }
 
 runPeer<SignalActiveRunPeerArgs>(async peer => {
-  const { agentId } = peer.args;
+  const { agentId, reasoning = false } = peer.args;
   const storage = new LibSQLStore({ id: `signal-active-run-worker-${process.pid}`, url: peer.dbUrl });
   const release = gate();
   // Installed before the tool can report that it parked: the test may release at once.
@@ -36,7 +38,7 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
   memory.setStorage(storage);
   const { agent } = createStepAgent({
     id: agentId,
-    steps: 1,
+    steps: reasoning ? 0 : 1,
     blockAt: 1,
     release: release.promise,
     finalText: 'worker answered',
@@ -44,6 +46,14 @@ runPeer<SignalActiveRunPeerArgs>(async peer => {
     onToolEvent: event => {
       if (event.event === 'reached') void peer.signal('tool-reached', { pid: process.pid });
     },
+    ...(reasoning
+      ? {
+          reasoningAt: 1,
+          onReasoning: ({ aborted }: { aborted: boolean }) => {
+            void peer.signal(aborted ? 'reasoning-cut-short' : 'reasoning-reached', { pid: process.pid });
+          },
+        }
+      : {}),
     onModelPrompt: (call, prompt) => {
       void peer.signal(`model-call-${call}`, { pid: process.pid, call, prompt } satisfies ModelCallReport);
     },
