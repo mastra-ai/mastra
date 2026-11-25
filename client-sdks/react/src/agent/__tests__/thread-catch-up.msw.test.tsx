@@ -37,6 +37,28 @@ function givenThreadStreams() {
   return { streams, send, breakStream, followedAgain };
 }
 
+const chunk = (type: string, payload: object = {}, runId = 'run-1') => ({ type, runId, from: 'AGENT', payload });
+const stored = (id: string, role: 'user' | 'assistant', text: string): MastraDBMessage => ({
+  id,
+  role,
+  createdAt: new Date('2026-01-01T10:00:00.000Z'),
+  threadId: 'thread-1',
+  resourceId: 'resource-1',
+  content: { format: 2, parts: [{ type: 'text', text }] },
+});
+const historyOf = (messages: MastraDBMessage[], activeRunId: string | null = null, hasMore = false) => ({
+  type: 'thread-history',
+  runId: '',
+  from: 'AGENT',
+  payload: { messages, hasMore, activeRunId },
+});
+const ended = (runId: string) => chunk('thread-run-status', { status: 'success' }, runId);
+const question = stored('u1', 'user', 'Tell me more');
+// What the page opened with: one array, as an app holds it.
+const opened = [question];
+const texts = (messages: MastraDBMessage[]) =>
+  messages.map(m => m.content.parts.map(part => (part.type === 'text' ? part.text : '')).join(''));
+
 const followThread = (props: Partial<MastraChatProps> = {}) =>
   renderHookWithProviders(() =>
     useChat({
@@ -65,6 +87,34 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
       { resourceId: 'resource-1', threadId: 'thread-1', withRunStatus: true },
       { resourceId: 'resource-1', threadId: 'thread-1', withInitialHistory: true, withRunStatus: true },
     ]);
+  });
+
+  // A reply under way when the phone locks: the page saw its first word, then lost the stream.
+  async function givenReplyCut(props: Partial<MastraChatProps> = { initialMessages: opened }) {
+    const threads = givenThreadStreams();
+    const page = followThread(props);
+    unmount = page.unmount;
+    await threads.followedAgain(1);
+    await threads.send(
+      0,
+      chunk('start', { messageId: 'a1' }),
+      chunk('text-start', { id: 't1' }),
+      chunk('text-delta', { id: 't1', text: 'Half' }),
+    );
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half']));
+    expect(page.result.current.isRunning).toBe(true);
+    threads.breakStream(0);
+    await threads.followedAgain(2);
+    return { ...threads, page };
+  }
+
+  it('shows whole the reply the server finished meanwhile, and no longer as running', async () => {
+    const { send, page } = await givenReplyCut();
+
+    await send(1, historyOf([question, stored('a1', 'assistant', 'Half, then whole.')]));
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
+    expect(page.result.current.isRunning).toBe(false);
   });
 
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {

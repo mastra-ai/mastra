@@ -24,7 +24,7 @@ import {
   extractTasksFromToolResultChunk,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
-import { mergeHistoryIntoConversation } from './merge-history';
+import { catchUpWithHistory, mergeHistoryIntoConversation } from './merge-history';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 import { createUserMessage } from './user-message';
@@ -518,6 +518,15 @@ export const useChat = ({
     return preview || 'Attachment';
   };
 
+  // The run the page follows is over: its approvals are answered or moot, and the page no longer shows it running.
+  const settleLiveRun = useCallback(() => {
+    setIsRunning(false);
+    liveRunFinished.current = true;
+    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+    pendingToolApprovalIdsRef.current.clear();
+    setIsAwaitingToolApproval(false);
+  }, []);
+
   const closeThreadSubscription = useCallback(() => {
     const subscription = _threadSubscriptionRef.current;
     if (subscription?.unsubscribe) {
@@ -668,6 +677,9 @@ export const useChat = ({
           }
 
           _threadSubscriptionRef.current = subscription;
+          // The first history answers a page that asked for one. Any later one starts a stream followed again after
+          // the previous one ended or broke: it catches the page up with what it missed meanwhile.
+          let nextHistoryCatchesUp = !withInitialHistory;
           void subscription
             .processDataStream({
               // A deploy, a locked phone or a lost network ends or breaks the stream while runs go on: the thread is
@@ -675,8 +687,19 @@ export const useChat = ({
               reconnect: { withInitialHistory: withInitialHistory || true },
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
+                  const catchingUp = nextHistoryCatchesUp;
+                  nextHistoryCatchesUp = true;
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
                     const { hasMore, activeRunId } = chunk.payload;
+                    // The run the page followed ended while the stream was down, unless the history still names it.
+                    if (
+                      catchingUp &&
+                      liveRunId.current &&
+                      !liveRunFinished.current &&
+                      activeRunId !== liveRunId.current
+                    ) {
+                      settleLiveRun();
+                    }
                     if (
                       activeRunId &&
                       activeRunId !== liveRunId.current &&
@@ -696,7 +719,9 @@ export const useChat = ({
                   const history = resolveInitialMessages(chunk.payload.messages);
                   const previousHistory = lastHydration.current?.formattedMessages ?? [];
                   setMessages(current =>
-                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
+                    catchingUp
+                      ? catchUpWithHistory({ conversation: current, history, activeRunId: chunk.payload.activeRunId })
+                      : mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
                   );
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
@@ -709,13 +734,8 @@ export const useChat = ({
                     pendingRunStatuses.current?.set(chunk.runId, chunk);
                     return;
                   }
-                  setIsRunning(false);
-                  if (chunk.payload.status !== 'suspended') {
-                    liveRunFinished.current = true;
-                    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
-                    pendingToolApprovalIdsRef.current.clear();
-                    setIsAwaitingToolApproval(false);
-                  }
+                  if (chunk.payload.status === 'suspended') setIsRunning(false);
+                  else settleLiveRun();
                   return;
                 }
                 return processStreamChunk(chunk);
@@ -761,6 +781,7 @@ export const useChat = ({
       historyConfigKey,
       markThreadSignalsUnsupported,
       processStreamChunk,
+      settleLiveRun,
       streamPath,
       withInitialHistory,
     ],
