@@ -768,7 +768,7 @@ type AgentThreadRuntimeState = {
    * Per thread key, the lease probe still waiting behind an earlier append on the thread topic, resolving to the
    * episode it was sent for (see `#watchForwardedIdleLease`).
    */
-  forwardedLeaseProbesWaiting: Map<string, Promise<ForwardedIdleLeaseEpisode | undefined>>;
+  forwardedLeaseProbesWaiting: Map<string, Promise<void>>;
   /**
    * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
    * known to be extended. The sweep keeps their lease, so until it lapses an idle
@@ -3655,31 +3655,37 @@ export class AgentThreadStreamRuntime {
         };
         state.forwardedIdleLeaseEpisodes.set(key, current);
       }
-      // While a probe still waits behind an earlier append, a retry waits on that same probe rather than queueing
-      // another behind the append. It is built when it leaves, for the lease loss current then; once handed to the
-      // pubsub it no longer waits, so a retry after that publishes anew.
-      let waiting = state.forwardedLeaseProbesWaiting.get(key);
-      if (!waiting) {
-        let left = false;
-        let sentFor: ForwardedIdleLeaseEpisode | undefined;
-        // Assigned after the call: with no earlier append in flight the builder below runs inside it.
-        let probe: Promise<ForwardedIdleLeaseEpisode | undefined> | undefined;
-        probe = this.#publishAndWait(pubsub, key, () => {
-          // From here a publish that hangs is the pubsub's own, and a retry publishes anew.
-          left = true;
-          if (probe && state.forwardedLeaseProbesWaiting.get(key) === probe)
-            state.forwardedLeaseProbesWaiting.delete(key);
-          sentFor = state.forwardedIdleLeaseEpisodes.get(key);
-          return sentFor && { type: 'forwarded-lease-probe', episodeId: sentFor.id, seq: ++sentFor.seq };
-        }).then(() => sentFor);
-        if (!left) state.forwardedLeaseProbesWaiting.set(key, probe);
-        waiting = probe;
-      }
+      // While a probe still waits behind an earlier append, a retry joins it rather than queueing another behind the
+      // append, and does not wait on it again: the check that made it already does, and a probe that never leaves
+      // would otherwise keep one more waiter per retry. It is built when it leaves, for the lease loss current then;
+      // once handed to the pubsub it no longer waits, so a retry after that publishes anew.
+      if (state.forwardedLeaseProbesWaiting.has(key)) return;
+      let left = false;
+      let sentFor: ForwardedIdleLeaseEpisode | undefined;
+      // Assigned after the call: with no earlier append in flight the builder below runs inside it.
+      let probe: Promise<void> | undefined;
+      probe = this.#publishAndWait(pubsub, key, () => {
+        // From here a publish that hangs is the pubsub's own, and a retry publishes anew.
+        left = true;
+        if (probe && state.forwardedLeaseProbesWaiting.get(key) === probe)
+          state.forwardedLeaseProbesWaiting.delete(key);
+        sentFor = state.forwardedIdleLeaseEpisodes.get(key);
+        return sentFor && { type: 'forwarded-lease-probe', episodeId: sentFor.id, seq: ++sentFor.seq };
+      }).then(() => {
+        // Recorded when the probe is out, even after the wait below gave up, so retries count from then.
+        if (
+          sentFor &&
+          state.forwardedIdleLeaseEpisodes.get(key) === sentFor &&
+          state.forwardedIdleLeaseChecks.get(key) === check
+        )
+          sentFor.publishedAtCheck = checks;
+      });
+      if (!left) state.forwardedLeaseProbesWaiting.set(key, probe);
       // Bounded like the lease read, so a publish that never settles frees the in-flight guard. Running out counts as
-      // a failed publish: the episode stays as it was and a later check publishes again.
+      // a failed publish until the probe is out: the episode stays as it was and a later check publishes again.
       let giveUp: ReturnType<typeof setTimeout> | undefined;
-      const sentFor = await Promise.race([
-        waiting,
+      await Promise.race([
+        probe,
         new Promise<never>((_, reject) => {
           giveUp = setTimeout(
             () => reject(new Error('Thread pubsub did not publish the lease probe')),
@@ -3687,7 +3693,6 @@ export class AgentThreadStreamRuntime {
           );
         }),
       ]).finally(() => clearTimeout(giveUp));
-      if (sentFor && state.forwardedIdleLeaseEpisodes.get(key) === sentFor) sentFor.publishedAtCheck = checks;
     };
     // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
     const check = setInterval(() => {

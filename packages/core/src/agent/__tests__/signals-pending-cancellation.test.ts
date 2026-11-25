@@ -3373,8 +3373,18 @@ describe('Agent signals: pending cancellation', () => {
           .sendSignal(agent, { type: 'user-message', contents: 'idle D' }, scope, pubsub)
           .accepted.catch(() => {});
         await vi.waitFor(() => expect(held).toBe(true));
-        for (let tick = 0; tick < 6; tick++) await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        // Every wait on a promise that has not settled stays attached to it, so count how often each is waited on.
+        const race = Promise.race.bind(Promise);
+        const waits = new Map<unknown, number>();
+        const raceSpy = vi.spyOn(Promise, 'race').mockImplementation(((values: Iterable<unknown>) => {
+          for (const value of values) waits.set(value, (waits.get(value) ?? 0) + 1);
+          return race(values);
+        }) as typeof Promise.race);
+        for (let tick = 0; tick < 12; tick++) await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        raceSpy.mockRestore();
         expect(probeSeqs).toEqual([]);
+        // The probe stuck behind the append is waited on once, not again on every retry.
+        expect(Math.max(0, ...waits.values())).toBe(1);
         releaseAppend();
         await vi.waitFor(() => expect(probeSeqs.length).toBeGreaterThan(0));
         await pubsub.flush();
