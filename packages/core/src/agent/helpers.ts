@@ -34,15 +34,29 @@ export function resolveVersionContext(
  */
 export const MASTRA_VERSION_INFO_KEY = 'mastra__versionInfo';
 
-/** The entry `MASTRA_VERSION_INFO_KEY` holds for one agent, as span metadata. Empty when there is none. */
+/**
+ * The entry `MASTRA_VERSION_INFO_KEY` holds for one agent, as span metadata. Empty when the request
+ * recorded no version info at all.
+ *
+ * A span inherits its parent's metadata, so a sub-agent's span would otherwise repeat the versions
+ * of the agent that called it. Every key another agent in the request recorded is therefore set
+ * here too, to `null` when this agent has no value for it.
+ */
 export function versionInfoSpanMetadata(
   requestContext: RequestContext | undefined,
   agentId: string,
 ): Record<string, unknown> {
   const all = requestContext?.get(MASTRA_VERSION_INFO_KEY);
   if (!all || typeof all !== 'object' || Array.isArray(all)) return {};
-  const info = (all as Record<string, unknown>)[agentId];
-  return info && typeof info === 'object' && !Array.isArray(info) ? { ...(info as Record<string, unknown>) } : {};
+  const isEntry = (value: unknown): value is Record<string, unknown> =>
+    !!value && typeof value === 'object' && !Array.isArray(value);
+  const metadata: Record<string, unknown> = {};
+  for (const [id, entry] of Object.entries(all)) {
+    if (id === agentId || !isEntry(entry)) continue;
+    for (const key of Object.keys(entry)) metadata[key] = null;
+  }
+  const own = (all as Record<string, unknown>)[agentId];
+  return isEntry(own) ? { ...metadata, ...own } : metadata;
 }
 
 export function resolveRunId(runId: string | undefined, generateId?: () => string | undefined): string {

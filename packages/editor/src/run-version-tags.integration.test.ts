@@ -352,9 +352,13 @@ describe('running an agent by version tag', () => {
         promptBlockVersions: { [TONE]: versions.tone.v1, [POLICY]: versions.policy.v1 },
         promptBlocksWithoutTag: [POLICY],
       });
+      // The billing agent references no prompt blocks, so its span must not repeat the support agent's.
       expect((await spanFor(BILLING)).metadata).toMatchObject({
         entityVersionId: versions.billing.v1,
         versionTag: 'production',
+        promptVersionTag: null,
+        promptBlockVersions: null,
+        promptBlocksWithoutTag: null,
       });
     });
   });

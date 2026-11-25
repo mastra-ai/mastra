@@ -152,7 +152,7 @@ With [tracing](/docs/observability/tracing/overview) enabled, the agent run span
 - `promptBlockVersions`: A map of prompt block ID to the version ID that was rendered
 - `promptBlocksWithoutTag`: The IDs of rendered prompt blocks that don't have the tag and used their published version
 
-`promptBlockVersions` is reported for untagged runs too. The other tag fields are only present when a tag was used.
+`promptBlockVersions` is reported for untagged runs too. The other tag fields are only present when a tag was used. On a sub-agent's span, a field that doesn't apply to that sub-agent is `null`, so it never shows the calling agent's value.
 
 ### Retention
 
