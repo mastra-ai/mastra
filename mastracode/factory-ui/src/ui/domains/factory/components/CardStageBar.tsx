@@ -7,7 +7,7 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useCardSessions } from '../../../../hooks/useSessionRows';
-import { headerCapsuleClass } from '../../chat/components/chatPageHeader';
+import { sessionHeaderCapsuleClass } from '@mastra/playground-ui/new/layout/session-page-frame';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { BUSY_CARD_MOVE_REFUSAL, boardCardState, canMoveTo } from '../boardCardState';
 import { phaseName } from '../boardStages';
@@ -90,7 +90,7 @@ export function CardStageBar({
 
   return (
     <>
-      <div role="group" aria-label="Card stage" className={headerCapsuleClass}>
+      <div role="group" aria-label="Card stage" className={sessionHeaderCapsuleClass}>
         {stages.previous ? (
           <NeighbourButton
             direction="previous"

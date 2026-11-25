@@ -155,6 +155,12 @@
         "default": "./dist/new/layout/app-shell.es.js"
       }
     },
+    "./new/layout/session-page-frame": {
+      "import": {
+        "types": "./dist/new/layout/session-page-frame.d.ts",
+        "default": "./dist/new/layout/session-page-frame.es.js"
+      }
+    },
     "./layout/tabbed-container": {
       "import": {
         "types": "./dist/layout/tabbed-container.d.ts",
