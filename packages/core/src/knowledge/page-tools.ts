@@ -1,3 +1,4 @@
+import { knowledgeSearchWords } from '@internal/core/knowledge-compat';
 import type { JSONSchema7 } from 'json-schema';
 import { estimateTokenCount } from 'tokenx';
 import type {
@@ -38,6 +39,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeBodyHit, knowledgeSearchQuery } from './search-snippet';
 import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -100,6 +102,8 @@ type Tools = Record<string, ToolAction<any, any, any>>;
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+/** The most words knowledge_read's `match` accepts; a search hint never emits a longer array. */
+const READ_MATCH_MAX_WORDS = 10;
 const MENTION = /\[\[([^\]]+)\]\]/g;
 /** Misses a note's mention linking may spend beyond its stored mentions (renamed or ambiguous refs). */
 const MENTION_LOOKUP_SLACK = 2;
@@ -140,6 +144,15 @@ function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
     ...(page.isScope ? { address: page.address } : { scope: scopes.get(page.scopeId) }),
     ...(page.description ? { description: page.description } : {}),
   };
+}
+
+/**
+ * A page search hit: its summary, plus, when the body contains a matched word, a short excerpt around
+ * it with every line numbered, the line it is centred on, and how many lines have a match.
+ */
+function searchPageSummary(page: KnowledgePage, refs: KnowledgePageRefs, words: string) {
+  const hit = knowledgeBodyHit(page.body, words);
+  return { ...pageSummary(page, refs), ...(hit ?? {}) };
 }
 
 function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
@@ -258,7 +271,7 @@ function searchTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_search',
     description:
-      'Search the knowledge this run can read: page names, descriptions, bodies and notes. Optional `scope` narrows to pages in those scopes.',
+      'Search the knowledge this run can read: page names, descriptions, bodies and notes. A page hit whose body contains a matched word carries a short `snippet` around it, numbered line by line like knowledge_read (with the heading it sits under when that is out of view), the `line` the snippet is centred on and `matchingLines`, how many lines match; read from that line, or with `match`, before relying on a snippet. Optional `scope` narrows to pages in those scopes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -276,7 +289,7 @@ function searchTool(host: KnowledgePageToolHost) {
       const max = limitOf(limit);
       // Keyword search has no quoting: a quote mark would be matched as a literal character, so
       // `"api" "responses"` would find nothing. Search the quoted words instead.
-      const words = query.replace(/["`\u201C\u201D]/g, ' ').trim();
+      const words = knowledgeSearchQuery(query);
       const lexical = words
         ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
         : [];
@@ -319,34 +332,43 @@ function searchTool(host: KnowledgePageToolHost) {
         hits.map(hit => hit.page),
       );
       const mentionCache: MentionCache = new Map();
-      return {
-        results: await Promise.all(
-          hits.map(async hit =>
-            hit.type === 'page'
-              ? { type: 'page' as const, page: pageSummary(hit.page, addresses) }
-              : {
-                  type: 'note' as const,
-                  page: pageSummary(hit.page, addresses),
-                  note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
-                },
-          ),
+      const results = await Promise.all(
+        hits.map(async hit =>
+          hit.type === 'page'
+            ? { type: 'page' as const, page: searchPageSummary(hit.page, addresses, words) }
+            : {
+                type: 'note' as const,
+                page: pageSummary(hit.page, addresses),
+                note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
+              },
         ),
+      );
+      const matched = results.some(result => result.type === 'page' && 'line' in result.page);
+      const readWords = knowledgeSearchWords(words);
+      const readMatch =
+        readWords.length <= READ_MATCH_MAX_WORDS
+          ? JSON.stringify(readWords)
+          : `${JSON.stringify(readWords.slice(0, READ_MATCH_MAX_WORDS))} (the first ${READ_MATCH_MAX_WORDS} of your ${readWords.length} search words; search again with fewer words to see the rest)`;
+      const readOn = matched
+        ? [
+            `snippet: each page hit's \`line\` is the line its snippet is centred on (numbered as in the snippet), and \`matchingLines\` how many lines have a matched word. Pass the hit's ref as page to read on from that line with knowledge_read { page, from: { line } }, or to see every match with knowledge_read { page, match: ${readMatch} }.`,
+          ]
+        : [];
+      const more = [
         ...(hits.length === 0
-          ? {
-              more: [
-                `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
-              ],
-            }
+          ? [
+              `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
+            ]
           : hits.length === max
-            ? {
-                more: [
-                  max < MAX_LIMIT
-                    ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
-                    : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
-                ],
-              }
-            : {}),
-      };
+            ? [
+                max < MAX_LIMIT
+                  ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
+                  : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+              ]
+            : []),
+        ...readOn,
+      ];
+      return { results, ...(more.length ? { more } : {}) };
     },
   });
 }
@@ -561,7 +583,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
         match: {
           anyOf: [
             { type: 'string', minLength: 1 },
-            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 10 },
+            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: READ_MATCH_MAX_WORDS },
           ],
           description:
             'Like grep: return only the lines that contain this term, or any of these terms (case-insensitive), as numbered lines with the range each covers.',

@@ -10,6 +10,12 @@
   ],
   "structuredOutput": ["deepseek-v4.1-flash", "mistral-large-4"],
   "reasoning": {
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -32,12 +38,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }
