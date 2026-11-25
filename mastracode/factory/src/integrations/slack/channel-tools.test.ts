@@ -1,5 +1,6 @@
 import {
   AgentControllerChannels,
+  ChannelReplyGuidanceProcessor,
   ChannelReplyReminderProcessor,
   ChannelReplyStreamProcessor,
   ChannelThreadLinkProcessor,
@@ -9,7 +10,6 @@ import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
-import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { SlackIntegration } from './integration.js';
 
 type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<unknown> };
@@ -19,10 +19,7 @@ type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, u
  * from storage, the way a web prompt or a woken run finds its Slack thread.
  */
 async function factoryWithSlack({
-  threadMetadata = { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' } as Record<
-    string,
-    unknown
-  >,
+  threadMetadata = { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' } as Record<string, unknown>,
   textDisplay,
   bindChannels = true,
 }: { threadMetadata?: Record<string, unknown>; textDisplay?: 'show' | 'hidden'; bindChannels?: boolean } = {}) {
@@ -109,7 +106,7 @@ describe('Slack channel tools', () => {
     const tools = Object.keys(await slack.agentTools({ requestContext }));
     expect(tools).toContain('attach_file');
     expect(tools).not.toContain(REPLY_TOOL_NAME);
-    expect(slack.processors.input.map(p => p.constructor)).toEqual([FactoryChannelReplyProcessor]);
+    expect(slack.processors.input.map(p => p.constructor)).toEqual([ChannelReplyGuidanceProcessor]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([ChannelThreadLinkProcessor]);
   });
 
@@ -117,7 +114,7 @@ describe('Slack channel tools', () => {
     const { slack } = await factoryWithSlack();
 
     expect(slack.processors.input.map(p => p.constructor)).toEqual([
-      FactoryChannelReplyProcessor,
+      ChannelReplyGuidanceProcessor,
       ChannelReplyReminderProcessor,
     ]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([

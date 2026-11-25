@@ -33,6 +33,8 @@ export type { ChatChannelRenderContext } from './output-processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
+export { ChannelReplyGuidanceProcessor } from './reply-guidance-processor';
+export type { ChannelReplyGuidanceOptions } from './reply-guidance-processor';
 export { channelReplyMode, channelReplyTypingStatus } from './reply-mode';
 export type { ChannelReplyMode, ChannelReplyModeOptions } from './reply-mode';
 export { ChannelReplyReminderProcessor, REPLY_REMINDER_AFTER_MS } from './reply-reminder-processor';

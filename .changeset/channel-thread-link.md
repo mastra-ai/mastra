@@ -26,3 +26,5 @@ Added `channelReplyMode()`, an opt-in channel display preset: reply text and too
 const reply = channelReplyMode({ link: { link: ({ threadId }) => `${appUrl}/threads/${threadId}` } });
 // adapter options: reply.adapterOptions; processors: reply.processors; tools: reply.tools(requestContext)
 ```
+
+`channelReplyMode()` also adds `ChannelReplyGuidanceProcessor`, which tells the agent how to speak in the channel: open long jobs with one line, finish with the outcome, write for people, and link references. Hosts add their own lines with `guidance.instructions`.

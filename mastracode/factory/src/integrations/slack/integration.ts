@@ -28,7 +28,7 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
-import { FactoryChannelReplyProcessor, SESSION_LINK_LABEL } from './channel-reply-processor.js';
+import { factoryReplyInstructions, SESSION_LINK_LABEL } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
@@ -114,6 +114,7 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
 function factoryReplyMode(overrides: SlackAdapterChannelConfig, deps: ShareFileToolDeps): ChannelReplyMode {
   return channelReplyMode({
     textDisplay: overrides.textDisplay ?? 'hidden',
+    guidance: { instructions: factoryReplyInstructions },
     link: { label: SESSION_LINK_LABEL, link: ({ requestContext }) => sessionLinkFromRequest(requestContext) },
     // Rebuild the thread for runs that didn't start from Slack (web prompts, woken runs).
     resolveRender: requestContext => resolveRenderContext(requestContext, deps),
@@ -173,7 +174,7 @@ export class SlackIntegration implements FactoryIntegration {
     this.#reply = factoryReplyMode(overrides, this.#deps);
     this.#adapterOptions = { ...this.#reply.adapterOptions, ...overrides };
     this.processors = {
-      input: [new FactoryChannelReplyProcessor(), ...this.#reply.processors.input],
+      input: this.#reply.processors.input,
       output: this.#reply.processors.output,
     };
   }

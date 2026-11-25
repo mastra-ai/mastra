@@ -1,5 +1,7 @@
 import type { InputProcessor, OutputProcessor } from '../processors';
 import type { RequestContext } from '../request-context';
+import { ChannelReplyGuidanceProcessor } from './reply-guidance-processor';
+import type { ChannelReplyGuidanceOptions } from './reply-guidance-processor';
 import { ChannelReplyReminderProcessor } from './reply-reminder-processor';
 import type { ChannelReplyReminderOptions } from './reply-reminder-processor';
 import { ChannelReplyStreamProcessor, createChannelReplyTool, REPLY_TOOL_NAME } from './reply-tool';
@@ -64,6 +66,7 @@ export interface ChannelReplyModeOptions extends ChannelReplyOptions {
   /** Show the model's reply text in the thread instead of posting through `reply_in_thread`. */
   textDisplay?: 'show' | 'hidden';
   reminder?: ChannelReplyReminderOptions;
+  guidance?: ChannelReplyGuidanceOptions;
 }
 
 export interface ChannelReplyMode {
@@ -86,7 +89,10 @@ export function channelReplyMode(options: ChannelReplyModeOptions = {}): Channel
   return {
     adapterOptions: { textDisplay, toolDisplay: 'hidden', typingStatus: channelReplyTypingStatus(textDisplay) },
     processors: {
-      input: hidden ? [new ChannelReplyReminderProcessor(options.reminder)] : [],
+      input: [
+        new ChannelReplyGuidanceProcessor(options.guidance),
+        ...(hidden ? [new ChannelReplyReminderProcessor(options.reminder)] : []),
+      ],
       output: [
         ...(options.link ? [new ChannelThreadLinkProcessor(options.link)] : []),
         ...(hidden ? [new ChannelReplyStreamProcessor(options)] : []),

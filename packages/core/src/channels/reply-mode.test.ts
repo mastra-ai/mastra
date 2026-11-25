@@ -41,7 +41,7 @@ describe('channelReplyMode', () => {
     const mode = channelReplyMode({ link: { link: () => 'https://app.example.com/t/1' } });
 
     expect(mode.adapterOptions).toMatchObject({ textDisplay: 'hidden', toolDisplay: 'hidden' });
-    expect(mode.processors.input.map(p => p.id)).toEqual(['channel-reply-reminder']);
+    expect(mode.processors.input.map(p => p.id)).toEqual(['channel-reply-guidance', 'channel-reply-reminder']);
     expect(mode.processors.output.map(p => p.id)).toEqual(['channel-thread-link', 'channel-reply-stream']);
     expect(Object.keys(mode.tools(new RequestContext()))).toEqual([REPLY_TOOL_NAME]);
   });
@@ -50,7 +50,7 @@ describe('channelReplyMode', () => {
     const mode = channelReplyMode({ textDisplay: 'show' });
 
     expect(mode.adapterOptions).toMatchObject({ textDisplay: 'show', toolDisplay: 'hidden' });
-    expect(mode.processors.input).toEqual([]);
+    expect(mode.processors.input.map(p => p.id)).toEqual(['channel-reply-guidance']);
     expect(mode.processors.output).toEqual([]);
     expect(mode.tools(new RequestContext())).toEqual({});
   });
