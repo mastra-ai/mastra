@@ -582,6 +582,7 @@ export function createDurableToolCallStep() {
                   : null,
             });
           }
+          const agentSpan = agentSpanData && obs.rebuildSpan(agentSpanData);
           if (modelSpanData) {
             const end = {
               output,
@@ -597,24 +598,24 @@ export function createDurableToolCallStep() {
                   : null,
             };
             const modelSpan = obs.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined;
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
             if (usage) modelSpan?.createTracker()?.endGeneration({ ...end, attributes: { ...attributes }, usage });
             else modelSpan?.end(end);
           }
-          if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData)?.end({
-              output,
-              attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
-          }
+          agentSpan?.end({
+            output,
+            attributes,
+            outcome: 'suspend',
+            stopReason: info.reason === 'approval' ? 'approval_required' : null,
+            stopReasonContext:
+              info.reason === 'approval'
+                ? compactStopReasonContext('approval_required', {
+                    toolCallId: info.toolCallId,
+                    toolName: info.toolName,
+                  })
+                : null,
+          });
         } catch (error) {
           // Span bookkeeping must never break suspension.
           logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);

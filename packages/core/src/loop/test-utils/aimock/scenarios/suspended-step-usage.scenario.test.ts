@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { SpanType } from '../../../../observability';
+import { InternalSpans, SpanType } from '../../../../observability';
+import type { TracingPolicy } from '../../../../observability';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import {
@@ -90,7 +91,11 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
 
   async function setup(
     kind: Kind,
-    { withPriorStep = false, observability }: { withPriorStep?: boolean; observability?: Observability } = {},
+    {
+      withPriorStep = false,
+      observability,
+      tracingPolicy,
+    }: { withPriorStep?: boolean; observability?: Observability; tracingPolicy?: TracingPolicy } = {},
   ) {
     const llm = getMock();
     const toolName = kind === 'suspend' ? 'ask' : 'approve';
@@ -107,6 +112,7 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
     const { agent } = await createSharedAgent(llm, {
       engine,
       observability,
+      tracingPolicy,
       instructions: 'use the tool',
       tools: { lookup: lookupTool, ...(kind === 'suspend' ? { ask: askTool } : { approve: approveTool }) },
     });
@@ -230,6 +236,23 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       expect(generations.map(spanTokens)).toEqual([spanTokens(add(PRIOR, SUSPENDED)), spanTokens(RESUMED)]);
     });
   }
+
+  // Technical: a hidden generation reports its usage on the AGENT_RUN of its part instead.
+  it('each part of the run records its own tokens when the agent hides its model spans', async () => {
+    const { observability, ended } = capture();
+    const tracingPolicy = { internal: InternalSpans.MODEL };
+    const { agent, toolCallId } = await setup('approval', { withPriorStep: true, observability, tracingPolicy });
+    const first: RunHandle = await agent.stream('go');
+    await drain(first);
+    await expect.poll(() => ended().length).toBe(1);
+
+    const resumed = await drain(await resume(agent, 'approval', first.runId, toolCallId));
+    expect(await resumed.text).toBe('done');
+    await expect.poll(() => ended().length).toBe(2);
+
+    const runs = ended().map(span => span.attributes?.internalUsage);
+    expect(runs.map(spanTokens)).toEqual([spanTokens(add(PRIOR, SUSPENDED)), spanTokens(RESUMED)]);
+  });
 
   // Technical: tool calls without an approval or a suspend schema run at the same time, on workers
   // that share no memory when the engine is distributed, and each one that suspends ends the
