@@ -5,12 +5,24 @@
 Added a `leaseTtlMs` option for default-engine workflow runs. A run's lease used to be fixed at 15 seconds, so a step that blocked the event loop for longer let another instance take the run over, and the same step could block there too. Set it on the workflow, or on one run:
 
 ```ts
+import { createStep, createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const render = createStep({
+  id: 'render',
+  inputSchema: z.object({ pages: z.number() }),
+  outputSchema: z.object({ pdf: z.string() }),
+  execute: async ({ inputData }) => ({ pdf: `${inputData.pages} pages` }),
+})
+
 const report = createWorkflow({
   id: 'report',
-  inputSchema,
-  outputSchema,
+  inputSchema: z.object({ pages: z.number() }),
+  outputSchema: z.object({ pdf: z.string() }),
   options: { leaseTtlMs: 60_000 },
 })
+  .then(render)
+  .commit()
 
 const run = await report.createRun({ leaseTtlMs: 120_000 })
 ```
