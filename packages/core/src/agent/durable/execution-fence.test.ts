@@ -1156,6 +1156,170 @@ describe('storage-backed ExecutionFence', () => {
     await successor.settle(async () => {});
   });
 
+  describe('after an event-loop stall longer than the lease (#30669)', () => {
+    // A blocked event loop moves the clock without letting the heartbeat run.
+    const stall = (ms: number) => vi.setSystemTime(Date.now() + ms);
+
+    it('renews instead of giving up when nobody else claimed the run', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = vi.spyOn(workflowsStore, 'renewRunOwnership');
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(renew).toHaveBeenCalledTimes(1);
+      expect(fence.isLost()).toBe(false);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+      expect(fence.isLost()).toBe(false);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+        ownerId: fence.executionId,
+        generation: fence.generation,
+        live: true,
+      });
+      expect(await fence.settle(async () => {})).toBe('owned');
+    });
+
+    it('keeps the run when a renewal sent before the stall succeeds after it', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let unblock!: () => void;
+      const blocked = new Promise<void>(resolve => (unblock = resolve));
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        await blocked;
+        return renew(args);
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      // Longer than the lease plus the in-flight grace: the late tick must not decide before the response lands.
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(false);
+
+      unblock();
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+      expect(fence.isLost()).toBe(false);
+      expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.live).toBe(true);
+      expect(await fence.settle(async () => {})).toBe('owned');
+    });
+
+    it('loses the run on the next tick when a renewal from before the stall is answered after a takeover', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let deliver!: () => void;
+      const delivered = new Promise<void>(resolve => (deliver = resolve));
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        const result = await renew(args);
+        await delivered;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      const successor = await ExecutionFence.claim({
+        leaseProvider: NoopLeaseProvider,
+        workflowsStore,
+        agentId,
+        runId: 'run-1',
+        mode: 'recover',
+      });
+      deliver();
+      // The stale answer is only trusted until the next renewal, which the store refuses.
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+      expect(await fence.settle(async () => {})).toBe('superseded');
+      await successor.settle(async () => {});
+    });
+
+    it('gives up a hung renewal after the same number of ticks however long the stalls between them', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(() => new Promise(() => {}));
+      // A renewal in flight is waited on for two TTLs' worth of ticks, as without stalls.
+      const ticks = (2 * EXECUTION_LEASE_TTL_MS) / EXECUTION_LEASE_RENEW_INTERVAL_MS;
+
+      for (let tick = 1; tick < ticks; tick++) {
+        stall(EXECUTION_LEASE_TTL_MS * 3);
+        await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+        expect(fence.isLost()).toBe(false);
+      }
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    });
+
+    it('still loses the run to an execution that claimed it during the stall', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const lost = vi.fn();
+      fence.onLost(lost);
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      const successor = await ExecutionFence.claim({
+        leaseProvider: NoopLeaseProvider,
+        workflowsStore,
+        agentId,
+        runId: 'run-1',
+        mode: 'recover',
+      });
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+      expect(await fence.settle(async () => {})).toBe('superseded');
+      expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe(successor.executionId);
+      await successor.settle(async () => {});
+    });
+
+    it('marks the fence lost when renewals keep failing after the stall', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      vi.spyOn(workflowsStore, 'renewRunOwnership').mockRejectedValue(new Error('store unavailable'));
+
+      stall(EXECUTION_LEASE_TTL_MS * 2);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      expect(fence.isLost()).toBe(false);
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS - EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    });
+
+    it('does not renew a detached claim when a renewal answer arrives after a stall', async () => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+      let deliver!: () => void;
+      const delivered = new Promise<void>(resolve => (deliver = resolve));
+      const spy = vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementationOnce(async args => {
+        const result = await renew(args);
+        await delivered;
+        return result;
+      });
+
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+      stall(EXECUTION_LEASE_TTL_MS * 3);
+      fence.detach();
+      deliver();
+      await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS * 2);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.live).toBe(false);
+    });
+  });
+
   // The renewal was sent before settle() released the claim and reached the store after it, so it renews nothing.
   // Nobody took the run over: the execution must not be marked lost. (#30206)
   it('ignores a renewal that comes back false after the execution settled and released its claim (#30206)', async () => {

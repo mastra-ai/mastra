@@ -5,6 +5,8 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../logger';
+import type { IMastraLogger } from '../logger';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
@@ -14,6 +16,7 @@ function buildReplica(
   storage: InMemoryStore,
   onExecute: (runId: string, suspend: (payload: object) => Promise<unknown>) => Promise<void>,
   storageVersion?: 1 | 2,
+  options: Partial<ConstructorParameters<typeof Mastra>[0]> = {},
 ) {
   const step = createStep({
     id: 'side-effect',
@@ -32,7 +35,7 @@ function buildReplica(
   })
     .then(step)
     .commit();
-  return new Mastra({ logger: false, storage, workflows: { workflow } });
+  return new Mastra({ logger: false, ...options, storage, workflows: { workflow } });
 }
 
 const replicas: Mastra[] = [];
@@ -120,6 +123,58 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     expect((await resultPromise).status).toBe('success');
     expect(executions).toEqual([`A:${run.runId}`]);
   });
+
+  // The recovery restart's saves are refused once a third process takes the run over. That is the
+  // new owner's run now, not a failed restart for this replica to report.
+  it.each(['Mastra', 'Workflow'] as const)(
+    'ends a %s recovery restart that another process took over without logging a failed restart',
+    async via => {
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const hold = () => new Promise<void>(resolve => gates.push(resolve));
+      const errors: string[] = [];
+      const logger = { ...noopLogger, error: (message: string) => errors.push(message) } as IMastraLogger;
+      const replicaA = buildReplica(storage, hold);
+      const replicaB = buildReplica(storage, hold, undefined, { logger, recovery: { workflowGraceMs: 0 } });
+      replicas.push(replicaA, replicaB);
+      const workflowsStore = (await storage.getStore('workflows'))!;
+
+      const run = await replicaA.getWorkflow('workflow').createRun();
+      const stalled = run.start({ inputData: {} });
+      await vi.waitFor(() => expect(gates).toHaveLength(1));
+      // A's lease lapses, and B's recovery restarts the run.
+      await workflowsStore.claimRunOwnership({ runId: run.runId, ownerId: 'lapsed', leaseMs: -1, force: true });
+      const recovering =
+        via === 'Mastra'
+          ? replicaB.restartAllActiveWorkflowRuns()
+          : replicaB.getWorkflow('workflow').restartAllActiveWorkflowRuns();
+      await vi.waitFor(() => expect(gates).toHaveLength(2));
+
+      const claim = await workflowsStore.claimRunOwnership({
+        runId: run.runId,
+        ownerId: 'C',
+        leaseMs: 60_000,
+        force: true,
+      });
+      const fence = { runId: run.runId, generation: claim.record!.generation, ownerId: 'C' };
+      await workflowsStore.updateWorkflowState({
+        workflowName: 'recoverable-wf',
+        runId: run.runId,
+        opts: { status: 'success' },
+        fence,
+      });
+      gates[1]!();
+      await recovering;
+      gates[0]!();
+      await expect(stalled).rejects.toMatchObject({ id: 'STORAGE_RUN_FENCE_CONFLICT' });
+
+      expect(errors).toEqual([]);
+      const stored = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'recoverable-wf', runId: run.runId });
+      expect(stored?.status).toBe('success');
+      // Neither A nor B stored the step's result over C's run.
+      expect(stored?.context['side-effect']?.status).toBe('running');
+    },
+  );
 
   describe.each([1, 2] as const)('restart() of a run that stops before the claim (storage v%s)', storageVersion => {
     /**
