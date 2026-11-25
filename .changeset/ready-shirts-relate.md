@@ -10,8 +10,9 @@
   value={value}
   onValueChange={setValue}
   customModel={query => {
-    const [provider, model] = query.split('/');
-    return provider && model ? { provider, model } : undefined;
+    const slash = query.indexOf('/');
+    if (slash <= 0 || slash === query.length - 1) return undefined;
+    return { provider: query.slice(0, slash), model: query.slice(slash + 1) };
   }}
   chevron={false}
 />
