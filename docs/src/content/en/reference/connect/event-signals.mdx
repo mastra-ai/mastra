@@ -76,7 +76,7 @@ The agent needs a `Mastra` instance with `storage`, where notifications are stor
     name: 'rateLimit',
     type: '{ limit: number; windowMs: number }',
     description:
-      "Caps how many events of one connection can wake an idle agent: at most `limit` per `windowMs` milliseconds. Later events in the window are still stored on the thread, marked `rateLimited`, but don't start a run. The agent sees them on its next run. No limit by default.",
+      "Caps how many events of one connection can wake an idle agent: at most `limit` per `windowMs` milliseconds. Later events in the window are still stored on the thread, marked `rateLimited`, but don't start a run. The agent sees them on its next run. Events whose target sets `ifIdle.behavior` to `persist` or `discard` never wake the agent, so they don't count. No limit by default.",
     isOptional: true,
   },
   {
@@ -121,7 +121,7 @@ Ends the subscription. Call it when your app stops, because the agent doesn't ca
 
 ## Delivery
 
-Events reach the agent in order. Each event's notification follows the agent's [delivery policy](/docs/signals/notifications), so by default one can wake an idle agent and start a run. Set `rateLimit` so a burst of webhooks from one connection can't start a run per event. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Errors that end the subscription are described under [`start()`](#start). Without a `cursorStore`, the subscription starts at the newest event each time it starts.
+Events reach the agent in order. Each event's notification follows the agent's [delivery policy](/docs/signals/notifications), so by default one can wake an idle agent and start a run. Set `rateLimit` so a burst of webhooks from one connection can't start a run per event. Set it whenever a connection's events come from people outside your team, such as a public repository's issues or a support inbox, or when the provider doesn't sign its webhooks. An event whose target or notification function throws, or whose notification can't be stored, is logged and skipped, and later events are still delivered. Errors that end the subscription are described under [`start()`](#start). Without a `cursorStore`, the subscription starts at the newest event each time it starts.
 
 ## Related
 
