@@ -550,6 +550,11 @@ export interface CreateWorkspaceFactoryOptions {
   workItems?: Pick<WorkItemsStorage, 'findActiveRunBindingForSession' | 'hasRunBindingForSession'>;
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
+  /**
+   * Called when a session's sandbox starts from the project's built template,
+   * so the host can rebuild a template that fell behind. Must not throw.
+   */
+  onSessionStart?: (project: FactoryProject) => void;
   /** The Factory's sandbox environment variables, applied to each session sandbox. */
   sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -645,23 +650,27 @@ export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/s
  * failing every start of the session.
  *
  * `templateHeads` are the commits the project's active template was built
- * from, present only while pushes rebuild that template. A session that asks
- * for those commits boots the template the project already built; one that
- * asks for the newest commits names a template nobody built yet, so every
- * session start after a push would start its own build, outside the push
- * debounce. The session's checkout fetches the newest commit either way.
+ * from, absent before the first build. A session that asks for those commits
+ * boots the template the project already built; one that asks for the newest
+ * commits names a template nobody built yet, so every session start after a
+ * push would start its own build, outside the debounce. The session's
+ * checkout fetches the newest commit either way, and its start asks for a
+ * debounced rebuild through `onSessionStart`, so the template keeps up.
  */
 async function resolveSessionEnvironment(
   projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
   storage: SourceControlStorageHandle,
   session: SourceControlSession,
-): Promise<{ environment: SessionEnvironment; templateHeads: EnvironmentHeads | undefined } | undefined> {
+): Promise<
+  { environment: SessionEnvironment; templateHeads: EnvironmentHeads | undefined; project: FactoryProject } | undefined
+> {
   if (!projects || !session.factoryProjectId) return undefined;
   const project = await projects.get({ orgId: session.orgId, id: session.factoryProjectId });
   if (!project) return undefined;
   return {
     environment: await resolveProjectEnvironment(storage, project),
-    templateHeads: project.buildOnPushEnabled ? (project.activeTemplateHeads ?? undefined) : undefined,
+    templateHeads: project.activeTemplateHeads ?? undefined,
+    project,
   };
 }
 
@@ -1090,6 +1099,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
             recordSandboxAcquired(args.sandbox, args.outcome);
+            if (templateHeads && sessionEnvironment) options.onSessionStart?.(sessionEnvironment.project);
             try {
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);

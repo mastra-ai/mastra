@@ -4136,6 +4136,7 @@ describe('factory environment sandbox context', () => {
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
     sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
+    onSessionStart?: CreateWorkspaceFactoryOptions['onSessionStart'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -4173,6 +4174,7 @@ describe('factory environment sandbox context', () => {
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
       ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
+      ...(options.onSessionStart ? { onSessionStart: options.onSessionStart } : {}),
     });
     return { resolver, projects, sandbox, github };
   }
@@ -4345,39 +4347,62 @@ describe('factory environment sandbox context', () => {
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
   });
 
-  it('asks for the commits the active template was built from while pushes rebuild it', async () => {
-    const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+  it.each([true, false])(
+    'asks for the commits the active template was built from (build on push: %s)',
+    async buildOnPushEnabled => {
+      const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+      const { resolver } = environmentFixture({
+        links: twoLinks,
+        project: { buildOnPushEnabled, activeTemplateHeads: built },
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+      // The same answers a build gives the provider, so the session names the template that build made.
+      await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
+      await expect(ctx.resolveHead('https://github.com/octocat/docs.git')).resolves.toBe(built['octocat/docs']);
+      // A repository added since that build is left to the template's own lookup.
+      await expect(ctx.resolveHead('https://github.com/octocat/new.git')).resolves.toBeUndefined();
+    },
+  );
+
+  it('leaves the commits to the template when no template was built yet', async () => {
+    const onSessionStart = vi.fn();
     const { resolver } = environmentFixture({
       links: twoLinks,
-      project: { buildOnPushEnabled: true, activeTemplateHeads: built },
+      project: { buildOnPushEnabled: true, activeTemplateHeads: null },
+      onSessionStart,
     });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
 
-    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await workspace!.sandbox!.getInfo!();
 
-    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
-    // The same answers a build gives the provider, so the session names the template that build made.
-    await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
-    await expect(ctx.resolveHead('https://github.com/octocat/docs.git')).resolves.toBe(built['octocat/docs']);
-    // A repository added since that build is left to the template's own lookup.
-    await expect(ctx.resolveHead('https://github.com/octocat/new.git')).resolves.toBeUndefined();
+    expect('resolveHead' in (mocks.createSandbox.mock.calls[0]![0] as any)).toBe(false);
+    // The template's own lookup already starts the first build.
+    expect(onSessionStart).not.toHaveBeenCalled();
   });
 
-  it.each([
-    [
-      'pushes do not rebuild the template',
-      { buildOnPushEnabled: false, activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
-    ],
-    ['no template was built yet', { buildOnPushEnabled: true, activeTemplateHeads: null }],
-  ])('leaves the commits to the template when %s', async (_case, project) => {
-    const { resolver } = environmentFixture({ links: twoLinks, project });
+  it('asks for a rebuild when a sandbox starts from the built template, not when a workspace is only resolved', async () => {
+    const onSessionStart = vi.fn();
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
+      onSessionStart,
+    });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
 
-    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    expect(onSessionStart).not.toHaveBeenCalled();
 
-    expect('resolveHead' in (mocks.createSandbox.mock.calls[0]![0] as any)).toBe(false);
+    await workspace!.sandbox!.getInfo!();
+    expect(onSessionStart).toHaveBeenCalledTimes(1);
+    expect(onSessionStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'factory-1' }));
   });
 
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {
