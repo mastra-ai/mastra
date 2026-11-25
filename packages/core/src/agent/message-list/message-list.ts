@@ -789,10 +789,9 @@ export class MessageList {
     dataParts?: Map<string, Set<MastraDBMessage['content']['parts'][number]>>;
   } {
     const dataParts = new Map(
-      this.messages.map(message => [
-        message.id,
-        new Set(message.content.parts.filter(part => part.type.startsWith('data-'))),
-      ]),
+      this.messages
+        .filter(message => message.role === 'assistant')
+        .map(message => [message.id, new Set(message.content.parts.filter(part => part.type.startsWith('data-')))]),
     );
     return { ...this.stateManager.createSourceChecker(), dataParts };
   }

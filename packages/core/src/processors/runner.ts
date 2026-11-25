@@ -84,7 +84,6 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
 /**
  * The message a processor returned, plus the `data-*` parts the live message gained while the processor ran
  * (`writer.custom()` merges its part into the list during the call) that the returned copy does not have.
- * A written part with an id replaces the returned part with that id, the way the merge that stored it did.
  * Parts the message held before the call follow the processor's result, so it can still remove them.
  */
 function withDataPartsWrittenDuringCall(
@@ -96,17 +95,10 @@ function withDataPartsWrittenDuringCall(
   const before = dataPartsBefore.get(returned.id);
   const written = current.content.parts.filter(part => part.type.startsWith('data-') && !before?.has(part));
   if (!written.length) return returned;
-  const parts = [...returned.content.parts];
-  for (const part of written) {
-    const id = 'id' in part && typeof part.id === 'string' ? part.id : undefined;
-    const sameId = id === undefined ? -1 : parts.findIndex(p => p.type === part.type && 'id' in p && p.id === id);
-    if (sameId !== -1) {
-      parts[sameId] = part;
-      continue;
-    }
-    const key = CacheKeyGenerator.fromDBParts([part]);
-    if (!parts.some(p => p.type === part.type && CacheKeyGenerator.fromDBParts([p]) === key)) parts.push(part);
-  }
+  const returnedKeys = new Set(returned.content.parts.map(part => CacheKeyGenerator.fromDBParts([part])));
+  const missing = written.filter(part => !returnedKeys.has(CacheKeyGenerator.fromDBParts([part])));
+  if (!missing.length) return returned;
+  const parts = [...returned.content.parts, ...missing];
   return { ...returned, content: { ...returned.content, parts } };
 }
 
