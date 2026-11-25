@@ -35,12 +35,12 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8": [
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-FP8": [
       {
         "type": "toggle"
       }

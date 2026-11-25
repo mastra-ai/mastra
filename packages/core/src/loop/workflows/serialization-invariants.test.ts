@@ -17,7 +17,7 @@ import { llmIterationOutputSchema, llmIterationStepResultSchema, toolCallOutputS
  * Serialization invariants for the agentic-execution and agentic-loop workflows.
  *
  * The evented engine routes step outputs through `JSON.stringify` (storage
- * snapshots, `UnixSocketPubSub` frames). Anything described by a step's
+ * snapshots, frames on a cross-process pubsub). Anything described by a step's
  * `outputSchema` MUST be JSON-safe — class instances with non-trivial state,
  * `Map`s, closures, and live runtime handles must live on the per-run RunScope
  * instead.

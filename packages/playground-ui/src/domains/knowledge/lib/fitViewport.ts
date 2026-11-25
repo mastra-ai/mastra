@@ -21,12 +21,17 @@ interface FitInput {
 export interface PaneInsets {
   left: number;
   right: number;
+  top?: number;
 }
 
 const NO_INSETS: PaneInsets = { left: 0, right: 0 };
 
 export function uncoveredInsets(width: number, insets: PaneInsets): PaneInsets {
-  return width - insets.left - insets.right > 0 ? insets : NO_INSETS;
+  return width > insets.left + insets.right ? insets : NO_INSETS;
+}
+
+export function uncoveredTopInset(height: number, top = 0): number {
+  return height > top ? top : 0;
 }
 
 /**
@@ -35,19 +40,21 @@ export function uncoveredInsets(width: number, insets: PaneInsets): PaneInsets {
  */
 export function fitViewport({ bounds, width, height, ring, anchor, insets: drawers = NO_INSETS }: FitInput): Viewport {
   const insets = uncoveredInsets(width, drawers);
+  const top = uncoveredTopInset(height, drawers.top);
   const floor = ring ? RING_MIN_ZOOM : READABLE_MIN_ZOOM;
   const visible = width - insets.left - insets.right;
-  const viewport = getViewportForBounds(bounds, visible, height, floor, 2, 0.1);
+  const visibleHeight = height - top;
+  const viewport = getViewportForBounds(bounds, visible, visibleHeight, floor, 2, 0.1);
   if (anchor && viewport.zoom <= floor) {
     const cx = anchor.position.x + (anchor.width ?? 0) / 2;
     const cy = anchor.position.y + (anchor.height ?? 0) / 2;
     return {
       zoom: viewport.zoom,
       x: insets.left + visible / 2 - cx * viewport.zoom,
-      y: height / 2 - cy * viewport.zoom,
+      y: top + visibleHeight / 2 - cy * viewport.zoom,
     };
   }
-  return { ...viewport, x: viewport.x + insets.left };
+  return { ...viewport, x: viewport.x + insets.left, y: viewport.y + top };
 }
 
 /** Margin around the drawn nodes on the first view, as a share of the pane. */
@@ -81,6 +88,7 @@ export function fitAllViewport({
   insets?: PaneInsets;
 }): Viewport {
   const insets = uncoveredInsets(width, drawers);
+  const topInset = uncoveredTopInset(height, drawers.top);
   const fitIn = (left: number, top: number): Viewport => {
     const view = getViewportForBounds(
       bounds,
@@ -92,7 +100,7 @@ export function fitAllViewport({
     );
     return { zoom: view.zoom, x: view.x + left, y: view.y + top };
   };
-  const plain = fitIn(insets.left, 0);
+  const plain = fitIn(insets.left, topInset);
   if (!legend) return plain;
   const covered = nodes.some(node => {
     const left = node.x * plain.zoom + plain.x;
@@ -100,7 +108,7 @@ export function fitAllViewport({
     return left < legend.right && top < legend.bottom;
   });
   if (!covered) return plain;
-  const beside = fitIn(legend.right, 0);
+  const beside = fitIn(legend.right, topInset);
   const below = fitIn(insets.left, legend.bottom);
   return beside.zoom >= below.zoom ? beside : below;
 }

@@ -1,11 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
-import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
+import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -21,11 +22,6 @@ import {
   markErrorForStreamRejection,
   RECOVER_SHUTDOWN_ERROR_ID,
 } from './constants';
-import type {
-  DurableAgentActiveRun,
-  DurableAgentListActiveRunsOptions,
-  DurableAgentListActiveRunsResult,
-} from './durable-agent';
 import type { UntrackedRunLiveness } from './execution-fence';
 import {
   DurableExecutionFenceError,
@@ -38,8 +34,16 @@ import {
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
+import { openStepsOfCrashedSegment } from './segment-spans';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
-import type { AgentStreamEvent, DurableAgenticWorkflowInput, DurableToolCallInput } from './types';
+import type {
+  DurableAgentActiveRun,
+  DurableAgentListActiveRunsOptions,
+  DurableAgentListActiveRunsResult,
+  AgentStreamEvent,
+  DurableAgenticWorkflowInput,
+  DurableToolCallInput,
+} from './types';
 import {
   createDurableAgenticWorkflow,
   defaultShouldPersistSnapshot,
@@ -567,6 +571,17 @@ export class DefaultAgentExecutionEngine {
 
   getWorkflow(options: DurableWorkflowOptions) {
     if (!this.#workflow) {
+      if (options.storesRunsInJournal) {
+        // Workflow creation is synchronous; inspect the registered store without initializing it.
+        const storage = this.mastra?.getStorage();
+        const workflowsStore = storage?.stores?.workflows;
+        if (workflowsStore && !workflowsStore.supportsRunJournal()) {
+          options.guardrailLogger?.warn(
+            `DurableAgent '${this.id}' sets storageVersion: 2, which ${storage?.name ?? 'the configured'} storage ` +
+              `doesn't support yet; storing new runs as version 1.`,
+          );
+        }
+      }
       this.#workflow = this.createWorkflow(options);
       this.warnOnRiskyPersistencePolicy(options.shouldPersistSnapshot, options.guardrailLogger);
       // Register mastra on the workflow so execution steps can access agents/tools.
@@ -809,6 +824,7 @@ export class DefaultAgentExecutionEngine {
     workflowInput: DurableAgenticWorkflowInput;
     finishPublishedBeforeCrash: boolean;
     originalSpansEnded: boolean;
+    openStepsOf: string[] | undefined;
   }> {
     const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
@@ -897,15 +913,18 @@ export class DefaultAgentExecutionEngine {
     }
 
     const finishPublishedBeforeCrash = snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+    const results = Object.values(snapshot.context ?? {}) as Array<{ status?: string; resumedAt?: number } | undefined>;
+    // The default engine keeps the suspended result until the resumed step finishes.
+    const stepSuspended = results.some(result => result?.status === 'suspended');
     // Spans from a segment after resume lived only in the lost process.
-    const resumed = Object.values(snapshot.context ?? {}).some(
-      result => result && typeof result === 'object' && 'resumedAt' in result && result.resumedAt != null,
-    );
+    const resumed = stepSuspended || results.some(result => result?.resumedAt != null);
     return {
       snapshot,
       workflowInput,
       finishPublishedBeforeCrash,
       originalSpansEnded: finishPublishedBeforeCrash || resumed,
+      // The suspension ended the step it saved, so the crash left none open.
+      openStepsOf: stepSuspended ? [] : openStepsOfCrashedSegment(snapshot.requestContext, runId),
     };
   }
 
@@ -1023,8 +1042,15 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
     guardrailLogger: IMastraLogger | undefined,
   ): { sharedExecution: boolean; usesRunPubSub: boolean } {
     const engine = this.resolveWorkflowEngine(workflowEngine, logger);
-    const sharedTransport =
-      engine === 'evented' && pubsub !== undefined && !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
+    if (sharedTransport && this.mastra) {
+      const mastra = this.mastra;
+      // The store resolves asynchronously and this path is sync. The warning never gates the run.
+      void Promise.resolve(mastra.getStorage()?.getStore('workflows'))
+        .catch(() => undefined)
+        .then(store => warnUnsupportedEventedSetup(mastra, store))
+        .catch(() => {});
+    }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
       this.#warnedUnfencedSharedExecution = true;

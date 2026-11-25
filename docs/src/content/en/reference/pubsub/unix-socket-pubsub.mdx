@@ -13,6 +13,8 @@ Use it when several local processes need to share a stream, such as coordinating
 
 `UnixSocketPubSub` is a push transport: events arrive without a read loop, so Mastra doesn't run a pull worker for it.
 
+It doesn't redeliver the events a stopped process held, so it isn't a backend for evented workflows or agents that run on several processes. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
+
 ## Usage example
 
 Pass a socket path that every participating process shares.

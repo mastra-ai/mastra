@@ -1,4 +1,4 @@
-// The `shadow-raised` / `shadow-overlay` utilities compose lip + rim + drops on
+// The `shadow-raised` / `shadow-overlay` utilities compose rim + drops on
 // the element (see `components.css`); these are the drop layers they pull in.
 export const Shadows = {
   raised: 'var(--elevation-raised)',

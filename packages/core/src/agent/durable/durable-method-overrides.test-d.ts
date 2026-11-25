@@ -3,10 +3,10 @@ import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 import { DurableAgent } from './durable-agent';
-import type { DurableAgentStreamOptions, DurableAgentStreamResult } from './durable-agent';
+import { EventedAgent } from './evented-agent';
+import type { DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 
 type DurableAgentResumeOptions<OUTPUT> = Parameters<DurableAgent<string, ToolsInput, OUTPUT>['resume']>[2];
-import { EventedAgent } from './evented-agent';
 
 type Answer = { answer: string };
 

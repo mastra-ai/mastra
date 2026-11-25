@@ -1129,38 +1129,6 @@ test('past the deadline the rest waits for tomorrow, and nothing moves out on a 
   assert.deepEqual(complete.out, ['packages/core/src/a.test.ts']);
 });
 
-test('a GitHub outage that outlasts the retries ends the day early but keeps what was settled', () => {
-  const t = tiers({});
-  const down = Object.assign(new Error('Command failed'), { stderr: 'gh: Server Error (HTTP 502)' });
-  const result = inspectRuns(
-    t,
-    [run(1, 10), run(2, 11), run(3, 12)],
-    r => {
-      if (r.id === 2) throw down;
-      return [];
-    },
-    { deadline: Infinity },
-  );
-  assert.deepEqual(
-    result.settled.map(r => r.id),
-    [3],
-  );
-  assert.equal(result.left, 2);
-  const gone = Object.assign(new Error('Command failed'), { stderr: 'gh: Not Found (HTTP 404)' });
-  assert.throws(
-    () =>
-      inspectRuns(
-        t,
-        [run(1, 10)],
-        () => {
-          throw gone;
-        },
-        { deadline: Infinity },
-      ),
-    gone,
-  );
-});
-
 test('a rerun of a remembered run is inspected again, and its catch keeps the file in', () => {
   const file = 'packages/core/src/a.test.ts';
   const t = tiers({ [file]: { tier: 'in', since: '2026-09-01', last_failure: '2026-10-01', reason: 'pr-catch' } });
@@ -1208,6 +1176,98 @@ test('the newest runs are inspected first, so a short day still covers the lates
   });
   assert.deepEqual(fetched, [3]);
   assert.equal(result.left, 2);
+});
+
+const ghDown = () => Object.assign(new Error('gh failed'), { stderr: 'gh: Server Error (HTTP 502)' });
+
+test('a run GitHub keeps failing on is retried after the others, so one 502 does not end the day', () => {
+  const fetched = [];
+  let failuresLeft = 1;
+  const result = inspectRuns(
+    tiers({}),
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      fetched.push(r.id);
+      if (r.id === 2 && failuresLeft-- > 0) throw ghDown();
+      return [];
+    },
+    { deadline: Infinity },
+  );
+  assert.deepEqual(fetched, [3, 2, 1, 2]);
+  assert.deepEqual(result.settled.map(r => r.id).sort(), [1, 2, 3]);
+  assert.equal(result.left, 0);
+});
+
+test('a run still failing after its second try is left for the next day, and the rest are inspected', () => {
+  const fetched = [];
+  const result = inspectRuns(
+    tiers({}),
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      fetched.push(r.id);
+      if (r.id === 2) throw ghDown();
+      return [];
+    },
+    { deadline: Infinity },
+  );
+  assert.deepEqual(fetched, [3, 2, 1, 2]);
+  assert.deepEqual(result.settled.map(r => r.id).sort(), [1, 3]);
+  assert.equal(result.left, 1);
+});
+
+test('the deadline also stops the retries, and runs still failing count as left', () => {
+  let clock = 0;
+  const fetched = [];
+  const result = inspectRuns(
+    tiers({}),
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      clock += 10;
+      fetched.push(r.id);
+      if (r.id !== 3) throw ghDown();
+      return [];
+    },
+    { deadline: 45, now: () => clock },
+  );
+  assert.deepEqual(fetched, [3, 2, 1, 2, 1]);
+  assert.deepEqual(
+    result.settled.map(r => r.id),
+    [3],
+  );
+  assert.equal(result.left, 2);
+});
+
+test('a deadline inside the retries leaves the deferred runs and the unread ones', () => {
+  let clock = 0;
+  const fetched = [];
+  const result = inspectRuns(
+    tiers({}),
+    [run(1, 10), run(2, 11), run(3, 12)],
+    r => {
+      clock += 10;
+      fetched.push(r.id);
+      if (r.id !== 3) throw ghDown();
+      return [];
+    },
+    { deadline: 35, now: () => clock },
+  );
+  assert.deepEqual(fetched, [3, 2, 1, 2]);
+  assert.equal(result.left, 2);
+});
+
+test('a non-transient GitHub error still fails the day', () => {
+  assert.throws(
+    () =>
+      inspectRuns(
+        tiers({}),
+        [run(1, 10)],
+        () => {
+          throw Object.assign(new Error('gh failed'), { stderr: 'gh: Not Found (HTTP 404)' });
+        },
+        { deadline: Infinity },
+      ),
+    /gh failed/,
+  );
 });
 
 test('the next green run must come from the same repository as the failing run', () => {

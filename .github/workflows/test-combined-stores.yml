@@ -36,6 +36,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     outputs:
       stores: ${{ steps.set-stores.outputs.stores }}
       light_stores: ${{ steps.set-stores.outputs.light_stores }}
@@ -46,6 +47,11 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
       - id: set-stores
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -123,6 +129,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -170,6 +182,13 @@ jobs:
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        timeout-minutes: 1
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         timeout-minutes: 10
@@ -350,6 +369,12 @@ jobs:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
@@ -363,6 +388,22 @@ jobs:
         run: pnpm turbo build ${{ steps.filters.outputs.args }}
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
+
+      # The DuckDB vector tests run `INSTALL vss`, which downloads the extension unless it is already
+      # in DuckDB's extension directory. A stalled download takes DuckDB about 120 s to give up, past
+      # the tests' 60 s hook timeout, so restore the directory and download only on a cache miss.
+      - name: Resolve DuckDB version
+        id: duckdb
+        if: ${{ contains(needs.setup.outputs.light_stores, '"duckdb"') }}
+        working-directory: stores/duckdb
+        run: echo "version=$(node -p "require('@duckdb/node-api/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache DuckDB extensions
+        if: ${{ steps.duckdb.outputs.version != '' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ~/.duckdb/extensions
+          key: duckdb-extensions-${{ runner.os }}-${{ runner.arch }}-${{ steps.duckdb.outputs.version }}
 
       # Each store runs its own `test` script and vitest config, four at a time.
       # --no-bail runs every store; the summary at the end names any that failed.

@@ -134,6 +134,13 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
     isOptional: true,
   },
   {
+    name: 'denyWritePaths',
+    type: 'string[]',
+    description:
+      "Paths that commands can read but never write, even when nested inside the workspace or a `readWritePaths` entry. Mounted filesystems with `readOnly: true` are added automatically. In a generated policy, a deny always wins: if the same directory is mounted both read-only and read-write, commands can't write to it through either mount. A custom `seatbeltProfilePath` file you wrote and non-empty `bwrapArgs` replace the generated policy, so neither applies `denyWritePaths` or read-only mount denials. A custom policy must deny those writes itself.",
+    isOptional: true,
+  },
+  {
     name: 'seatbeltProfilePath',
     type: 'string',
     description:

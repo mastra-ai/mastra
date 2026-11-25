@@ -1,0 +1,178 @@
+---
+title: Health metrics | Configuration
+description: Turn on Factory health metrics, choose which groups to collect, and read them to find the component that's slowing Factory down.
+---
+
+# Health metrics
+
+Health metrics show which part of Factory to investigate first when it slows down or stops responding: the Node.js process, Postgres, Redis, sandboxes, or intake. Factory sends them through the Mastra instance's observability exporter. On Mastra platform, the exporter is added for you when observability is on for the project.
+
+Metrics are off by default. Every record counts toward your observability usage, so you turn on only the groups you need.
+
+## Turn on metrics
+
+Pass `metrics` to [`MastraFactory`](/reference/mastra-factory-api#constructor-parameters):
+
+```typescript title="src/mastra/index.ts"
+const factory = new MastraFactory({
+  // ...
+  metrics: {
+    groups: ['process', 'postgres', 'redis', 'sandbox', 'session', 'intake'], // or 'all'
+  },
+})
+```
+
+Or set environment variables on the Factory Server. They override the code option:
+
+```dotenv title=".env"
+FACTORY_METRICS=all
+```
+
+`FACTORY_METRICS` accepts `all`, a comma-separated list such as `sandbox,intake`, or `0` to turn metrics off. See [Environment variables](/reference/environment-variables#health-metrics) for the interval and record cap.
+
+A group that's off doesn't start timers, query the database or Redis, or send records. Factory logs a warning at startup for any group name it doesn't recognize.
+
+## How records are sent
+
+Factory sends records once per interval, every 60 seconds by default. The minimum interval is 15 seconds.
+
+- **Gauges**, such as pool size or memory, are sampled once per interval.
+- **Counters**, such as intake events, are summed over the interval and sent as one record per label combination.
+- **Timings**, such as sandbox phase durations, are sent as three records on the same metric, with a `stat` label: `avg`, `p95`, and `max`. A separate `<name>_count` metric, such as `session_ready_ms_count`, holds the number of timings in the interval, so a metric ending in `_ms` is always in milliseconds. `p95` is computed from up to 1,000 samples per interval.
+
+Timing stats are per interval and per process. A `p95` can't be averaged across intervals or processes. Chart the worst `p95` per time bucket instead. For the worst single value use `max`, and weight averages by the `_count` metric.
+
+Each process sends at most 500 records per minute by default. Event counts and timings are sent before gauges, so when the cap is reached, gauges are dropped first and are sampled again next interval. Records over the cap are dropped and counted in `mastra_factory_metrics_dropped_total`. If that metric is above 0, raise the cap or turn off groups you don't need.
+
+All metric names start with `mastra_factory_`. Labels only take values from fixed lists, so IDs, file paths, and repository names are never sent.
+
+### Split deployments
+
+Every record has a `service` label, read from `MASTRA_WORKERS`:
+
+| `MASTRA_WORKERS` | `service` |
+| - | - |
+| Unset | `all`: one process serves the API and runs workers |
+| `false` | `api`: the API container of a split deployment |
+| Set to anything else | `worker`: the worker container of a split deployment |
+
+On Mastra platform, a project with storage and an event bus such as Redis gets a separate worker service. The API container has `service=api` and the worker has `service=worker`.
+
+Process metrics, pool metrics, and connection checks come from every process. Database-wide and Redis-wide stats only come from `worker` or `all`, so they aren't reported twice.
+
+## Where to start
+
+Check the components in this order. All checks run inside the Factory process. A blocked process makes the other components look slow too.
+
+1. **Process.** If `mastra_factory_event_loop_utilization` is near 1 or `mastra_factory_event_loop_delay_ms{stat=p95}` is high, start here. Check GC pauses, memory against the heap limit, and CPU against the CPU limit.
+1. **Postgres.** If event-loop delay is low, look at failed and slow connection checks, pool `waiting`, and sessions waiting on locks.
+1. **Redis.** Look at failed and slow Redis checks, memory against `maxmemory`, evictions, and stream backlog.
+1. **Sandboxes.** Check `session_start_oldest_age_ms` for a start that's hung right now, then `session_ready_ms` for slow or failing starts. Then separate a slow or failing sandbox provider (`sandbox_start_*`) from slow or failing repository setup (`sandbox_phase_ms`, `sandbox_command_ms`).
+1. **Sessions.** If sandboxes are ready but agents are slow to respond, check `session_first_output_ms`.
+1. **Intake.** Look for replayed events, which are missed webhooks, and sweeps that stopped running.
+
+If no metrics arrive at all, the Factory Server is down, metrics are off, or the exporter isn't configured.
+
+## Process
+
+Turned on with `process`. Comes from every process.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `event_loop_delay_ms` | ms | `stat=avg\|p95\|max` | How long ready work waited for the event loop during the interval, with the same stats as other timings. `event_loop_delay_ms_count` is the number of delay samples. A `p95` over about 100 ms means requests and agent runs are stalled. `max` shows the single worst freeze. |
+| `gc_ms` | ms | `kind=major\|incremental`, `stat` | Major and incremental garbage-collection pauses. Short minor pauses already show in event-loop delay and aren't sent. Long or frequent `major` pauses that match event-loop spikes mean memory pressure, not slow code. |
+| `process_memory_bytes` | bytes | `kind=rss\|heap_used\|heap_limit` | Process memory. `heap_used` close to `heap_limit` means the process is close to running out of memory. A steady climb between restarts suggests a leak. |
+| `process_heap_utilization` | ratio | | `heap_used` divided by `heap_limit`, 0 to 1. Close to 1 means the process is close to running out of memory. |
+| `event_loop_utilization` | ratio | | Share of the interval the main thread spent running JavaScript and callbacks, from 0 to 1. The main thread runs on one core, so a value near 1 means it's saturated and new work waits. |
+| `process_cpu_cores` | cores | | CPU used by every thread of the process since the last sample: the main thread, garbage-collection helpers, the libuv pool for crypto, compression, and file work, and worker threads. `1.4` means the process used 1.4 cores, like 140% in `top`. It can go above 1. Compare it to `process_cpu_limit_cores`, and use `event_loop_utilization` for the main thread. |
+| `process_cpu_limit_cores` | cores | | Cores the process can use: the container's CPU limit when one is set, otherwise the cores the machine reports. `process_cpu_cores` close to this value means the process is at its CPU limit. |
+| `process_uptime_ms` | ms | | Time since the process started. A drop means the process restarted, for example after running out of memory. |
+
+## Postgres
+
+Turned on with `postgres`. Factory reads the `pg` pools of the storage and vector store passed to `MastraFactory`, labeled `pool=store` and `pool=vector`.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `db_pool` | connections | `pool`, `state=total\|idle\|waiting` | This process's pool. `waiting` above 0 means queries are queued for a connection, which is the clearest sign the database or pool is the bottleneck. `total` at the pool's maximum for long periods means the pool is saturated. |
+| `probe_duration_ms` | ms | `component=db_store\|db_vector` | Time for a successful `SELECT 1` on each pool, including the wait for a connection. A pool closes connections idle for 10 seconds by default, so a quiet pool such as `vector` often opens a new connection for the check, and its time includes connecting. The pool's `db_pool` values are read after the check. |
+| `db_sessions` | sessions | `state=active\|idle_in_transaction\|waiting_on_lock` | Database sessions from the server's view, across all clients. `waiting_on_lock` above 0 means queries are blocked by other transactions. Worker or single process only. |
+| `db_longest_ms` | ms | `kind=query\|idle_transaction` | Age of the longest running query, and of the longest transaction left open without a query. A long idle transaction can hold locks and block others. Worker or single process only. |
+
+A failed check sends `probe_failures_total` instead of a duration. When Postgres hangs, the duration series stops arriving. See [Failed checks](#failed-checks).
+
+Every 10 minutes, Factory also logs the five statements that used the most database time since the previous sample. The log line starts with `[factory:metrics] Slowest Postgres statements since last sample` and lists each statement's query ID with its call count, total time, and mean time. Statement text isn't logged, because `pg_stat_statements` can keep literal values in it. To see a statement, run `SELECT query FROM pg_stat_statements WHERE queryid = <id>` on the database. This needs the `pg_stat_statements` extension; without it, the log is skipped. Postgres hides other users' query IDs unless Factory's database role has `pg_read_all_stats`, so without that role the log only covers statements run by Factory's own role.
+
+## Redis
+
+Turned on with `redis`. Collected when `pubsub` is a `RedisStreamsPubSub`. A Redis Cluster gets the `redis` check alone, because `INFO` reads a single node. Factory opens its own connection, so checks don't wait behind event traffic.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `probe_duration_ms` | ms | `component=redis` | Time for a successful `INFO` round trip, from every process. Rising values mean the network or Redis itself is slow. Redis runs one command at a time, and a slow command delays every other. |
+| `redis_memory_bytes` | bytes | `kind=used\|max` | Memory used against `maxmemory`. `max` isn't sent when no limit is set. Used memory near the limit leads to evictions or write errors. Worker or single process only. |
+| `redis_memory_utilization` | ratio | | Used memory divided by `maxmemory`, 0 to 1. Only sent when `maxmemory` is set. Worker or single process only. |
+| `redis_evicted_keys_total` | keys | | Keys evicted during the interval. Any evictions mean Redis is out of memory and may be dropping event data. Worker or single process only. |
+| `redis_clients` | connections | | Connected clients. A steady climb suggests connections aren't being closed. Worker or single process only. |
+| `redis_stream_backlog` | events | `topic=workflows\|background-tasks`, `kind=pending\|lag` | `pending` counts events delivered but not yet acknowledged. `lag` counts events not yet delivered. A growing backlog means workers aren't keeping up or have stopped. Worker or single process only. |
+
+A failed Redis check also sends `probe_failures_total` instead of a duration. See [Failed checks](#failed-checks).
+
+## Failed checks
+
+Postgres and Redis checks share one failure metric. It comes from every process that runs the check. The `db_stats`, `db_statements`, `redis_stats`, and `redis_streams` checks read server-wide stats on the worker or single process only. Only their failures are sent here. Their duration would repeat the `db_store` and `redis` checks.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `probe_failures_total` | checks | `component`, `reason=timeout\|error` | Checks that failed. `timeout` means the check took longer than 5 seconds, or half the interval when that's shorter. A check still stuck from a previous interval isn't run again and counts as `timeout`. `error` means the check threw, for example on a refused connection. Any value above 0 for `db_store` or `redis` means that component isn't answering. |
+
+## Sandboxes
+
+Turned on with `sandbox`.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `session_ready_ms` | ms | `kind=first\|resume`, `outcome=ok\|error`, `stat` | Time for a session's sandbox to be ready: from the first request to start it to the end of Factory's setup, failures included. `first` is the session's first sandbox and `resume` any later start. This is the main start-up number. The rows below show which step was slow. |
+| `session_sandbox_wait_ms` | ms | `kind`, `outcome`, `stat` | How long the agent's first sandbox request waited for a sandbox that was still starting. With a lazy start, that's the whole start. With an eager start, it's only the part setup hadn't finished when the agent needed the sandbox. |
+| `sessions_starting` | starts | | Sandbox starts in progress in this process, sent every interval, 0 included. |
+| `session_start_oldest_age_ms` | ms | | Age of the oldest start in progress, or 0. A value that keeps growing means a start is hung, before it times out or fails. |
+| `sandbox_start_ms` | ms | `sandbox_provider`, `outcome=created\|connected\|unknown`, `stat` | How long the provider took to hand over a running sandbox, before Factory's own setup starts. `created` is a new sandbox and `connected` reattaches an existing one. |
+| `sandbox_start_failures_total` | starts | `sandbox_provider`, `cause=timeout\|error` | Sandbox starts that failed at the provider. A rise here with healthy setup phases points at the provider, not your repository. Sent as 0 once the first sandbox is created. |
+| `sandbox_phase_ms` | ms | `phase=materialize\|checkout\|setup\|setup_marker\|sync\|on_start`, `outcome=ok\|error`, `stat` | Factory's setup phases after the sandbox starts. `outcome=error` on `setup` or `checkout` points at the repository's setup command or Git access. |
+| `sandbox_command_ms` | ms | `step=clone\|fetch\|checkout\|probe\|setup\|teardown\|other`, `outcome=ok\|exit\|threw`, `stat` | Each attempt of a Git or setup command. `exit` means the command ran and failed. `threw` means the sandbox didn't answer, which Factory retries. |
+| `sandbox_recreated_total` | sandboxes | `kind=recreate\|reset` | Sandboxes replaced by a recreate or reset. |
+| `sandbox_retired_total` | sessions | | Sessions whose sandbox was released or destroyed. |
+| `sandboxes_active` | sandboxes | | Running session sandboxes held by this process. |
+
+## Sessions
+
+Turned on with `session`.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `session_first_output_ms` | ms | `turn=first\|later`, `outcome=ok\|no_output`, `first=text\|reasoning\|tool_call`, `stat` | Time from when an idle session receives a message to the first text, reasoning, or tool call of the run it starts. It includes loading the thread, building tools, memory, and the model's time to first token. `turn=first` is the session's first run since this process loaded it, and `first` is the kind of output that arrived first. `no_output` counts runs that ended without output, such as a start that failed. Messages sent while a run is in progress join that run and aren't timed. |
+
+## Intake
+
+Turned on with `intake`.
+
+| Metric | Unit | Labels | Meaning and what to watch |
+| - | - | - | - |
+| `intake_events_total` | events | `source=github\|linear`, `outcome` | Events handled by intake rules. `committed` changed Factory, `replayed` was already applied, `ignored` didn't match a rule, `missing` referred to something Factory doesn't track, and `error` failed. Watch `error`, and a drop to 0 when you expect activity. `committed` and `error` are sent as 0 for each configured GitHub or Linear integration. A quiet source reads as 0 rather than no data. |
+| `intake_replayed_total` | events | `source=github`, `kind=merge_close\|open` | Pull request merges, closes, and openings the GitHub reconcile sweep found that no webhook delivered. Each one is a missed webhook. |
+| `intake_sweep_failures_total` | sweeps | `source=github`, `kind` | Reconcile sweeps that failed or partly failed. Sent as 0 once the sweep worker starts. |
+| `intake_last_sweep_age_ms` | ms | `source=github`, `kind=merge_close\|open` | Time since the last clean reconcile sweep of each kind in this process, counted from when the sweep worker started, so a sweep that never succeeds still shows. Only the process holding the sweep lease updates it, so use the lowest value across processes. A value that keeps growing means sweeps stopped, and missed webhooks stay missed. No series means no sweep worker runs in that process: no repositories are linked, or it's the `api` service. |
+
+## Query metrics
+
+Use the `mastra api metric` commands to read metrics from Mastra platform. Filter by environment so production and other environments aren't mixed.
+
+```bash
+mastra api metric names '{"prefix":"mastra_factory_"}'
+```
+
+For example, the p95 event-loop delay as a time series, split by service:
+
+```bash
+mastra api metric timeseries '{"name":["mastra_factory_event_loop_delay_ms"],"interval":"5m","aggregation":"max","filters":{"labels":{"stat":"p95"}},"groupBy":["service"]}'
+```

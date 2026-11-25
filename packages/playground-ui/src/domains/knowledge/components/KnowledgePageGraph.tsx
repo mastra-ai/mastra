@@ -1,18 +1,14 @@
 import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
 import {
-  Background,
   BaseEdge,
-  BackgroundVariant,
   getViewportForBounds,
   Handle,
   MarkerType,
   Position,
-  ReactFlow,
   ReactFlowProvider,
   useReactFlow,
   useStore,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -24,6 +20,7 @@ import {
   INITIAL_SETTLE_MS,
   nudgeAxis,
   uncoveredInsets,
+  uncoveredTopInset,
 } from '../lib/fitViewport';
 import type { PaneInsets } from '../lib/fitViewport';
 import {
@@ -49,7 +46,7 @@ import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPa
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
-import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
+import { KNOWLEDGE_GRAPH_TRANSITION_MS, prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 import { KnowledgePageCard } from './KnowledgePageCard';
 import { KnowledgeTooltip } from './KnowledgeTooltip';
@@ -58,15 +55,15 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-
 import './knowledge.css';
 import { IconArrowWallUp } from '@/ds/icons/central/IconArrowWallUp';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
-import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
 import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
-import { IconMinusMedium } from '@/ds/icons/central/IconMinusMedium';
 import { IconPin } from '@/ds/icons/central/IconPin';
-import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
+import { GraphCanvas } from '@/ds/primitives/graph-canvas';
+import { GraphZoomControls } from '@/ds/primitives/graph-zoom-controls';
+import { overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
 type PaneStyle = CSSProperties & { '--knowledge-pane-left': string };
@@ -647,7 +644,7 @@ function GraphLegend({
   const open = pinned || peeking;
   return (
     <div
-      className="absolute top-3 left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
+      className="absolute top-[calc(var(--knowledge-toolbar-inset,0px)+0.75rem)] left-3 z-10 flex translate-x-(--knowledge-pane-left) flex-col items-start gap-1.5 transition-transform duration-slow ease-out-custom motion-reduce:transition-none"
       onPointerEnter={collapsible ? () => setPeeking(true) : undefined}
       onPointerLeave={collapsible ? () => setPeeking(false) : undefined}
     >
@@ -656,7 +653,6 @@ function GraphLegend({
           size="sm"
           icon={<IconCircleInfo />}
           aria-expanded={open}
-          className="shadow-overlay"
           onFocus={() => setPeeking(true)}
           onBlur={() => setPeeking(false)}
           onClick={() => {
@@ -670,7 +666,10 @@ function GraphLegend({
       <ul
         aria-label="Legend"
         hidden={collapsible && !open}
-        className={`pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2 ${collapsible ? 'bg-card shadow-overlay' : 'rounded-md border border-border bg-card/90 shadow-raised'}`}
+        className={cn(
+          'pointer-events-none flex flex-col gap-1 rounded-lg px-2.5 py-2',
+          collapsible ? overlaySurfaceStyle : raisedSurfaceStyle,
+        )}
       >
         <li className="flex items-center gap-2">
           <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
@@ -929,6 +928,8 @@ export interface KnowledgePageGraphProps {
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
   insets?: PaneInsets;
+  /** Scroll pans by default. Set to false to use scroll to zoom. */
+  panOnScroll?: boolean;
   collapsibleLegend?: boolean;
   /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
   exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
@@ -1034,6 +1035,7 @@ function KnowledgePageGraphInner({
   onClearSelection,
   onMentionSelect,
   insets = NO_PANE_INSETS,
+  panOnScroll = true,
   collapsibleLegend,
 }: KnowledgePageGraphProps) {
   // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
@@ -1424,13 +1426,14 @@ function KnowledgePageGraphInner({
     const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
     const covered = uncoveredInsets(width, insets);
+    const top = uncoveredTopInset(height, insets.top);
     const view = flow.getViewport();
     const dx = nudgeAxis(
       anchor.position.x * view.zoom + view.x - covered.left,
       (anchor.width ?? 0) * view.zoom,
       width - covered.left - covered.right,
     );
-    const dy = nudgeAxis(anchor.position.y * view.zoom + view.y, (anchor.height ?? 0) * view.zoom, height);
+    const dy = nudgeAxis(anchor.position.y * view.zoom + view.y - top, (anchor.height ?? 0) * view.zoom, height - top);
     if (dx === 0 && dy === 0) return;
     void flow.setViewport({ zoom: view.zoom, x: view.x + dx, y: view.y + dy }, duration ? { duration } : undefined);
   }, []);
@@ -1477,7 +1480,7 @@ function KnowledgePageGraphInner({
   const initialized = useRef(false);
   useEffect(() => {
     if (initialized.current) nudgeToSelection(fitDuration(prefersMotion()));
-  }, [insets.left, insets.right, nudgeToSelection]);
+  }, [insets.left, insets.right, insets.top, nudgeToSelection]);
 
   // The first view is refitted while the graph is still filling in (ring pages, children, links arrive over the
   // first moments), until the user does anything or the window closes. After that the view is theirs.
@@ -1573,7 +1576,7 @@ function KnowledgePageGraphInner({
     <div
       ref={containerRef}
       style={paneStyle}
-      className="knowledge-graph relative size-full"
+      className="knowledge-graph relative size-full rounded-[inherit]"
       data-emphasis={neighbours ? 'on' : undefined}
       data-testid="knowledge-page-graph"
       onKeyDown={onKeyDown}
@@ -1595,7 +1598,8 @@ function KnowledgePageGraphInner({
           ([id, hidden]) => laidOut.shape.form.get(id) === 'full' && (hidden.in > 0 || hidden.out > 0),
         )}
       />
-      <ReactFlow
+      <GraphCanvas
+        className="rounded-[inherit]"
         nodes={drawnNodes}
         edges={emphasisedEdges}
         nodeTypes={nodeTypes}
@@ -1613,40 +1617,16 @@ function KnowledgePageGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         nodesDraggable={false}
+        zoomOnScroll={!panOnScroll}
         onPaneClick={onPaneClick}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
-      </ReactFlow>
+      />
       <div className="absolute bottom-3 left-3 z-10 translate-x-(--knowledge-tree-drawer-inset,0px) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
-        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom className="rounded-full shadow-overlay">
-          <Button
-            size="icon-sm"
-            tooltip="Zoom out"
-            aria-label="Zoom out"
-            onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
-          >
-            <IconMinusMedium />
-          </Button>
-          <Button
-            size="icon-sm"
-            tooltip="Zoom in"
-            aria-label="Zoom in"
-            onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
-          >
-            <IconPlusMedium />
-          </Button>
-          <Button
-            size="icon-sm"
-            tooltip="Fit view"
-            aria-label="Fit view"
-            onClick={() => fit(fitDuration(prefersMotion()))}
-          >
-            <IconFullscreen1 />
-          </Button>
+        <ButtonsGroup size="sm" aria-label="Zoom" data-knowledge-graph-zoom>
+          <GraphZoomControls duration={KNOWLEDGE_GRAPH_TRANSITION_MS} onFitView={fit} />
         </ButtonsGroup>
       </div>
     </div>

@@ -214,10 +214,31 @@ describe('native Agent stored-registration policy', () => {
       host.addAgent(agent);
       const messages = warn.mock.calls.map(([message]) => String(message));
       expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(1);
-      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(
+      expect(messages.filter(message => message.includes('does not carry stopWhen to another process'))).toHaveLength(
         executionEngine === 'evented' ? 1 : 0,
       );
       expect(messages.every(message => !message.includes('activation is deferred'))).toBe(true);
+    },
+  );
+
+  it.each(['default', 'evented'] as const)(
+    'warns about per-call options on inherited %s runs',
+    async executionEngine => {
+      const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+      const agent = new Agent(config);
+      new Mastra({ agents: { policy: agent }, durable: { executionEngine } });
+
+      for (const method of ['stream', 'generate'] as const) {
+        await expect(agent[method]('hello', { eagerToolExecution: true, stopWhen: () => true })).rejects.toThrow(
+          'eagerToolExecution is not supported by durable agents',
+        );
+      }
+
+      const messages = warn.mock.calls.map(([message]) => String(message));
+      expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(1);
+      expect(
+        messages.filter(message => message.includes('stopWhen') && message.includes('another process')),
+      ).toHaveLength(executionEngine === 'evented' ? 1 : 0);
     },
   );
 
@@ -249,7 +270,9 @@ describe('native Agent stored-registration policy', () => {
       await expect(agent.stream('hello', { requestContext })).rejects.toThrow('Request context validation failed');
       const messages = warn.mock.calls.map(([message]) => String(message));
       expect(messages.filter(message => message.includes('does not support eagerToolExecution'))).toHaveLength(0);
-      expect(messages.filter(message => message.includes('does not support stopWhen'))).toHaveLength(0);
+      expect(messages.filter(message => message.includes('does not carry stopWhen to another process'))).toHaveLength(
+        0,
+      );
     },
   );
 });
@@ -267,7 +290,7 @@ describe('wrappers leave inner durable policy unchanged', () => {
     );
   });
 
-  it.each(['unrelated', 'throwing'] as const)('preserves legacy capability with a %s strategy property', kind => {
+  it('preserves legacy capability for structurally matching objects', () => {
     const inner = new Agent(config);
     const wrapped = createDurableAgent({ agent: inner });
     const legacy = {
@@ -278,12 +301,6 @@ describe('wrappers leave inner durable policy unchanged', () => {
       recover: wrapped.recover.bind(wrapped),
       recoverActiveRuns: wrapped.recoverActiveRuns.bind(wrapped),
     };
-    Object.defineProperty(legacy, '__getExecutionEngineStrategy', {
-      get() {
-        if (kind === 'throwing') throw new Error('Not a core strategy protocol');
-        return () => 'third-party';
-      },
-    });
     expect(isDurableAgentLike(legacy)).toBe(true);
     expect(hasDurableExecution(legacy)).toBe(true);
   });
@@ -319,7 +336,7 @@ describe('wrappers leave inner durable policy unchanged', () => {
               expect(warn).not.toHaveBeenCalled();
               expect(agent.durable).toEqual(before);
               expect(agent.__getExecutionEnginePolicy()).toBe(selected);
-              expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
+              expect(wrapped.__getExecutionEnginePolicy()).toBe(wrapper.engine);
               expect(hasDurableExecution(wrapped)).toBe(true);
               expect(isDurableAgentLike(wrapped)).toBe(true);
               expect(hasDurableExecution(agent)).toBe(selected !== false);
@@ -341,7 +358,7 @@ describe('wrappers leave inner durable policy unchanged', () => {
               );
               if (durable === false) expect(agent.durable).toBe(false);
               else expect(agent.durable).toMatchObject({ shouldCache, shouldPersistSnapshot, cleanupTimeoutMs: 0 });
-              expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
+              expect(wrapped.__getExecutionEnginePolicy()).toBe(wrapper.engine);
               expect(warn).not.toHaveBeenCalled();
               warn.mockRestore();
             },
@@ -400,11 +417,11 @@ describe('wrappers leave inner durable policy unchanged', () => {
   it('retains forced evented strategy before host/storage fallback and isolates wrapped forks', () => {
     const agent = new Agent({ ...config, durable: { executionEngine: 'default' } });
     const wrapped = createEventedAgent({ agent });
-    expect(wrapped.__getExecutionEngineStrategy()).toBe('evented');
+    expect(wrapped.__getExecutionEnginePolicy()).toBe('evented');
     const fork = wrapped.__fork();
     expect(fork).toBeInstanceOf(EventedAgent);
     if (!(fork instanceof EventedAgent)) throw new Error('Expected an evented wrapper fork');
-    expect(fork.__getExecutionEngineStrategy()).toBe('evented');
+    expect(fork.__getExecutionEnginePolicy()).toBe('evented');
     expect(fork.agent.durable).toEqual({ executionEngine: 'default' });
     expect(agent.durable).toEqual({ executionEngine: 'default' });
   });

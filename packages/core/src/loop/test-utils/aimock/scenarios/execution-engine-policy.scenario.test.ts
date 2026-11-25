@@ -15,6 +15,7 @@ import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';
+import { Knowledge } from '../../../../knowledge';
 import { ConsoleLogger } from '../../../../logger';
 import { MockMemory } from '../../../../memory/mock';
 import { Mastra } from '../../../../mastra';
@@ -333,7 +334,7 @@ describe('Configured native engines preserve Agent outputs', () => {
           expect(agent.__getExecutionEnginePolicy()).toBe(
             typeof durable === 'object' ? durable.executionEngine : false,
           );
-          expect(wrapped.__getExecutionEngineStrategy()).toBe(strategy);
+          expect(wrapped.__getExecutionEnginePolicy()).toBe(strategy);
           expect(hasDurableExecution(agent)).toBe(typeof durable === 'object' && durable.executionEngine !== false);
           if (method === 'stream') expect(output).toBeInstanceOf(MastraModelOutput);
           else expect(output).not.toBeInstanceOf(MastraModelOutput);
@@ -461,6 +462,133 @@ describe('Configured native engines preserve Agent outputs', () => {
       }
     },
   );
+});
+
+describe('Wrappers preserve live agent configuration', () => {
+  const getMock = useLoopScenarioAimock();
+
+  for (const wrap of [createDurableAgent, createEventedAgent]) {
+    it.each([false, true])(
+      `${wrap.name}: exposes and updates the configured knowledge (registered key: %s)`,
+      async byKey => {
+        const llm = getMock();
+        const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+        const knowledge = new Knowledge({ id: 'order-knowledge', scopes: {} });
+        const replacement = new Knowledge({ id: 'replacement-knowledge', scopes: {} });
+        const inner = new Agent({
+          id: 'order-agent',
+          name: 'Order agent',
+          instructions: 'Help with orders.',
+          model: openai('gpt-4o'),
+          knowledge: byKey ? 'orders' : knowledge,
+        });
+        const wrapper = wrap({ agent: inner });
+        const mastra = new Mastra({
+          agents: { support: wrapper },
+          knowledge: { orders: knowledge },
+          storage: new InMemoryStore(),
+          logger: false,
+        });
+        try {
+          expect(wrapper.getKnowledge()).toBe(knowledge);
+          inner.__setKnowledge(replacement);
+          expect(wrapper.getKnowledge()).toBe(replacement);
+          wrapper.__setKnowledge(knowledge);
+          expect(inner.getKnowledge()).toBe(knowledge);
+          expect(wrapper.getKnowledge()).toBe(knowledge);
+          expect(inner.__getExecutionEnginePolicy()).toBe(false);
+        } finally {
+          await mastra.shutdown();
+        }
+      },
+    );
+
+    it(`${wrap.name}: executes model-list edits on a fork without changing the original agent`, async () => {
+      const llm = getMock();
+      llm.on({ endpoint: 'chat' }, { content: 'Order checked.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+      const inner = new Agent({
+        id: 'model-list-orders',
+        name: 'Model list orders',
+        instructions: 'Help with orders.',
+        maxRetries: 0,
+        model: [
+          { id: 'primary', model: openai('gpt-4o') },
+          { id: 'fallback', model: openai('gpt-4o-mini') },
+        ],
+      });
+      const wrapper = wrap({ agent: inner });
+      const mastra = new Mastra({ agents: { support: wrapper }, storage: new InMemoryStore(), logger: false });
+      try {
+        const fork = wrapper.__fork();
+        expect(fork.reorderModels(['fallback', 'primary'])).toBe(true);
+        expect(fork.updateModelInModelList({ id: 'primary', enabled: false })).toBe(true);
+        const selection = await fork.__getModelAndModelList();
+        expect(selection.modelList?.map(model => model.id)).toEqual(['fallback', 'primary']);
+        const result = await fork.stream('Check my order.', { closeOnSuspend: true });
+        expect(await result.output.text).toBe('Order checked.');
+        expect(llm.getRequests().map(request => request.body?.model)).toEqual(['gpt-4o-mini']);
+        expect((await wrapper.getModelList())?.map(model => model.id)).toEqual(['primary', 'fallback']);
+        expect(inner.__getExecutionEnginePolicy()).toBe(false);
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+
+    it(`${wrap.name}: runs with post-wrap configuration without changing the inner engine or fork identity`, async () => {
+      const llm = getMock();
+      llm.on({ endpoint: 'chat' }, { content: 'Your order has shipped.' });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+      const inner = new Agent({
+        id: 'live-order-agent',
+        name: 'Order agent',
+        instructions: 'Old order instructions.',
+        model: openai('gpt-4o'),
+        memory: new MockMemory(),
+        maxRetries: 2,
+        maxProcessorRetries: 4,
+      });
+      const wrapper = wrap({ agent: inner });
+      inner.__updateInstructions('Use the updated order policy.');
+      const tools = {
+        lookupOrder: createTool({
+          id: 'lookup-order',
+          description: 'Look up the current order status.',
+          inputSchema: z.object({ orderId: z.string() }),
+          execute: async ({ orderId }) => ({ orderId, status: 'shipped' }),
+        }),
+      };
+      inner.__setTools(tools);
+      const mastra = new Mastra({
+        agents: { support: wrapper },
+        storage: new InMemoryStore(),
+        pubsub: new EventEmitterPubSub(),
+        logger: false,
+      });
+      try {
+        expect(wrapper.maxRetries).toBe(2);
+        expect(wrapper.__getMaxRetriesConfigured()).toBe(true);
+        expect(wrapper.__getMaxProcessorRetries()).toBe(4);
+        expect(wrapper.__hasFixedMemory()).toBe(true);
+        expect(await wrapper.listTools()).toHaveProperty('lookupOrder');
+        const fork = wrapper.__fork();
+        fork.__updateInstructions('Use the fork-specific order policy.');
+        fork.__setTools(tools);
+        const result = await fork.stream('Where is my order?', { closeOnSuspend: true });
+        const output = 'output' in result ? result.output : result;
+        expect(await output.text).toBe('Your order has shipped.');
+        const request = JSON.stringify(llm.getRequests()[0]?.body);
+        expect(request).toContain('Use the fork-specific order policy.');
+        expect(request).toContain('lookupOrder');
+        expect(fork.id).toBe(wrapper.id);
+        expect(fork.name).toBe(wrapper.name);
+        expect(await inner.getInstructions()).toBe('Use the updated order policy.');
+        expect(inner.__getExecutionEnginePolicy()).toBe(false);
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+  }
 });
 
 // The same registration must not disturb any existing engine's model request/output.

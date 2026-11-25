@@ -31,7 +31,7 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
             aria-label={`Show model details for ${agentName}`}
           >
             <span aria-hidden="true">
-              <ProviderLogo providerId={provider} className="dark:invert" />
+              <ProviderLogo providerId={provider} />
             </span>
           </Button>
         }
@@ -47,7 +47,7 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
           <CardTitle id={titleId}>Model</CardTitle>
           <TextAndIcon className="text-foreground">
             <span aria-hidden="true">
-              <ProviderLogo providerId={provider} className="dark:invert" />
+              <ProviderLogo providerId={provider} />
             </span>
             <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
           </TextAndIcon>

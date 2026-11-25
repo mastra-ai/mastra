@@ -309,6 +309,18 @@ function hasDurableExecution(agent: Agent): boolean {
   return typeof native.__hasDurableExecution === 'function' && native.__hasDurableExecution();
 }
 
+function usesDurableEngine(agent: Agent): boolean | undefined {
+  const native = agent as unknown as { __hasDurableExecution?: () => boolean };
+  return typeof native.__hasDurableExecution === 'function' ? native.__hasDurableExecution() : undefined;
+}
+
+/** A forwarding proxy can expose the wrapped agent's hook without implementing it itself. */
+function ownsRunStreamHook(agent: Agent): boolean {
+  const key = '__subscribeToRunStream';
+  const prototype: object | null = Object.getPrototypeOf(agent);
+  return Object.hasOwn(agent, key) || (prototype !== null && key in prototype);
+}
+
 async function validateDurableToolCallAccess({
   mastra,
   agent,
@@ -2321,6 +2333,36 @@ const sendAgentSignalResponseSchema: z.ZodType<{ accepted: true; runId: string; 
 });
 
 /**
+ * A `runId` target sends input to the thread that run is on, not the caller's, so the caller
+ * must be allowed to act on that run under `validateRunOwnership`: with
+ * `mapUserToResourceId`, a resource-scoped caller may only name its own runs and an unscoped
+ * caller needs an FGA provider. A `runId` this process doesn't track can only reach the
+ * caller's own thread, which `threadId` names and the thread check covers. Without a
+ * `threadId`, a scoped caller gets the same denial whether or not the run exists, so the route
+ * doesn't confirm live run ids.
+ */
+async function validateSignalRunOwnership(
+  mastra: any,
+  agent: Agent,
+  runId: string,
+  threadId: string | undefined,
+  requestContext: RequestContext,
+): Promise<void> {
+  const contextResourceId = getContextResourceId(requestContext);
+  // Cores older than `getThreadRunTarget` only expose blocking runs.
+  const runtimeAgent = agent as Partial<Pick<Agent, 'getThreadRunTarget' | 'listActiveThreadRuns'>>;
+  const runTarget =
+    typeof runtimeAgent.getThreadRunTarget === 'function'
+      ? runtimeAgent.getThreadRunTarget(runId)
+      : runtimeAgent.listActiveThreadRuns?.().find(run => run.runId === runId);
+  if (runTarget) {
+    await validateRunOwnership(runTarget, contextResourceId, mastra, requestContext);
+  } else if (contextResourceId && !threadId) {
+    throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+  }
+}
+
+/**
  * Maps a rejected `result.accepted` (signal/message routing) to an HTTP error.
  *
  * `accepted` only rejects on a setup/misconfig failure surfaced before the run
@@ -2422,6 +2464,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       const agentSignal = signal as AgentSignalInput;
 
       if (runId) {
+        await validateSignalRunOwnership(mastra, agent, runId, effectiveThreadId, serverRequestContext);
         const result = await agent.sendSignal(agentSignal, {
           runId,
           ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
@@ -2524,6 +2567,7 @@ async function handleAgentMessageRoute({
   }
 
   if (runId) {
+    await validateSignalRunOwnership(mastra, agent, runId, effectiveThreadId, serverRequestContext);
     const result = await invoke(agent, {
       runId,
       ...(effectiveResourceId ? { resourceId: effectiveResourceId } : {}),
@@ -3204,16 +3248,22 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      // Inngest forwards unknown methods to its wrapped agent, but publishes on its own bus.
+      // Only use the fence when the observed agent implements the hook. Older core wrappers
+      // predate the engine check and are identified by their durable wrapper shape.
+      const fencedAgent =
+        ownsRunStreamHook(agent) && (usesDurableEngine(agent) ?? durableAgent)
+          ? (agent as unknown as DurableAgentLike)
+          : undefined;
       // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
-      // A durable agent subscribes for us so the client never sees what an
-      // execution that lost the run still publishes. Agents without it, such as
-      // those from an older @mastra/core, are observed through the topic directly.
+      // Agents without the hook, such as those from an older @mastra/core, are observed
+      // through the topic directly.
       const subscribe = (onEvent: (event: any) => void, onComplete: () => void): Promise<() => Promise<void>> => {
-        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
-          return durableAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
+        if (typeof fencedAgent?.__subscribeToRunStream === 'function') {
+          return fencedAgent.__subscribeToRunStream(runId, { offset, onComplete }, onEvent);
         }
         if (offset === undefined) {
           return pubsub.subscribeWithReplay(topic, onEvent).then(() => () => pubsub.unsubscribe(topic, onEvent));

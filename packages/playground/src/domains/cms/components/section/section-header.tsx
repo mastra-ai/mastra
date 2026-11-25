@@ -33,7 +33,7 @@ export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
   return (
     <Txt as="h4" variant="caption" tone="faint" className="flex items-center gap-1 uppercase">
       {icon && (
-        <Icon size="xs" className="text-placeholder">
+        <Icon size="xs" className="text-subtle-foreground">
           {icon}
         </Icon>
       )}

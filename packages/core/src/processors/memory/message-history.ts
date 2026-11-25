@@ -310,7 +310,17 @@ export class MessageHistory implements Processor {
     // providerMetadata. Persisting it untransformed would leak the raw
     // payload to storage whenever this save lands after the redacting
     // save-queue flush (last-writer-wins on the message id).
-    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([...newInput, ...newOutput]);
+    // Stored messages OM marked for resave (their token counts changed) go back with them.
+    const resaveIds = new Set(persistenceMessageList.getMessagesToResave().map(message => message.id));
+    const newIds = new Set([...newInput, ...newOutput].map(message => message.id));
+    const resaved = persistenceMessageList.get.all
+      .db()
+      .filter(message => resaveIds.has(message.id) && !newIds.has(message.id));
+    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([
+      ...newInput,
+      ...newOutput,
+      ...resaved,
+    ]);
 
     if (messagesToSave.length === 0) {
       return messageList;

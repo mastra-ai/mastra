@@ -19,10 +19,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "glm5.3-flash": [
+    "glm5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseekv4.1-flash-1017": [
@@ -37,16 +43,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "glm5.3": [
+    "glm5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ]
   }

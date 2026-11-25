@@ -125,7 +125,7 @@ const AgentMetadataReadOnlyModelList = ({
       </Txt>
     )}
     {modelList.map(modelConfig => (
-      <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-sidebar p-2">
+      <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-nested p-2">
         <Txt as="span" variant="caption" tone="ink" className="min-w-0 flex-1 truncate">
           {modelConfig.model.provider}/{modelConfig.model.modelId}
         </Txt>
@@ -153,7 +153,7 @@ const AgentMetadataModelListItem = ({
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
   return (
-    <div className="rounded-lg bg-sidebar state-layer">
+    <div className="rounded-lg bg-nested state-layer">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
           <div {...dragHandleProps} className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing">

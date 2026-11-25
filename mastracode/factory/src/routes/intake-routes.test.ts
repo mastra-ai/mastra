@@ -7,6 +7,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryCardPlacement } from '../board-engine/engine.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -84,6 +86,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   type Client = Awaited<ReturnType<typeof client>>;
 
+  const never = (): never => {
+    throw new Error('A reroute files cards without a transition.');
+  };
+
   /** One replica: the intake route and board routes over HTTP, with its own board cache. */
   function replica(
     domains: Client,
@@ -109,10 +115,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       if (user !== SIGNED_OUT) c.set('factoryAuthUser' as never, { workosId: user, organizationId: orgId } as never);
       await next();
     });
+    const placements: FactoryCardPlacement[] = [];
+    const boardEngine = {
+      requestPlacement: (placement: FactoryCardPlacement) => {
+        placements.push(placement);
+        return new DispatcherBoardEngine({ transitionService: { transition: async () => never() } }).requestPlacement(
+          placement,
+        );
+      },
+    };
     mountApiRoutes(app, [
       ...new IntakeRouteRoutes({
         auth,
         audit,
+        boardEngine,
         projects: domains.projects,
         workItems: domains.workItems,
         storage: domains.boards,
@@ -137,7 +153,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       const text = await response.text();
       return { status: response.status, body: text ? JSON.parse(text) : null };
     }
-    return { send };
+    return { send, placements };
   }
 
   /** Pass `seeded` to keep the default routes every project starts with; tests otherwise start with none. */
@@ -784,6 +800,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(where(waiting.id)).toMatchObject({ board: 'docs', stages: ['inbox'] });
     expect(where(started.id)).toMatchObject({ board: 'work', stages: ['triage'] });
     expect(where(other.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    // The board engine files the card; the route never moves it itself.
+    expect(replicaA.placements).toEqual([
+      expect.objectContaining({ item: expect.objectContaining({ id: waiting.id }), targetBoard: 'docs' }),
+    ]);
     expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
 
     const trail = await a.audit.list({ orgId: scope.orgId, actions: auditActionsInNamespaces(['intake_route']) });

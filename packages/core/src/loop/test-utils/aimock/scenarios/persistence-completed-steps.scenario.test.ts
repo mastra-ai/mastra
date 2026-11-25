@@ -3,13 +3,7 @@ import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: completed steps are historical facts in the memory thread.
@@ -169,7 +163,7 @@ describeForAllEngines('AIMock loop scenario: persistence of completed steps', en
         abortSignal: controller.signal,
         savePerStep,
       });
-      const output = isDurableEngineVariant(engine) ? (result as unknown as { output: typeof result }).output : result;
+      const output = 'output' in result ? (result.output as typeof result) : result;
       let sawToolResult = false;
       let streamedAfterTool = '';
       try {

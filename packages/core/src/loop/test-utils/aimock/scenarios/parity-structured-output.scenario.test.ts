@@ -186,7 +186,15 @@ async function runT47(target: ParityTarget, variant: Variant) {
     },
     input: 'go',
     options,
-    differences: variant === 'warn' ? undefined : { durable: OBJECT_RESULT_ORDER, evented: OBJECT_RESULT_ORDER },
+    differences:
+      variant === 'warn'
+        ? undefined
+        : {
+            durable: OBJECT_RESULT_ORDER,
+            evented: OBJECT_RESULT_ORDER,
+            'native-default': OBJECT_RESULT_ORDER,
+            'native-evented': OBJECT_RESULT_ORDER,
+          },
   });
 
   return { results, memories };
@@ -243,10 +251,22 @@ const PLAIN_CONTRACTS: Record<Variant, Record<string, unknown>> = {
 const STRICT_ERROR_MESSAGE = 'Structured output validation failed';
 
 /** Strict errors must precede finish, even though wrapped engines validate after step-finish. */
+const DURABLE_STRICT_CHUNKS = [
+  'start',
+  'step-start',
+  'text-start',
+  'text-delta',
+  'text-end',
+  'step-finish',
+  'error',
+  'finish',
+];
 const STRICT_CHUNK_TYPES: Record<ParityEngine, string[]> = {
   plain: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'error', 'step-finish', 'finish'],
-  durable: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'error', 'finish'],
-  evented: ['start', 'step-start', 'text-start', 'text-delta', 'text-end', 'step-finish', 'error', 'finish'],
+  durable: DURABLE_STRICT_CHUNKS,
+  evented: DURABLE_STRICT_CHUNKS,
+  'native-default': DURABLE_STRICT_CHUNKS,
+  'native-evented': DURABLE_STRICT_CHUNKS,
 };
 
 const STRICT_USAGE = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };
@@ -304,7 +324,12 @@ async function runStrict(target: ParityTarget) {
       memory: { thread: THREAD, resource: RESOURCE },
       structuredOutput: { schema: FLAT, errorStrategy: 'strict' },
     } as EngineTurnOptions & { structuredOutput: PublicStructuredOutputOptions<any> },
-    differences: { durable: STRICT_ORDER, evented: STRICT_ORDER },
+    differences: {
+      durable: STRICT_ORDER,
+      evented: STRICT_ORDER,
+      'native-default': STRICT_ORDER,
+      'native-evented': STRICT_ORDER,
+    },
   });
 }
 

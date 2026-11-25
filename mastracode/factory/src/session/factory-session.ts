@@ -1,3 +1,5 @@
+import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
+import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
@@ -401,16 +403,12 @@ export interface OrganizationModelSources {
   deploymentModelProviders?: ReadonlySet<string>;
 }
 
-/**
- * A run owned by the Factory reaches models through the organization alone: its stored
- * keys and the providers it configured. With neither it cannot run however often it is
- * retried, so say what to add instead of starting a run that dies on its first model call.
- */
 export async function requireOrganizationModelKey(
   sources: OrganizationModelSources | undefined,
-  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  project: Pick<FactoryProject, 'id' | 'orgId' | 'defaultModelId'>,
 ): Promise<void> {
   if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
+  if (project.defaultModelId?.startsWith(MASTRA_GATEWAY_PREFIX) && MastraCodeGateway.getMastraGatewayApiKey()) return;
   const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
   if (credentials.some(credential => credential.scope === 'org')) return;
   if (sources.customProviders) {

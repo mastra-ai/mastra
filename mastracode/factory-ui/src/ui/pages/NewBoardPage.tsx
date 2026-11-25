@@ -170,8 +170,9 @@ export function NewBoardPage() {
               type="submit"
               variant="primary"
               disabled={pending || name.trim() === '' || invalidKey !== undefined}
+              loading={create.isPending}
             >
-              {create.isPending ? 'Creating…' : 'Create board'}
+              Create board
             </Button>
           </div>
         </form>

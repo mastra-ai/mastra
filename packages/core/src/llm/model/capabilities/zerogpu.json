@@ -23,13 +23,7 @@
     "qwen3.6-35b-a3b"
   ],
   "reasoning": {
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3.6-35b-a3b": [
+    "qwen3-30b-a3b-fp8": [
       {
         "type": "toggle"
       }
@@ -49,15 +43,21 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3-30b-a3b-fp8": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-5.6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3.6-35b-a3b": [
+      {
+        "type": "toggle"
       }
     ]
   }
