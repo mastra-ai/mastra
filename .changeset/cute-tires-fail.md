@@ -2,15 +2,17 @@
 '@mastra/core': minor
 ---
 
-Fixed signals sent to a running evented agent not reaching the run when its steps execute in another process. On storage that keeps agent signals (Postgres, LibSQL and the in-memory store), a message or steer sent while the run is working now reaches the run's next model call, wherever that call runs.
+Fixed signals sent to a running evented agent not reaching the run when its steps execute in another process. Evented agents with memory now keep these signals in the messages table of their memory storage on Postgres, LibSQL and the in-memory store, so a message or steer sent while the run is working reaches the run's next model call. When every process shares the storage, as with Postgres or a LibSQL file or server, that holds when the call runs in another process. On the in-memory store, signals stay in one process. The run needs a thread and a `resourceId`. A signal the run never took becomes the thread's next turn.
+
+A run that does not hold its thread keeps its signals in the process that started it, for example a run with `readOnly` memory started beside an active run, or a run started with `prepare()`.
 
 **`sendSignal` resolves `accepted` after the signal is stored**
 
-For evented agents on storage that keeps agent signals, `accepted` now resolves once the signal is saved, so a resolved `deliver` means the run will see it. `accepted` rejects when the signal cannot be saved.
+For these agents, `accepted` resolves once the signal is saved, so a resolved `deliver` means the run will see it. A signal sent to a running run, or one that joined a run being woken, rejects `accepted` when it cannot be saved. A signal sent while a `stream()` call is starting its run waits in the sending process and is saved for the run when the run registers, before its first model call. If that save fails after `accepted` resolved, the signal stays in the sending process, and the end of that run saves it and starts the thread's next turn with it.
 
-**`cancelQueuedMessages` can finish asynchronously**
+**`cancelQueuedMessages` now returns a promise**
 
-For evented agents on storage that keeps agent signals, including a single process on the in-memory store, the cancellation completes in storage. `cancelledSignalIds` can then be empty, and the cancelled ids arrive on the new `settled` promise. A signal the run already took is not cancelled.
+`Agent.cancelQueuedMessages` now returns a promise, for every agent. It resolves with every cancelled id once the cancellation finished, including signals kept in memory storage. A signal the run already took is not cancelled. Code that reads its result without `await` has to add one.
 
 Before:
 
@@ -21,8 +23,7 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({ resourceId, threadId
 After:
 
 ```ts
-const result = agent.cancelQueuedMessages({ resourceId, threadId, signalIds: [signal.id] });
-const { cancelledSignalIds } = (await result.settled) ?? result;
+const { cancelledSignalIds } = await agent.cancelQueuedMessages({ resourceId, threadId, signalIds: [signal.id] });
 ```
 
-A warning is logged once when the pubsub reaches other processes and the storage does not keep agent signals for every process.
+A warning is logged once when the pubsub reaches other processes and an evented agent's signals stay in one process, with the reason: the run has no memory, thread or `resourceId`, the memory storage does not keep pending signals, or it keeps them in this process only.
