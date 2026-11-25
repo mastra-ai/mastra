@@ -1,18 +1,15 @@
+import { BoardCard } from '@mastra/playground-ui/domains/factory';
+import { HrefLink } from '../../../ui/HrefLink';
 import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
 import { cardThreadSession, itemThreadSession } from '@mastra/factory/work-items/card-context-sessions';
-import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { BOARD_CARD_LAYOUT_CLASS } from '../boardLayout';
 import type { ReactElement } from 'react';
 
-import { Link, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { cardPath, threadPath } from '../../workspaces/services/factoryPaths';
 import type { BoardCardOwner } from '../boardCardState';
-import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
@@ -204,33 +201,18 @@ export function WorkItemCard({
   }
 
   return (
-    <article
-      draggable={dragPayload !== undefined}
-      aria-label={item.title}
-      aria-busy={busy || undefined}
-      data-testid="work-item-card"
-      data-related={relatedItems.length > 0 ? 'true' : undefined}
-      data-highlighted={highlighted || undefined}
-      onDragStart={event => {
-        if (dragPayload) setDragPayload(event, dragPayload);
-      }}
-      className={cn(
-        BOARD_CARD_LAYOUT_CLASS,
-        'group outline-none transition-colors hover:bg-fill-hover',
-        // `content-visibility` clips at the padding box, which the wick's ring has to reach past.
-        wick ? 'border-transparent' : '[content-visibility:auto] [contain-intrinsic-size:auto_9rem]',
-        lockedByYou ? 'cursor-wait opacity-70' : 'cursor-grab active:cursor-grabbing',
-        highlighted && 'border-warning-edge bg-warning-subtle ring-1 ring-warning-edge',
-      )}
+    <BoardCard
+      title={item.title}
+      href={href}
+      linkRef={deepLinkRef}
+      dragPayload={dragPayload}
+      busy={busy}
+      locked={lockedByYou}
+      highlighted={highlighted}
+      related={relatedItems.length > 0}
+      activityStatus={wick}
+      LinkComponent={HrefLink}
     >
-      {wick && <ActivityWick status={wick} />}
-      <Link
-        ref={deepLinkRef}
-        to={href}
-        draggable={false}
-        aria-label={`Open ${item.title}`}
-        className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
-      />
       <WorkItemCardRows
         item={item}
         columnStage={columnStage}
@@ -264,6 +246,6 @@ export function WorkItemCard({
           </DropdownMenu>
         }
       />
-    </article>
+    </BoardCard>
   );
 }

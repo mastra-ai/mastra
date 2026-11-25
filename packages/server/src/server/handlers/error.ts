@@ -87,6 +87,22 @@ function isDurableRunConflictError(error: unknown): error is Error {
   return error instanceof Error && typeof id === 'string' && DURABLE_RUN_CONFLICT_CODES.has(id);
 }
 
+// Storage refused a save of a workflow run because another instance took the run over.
+const RUN_FENCE_CONFLICT_CODE = 'STORAGE_RUN_FENCE_CONFLICT';
+
+/** The run named by the run fence conflict in `error` or its cause chain, if there is one. */
+export function runFenceConflictRunId(error: unknown): string | undefined {
+  let current: unknown = error;
+  for (let depth = 0; depth < 8 && current && typeof current === 'object'; depth++) {
+    const { id, code, details, cause } = current as { id?: unknown; code?: unknown; details?: any; cause?: unknown };
+    if ((id === RUN_FENCE_CONFLICT_CODE || code === RUN_FENCE_CONFLICT_CODE) && typeof details?.runId === 'string') {
+      return details.runId;
+    }
+    current = cause;
+  }
+  return undefined;
+}
+
 const FEEDBACK_REVIEW_STATUS_CONFLICT_CODE = 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT';
 
 function isFeedbackReviewStatusConflictError(error: unknown): error is Error {
@@ -179,6 +195,21 @@ export function handleError(error: unknown, defaultMessage: string): never {
       res,
       message: error.message,
       stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // Another instance took the run over while this request drove it. The storage error names that
+  // instance's claim, which the caller can't use, so it isn't passed on.
+  const fencedRunId = runFenceConflictRunId(error);
+  if (fencedRunId !== undefined) {
+    const message = `Workflow run "${fencedRunId}" is now driven by another instance. Read the run for its current state.`;
+    throw new HTTPException(409, {
+      res: new Response(JSON.stringify({ error: message, code: RUN_FENCE_CONFLICT_CODE }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+      message,
       cause: error,
     });
   }

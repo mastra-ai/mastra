@@ -1,9 +1,10 @@
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import type { IntakeEvaluator, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 import { resolveIntake, resolveIntakePlacement } from './intake-routing.js';
 import type { BoardRegistry } from './registry.js';
-import { effectiveBoard, moveCardToBoard } from './relocate.js';
+import { effectiveBoard } from './relocate.js';
 
 export type RerouteMove = { item: Card; fromBoard: string; toBoard: string; toPhase: string; routeId: string };
 
@@ -70,11 +71,13 @@ export function summarizeReroute(
 
 export async function applyReroute({
   moves,
+  boardEngine,
   workItems,
   registry,
   userId,
 }: {
   moves: readonly RerouteMove[];
+  boardEngine: Pick<FactoryBoardEngine, 'requestPlacement'>;
   workItems: Pick<WorkItemsStorage, 'update' | 'supersedeDecisionsForWorkItem'>;
   registry: BoardRegistry;
   userId: string;
@@ -82,7 +85,7 @@ export async function applyReroute({
   let moved = 0;
   let skipped = 0;
   for (const move of moves) {
-    const result = await moveCardToBoard({
+    const result = await boardEngine.requestPlacement({
       workItems,
       boardRegistry: registry,
       userId,

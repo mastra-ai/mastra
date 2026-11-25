@@ -225,13 +225,15 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval.mock.calls.map(call => call[5])).toEqual(['86400', '300']);
     });
 
-    it('keeps a cache without expiry persistent when a TTL is requested', async () => {
+    it('applies an explicitly requested TTL even when the default expiry is disabled', async () => {
       const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
       mockClient.eval.mockResolvedValue(0);
 
       await noTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
 
-      expect(mockClient.eval.mock.calls[0]![5]).toBe('0');
+      // The caller stated a retention bound for this log; "no default expiry"
+      // must not override it (stream keys used to be written with no TTL at all).
+      expect(mockClient.eval.mock.calls[0]![5]).toBe('86400');
     });
 
     it('falls back to INCR + RPUSH when the client has no eval', async () => {
@@ -248,23 +250,60 @@ describe('RedisServerCache', () => {
 
     it('permanently falls back after a CROSSSLOT rejection (Redis Cluster)', async () => {
       mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
-      mockClient.incr.mockResolvedValue(1);
       mockClient.rpush.mockResolvedValue(1);
+      mockClient.set.mockResolvedValue('OK');
+      mockClient.incr.mockResolvedValue(8);
 
-      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'x' })).toBe(0);
+      const index = await cache.listPushIndexed('events', 'events:counter', { type: 'x' });
+
+      expect(index).toBe(7);
       expect(mockClient.eval).toHaveBeenCalledTimes(1);
-      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":0}');
+      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":7}');
 
-      mockClient.incr.mockResolvedValue(2);
-      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'y' })).toBe(1);
+      mockClient.incr.mockResolvedValue(9);
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'y' })).toBe(8);
       // No second eval attempt once scripting is known to be unusable
       expect(mockClient.eval).toHaveBeenCalledTimes(1);
+    });
+
+    it('seeds an absent counter with SET NX before incrementing, never after', async () => {
+      // Incrementing first and overwriting an absent counter with the seed
+      // afterwards would discard an index a concurrent writer had already
+      // allocated and published; a subscriber past the seed would then drop
+      // that writer's frame as stale. NX lets exactly one writer seed, and
+      // every writer counts on from whichever one won.
+      const { eval: _eval, ...clientWithoutEval } = mockClient;
+      const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
+      const calls: string[] = [];
+      mockClient.set.mockImplementation(((...args: unknown[]) => {
+        calls.push(`set:${args.slice(2).join(',')}`);
+        return Promise.resolve('OK');
+      }) as never);
+      mockClient.incr.mockImplementation((() => {
+        calls.push('incr');
+        return Promise.resolve(5);
+      }) as never);
+      mockClient.rpush.mockResolvedValue(1);
+
+      const before = Date.now();
+      const index = await fallbackCache.listPushIndexed('events', 'events:counter', { type: 'x' }, 60_000);
+
+      expect(index).toBe(4);
+      expect(calls).toEqual(['set:NX,EX,300', 'incr']);
+      // Epoch microseconds, like the Lua script's server-side TIME, so a log
+      // recreated after its predecessor expired cannot reissue a consumed index.
+      const [, seed] = mockClient.set.mock.calls[0] as [string, string];
+      expect(Number(seed)).toBeGreaterThanOrEqual(before * 1000);
+      // The TTL rides on the seeding SET, so a crash between seed and INCR
+      // cannot leave an unexpiring counter.
+      expect(mockClient.set).toHaveBeenCalledWith('mastra:cache:events:counter', seed, 'NX', 'EX', 300);
     });
 
     it('keeps the requested run-log TTL on both keys after a CROSSSLOT fallback', async () => {
       mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
       mockClient.incr.mockResolvedValue(1);
       mockClient.rpush.mockResolvedValue(1);
+      mockClient.set.mockResolvedValue('OK');
 
       await cache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
 
@@ -273,12 +312,23 @@ describe('RedisServerCache', () => {
       expect(mockClient.expire).not.toHaveBeenCalledWith(expect.anything(), 300);
     });
 
-    it('keeps a cache without expiry persistent on the fallback path', async () => {
+    it('applies an explicitly requested TTL on the fallback path when the default expiry is disabled', async () => {
       const { eval: _eval, ...clientWithoutEval } = mockClient;
       const noTtlCache = new RedisServerCache({ client: clientWithoutEval as RedisClient }, { ttlSeconds: 0 });
-      mockClient.incr.mockResolvedValue(1);
+      mockClient.incr.mockResolvedValue(2);
 
       await noTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' }, 24 * 60 * 60 * 1000);
+
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events:counter', 86400);
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 86400);
+    });
+
+    it('keeps a cache without expiry persistent when no TTL is requested on the fallback path', async () => {
+      const { eval: _eval, ...clientWithoutEval } = mockClient;
+      const noTtlCache = new RedisServerCache({ client: clientWithoutEval as RedisClient }, { ttlSeconds: 0 });
+      mockClient.incr.mockResolvedValue(2);
+
+      await noTtlCache.listPushIndexed('events', 'events:counter', { type: 'x' });
 
       expect(mockClient.expire).not.toHaveBeenCalled();
     });

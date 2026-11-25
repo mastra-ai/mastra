@@ -699,12 +699,10 @@ describe('storageVersion per run', () => {
     expect(started).toEqual(['a', 'a', 'b']);
   });
 
-  it.each([
-    { endsFirst: 'hung', storedLast: { n: 22 } },
-    { endsFirst: 'restarted', storedLast: { n: 12 } },
-  ] as const)(
-    'stores the writes of a hung execution and the restart that replaced it as they come ($endsFirst ends first), as v1 does',
-    async ({ endsFirst, storedLast }) => {
+  // The restart claims the run, so storage refuses the hung execution's saves whichever ends first.
+  it.each(['hung', 'restarted'] as const)(
+    "keeps the restart's result over a hung execution it replaced (%s ends first), as v1 does",
+    async endsFirst => {
       async function restartWhileStepHangs(storageVersion: 1 | 2) {
         const gates: (() => void)[] = [];
         let calls = 0;
@@ -746,11 +744,16 @@ describe('storageVersion per run', () => {
           { gate: gates[1]!, done: restarted },
         ];
         if (endsFirst === 'restarted') executions.reverse();
-        const results = [];
+        const results: { status: string; steps: Record<string, any> }[] = [];
+        let hungError: unknown;
         for (const { gate, done } of executions) {
           gate();
           // Read this execution's steps before the other execution writes a newer result.
-          results.push(await withLoadedSteps(await done));
+          try {
+            results.push(await withLoadedSteps(await done));
+          } catch (error) {
+            hungError = error;
+          }
         }
 
         // The snapshot resume, restart and time travel continue from.
@@ -762,6 +765,7 @@ describe('storageVersion per run', () => {
         const outputs = (steps: Record<string, any>) =>
           Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, step.output ?? step]));
         return {
+          hungError: (hungError as { id?: string } | undefined)?.id,
           returned: results.map(result => ({ status: result.status, steps: outputs(result.steps) })),
           stored: { status: stored.status, result: stored.result, steps: outputs(stored.context) },
           read: { status: read.status, result: read.result, steps: outputs(read.steps ?? {}) },
@@ -771,8 +775,10 @@ describe('storageVersion per run', () => {
 
       const v1 = await restartWhileStepHangs(1);
       expect(v1).toMatchObject({
-        stored: { status: 'success', result: storedLast },
-        read: { result: storedLast },
+        hungError: 'STORAGE_RUN_FENCE_CONFLICT',
+        returned: [{ status: 'success' }],
+        stored: { status: 'success', result: { n: 22 } },
+        read: { result: { n: 22 } },
         listed: 1,
       });
       expect(await restartWhileStepHangs(2)).toEqual(v1);

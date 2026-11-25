@@ -246,6 +246,33 @@ function resolveAgentVersionFromQuery(
   return versionId ? { versionId } : status ? { status: status as 'draft' | 'published' } : fallback;
 }
 
+// Same message as the agent API's 400 in @mastra/server (requireEffectiveResourceId).
+const MEMORY_RESOURCE_REQUIRED_MESSAGE =
+  'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.';
+
+/**
+ * The agent resolves the resource ID itself (request context, memory.resource, agent defaults)
+ * and fails with AGENT_MEMORY_MISSING_RESOURCE_ID when memory is on but none resolves. Matching that
+ * error keeps chatRoute's check identical to the agent's. The agent wraps it in AGENT_STREAM_FAILED,
+ * and the original arrives as a deserialized cause carrying `code`, so walk the cause chain.
+ * A missing thread with a resource present is a different problem and is left alone.
+ */
+function isMissingMemoryResourceError(error: unknown): boolean {
+  for (let current = error, depth = 0; current && depth < 5; depth++) {
+    const { id, code, details, cause } = current as {
+      id?: unknown;
+      code?: unknown;
+      details?: Record<string, unknown>;
+      cause?: unknown;
+    };
+    if (id === 'AGENT_MEMORY_MISSING_RESOURCE_ID' || code === 'AGENT_MEMORY_MISSING_RESOURCE_ID') {
+      return !details?.resourceId && !!details?.threadId;
+    }
+    current = cause;
+  }
+  return false;
+}
+
 /** Wraps a UI message stream in the response implementation for its AI SDK version. */
 function createChatUIMessageStreamResponse(stream: ReadableStream<any>, version: 'v5' | 'v6' | 'v7'): Response {
   if (version === 'v7') return createUIMessageStreamResponseV7({ stream });
@@ -701,7 +728,7 @@ export type chatRouteOptions<OUTPUT = undefined, UI_MESSAGE extends SupportedUIM
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
  * @param {boolean} [options.includeSubAgentMetadata=true] - Whether to emit `data-tool-agent` / `data-tool-agent-step` parts with sub-agent progress
  * @param {number} [options.heartbeatMs] - Target interval for periodic SSE comment heartbeats. Already-buffered source events and stream lifecycle signals take priority. Values up to 0 disable heartbeats. `NaN`, positive infinity, and values above 2,147,483,647 throw a `RangeError`.
- * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
+ * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, the client receives only the error `name` and `message` plus safe fields (`code`, `id`, `domain`, `category`, `statusCode`, `isRetryable`, the provider error `type`, `status` and `param`, and a redacted `cause` or nested `error`); all other properties, including `stack`, `url`, and provider request/response payloads, are dropped. Values are not sanitized, so a `message` or nested `error` string can still contain a path or URL. A custom `onError` receives the full error.
  * @param {Function} [options.messageMetadata] - Maps stream parts to metadata attached to AI SDK start and finish message parts. Receives `{ part, traceId }`.
  *
  * @returns A POST route, or `[postRoute, reconnectRoute]` when `resumable: true`
@@ -982,23 +1009,31 @@ export function chatRoute<OUTPUT = undefined, UI_MESSAGE extends SupportedUIMess
         onError,
       };
 
-      const uiMessageStream =
-        version === 'v7'
-          ? await handleChatStream({
-              ...handlerOptions,
-              version: 'v7',
-              messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
-            })
-          : version === 'v6'
+      let uiMessageStream: ReadableStream<any>;
+      try {
+        uiMessageStream =
+          version === 'v7'
             ? await handleChatStream({
                 ...handlerOptions,
-                version: 'v6',
-                messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+                version: 'v7',
+                messageMetadata: messageMetadata as UIMessageStreamOptionsV7<V7UIMessage>['messageMetadata'],
               })
-            : await handleChatStream({
-                ...handlerOptions,
-                messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
-              });
+            : version === 'v6'
+              ? await handleChatStream({
+                  ...handlerOptions,
+                  version: 'v6',
+                  messageMetadata: messageMetadata as UIMessageStreamOptionsV6<V6UIMessage>['messageMetadata'],
+                })
+              : await handleChatStream({
+                  ...handlerOptions,
+                  messageMetadata: messageMetadata as UIMessageStreamOptionsV5<V5UIMessage>['messageMetadata'],
+                });
+      } catch (error) {
+        if (isMissingMemoryResourceError(error)) {
+          return c.json({ error: MEMORY_RESOURCE_REQUIRED_MESSAGE }, 400);
+        }
+        throw error;
+      }
 
       return withSseHeartbeat(createChatUIMessageStreamResponse(uiMessageStream, version), heartbeatMs);
     },

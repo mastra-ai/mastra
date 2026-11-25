@@ -78,6 +78,7 @@ export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Scorer', entityType: ROOT_ENTITY_TYPES.SCORER },
   { label: 'Ingest', entityType: ROOT_ENTITY_TYPES.INGEST },
   { label: 'Classifier', entityType: ROOT_ENTITY_TYPES.CLASSIFIER },
+  { label: 'MCP Server', entityType: ROOT_ENTITY_TYPES.MCP_SERVER },
 ] as const satisfies readonly EntityOptions[];
 
 export type TraceStatusFilter = 'running' | 'success' | 'error';

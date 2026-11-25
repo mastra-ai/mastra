@@ -105,6 +105,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
+import { reportedCost } from '../shared/reported-cost';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
@@ -3197,6 +3198,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       deferredStepFinishChunk.payload?.metadata?.providerMetadata,
                       deferredStepFinishChunk.payload?.metadata?.modelId,
                     ),
+                    // After a fallback or a prepareStep change this is not the run's first model.
+                    // A cached response replays without a model call, so no model served it.
+                    ...(cachedResponse
+                      ? {}
+                      : { servedBy: { provider: currentModel.provider, modelId: currentModel.modelId } }),
+                    reportedCost: reportedCost(deferredStepFinishChunk.payload?.metadata?.providerMetadata),
                   }
                 : undefined,
               state: typedInput.state,

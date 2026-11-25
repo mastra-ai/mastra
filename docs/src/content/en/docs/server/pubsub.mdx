@@ -113,7 +113,7 @@ export const mastra = new Mastra({
 
 ## Evented workflows and agents
 
-Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#execution-engine) and agents created with [`createEventedAgent()`](/docs/harness/durable-agents#fire-and-forget-with-createeventedagent) advance a run one event at a time. Any worker can take the next event, which lets several processes share one run. That only holds when the deployment has both of the following:
+Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#execution-engine) and agents using [evented durable execution](/docs/harness/durable-agents#execution-variants) advance a run one event at a time. Any worker can take the next event, which lets several processes share one run. That only holds when the deployment has both of the following:
 
 - **A PubSub backend that redelivers unacknowledged events**: When a worker stops in the middle of a step, the backend gives the step's event to another worker.
 - **A storage adapter with workflow step guards**: The backend can deliver the same event more than once, and the step guard keeps a later delivery from saving the step's result a second time. A step can still run more than once, so [make steps with side effects idempotent](/docs/workflows/overview#restarting-active-workflow-runs).

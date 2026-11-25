@@ -121,7 +121,7 @@ describe('transformAgent tool-error (issue #23022)', () => {
     expect(wire.data.toolErrors[0].errorText).toBe('Error: weather API 500');
   });
 
-  it('preserves the durable path error shape ({ name, message, stack })', () => {
+  it('keeps name and message from the durable path error shape but drops its stack', () => {
     const bufferedSteps = new Map<string, any>();
     startRun(bufferedSteps, 'run-2');
 
@@ -142,7 +142,7 @@ describe('transformAgent tool-error (issue #23022)', () => {
     const parsed = JSON.parse(errorText);
     expect(parsed.name).toBe('ToolNotFoundError');
     expect(parsed.message).toBe('Tool "nope" not found.');
-    expect(parsed.stack).toBe('ToolNotFoundError: x');
+    expect(parsed).not.toHaveProperty('stack');
   });
 
   it('redacts error fields that could leak the system prompt', () => {

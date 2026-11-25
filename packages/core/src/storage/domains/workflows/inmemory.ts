@@ -385,6 +385,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       ownerId: owner.ownerId,
       leaseExpiresAt: owner.leaseExpiresAt ? new Date(owner.leaseExpiresAt) : null,
       live: !!owner.leaseExpiresAt && owner.leaseExpiresAt.getTime() > Date.now(),
+      updatedAt: new Date(owner.updatedAt),
     };
   }
 
@@ -409,10 +410,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (current?.live && !force) {
       return { acquired: false, record: current };
     }
+    const now = Date.now();
     this.db.runOwners.set(runId, {
-      generation: current ? current.generation + 1 : Math.max(1, Date.now()),
+      generation: current ? current.generation + 1 : Math.max(1, now),
       ownerId,
-      leaseExpiresAt: new Date(Date.now() + leaseMs),
+      leaseExpiresAt: new Date(now + leaseMs),
+      updatedAt: new Date(now),
     });
     return { acquired: true, record: this.ownershipRecord(runId)! };
   }
@@ -422,7 +425,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (!owner?.leaseExpiresAt || !matchesRunFence(owner, fence)) {
       return { renewed: false, record: this.ownershipRecord(fence.runId) };
     }
-    owner.leaseExpiresAt = new Date(Date.now() + leaseMs);
+    const now = Date.now();
+    owner.leaseExpiresAt = new Date(now + leaseMs);
+    owner.updatedAt = new Date(now);
     return { renewed: true, record: this.ownershipRecord(fence.runId)! };
   }
 
@@ -430,6 +435,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const owner = this.db.runOwners.get(fence.runId);
     if (!owner || !matchesRunFence(owner, fence)) return false;
     owner.leaseExpiresAt = null;
+    owner.updatedAt = new Date();
     return true;
   }
 
