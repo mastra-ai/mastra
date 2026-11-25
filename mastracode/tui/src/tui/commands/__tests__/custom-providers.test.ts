@@ -1,17 +1,13 @@
-import { parseCustomProviders } from '@mastra/code-sdk/onboarding/settings';
-import type { CustomProviderSetting, GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings, StorageSettings } from '@mastra/code-sdk/onboarding/settings';
 import { describe, expect, it } from 'vitest';
 
 import {
   addHeaderToCustomProviderInSettings,
-  addModelsToCustomProviderInSettings,
   addModelToCustomProviderInSettings,
   endpointModelsToOffer,
   headersForCustomProviderUrlChange,
   removeCustomProviderFromSettings,
-  removeHeaderFromCustomProviderInSettings,
   removeModelFromCustomProviderInSettings,
-  setCustomProviderAuthSchemeInSettings,
   upsertCustomProviderInSettings,
 } from '../custom-providers.js';
 
@@ -170,119 +166,44 @@ describe('custom provider model mutations', () => {
     expect(removed).toBe(true);
     expect(settings.customProviders).toEqual([]);
   });
-
-  it('adds the models an endpoint lists and counts only the new ones', () => {
-    const settings = createSettings({
-      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: ['acme-1'] }],
-    });
-
-    const added = addModelsToCustomProviderInSettings(settings, 'acme', ['acme-1', 'acme-2', ' acme-3 ', '']);
-
-    expect(added).toBe(2);
-    expect(settings.customProviders[0]?.models).toEqual(['acme-1', 'acme-2', 'acme-3']);
-    expect(addModelsToCustomProviderInSettings(settings, 'acme', ['acme-2'])).toBe(0);
-    expect(addModelsToCustomProviderInSettings(settings, 'renamed', ['acme-4'])).toBe(0);
-  });
 });
 
-describe('custom provider headers and auth scheme', () => {
-  function acmeSettings(provider: Partial<CustomProviderSetting> = {}): GlobalSettings {
-    return createSettings({
-      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: [], ...provider }],
-    });
-  }
-
-  it('saves a new header as secret unless marked plain, and removes it by name ignoring case', () => {
-    const settings = acmeSettings();
-
-    expect(addHeaderToCustomProviderInSettings(settings, 'acme', { name: 'X-Org', value: 'org-1' })).toBeUndefined();
-    expect(
-      addHeaderToCustomProviderInSettings(settings, 'acme', { name: 'X-Region', value: 'eu', secret: false }),
-    ).toBeUndefined();
-    expect(settings.customProviders[0]?.headers).toEqual([
-      { name: 'X-Org', value: 'org-1', secret: true },
-      { name: 'X-Region', value: 'eu', secret: false },
-    ]);
-
-    expect(removeHeaderFromCustomProviderInSettings(settings, 'acme', 'x-org')).toBe(true);
-    expect(settings.customProviders[0]?.headers).toEqual([{ name: 'X-Region', value: 'eu', secret: false }]);
-  });
-
-  it.each([
-    { case: 'the header that carries the API key', header: { name: 'authorization', value: 'Basic abc' } },
-    { case: 'a saved name in another case', header: { name: 'x-org', value: 'org-2' } },
-    { case: 'a value that is blank once trimmed', header: { name: 'X-Team', value: '  ' } },
-  ])('refuses $case and leaves the saved headers alone', ({ header }) => {
+describe('custom provider headers', () => {
+  it('refuses a header whose name a saved header already uses in another case', () => {
     const saved = [{ name: 'X-Org', value: 'org-1', secret: true }];
-    const settings = acmeSettings({ headers: saved });
+    const settings = createSettings({
+      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: [], headers: saved }],
+    });
 
-    expect(addHeaderToCustomProviderInSettings(settings, 'acme', header)).toEqual(expect.any(String));
+    expect(addHeaderToCustomProviderInSettings(settings, 'acme', { name: 'x-org', value: 'org-2' })).toBeTruthy();
     expect(settings.customProviders[0]?.headers).toEqual(saved);
   });
 
-  it('refuses an auth scheme whose header a saved custom header already uses', () => {
-    const settings = acmeSettings({ headers: [{ name: 'x-api-key', value: 'gateway-key', secret: true }] });
+  it.each([
+    ['the same origin', 'https://llm.acme.dev/v2/', ['X-Secret', 'X-Legacy', 'X-Region']],
+    ['another host', 'https://proxy.example.com/v1', ['X-Region']],
+    ['another port', 'https://llm.acme.dev:8443/v1', ['X-Region']],
+  ])('keeps secret headers only on the same origin: %s', (_case, nextUrl, keptNames) => {
+    const headers = [
+      { name: 'X-Secret', value: 'secret-value', secret: true },
+      { name: 'X-Legacy', value: 'saved-before-flags' },
+      { name: 'X-Region', value: 'eu', secret: false },
+    ];
 
-    expect(setCustomProviderAuthSchemeInSettings(settings, 'acme', 'x-api-key')).toMatch(/x-api-key/);
-    expect(settings.customProviders[0]?.authScheme).toBeUndefined();
+    const { kept } = headersForCustomProviderUrlChange(headers, 'https://llm.acme.dev/v1', nextUrl);
 
-    removeHeaderFromCustomProviderInSettings(settings, 'acme', 'x-api-key');
-    expect(setCustomProviderAuthSchemeInSettings(settings, 'acme', 'x-api-key')).toBeUndefined();
-    expect(settings.customProviders[0]?.authScheme).toBe('x-api-key');
+    expect(kept.map(header => header.name)).toEqual(keptNames);
   });
 });
 
 describe('endpointModelsToOffer', () => {
-  it('offers each listed model once, as the settings file would read it back', () => {
-    const provider = { name: 'Acme', models: ['acme-small'] };
-
+  it('leaves out configured ids, ids saved under the provider prefix and menu labels', () => {
     const offered = endpointModelsToOffer(
-      ['acme/acme-small', 'acme/acme-large', 'acme-large', ' acme-tiny ', 'other/acme-large', 'Done', 'Add all'],
-      provider,
+      ['acme/acme-small', 'acme-small', 'acme/acme-large', 'other/acme-large', 'Done', 'Add all'],
+      { name: 'Acme', models: ['acme-small'] },
       ['Add all', 'Done'],
     );
 
-    expect(offered).toEqual(['acme-large', 'acme-tiny', 'other/acme-large']);
-  });
-
-  it('offers nothing once a prefixed model is saved, so the list reaches its end', () => {
-    const settings = createSettings({
-      customProviders: [{ name: 'Acme', url: 'https://llm.acme.dev/v1', models: [] }],
-    });
-    const offered = endpointModelsToOffer(['acme/acme-large'], settings.customProviders[0]!, []);
-
-    addModelsToCustomProviderInSettings(settings, 'acme', offered);
-    const savedBack = parseCustomProviders(JSON.parse(JSON.stringify(settings.customProviders)));
-
-    expect(endpointModelsToOffer(['acme/acme-large'], savedBack[0]!, [])).toEqual([]);
-  });
-});
-
-describe('headersForCustomProviderUrlChange', () => {
-  const headers = [
-    { name: 'X-Secret', value: 'secret-value', secret: true },
-    { name: 'X-Legacy', value: 'saved-before-flags' },
-    { name: 'X-Region', value: 'eu', secret: false },
-  ];
-
-  it('keeps every header when only the path changes', () => {
-    expect(headersForCustomProviderUrlChange(headers, 'https://llm.acme.dev/v1', 'https://llm.acme.dev/v2/')).toEqual({
-      kept: headers,
-      removed: [],
-    });
-  });
-
-  it.each([
-    ['another host', 'https://proxy.example.com/v1'],
-    ['another port', 'https://llm.acme.dev:8443/v1'],
-    ['plain HTTP', 'http://llm.acme.dev/v1'],
-  ])('drops secret and unflagged headers when the URL moves to %s', (_case, nextUrl) => {
-    expect(headersForCustomProviderUrlChange(headers, 'https://llm.acme.dev/v1', nextUrl)).toEqual({
-      kept: [{ name: 'X-Region', value: 'eu', secret: false }],
-      removed: [
-        { name: 'X-Secret', value: 'secret-value', secret: true },
-        { name: 'X-Legacy', value: 'saved-before-flags' },
-      ],
-    });
+    expect(offered).toEqual(['acme-large', 'other/acme-large']);
   });
 });

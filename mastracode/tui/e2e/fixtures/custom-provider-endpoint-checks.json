@@ -1,41 +1,12 @@
 {
   "fixtures": [
     {
-      "match": {
-        "model": "gpt-4o",
-        "userMessage": "Reply with the single word \"yes\".",
-        "endpoint": "chat"
-      },
-      "response": {
-        "content": "yes"
-      }
+      "match": { "model": "gpt-4o", "userMessage": "Reply with the single word \"yes\".", "endpoint": "chat" },
+      "response": { "content": "yes" }
     },
     {
-      "match": {
-        "model": "acme-large",
-        "endpoint": "chat"
-      },
-      "response": {
-        "content": "acme-large is listed but never called"
-      }
-    },
-    {
-      "match": {
-        "model": "acme-medium",
-        "endpoint": "chat"
-      },
-      "response": {
-        "content": "acme-medium is listed but never called"
-      }
-    },
-    {
-      "match": {
-        "model": "acme-small",
-        "endpoint": "chat"
-      },
-      "response": {
-        "content": "acme-small is listed but never called"
-      }
+      "match": { "model": "acme-large", "endpoint": "chat" },
+      "response": { "content": "listed so the endpoint offers it, never called" }
     }
   ]
 }
