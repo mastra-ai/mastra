@@ -12,7 +12,6 @@ import type {
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
-import { createThreadBranchError } from '@mastra/core/memory';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import { validateStorageMetadataFilter } from '@mastra/core/storage';
@@ -36,6 +35,7 @@ import {
   filterThreadsByBranchAccess,
   inspectVisibleMemoryThread,
 } from './thread-branching';
+import { createThreadBranchError } from './thread-branching-compat';
 import { enforceThreadAccess } from './utils';
 
 /**

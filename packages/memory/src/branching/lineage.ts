@@ -1,12 +1,12 @@
+import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { InternalThreadBranchMetadata, MemoryStorage, PublicThreadBranchMetadata } from '@mastra/core/storage';
 import {
   MASTRA_THREAD_BRANCH_METADATA_KEY,
   MASTRA_THREAD_BRANCH_METADATA_KEYS,
   MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
   MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
   createThreadBranchError,
-} from '@mastra/core/memory';
-import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
-import type { InternalThreadBranchMetadata, MemoryStorage, PublicThreadBranchMetadata } from '@mastra/core/storage';
+} from './core-compat';
 
 export const MAX_THREAD_BRANCH_DEPTH = 100;
 
