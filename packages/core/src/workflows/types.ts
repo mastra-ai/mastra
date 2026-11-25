@@ -611,6 +611,16 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * process's saves and its call rejects with `STORAGE_RUN_FENCE_CONFLICT`.
    */
   autoRestartActiveRuns?: boolean;
+  /**
+   * How long, in milliseconds, the storage run lease of this workflow's runs lasts
+   * without a renewal. Only runs that take a lease use it (see
+   * `autoRestartActiveRuns`). The lease is renewed every third of it, so a step
+   * that blocks the event loop for longer than this lets another process take
+   * the run over. A restart over a lease that lapsed doubles it, up to 8 times
+   * this value. Defaults to `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15000).
+   * `createRun({ leaseTtlMs })` overrides it for one run.
+   */
+  leaseTtlMs?: number;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   /**
    * Evaluates `shouldPersistSnapshot` before entering the durable operation so a

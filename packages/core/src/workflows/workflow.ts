@@ -105,8 +105,10 @@ import {
   claimWorkflowRunOwnership,
   coverNestedWorkflowRun,
   isOwnRunFenceConflict,
+  normalizeLeaseTtlMs,
   runFenceConflictOf,
   UNCLAIMED_WORKFLOW_RUN,
+  WORKFLOW_RUN_LEASE_TTL_MS,
 } from './run-ownership';
 import type { WorkflowRunOwnership } from './run-ownership';
 import { createRunStorage } from './run-storage';
@@ -2173,6 +2175,7 @@ export class Workflow<
       onError: options.onError,
       sharePubsub: options.sharePubsub,
       autoRestartActiveRuns: options.autoRestartActiveRuns,
+      leaseTtlMs: options.leaseTtlMs,
     };
 
     if (!executionEngine) {
@@ -3360,6 +3363,8 @@ export class Workflow<
     shouldPersistSnapshot?: WorkflowOptions['shouldPersistSnapshot'];
     /** Overrides the workflow-wide tracing policy for this run only. */
     tracingPolicy?: TracingPolicy;
+    /** Overrides the workflow's `leaseTtlMs` option for this run only. */
+    leaseTtlMs?: number;
     parentWorkflow?: NestedWorkflowParent;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> {
     // Taken before the first await: concurrent parent runs share this workflow
@@ -3433,6 +3438,10 @@ export class Workflow<
         storageVersion,
         recoverable:
           this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+        leaseTtlMs: normalizeLeaseTtlMs(
+          options?.leaseTtlMs,
+          normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
+        ),
       });
 
     this.#runs.set(runIdToUse, run);
@@ -4389,6 +4398,8 @@ export class Run<
 
   #recoverable: boolean;
 
+  #leaseTtlMs: number;
+
   get mastra() {
     return this.#mastra;
   }
@@ -4436,6 +4447,8 @@ export class Run<
     storageVersion?: 1 | 2;
     /** Whether the boot-time recovery sweep may restart this run, so it must hold an ownership lease while it executes. */
     recoverable?: boolean;
+    /** The length of that lease, before any backoff. */
+    leaseTtlMs?: number;
   }) {
     this.workflowId = params.workflowId;
     this.runId = params.runId;
@@ -4469,6 +4482,7 @@ export class Run<
       getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
     });
     this.#recoverable = params.recoverable ?? false;
+    this.#leaseTtlMs = params.leaseTtlMs ?? WORKFLOW_RUN_LEASE_TTL_MS;
   }
 
   public get abortController(): AbortController {
@@ -5587,6 +5601,8 @@ export class Run<
    * parent's lease unless `nested` is set. The sweep lists `running` and `waiting` runs of registered
    * workflows, so a run that persists neither is never swept. Internal workflows aren't registered,
    * so persisting `waiting` alone doesn't make their runs claim.
+   *
+   * A claim without `force` is a restart's, which backs off from a lease that lapsed.
    */
   async #claimOwnership(
     force: boolean,
@@ -5606,6 +5622,8 @@ export class Run<
       runId: this.runId,
       force,
       logger: this.#mastra?.getLogger(),
+      leaseMs: this.#leaseTtlMs,
+      backOff: !force,
     });
   }
 

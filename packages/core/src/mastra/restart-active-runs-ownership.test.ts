@@ -9,6 +9,7 @@ import { noopLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
+import type { WorkflowOptions } from '../workflows';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
 
@@ -17,6 +18,7 @@ function buildReplica(
   onExecute: (runId: string, suspend: (payload: object) => Promise<unknown>) => Promise<void>,
   storageVersion?: 1 | 2,
   options: Partial<ConstructorParameters<typeof Mastra>[0]> = {},
+  workflowOptions: WorkflowOptions = {},
 ) {
   const step = createStep({
     id: 'side-effect',
@@ -31,7 +33,7 @@ function buildReplica(
     id: 'recoverable-wf',
     inputSchema: z.object({}),
     outputSchema: z.object({ done: z.boolean() }),
-    ...(storageVersion ? { options: { storageVersion } } : {}),
+    options: { ...workflowOptions, ...(storageVersion ? { storageVersion } : {}) },
   })
     .then(step)
     .commit();
@@ -475,4 +477,97 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       );
     },
   );
+
+  describe('lease length (COR-1634)', () => {
+    const fakeTimers = () =>
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    // setImmediate stays real, so this lets in-memory storage work settle without moving the fake clock.
+    const until = async (done: () => boolean) => {
+      while (!done()) await new Promise(resolve => setImmediate(resolve));
+    };
+    const leaseOf = async (storage: InMemoryStore, runId: string) => {
+      const record = (await (await storage.getStore('workflows'))!.getRunOwnership({ runId }))!;
+      return { live: record.live, ms: record.leaseExpiresAt!.getTime() - record.updatedAt!.getTime() };
+    };
+
+    it("holds a run's lease for the workflow's leaseTtlMs, or the run's own", async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const replica = buildReplica(
+        storage,
+        () => new Promise<void>(resolve => gates.push(resolve)),
+        undefined,
+        { recovery: { workflows: 'off' } },
+        { leaseTtlMs: 3_000 },
+      );
+      replicas.push(replica);
+
+      const workflowLease = await replica.getWorkflow('workflow').createRun();
+      const ownLease = await replica.getWorkflow('workflow').createRun({ leaseTtlMs: 90_000 });
+      const results = [workflowLease.start({ inputData: {} }), ownLease.start({ inputData: {} })];
+      await until(() => gates.length === 2);
+      expect(await leaseOf(storage, workflowLease.runId)).toEqual({ live: true, ms: 3_000 });
+      expect(await leaseOf(storage, ownLease.runId)).toEqual({ live: true, ms: 90_000 });
+
+      // Renewals keep the length and come often enough for a lease shorter than the default renew interval.
+      for (let second = 0; second < 10; second++) {
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(await leaseOf(storage, workflowLease.runId)).toEqual({ live: true, ms: 3_000 });
+      }
+
+      gates.forEach(open => open());
+      expect((await Promise.all(results)).map(result => result.status)).toEqual(['success', 'success']);
+    });
+
+    it('doubles the lease of a run restarted over a lapsed one, up to 8 times its base, and warns each time', async () => {
+      fakeTimers();
+      const storage = new InMemoryStore();
+      const gates: (() => void)[] = [];
+      const warnings: { message: string; context: unknown }[] = [];
+      const logger = {
+        ...noopLogger,
+        warn: (message: string, context: unknown) => warnings.push({ message, context }),
+      } as IMastraLogger;
+      const replica = () => {
+        const mastra = buildReplica(
+          storage,
+          () => new Promise<void>(resolve => gates.push(resolve)),
+          undefined,
+          { logger, recovery: { workflows: 'off' } },
+          { leaseTtlMs: 1_000 },
+        );
+        replicas.push(mastra);
+        return mastra;
+      };
+
+      const run = await replica().getWorkflow('workflow').createRun();
+      const executions = [run.start({ inputData: {} })];
+      await until(() => gates.length === 1);
+      const lengths = [(await leaseOf(storage, run.runId)).ms];
+      for (let takeover = 1; takeover <= 4; takeover++) {
+        // The owner blocks its event loop past its lease: time passes and none of its timers run.
+        vi.setSystemTime(Date.now() + 10_000);
+        executions.push((await replica().getWorkflow('workflow').createRun({ runId: run.runId })).restart());
+        await until(() => gates.length === takeover + 1);
+        lengths.push((await leaseOf(storage, run.runId)).ms);
+      }
+
+      expect(lengths).toEqual([1_000, 2_000, 4_000, 8_000, 8_000]);
+      expect(warnings.filter(({ message }) => message.startsWith('Took over')).map(({ context }) => context)).toEqual([
+        { runId: run.runId, previousLeaseMs: 1_000, leaseMs: 2_000 },
+        { runId: run.runId, previousLeaseMs: 2_000, leaseMs: 4_000 },
+        { runId: run.runId, previousLeaseMs: 4_000, leaseMs: 8_000 },
+        { runId: run.runId, previousLeaseMs: 8_000, leaseMs: 8_000 },
+      ]);
+
+      // Only the last restart still owns the run.
+      gates.forEach(open => open());
+      const settled = await Promise.allSettled(executions);
+      expect(settled.at(-1)).toMatchObject({ status: 'fulfilled', value: { status: 'success' } });
+      for (const stale of settled.slice(0, -1)) {
+        expect(stale).toMatchObject({ status: 'rejected', reason: { id: 'STORAGE_RUN_FENCE_CONFLICT' } });
+      }
+    });
+  });
 });
