@@ -37,6 +37,8 @@ export interface MessageEntry {
   deliveryStatus?: 'pending' | 'delivered' | 'failed';
   /** Drawn from the server's list of sent messages it has not stored yet; leaves when the list drops it. */
   pendingSend?: true;
+  /** A pending follow-up queued behind the running reply; it does not start a turn until its own run takes it. */
+  queuedFollowUp?: true;
 }
 
 export interface NoticeEntry {
@@ -918,7 +920,7 @@ function storedPendingSends(state: TranscriptState, anchors: Map<MastraDBMessage
     ...state,
     entries: state.entries.map((entry, index) => {
       if (!claimed.has(index) || entry.kind !== 'message' || !entry.pendingSend) return entry;
-      const { pendingSend: _, ...rest } = entry;
+      const { pendingSend: _, queuedFollowUp: __, ...rest } = entry;
       return rest;
     }),
   };
@@ -1241,10 +1243,12 @@ function showPendingUserMessages(
       continue;
     }
     const steer = kind === 'steer';
-    (kind === 'follow-up' ? afterLive : beforeLive).push({
+    const entry = {
       ...toMessageEntry(message, { steer, deliveryStatus: steer ? 'pending' : undefined }),
       pendingSend: true as const,
-    });
+    };
+    if (kind === 'follow-up') afterLive.push({ ...entry, queuedFollowUp: true as const });
+    else beforeLive.push(entry);
   }
   const shown =
     beforeLive.length === 0 && kept.length === state.entries.length
@@ -1406,7 +1410,7 @@ function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.message.role === 'assistant') return i;
-    if (entry.message.role === 'user' && !entry.steer) return -1;
+    if (entry.message.role === 'user' && !entry.steer && !entry.queuedFollowUp) return -1;
   }
   return -1;
 }

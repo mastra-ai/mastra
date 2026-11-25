@@ -2641,6 +2641,32 @@ describe('sent messages the server has not stored yet', () => {
     ]);
   });
 
+  it("attaches the running reply's next tool to that reply, not after a queued follow-up", () => {
+    const reloaded = transcriptReducer(createInitialTranscript({ messages: [stored[0]] }), {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+    const withTool = transcriptReducer(reloaded, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+
+    expect(withTool.entries.map(entry => (entry.kind === 'message' ? entry.message.id : entry.kind))).toEqual([
+      'user-1',
+      'assistant-1',
+      'sig-2',
+    ]);
+    const reply = withTool.entries[1];
+    expect(reply?.kind === 'message' ? Object.keys(reply.runtimeTools ?? {}) : []).toEqual(['tool-1']);
+  });
+
   it('shows two pending messages with the same text when only one was sent from this page', () => {
     const sent = transcriptReducer(createInitialTranscript({ messages: stored }), {
       type: 'localUser',
