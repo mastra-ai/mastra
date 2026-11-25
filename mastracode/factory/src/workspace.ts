@@ -551,10 +551,11 @@ export interface CreateWorkspaceFactoryOptions {
   /** Projects storage used to resolve a session's project environment. */
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /**
-   * Called when a session's sandbox starts from the project's built template,
-   * so the host can rebuild a template that fell behind. Must not throw.
+   * Called when a new sandbox is created from the project's built template
+   * (not when an existing one is reattached), so the host can rebuild a
+   * template that fell behind. Must not throw.
    */
-  onSessionStart?: (project: FactoryProject) => void;
+  onSandboxCreated?: (project: FactoryProject) => void;
   /** The Factory's sandbox environment variables, applied to each session sandbox. */
   sandboxEnvs?: Pick<SandboxEnvStore, 'resolve' | 'revisions'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
@@ -655,7 +656,7 @@ export type { SessionEnvironment, SessionEnvironmentRepo } from './environment/s
  * commits names a template nobody built yet, so every session start after a
  * push would start its own build, outside the debounce. The session's
  * checkout fetches the newest commit either way, and its start asks for a
- * debounced rebuild through `onSessionStart`, so the template keeps up.
+ * debounced rebuild through `onSandboxCreated`, so the template keeps up.
  */
 async function resolveSessionEnvironment(
   projects: Pick<FactoryProjectsStorage, 'get'> | undefined,
@@ -1099,7 +1100,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
             recordSandboxAcquired(args.sandbox, args.outcome);
-            if (templateHeads && sessionEnvironment) options.onSessionStart?.(sessionEnvironment.project);
+            if (args.outcome === 'created' && templateHeads && sessionEnvironment) {
+              options.onSandboxCreated?.(sessionEnvironment.project);
+            }
             try {
               await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
                 await setupHook(args);

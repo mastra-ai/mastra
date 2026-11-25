@@ -150,14 +150,14 @@ export class EnvironmentBuildRunner {
   };
 
   /**
-   * A session whose sandbox starts from the project's built template asks for
-   * a `session` run, so the template follows the default branches without a
+   * A new sandbox created from the project's built template asks for a
+   * `session` run, so the template follows the default branches without a
    * push event. The run builds only when a head moved since the last build and
    * no push or session build started inside the debounce window. The window is
-   * checked here first, so a session start inside it costs nothing. Fire and
+   * checked here first, so a sandbox created inside it costs nothing. Fire and
    * forget: the session never waits on it.
    */
-  readonly onSessionStart = (
+  readonly onSandboxCreated = (
     project: Pick<FactoryProject, 'id' | 'lastPushBuildAt' | 'buildPushDebounceMinutes'>,
   ): void => {
     if (environmentBuildDebounced(project, new Date())) return;

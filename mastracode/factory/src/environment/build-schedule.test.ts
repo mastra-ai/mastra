@@ -221,10 +221,10 @@ describe('factory-environment-build workflow', () => {
     mastra = bootMastra(runner);
     const start = vi.spyOn(runner, 'start');
 
-    runner.onSessionStart({ id: project.id, lastPushBuildAt: new Date(), buildPushDebounceMinutes: 60 });
+    runner.onSandboxCreated({ id: project.id, lastPushBuildAt: new Date(), buildPushDebounceMinutes: 60 });
     expect(start).not.toHaveBeenCalled();
 
-    runner.onSessionStart({ id: project.id, lastPushBuildAt: null, buildPushDebounceMinutes: 60 });
+    runner.onSandboxCreated({ id: project.id, lastPushBuildAt: null, buildPushDebounceMinutes: 60 });
     expect(start).toHaveBeenCalledWith(project.id, 'session');
     await start.mock.results[0]!.value;
   });

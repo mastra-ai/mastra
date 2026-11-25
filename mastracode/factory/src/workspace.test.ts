@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** How the stub reports its start: a fresh sandbox, or a reattach to an existing one. */
+  startOutcome: 'created' as 'created' | 'connected',
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
   physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
@@ -47,7 +49,7 @@ const mocks = vi.hoisted(() => ({
         // the sandbox errored and rejects start().
         sandbox.status = 'running';
         try {
-          await onStart?.({ sandbox, outcome: 'created' });
+          await onStart?.({ sandbox, outcome: mocks.startOutcome });
         } catch (error) {
           sandbox.status = 'error';
           throw error;
@@ -197,6 +199,7 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.startOutcome = 'created';
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
@@ -4136,7 +4139,7 @@ describe('factory environment sandbox context', () => {
     project?: Record<string, unknown>;
     workspaceRegistry?: FactoryWorkspaceRegistry;
     sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
-    onSessionStart?: CreateWorkspaceFactoryOptions['onSessionStart'];
+    onSandboxCreated?: CreateWorkspaceFactoryOptions['onSandboxCreated'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -4174,7 +4177,7 @@ describe('factory environment sandbox context', () => {
       projects: projects as any,
       workspaceRegistry: options.workspaceRegistry,
       ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
-      ...(options.onSessionStart ? { onSessionStart: options.onSessionStart } : {}),
+      ...(options.onSandboxCreated ? { onSandboxCreated: options.onSandboxCreated } : {}),
     });
     return { resolver, projects, sandbox, github };
   }
@@ -4370,11 +4373,11 @@ describe('factory environment sandbox context', () => {
   );
 
   it('leaves the commits to the template when no template was built yet', async () => {
-    const onSessionStart = vi.fn();
+    const onSandboxCreated = vi.fn();
     const { resolver } = environmentFixture({
       links: twoLinks,
       project: { buildOnPushEnabled: true, activeTemplateHeads: null },
-      onSessionStart,
+      onSandboxCreated,
     });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
@@ -4384,25 +4387,42 @@ describe('factory environment sandbox context', () => {
 
     expect('resolveHead' in (mocks.createSandbox.mock.calls[0]![0] as any)).toBe(false);
     // The template's own lookup already starts the first build.
-    expect(onSessionStart).not.toHaveBeenCalled();
+    expect(onSandboxCreated).not.toHaveBeenCalled();
   });
 
-  it('asks for a rebuild when a sandbox starts from the built template, not when a workspace is only resolved', async () => {
-    const onSessionStart = vi.fn();
+  it('asks for a rebuild when a sandbox is created from the built template, not when a workspace is only resolved', async () => {
+    const onSandboxCreated = vi.fn();
     const { resolver } = environmentFixture({
       links: twoLinks,
       project: { activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
-      onSessionStart,
+      onSandboxCreated,
     });
     addProject({ setupCommand: 'pnpm i' });
     addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
 
     const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-    expect(onSessionStart).not.toHaveBeenCalled();
+    expect(onSandboxCreated).not.toHaveBeenCalled();
 
     await workspace!.sandbox!.getInfo!();
-    expect(onSessionStart).toHaveBeenCalledTimes(1);
-    expect(onSessionStart).toHaveBeenCalledWith(expect.objectContaining({ id: 'factory-1' }));
+    expect(onSandboxCreated).toHaveBeenCalledTimes(1);
+    expect(onSandboxCreated).toHaveBeenCalledWith(expect.objectContaining({ id: 'factory-1' }));
+  });
+
+  it('does not ask for a rebuild when a sandbox reattaches instead of booting from the template', async () => {
+    mocks.startOutcome = 'connected';
+    const onSandboxCreated = vi.fn();
+    const { resolver } = environmentFixture({
+      links: twoLinks,
+      project: { activeTemplateHeads: { 'octocat/hello': 'a'.repeat(40) } },
+      onSandboxCreated,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await workspace!.sandbox!.getInfo!();
+
+    expect(onSandboxCreated).not.toHaveBeenCalled();
   });
 
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {

@@ -1986,7 +1986,7 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
-          ...(this.#environmentBuilds ? { onSessionStart: this.#environmentBuilds.onSessionStart } : {}),
+          ...(this.#environmentBuilds ? { onSandboxCreated: this.#environmentBuilds.onSandboxCreated } : {}),
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
