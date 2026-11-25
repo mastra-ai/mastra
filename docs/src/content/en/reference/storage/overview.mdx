@@ -21,7 +21,7 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 
 | Domain | Description |
 | - | - |
-| `memory` | Conversation persistence: messages, threads, and resources (including working memory). |
+| `memory` | Conversation persistence: messages, threads, and resources (including working memory). Some adapters also keep the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of evented agents in the messages table. |
 | `workflows` | Workflow run snapshots used for suspend and resume. |
 | `workflowDefinitions` | Persisted [dynamic workflow](/docs/workflows/dynamic-workflows) definitions (beta). Loaded and live-registered on boot. |
 | `scores` | Evaluation score records from eval runs. |
@@ -44,7 +44,6 @@ Not every storage adapter implements every domain. Composite storage lets you mi
 | `toolProviderConnections` | User-assigned names for tool provider connections. |
 | `notifications` | Notification records. |
 | `threadState` | Durable per-thread state, such as task lists and goals. |
-| `agentSignals` | Signals sent to running [evented agents](/docs/server/pubsub#evented-workflows-and-agents), kept until the run takes them. |
 | `knowledge` | Knowledge graph nodes and records (experimental). |
 
 The schema definitions below cover the built-in database-backed tables documented for `memory`, `workflows`, `scores`, and `observability`. Other domains, and non-database adapters, use implementation-specific storage structures.
@@ -95,6 +94,19 @@ The schema definitions below cover the built-in database-backed tables documente
     type: 'timestamp',
     description: 'Used for thread message ordering',
     constraints: [{ type: 'nullable', value: false }],
+  },
+  {
+    name: 'signalStatus',
+    type: 'text',
+    description:
+      'Postgres and libSQL only. Set while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) that message reads skip. See the [PostgreSQL](/integrations/databases/postgresql#pending-signals) and [libSQL](/integrations/databases/libsql#pending-signals) pages for the migration.',
+    constraints: [{ type: 'nullable', value: true }],
+  },
+  {
+    name: 'signalClaimedBy',
+    type: 'text',
+    description: 'Postgres and libSQL only. ID of the run that took the pending signal.',
+    constraints: [{ type: 'nullable', value: true }],
   },
 ]}
     />
@@ -194,6 +206,12 @@ The schema definitions below cover the built-in database-backed tables documente
     type: 'timestamp',
     description: 'Used for thread ordering history',
     constraints: [{ type: 'nullable', value: false }],
+  },
+  {
+    name: 'signalRunId',
+    type: 'text',
+    description: "Postgres and libSQL only. ID of the run that takes the thread's pending signals.",
+    constraints: [{ type: 'nullable', value: true }],
   },
 ]}
     />

@@ -40,7 +40,7 @@ Mastra storage is organized into **domains**. A domain owns one type of runtime 
 
 | Domain | What it stores |
 | - | - |
-| `memory` | Threads, messages, resources, working memory, and other agent memory state. |
+| `memory` | Threads, messages, resources, working memory, and other agent memory state, including the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of evented agents. |
 | `workflows` | Workflow snapshots used to suspend and resume runs. |
 | `observability` | Traces, spans, metrics, logs, and feedback. |
 | `scores` | Eval score records. |
@@ -49,7 +49,6 @@ Mastra storage is organized into **domains**. A domain owns one type of runtime 
 | `backgroundTasks` | Background task records and execution state. |
 | `schedules` | Schedule definitions and trigger history. |
 | `threadState` | Durable task, goal, and thread state. |
-| `agentSignals` | Signals sent to running evented agents, until the run takes them. |
 
 Adapter support varies by domain. For the full domain list and built-in schemas, see the [storage overview reference](/reference/storage/overview).
 

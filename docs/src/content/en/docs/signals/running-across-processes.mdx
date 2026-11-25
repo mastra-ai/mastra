@@ -57,6 +57,8 @@ When a signal arrives, the runtime looks for the thread's current owner. If one 
 
 If no owner is advertised, the receiving process tries to claim the thread. Winning means this process runs the agent. Losing means another process claimed it first, so this process forwards the signal and `accepted` resolves to `deliver` rather than `wake`. [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) documents the accepted result.
 
+When an evented agent's run keeps its signals in [storage that shares pending signals across processes](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), a process that doesn't hold the run can write a signal to that storage itself. It does so only when the agent's `memory` is a `Memory` instance and the process was already following the thread's events when the run started. Otherwise, and always when `memory` is a function, it forwards the signal, and the process that holds the run stores it when the event arrives.
+
 Set `ifIdle.requireClaimedOwner: true` when an idle wake must not start a run on an arbitrary instance. The wake only reaches an advertised owner, and `accepted` rejects if none responds within the discovery window.
 
 ## Delivery guarantees and duplicates
@@ -70,7 +72,7 @@ This doesn't guarantee exactly-once delivery for every event. If your handlers w
 What survives a crash depends on where the data lives:
 
 - Runtime queues live in process memory. A crash before the run consumes them loses those signals.
-- Evented agents on [storage that shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents) store the signals sent to an active run until the run takes them, so those signals don't depend on the process that accepted them. Input from `queueMessage()` and `queueSignal()` still lives in process memory.
+- Evented agents on [storage that shares pending signals across processes](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) keep the signals sent to an active run in their memory storage until the run takes them. Once stored, a signal doesn't depend on the process that accepted it. Until then it depends on one process: a forwarded signal on the process that holds the run, and a signal sent while a `stream()` call is starting its run on the sending process. Input from `queueMessage()` and `queueSignal()` lives in process memory.
 - Signals sent with `persist` behavior are written to memory storage and survive a restart when that storage is shared.
 - [State signals](/docs/signals/state-signals) and their tracking are stored on the thread and survive a restart with shared storage.
 - [Notifications](/docs/signals/notifications) are durable records in notification storage. Their dispatcher can retry delivery after a restart.
