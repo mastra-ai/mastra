@@ -160,6 +160,7 @@ import type {
   SwapBufferedReflectionToActiveInput,
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
+  PendingSignalEnqueueResult,
   PruneOptions,
   PruneResult,
   RetentionTablesDescriptor,
@@ -272,6 +273,7 @@ export class MemoryPG extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   override readonly supportsAtomicWorkingMemoryMerge = true;
+  override readonly supportsPendingSignals = true;
   readonly supportsObservationalMemoryHistorySearch = true;
 
   /**
@@ -2319,6 +2321,240 @@ export class MemoryPG extends MemoryStorage {
         },
         error,
       );
+    }
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  //
+  // Lock order: a transaction that locks a thread row and message rows locks
+  // the thread row first, and statements that lock several message rows take
+  // them in MESSAGE_LOCK_ORDER. Sends with a run and claims hold a shared lock
+  // on the thread row while they check its signal run and write; a close holds
+  // it exclusively from before it reads any message row until it has cleared
+  // the signal run. Every transaction here starts at READ COMMITTED, so each
+  // statement after a lock wait sees what committed during the wait.
+  // ============================================
+
+  #signalError(operation: string, error: unknown, details: Record<string, string>): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('PG', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details,
+      },
+      error,
+    );
+  }
+
+  /** Signal rows in the shape message reads return, ordered by createdAt, then id in code unit order. */
+  #toSignalMessages(rows: MessageRowFromDB[]): MastraDBMessage[] {
+    return rows
+      .map(row => this.parseRow(row))
+      .sort((a, b) => {
+        const byCreatedAt = a.createdAt.getTime() - b.createdAt.getTime();
+        if (byCreatedAt !== 0) return byCreatedAt;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+  }
+
+  async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    try {
+      await this.#db.client.tx(async t => {
+        await t.none(`UPDATE ${threadsTable} SET "signalRunId" = $2 WHERE id = $1`, [threadId, runId]);
+      }, READ_COMMITTED);
+    } catch (error) {
+      throw this.#signalError('SET_SIGNAL_RUN', error, { threadId, runId });
+    }
+  }
+
+  async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    try {
+      const row = await this.#db.client.oneOrNone<{ signalRunId: string | null }>(
+        `SELECT "signalRunId" FROM ${threadsTable} WHERE id = $1`,
+        [threadId],
+      );
+      return row?.signalRunId ?? null;
+    } catch (error) {
+      throw this.#signalError('GET_SIGNAL_RUN', error, { threadId });
+    }
+  }
+
+  async enqueuePendingSignal({
+    message,
+    toRunId,
+  }: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<PendingSignalEnqueueResult> {
+    const { threadId, resourceId } = message;
+    if (!threadId) throw new Error('Thread ID is required');
+    if (!resourceId) throw new Error('Resource ID is required');
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    const createdAt = toUtcISOString(message.createdAt || new Date());
+    const insert = (q: Queryable) =>
+      q.none(
+        `INSERT INTO ${messagesTable} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId", "signalStatus")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          message.id,
+          threadId,
+          typeof message.content === 'string' ? message.content : JSON.stringify(message.content),
+          createdAt,
+          createdAt,
+          message.role,
+          message.type || 'v2',
+          resourceId,
+        ],
+      );
+
+    try {
+      if (toRunId === undefined) {
+        await insert(this.#db.client);
+        return 'accepted';
+      }
+      return await this.#db.client.tx(async t => {
+        // Shared, so sends to one run do not wait for each other, while a close waits for this send.
+        const thread = await t.oneOrNone<{ resourceId: string; signalRunId: string | null }>(
+          `SELECT "resourceId", "signalRunId" FROM ${threadsTable} WHERE id = $1 FOR SHARE`,
+          [threadId],
+        );
+        if (!thread || thread.resourceId !== resourceId) return 'thread-not-found';
+        if (thread.signalRunId !== toRunId) return 'run-closed';
+        await insert(t);
+        return 'accepted';
+      }, READ_COMMITTED);
+    } catch (error) {
+      throw this.#signalError('ENQUEUE_PENDING_SIGNAL', error, { threadId, messageId: message.id });
+    }
+  }
+
+  async claimPendingSignals({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    try {
+      const rows = await this.#db.client.tx(async t => {
+        const thread = await t.oneOrNone<{ signalRunId: string | null }>(
+          `SELECT "signalRunId" FROM ${threadsTable} WHERE id = $1 FOR SHARE`,
+          [threadId],
+        );
+        if (thread?.signalRunId !== runId) return [];
+        await t.none(
+          `WITH locked AS (
+             SELECT id FROM ${messagesTable}
+             WHERE thread_id = $1 AND "signalStatus" = 'pending'
+             ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           UPDATE ${messagesTable} m SET "signalStatus" = 'claimed', "signalClaimedBy" = $2
+           FROM locked WHERE m.id = locked.id`,
+          [threadId, runId],
+        );
+        return t.manyOrNone<MessageRowFromDB>(
+          `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
+           FROM ${messagesTable}
+           WHERE thread_id = $1 AND "signalClaimedBy" = $2 AND id <> ALL($3::text[])`,
+          [threadId, runId, consumedIds],
+        );
+      }, READ_COMMITTED);
+      return this.#toSignalMessages(rows);
+    } catch (error) {
+      throw this.#signalError('CLAIM_PENDING_SIGNALS', error, { threadId, runId });
+    }
+  }
+
+  async closeSignalRun({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<void> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    try {
+      await this.#db.client.tx(async t => {
+        // Before any message row: a claim holding the shared lock commits first and its rows are
+        // settled below, and a claim that comes later finds the signal run cleared.
+        await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR UPDATE`, [threadId]);
+        await t.none(
+          `WITH locked AS (
+             SELECT id, ("signalStatus" IS NOT DISTINCT FROM 'claimed' AND id = ANY($3::text[])) AS consumed
+             FROM ${messagesTable}
+             WHERE thread_id = $1 AND "signalClaimedBy" = $2
+             ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           ), deleted AS (
+             DELETE FROM ${messagesTable} m USING locked WHERE m.id = locked.id AND locked.consumed
+           )
+           UPDATE ${messagesTable} m
+           SET "signalStatus" = CASE WHEN m."signalStatus" = 'claimed' THEN 'pending' ELSE m."signalStatus" END,
+               "signalClaimedBy" = NULL
+           FROM locked WHERE m.id = locked.id AND NOT locked.consumed`,
+          [threadId, runId, consumedIds],
+        );
+        await t.none(`UPDATE ${threadsTable} SET "signalRunId" = NULL WHERE id = $1 AND "signalRunId" = $2`, [
+          threadId,
+          runId,
+        ]);
+      }, READ_COMMITTED);
+    } catch (error) {
+      throw this.#signalError('CLOSE_SIGNAL_RUN', error, { threadId, runId });
+    }
+  }
+
+  async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    try {
+      const deleted = await this.#db.client.tx(async t => {
+        // updateThreadResourceId updates the thread's rows in no particular order under its thread
+        // lock; without waiting for that lock, this delete could take rows in the opposite order.
+        await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR SHARE`, [threadId]);
+        return t.manyOrNone<{ id: string }>(
+          `WITH locked AS (
+             SELECT id FROM ${messagesTable}
+             WHERE thread_id = $1 AND "signalStatus" = 'pending' AND id = ANY($2::text[])
+             ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
+           )
+           DELETE FROM ${messagesTable} m USING locked WHERE m.id = locked.id RETURNING m.id`,
+          [threadId, ids],
+        );
+      }, READ_COMMITTED);
+      const deletedIds = new Set(deleted.map(row => row.id));
+      // In the order given; an id named twice was deleted once.
+      return ids.filter(id => deletedIds.delete(id));
+    } catch (error) {
+      throw this.#signalError('CANCEL_PENDING_SIGNALS', error, { threadId });
+    }
+  }
+
+  async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
+    try {
+      // The primary, not a replica: a list after a close or a send must see its writes.
+      const rows = await this.#db.client.manyOrNone<MessageRowFromDB>(
+        `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"
+         FROM ${messagesTable} WHERE thread_id = $1 AND "signalStatus" = 'pending'`,
+        [threadId],
+      );
+      return this.#toSignalMessages(rows);
+    } catch (error) {
+      throw this.#signalError('LIST_PENDING_SIGNALS', error, { threadId });
     }
   }
 
