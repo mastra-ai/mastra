@@ -110,3 +110,42 @@ describe('phaseRunDecision', () => {
     expect(phaseRunDecision(board, 'missing', entering('queued'))).toBeUndefined();
   });
 });
+
+describe('a phase run by a host agent', () => {
+  const hosted = defineBoard({
+    id: 'bugs',
+    name: 'Bugs',
+    initialPhase: 'backlog',
+    phases: {
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['doing'] },
+      doing: {
+        name: 'Doing',
+        kind: 'working',
+        runner: { context: 'work', agentId: '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f', instructions: 'Fix it.' },
+        nextPhases: ['done'],
+      },
+      done: { name: 'Done', kind: 'terminal' },
+    },
+  });
+
+  it('queues a prompt run on arrival without a skill, and starts it on its own', () => {
+    expect(phaseRunDecision(hosted, 'doing', entering('backlog'))).toMatchObject({
+      type: 'invokeSkill',
+      role: 'work',
+      prompt: expect.stringContaining('Fix it.'),
+      startsAfterOwnMove: true,
+    });
+    expect(hosted.startsAutomatically('doing')).toBe(true);
+  });
+
+  it('runs again when the card is re-entered, replacing the run in flight', () => {
+    expect(phaseRunDecision(hosted, 'doing', entering('doing'), { reenter: true })).toMatchObject({
+      cancelInFlight: true,
+    });
+  });
+
+  it('leaves a code-agent phase without a skill queuing nothing', () => {
+    expect(phaseRunDecision(board, 'seat', entering('queued'))).toBeUndefined();
+    expect(board.startsAutomatically('seat')).toBe(false);
+  });
+});

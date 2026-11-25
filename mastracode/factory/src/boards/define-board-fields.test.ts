@@ -175,9 +175,9 @@ describe('defineBoard phase fields', () => {
     expect(() =>
       release({
         backlog: { name: 'Backlog', kind: 'resting' },
-        build: { name: 'Build', kind: 'working', runner: { agentId: 'other-agent' } },
+        build: { name: 'Build', kind: 'working', runner: { agentId: 'bad agent!' } },
       }),
-    ).toThrow(/names unknown agent "other-agent"; Factory runs "code-agent"/);
+    ).toThrow(/runner.agentId must be an agent id/);
   });
 
   it('keeps working-phase fields off resting and terminal phases', () => {
@@ -394,6 +394,17 @@ describe('defineBoard phase fields', () => {
         build: { name: 'Build', kind: 'working', runner: { goal: { objective: 'Ship.' } } },
       }),
     ).toThrow('Phase "build" runner.goal needs runner.skill');
+    // A host's own agent pursues the goal in its prompt run, so it needs no skill.
+    const hosted = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: {
+        name: 'Build',
+        kind: 'working',
+        runner: { agentId: 'managed-1', instructions: 'Fix it.', goal: { objective: 'Ship.' } },
+      },
+    });
+    expect(hosted.phases.build.runner?.goal).toEqual({ objective: 'Ship.' });
+    expect(hosted.phases.build.runner?.instructions).toBe('Fix it.');
   });
 
   it('starts the runner skill with its instructions for every source, ignoring a declared onEnter', () => {

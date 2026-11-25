@@ -292,10 +292,13 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
   }
 
   async create({
+    id,
     orgId,
     userId,
     input,
   }: {
+    /** A host that keys the project by its own id passes it; otherwise the database assigns one. */
+    id?: string;
     orgId: string;
     userId: string;
     input: CreateFactoryProjectInput;
@@ -304,6 +307,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     // A new project places its items by intake order; one created before that keeps the route list.
     const row = await this.storage.withTransaction(async ops => {
       const inserted = await ops.insertOne<FactoryProjectDbRow>('factory_projects', {
+        ...(id ? { id } : {}),
         org_id: orgId,
         created_by: userId,
         name: input.name,

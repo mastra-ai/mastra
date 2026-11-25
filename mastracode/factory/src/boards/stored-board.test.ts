@@ -126,6 +126,25 @@ describe('boards authored through the API', () => {
     expect(board.initialPhase).toBe('inbox');
   });
 
+  it('keep the agent a phase names through save and reload, and leave code-agent phases unchanged', () => {
+    const agentId = '3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f';
+    const input = { key: 'bugs', name: 'Bugs', phases: phases({ runner: { context: 'work', agentId } }) };
+    const parsed = storedBoardInputSchema.parse(input);
+    const board = compileStoredBoard(parsed);
+
+    expect(board.phases.doing!.runner?.agentId).toBe(agentId);
+    expect(boardDefinitionOf(board).phases.find(phase => phase.key === 'doing')?.runner).toEqual({
+      context: 'work',
+      agentId,
+    });
+    expect(
+      boardDefinitionOf(compileStoredBoard(storedBoardInputSchema.parse({ ...input, phases: phases() }))).phases[1]
+        ?.runner,
+    ).toEqual({
+      context: 'work',
+    });
+  });
+
   it('accept a valid board', () => {
     const input = { key: 'bugs', name: 'Bugs', description: null, phases: phases({ nextPhases: null }) };
     expect(storedBoardInputSchema.parse(input)).toEqual(input);
@@ -145,7 +164,7 @@ describe('boards authored through the API', () => {
       storedBoardInputSchema.safeParse({
         key: 'bugs',
         name: 'Bugs',
-        phases: phases({ runner: { agentId: 'x' } as never }),
+        phases: phases({ runner: { model: 'x' } as never }),
       }).success,
     ).toBe(false);
   });

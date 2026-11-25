@@ -25,6 +25,16 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.get({ orgId: 'other-org', id: project.id })).toBeNull();
   });
 
+  it('creates a project under the id its host passes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const id = '1feb8d53-8d69-4cc0-b866-a73b60cb415b';
+
+    const project = await seed.projects.create({ id, orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+
+    expect(project.id).toBe(id);
+    expect(await seed.projects.get({ orgId: 'org-1', id })).toEqual(project);
+  });
+
   it('stores an explicit model scope at creation', async () => {
     const seed = await createFactoryStorageForTests();
     const factory = await seed.projects.create({

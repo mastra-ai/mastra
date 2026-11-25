@@ -2,12 +2,19 @@ import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { BoardDefinitionError, compileBoardDefinition, declarationOf, FACTORY_PHASE_TOOLS } from './define-board.js';
+import {
+  BoardDefinitionError,
+  compileBoardDefinition,
+  declarationOf,
+  FACTORY_AGENT_ID,
+  FACTORY_PHASE_TOOLS,
+} from './define-board.js';
 import type { AnyBoardConfig, BoardPhase, BoardPhaseDefinition } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
 
 const storedRunnerSchema = z
   .object({
+    agentId: z.string().optional(),
     skill: z.string().optional(),
     context: z.string().optional(),
     instructions: z.string().optional(),
@@ -341,6 +348,8 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
     ...(phase.kind === 'working'
       ? {
           runner: withoutUndefined({
+            // The default agent stays implicit, so boards that never named one read back unchanged.
+            agentId: phase.runner.agentId === FACTORY_AGENT_ID ? undefined : phase.runner.agentId,
             skill: phase.runner.skill,
             context: phase.runner.context,
             instructions: phase.runner.instructions,

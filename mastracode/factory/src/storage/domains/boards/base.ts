@@ -33,8 +33,10 @@ export interface StoredBoardScope {
 
 export type StoredPhaseKind = 'resting' | 'working' | 'terminal';
 
-/** Who runs a working phase. Factory runs every phase with its code agent. */
+/** Who runs a working phase. */
 export interface StoredPhaseRunner {
+  /** The agent that runs the phase; omitted means Factory's code agent. */
+  agentId?: string;
   skill?: string;
   context?: string;
   instructions?: string;
