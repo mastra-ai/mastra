@@ -748,4 +748,51 @@ describe('workspace_lsp_inspect', () => {
       });
     });
   });
+
+  it('reads a file on a mounted local filesystem through its mount path', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.ts'), 'const foo = 1\nconst bar = foo');
+    await fs.writeFile(path.join(tempDir, 'other.ts'), 'export const foo = 2');
+    const mounted = new Workspace({
+      id: 'mounted-ws',
+      name: 'Mounted',
+      mounts: { '/proj': new LocalFilesystem({ basePath: tempDir }) },
+    });
+    const diskPath = path.join(tempDir, 'test.ts');
+    const mockClient = {
+      queryHover: vi.fn().mockResolvedValue(null),
+      queryDefinition: vi.fn().mockResolvedValue([
+        { uri: `file://${diskPath}`, range: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } } },
+        {
+          uri: `file://${path.join(tempDir, 'other.ts')}`,
+          range: { start: { line: 0, character: 13 }, end: { line: 0, character: 16 } },
+        },
+      ]),
+      queryImplementation: vi.fn().mockResolvedValue([]),
+      notifyClose: vi.fn(),
+      serverName: 'typescript',
+    };
+    const mockLsp = {
+      root: tempDir,
+      prepareQuery: vi.fn().mockResolvedValue({
+        client: mockClient,
+        uri: `file://${diskPath}`,
+        languageId: 'typescript',
+        serverName: 'typescript',
+        release: vi.fn(),
+      }),
+    };
+    Object.defineProperty(mounted, 'lsp', { get: () => mockLsp, configurable: true });
+    const mountedTools = await createWorkspaceTools(mounted);
+
+    const result = await mountedTools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+      { path: '/proj/test.ts', line: 2, match: 'const bar = <<<foo' },
+      { workspace: mounted },
+    );
+
+    expect(mockLsp.prepareQuery).toHaveBeenCalledWith(diskPath, 'const foo = 1\nconst bar = foo');
+    expect(result.definition).toEqual([
+      expect.objectContaining({ preview: 'const foo = 1' }),
+      expect.objectContaining({ preview: 'export const foo = 2' }),
+    ]);
+  });
 });
