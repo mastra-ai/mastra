@@ -112,8 +112,8 @@ async function runCase({
       // Another connection to the same database, so the run's process learns of the close only from the store.
       const closer = new LibSQLStore({ id: 'signal-active-run-closer', url: env.dbUrl });
       try {
-        const signals = await closer.getStore('agentSignals');
-        await signals!.closeRun({ threadKey: `${scope.resourceId}\u0000${scope.threadId}`, runId, consumedIds: [] });
+        const memoryStore = await closer.getStore('memory');
+        await memoryStore!.closeSignalRun({ threadId: scope.threadId, runId, consumedIds: [] });
       } finally {
         await closer.close();
       }
