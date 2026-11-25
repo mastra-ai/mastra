@@ -7,7 +7,7 @@ import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
-import { boardConfigPath, newBoardPath } from '../../boardConfig/boardConfigPaths';
+import { boardConfigPath, boardIntakePath, newBoardPath } from '../../boardConfig/boardConfigPaths';
 import { boardPath, orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
@@ -30,7 +30,7 @@ export function FactorySection() {
     return pathname === path || pathname.startsWith(`${path}/`);
   };
   const boards = catalog.data ? orderedBoards(catalog.data) : [];
-  // Settings open on the board in view, or the first board from anywhere else.
+  // Settings open on the intake page, which covers all boards, beside the board in view or the first board from anywhere else.
   const configured =
     boards.find(board => {
       const path = boardPath(factoryId, board.id);
@@ -64,7 +64,7 @@ export function FactorySection() {
               aria-label="Board settings"
               tooltip="Board settings"
               render={
-                <NavLink to={boardConfigPath(factoryId, configured.id)} onClick={() => overlays.close('sidebar')} />
+                <NavLink to={boardIntakePath(factoryId, configured.id)} onClick={() => overlays.close('sidebar')} />
               }
             >
               <IconSettingsSliderHor aria-hidden />
