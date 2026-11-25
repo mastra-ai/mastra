@@ -338,14 +338,27 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
     .then(llmExecutionStep)
     // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+        const toolCalls = llmOutput.toolCalls ?? [];
+        const state = getInitData() as IterationState | undefined;
+        // More than one of these calls can suspend at once, on workers that share no memory, so
+        // none of them reports the step's model usage. The last execution of the run does.
+        const sideBySide =
+          toolCalls.length > 1 &&
+          resolveDurableToolCallConcurrency({
+            options: state?.options,
+            toolsMetadata: state?.toolsMetadata,
+            toolCalls,
+          }) > 1;
+        return toolCalls.map(toolCall => ({
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
           timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
+          response: llmOutput.response,
+          ...(sideBySide ? { sideBySide } : {}),
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -474,6 +487,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               outputTokens: 0,
               totalTokens: 0,
             },
+            generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             lastStepResult: undefined,
             agentSpanData,
             modelSpanData,
@@ -879,7 +893,11 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 args: tc.args,
               })),
             );
-            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            const { usageIncomplete, usage } = generationUsage(
+              state.accumulatedUsage,
+              state.accumulatedSteps,
+              state.generationReportedUsage,
+            );
             // The span was opened for the run's first model, maybe on another worker. Name the
             // model that answered, so the generation and its cost are not booked on a model that failed.
             const servedBy = state.lastResponse?.servedBy;
@@ -898,7 +916,9 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               },
               usage,
               // Cost the provider reported itself is used in place of an estimate.
-              stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
+              stepProviderMetadata: state.reportedCosts
+                ?.slice(state.generationReportedSteps ?? 0)
+                .map(cost => cost ?? undefined),
             });
           }
 

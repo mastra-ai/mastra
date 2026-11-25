@@ -13418,6 +13418,7 @@ export class Agent<
     abortController,
     executionFence,
     originalSpansEnded,
+    openStepsOf,
     latestMessageListState,
   }: {
     runId: string;
@@ -13425,6 +13426,8 @@ export class Agent<
     abortController: AbortController;
     executionFence: ExecutionFence;
     originalSpansEnded: boolean;
+    /** The generations whose MODEL_STEP the crash left open, when the snapshot names them. */
+    openStepsOf?: string[];
     /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
     latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
@@ -13661,7 +13664,11 @@ export class Agent<
         ? {
             ...openedSegment(recoverAgentSpan, recoverModelSpan),
             adoptsOpenSteps: true,
-            ...(originalSpansEnded && origModelSpanData?.id ? { endedStepsOf: origModelSpanData.id } : {}),
+            ...(openStepsOf
+              ? { openStepsOf }
+              : originalSpansEnded && origModelSpanData?.id
+                ? { endedStepsOf: origModelSpanData.id }
+                : {}),
           }
         : null,
     );
@@ -14142,6 +14149,7 @@ export class Agent<
         abortController,
         executionFence,
         originalSpansEnded: loaded.originalSpansEnded,
+        openStepsOf: loaded.openStepsOf,
         latestMessageListState: await this.loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.

@@ -4,7 +4,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { SpanType } from '../../../../observability';
 import { createTool } from '../../../../tools';
-import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 
 const usage = { inputTokens: 3, outputTokens: 4, totalTokens: 7 };
@@ -135,6 +135,62 @@ describeForAllEngines('model generation span links to the provider response', en
       name: "llm: 'up-model'",
       attributes: { model: 'up-model', provider: 'up-provider' },
     });
+  });
+
+  // A run that waits for approval has one generation span per part, and the part that waits ends
+  // its span before the run is done.
+  it('names the model that answered and the cost it reported on each part of an approved run', async () => {
+    const { observability, ended } = capture();
+    const model = (modelId: string, doStream: (prompt: any[]) => ReadableStream) => ({
+      id: modelId,
+      maxRetries: 0,
+      model: new MockLanguageModelV2({
+        provider: `${modelId}-provider`,
+        modelId,
+        doStream: async ({ prompt }) => ({ stream: doStream(prompt) }),
+      }),
+    });
+    const { agent } = await createSharedAgent(getMock(), {
+      engine,
+      observability,
+      errorProcessors: [],
+      instructions: 'Call tick, then answer.',
+      tools: {
+        tick: createTool({
+          id: 'tick',
+          description: 'Tick',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ ok: true }),
+        }),
+      },
+      model: () => [
+        model('down-model', () => {
+          throw new Error('primary is down');
+        }),
+        model('up-model', prompt =>
+          fromParts(
+            prompt.some(message => message.role === 'tool')
+              ? textStep(2, { gateway: { cost: '0.5' } })
+              : toolCallStep(1, { gateway: { cost: '0.25' } }),
+          ),
+        ),
+      ],
+    } as any);
+
+    const first: any = await (agent as any).stream('Go.');
+    for await (const chunk of first.fullStream) if (chunk.type === 'tool-call-approval') break;
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(1);
+    const resumed: any = await (agent as any).approveToolCall({ runId: first.runId, toolCallId: 'call-1' });
+    expect(await (resumed.output ?? resumed).text).toBe('answer 2');
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(2);
+
+    const parts = ended(SpanType.MODEL_GENERATION);
+    expect(parts.map(part => [part.name, part.attributes?.provider])).toEqual([
+      ["llm: 'up-model'", 'up-model-provider'],
+      ["llm: 'up-model'", 'up-model-provider'],
+    ]);
+    expect(parts.map(part => part.attributes?.costContext?.estimatedCost)).toEqual([0.25, 0.5]);
   });
 
   // A gateway bills its own price, so its number replaces the estimate from the price table.

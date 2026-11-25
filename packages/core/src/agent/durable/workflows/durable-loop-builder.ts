@@ -19,7 +19,7 @@ import type {
   Span,
   SpanType,
 } from '../../../observability';
-import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../../observability/usage';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -61,6 +61,7 @@ import {
   durableOptionsSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  toolCallsRunSideBySide,
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
@@ -628,8 +629,14 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         .then(llmExecutionStep)
         // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
         .map(
-          async ({ inputData }) => {
+          async ({ inputData, getInitData }) => {
             const llmOutput = inputData as DurableLLMStepOutput;
+            const state = getInitData() as IterationState | undefined;
+            const sideBySide = toolCallsRunSideBySide({
+              options: state?.options,
+              toolsMetadata: state?.toolsMetadata,
+              toolCalls: llmOutput.toolCalls,
+            });
             return (llmOutput.toolCalls ?? []).map(toolCall => ({
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
@@ -637,6 +644,8 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
+              response: llmOutput.response,
+              ...(sideBySide ? { sideBySide } : {}),
             })) as DurableToolCallInput[];
           },
           { id: 'extract-tool-calls' },
@@ -1114,6 +1123,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                 totalTokens: 0,
               },
               usageAggregationVersion: 1,
+              generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
               lastStepResult: undefined,
             };
             return iterationState;
@@ -1335,9 +1345,14 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                       responseModel: state.lastResponse?.modelId,
                       ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
                     },
-                    usage: usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                    usage: subtractReportedUsage(
+                      usageIncomplete ? calculateObservedUsage(steps) : state.accumulatedUsage,
+                      state.generationReportedUsage,
+                    ),
                     // Cost the provider reported itself is used in place of an estimate.
-                    stepProviderMetadata: state.reportedCosts?.map(cost => cost ?? undefined),
+                    stepProviderMetadata: state.reportedCosts
+                      ?.slice(state.generationReportedSteps ?? 0)
+                      .map(cost => cost ?? undefined),
                   });
                 }
                 agentSpan?.end({

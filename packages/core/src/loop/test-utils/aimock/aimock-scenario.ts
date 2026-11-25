@@ -130,6 +130,7 @@ export async function createSharedAgent(
     | 'cache'
     | 'streamReplay'
     | 'observability'
+    | 'tracingPolicy'
     | 'engine'
     | 'inputProcessors'
   > = {},
