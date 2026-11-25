@@ -1,14 +1,17 @@
 import { MockLanguageModelV3, simulateReadableStream } from '@internal/ai-v6/test';
-import { Agent } from '@mastra/core/agent';
-import { InMemoryStore } from '@mastra/core/storage';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { InMemoryDB, InMemoryMemory, InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { ObservationalMemory } from '../observational-memory';
 
 // Issue #30079: after a mid-turn buffered activation, cleanup keeps an activated message as raw
 // context to honour the retention floor. The per-step filter on the next step must keep it too.
+// A message cleanup kept only because the model had not read it yet is not a floor keep.
 
 const MESSAGE_TOKENS = 9500; // floor = 9500 * (1 - default bufferActivation 0.8) = 1900
 const TOOL_CALLS = 13;
@@ -138,6 +141,78 @@ describe('retention floor after a mid-turn activation (#30079)', () => {
     },
     60_000,
   );
+
+  it('does not keep a message for the floor when it was kept only because it was in flight', async () => {
+    const threadId = 'thread-in-flight';
+    const resourceId = 'resource-in-flight';
+    const storage = new InMemoryMemory({ db: new InMemoryDB() });
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'thread', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        model: 'openai/gpt-4o-mini' as any,
+        messageTokens: 10_000,
+        bufferTokens: 2_000,
+        bufferActivation: 0.8,
+        blockAfter: 1.2,
+      },
+      reflection: { model: 'openai/gpt-4o-mini' as any, observationTokens: 50_000 },
+    });
+    const cleanup = vi.spyOn(om, 'cleanupMessages');
+
+    const t0 = Date.now() - 60_000;
+    const msg = (id: string, role: 'user' | 'assistant', text: string, at: number): MastraDBMessage => ({
+      id,
+      role,
+      content: { format: 2, parts: [{ type: 'text', text }] },
+      type: 'text',
+      createdAt: new Date(t0 + at),
+      threadId,
+      resourceId,
+    });
+    const oldUser = msg('old-user', 'user', 'hello '.repeat(300), 0);
+    const oldAssistant = msg('old-assistant', 'assistant', 'answer '.repeat(300), 1000);
+    const request = msg('request', 'user', 'please run the tool', 2000);
+    const toolResult = msg('tool-result', 'assistant', 'data '.repeat(11_000), 3000);
+    await storage.saveMessages({ messages: [oldUser, oldAssistant] });
+    const record = await om.getOrCreateRecord(threadId, resourceId);
+    // A buffered chunk that already covers the request and the tool result the model has not read.
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        observations: '- ran the tool',
+        tokenCount: 20,
+        messageIds: ['old-user', 'old-assistant', 'request', 'tool-result'],
+        cycleId: 'cycle-a',
+        messageTokens: 11_600,
+        lastObservedAt: toolResult.createdAt,
+      },
+    });
+    await storage.setPendingMessageTokens(record.id, 600);
+
+    const messageList = new MessageList({ threadId, resourceId });
+    messageList.add([oldUser, oldAssistant], 'memory');
+    messageList.add(request, 'input');
+    messageList.add(toolResult, 'response');
+    const turn = om.beginTurn({ threadId, resourceId, messageList });
+    await turn.start();
+
+    // Activation with a floor above 0: cleanup removes the old messages and keeps the unread ones
+    // only because they are in flight.
+    expect((await turn.step(1).prepare()).observed).toBe(true);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(cleanup.mock.calls[0]![0].retentionFloor).toBeGreaterThan(0);
+    expect(cleanup.mock.calls[0]![0].preserveMessageIds).toEqual(expect.arrayContaining(['request', 'tool-result']));
+    expect(messageList.get.all.db().map(m => m.id)).toEqual(['request', 'tool-result']);
+
+    // The model has now read them, so the next step's filter drops them like any observed message.
+    await turn.step(2).prepare();
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(messageList.get.all.db().map(m => m.id)).toEqual([]);
+  });
 
   it('still drops observed messages the model already read when there is no floor', async () => {
     const { requests } = await runLookups({ messageTokens: 3_000, bufferTokens: false });
