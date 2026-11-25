@@ -2222,8 +2222,7 @@ export class AgentThreadStreamRuntime {
    */
   #hasPendingThreadWork(state: AgentThreadRuntimeState, key: string): boolean {
     return (
-      (state.signalQueues.pendingSignalsByThread.get(key)?.length ?? 0) > 0 ||
-      (state.signalQueues.preRunSignalsByThread.get(key)?.length ?? 0) > 0 ||
+      state.signalQueues.hasSignals(key) ||
       (state.pendingContinuationsByThread.get(key)?.length ?? 0) > 0 ||
       (state.pendingIdleSignalsByThread.get(key)?.length ?? 0) > 0
     );
@@ -6322,15 +6321,7 @@ export class AgentThreadStreamRuntime {
     const key = record ? this.#threadKey(record.resourceId, record.threadId) : state.threadKeysByRunId.get(runId);
     if (!key) return [];
 
-    const signalsByThread =
-      scope === 'pre-run' ? state.signalQueues.preRunSignalsByThread : state.signalQueues.pendingSignalsByThread;
-    const queue = signalsByThread.get(key);
-    if (!queue || queue.length === 0) {
-      return [];
-    }
-
-    signalsByThread.delete(key);
-    return queue;
+    return state.signalQueues.take(scope, key);
   }
 
   /** Resolves `'reserved'` when this call reserved the thread for `runId`. The caller then owns the reservation. */
@@ -7594,14 +7585,9 @@ export class AgentThreadStreamRuntime {
 
     const currentRunId = activeRunId();
     // Pending input is not in saved history or a finished-step stream buffer.
-    for (const queue of [
-      state.signalQueues.preRunSignalsByThread.get(key),
-      state.signalQueues.pendingSignalsByThread.get(key),
-    ]) {
-      for (const signal of queue ?? []) {
-        const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
-        if (chunk) enqueuePresentation(chunk);
-      }
+    for (const signal of state.signalQueues.queued(key)) {
+      const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
+      if (chunk) enqueuePresentation(chunk);
     }
     for (const pending of state.pendingIdleSignalsByThread.get(key) ?? []) {
       const chunk = this.#pendingUserMessageChunk(currentRunId ?? pending.runId, pending.signal, 'queued');
