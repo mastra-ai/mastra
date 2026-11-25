@@ -9,6 +9,7 @@
 import { STATUS_CODES } from 'node:http';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
+import { APICallError, RetryError, streamText } from 'ai';
 import { customProviderAuthHeaderName, mergeHeadersIgnoringCase } from '../onboarding/custom-provider-headers.js';
 import type { CustomProviderAuthScheme, CustomProviderHeader } from '../onboarding/settings.js';
 
@@ -234,16 +235,11 @@ function causeMessages(error: unknown): string[] {
  * refuses a redirect before any status is read, so a redirect is only
  * recognisable by its cause message.
  */
-function connectionFailure(
-  error: unknown,
-  url: string,
-  timedOut: boolean,
-  timeoutMs: number,
-): CustomProviderCheckFailure {
-  if (timedOut) {
-    return { kind: 'timeout', message: `No answer from ${url} within ${timeoutMs / 1000} s` };
+function connectionFailure(error: unknown, url: string, abort: AbortState): CustomProviderCheckFailure {
+  if (abort.timedOut) {
+    return { kind: 'timeout', message: `No answer from ${url} within ${abort.timeoutMs / 1000} s` };
   }
-  if (error instanceof Error && error.name === 'AbortError') {
+  if (abort.aborted) {
     return { kind: 'timeout', message: `The request to ${url} was cancelled` };
   }
   const messages = causeMessages(error);
@@ -302,12 +298,20 @@ function modelIdsFromList(body: unknown): string[] | undefined {
   return [...ids].sort();
 }
 
-/** A timeout signal joined with the caller's signal. `timedOut` tells the two apart after an abort. */
-function checkSignal(timeoutMs: number, signal: AbortSignal | undefined) {
+/** Whether a check was stopped, and whether by its own timeout or by the caller. */
+interface AbortState {
+  timedOut: boolean;
+  aborted: boolean;
+  timeoutMs: number;
+}
+
+/** A timeout signal joined with the caller's signal. `abortState` tells the two apart after an abort. */
+function checkSignal(timeoutMs: number, callerSignal: AbortSignal | undefined) {
   const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = callerSignal ? AbortSignal.any([timeout, callerSignal]) : timeout;
   return {
-    signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
-    timedOut: () => timeout.aborted,
+    signal,
+    abortState: (): AbortState => ({ timedOut: timeout.aborted, aborted: signal.aborted, timeoutMs }),
   };
 }
 
@@ -331,7 +335,7 @@ export async function listCustomProviderModels(
     latencyMs: latencyMs(),
   });
 
-  const { signal, timedOut } = checkSignal(timeoutMs, options.signal);
+  const { signal, abortState } = checkSignal(timeoutMs, options.signal);
   let response: Response;
   let body: { text: string; truncated: boolean };
   try {
@@ -342,7 +346,7 @@ export async function listCustomProviderModels(
     });
     body = await readCappedBody(response, MAX_LIST_BODY_BYTES);
   } catch (error) {
-    return fail(connectionFailure(error, url, timedOut(), timeoutMs));
+    return fail(connectionFailure(error, url, abortState()));
   }
 
   const contentType = response.headers.get('content-type') ?? undefined;
@@ -381,4 +385,103 @@ export async function listCustomProviderModels(
     });
   }
   return { ok: true, models, latencyMs: latencyMs() };
+}
+
+const MODEL_TEST_TIMEOUT_MS = 30_000;
+const MODEL_TEST_PROMPT = 'Reply with the single word "yes".';
+
+/** A response header by name, ignoring case, from the plain object the AI SDK keeps on its errors. */
+function headerValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+  const entry = Object.entries(headers ?? {}).find(([key]) => key.toLowerCase() === name);
+  return entry?.[1];
+}
+
+/**
+ * The failure for an error from the test message. With `maxRetries: 0` the
+ * AI SDK should not wrap it in a `RetryError`, but the last attempt is read
+ * if one gets through.
+ */
+function modelTestFailure(args: {
+  error: unknown;
+  chatUrl: string;
+  abort: AbortState;
+  summaryOnly: boolean;
+}): CustomProviderCheckFailure {
+  const error = RetryError.isInstance(args.error) ? args.error.lastError : args.error;
+  if (APICallError.isInstance(error)) {
+    if (error.statusCode !== undefined) {
+      return httpFailure({
+        status: error.statusCode,
+        url: error.url,
+        body: error.responseBody ?? '',
+        contentType: headerValue(error.responseHeaders, 'content-type'),
+        summaryOnly: args.summaryOnly,
+      });
+    }
+    return connectionFailure(error, error.url, args.abort);
+  }
+  if (args.abort.aborted) {
+    return connectionFailure(error, args.chatUrl, args.abort);
+  }
+  const reason = error instanceof Error ? error.message : String(error);
+  return { kind: 'invalid_response', message: `The answer from ${args.chatUrl} could not be read: ${reason}` };
+}
+
+/**
+ * Send one short message to a model on a custom endpoint and return its reply,
+ * or why it failed. A failure is returned, never thrown, and the request is
+ * made once: a check that retries hides the error the user needs to see.
+ */
+export async function testCustomProviderModel(
+  args: { providerId: string; connection: CustomProviderConnection; modelId: string },
+  options: CustomProviderCheckOptions = {},
+): Promise<CustomProviderModelTestResult> {
+  const started = performance.now();
+  const latencyMs = () => Math.round(performance.now() - started);
+  const secrets = secretsSent(args.connection);
+  const timeoutMs = options.timeoutMs ?? MODEL_TEST_TIMEOUT_MS;
+  const chatUrl = `${args.connection.url.trim().replace(/\/+$/, '')}/chat/completions`;
+  const { signal, abortState } = checkSignal(timeoutMs, options.signal);
+
+  let reply = '';
+  let finishReason: string | undefined;
+  let streamError: unknown;
+  let stopped = false;
+  try {
+    const result = streamText({
+      model: createCustomProviderChatModel(args),
+      prompt: MODEL_TEST_PROMPT,
+      maxRetries: 0,
+      abortSignal: signal,
+      // In `ai` 7 a provider error arrives as an `error` part on `fullStream`.
+      // The default handler would also print it to the console.
+      onError: () => {},
+    });
+    for await (const part of result.fullStream) {
+      if (part.type === 'text-delta') reply += part.text;
+      else if (part.type === 'finish') finishReason = part.finishReason;
+      else if (part.type === 'error') {
+        streamError = part.error;
+        stopped = true;
+        break;
+      } else if (part.type === 'abort') {
+        stopped = true;
+        break;
+      }
+    }
+  } catch (error) {
+    streamError = error;
+    stopped = true;
+  }
+
+  if (stopped || signal.aborted) {
+    const failure = modelTestFailure({
+      error: streamError,
+      chatUrl,
+      abort: abortState(),
+      summaryOnly: options.summaryDetailOnly ?? false,
+    });
+    return { ok: false, failure: finishFailure(failure, secrets), latencyMs: latencyMs() };
+  }
+  return { ok: true, reply: reply.trim(), ...(finishReason ? { finishReason } : {}), latencyMs: latencyMs() };
 }
