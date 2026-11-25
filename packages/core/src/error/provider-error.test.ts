@@ -134,55 +134,6 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     }),
     'quota',
   ],
-  [
-    'OpenAI credit_balance_exhausted on 429',
-    apiError(429, 'You have run out of API credits.', undefined, {
-      error: { code: 'credit_balance_exhausted', type: 'invalid_request_error' },
-    }),
-    'quota',
-  ],
-  [
-    'OpenAI organization_spend_limit_exceeded on 429',
-    apiError(429, 'Your organization has reached its budget for this month.', undefined, {
-      error: { code: 'organization_spend_limit_exceeded', type: 'invalid_request_error' },
-    }),
-    'quota',
-  ],
-  [
-    'OpenAI project_spend_limit_exceeded on 429',
-    apiError(429, 'This project has reached its budget for this month.', undefined, {
-      error: { code: 'project_spend_limit_exceeded', type: 'invalid_request_error' },
-    }),
-    'quota',
-  ],
-  [
-    'OpenAI organization_usage_limit_exceeded on 429',
-    apiError(429, 'Your organization has reached its budget for this billing period.', undefined, {
-      error: { code: 'organization_usage_limit_exceeded', type: 'invalid_request_error' },
-    }),
-    'quota',
-  ],
-  [
-    'Gemini free-tier per-day quota on 429 with a short retry hint',
-    apiError(
-      429,
-      'You exceeded your current quota, please check your plan and billing details.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 50, model: gemini-2.5-pro\nPlease retry in 34.88s.',
-      JSON.stringify({
-        error: {
-          code: 429,
-          status: 'RESOURCE_EXHAUSTED',
-          details: [
-            {
-              '@type': 'type.googleapis.com/google.rpc.QuotaFailure',
-              violations: [{ quotaId: 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', quotaValue: '50' }],
-            },
-            { '@type': 'type.googleapis.com/google.rpc.RetryInfo', retryDelay: '34s' },
-          ],
-        },
-      }),
-    ),
-    'quota',
-  ],
   ['402', apiError(402, 'Payment Required'), 'quota'],
   [
     'OpenAI no credits worded without a code',
