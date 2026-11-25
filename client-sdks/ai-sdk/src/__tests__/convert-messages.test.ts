@@ -151,6 +151,10 @@ describe('toAISdkFormat', () => {
       expect(toAISdkMessages(quoted, { version: 'v7' })).toHaveLength(1);
     });
 
+    it('keeps user text that starts with a quoted tag but is not a reminder element', () => {
+      expect(toAISdkV5Messages('<system-reminder> shows up in my logs, what is it?')).toHaveLength(1);
+    });
+
     it('keeps a full reminder block pasted inside a longer user message', () => {
       const pasted = 'Why did the agent see this?\n<system-reminder>continue</system-reminder>';
       expect(toAISdkV5Messages([userMessage([{ type: 'text', text: pasted }])])).toHaveLength(1);
@@ -176,6 +180,33 @@ describe('toAISdkFormat', () => {
       expect(toAISdkV4Messages([legacy])).toEqual([]);
       expect(toAISdkV5Messages([legacy])).toEqual([]);
       expect(toAISdkMessages([legacy], { version: 'v6' })).toEqual([]);
+      expect(toAISdkMessages([legacy], { version: 'v7' })).toEqual([]);
+    });
+
+    it('still hides legacy reminders whose first text part is the wrapped reminder', () => {
+      const legacy = userMessage([
+        { type: 'text', text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>' },
+        { type: 'text', text: 'Step two has this attachment.' },
+      ]);
+
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
+    });
+
+    it('still hides file-only legacy reminders marked with a self-closing tag', () => {
+      const legacy = {
+        id: 'msg-reminder',
+        role: 'user' as const,
+        content: {
+          format: 2 as const,
+          parts: [
+            { type: 'text' as const, text: '<system-reminder kind="reference-image" />' },
+            { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+          ],
+        },
+        createdAt: new Date(),
+      };
+
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
     });
   });
 

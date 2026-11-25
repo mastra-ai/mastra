@@ -17,22 +17,21 @@ function isSystemReminderUIMessage(message: {
     return false;
   }
 
-  // Fall back to text inspection for legacy reminders stored without metadata. Those are a whole text wrapped in
-  // <system-reminder ...>...</system-reminder>; user text that merely quotes the tag is not a reminder.
+  // Fall back to text inspection for legacy reminders stored without metadata. Core emits those with the first text
+  // part being one whole <system-reminder> element (paired, or self-closing when the reminder carries only files);
+  // user text that merely quotes the tag is not a reminder.
   if (Array.isArray(message.parts)) {
-    const textParts = message.parts.filter(part => part.type === 'text');
-    return textParts.length > 0 && textParts.every(part => isStandaloneSystemReminderText(part.text));
+    const firstTextPart = message.parts.find(part => part.type === 'text');
+    return isSystemReminderElement(firstTextPart?.text);
   }
 
-  return isStandaloneSystemReminderText(message.content);
+  return isSystemReminderElement(message.content);
 }
 
-function isStandaloneSystemReminderText(text: unknown) {
-  if (typeof text !== 'string') {
-    return false;
-  }
-  const trimmed = text.trim();
-  return trimmed.startsWith('<system-reminder') && trimmed.endsWith('</system-reminder>');
+const SYSTEM_REMINDER_ELEMENT = /^<system-reminder(?:[\s>/][\s\S]*)?(?:<\/system-reminder>|\/>)$/;
+
+function isSystemReminderElement(text: unknown) {
+  return typeof text === 'string' && SYSTEM_REMINDER_ELEMENT.test(text.trim());
 }
 
 function filterSystemReminderUIMessages<
