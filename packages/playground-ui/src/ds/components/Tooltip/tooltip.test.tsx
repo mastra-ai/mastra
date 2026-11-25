@@ -106,6 +106,22 @@ describe('Tooltip', () => {
     expect((await screen.findByRole('tooltip')).textContent).toBe('Save the agent first');
   });
 
+  it('explains a disabled button under a provider that sets a delay', async () => {
+    const user = userEvent.setup();
+    render(
+      // oxlint-disable-next-line playground-ui/no-hover-delay-numbers -- the deprecated form is what this covers
+      <TooltipProvider delay={300}>
+        <Button disabled tooltip="Save the agent first">
+          Run
+        </Button>
+      </TooltipProvider>,
+    );
+
+    await user.hover(screen.getByRole('button', { name: 'Run' }));
+
+    expect(screen.getByRole('tooltip').textContent).toBe('Save the agent first');
+  });
+
   it('still takes the deprecated delay of a published app’s provider, through a bare provider inside it', async () => {
     const user = userEvent.setup();
     render(
