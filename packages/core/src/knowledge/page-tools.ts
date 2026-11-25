@@ -1637,7 +1637,8 @@ function activityTool(host: KnowledgePageToolHost) {
       'Give `since` and/or `until` (a date like 2026-07-01, or a date-time with a zone like 2026-07-01T09:30:00Z; at least one); `from` narrows it to one page or scope. ' +
       "A note entry shows the note's current text (marked `current`), not its text when the change happened; a removed note shows no text. " +
       `One result holds at most \`limit\` changes and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` is true and \`cursor\` continues (pass the same since, until, from and order). ` +
-      'Oldest first always returns a `cursor`, also when it has caught up or found nothing yet: keep it, and a later call with it returns only the changes it has not listed, none missed or repeated.',
+      'Oldest first always returns a `cursor`, also when it has caught up or found nothing yet: keep it, and a later call with it returns only the changes it has not listed, none missed or repeated. ' +
+      'The exception: a page or note that becomes readable later (moved into view, or a note restamped or restored) keeps its earlier changes behind that cursor, and they are not returned.',
     inputSchema: {
       type: 'object',
       properties: {

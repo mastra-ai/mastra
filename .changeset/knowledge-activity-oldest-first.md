@@ -6,7 +6,7 @@
 '@mastra/mongodb': patch
 ---
 
-Knowledge activity can now be read oldest first, so an agent can work through changes in order and pick up later from the last one it handled, without missing or repeating any.
+Knowledge activity can now be read oldest first, so an agent can work through changes in order and pick up later from the last one it handled, without missing or repeating any. One exception: when a page or note becomes readable later (a page moved into the scope being read, or a note restamped or restored into view), its earlier changes keep their place in the feed, so they can sit behind a position the agent already holds and are not returned.
 
 `knowledge_activity` takes `order: 'oldest'`. Its cursor continues in that order, and it comes back even once the agent has caught up or when nothing has changed yet, so the agent can keep it and resume when new changes land. For code that reads the store directly, `listPageActivity` takes `order: 'asc'`; each event then carries a `position`, and `after` returns only the events past it:
 

@@ -1877,14 +1877,20 @@ export class PgKnowledgePages implements KnowledgePageStore {
    * Run once after restoring this database from a logical dump (`pg_dump`/`pg_restore`) into another
    * cluster. Oldest-first positions are built from transaction ids, which a logical restore doesn't
    * carry over: restored events keep the old cluster's ids and stay hidden from oldest-first reads
-   * until this runs. It renumbers them into the new cluster, keeping their order, and moves the feed
+   * until this runs. It renumbers them into the new cluster, keeping their feed order, and moves the feed
    * to a new generation, so positions handed out before are refused and readers restart from `since`.
    * Not needed after `pg_upgrade` or a physical backup restore, which keep transaction ids.
    */
   async rebaseActivityFeed(): Promise<void> {
     await this.#tx(async tx => {
       await tx.query(`LOCK TABLE ${this.#activity} IN EXCLUSIVE MODE`);
-      await tx.query(`UPDATE ${this.#activity} SET "xact" = pg_current_xact_id()`);
+      // Every row gets this transaction's id, so seq alone orders them afterwards: renumber it in
+      // the old (xact, seq) order first, in the same statement.
+      await tx.query(
+        `UPDATE ${this.#activity} a SET "xact" = pg_current_xact_id(), "seq" = o."rank"
+         FROM (SELECT "id", ROW_NUMBER() OVER (ORDER BY "xact", "seq") AS "rank" FROM ${this.#activity}) o
+         WHERE a."id" = o."id"`,
+      );
       await tx.query(
         `UPDATE ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} SET "activityGeneration" = "activityGeneration" + 1 WHERE "id" = 'knowledge'`,
       );

@@ -159,6 +159,30 @@ describe('PgKnowledgePages oldest-first activity under concurrent writes (real P
     expect((await drain(since, fresh.after)).events.map(event => event.pageId)).toEqual([next.id]);
   });
 
+  it('rebaseActivityFeed keeps the feed order, also where it differs from seq order', async () => {
+    const { left, since } = await setup();
+    const first = await store.createPage({ parentId: left.id, name: 'first seq', provenance });
+    const second = await store.createPage({ parentId: left.id, name: 'second seq', provenance });
+    // Restored rows keep their old-cluster transaction ids; there the second page's transaction
+    // started first, so the feed order is the reverse of seq order.
+    await pool.query(`UPDATE ${activity} SET "xact" = '900000000002'::xid8 WHERE "pageId" = $1`, [first.id]);
+    await pool.query(`UPDATE ${activity} SET "xact" = '900000000001'::xid8 WHERE "pageId" <> $1`, [first.id]);
+    const restoredOrder = (await pool.query(`SELECT "id" FROM ${activity} ORDER BY "xact", "seq"`)).rows.map(row =>
+      String(row.id),
+    );
+
+    await store.rebaseActivityFeed();
+    const rebased = await drain(since);
+    expect(rebased.events.map(event => event.pageId)).toEqual([second.id, first.id]);
+    const all = (await pool.query(`SELECT "id" FROM ${activity} ORDER BY "xact", "seq"`)).rows.map(row =>
+      String(row.id),
+    );
+    expect(all).toEqual(restoredOrder);
+    // New writes still come after the rebased events.
+    const next = await store.createPage({ parentId: left.id, name: 'after rebase', provenance });
+    expect((await drain(since, rebased.after)).events.map(event => event.pageId)).toEqual([next.id]);
+  });
+
   it('upgrades an activity table from before feed positions, keeping its events readable oldest first', async () => {
     const { left, since } = await setup();
     await store.createPage({ parentId: left.id, name: 'old row', provenance });

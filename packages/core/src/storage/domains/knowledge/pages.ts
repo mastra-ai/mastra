@@ -907,7 +907,10 @@ export interface KnowledgePageStore {
    * commit-safe order: an event never appears behind a position a reader already holds, even when
    * its write committed after later-stamped ones. Each event carries a `position`; `after` returns
    * only events past that position, so a reader can store the last position it handled and continue
-   * from it later without missing or repeating events. The order is the store's own feed order, not
+   * from it later without missing or repeating events. One exception: events of a page or note that
+   * becomes readable later (a page moved into the read scope, a note restamped or restored into view)
+   * keep their original positions, so they can sit behind a position the reader already holds and
+   * aren't returned after it. The order is the store's own feed order, not
    * `createdAt` (`since`/`until` still filter by `createdAt`), and it isn't always the order writes
    * committed in: PostgreSQL orders by transaction id (taken at a transaction's first write) and holds back events until every earlier
    * transaction has ended, so a write that started first comes first even if it committed last. `after` needs `order: 'asc'` and can't be combined with `cursor`;
