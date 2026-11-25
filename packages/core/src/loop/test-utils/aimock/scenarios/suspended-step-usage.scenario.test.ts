@@ -1,5 +1,7 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { InternalSpans, SpanType } from '../../../../observability';
+import type { TracingPolicy } from '../../../../observability';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import {
@@ -8,6 +10,7 @@ import {
   isDurableEngineVariant,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
+import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 
 /**
  * Token usage when a tool call suspends (#27232).
@@ -22,6 +25,8 @@ import {
  * - Resumed totalUsage omits the steps before the suspension
  * - Resumed totalUsage double-counts the suspended step
  * - A tool that suspends again on resume loses the suspended step's tokens
+ * - The suspended part's MODEL_GENERATION span records no tokens, so a run that is never
+ *   resumed is never billed, and the resumed part's span reports the whole run
  */
 
 type Usage = { inputTokens: number; outputTokens: number; totalTokens: number };
@@ -43,6 +48,8 @@ const tokens = (u: any) => ({
   outputTokens: u?.outputTokens,
   totalTokens: u?.totalTokens,
 });
+// Span usage carries no total.
+const spanTokens = (u: any) => ({ inputTokens: u?.inputTokens ?? 0, outputTokens: u?.outputTokens ?? 0 });
 
 type Kind = 'suspend' | 'approval';
 
@@ -74,6 +81,7 @@ const lookupTool = createTool({
 });
 
 type RunHandle = { output?: any; fullStream: AsyncIterable<ChunkType>; runId: string };
+type Observability = ReturnType<typeof capture>['observability'];
 
 const settled = <T>(value: Promise<T> | T) =>
   Promise.race([Promise.resolve(value), new Promise<undefined>(r => setTimeout(() => r(undefined), 1000))]);
@@ -81,7 +89,14 @@ const settled = <T>(value: Promise<T> | T) =>
 describeForAllEngines('AIMock loop scenario: token usage when a tool call suspends', engine => {
   const getMock = useLoopScenarioAimock();
 
-  async function setup(kind: Kind, { withPriorStep = false } = {}) {
+  async function setup(
+    kind: Kind,
+    {
+      withPriorStep = false,
+      observability,
+      tracingPolicy,
+    }: { withPriorStep?: boolean; observability?: Observability; tracingPolicy?: TracingPolicy } = {},
+  ) {
     const llm = getMock();
     const toolName = kind === 'suspend' ? 'ask' : 'approve';
     const steps = [...(withPriorStep ? [{ toolName: 'lookup', usage: PRIOR }] : []), { toolName, usage: SUSPENDED }];
@@ -96,6 +111,8 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
 
     const { agent } = await createSharedAgent(llm, {
       engine,
+      observability,
+      tracingPolicy,
       instructions: 'use the tool',
       tools: { lookup: lookupTool, ...(kind === 'suspend' ? { ask: askTool } : { approve: approveTool }) },
     });
@@ -199,6 +216,100 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
       }
     });
   }
+
+  // Technical: token and cost metrics derive from the usage on each MODEL_GENERATION span. The
+  // suspended part ends its span when it suspends, so it must carry the model calls made so far,
+  // and the part that finishes the run must report only its own.
+  for (const kind of ['suspend', 'approval'] as const) {
+    it(`[${kind}] each part of the run records its own tokens on its generation span`, async () => {
+      const { observability, ended } = capture();
+      const { agent, toolCallId } = await setup(kind, { withPriorStep: true, observability });
+      const first: RunHandle = await agent.stream('go');
+      await drain(first);
+      await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(1);
+
+      const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
+      expect(await resumed.text).toBe('done');
+      await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(2);
+
+      const generations = ended(SpanType.MODEL_GENERATION).map(span => span.attributes?.usage);
+      expect(generations.map(spanTokens)).toEqual([spanTokens(add(PRIOR, SUSPENDED)), spanTokens(RESUMED)]);
+    });
+  }
+
+  // Technical: a hidden generation reports its usage on the AGENT_RUN of its part instead.
+  it('each part of the run records its own tokens when the agent hides its model spans', async () => {
+    const { observability, ended } = capture();
+    const tracingPolicy = { internal: InternalSpans.MODEL };
+    const { agent, toolCallId } = await setup('approval', { withPriorStep: true, observability, tracingPolicy });
+    const first: RunHandle = await agent.stream('go');
+    await drain(first);
+    await expect.poll(() => ended().length).toBe(1);
+
+    const resumed = await drain(await resume(agent, 'approval', first.runId, toolCallId));
+    expect(await resumed.text).toBe('done');
+    await expect.poll(() => ended().length).toBe(2);
+
+    const runs = ended().map(span => span.attributes?.internalUsage);
+    expect(runs.map(spanTokens)).toEqual([spanTokens(add(PRIOR, SUSPENDED)), spanTokens(RESUMED)]);
+  });
+
+  // Technical: tool calls without an approval or a suspend schema run at the same time, on workers
+  // that share no memory when the engine is distributed, and each one that suspends ends the
+  // suspended part's spans.
+  it('two tool calls that suspend side by side count each model call once', async () => {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', sequenceIndex: 0 },
+      { toolCalls: ['call-a', 'call-b'].map(id => ({ id, name: 'ask', arguments: {} })), usage: wire(SUSPENDED) },
+    );
+    llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'done', usage: wire(RESUMED) });
+    const { observability, ended } = capture();
+    const created = await createSharedAgent(llm, {
+      engine,
+      observability,
+      instructions: 'use the tool',
+      tools: { ask: askTool },
+    });
+    const agent = created.agent as any;
+
+    const first: RunHandle = await agent.stream('go');
+    await drain(first);
+    await drain(await agent.resumeStream({ answer: 'blue' }, { runId: first.runId, toolCallId: 'call-a' }));
+    const resumed = await drain(
+      await agent.resumeStream({ answer: 'blue' }, { runId: first.runId, toolCallId: 'call-b' }),
+    );
+    expect(await resumed.text).toBe('done');
+
+    const recorded = () =>
+      ended(SpanType.MODEL_GENERATION)
+        .map(span => spanTokens(span.attributes?.usage))
+        .reduce((a, u) => ({
+          inputTokens: a.inputTokens + u.inputTokens,
+          outputTokens: a.outputTokens + u.outputTokens,
+        }));
+    await expect.poll(recorded).toEqual(spanTokens(add(SUSPENDED, RESUMED)));
+  });
+
+  it('a tool that suspends again on resume records no new tokens', async () => {
+    const { observability, ended } = capture();
+    const { agent, toolCallId } = await setup('suspend', { observability });
+    const first: RunHandle = await agent.stream('go');
+    await drain(first);
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(1);
+
+    await drain(await resume(agent, 'suspend', first.runId, toolCallId, 'again'));
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(2);
+
+    const resumed = await drain(await resume(agent, 'suspend', first.runId, toolCallId));
+    expect(await resumed.text).toBe('done');
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(3);
+
+    const generations = ended(SpanType.MODEL_GENERATION).map(span => span.attributes?.usage);
+    expect(generations.map(spanTokens)).toEqual(
+      [SUSPENDED, { inputTokens: 0, outputTokens: 0 }, RESUMED].map(spanTokens),
+    );
+  });
 
   it('keeps the suspended step usage when a resumed tool suspends again', async () => {
     const { agent, toolCallId } = await setup('suspend');

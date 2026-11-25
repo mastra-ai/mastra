@@ -20,7 +20,12 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash": [
+    "glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openpangu-2.0-pro": [
       {
         "type": "toggle"
       },
@@ -35,18 +40,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.2": [
+    "deepseek-v4-flash": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -58,16 +58,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "openpangu-2.0-flash": [
+    "glm-5.2": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
-    "openpangu-2.0-pro": [
+    "openpangu-2.0-flash": [
       {
         "type": "toggle"
       },
