@@ -177,6 +177,16 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
       expect(types.at(-1)).toBe('finish');
     });
 
+    if (engine === 'evented' || engine === 'native-evented') {
+      it('starts a same-thread follow-up at finish while Redis release is delayed', async () => {
+        llm.on({ endpoint: 'chat' }, { content: 'Done.' });
+        producer.send({ cmd: 'followUpAtFinish', threadId: randomUUID() });
+
+        expect(await producer.next(e => e.type === 'follow-up-done')).toMatchObject({ text: 'Done.' });
+        expect(producer.events.some(e => e.type === 'follow-up-contended')).toBe(true);
+      });
+    }
+
     it('follows a live run owned by the other process and closes on its finish', async () => {
       llm.on(
         { endpoint: 'chat', predicate: (req: any) => !req.messages.some((m: any) => m.role === 'tool') },

@@ -170,6 +170,53 @@ async function main() {
     stream,
     approve,
     observe,
+    async followUpAtFinish(cmd) {
+      const releaseLease = redisPubsub.releaseLease.bind(redisPubsub);
+      const acquireLease = redisPubsub.acquireLease.bind(redisPubsub);
+      const firstRunId = `${cmd.threadId}-first`;
+      const secondRunId = `${cmd.threadId}-second`;
+      const memory = { thread: cmd.threadId, resource: 'follow-up-test' };
+      let allowRelease!: () => void;
+      const releaseGate = new Promise<void>(resolve => (allowRelease = resolve));
+      redisPubsub.releaseLease = async (key, owner) => {
+        if (key.endsWith(cmd.threadId) && owner.includes(firstRunId)) await releaseGate;
+        return releaseLease(key, owner);
+      };
+      let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+      redisPubsub.acquireLease = async (key, owner, ttl) => {
+        const result = await acquireLease(key, owner, ttl);
+        if (
+          !releaseTimer &&
+          key.endsWith(cmd.threadId) &&
+          owner.includes(secondRunId) &&
+          result.owner?.includes(firstRunId)
+        ) {
+          emit({ type: 'follow-up-contended' });
+          releaseTimer = setTimeout(allowRelease, 2_000);
+        }
+        return result;
+      };
+      try {
+        const first = await durable.stream('First turn', { runId: firstRunId, memory });
+        for await (const chunk of first.fullStream) {
+          if (chunk.type !== 'finish') continue;
+          const second = await durable.stream('Follow-up turn', { runId: secondRunId, memory });
+          let text = '';
+          for await (const part of second.fullStream) {
+            if (part.type === 'error') throw part.payload.error;
+            if (part.type === 'text-delta') text += part.payload.text;
+          }
+          emit({ type: 'follow-up-done', text });
+          return;
+        }
+        throw new Error('First turn ended without a finish frame');
+      } finally {
+        clearTimeout(releaseTimer);
+        allowRelease();
+        redisPubsub.releaseLease = releaseLease;
+        redisPubsub.acquireLease = acquireLease;
+      }
+    },
     async waitForSuspension(cmd) {
       const workflows = await storage.getStore('workflows');
       const deadline = Date.now() + 10_000;
