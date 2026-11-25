@@ -82,11 +82,17 @@ export abstract class MastraServerCache extends MastraBase {
    * separate round-trips do not: a writer could publish its frame while an
    * earlier allocation's append is still in flight, and the gap backfill would
    * come up empty. So this fallback serializes appends per counter within the
-   * process — sibling producers for one run share the process, so that covers
-   * the writers that actually race. Appends from *other* processes can still
-   * interleave with these; overrides should perform allocation, the seed check
-   * and the append in one server-side operation instead (see the Redis and
-   * Valkey caches).
+   * process, across every `CachingPubSub` sharing this cache instance.
+   *
+   * That only covers single-process deployments. The evented engine runs each
+   * step on whichever worker claims it from the grouped `workflows` topic (see
+   * `StepExecutor.#getStepPubsub`), so in a multi-process deployment a step's
+   * frames and the owner's lifecycle frames are appended from different
+   * processes and can still interleave in this fallback. No composition of
+   * get/set/increment/listPush can close that; overrides must perform
+   * allocation, the seed check and the append in one server-side operation
+   * (see the Redis and Valkey caches), and a cache that cannot should not be
+   * the basis for cross-process replay.
    */
   async listPushIndexed(
     listKey: string,
