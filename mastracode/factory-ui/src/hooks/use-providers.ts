@@ -82,9 +82,11 @@ export function useConnectMastraGateway() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ scope }: { scope?: 'user' | 'org' }) =>
+    /** `ownAccount` creates a key on the caller's own Mastra account even where the deployment has one. */
+    mutationFn: ({ scope, ownAccount }: { scope?: 'user' | 'org'; ownAccount?: boolean }) =>
       client.post<SaveProviderKeyResponse>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
         scope,
+        ...(ownAccount ? { ownAccount } : {}),
       }),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });

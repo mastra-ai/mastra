@@ -256,6 +256,68 @@ describe('ProviderList credential scopes', () => {
       expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled();
     });
 
+    describe('on a deployment with its own Mastra Gateway key', () => {
+      const deploymentGateway: ProviderInfo = {
+        provider: 'mastra',
+        source: 'deployment',
+        serverKey: true,
+        connectOwnAccount: true,
+      };
+
+      it.each([
+        { list: 'personal', scope: 'user', connected: { source: 'stored-user', userCredential: 'api_key' } },
+        { list: 'factory', scope: 'org', connected: { source: 'stored-org', orgCredential: 'api_key' } },
+      ] as const)(
+        'connects your own account from the $list list at $scope scope',
+        async ({ list, scope, connected }) => {
+          let connectBody: unknown;
+          let providers: ProviderInfo[] = [deploymentGateway];
+          server.use(
+            http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
+            http.post(`${PROVIDERS_URL}/mastra/connect`, async ({ request }) => {
+              connectBody = await request.json();
+              providers = [{ ...deploymentGateway, ...connected }];
+              return HttpResponse.json({ ok: true });
+            }),
+            http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+              HttpResponse.json({ remaining: 5, unlimited: false, canAddCredits: true, addCreditsUrl: 'https://x' }),
+            ),
+          );
+          const user = userEvent.setup();
+          const lists = renderBothLists();
+
+          expect(await within(lists[list]()).findByText('From deployment')).toBeInTheDocument();
+          const drawer = await openAddProvider(user, lists[list]());
+          await user.click(within(drawer).getByRole('button', { name: 'Connect Mastra Gateway' }));
+
+          await waitFor(() => expect(connectBody).toEqual({ scope, ownAccount: true }));
+          await waitFor(() =>
+            expect(within(rowFor('mastra', lists[list]())).getByText('Key saved')).toBeInTheDocument(),
+          );
+        },
+      );
+
+      it('offers members no way to connect an account for the whole organization', async () => {
+        stubProviders([deploymentGateway], false);
+        const lists = renderBothLists();
+
+        expect(
+          await within(lists.factory()).findByText('Only organization admins can manage org-wide credentials.'),
+        ).toBeInTheDocument();
+        expect(within(lists.factory()).getByRole('button', { name: 'Add provider' })).toBeDisabled();
+        expect(within(lists.personal()).getByRole('button', { name: 'Add provider' })).toBeEnabled();
+      });
+
+      it('offers no connect where the server cannot reach the Mastra platform', async () => {
+        stubProviders([{ provider: 'mastra', source: 'deployment', serverKey: true }]);
+        const user = userEvent.setup();
+        const lists = renderBothLists();
+
+        const drawer = await openAddProvider(user, lists.personal());
+        expect(within(drawer).queryByRole('button', { name: 'Connect Mastra Gateway' })).not.toBeInTheDocument();
+      });
+    });
+
     describe('custom endpoints', () => {
       const endpoint = (name: string, scope: CustomProviderInfo['scope']): CustomProviderInfo => ({
         id: name.toLowerCase(),

@@ -872,6 +872,11 @@ describe('Mastra Gateway routes with a tenant', () => {
       expect(row).not.toHaveProperty('connectWithMastraAccount');
     });
 
+    it("still offers connecting one's own account, only when auth can act on the Mastra platform", async () => {
+      expect(await gatewayRow(buildApp(fakePlatform()))).toMatchObject({ connectOwnAccount: true });
+      expect(await gatewayRow(buildApp())).not.toHaveProperty('connectOwnAccount');
+    });
+
     it('keeps a key someone connected earlier, still without the one-click connect', async () => {
       await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_old' });
 
@@ -1079,6 +1084,8 @@ describe('Mastra Gateway routes with a tenant', () => {
 
     expect(await gatewayRow(buildApp(fakePlatform()))).toMatchObject({ connectWithMastraAccount: true });
     expect(await gatewayRow(buildApp())).not.toHaveProperty('connectWithMastraAccount');
+    // Without a server key the one-click connect already uses the caller's own account.
+    expect(await gatewayRow(buildApp(fakePlatform()))).not.toHaveProperty('connectOwnAccount');
   });
 });
 

@@ -132,6 +132,11 @@ export interface ProviderInfo {
    * credential that wins for the caller.
    */
   serverKey?: true;
+  /**
+   * Tenant mode, beside `serverKey`: the caller can still mint a key on their own Mastra account
+   * (connect with `ownAccount`), so that account rather than the deployment's is billed.
+   */
+  connectOwnAccount?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -311,6 +316,9 @@ export async function listProviders({
         ? { connectWithMastraAccount: true as const }
         : {}),
       ...(tenantCredentials && serverGatewayKey ? { serverKey: true as const } : {}),
+      ...(tenantCredentials && connectWithMastraAccount && serverGatewayKey
+        ? { connectOwnAccount: true as const }
+        : {}),
     });
   }
 
