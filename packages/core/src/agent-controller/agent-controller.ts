@@ -105,18 +105,31 @@ function getRawThreadBranchMetadata(thread: StorageThreadType): RawThreadBranchM
   return { state: branch.state, parentThreadId: branch.parentThreadId };
 }
 
-function assertRawControllerThreadAvailable({
+/**
+ * Read a thread row from raw controller storage and refuse rows that take part in
+ * shared-history branching. Uses one row read and one indexed ready-child query,
+ * never a thread-table scan.
+ */
+async function assertRawControllerThreadAvailable({
   threadId,
-  threads,
+  memoryStorage,
 }: {
   threadId: string;
-  threads: StorageThreadType[];
-}): StorageThreadType | null {
-  const thread = threads.find(candidate => candidate.id === threadId);
-  const hasReadyDescendants = threads.some(candidate => {
-    const candidateBranch = getRawThreadBranchMetadata(candidate);
-    return candidateBranch?.state === 'ready' && candidateBranch.parentThreadId === threadId;
+  memoryStorage: MemoryStorage;
+}): Promise<StorageThreadType | null> {
+  const thread = await memoryStorage.getThreadById({ threadId });
+  const readyChildren = await memoryStorage.listThreads({
+    filter: {
+      ...(thread ? { resourceId: thread.resourceId } : {}),
+      metadata: {
+        [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+        [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+      },
+    },
+    page: 0,
+    perPage: 1,
   });
+  const hasReadyDescendants = readyChildren.threads.length > 0;
   if (!thread) {
     if (hasReadyDescendants) {
       throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage has a missing parent.');
@@ -1509,10 +1522,7 @@ export class AgentController<TState = {}> {
   }): Promise<void> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
-    assertRawControllerThreadAvailable({
-      threadId: persistedThread.id,
-      threads: (await memoryStorage.listThreads({ perPage: false })).threads,
-    });
+    await assertRawControllerThreadAvailable({ threadId: persistedThread.id, memoryStorage });
     await memoryStorage.saveThread({ thread: persistedThread });
   }
 
@@ -1576,10 +1586,11 @@ export class AgentController<TState = {}> {
     }
 
     if (!this.config.memory) {
-      const threads = (await memory.listThreads({ perPage: false })).threads;
-      assertRawControllerThreadAvailable({ threadId: sourceThreadId, threads });
+      // Without configured memory, `memory` is the controller storage's memory domain.
+      const memoryStorage = await this.getMemoryStorage();
+      await assertRawControllerThreadAvailable({ threadId: sourceThreadId, memoryStorage });
       if (newThreadId) {
-        const destination = assertRawControllerThreadAvailable({ threadId: newThreadId, threads });
+        const destination = await assertRawControllerThreadAvailable({ threadId: newThreadId, memoryStorage });
         if (destination) {
           throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with the requested ID already exists.');
         }
@@ -1641,6 +1652,21 @@ export class AgentController<TState = {}> {
       );
     }
     const result = await memory.branchThread({ threadId: sourceThreadId, branchPointMessageId, title, metadata });
+    // Memory may keep its threads in a different store than the controller's rows.
+    // Mirror the branch row there, as clone does, so getById and ownership checks
+    // find it; controller storage then refuses the lineage row and reads defer to memory.
+    if (this.#resolveStorage()) {
+      const memoryStorage = await this.getMemoryStorage();
+      if (!(await memoryStorage.getThreadById({ threadId: result.thread.id }))) {
+        try {
+          await memoryStorage.saveThread({ thread: result.thread });
+        } catch (error) {
+          // Without the controller row the branch is unreachable; remove it rather than orphan it.
+          await memory.deleteThread(result.thread.id).catch(() => {});
+          throw error;
+        }
+      }
+    }
     return {
       thread: {
         id: result.thread.id,
@@ -1711,10 +1737,7 @@ export class AgentController<TState = {}> {
       // than a per-caller memory that may hold its own copy of the thread.
       const memoryStorage = this.#resolveStorage() ? await this.getMemoryStorage() : undefined;
       const thread = memoryStorage
-        ? assertRawControllerThreadAvailable({
-            threadId,
-            threads: (await memoryStorage.listThreads({ perPage: false })).threads,
-          })
+        ? await assertRawControllerThreadAvailable({ threadId, memoryStorage })
         : await (this.config.memory ? await this.resolveMemory(session) : undefined)?.getThreadById({ threadId });
       const metadata = thread?.metadata as Record<string, unknown> | undefined;
       return metadata?.[key];
@@ -1788,10 +1811,7 @@ export class AgentController<TState = {}> {
     await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
-    const storedThread = await memoryStorage.getThreadById({ threadId });
-    if (!storedThread) return null;
-    const allThreads = (await memoryStorage.listThreads({ perPage: false })).threads;
-    const thread = assertRawControllerThreadAvailable({ threadId, threads: allThreads });
+    const thread = await assertRawControllerThreadAvailable({ threadId, memoryStorage });
     if (!thread) return null;
     return {
       id: thread.id,
@@ -1946,8 +1966,7 @@ export class AgentController<TState = {}> {
     }
 
     const memoryStorage = await this.getMemoryStorage();
-    const allThreads = (await memoryStorage.listThreads({ perPage: false })).threads;
-    assertRawControllerThreadAvailable({ threadId, threads: allThreads });
+    await assertRawControllerThreadAvailable({ threadId, memoryStorage });
     const result = await memoryStorage.listMessages({
       threadId,
       ...(resourceId !== undefined ? { resourceId } : {}),
