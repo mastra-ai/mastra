@@ -12,3 +12,6 @@ export * from './components/composer/image-attachments';
 export * from './components/composer/primary-action';
 export * from './components/composer/types';
 export * from './components/session/session-surface';
+export * from './services/run-activity';
+export * from './components/activity-line/run-line';
+export * from './components/activity-line/activity-line';
