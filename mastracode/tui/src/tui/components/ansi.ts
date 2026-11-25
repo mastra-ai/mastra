@@ -4,6 +4,13 @@
 
 import { visibleWidth } from '@earendil-works/pi-tui';
 
+/** Text from outside (a paste) without escape codes and other control characters, which would break the row it is drawn in. */
+export function stripControls(text: string): string {
+  return text
+    .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[PX^_][^\x1b]*(?:\x1b\\)?)/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+}
+
 const ANSI_CLOSERS = '\x1b]8;;\x07\x1b[0m';
 const ELLIPSIS = '…';
 const ELLIPSIS_WIDTH = visibleWidth(ELLIPSIS);

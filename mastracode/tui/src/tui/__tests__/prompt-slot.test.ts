@@ -1,9 +1,10 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { Component, Terminal } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MenuList } from '../components/menu-list.js';
 import { SettingsMenu } from '../components/settings-menu.js';
+import { TextInput } from '../components/text-input.js';
 import { MastraTUI, PromptSlot } from '../prompt-slot.js';
 
 const plain = (lines: string[]) => lines.map(line => line.replace(/\x1b\[[0-9;:]*m|\x1b_[^\x07]*\x07/g, '').trimEnd());
@@ -109,6 +110,53 @@ describe('PromptSlot', () => {
     expect(rows.some(row => row.includes('openai/gpt m'))).toBe(true);
     expect(rows.some(row => row.includes('→ openai/gpt-5 mini'))).toBe(true);
     expect(rows.some(row => row.includes('anthropic'))).toBe(false);
+  });
+
+  it('keeps control characters of a paste out of the search', () => {
+    const { slot, mounted } = setup();
+    slot.open(list(['ab c de', 'other']));
+    const frame = mounted();
+    frame.handleInput!('\x1b[200~a\x1b[31mb\tc\nd\x07e\x1b[0m\x1b[201~');
+    expect(frame.render(60).join('\n')).not.toMatch(/\x1b\[31m|\x07\w/);
+    expect(plain(frame.render(60)).some(row => row.includes('→ ab c de'))).toBe(true);
+  });
+
+  it('keeps every row inside the terminal when colored text is pasted into a field and edited', () => {
+    const { slot, mounted } = setup();
+    const input = new TextInput();
+    slot.open(input, { title: 'Name this custom pack' });
+    const frame = mounted();
+    frame.handleInput!('\x1b[200~\x1b[31mred\x1b[0m\x1b[201~');
+    for (const key of ['\x7f', 'é', '\x1b[200~' + 'x'.repeat(300) + '\x1b[201~']) {
+      frame.handleInput!(key);
+      for (const row of frame.render(40)) expect(visibleWidth(row)).toBeLessThanOrEqual(40);
+    }
+    expect(input.getValue()).toBe('reé' + 'x'.repeat(300));
+  });
+
+  it('deletes a whole emoji, a word, or the whole search', () => {
+    const { slot, mounted } = setup();
+    slot.open(list(['One']));
+    const frame = mounted();
+    const search = () => plain(frame.render(60))[1]!.trim();
+    for (const key of ['a', '👩‍👩‍👧']) frame.handleInput!(key);
+    frame.handleInput!('\x7f');
+    expect(search()).toBe('› a');
+    for (const key of ' big query') frame.handleInput!(key);
+    frame.handleInput!('\x17');
+    expect(search()).toBe('› a big');
+    frame.handleInput!('\x15');
+    expect(search()).toBe('›  search');
+  });
+
+  it('shows the end of a search longer than the row, with the text cursor', () => {
+    const { slot, mounted } = setup();
+    slot.open(list(['One']));
+    const frame = mounted();
+    frame.handleInput!('\x1b[200~' + 'long-'.repeat(30) + 'end\x1b[201~');
+    const row = frame.render(40)[1]!;
+    expect(plain([row])[0]).toMatch(/^ › ….*-end$/);
+    expect(row).toContain('\x1b[7m');
   });
 
   it('lets a menu keep Backspace on an empty search instead of going back', () => {

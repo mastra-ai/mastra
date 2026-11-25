@@ -202,6 +202,7 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
   setFilter(query: string): void {
     this.query = query;
     if (this.isLoading) return;
+    this.highlightedIndex = 0;
     this.filterPullRequests(query);
     this.tui.requestRender();
   }

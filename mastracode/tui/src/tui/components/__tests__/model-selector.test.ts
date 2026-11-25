@@ -91,6 +91,27 @@ describe('makeCustomModelItem', () => {
   });
 });
 
+describe('model search', () => {
+  it('selects the best match while typing, wherever the cursor was', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: Array.from({ length: 30 }, (_, i) => ({
+        id: `mock/model-${i}`,
+        provider: 'mock',
+        modelName: `model-${i}`,
+        hasApiKey: true,
+      })),
+      onSelect,
+      onCancel: vi.fn(),
+    });
+    selector.handleInput('\x1b[A');
+    selector.setFilter('model-2');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'mock/model-2' }));
+  });
+});
+
 describe('Codex fast model selection', () => {
   const codex = { id: 'openai/gpt-6.2-sol', provider: 'openai', modelName: 'gpt-6.2-sol', hasApiKey: true };
   const fast = { ...codex, id: 'openai/gpt-6.2-sol:fast', modelName: 'gpt-6.2-sol:fast' };

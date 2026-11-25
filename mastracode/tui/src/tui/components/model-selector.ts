@@ -186,8 +186,7 @@ export class ModelSelectorComponent implements Component, Focusable, Filterable,
       (trimmed.includes('/') || this.filteredModels.length === 0) &&
       this.filteredModels[0]?.id !== trimmed;
 
-    const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, totalItems - 1));
+    this.selectedIndex = 0;
     this.updateList();
     this.tui.requestRender();
   }

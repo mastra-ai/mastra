@@ -9,13 +9,24 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { CURSOR_MARKER, decodeKittyPrintable, matchesKey, TUI, truncateToWidth } from '@earendil-works/pi-tui';
+import {
+  CURSOR_MARKER,
+  decodeKittyPrintable,
+  getKeybindings,
+  matchesKey,
+  sliceByColumn,
+  TUI,
+  truncateToWidth,
+  visibleWidth,
+} from '@earendil-works/pi-tui';
 import type { Component, Container, Focusable, OverlayHandle } from '@earendil-works/pi-tui';
 
+import { stripControls } from './components/ansi.js';
 import type { ListWindow } from './components/list-window.js';
 import { findFilterTarget, findMenuWindow, lowerFirst } from './components/menu-chrome.js';
 import type { Filterable, MenuChrome, MenuHint } from './components/menu-chrome.js';
 import { fadePanel, keyHint } from './components/surface.js';
+import { PASTE_END, PASTE_START } from './components/text-input.js';
 import { locate } from './mouse/hit-test.js';
 import type { MouseAware, MousePoint, MouseTarget } from './mouse/hit-test.js';
 import { tuiInternals } from './mouse/pi-tui-internals.js';
@@ -61,19 +72,35 @@ function caret(): string {
   return `${CURSOR_MARKER}\x1b[7m \x1b[27m`;
 }
 
-const PASTE_START = '\x1b[200~';
-const PASTE_END = '\x1b[201~';
-
 /**
  * Text typed or pasted into the search: a character (legacy or Kitty keyboard encoding), IME or emoji
- * input, or a bracketed paste flattened to one line. Undefined for keys (arrows, Enter, Esc, …).
+ * input, or a bracketed paste flattened to one line without its control characters. Undefined for keys
+ * (arrows, Enter, Esc, …).
  */
 function typedText(data: string): string | undefined {
   if (data.startsWith(PASTE_START)) {
-    return data.slice(PASTE_START.length).replace(PASTE_END, '').replace(/\s+/g, ' ');
+    return stripControls(data.slice(PASTE_START.length).replace(PASTE_END, '')).replace(/\s+/g, ' ');
   }
-  if (!/[\x00-\x1f\x7f]/.test(data)) return data;
+  if (!/[\x00-\x1f\x7f-\x9f]/.test(data)) return data;
   return decodeKittyPrintable(data);
+}
+
+/** An escape code that isn't complete (cut text): the panel's own codes would end up inside it and widen the row. */
+const BROKEN_ESCAPE_RE = /\x1b(?!\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)|_[^\x07\x1b]*(?:\x07|\x1b\\)|\\)/g;
+
+const graphemes = new Intl.Segmenter();
+
+function withoutLastGrapheme(text: string): string {
+  return [...graphemes.segment(text)]
+    .slice(0, -1)
+    .map(part => part.segment)
+    .join('');
+}
+
+/** The end of `text` that fits `width` columns, so the text cursor after it stays visible. */
+function tail(text: string, width: number): string {
+  const over = visibleWidth(text) - width;
+  return over > 0 ? `…${sliceByColumn(text, over + 1, width - 1)}` : text;
 }
 
 const isBlank = (line: string) => !line.replace(/\x1b\[[0-9;:]*m/g, '').trim();
@@ -138,8 +165,13 @@ export class MenuFrame implements Component, Focusable, MouseAware {
           return;
         }
       } else if (backspace) {
-        this.query = [...this.query].slice(0, -1).join('');
-        target.setFilter(this.query);
+        this.search(target, withoutLastGrapheme(this.query));
+        return;
+      } else if (this.query && getKeybindings().matches(data, 'tui.editor.deleteWordBackward')) {
+        this.search(target, this.query.replace(/\s*\S+\s*$/, ''));
+        return;
+      } else if (this.query && getKeybindings().matches(data, 'tui.editor.deleteToLineStart')) {
+        this.search(target, '');
         return;
       } else {
         // A leading space is left to the menu (Space changes a setting); after text it is part of the
@@ -147,13 +179,17 @@ export class MenuFrame implements Component, Focusable, MouseAware {
         const typed = typedText(data);
         const keepsSpace = typed === ' ' && (this.component as MenuChrome).menuKeepsSpace;
         if (typed && !keepsSpace && (this.query || typed.trim())) {
-          this.query += this.query ? typed : typed.trimStart();
-          target.setFilter(this.query);
+          this.search(target, this.query + (this.query ? typed : typed.trimStart()));
           return;
         }
       }
     }
     this.component.handleInput?.(data);
+  }
+
+  private search(target: Filterable, query: string): void {
+    this.query = query;
+    target.setFilter(query);
   }
 
   invalidate(): void {
@@ -168,7 +204,9 @@ export class MenuFrame implements Component, Focusable, MouseAware {
     if (target) {
       // A list: the title is the search field's placeholder.
       const placeholder = theme.fg('dim', lowerFirst(title) ?? 'search');
-      head.push(` ${searchIcon()} ${this.query ? theme.fg('text', this.query) + caret() : caret() + placeholder}`, '');
+      // Around the text: a space, the icon, a space, and the text cursor.
+      const shown = tail(this.query, Math.max(1, width - 4));
+      head.push(` ${searchIcon()} ${shown ? theme.fg('text', shown) + caret() : caret() + placeholder}`, '');
     } else if (title) {
       // A question (a text prompt) or a list without search: the title reads as a heading.
       head.push(` ${theme.fg('text', title)}`, '');
@@ -207,7 +245,7 @@ export class MenuFrame implements Component, Focusable, MouseAware {
       ...foot,
     ];
     return fadePanel(
-      rows.map(line => truncateToWidth(line, width, '')),
+      rows.map(line => truncateToWidth(line.replace(BROKEN_ESCAPE_RE, ''), width, '')),
       width,
       PANEL_STEP,
     );

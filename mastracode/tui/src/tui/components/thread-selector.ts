@@ -249,7 +249,7 @@ export class ThreadSelectorComponent extends Container implements Focusable, Fil
         )
       : this.allThreads;
 
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.filteredThreads.length - 1));
+    this.selectedIndex = 0;
     this.updateList();
     this.scheduleMessagePreviewLoad({ initialLoad: true });
   }
