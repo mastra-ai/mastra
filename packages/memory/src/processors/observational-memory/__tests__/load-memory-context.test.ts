@@ -28,6 +28,36 @@ function context(messages: MastraDBMessage[]) {
   return { memory, result };
 }
 
+describe('history batch insertion', () => {
+  it.each([false, true])('places tied live input exactly like sequential loads (reverse: %s)', async reverse => {
+    const history = Array.from({ length: 80 }, (_, i) =>
+      message(`stored-${i}`, i % 2 ? 'assistant' : 'user', `Stored fact ${i}`, i + 1),
+    );
+    history.push(structuredClone(history[10]!));
+    if (reverse) history.reverse();
+    history.push(message('system', 'system', 'Excluded stored system prompt', 0));
+    const incoming = message('incoming', 'user', 'Current request', 80);
+    incoming.content.parts = [{ type: 'text', text: 'Current request', createdAt: 80 }];
+    const expected = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    expected.add(structuredClone(incoming), 'input');
+    for (const item of structuredClone(history)) {
+      if (item.role !== 'system') expected.add(item, 'memory');
+    }
+    const actual = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    actual.add(structuredClone(incoming), 'input');
+    const add = vi.spyOn(actual, 'add');
+    const { memory } = context(structuredClone(history));
+    await loadMemoryContextMessages({ memory, messageList: actual, threadId: 'thread', resourceId: 'resource' });
+    expect(actual.get.all.db()).toEqual(expected.get.all.db());
+    expect(actual.get.input.db()).toEqual(expected.get.input.db());
+    expect(actual.get.response.db()).toEqual([]);
+    expect(actual.get.all.db().map(item => item.id)).not.toContain('system');
+    expect(actual.get.all.db().filter(item => item.id === 'stored-10')).toHaveLength(1);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(actual.drainUnsavedMessagesForSave().messages.map(item => item.id)).toEqual(['incoming']);
+  });
+});
+
 describe('22573 history loader', () => {
   it('preserves incoming same-ID client results without duplicating messages', async () => {
     const pending = message('assistant', 'assistant', '', 2);

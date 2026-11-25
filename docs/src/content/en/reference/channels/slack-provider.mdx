@@ -141,6 +141,14 @@ await slack.configure({
       'Show a typing indicator while the agent works. Set `false` to disable, or pass a function to return custom status text per stream chunk (return `false`, `null`, or `undefined` to leave the current status unchanged for that chunk).',
   },
   {
+    name: 'generativeUI',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      '**Experimental.** Gives the agent a `render_card` tool that posts structured cards to Slack as Block Kit. Requires the optional `@json-render/chat` package. With Mastra Connect, pass it through `providerOptions`. See [Generative UI cards](/reference/agents/channels#generative-ui-cards).',
+  },
+  {
     name: 'waitUntil',
     type: 'WaitUntilFn',
     isOptional: true,
@@ -217,8 +225,8 @@ await slack.configure({
 Creates a new Slack app for the agent via the Manifest API and returns an OAuth result with the authorization URL to redirect the user to. Requires `baseUrl` to be set. If a pending installation already exists for the agent, returns its existing authorization URL instead of creating a duplicate app.
 
 ```typescript
-const result = await slack.connect('support-agent', {
-  name: 'Support Bot',
+const result = await slack.connect('example-agent', {
+  name: 'Example Bot',
 })
 
 // Redirect the user to result.authorizationUrl to install the app
@@ -279,7 +287,7 @@ interface ChannelConnectResult {
 Disconnects an agent from Slack by deleting its app and removing the installation from storage.
 
 ```typescript
-await slack.disconnect('support-agent')
+await slack.disconnect('example-agent')
 ```
 
 Returns: `Promise<void>`
@@ -289,7 +297,7 @@ Returns: `Promise<void>`
 Returns the Slack installation for an agent, or `null` if none exists.
 
 ```typescript
-const installation = await slack.getInstallation('support-agent')
+const installation = await slack.getInstallation('example-agent')
 ```
 
 Returns: `Promise<SlackInstallation | null>`
@@ -367,15 +375,37 @@ When `connect()` builds a Slack app, the generated manifest requests a default s
 Access the registered provider through the typed `channels` getter, keyed by the id you registered it under:
 
 ```typescript
-const result = await mastra.channels.slack.connect('support-agent')
+const result = await mastra.channels.slack.connect('example-agent')
 ```
 
 When the key is only known at runtime, look it up by string id and pass the concrete type:
 
 ```typescript
 const slack = mastra.getChannelProvider<SlackProvider>('slack')
-const result = await slack.connect('support-agent')
+const result = await slack.connect('example-agent')
 ```
+
+## Slack tools
+
+`createSlackTools()` returns Slack-only tools that sit alongside the [channel tools](/reference/agents/channels#channel-tools): `findChannel` (find channels by name), `findUser` (find people by name), `searchMessages` (search recent top-level messages in channels) and `downloadSlackAttachment` (show a JPEG, PNG or WebP attachment to the model). They take the same options as `createChannelTools()`. `searchMessages` and `downloadSlackAttachment` only read channels those options allow. `findChannel` and `findUser` look up the whole workspace, so they can return channels and people outside them.
+
+```typescript title="src/mastra/agents/slack-tools.ts"
+import { Agent } from '@mastra/core/agent'
+import { createChannelTools } from '@mastra/core/channels'
+import { createSlackTools } from '@mastra/slack'
+
+const limits = { channels: 'all', access: 'read' } as const
+
+const agent = new Agent({
+  id: 'slack-tools-agent',
+  name: 'Slack Tools Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { ...(await createChannelTools(limits)), ...createSlackTools(limits) },
+})
+```
+
+A call made outside a Slack conversation fails with an error. `findChannel` and `findUser` use the `channels:read`, `groups:read` and `users:read` scopes, which are in the [default manifest](#default-manifest).
 
 ## Storage requirement
 

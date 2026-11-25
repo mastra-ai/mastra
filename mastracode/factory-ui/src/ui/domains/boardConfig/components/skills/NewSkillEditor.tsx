@@ -53,15 +53,16 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
     <div className="flex flex-col gap-8">
       <div inert={create.isPending} className="flex flex-col gap-8">
         <div className="flex flex-col gap-3">
-          <Txt as="h1" variant="display-lg" tone="ink" className="min-w-0 break-words">
+          <Txt as="p" variant="body" tone="ink" className="min-w-0 break-words">
             <InlineText
               value={name}
               label="Name"
               placeholder="skill-name"
               readOnly={false}
               autoFocus
-              variant="display-lg"
+              variant="body"
               tone="ink"
+              className="zoom-safe-text"
               onChange={value => setName(value.trim())}
             />
           </Txt>
@@ -90,8 +91,14 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
           <Button size="sm" variant="ghost" onClick={discard} disabled={create.isPending}>
             Discard
           </Button>
-          <Button size="sm" variant="primary" onClick={submit} disabled={problem !== undefined || create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create'}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={submit}
+            disabled={problem !== undefined}
+            loading={create.isPending}
+          >
+            Create
           </Button>
         </SaveBar>
       )}

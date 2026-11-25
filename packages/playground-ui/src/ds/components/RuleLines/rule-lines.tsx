@@ -118,8 +118,7 @@ export function RuleLineGroupRemove({
   ...props
 }: Omit<ButtonProps, 'variant' | 'size'> & { children: ReactNode }) {
   return (
-    <Button variant="ghost" size="sm" className={cn('ml-auto', className)} {...props}>
-      <TrashIcon />
+    <Button icon={<TrashIcon />} variant="ghost" size="sm" className={cn('ml-auto', className)} {...props}>
       {children}
     </Button>
   );

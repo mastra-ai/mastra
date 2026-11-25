@@ -8,21 +8,6 @@
   ],
   "structuredOutput": ["abliterated-model-large", "abliterated-model-large-flash", "abliterated-model-large-v2"],
   "reasoning": {
-    "abliterated-model-large-v2": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "abliterated-model": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "abliterated-model-large": [
       {
         "type": "toggle"
@@ -32,10 +17,25 @@
         "values": ["none", "high", "max"]
       }
     ],
+    "abliterated-model-large-v2": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "abliterated-model-large-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "abliterated-model": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

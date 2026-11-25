@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { AgentStepContainer } from './agent-step-container';
 import { Integrations } from './integrations';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
@@ -23,11 +22,8 @@ export const AgentProfileIntegrationsStep = () => {
     <AgentStepContainer
       title="Integrations"
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <IconArrowRight />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >

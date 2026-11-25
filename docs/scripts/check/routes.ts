@@ -20,12 +20,16 @@ export function normalizeRoute(route: string): string {
 export function routeForFile(file: Pick<ContentFile, 'path' | 'section' | 'frontmatter'>): string | null {
   const base = SECTION_ROUTES.get(file.section)
   if (!base || isPartial(file)) return null
+  return routeWithin(base, file.path.slice(`${CONTENT_ROOT}/${file.section}/`.length), file.frontmatter)
+}
 
-  const withinSection = file.path.slice(`${CONTENT_ROOT}/${file.section}/`.length).replace(/\.mdx$/, '')
+/** The URL path Docusaurus serves `relativePath` (an `.mdx` path inside a docs dir served at `base`) at. */
+export function routeWithin(base: string, relativePath: string, frontmatter: Record<string, unknown> | null): string {
+  const withinSection = relativePath.replace(/\.mdx$/, '')
   const segments = withinSection.split('/')
   const dir = segments.slice(0, -1).join('/')
 
-  const slug = file.frontmatter?.slug
+  const slug = frontmatter?.slug
   if (typeof slug === 'string' && slug.trim() !== '') {
     const resolved = slug.startsWith('/') ? slug : `/${dir ? `${dir}/` : ''}${slug}`
     return normalizeRoute(`${base}${resolved}`)
@@ -37,7 +41,10 @@ export function routeForFile(file: Pick<ContentFile, 'path' | 'section' | 'front
   if (name.toLowerCase() === 'index' || name.toLowerCase() === 'readme' || name === parent) {
     return normalizeRoute(`${base}/${dir}`)
   }
-  return normalizeRoute(`${base}/${withinSection}`)
+  // Without a slug, a frontmatter `id` replaces the file name in the route.
+  const id = frontmatter?.id
+  const baseName = typeof id === 'string' && id.trim() !== '' ? id.trim() : name
+  return normalizeRoute(`${base}/${dir ? `${dir}/` : ''}${baseName}`)
 }
 
 export interface RouteIndex {

@@ -151,6 +151,7 @@ export const durableAgenticOutputSchema = z.object({
   }),
   state: z.any(),
   tracingTermination: z.custom<SpanTermination>().optional(),
+  stopCause: z.enum(CONTINUATION_STOP_CAUSES).optional(),
 });
 
 /**

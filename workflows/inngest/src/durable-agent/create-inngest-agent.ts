@@ -455,6 +455,10 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
   threadId?: string;
   /** Resource ID if using memory */
   resourceId?: string;
+  /** Trace ID of the run, when the run is traced */
+  traceId?: string;
+  /** ID of the agent run span, when the run is traced */
+  spanId?: string;
   /** Cleanup function */
   cleanup: () => void;
   /**
@@ -633,6 +637,14 @@ export interface InngestAgent<TOutput = undefined> {
    * agent recovery has nothing to re-drive and skips Inngest agents.
    */
   recoverActiveRuns(options?: unknown): Promise<{ recovered: never[]; succeeded: number; failed: number }>;
+
+  /**
+   * The owner and lifecycle of one of this agent's runs, read from its saved workflow
+   * row: `running`, `suspended`, or `finished`. Undefined when the run is unknown,
+   * belongs to another agent, or storage is not configured.
+   * @internal Used by resumable chat routes to reconnect to a run.
+   */
+  __getRunRecord: Agent<any, any, TOutput>['__getRunRecord'];
 
   /**
    * Get the durable workflows required by this agent.
@@ -961,6 +973,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * The agent run span saved with a run that has no live span in this process (another process
+   * started it, or it already finished here), so an observer still names the run's trace.
+   * `undefined` when the run is untraced or its snapshot is gone. Never throws.
+   */
+  async function loadRunAgentSpan(runId: string): Promise<Span<SpanType.AGENT_RUN> | undefined> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        runId,
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+      });
+      const agentSpanData = (
+        snapshot?.context?.input as { agentSpanData?: SpanSnapshot<SpanType.AGENT_RUN> } | undefined
+      )?.agentSpanData;
+      return agentSpanData ? mastra?.observability?.getSelectedInstance({})?.rebuildSpan(agentSpanData) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
    * A run parked on a suspension has no prepared run in this process, so a
    * fenced resume is the first point where it is known it can never continue.
    * Delete its still-suspended snapshot rows and publish the abort terminal so
@@ -1103,6 +1136,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         name: input.modelSpanData?.name ?? "llm: ''",
         attributes: input.modelSpanData?.attributes ?? {},
         metadata: { runId, resumed: true },
+        tracingPolicy: agent.getTracingPolicy?.(),
         requestContext,
       });
       return {
@@ -1164,8 +1198,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) return false;
       const threadId: string | undefined = workflowInput.state?.threadId;
       const resourceId: string | undefined = workflowInput.state?.resourceId;
+      // An observer in another process rebuilds the run's span from this, so it names the trace.
+      // The span's input and attributes stay out: they can be large and the observer needs neither.
+      const { input: _input, attributes: _attributes, ...agentSpanData } = workflowInput.agentSpanData ?? {};
       const context = {} as WorkflowRunState['context'];
-      context.input = { agentId: workflowInput.agentId, state: { threadId, resourceId } };
+      context.input = {
+        agentId: workflowInput.agentId,
+        state: { threadId, resourceId },
+        ...(workflowInput.agentSpanData ? { agentSpanData } : {}),
+      };
       await workflowsStore.persistWorkflowSnapshot({
         workflowName,
         runId,
@@ -1468,6 +1509,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'recover'
     | 'listActiveRuns'
     | 'recoverActiveRuns'
+    | '__getRunRecord'
     | 'generate'
     | 'resumeGenerate'
     | 'resumeStream'
@@ -1631,6 +1673,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         outputProcessors: registryEntry.outputProcessors,
         processorStates: registryEntry.processorStates,
         requestContext: registryEntry.requestContext,
+        tracingContext: registryEntry.agentSpan ? { currentSpan: registryEntry.agentSpan } : undefined,
         onChunk: chunk => {
           // A parked segment is resumable; its observer's signal must not abort the next segment.
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
@@ -1759,6 +1802,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         threadId,
         resourceId,
+        traceId: output.traceId,
+        spanId: output.spanId,
         cleanup,
         abort,
         // Also expose fullStream directly for server compatibility
@@ -2137,6 +2182,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // SUSPENDED event seen before any chunk belongs to the earlier segment
       // and must not close (or be reported by) this stream.
       let resumedChunkSeen = false;
+      const resumeSegmentSpan = existingEntry.resumeAgentSpan ?? existingEntry.agentSpan;
       // Re-subscribe to the stream
       const {
         output,
@@ -2164,6 +2210,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         outputProcessors: existingEntry.outputProcessors,
         processorStates: existingEntry.processorStates,
         requestContext: callbackOptions.requestContext,
+        tracingContext: resumeSegmentSpan ? { currentSpan: resumeSegmentSpan } : undefined,
         onChunk: chunk => {
           resumedChunkSeen = true;
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
@@ -2361,6 +2408,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
+        traceId: output.traceId,
+        spanId: output.spanId,
         cleanup,
         abort,
         // Internal: stream-only cleanup for resumeGenerate() to release the
@@ -2405,7 +2454,37 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return { recovered: [], succeeded: 0, failed: 0 };
     },
 
+    async __getRunRecord(runId) {
+      // Inngest runs publish no core run record. Their loop row is written as `running`
+      // before dispatch and replaced by the engine once the run suspends or ends, so it
+      // carries the same owner and lifecycle a run record would.
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      const input = snapshot?.context?.input as
+        | { agentId?: string; state?: { threadId?: string; resourceId?: string } }
+        | undefined;
+      if (!snapshot || !input || input.agentId !== agentId) return undefined;
+      const parked =
+        snapshot.status === 'suspended' ||
+        (snapshot.status === 'running' && Object.keys(snapshot.suspendedPaths ?? {}).length > 0);
+      const live = ['running', 'waiting', 'pending'].includes(snapshot.status);
+      return {
+        agentId,
+        runId,
+        threadId: input.state?.threadId,
+        resourceId: input.state?.resourceId,
+        status: parked ? 'suspended' : live ? 'running' : 'finished',
+        updatedAt: snapshot.timestamp,
+      };
+    },
+
     async observe(runId, observeOptions) {
+      const observedEntry = getRunRegistryEntry(runId, mastra);
+      const observedAgentSpan =
+        observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan ?? (await loadRunAgentSpan(runId));
       // Create the stream subscription with offset support
       const stream = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -2420,9 +2499,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
-        structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
-          | StructuredOutputOptions<TOutput>
-          | undefined,
+        structuredOutput: observedEntry?.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
         onChunk: observeOptions?.onChunk,
         onStepFinish: observeOptions?.onStepFinish,
         onFinish: observeOptions?.onFinish,
@@ -2497,6 +2575,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           return output.fullStream as ReadableStream<any>;
         },
         runId,
+        traceId: output.traceId,
+        spanId: output.spanId,
         cleanup: streamCleanup,
         detach,
         abort,

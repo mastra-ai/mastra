@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/ds/components/Dialog';
+import { Kbd } from '@/ds/components/Kbd';
 import { LogoWithoutText } from '@/ds/components/Logo';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import {
@@ -251,12 +252,9 @@ const StudioSidebarBody = () => {
               <IconMagnifyingGlass />
               <Sidebar.NavLabel state={state}>Search</Sidebar.NavLabel>
               {state !== 'collapsed' && (
-                <kbd
-                  aria-hidden="true"
-                  className="ml-auto rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-meta leading-none text-muted-foreground"
-                >
-                  ⌘K
-                </kbd>
+                <span aria-hidden="true" className="ml-auto">
+                  <Kbd size="xs">⌘K</Kbd>
+                </span>
               )}
             </button>
           </Sidebar.NavLink>

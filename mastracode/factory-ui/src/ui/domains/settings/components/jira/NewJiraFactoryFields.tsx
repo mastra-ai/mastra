@@ -54,8 +54,8 @@ export function NewJiraFactoryFields({
           disabled={adding}
           className="w-56 max-w-full"
         />
-        <Button size="sm" icon={<IconPlusMedium />} disabled={adding || !labelsReady} onClick={add}>
-          {adding ? 'Adding…' : 'Add'}
+        <Button size="sm" icon={<IconPlusMedium />} disabled={!labelsReady} onClick={add} loading={adding}>
+          Add
         </Button>
       </div>
       <RoutingNote error={labelsError ?? refusal} hint={hint} />

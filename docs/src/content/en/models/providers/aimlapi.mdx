@@ -7,7 +7,7 @@ description: "Browse AI/ML API model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/aimlapi.svg" alt="AI/ML API logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AI/ML API
 
-Access 163 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
+Access 158 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
 
 Learn more in the [AI/ML API documentation](https://docs.aimlapi.com).
 
@@ -341,7 +341,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 200000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": 3.174,
     "outputCost": 15.87
   },
@@ -372,7 +372,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "aimlapi/bytedance-seed/seed-2.0-lite",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -384,7 +384,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "aimlapi/bytedance-seed/seed-2.0-mini",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -474,8 +474,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 124000,
-    "inputCost": 0.30682,
-    "outputCost": 1.20612
+    "inputCost": 0.2645,
+    "outputCost": 1.058
   },
   {
     "model": "aimlapi/deepseek/deepseek-v4-flash",
@@ -522,8 +522,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 384000,
-    "inputCost": 1.84092,
-    "outputCost": 3.68184
+    "inputCost": 2.09484,
+    "outputCost": 6.28452
   },
   {
     "model": "aimlapi/deepseek/deepseek-v4.1-flash",
@@ -780,7 +780,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   {
     "model": "aimlapi/meta/muse-spark-1.1",
     "imageInput": true,
-    "audioInput": false,
+    "audioInput": true,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -917,21 +917,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
-    "maxOutput": 209715,
+    "maxOutput": 262144,
     "inputCost": 1.587,
     "outputCost": 7.935
-  },
-  {
-    "model": "aimlapi/mistralai/mistral-medium-3.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 104857,
-    "inputCost": 0.4232,
-    "outputCost": 2.116
   },
   {
     "model": "aimlapi/mistralai/mistral-nemo",
@@ -1040,42 +1028,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 3,
     "outputCost": 15
-  },
-  {
-    "model": "aimlapi/moonshotai/kimi-k2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 98304,
-    "inputCost": 0.60306,
-    "outputCost": 2.4334
-  },
-  {
-    "model": "aimlapi/moonshotai/kimi-k2-0905",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 98304,
-    "inputCost": 1.058,
-    "outputCost": 3.174
-  },
-  {
-    "model": "aimlapi/moonshotai/kimi-k2-thinking",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 98304,
-    "inputCost": 0.6348,
-    "outputCost": 2.645
   },
   {
     "model": "aimlapi/morph/morph-v3-fast",
@@ -1757,7 +1709,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 64000,
+    "maxOutput": 65536,
     "inputCost": 0.882372,
     "outputCost": 2.646058
   },
@@ -1854,8 +1806,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 524288,
     "maxOutput": 131072,
-    "inputCost": 0.09522,
-    "outputCost": 0.38088
+    "inputCost": 0.1587,
+    "outputCost": 0.6348
   },
   {
     "model": "aimlapi/x-ai/grok-4-20-0309-non-reasoning",
@@ -1892,18 +1844,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.14812,
     "outputCost": 0.29624
-  },
-  {
-    "model": "aimlapi/xiaomi/mimo-v2.5-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
-    "inputCost": 0.46023,
-    "outputCost": 0.92046
   },
   {
     "model": "aimlapi/z-ai/glm-4.5v",

@@ -1,3 +1,4 @@
+import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import { MastraFGAPermissions } from '../../auth/ee';
 import type { MastraFGAPermissionInput } from '../../auth/ee';
@@ -25,6 +26,8 @@ import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import { getRequestContextInputValues } from '../../request-context/input-source';
+import { getToolDefinitionsForTracing } from '../../stream/aisdk/v5/compat/prepare-tools';
+import { sendsNativeResponseFormat } from '../../stream/aisdk/v5/execute';
 import { asJsonSchema } from '../../stream/base/schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
@@ -32,7 +35,7 @@ import type { DynamicArgument } from '../../types';
 import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
+import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
 import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
@@ -67,10 +70,16 @@ import {
   createWorkflowInput,
   serializeClientTools,
   serializeModelConfig,
+  serializeModelSettings,
   serializeToolsetToolNames,
 } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
+
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+export const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+export const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -109,6 +118,7 @@ interface DurablePreparationAgent {
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptions<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel;
+    resolvedDefaultOptions?: AgentExecutionOptionsBase<any>;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -192,6 +202,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   runId?: string;
   /** Request context */
   requestContext?: RequestContext;
+  /** @internal Called when a non-reserved context entry cannot be snapshotted. */
+  onRequestContextEntryOmitted?: () => void;
   /** Logger */
   logger?: IMastraLogger;
   /** Mastra instance (for version overrides, background tasks, etc.) */
@@ -636,7 +648,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // snapshotRequestContextEntries; the versions entry is pinned back to the
   // caller's own value (captured at step 3, before the merge) so persisted
   // input still reflects only caller intent.
-  let requestContextEntriesSnapshot = snapshotRequestContextEntries(requestContext);
+  let requestContextEntriesSnapshot = snapshotRequestContextEntries(
+    requestContext,
+    options.onRequestContextEntryOmitted,
+  );
   // Persist the run's scope set unconditionally — [] included — so a cold resume can tell
   // "held no scopes" (recorded [], re-supplied scopes are rejected) from a pre-upgrade
   // snapshot (key absent, supplied scopes are adopted). The live run context deliberately
@@ -667,6 +682,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
+      resolvedDefaultOptions: await loadDefaultOptions(),
       toolsets: execOptions?.toolsets,
       clientTools: execOptions?.clientTools,
       threadId,
@@ -684,6 +700,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
+  }
+  const toolNames = Object.keys(tools);
+  if (!resumedSpans && toolNames.length > 0) {
+    agentSpan?.update({ attributes: { availableTools: toolNames } });
   }
 
   // Client-executed results fire only after processors accept the request and
@@ -816,18 +836,38 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         type: SpanType.MODEL_GENERATION,
         outcome: null,
         name: `llm: '${model.modelId}'`,
+        input: {
+          messages: [...messageList.getAllSystemMessages(), ...messageList.get.all.aiV5.model()],
+        },
         attributes: {
           model: model.modelId,
           provider: model.provider,
           streaming: true,
+          parameters: serializeModelSettings(execOptions?.modelSettings),
+          tools: agentSpan?.isValid
+            ? getToolDefinitionsForTracing({
+                tools: tools as unknown as ToolSet,
+                toolChoice: execOptions?.toolChoice,
+                activeTools: execOptions?.activeTools,
+                stripToolsWhenNone: sendsNativeResponseFormat(execOptions?.structuredOutput, model),
+              })
+            : undefined,
         },
         metadata: {
           runId,
           threadId,
           resourceId,
         },
+        tracingPolicy: agentTracingPolicy,
         requestContext,
       });
+
+  const modelSnapshot = modelSpan?.snapshot?.() ?? modelSpan?.exportSpan();
+  const modelSnapshotWithoutPromptOrTools = modelSnapshot && {
+    ...modelSnapshot,
+    input: undefined,
+    attributes: { ...modelSnapshot.attributes, tools: undefined },
+  };
 
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
@@ -918,7 +958,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     },
     messageId,
     agentSpanData: agentSpan?.snapshot?.() ?? agentSpan?.exportSpan(),
-    modelSpanData: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan(),
+    modelSpanData: modelSnapshotWithoutPromptOrTools,
     requestContextEntries: requestContextEntriesSnapshot,
     inputTripwire: tripwireData,
   });

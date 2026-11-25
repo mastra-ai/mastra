@@ -13,3 +13,4 @@ export {
   resolveWebSearchProvider,
 } from './web-search.js';
 export { requestSandboxAccessTool } from './request-sandbox-access.js';
+export { createSubmitPlanTool } from './submit-plan.js';

@@ -106,4 +106,28 @@ describe('StoredSkillsPicker', () => {
     expect(onAttach).not.toHaveBeenCalled();
     expect(onRemove).not.toHaveBeenCalled();
   });
+
+  it('delegates editing without toggling the skill', () => {
+    const onEdit = vi.fn();
+    const onAttach = vi.fn();
+    render(
+      <StoredSkillsPicker
+        availableSkills={availableSkills}
+        selectedSkillIds={[]}
+        onAttach={onAttach}
+        onRemove={vi.fn()}
+        onEdit={onEdit}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Summarize' }));
+    expect(onEdit).toHaveBeenCalledWith('summarize');
+    expect(onAttach).not.toHaveBeenCalled();
+    expect(screen.getByRole('checkbox', { name: /Summarize/ }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('hides the edit action unless the host offers it', () => {
+    render(<ControlledPicker />);
+    expect(screen.queryByRole('button', { name: /^Edit / })).toBeNull();
+  });
 });

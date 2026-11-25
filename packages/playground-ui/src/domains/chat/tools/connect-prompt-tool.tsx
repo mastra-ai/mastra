@@ -180,7 +180,8 @@ const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPro
                         variant="primary"
                         size="sm"
                         className="min-w-24"
-                        disabled={readOnly || isCreating || isPending}
+                        disabled={readOnly || isCreating}
+                        loading={isPending}
                         onClick={() => connect(provider)}
                       >
                         Connect

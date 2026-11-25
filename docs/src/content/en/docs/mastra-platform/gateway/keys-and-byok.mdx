@@ -34,11 +34,7 @@ When you create a key, you can set:
 
 You can rename project and organization keys at any time. Expiry, allowed models, and failover are fixed at creation. To change them, create a new key and revoke the old one.
 
-:::info[Rolling out]
-
-Per-key spend limits (daily, weekly, monthly, or lifetime, from $1) are rolling out and may not appear in your organization yet.
-
-:::
+A key can also have a spend limit (daily, weekly, monthly, or lifetime, from $1). Gateway rejects requests with that key once the limit is reached.
 
 ## Rotate and revoke
 
@@ -57,7 +53,7 @@ Automatic deployment keys are rolling out by organization.
 
 When enabled, Mastra platform injects a Gateway key into each deploy as `MASTRA_GATEWAY_API_KEY`, so deployed agents can call Gateway without manual setup. The key is scoped to the deploy and is revoked when the deploy stops, fails, or is cancelled. A key you set yourself isn't replaced.
 
-Turn injection on or off, and restrict allowed models, in project settings. A deployment-key spend limit can be saved in project settings, but it isn't enforced on the key yet.
+Turn injection on or off, and restrict allowed models, in project settings. A deployment-key spend limit set in project settings applies to each deploy's key.
 
 ## Bring your own key
 
@@ -66,7 +62,7 @@ A BYOK connection routes requests through your own provider account. The provide
 | Provider | Supported endpoints |
 | - | - |
 | OpenAI | Chat Completions, Responses, Embeddings, Decisions |
-| Anthropic | Messages |
+| Anthropic | Messages and Chat Completions (OpenAI-compatible) |
 | Google | Chat Completions and Embeddings (OpenAI-compatible) |
 | Custom HTTPS endpoint | Chat Completions, Responses, and Messages |
 

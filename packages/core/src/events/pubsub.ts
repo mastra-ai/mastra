@@ -16,6 +16,21 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
  */
 export type PubSubDeliveryMode = 'pull' | 'push';
 
+/**
+ * The event bus behind workflow execution, streams, signals, background tasks
+ * and schedules.
+ *
+ * Mastra decides how to behave from the capability getters below
+ * (`deliversAcrossProcesses`, `redeliversUnacked`, `supportedModes`, ...), never
+ * from which transport class the instance is. An implementation states what its
+ * transport does by overriding them.
+ *
+ * Evented workflows and evented agents can run on any implementation inside one
+ * process. Running them on several processes needs a pubsub that redelivers
+ * unacknowledged events and a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ */
 export abstract class PubSub {
   abstract publish(
     topic: string,
@@ -117,6 +132,20 @@ export abstract class PubSub {
   }
 
   /**
+   * Whether an event published here can reach a subscriber in another process.
+   * Defaults to `true`, so an implementation is treated as a shared transport
+   * unless it says otherwise: runs are fenced against other processes, and
+   * shutdown detaches from the evented runs other processes may still execute
+   * instead of stopping them.
+   *
+   * Return `false` only when every subscriber lives in the publishing process.
+   * Mastra then skips that cross-process coordination.
+   */
+  get deliversAcrossProcesses(): boolean {
+    return true;
+  }
+
+  /**
    * Whether a message delivered to a consumer that neither acks nor nacks it
    * (for example because its process died) is delivered again to a consumer of
    * the same group once the broker considers it abandoned. Defaults to `false`.
@@ -126,6 +155,9 @@ export abstract class PubSub {
    * pass restarts the run. The broker's abandonment threshold must be at least
    * 30 s, the evented step fence a dead worker leaves behind; a redelivery that
    * arrives before the fence expires is dropped as a duplicate.
+   *
+   * Evented workflows and agents that run on several processes need `true`
+   * here. Without it, no other worker picks up the step a stopped worker held.
    */
   get redeliversUnacked(): boolean {
     return false;

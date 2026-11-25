@@ -310,8 +310,8 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-          <Button variant="destructive" disabled={isDeleting} onClick={() => void confirm()}>
-            {isDeleting ? 'Deleting…' : 'Delete'}
+          <Button variant="destructive" onClick={() => void confirm()} loading={isDeleting}>
+            Delete
           </Button>
         </AlertDialog.Footer>
       </AlertDialog.Content>

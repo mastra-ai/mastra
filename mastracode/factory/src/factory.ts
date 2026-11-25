@@ -115,6 +115,7 @@ import {
 } from './integrations/platform/foundation/connect-event-poller.js';
 import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
+import { observeSessionMemoryFailurePosts } from './integrations/slack/memory-failure-post.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
@@ -1612,6 +1613,8 @@ export class MastraFactory {
       sessionModel: {
         projects: factoryProjectsStorage,
         modelDefaults: modelDefaultsStorage,
+        // `this.#prepared` is assigned below; tools only run once the mount is up.
+        localAuthStorage: () => this.#prepared?.base.authStorage,
         ...(auth
           ? {
               tenantCatalog: {
@@ -2634,6 +2637,7 @@ export class MastraFactory {
           answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
+      observeSessionMemoryFailurePosts(session, () => prepared.base.controller.getChannels());
       observeSessionThreadStamp(session);
       instrumentSessionFirstOutput(session);
     });

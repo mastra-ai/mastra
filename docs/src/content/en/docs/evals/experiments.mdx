@@ -497,6 +497,34 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 console.log(experiment.status) // 'completed' | 'failed'
 ```
 
+### Durable experiments
+
+By default, `startExperimentAsync()` runs the experiment inside the process that started it. If that process stops or redeploys, the experiment stays `running`. Pass `durable: true` to run it as an [evented workflow](/docs/deployment/workers) instead, with one workflow step per item:
+
+```typescript title="src/mastra/experiments/durable.ts"
+const { experimentId } = await dataset.startExperimentAsync({
+  durable: true,
+  targetType: 'agent',
+  targetId: 'translation-agent',
+  scorers: ['accuracy'],
+  maxConcurrency: 5,
+})
+```
+
+The workflow's run ID is the experiment ID. Each item's result is upserted on `(experimentId, itemId, attempt)`, so an item that runs again after a crash still leaves one row. A target error is recorded on the item's row and doesn't fail the run. When every item is done, Mastra finalizes the experiment.
+
+Durable runs need [workers](/docs/deployment/workers) and a pubsub that redelivers unacknowledged events, such as Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. A process that only handles pushed events through `mastra.handleWorkflowEvent()` can run the steps too, without starting workers. On the default in-memory pubsub, the run works but stays in one process, so it isn't durable.
+
+Everything in a durable run must be serializable, so `durable: true` accepts registered targets, scorer IDs, `version`, `maxConcurrency`, `itemTimeout`, `maxRetries`, `agentModel` as a `provider/modelId` string, `requestContext` with plain JSON values, `unmockedToolPolicy`, and `versions`. It throws a `MastraError` with the `id` `EXPERIMENT_NOT_DURABLE` before creating anything when the config uses an inline `task`, lifecycle hooks, `onEvent`, `signal`, scorer objects or step scorers, `persistence` set to `'none'`, or `requestContext` values that aren't plain JSON, such as functions or dates.
+
+A durable run doesn't keep the signed-in user from the request that started it. Mastra removes the auth token, user, roles, and permissions from `requestContext` before the run is published or stored, so targets in a durable run don't see them.
+
+Keep these limits in mind:
+
+- **Recovery waits for the broker.** With Redis or Valkey Streams, an item cut off by a crash runs again after `reclaimIdleMs` (60 seconds by default).
+- **A pull worker runs one step at a time.** Items run in parallel only across workers, so `maxConcurrency` above the worker count doesn't speed up the run.
+- **Workflow targets can run twice after a crash.** Workflow recovery can restart the cut-off target run while the item also runs again. The item still counts once.
+
 ## Caller-driven experiments
 
 `startExperiment()` puts Mastra in charge of the whole run. If a durable orchestrator (for example Temporal, Airflow, or a custom worker fleet) owns the loop instead, create the experiment first and drive it yourself in one of these shapes:
@@ -530,7 +558,7 @@ const { result, scores } = await dataset.runExperimentItem({
 })
 ```
 
-Retries and timeouts belong to your orchestrator: each `runExperimentItem` call executes the item exactly once. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
+By default each `runExperimentItem` call executes the item once. Pass `maxRetries` and `itemTimeout` to retry and time out inside the call, or leave both to your orchestrator. The item's tool mocks apply as in native runs. Scorers resolve with the same precedence as native runs: experiment `scorers` win over item `scorerIds`, which win over dataset `scorerIds`.
 
 ### Ingest external results
 

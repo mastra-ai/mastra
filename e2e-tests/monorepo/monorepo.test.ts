@@ -756,6 +756,7 @@ export const optionalPeerRoute = registerApiRoute('/optional-peer', {
           join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
           `import { registerApiRoute } from '@mastra/core/server';
 import { camelCase } from 'lodash';
+import kebabCase from 'lodash.kebabcase';
 import { getDaysInMonth, isLeapYear } from 'date-fns';
 import { greet } from '@inner/raw-ts';
 import { basename, join } from 'node:path';
@@ -766,6 +767,7 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
   method: 'GET',
   handler: async c => c.json({
     label: camelCase('virtual dependency entries'),
+    modularizedLabel: kebabCase('Modularized Lodash Import'),
     days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
     externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
     leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
@@ -945,11 +947,21 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         label: 'virtualDependencyEntries',
+        modularizedLabel: 'modularized-lodash-import',
         days: 28,
         externalFile: 'optimized-entry.txt',
         leapYear: true,
         workspaceGreeting: 'hello workspace c',
       });
+    });
+
+    it('should not rewrite modularized lodash packages to lodash', async () => {
+      const outputDir = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      const bundleFiles = await glob('**/*.mjs', { cwd: outputDir, ignore: ['node_modules/**'] });
+      const output = (await Promise.all(bundleFiles.map(file => readFile(join(outputDir, file), 'utf-8')))).join('\n');
+
+      expect(bundleFiles.length).toBeGreaterThan(0);
+      expect(output).not.toMatch(/['"]lodash\/kebabCase(\.js)?['"]/);
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {

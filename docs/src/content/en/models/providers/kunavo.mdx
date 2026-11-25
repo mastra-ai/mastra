@@ -7,7 +7,7 @@ description: "Browse Kunavo model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/kunavo.svg" alt="Kunavo logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kunavo
 
-Access 16 Kunavo models through Mastra's model router. Authentication is handled automatically using the `KUNAVO_API_KEY` environment variable.
+Access 19 Kunavo models through Mastra's model router. Authentication is handled automatically using the `KUNAVO_API_KEY` environment variable.
 
 Learn more in the [Kunavo documentation](https://kunavo.com/docs/quickstart?utm_source=models.dev&utm_medium=directory).
 
@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 35
   },
   {
+    "model": "kunavo/claude-fable-5-2",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 5.6,
+    "outputCost": 28
+  },
+  {
     "model": "kunavo/claude-haiku-4-5",
     "imageInput": true,
     "audioInput": false,
@@ -80,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 64000,
     "inputCost": 0.7,
     "outputCost": 3.5
+  },
+  {
+    "model": "kunavo/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.07,
+    "outputCost": 0.35
   },
   {
     "model": "kunavo/claude-opus-4-6",
@@ -149,12 +173,24 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "maxOutput": 128000,
     "inputCost": 2.1,
     "outputCost": 10.5
   },
   {
     "model": "kunavo/claude-sonnet-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 1.4,
+    "outputCost": 7
+  },
+  {
+    "model": "kunavo/claude-sonnet-5-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

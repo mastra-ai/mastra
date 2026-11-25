@@ -39,6 +39,8 @@ function fakePlatform(options?: {
   integrations?: Array<Record<string, unknown>>;
   endUserProviders?: string[] | null;
   gateConnectUrl?: string;
+  /** Vendor API host on session responses; null mimics a platform that predates the field. */
+  apiBaseUrl?: string | null;
 }) {
   const connections = options?.connections ?? [makeConnection()];
   const integrations = options?.integrations ?? [
@@ -88,6 +90,7 @@ function fakePlatform(options?: {
         // reader.
         connectUrl: body.resourceId ? null : 'https://connect.test/session',
         sessionToken: body.resourceId ? null : 'sess_tok',
+        ...(options?.apiBaseUrl === null ? {} : { apiBaseUrl: options?.apiBaseUrl ?? 'https://nango.example.test' }),
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -449,11 +452,24 @@ describe('POST /:provider/sessions', () => {
       // The browser gets the launch-gate path only — never a launch
       // capability (vendor connect URL or session token).
       launchUrl: '/connect/connections/c_new1/launch',
+      // Not a capability: the browser needs it to point the connect SDK at
+      // a self-hosted Nango.
+      apiBaseUrl: 'https://nango.example.test',
       expiresAt: '2026-10-13T15:00:00Z',
     });
     const sessionRequest = requests.find(request => request.url.pathname.includes('/connect-sessions'))!;
     expect(sessionRequest.body).toEqual({ resourceId: 'end-user-42' });
     expect(sessionRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('returns a null apiBaseUrl when the platform predates the field, so the browser keeps the default Nango host', async () => {
+    const { fetchMock } = fakePlatform({ apiBaseUrl: null });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(201);
+    expect((await json(response)).apiBaseUrl).toBeNull();
   });
 
   it('404s for providers outside the allowlist without touching the platform', async () => {

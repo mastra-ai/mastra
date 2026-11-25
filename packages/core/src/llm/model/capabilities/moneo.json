@@ -19,15 +19,6 @@
     "z-ai-glm-5-3-flash"
   ],
   "reasoning": {
-    "Claude Haiku 5.5": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "deepseek-v4-flash:web": [
       {
         "type": "toggle"
@@ -37,7 +28,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3-235b:web": [
+    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
       {
         "type": "toggle"
       }
@@ -48,15 +39,13 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nvidia-nemotron-3-5-super-vl-120b-a12b": [
+    "Claude Haiku 5.5": [
       {
         "type": "toggle"
-      }
-    ],
-    "z-ai-glm-5-3-flash": [
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-1-flash-1017-uncensored": [
@@ -66,6 +55,17 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3-235b:web": [
+      {
+        "type": "toggle"
       }
     ]
   }
