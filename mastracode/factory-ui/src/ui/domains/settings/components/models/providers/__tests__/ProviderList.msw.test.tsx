@@ -519,7 +519,7 @@ describe('ProviderList custom endpoints', () => {
     );
   });
 
-  it('keeps the form open and asks for the key when the server needs it again', async () => {
+  it('keeps the form open and points at the key field when the server needs the key again', async () => {
     stubProviders([]);
     stubCustomProviders([myLlm]);
     server.use(
@@ -543,7 +543,13 @@ describe('ProviderList custom endpoints', () => {
     await user.type(url, 'https://elsewhere.example.com/v1');
     await user.click(within(form).getByRole('button', { name: 'Test & save' }));
 
-    expect(await within(form).findByText(/Enter the API key again/)).toBeInTheDocument();
+    expect(await within(form).findByRole('alert')).toHaveTextContent(/Enter the API key again/);
+    const apiKey = within(form).getByPlaceholderText('Paste API key');
+    expect(apiKey).toHaveAttribute('aria-invalid', 'true');
+    expect(apiKey).toHaveFocus();
+
+    await user.type(apiKey, 'sk-new');
+    expect(apiKey).not.toHaveAttribute('aria-invalid', 'true');
   });
 
   it('removes an endpoint from its row menu', async () => {

@@ -57,7 +57,10 @@ interface Tested<Result> {
 /** The fields a save needs filled before anything is sent. */
 type RequiredField = 'name' | 'url' | 'models';
 
-const NO_INVALID_FIELDS: ReadonlySet<RequiredField> = new Set();
+/** The fields the form can mark invalid: the required ones, and the API key the server may ask for again. */
+type InvalidField = RequiredField | 'apiKey';
+
+const NO_INVALID_FIELDS: ReadonlySet<InvalidField> = new Set();
 
 /** The text of a failed request, for the form's error line. */
 function errorMessage(caught: unknown): string {
@@ -115,6 +118,7 @@ export function CustomProviderForm({
   const uncheckedSave = useSaveCustomProvider();
   const nameInput = useRef<HTMLInputElement>(null);
   const urlInput = useRef<HTMLInputElement>(null);
+  const apiKeyInput = useRef<HTMLInputElement>(null);
   const modelsField = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<CustomProviderDraft>(() => initialCustomProviderDraft(provider));
   const [error, setError] = useState<string>();
@@ -160,15 +164,23 @@ export function CustomProviderForm({
     if (problem.target) document.getElementById(headerInputId(problem.target))?.focus();
   };
 
-  /** Shows a failed request: header refusals next to the headers, anything else on the error line. */
+  /**
+   * Shows a failed request on the error line. A refusal about the headers or the API key also marks the control
+   * it is about and moves focus there.
+   */
   const showRequestError = (caught: unknown) => {
+    const message = errorMessage(caught);
     const code = headerRefusal(caught);
-    if (!code) {
-      setError(errorMessage(caught));
+    if (code) {
+      showHeaderProblem({ message, target: serverHeaderProblemTarget(code, message, draft.headers) });
       return;
     }
-    const message = errorMessage(caught);
-    showHeaderProblem({ message, target: serverHeaderProblemTarget(code, message, draft.headers) });
+    setError(message);
+    // The saved key is only kept on the same origin, so a URL that moved needs the key typed again.
+    if (refusalCode(caught) === 'api_key_required') {
+      setInvalid(new Set(['apiKey']));
+      apiKeyInput.current?.focus();
+    }
   };
 
   /** Checks what a test needs before it calls the endpoint. Reports the problem and returns false when there is one. */
@@ -298,9 +310,10 @@ export function CustomProviderForm({
             onChange={event => update({ url: event.target.value })}
           />
         </Field>
-        <Field>
+        <Field invalid={invalid.has('apiKey')}>
           <FieldLabel>API key {provider ? '(leave blank to keep, unless the host changes)' : '(optional)'}</FieldLabel>
           <Input
+            ref={apiKeyInput}
             type="password"
             placeholder="Paste API key"
             autoComplete="off"
