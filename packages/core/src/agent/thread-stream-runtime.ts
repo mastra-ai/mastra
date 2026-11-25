@@ -5,6 +5,7 @@ import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import { reachesOtherProcesses } from '../events/reach';
 import type { EventCallback } from '../events/types';
+import type { IMastraLogger } from '../logger';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
@@ -16,6 +17,12 @@ import {
   withoutLiveRequestKeys,
 } from '../request-context';
 import { getRequestContextInputSource } from '../request-context/input-source';
+import type {
+  AgentSignalScope,
+  AgentSignalsStorage,
+  AgentSignalWriteResult,
+  StoredAgentSignal,
+} from '../storage/domains/agent-signals/base';
 import type { MastraModelOutput } from '../stream/base/output';
 import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
@@ -50,6 +57,8 @@ import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
+import { decodeStoredSignals, toStoredSignalPayload } from './stored-signal-payload';
+import { getAgentSignalsStore, getRunSignalsStore } from './stored-signals';
 import { hasDurableExecution } from './streams/execution-capability';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -506,6 +515,12 @@ type AgentThreadRunContinuation<OUTPUT = unknown> = {
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
+  /**
+   * Where signals sent to this run are kept, decided once when it registers
+   * from the agent that runs it; `undefined` keeps them in this runtime's
+   * queues.
+   */
+  signalsStore?: AgentSignalsStorage;
   /** The source output that owns the subscriber-facing broadcast. */
   output: MastraModelOutput<OUTPUT>;
   /** The latest execution segment attached to a suspension-spanning broadcast. */
@@ -680,7 +695,36 @@ type PendingThreadAdmission = {
   /** The agent whose run holds the reservation. */
   agentId: string;
   outcome: Promise<ThreadAdmissionOutcome>;
+  /** Where input joining the reservation is stored, when its run keeps its signals in storage. */
+  signalsStore?: AgentSignalsStorage;
 };
+
+/**
+ * What became of the stored rows of a reservation that lost the lease: moved
+ * to the run that holds the thread (`accepted`), deleted because that run is
+ * closed (`run-closed`), or cancelled because no holder is known.
+ */
+type StoredReservationSettlement = { outcome: AgentSignalWriteResult; toRunId: string } | { outcome: 'cancelled' };
+
+/**
+ * A storage-backed reservation's rows have one writer once it loses the
+ * lease: the rollback, which settles this. Senders that joined it never move
+ * their own rows; they wait for the settlement instead.
+ */
+type StoredReservation = {
+  store: AgentSignalsStorage;
+  /** The reserving agent's logger. */
+  logger?: IMastraLogger;
+  settled: Promise<StoredReservationSettlement>;
+  settle: (settlement: Promise<StoredReservationSettlement>) => void;
+};
+
+/** The finished run an end-of-run check starts the thread's next turn from. */
+type EndedThreadRun = Pick<
+  AgentThreadRunRecord<any>,
+  'agent' | 'streamOptions' | 'runId' | 'resourceId' | 'threadId' | 'signalsStore'
+> &
+  Partial<Pick<AgentThreadRunRecord<any>, 'leaseOwner'>>;
 
 /** A claimed-owner message queued for a run in flight, tracked so cancelling it ends the logical message. */
 type ClaimedQueuedMessage = {
@@ -707,6 +751,8 @@ type AgentThreadRuntimeState = {
   threadKeysByRunId: Map<string, string>;
   remoteThreadKeysByRunId: Map<string, string>;
   remoteAgentIdsByRunId: Map<string, string>;
+  /** Remote runs whose registration said they keep their signals in storage, so a sender here may store for them. */
+  remoteStoredRunIds: Set<string>;
   unobservedRemoteRunIds: Set<string>;
   activeThreadRunIds: Map<string, string>;
   activeThreadStreamIds: Map<string, string>;
@@ -718,6 +764,13 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
+  /**
+   * Signals this runtime stored for runs other processes hold, keyed by thread
+   * key and signal ID to the run they went to. Unlike the locally queued IDs,
+   * they outlive the thread's control subscription: a retry finds them after
+   * the run consumed the row and deleted it.
+   */
+  storedForwardedSignals: Map<string, string>;
   pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   /**
    * Threads whose queued signals belong to a run whose execution here lost it
@@ -752,6 +805,22 @@ type AgentThreadRuntimeState = {
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   /** Idle-start reservations whose execution lease has not resolved yet. */
   pendingThreadAdmissions: Map<string, PendingThreadAdmission>;
+  /** Storage-backed reservations by run id, until their admission is local or their rollback settled them. */
+  storedReservations: Map<string, StoredReservation>;
+  /**
+   * Per thread key, the last of this process's writes to stored signals
+   * (inserts, cancels, readdresses). Each write starts after the previous one
+   * settled, so writes for a thread commit in call order.
+   */
+  storedSignalWrites: Map<string, Promise<void>>;
+  /** Per thread key, the last end-of-run check of a storage-backed run, so checks of one thread never overlap. */
+  storedEndOfRunChecks: Map<string, Promise<void>>;
+  /**
+   * Per thread key, stored signals an end-of-run check already started a
+   * follow-up with. One still unclaimed afterwards waits for the thread's next
+   * run instead of starting another follow-up.
+   */
+  storedFollowUpInputs: Map<string, Set<string>>;
   /** Call scopes of runs this process reserved through an idle start, until their record registers. */
   reservedRunScopes: Map<string, string[] | undefined>;
   /**
@@ -845,6 +914,12 @@ type AgentThreadRunClaim = {
    * thread lease lets those steps finish before it stops; a run this runtime prepared uses its own abort signal.
    */
   stepOwner?: () => object | undefined;
+  /**
+   * Whether the run keeps the signals sent to it in storage, as decided when it
+   * was prepared and carried in its workflow input. Absent for a run that keeps
+   * them in this runtime's queues.
+   */
+  signalsStored?: boolean;
 };
 
 export type AgentThreadStrictRegistrationOptions = AgentThreadRunClaim & {
@@ -896,6 +971,8 @@ type AgentThreadStreamRuntimeEvent =
       generation?: number;
       /** See {@link AgentThreadRunRecord.supersedes}. */
       supersedes?: boolean;
+      /** The run keeps the signals sent to it in storage. Absent when it does not, or from a release that never says. */
+      signalsStored?: boolean;
     }
   | {
       type: 'stream-part';
@@ -935,7 +1012,15 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'user-message-admitted'; signalId: string; admittedRunId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
-  | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
+  | {
+      type: 'signal-enqueued';
+      runId: string;
+      signal: SerializableAgentSignal;
+      sourceId: string;
+      preRun?: boolean;
+      /** The sender stored the signal for the run itself, so the run's holder must not store it again. */
+      stored?: boolean;
+    }
   | {
       type: 'idle-signal-enqueued';
       runId: string;
@@ -1008,6 +1093,7 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
 }
 
 const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+const MAX_STORED_FORWARDED_SIGNAL_IDS = 1000;
 // Resume fences outlive their stream segment until the suspended snapshot is gone, so cap them.
 const MAX_RESUME_FENCED_RUN_IDS = 1000;
 
@@ -1018,6 +1104,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     threadKeysByRunId: new Map(),
     remoteThreadKeysByRunId: new Map(),
     remoteAgentIdsByRunId: new Map(),
+    remoteStoredRunIds: new Set(),
     unobservedRemoteRunIds: new Set(),
     activeThreadRunIds: new Map(),
     activeThreadStreamIds: new Map(),
@@ -1027,6 +1114,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspensionMetadataByRunId: new Map(),
     signalQueues: createActiveRunSignalQueues(),
     locallyQueuedSignalIdsByThread: new Map(),
+    storedForwardedSignals: new Map(),
     pendingSignalListenersByRunId: new Map(),
     lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
@@ -1039,6 +1127,10 @@ function createRuntimeState(): AgentThreadRuntimeState {
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
     pendingThreadAdmissions: new Map(),
+    storedReservations: new Map(),
+    storedSignalWrites: new Map(),
+    storedEndOfRunChecks: new Map(),
+    storedFollowUpInputs: new Map(),
     reservedRunScopes: new Map(),
     handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
     acceptedIdleMessagesByIdentity: createRecentRequests<AcceptedIdleMessage>(),
@@ -2157,8 +2249,10 @@ export class AgentThreadStreamRuntime {
     runId: string,
     agentId: string,
     outcome: Promise<ThreadAdmissionOutcome>,
+    signalsStore?: AgentSignalsStorage,
+    logger?: IMastraLogger,
   ): void {
-    const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome };
+    const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome, signalsStore };
     state.pendingThreadAdmissions.set(key, pendingAdmission);
     const clearPendingAdmission = () => {
       if (state.pendingThreadAdmissions.get(key) === pendingAdmission) {
@@ -2166,6 +2260,84 @@ export class AgentThreadStreamRuntime {
       }
     };
     void outcome.then(clearPendingAdmission, clearPendingAdmission);
+    if (!signalsStore) return;
+    let settle!: StoredReservation['settle'];
+    const settled = new Promise<StoredReservationSettlement>((resolve, reject) => {
+      settle = settlement => void settlement.then(resolve, reject);
+    });
+    void settled.catch(() => {});
+    const reservation: StoredReservation = { store: signalsStore, settled, settle, logger };
+    state.storedReservations.set(runId, reservation);
+    // A reservation whose admission failed has senders that cancel their own rows. One that won stays known
+    // until its run registers, so a signal forwarded to it in between is stored rather than queued in memory.
+    void outcome.catch(() => {
+      if (state.storedReservations.get(runId) === reservation) state.storedReservations.delete(runId);
+    });
+  }
+
+  /**
+   * Settle a storage-backed reservation that lost the lease: hand its unclaimed
+   * rows to the run holding the thread, or cancel them when no holder is
+   * known. Runs behind this process's earlier writes for the thread. No-op for
+   * a reservation that is not storage-backed.
+   */
+  #settleStoredReservation(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    toRunId: string | undefined,
+  ) {
+    const reservation = state.storedReservations.get(runId);
+    if (!reservation) return;
+    state.storedReservations.delete(runId);
+    const { store, logger } = reservation;
+    reservation.settle(
+      this.#writeStoredSignals(state, key, async (): Promise<StoredReservationSettlement> => {
+        if (toRunId && toRunId !== runId && (store.sharedAcrossProcesses || state.threadKeysByRunId.has(toRunId))) {
+          return { outcome: await store.readdress({ threadKey: key, fromRunId: runId, toRunId }), toRunId };
+        }
+        // A row this release can't read is not cancelled: it stays for the thread's next run.
+        const decoded = decodeStoredSignals(await store.listPending({ threadKey: key, runId }), (id, error) =>
+          logger?.warn?.('Skipped a stored agent signal this version cannot read', { runId, signalId: id, error }),
+        );
+        const cancelled = new Set(
+          decoded.length ? await store.cancel({ threadKey: key, ids: decoded.map(({ row }) => row.id) }) : [],
+        );
+        if (!toRunId || toRunId === runId) return { outcome: 'cancelled' };
+        // The holder is in another process, which does not read this store: it stores what it is sent.
+        for (const { row, signal } of decoded) {
+          if (!cancelled.has(row.id)) continue;
+          await this.#publishStoredForward(state, pubsub, key, toRunId, signal);
+        }
+        return { outcome: 'accepted', toRunId };
+      }),
+    );
+  }
+
+  /**
+   * The signals store a registering run uses, from the decision the run
+   * carries: recovery and resume register without a reservation, and their
+   * run's decision may differ from this process's configuration. The record
+   * takes over from the run's reservation here.
+   */
+  #takeReservedSignalsStore(
+    state: AgentThreadRuntimeState,
+    runId: string,
+    agent: Agent<any, any, any, any>,
+    signalsStored: boolean | undefined,
+  ): AgentSignalsStorage | undefined {
+    const reservation = state.storedReservations.get(runId);
+    if (reservation) state.storedReservations.delete(runId);
+    if (!signalsStored) return undefined;
+    return reservation?.store ?? getRunSignalsStore(agent, signalsStored);
+  }
+
+  /** The run holding the thread after a lost lease, when signals may be handed to it. */
+  #leaseWinnerRunId(state: AgentThreadRuntimeState, owner: string | undefined): string | undefined {
+    if (!owner || isRetakeLeaseOwner(owner)) return undefined;
+    const runId = threadLeaseRunId(owner);
+    return this.#isSweptLeaseOwner(state, runId) ? undefined : runId;
   }
 
   #threadAdmissionOutcome(runId: string, lease: { acquired: boolean; owner?: string }): ThreadAdmissionOutcome {
@@ -2263,6 +2435,11 @@ export class AgentThreadStreamRuntime {
         if (!answersTo(runId)) {
           return;
         }
+        const { store } = this.#heldRunSignalsStore(state, runId);
+        if (store) {
+          await this.#admitForwardedStoredSignal(state, pubsub, key, subscription, runId, data, store);
+          return;
+        }
         if (state.signalQueues.includes(key, data.signal.id)) return;
         const signal = createSignal(data.signal);
         // Not awaited: if the run ended while this runtime waited on the publish, the forwarder would settle its copy
@@ -2286,7 +2463,16 @@ export class AgentThreadStreamRuntime {
         for (const id of data.signalIds) this.#settleForwardedIdleSignal(state, key, id);
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
-        this.#cancelPendingSignals(state, key, new Set(data.signalIds), pubsub);
+        // Cancelled in the store here even when the canceller shares it: a canceller whose agent keeps its signals
+        // in memory only cancelled its own queues. The store returns only the rows this call deleted, so nothing
+        // is announced twice.
+        this.#cancelPendingSignals(
+          state,
+          key,
+          new Set(data.signalIds),
+          pubsub,
+          this.#localThreadSignalsStore(state, key),
+        );
         this.#notifyThreadEvents(state);
       } else if (data?.type === 'run-abort-requested') {
         const ownsRun = () =>
@@ -2303,7 +2489,9 @@ export class AgentThreadStreamRuntime {
           data.clearPendingSignals &&
           (await this.#holdsThreadLeaseThroughRetake(resolvedPubSub, key, data.runId));
         if (ownsRun()) {
-          if (clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
+          if (clearPendingSignals) {
+            this.#cancelPendingSignals(state, key, undefined, pubsub, this.#localThreadSignalsStore(state, key));
+          }
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {
             // A parked (suspended) run has no prepared run left, but abortRun's
             // parked branch releases it so the thread stops blocking on it.
@@ -3314,7 +3502,45 @@ export class AgentThreadStreamRuntime {
         // Queued input waits for the thread to go idle; only a send joins a run in flight.
         const pendingAdmission =
           activeRunId && !activeRecord && joins(activeRunId) ? state.pendingThreadAdmissions.get(key) : undefined;
-        if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
+        const joinedStore = pendingAdmission?.signalsStore;
+        if (joinedStore && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
+          const queued: ClaimedQueuedMessage = { identity: messageIdentity };
+          state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
+          const joined = await this.#joinStoredReservationForOwner(
+            state,
+            key,
+            pendingAdmission,
+            joinedStore,
+            joinSignal ?? signal,
+            owner.agent,
+          ).catch(error => {
+            state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
+            releaseMessageIdentity(getErrorFromUnknown(error));
+            throw error;
+          });
+          if (queued.cancelled) {
+            const cancelledRunId = joined ?? runId;
+            settleMessageIdentity?.({ runId: cancelledRunId, terminalReason: CANCELLED_BEFORE_RUN });
+            return { runId: cancelledRunId };
+          }
+          if (joined) {
+            queued.runId = joined;
+            settleMessageIdentity?.({ runId: joined });
+            return { runId: joined };
+          }
+          // No run took the input; route it again.
+          state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
+          if (!isOwnerActive()) {
+            releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+            return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
+          }
+          activeRunId = state.activeThreadRunIds.get(key);
+          activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+        } else if (
+          pendingAdmission &&
+          pendingAdmission.runId === activeRunId &&
+          pendingAdmission.agentId === owner.agent.id
+        ) {
           // The owner has reserved the thread for a run that has not started yet. Hand
           // it the input for its first model request, as a local send does.
           state.signalQueues.enqueue('pre-run', key, joinSignal ?? signal);
@@ -3358,7 +3584,18 @@ export class AgentThreadStreamRuntime {
           // whatever cancels the input from there must find it.
           const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
-          this.#queueForActiveRun(state, pubsub, key, activeRecord, joinSignal ?? signal);
+          const store = activeRecord.signalsStore;
+          if (store) {
+            try {
+              await this.#queueForStoredRun(state, pubsub, key, activeRecord, joinSignal ?? signal, store);
+            } catch (error) {
+              state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
+              releaseMessageIdentity(getErrorFromUnknown(error));
+              throw error;
+            }
+          } else {
+            this.#queueForActiveRun(state, pubsub, key, activeRecord, joinSignal ?? signal);
+          }
           settleMessageIdentity?.(
             queued.cancelled
               ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
@@ -3423,7 +3660,15 @@ export class AgentThreadStreamRuntime {
         settleThreadAdmission = resolve;
         failThreadAdmission = reject;
       });
-      this.#trackPendingThreadAdmission(state, key, runId, owner.agent.id, threadAdmission);
+      this.#trackPendingThreadAdmission(
+        state,
+        key,
+        runId,
+        owner.agent.id,
+        threadAdmission,
+        getAgentSignalsStore(owner.agent),
+        owner.agent.__getLogger?.(),
+      );
       let lease: { acquired: boolean; owner?: string };
       try {
         lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
@@ -3440,6 +3685,7 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
+        this.#settleStoredReservation(state, pubsub, key, runId, undefined);
         throw error;
       }
       const ownerActive = isOwnerActive();
@@ -3457,6 +3703,15 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
+        // Input that joined this reservation goes to the run holding the lease only when this attempt hands its
+        // wake there too.
+        this.#settleStoredReservation(
+          state,
+          pubsub,
+          key,
+          runId,
+          ownerActive && !expired ? this.#leaseWinnerRunId(state, lease.owner) : undefined,
+        );
         if (!ownerActive || expired) {
           settleThreadAdmission({ action: 'blocked', runId });
           const error = !ownerActive
@@ -3485,12 +3740,26 @@ export class AgentThreadStreamRuntime {
         }
         if (ownerRunId) {
           settleThreadAdmission({ action: 'remote', runId: ownerRunId });
-          this.#publish(pubsub, key, {
-            type: 'signal-enqueued',
-            runId: ownerRunId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          });
+          if (this.#forwardSignalsStore(state, owner.agent, ownerRunId)) {
+            const forwarded = await this.#forwardSignal(state, pubsub, key, owner.agent, ownerRunId, signal).catch(
+              error => {
+                releaseMessageIdentity(getErrorFromUnknown(error));
+                throw error;
+              },
+            );
+            if (!forwarded) {
+              const error = `Thread ${describeThreadKey(key)} is held by run ${ownerRunId}, which ended before it took the message`;
+              releaseMessageIdentity(error);
+              return { runId: ownerRunId, error, blocked: true };
+            }
+          } else {
+            this.#publish(pubsub, key, {
+              type: 'signal-enqueued',
+              runId: ownerRunId,
+              signal: this.#serializeSignal(signal),
+              sourceId: this.#getSourceId(),
+            });
+          }
           // Another live lease owner took the wake, so this attempt delivered it
           // without running it here. Report that to a duplicate instead of leaving
           // it waiting, while still releasing the reservation so a later retry routes.
@@ -3661,6 +3930,13 @@ export class AgentThreadStreamRuntime {
     // Bound memory: retained replays of very old local signals are vanishingly rare, so evict oldest first.
     if (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.keys().next().value!);
     state.locallyQueuedSignalIdsByThread.set(key, ids);
+  }
+
+  /** Undo `#recordLocallyQueuedSignal` for a signal whose stored row was never written. */
+  #forgetLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    ids?.delete(signalId);
+    if (ids?.size === 0) state.locallyQueuedSignalIdsByThread.delete(key);
   }
 
   /**
@@ -4326,7 +4602,15 @@ export class AgentThreadStreamRuntime {
    * `fenceResume: false` is for lifecycle teardowns (detach, thread switch) that
    * stop the local segment but leave its parked suspensions answerable.
    */
-  abortRun(runId: string, pubsub?: PubSub, options: { fenceResume?: boolean } = {}): boolean {
+  abortRun(
+    runId: string,
+    pubsub?: PubSub,
+    options: {
+      fenceResume?: boolean;
+      /** Closes the stored signals of a parked run this call releases; only called for a storage-backed run. */
+      closeStoredRun?: (runId: string) => Promise<void> | undefined;
+    } = {},
+  ): boolean {
     const fenceResume = options.fenceResume ?? true;
     const state = this.#getState(pubsub);
     const preparedRun = state.preparedRunsById.get(runId);
@@ -4336,7 +4620,7 @@ export class AgentThreadStreamRuntime {
       // A run parked on a tool suspension (a question to the user, a pending
       // generation) has no prepared run left to abort, and its completion
       // watcher returned when it suspended, so nothing else frees its thread.
-      return this.#releaseParkedRun(state, pubsub, runId);
+      return this.#releaseParkedRun(state, pubsub, runId, options.closeStoredRun);
     }
 
     preparedRun.abortController.abort();
@@ -4384,10 +4668,20 @@ export class AgentThreadStreamRuntime {
    * way a finished run is: its records and thread reservation are dropped, then
    * the thread's pending work starts or its lease is given up. A run parked on
    * a tool approval is released the same way: the abort is the decision.
+   *
+   * A storage-backed run is closed first through `closeStoredRun`, which turns
+   * its untaken signals into thread leftovers, and the thread's pending work is
+   * checked once that close settled.
    */
-  #releaseParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, runId: string): boolean {
+  #releaseParkedRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    runId: string,
+    closeStoredRun?: (runId: string) => Promise<void> | undefined,
+  ): boolean {
     const record = state.threadRunsById.get(runId);
     if (!this.#isParkedRun(state, runId) || !record) return false;
+    const closing = record.signalsStore ? closeStoredRun?.(runId) : undefined;
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
     this.#clearSuspendedRun(state, runId);
     record.lifecycle = 'completed';
@@ -4404,6 +4698,16 @@ export class AgentThreadStreamRuntime {
       streamId: record.streamId,
       superseded: record.ownershipLost?.() || record.lateRetakeHandoff,
     });
+    if (record.signalsStore) {
+      // As at the end of any storage-backed run, the lease is released unless queued work here takes it, and the
+      // check of the store acquires it fresh.
+      const queued = this.#hasPendingThreadWork(state, key);
+      if (!queued) this.#releaseThreadLease(pubsub, key, runId);
+      const check = () => void this.#drainPendingSignals(state, pubsub, key, record, { freshLease: !queued });
+      if (closing) void closing.then(check, check);
+      else check();
+      return true;
+    }
     if (this.#hasPendingThreadWork(state, key)) {
       void this.#drainPendingSignals(state, pubsub, key, record);
     } else {
@@ -4609,7 +4913,11 @@ export class AgentThreadStreamRuntime {
     return started;
   }
 
-  abortThread(options: AgentAbortThreadOptions, pubsub?: PubSub): boolean {
+  abortThread(
+    options: AgentAbortThreadOptions,
+    pubsub?: PubSub,
+    closeStoredRun?: (runId: string) => Promise<void> | undefined,
+  ): boolean {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const state = this.#getState(resolvedPubSub);
     const key = this.#threadKey(options.resourceId, options.threadId);
@@ -4617,14 +4925,17 @@ export class AgentThreadStreamRuntime {
     // A stale request conditioned on a run that is no longer active must not
     // stop the successor run or clear input queued for it.
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
-    if (options.clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
+    // Stored rows of a run held elsewhere are cleared by its holder, which checks it still holds the lease.
+    if (options.clearPendingSignals) {
+      this.#cancelPendingSignals(state, key, undefined, pubsub, this.#localThreadSignalsStore(state, key));
+    }
     try {
       if (!runId) return false;
       if (options.localOnly && this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
         this.#releaseSupersededParkedRun(state, resolvedPubSub, key, runId);
         return true;
       }
-      const abortOptions = { fenceResume: !options.localOnly };
+      const abortOptions = { fenceResume: !options.localOnly, closeStoredRun };
       if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub, abortOptions);
       if (state.threadKeysByRunId.get(runId) === key) {
         // Reserved locally (a sendSignal wake that has not prepared its run yet):
@@ -4682,6 +4993,7 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.clear();
     state.remoteThreadKeysByRunId.clear();
     state.remoteAgentIdsByRunId.clear();
+    state.remoteStoredRunIds.clear();
     state.unobservedRemoteRunIds.clear();
     state.activeThreadRunIds.clear();
     state.approvalSuspendedRunIds.clear();
@@ -4689,6 +5001,7 @@ export class AgentThreadStreamRuntime {
     state.suspensionMetadataByRunId.clear();
     state.signalQueues.clear();
     state.locallyQueuedSignalIdsByThread.clear();
+    state.storedForwardedSignals.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.forwardedIdleSignalsByThread.clear();
@@ -4703,6 +5016,10 @@ export class AgentThreadStreamRuntime {
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
     state.pendingThreadAdmissions.clear();
+    state.storedReservations.clear();
+    state.storedSignalWrites.clear();
+    state.storedEndOfRunChecks.clear();
+    state.storedFollowUpInputs.clear();
     state.handledIdleSignals.clear();
     state.acceptedIdleMessagesByIdentity.clear();
     state.claimedQueuedMessages.clear();
@@ -4740,6 +5057,7 @@ export class AgentThreadStreamRuntime {
     const record = state.threadRunsById.get(runId);
     if (preparedRun && record) record.segmentAbortController = preparedRun.abortController;
     state.preparedRunsById.delete(runId);
+    state.storedReservations.delete(runId);
     state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
     if (state.resumeFencedRunIds.has(runId) && preparedRun?.cleanupAbortedRun) {
@@ -4793,6 +5111,457 @@ export class AgentThreadStreamRuntime {
       sourceId: this.#getSourceId(),
     });
     this.#watchThreadRunCompletion(state, pubsub, key, record);
+  }
+
+  /**
+   * `#queueForActiveRun` for a run that keeps its signals in storage. Resolves
+   * once the row committed; everything the map path announces at once is
+   * announced only then. A run that closed in the meantime gets the signal as
+   * a thread leftover, which the thread's next turn takes.
+   */
+  async #queueForStoredRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+    signal: CreatedAgentSignal,
+    store: AgentSignalsStorage,
+  ): Promise<void> {
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    const written = await this.#enqueueStoredSignal(state, key, store, record.runId, 'pending', signal).catch(error => {
+      this.#forgetLocallyQueuedSignal(state, key, signal.id);
+      throw error;
+    });
+    if (written === 'run-closed') {
+      await this.#storeLeftoverSignal(state, pubsub, key, record, signal, store);
+      return;
+    }
+    this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
+    this.#notifyPendingSignals(state, key, signal);
+    this.#publish(pubsub, key, {
+      type: 'signal-enqueued',
+      runId: record.runId,
+      signal: this.#serializeSignal(signal),
+      sourceId: this.#getSourceId(),
+      stored: true,
+    });
+    this.#watchThreadRunCompletion(state, pubsub, key, record);
+  }
+
+  /**
+   * `signal-enqueued` for a run this runtime holds that keeps its signals in
+   * storage. The event says whether its sender stored the signal; when it did
+   * not, this runtime is the one that stores it. Resolves once the insert
+   * committed, so an event whose insert failed can be delivered again.
+   */
+  async #admitForwardedStoredSignal(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    subscription: ThreadControlSubscription,
+    runId: string,
+    data: Extract<AgentThreadStreamRuntimeEvent, { type: 'signal-enqueued' }>,
+    store: AgentSignalsStorage,
+  ) {
+    subscription.admittedSignalIds.add(data.signal.id);
+    const signal = createSignal(data.signal);
+    const record = state.threadRunsById.get(runId);
+    const logger = record?.agent.__getLogger?.();
+    if (!data.stored) {
+      let written: AgentSignalWriteResult;
+      try {
+        written = await this.#enqueueStoredSignal(
+          state,
+          key,
+          store,
+          runId,
+          data.preRun ? 'pre-run' : 'pending',
+          signal,
+        );
+      } catch (error) {
+        // Not admitted, so a redelivery of the event may store it.
+        subscription.admittedSignalIds.delete(data.signal.id);
+        logger?.warn?.('Could not store a signal forwarded to a running run', { runId, signalId: signal.id, error });
+        throw error;
+      }
+      if (written === 'run-closed') {
+        if (record) {
+          await this.#storeLeftoverSignal(state, pubsub, key, record, signal, store);
+        } else {
+          logger?.warn?.('Dropped a signal forwarded to a run that already closed', { runId, signalId: signal.id });
+        }
+        return;
+      }
+    }
+    if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
+      this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
+    }
+    this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
+    this.#notifyPendingSignals(state, key, signal);
+  }
+
+  /**
+   * A send joining a storage-backed reservation: store the signal for the
+   * reservation's first model request, then report what became of it once the
+   * admission settled. This sender never moves its row: when the reservation
+   * loses the lease, its rollback does, and the sender reports the result.
+   */
+  async #joinStoredReservation(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    pendingAdmission: PendingThreadAdmission,
+    store: AgentSignalsStorage,
+    signal: CreatedAgentSignal,
+    agent: Agent<any, any, any, any>,
+    messageScopes: string[] | undefined,
+    endedRun: EndedThreadRun,
+  ): Promise<Exclude<SendAgentSignalAccepted, { action: 'wake' }>> {
+    const reservation = state.storedReservations.get(pendingAdmission.runId);
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    const written = await this.#enqueueStoredSignal(state, key, store, pendingAdmission.runId, 'pre-run', signal).catch(
+      error => {
+        this.#forgetLocallyQueuedSignal(state, key, signal.id);
+        throw error;
+      },
+    );
+    if (written === 'accepted') this.#notifyPendingSignals(state, key, signal);
+    let admission: ThreadAdmissionOutcome;
+    try {
+      admission = await pendingAdmission.outcome;
+    } catch (error) {
+      // No outcome was produced, so nothing acknowledged this signal; drop its row so that no run delivers input
+      // the caller must retry. The cancel runs behind the insert.
+      if (written === 'accepted') {
+        await this.#cancelStoredSignals(state, key, store, [signal.id]).catch(cancelError => {
+          // The row stays for the thread's next run, which takes over the reservation's rows.
+          agent.__getLogger?.()?.warn?.('Could not drop a signal whose reservation failed', {
+            runId: pendingAdmission.runId,
+            signalId: signal.id,
+            error: cancelError,
+          });
+        });
+      }
+      throw error;
+    }
+    if (written === 'run-closed') {
+      // No row was stored, so this sender hands the signal on itself.
+      if (admission.action === 'local') {
+        await this.#storeLeftoverSignal(state, pubsub, key, { ...endedRun, runId: admission.runId }, signal, store);
+        return { action: 'deliver', runId: admission.runId };
+      }
+      if (admission.action === 'remote') {
+        // The real owner's scopes are unknown here, so a signal naming scopes waits for it.
+        if (messageScopes !== undefined) {
+          return { action: 'blocked', reason: 'scope-mismatch', runId: admission.runId };
+        }
+        if (await this.#forwardSignal(state, pubsub, key, agent, admission.runId, signal)) {
+          return { action: 'deliver', runId: admission.runId };
+        }
+      }
+      return { action: 'blocked', reason: 'thread-blocked', runId: admission.runId };
+    }
+    if (admission.action === 'local') return { action: 'deliver', runId: admission.runId };
+    const settlement: StoredReservationSettlement = reservation ? await reservation.settled : { outcome: 'cancelled' };
+    if (settlement.outcome === 'accepted') {
+      if (messageScopes !== undefined) {
+        // The real owner's scopes are unknown here, so a signal naming scopes waits for it, unless that run already
+        // took it.
+        const cancelled = await this.#cancelStoredSignals(state, key, store, [signal.id]);
+        if (cancelled.includes(signal.id)) {
+          return { action: 'blocked', reason: 'scope-mismatch', runId: settlement.toRunId };
+        }
+      }
+      return { action: 'deliver', runId: settlement.toRunId };
+    }
+    if (settlement.outcome === 'cancelled') await this.#cancelStoredSignals(state, key, store, [signal.id]);
+    return { action: 'blocked', reason: 'thread-blocked', runId: admission.runId };
+  }
+
+  /**
+   * `#joinStoredReservation` for input a claimed owner joins to its own
+   * reservation. Resolves the run that took it, or `undefined` when none did
+   * and the input has to be routed again.
+   */
+  async #joinStoredReservationForOwner(
+    state: AgentThreadRuntimeState,
+    key: string,
+    pendingAdmission: PendingThreadAdmission,
+    store: AgentSignalsStorage,
+    signal: CreatedAgentSignal,
+    agent: Agent<any, any, any, any>,
+  ): Promise<string | undefined> {
+    const reservation = state.storedReservations.get(pendingAdmission.runId);
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    const written = await this.#enqueueStoredSignal(state, key, store, pendingAdmission.runId, 'pre-run', signal).catch(
+      error => {
+        this.#forgetLocallyQueuedSignal(state, key, signal.id);
+        throw error;
+      },
+    );
+    if (written === 'accepted') this.#notifyPendingSignals(state, key, signal);
+    const admission = await pendingAdmission.outcome.catch(() => undefined);
+    // Closed before the insert: no row exists to hand on.
+    if (written === 'run-closed') return undefined;
+    if (admission?.action === 'local') return admission.runId;
+    const settlement: StoredReservationSettlement =
+      admission && reservation ? await reservation.settled : { outcome: 'cancelled' };
+    if (settlement.outcome === 'accepted') return settlement.toRunId;
+    // Cancelling behind the insert leaves no row a later run could replay. If the cancel fails, the input is not
+    // routed again: its row stays for the thread's next run, which takes over the reservation's rows.
+    if (settlement.outcome === 'cancelled') {
+      await this.#cancelStoredSignals(state, key, store, [signal.id]).catch(error => {
+        agent.__getLogger?.()?.warn?.('Could not drop a signal whose reservation did not run it', {
+          runId: pendingAdmission.runId,
+          signalId: signal.id,
+          error,
+        });
+        throw error;
+      });
+    }
+    return undefined;
+  }
+
+  /**
+   * A send to a run reserved but not registered yet: this process's own
+   * reservation takes it at its first model request; one held by another
+   * process gets it as a follow-up, since its request state can't be seen
+   * from here.
+   */
+  async #sendToStoredReservedRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    local: boolean,
+    signal: CreatedAgentSignal,
+    store: AgentSignalsStorage,
+    endedRun: EndedThreadRun,
+  ): Promise<Exclude<SendAgentSignalAccepted, { action: 'wake' }>> {
+    if (local) this.#recordLocallyQueuedSignal(state, key, signal.id);
+    const written = await (
+      local
+        ? this.#enqueueStoredSignal(state, key, store, runId, 'pre-run', signal)
+        : this.#storeForwardedSignal(state, key, store, forwardedSignalRunId(runId), signal)
+    ).catch(error => {
+      if (local) this.#forgetLocallyQueuedSignal(state, key, signal.id);
+      throw error;
+    });
+    if (written === 'run-closed') {
+      if (!local) return { action: 'blocked', reason: 'thread-blocked', runId };
+      await this.#storeLeftoverSignal(state, pubsub, key, endedRun, signal, store);
+      return { action: 'deliver', runId };
+    }
+    if (local) {
+      this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
+      this.#notifyPendingSignals(state, key, signal);
+    }
+    this.#publish(pubsub, key, {
+      type: 'signal-enqueued',
+      runId,
+      signal: this.#serializeSignal(signal),
+      sourceId: this.#getSourceId(),
+      preRun: local,
+      stored: true,
+    });
+    return { action: 'deliver', runId };
+  }
+
+  /**
+   * Keep a signal whose run closed before it was stored, in the process that
+   * started that run: as a thread leftover, then run the end-of-run check
+   * again, since the run's own check may have found nothing.
+   */
+  async #storeLeftoverSignal(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    endedRun: EndedThreadRun,
+    signal: CreatedAgentSignal,
+    store: AgentSignalsStorage,
+  ): Promise<void> {
+    await this.#enqueueStoredSignal(state, key, store, null, 'pending', signal).catch(error => {
+      this.#forgetLocallyQueuedSignal(state, key, signal.id);
+      throw error;
+    });
+    this.#publishPendingUserMessage(pubsub, key, endedRun.runId, signal, 'pending');
+    void this.#drainPendingSignals(state, pubsub, key, endedRun, { freshLease: true });
+  }
+
+  /**
+   * A send to a storage-backed run this runtime holds that has already closed.
+   * The signal is the thread's next turn, and it is reported delivered to that
+   * run once stored: it belongs to the thread, not to the follow-up run that
+   * takes it.
+   */
+  async #sendToClosedStoredRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: EndedThreadRun,
+    signal: CreatedAgentSignal,
+    store: AgentSignalsStorage,
+  ): Promise<{ action: 'deliver'; runId: string }> {
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    await this.#storeLeftoverSignal(state, pubsub, key, record, signal, store);
+    return { action: 'deliver', runId: record.runId };
+  }
+
+  /**
+   * Hand a signal to a run another process holds. With a store every process
+   * shares, the row is inserted here and the event only carries bookkeeping;
+   * otherwise the process holding the run stores it when the event arrives.
+   * Returns `false` when the store reports that run closed.
+   */
+  async #forwardSignal(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    agent: Agent<any, any, any, any>,
+    runId: string,
+    signal: CreatedAgentSignal,
+  ): Promise<boolean> {
+    const target = forwardedSignalRunId(runId);
+    const store = this.#forwardSignalsStore(state, agent, target);
+    if (store && (await this.#storeForwardedSignal(state, key, store, target, signal)) === 'run-closed') return false;
+    await this.#publishAndWait(pubsub, key, {
+      type: 'signal-enqueued',
+      runId,
+      signal: this.#serializeSignal(signal),
+      sourceId: this.#getSourceId(),
+      ...(store ? { stored: true } : {}),
+    }).catch(() => {});
+    return true;
+  }
+
+  /**
+   * Insert a signal this sender hands to a run another process holds. A retry
+   * from this process finds the earlier insert here, even after the row was
+   * consumed and deleted. A retry from another process after that stores it
+   * again: nothing there knows it was delivered.
+   */
+  async #storeForwardedSignal(
+    state: AgentThreadRuntimeState,
+    key: string,
+    store: AgentSignalsStorage,
+    target: string,
+    signal: CreatedAgentSignal,
+  ): Promise<AgentSignalWriteResult> {
+    const forwardedKey = `${key}\u0000${signal.id}`;
+    if (state.storedForwardedSignals.get(forwardedKey) === target) return 'accepted';
+    const written = await this.#enqueueStoredSignal(state, key, store, target, 'pending', signal);
+    if (written === 'run-closed') return written;
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    state.locallyQueuedSignalIdsByThread.get(key)?.set(signal.id, target);
+    state.storedForwardedSignals.delete(forwardedKey);
+    state.storedForwardedSignals.set(forwardedKey, target);
+    if (state.storedForwardedSignals.size > MAX_STORED_FORWARDED_SIGNAL_IDS) {
+      state.storedForwardedSignals.delete(state.storedForwardedSignals.keys().next().value!);
+    }
+    return written;
+  }
+
+  /**
+   * The store a sender inserts a forwarded signal into itself, or `undefined`
+   * when the process holding the run stores it. A sender only stores what it
+   * knows goes to a storage-backed run whose store it writes: one this runtime
+   * holds, or one of the same agent elsewhere whose registration said it is
+   * storage-backed, when that agent's storage is shared by every process. A
+   * holder that never said so may keep forwarded signals in memory, so it
+   * stores or queues them itself.
+   */
+  #forwardSignalsStore(
+    state: AgentThreadRuntimeState,
+    agent: Agent<any, any, any, any>,
+    runId: string,
+  ): AgentSignalsStorage | undefined {
+    const local = this.#heldRunSignalsStore(state, runId);
+    if (local.held) return local.store;
+    if (state.remoteAgentIdsByRunId.get(runId) !== agent.id || !state.remoteStoredRunIds.has(runId)) return undefined;
+    const store = getAgentSignalsStore(agent);
+    return store?.sharedAcrossProcesses ? store : undefined;
+  }
+
+  /** Whether this runtime holds `runId` (its record or its reservation), and where that run keeps its signals. */
+  #heldRunSignalsStore(state: AgentThreadRuntimeState, runId: string): { held: boolean; store?: AgentSignalsStorage } {
+    const record = state.threadRunsById.get(runId);
+    if (record) return { held: true, store: record.signalsStore };
+    const reservation = state.storedReservations.get(runId);
+    if (reservation) return { held: true, store: reservation.store };
+    return { held: state.threadKeysByRunId.has(runId) };
+  }
+
+  /** Run a write to the thread's stored signals after this process's earlier ones settled. */
+  #writeStoredSignals<T>(state: AgentThreadRuntimeState, key: string, write: () => Promise<T>): Promise<T> {
+    const result = (state.storedSignalWrites.get(key) ?? Promise.resolve()).then(write);
+    const tail = result.then(
+      () => {},
+      () => {},
+    );
+    state.storedSignalWrites.set(key, tail);
+    void tail.then(() => {
+      if (state.storedSignalWrites.get(key) === tail) state.storedSignalWrites.delete(key);
+    });
+    return result;
+  }
+
+  #enqueueStoredSignal(
+    state: AgentThreadRuntimeState,
+    key: string,
+    store: AgentSignalsStorage,
+    runId: string | null,
+    scope: AgentSignalScope,
+    signal: CreatedAgentSignal,
+  ): Promise<AgentSignalWriteResult> {
+    return this.#writeStoredSignals(state, key, async () => {
+      const written = await store.enqueue({
+        id: signal.id,
+        threadKey: key,
+        runId,
+        scope,
+        signal: toStoredSignalPayload(signal),
+      });
+      if (written === 'accepted') {
+        // An id sent again after a follow-up consumed it is a new row, which may start a turn of its own.
+        const used = state.storedFollowUpInputs.get(key);
+        if (used?.delete(signal.id) && !used.size) state.storedFollowUpInputs.delete(key);
+      }
+      return written;
+    });
+  }
+
+  #cancelStoredSignals(state: AgentThreadRuntimeState, key: string, store: AgentSignalsStorage, ids: string[]) {
+    return this.#writeStoredSignals(state, key, async () =>
+      this.#forgetStoredForwards(state, key, ids.length ? await store.cancel({ threadKey: key, ids }) : []),
+    );
+  }
+
+  /** A cancelled row is gone, so a later send of its id must store it again. */
+  #forgetStoredForwards(state: AgentThreadRuntimeState, key: string, cancelledIds: string[]): string[] {
+    for (const id of cancelledIds) state.storedForwardedSignals.delete(`${key}\u0000${id}`);
+    return cancelledIds;
+  }
+
+  /** The store of the run this runtime holds for the thread, when that run keeps its signals in storage. */
+  #localThreadSignalsStore(state: AgentThreadRuntimeState, key: string): AgentSignalsStorage | undefined {
+    const runId = state.activeThreadRunIds.get(key);
+    if (!runId || state.threadKeysByRunId.get(runId) !== key) return undefined;
+    return this.#heldRunSignalsStore(state, runId).store;
+  }
+
+  /**
+   * The store of the thread's signals as far as this process knows: the
+   * decision of the run it holds there, or, when it holds none, the calling
+   * agent's configuration.
+   */
+  #threadSignalsStore(
+    state: AgentThreadRuntimeState,
+    key: string,
+    agent: Agent<any, any, any, any>,
+  ): AgentSignalsStorage | undefined {
+    const runId = state.activeThreadRunIds.get(key);
+    const held = runId ? this.#heldRunSignalsStore(state, runId) : { held: false };
+    return held.held ? held.store : getAgentSignalsStore(agent);
   }
 
   #publishPendingUserMessage(
@@ -5139,6 +5908,7 @@ export class AgentThreadStreamRuntime {
     }
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
+      signalsStore: this.#takeReservedSignalsStore(state, output.runId, agent, registrationOptions?.signalsStored),
       output: broadcast.output,
       currentSegmentOutput: output,
       runId: output.runId,
@@ -5290,6 +6060,7 @@ export class AgentThreadStreamRuntime {
         sourceId: this.#getSourceId(),
         agentId: agent.id,
         generation: registrationOptions?.generation,
+        ...(record.signalsStore ? { signalsStored: true } : {}),
       });
     })();
     // Always drive the run's stream to completion, even when no caller consumes
@@ -5419,6 +6190,7 @@ export class AgentThreadStreamRuntime {
         agentId: agent.id,
         generation: registrationOptions.generation,
         supersedes: record.supersedes,
+        ...(record.signalsStore ? { signalsStored: true } : {}),
       });
       registrationPublished = true;
       await registrationOptions.validate?.();
@@ -5633,6 +6405,12 @@ export class AgentThreadStreamRuntime {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
           this.#releaseThreadLease(pubsub, key, record.runId, record.leaseOwner);
+          // A storage-backed run's leftovers are only known to the store. The lease is released first, as for
+          // any run with nothing queued here, since a read can outlast this run's hold on it; a check that finds
+          // leftovers takes the lease again.
+          if (record.signalsStore) {
+            void this.#drainPendingSignals(state, pubsub, key, record, { freshLease: true });
+          }
         }
       });
     });
@@ -5712,8 +6490,16 @@ export class AgentThreadStreamRuntime {
     state: AgentThreadRuntimeState,
     pubsub: PubSub | undefined,
     key: string,
-    previousRun: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions' | 'runId' | 'resourceId' | 'threadId'>,
+    previousRun: EndedThreadRun,
+    options?: { freshLease?: boolean },
   ) {
+    const store = previousRun.signalsStore;
+    if (store) {
+      // Not awaited: a check can start work whose failure path checks the thread again, and that check waits
+      // behind this one.
+      void this.#checkStoredEndOfRun(state, pubsub, key, previousRun, store, options?.freshLease === true);
+      return;
+    }
     if (state.activeThreadRunIds.has(key)) {
       return;
     }
@@ -5881,6 +6667,231 @@ export class AgentThreadStreamRuntime {
     this.#releaseThreadLease(pubsub, key, previousRun.runId);
   }
 
+  /**
+   * Hand leftovers to a run that holds the thread in another process. Only for
+   * a store that process does not read: the rows are deleted here and sent to
+   * its holder, which stores them.
+   */
+  async #forwardStoredLeftovers(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    store: AgentSignalsStorage,
+    signals: CreatedAgentSignal[],
+    runId: string,
+  ) {
+    const cancelled = new Set(
+      await this.#cancelStoredSignals(
+        state,
+        key,
+        store,
+        signals.map(signal => signal.id),
+      ),
+    );
+    for (const signal of signals) {
+      if (cancelled.has(signal.id)) await this.#publishStoredForward(state, pubsub, key, runId, signal);
+    }
+  }
+
+  async #publishStoredForward(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+  ) {
+    // Echoes of the original send stay suppressed, but this forward must be stored if this runtime later holds
+    // that run.
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    if (ids?.has(signal.id)) ids.set(signal.id, runId);
+    await this.#publishAndWait(pubsub, key, {
+      type: 'signal-enqueued',
+      runId,
+      signal: this.#serializeSignal(signal),
+      sourceId: this.#getSourceId(),
+    }).catch(() => {});
+  }
+
+  /** Runs the end-of-run check of a storage-backed run after the thread's earlier checks in this process. */
+  #checkStoredEndOfRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    endedRun: EndedThreadRun,
+    store: AgentSignalsStorage,
+    freshLease: boolean,
+  ): Promise<void> {
+    const check = (state.storedEndOfRunChecks.get(key) ?? Promise.resolve()).then(() =>
+      this.#drainStoredLeftovers(state, pubsub, key, endedRun, store, freshLease),
+    );
+    const tail = check.catch(error => {
+      endedRun.agent.__getLogger?.()?.warn?.('Could not check the thread for signals left by an ended run', {
+        runId: endedRun.runId,
+        error,
+      });
+    });
+    state.storedEndOfRunChecks.set(key, tail);
+    void tail.then(() => {
+      if (state.storedEndOfRunChecks.get(key) === tail) state.storedEndOfRunChecks.delete(key);
+    });
+    return tail;
+  }
+
+  /**
+   * End-of-run check of a storage-backed run: start the thread's next turn
+   * with its oldest leftover as input, else a queued continuation, else a
+   * queued message, else release the lease. Rows are neither moved nor
+   * deleted here: the follow-up's first model request claims every leftover.
+   *
+   * `freshLease` is for a check that a late send triggered after the run's own
+   * check: the ended run's lease may be gone, so it is acquired fresh, and
+   * queued work is only taken under a lease this check acquired.
+   */
+  async #drainStoredLeftovers(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    previousRun: EndedThreadRun,
+    store: AgentSignalsStorage,
+    freshLease: boolean,
+  ): Promise<void> {
+    if (state.activeThreadRunIds.has(key)) return;
+    // The read and the choice of input share one link of the thread's writes, so a cancel either deletes the row
+    // before it is read or finds the follow-up it would start.
+    const chosen = await this.#writeStoredSignals(state, key, async () => {
+      let rows: StoredAgentSignal[] = [];
+      try {
+        // Every unclaimed row, not only released ones: a reservation that never started, or a run that ended
+        // without closing, still has its rows addressed to it. No run of the thread is active here, and the
+        // follow-up's takeover claims them all.
+        rows = await store.listPending({ threadKey: key });
+      } catch (error) {
+        // The leftovers stay stored; the thread's next run takes them at its first model request.
+        previousRun.agent.__getLogger?.()?.warn?.('Could not read the signals an ended run left', {
+          runId: previousRun.runId,
+          error,
+        });
+      }
+      if (state.activeThreadRunIds.has(key)) return undefined;
+      // A row this release can't read never starts a turn here; the thread's next run takes it over.
+      const leftovers = decodeStoredSignals(rows, (id, error) =>
+        previousRun.agent.__getLogger?.()?.warn?.('Skipped a stored agent signal this version cannot read', {
+          runId: previousRun.runId,
+          signalId: id,
+          error,
+        }),
+      ).map(({ signal }) => signal);
+      const used = state.storedFollowUpInputs.get(key) ?? new Set<string>();
+      for (const id of used) if (!rows.some(row => row.id === id)) used.delete(id);
+      // A row a follow-up started with and left unclaimed waits for the thread's next run.
+      const signal = leftovers.find(leftover => !used.has(leftover.id));
+      if (signal) used.add(signal.id);
+      if (used.size) state.storedFollowUpInputs.set(key, used);
+      else state.storedFollowUpInputs.delete(key);
+      if (!signal) return { leftovers };
+      const next = { runId: globalThis.crypto.randomUUID(), draining: { signal, cancelled: false, handedOff: false } };
+      state.activeThreadRunIds.set(key, next.runId);
+      state.threadKeysByRunId.set(next.runId, key);
+      state.drainingPendingSignalsByThread.set(key, next.draining);
+      return { leftovers, next };
+    });
+    if (!chosen) return;
+    const { leftovers, next } = chosen;
+    // The run id holding the lease this check hands on, if any.
+    let leaseRunId: string | undefined = freshLease ? undefined : previousRun.runId;
+    if (next) {
+      const { runId: nextRunId, draining } = next;
+      const { signal } = draining;
+      let owns: { acquired: boolean; owner?: string } | undefined;
+      try {
+        const ownership = this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, leaseRunId);
+        this.#trackPendingThreadAdmission(
+          state,
+          key,
+          nextRunId,
+          previousRun.agent.id,
+          ownership.then(lease => this.#threadAdmissionOutcome(nextRunId, lease)),
+          store,
+          previousRun.agent.__getLogger?.(),
+        );
+        owns = await ownership;
+        if (owns.acquired) leaseRunId = nextRunId;
+        if (draining.cancelled || !owns.acquired) {
+          if (state.activeThreadRunIds.get(key) === nextRunId) state.activeThreadRunIds.delete(key);
+          state.threadKeysByRunId.delete(nextRunId);
+          // Settled before the cleanup forgets the reservation, so the senders that joined it learn the outcome.
+          const winnerRunId = owns.acquired ? undefined : this.#leaseWinnerRunId(state, owns.owner);
+          if (!owns.acquired) this.#settleStoredReservation(state, pubsub, key, nextRunId, winnerRunId);
+          this.#cleanupPreparedRun(state, nextRunId);
+          if (!owns.acquired) {
+            // Another run holds the thread; it takes the leftovers at its first model request, or its own end-of-run
+            // check does. This follow-up never started, so a later check may start one with the same input.
+            state.storedFollowUpInputs.get(key)?.delete(signal.id);
+            if (winnerRunId && !store.sharedAcrossProcesses && !state.threadKeysByRunId.has(winnerRunId)) {
+              await this.#forwardStoredLeftovers(state, pubsub, key, store, leftovers, winnerRunId);
+            }
+            return;
+          }
+          return this.#drainStoredLeftovers(
+            state,
+            pubsub,
+            key,
+            { ...previousRun, runId: nextRunId, leaseOwner: undefined },
+            store,
+            false,
+          );
+        }
+        draining.handedOff = true;
+        state.startingQueuedRunIds.add(nextRunId);
+        const output = await previousRun.agent.stream(signal, {
+          ...(previousRun.streamOptions as any),
+          // Cancellation belongs to the finished run, not its follow-up.
+          abortSignal: undefined,
+          runId: nextRunId,
+          memory: withThreadMemory(
+            previousRun.streamOptions.memory,
+            previousRun.resourceId ?? '',
+            previousRun.threadId ?? '',
+          ),
+        });
+        const nextRecord = state.threadRunsById.get(output.runId);
+        if (nextRecord) this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
+        return;
+      } catch (err) {
+        // The leftovers stay stored and deliver on the thread's next turn.
+        state.threadKeysByRunId.delete(nextRunId);
+        this.#cleanupPreparedRun(state, nextRunId);
+        if (state.activeThreadRunIds.get(key) === nextRunId) state.activeThreadRunIds.delete(key);
+        this.#publish(pubsub, key, {
+          type: 'run-failed',
+          runId: nextRunId,
+          error: `failed to start follow-up run for queued message: ${getErrorFromUnknown(err).message}${draining.cancelled ? '; the message was cancelled' : '; the message stays queued and will deliver on the next turn'}`,
+        });
+        this.#trimRunLater(pubsub, key, nextRunId);
+        if (!owns?.acquired && leaseRunId) {
+          // The lease call itself threw, so the ended run may still hold the lease under its own id. Queued work
+          // below then acquires it fresh; releasing is owner-guarded.
+          this.#releaseThreadLease(pubsub, key, leaseRunId);
+        }
+        leaseRunId = nextRunId;
+      } finally {
+        if (state.drainingPendingSignalsByThread.get(key) === draining)
+          state.drainingPendingSignalsByThread.delete(key);
+        state.startingQueuedRunIds.delete(nextRunId);
+        this.#releaseUnusedThreadControlSubscription(state, key);
+      }
+    }
+    if (!leaseRunId) return;
+    if (await this.#drainPendingContinuations(state, pubsub, key, leaseRunId)) return;
+    if (await this.#drainPendingIdleSignals(state, pubsub, key, leaseRunId)) return;
+    this.#releaseThreadLease(
+      pubsub,
+      key,
+      leaseRunId,
+      leaseRunId === previousRun.runId ? previousRun.leaseOwner : undefined,
+    );
+  }
+
   async #drainPendingContinuations(
     state: AgentThreadRuntimeState,
     pubsub: PubSub | undefined,
@@ -5914,6 +6925,8 @@ export class AgentThreadStreamRuntime {
         pending.runId,
         pending.agent.id,
         ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
+        getAgentSignalsStore(pending.agent),
+        pending.agent.__getLogger?.(),
       );
       const owns = await ownership;
       if (!owns.acquired) {
@@ -5922,6 +6935,7 @@ export class AgentThreadStreamRuntime {
         }
         state.threadKeysByRunId.delete(pending.runId);
         state.signalQueues.discardPreRunQueue(key);
+        this.#settleStoredReservation(state, pubsub, key, pending.runId, this.#leaseWinnerRunId(state, owns.owner));
         const restored = state.pendingContinuationsByThread.get(key) ?? [];
         state.pendingContinuationsByThread.set(key, [pending, ...restored]);
         return false;
@@ -6056,6 +7070,8 @@ export class AgentThreadStreamRuntime {
     // way the run must only start if this process owns the cross-process lease,
     // otherwise two processes could each start a competing idle run.
     let owns: { acquired: boolean; owner?: string };
+    // Decided once for the run this reservation starts; the paths below that end it read this decision.
+    const signalsStore = getAgentSignalsStore(pendingIdle.agent);
     try {
       const ownership = this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
       this.#trackPendingThreadAdmission(
@@ -6064,6 +7080,8 @@ export class AgentThreadStreamRuntime {
         pendingIdle.runId,
         pendingIdle.agent.id,
         ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
+        signalsStore,
+        pendingIdle.agent.__getLogger?.(),
       );
       owns = await ownership;
     } catch (err) {
@@ -6084,6 +7102,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      this.#settleStoredReservation(state, pubsub, key, pendingIdle.runId, undefined);
       this.#notifyThreadEvents(state);
       this.#publish(pubsub, key, {
         type: 'run-failed',
@@ -6102,6 +7121,7 @@ export class AgentThreadStreamRuntime {
         state.drainingIdleSignalsByThread.delete(key);
         state.threadKeysByRunId.delete(pendingIdle.runId);
         if (state.activeThreadRunIds.get(key) === pendingIdle.runId) state.activeThreadRunIds.delete(key);
+        this.#settleStoredReservation(state, pubsub, key, pendingIdle.runId, this.#leaseWinnerRunId(state, owns.owner));
         this.#notifyThreadEvents(state);
         void this.#drainPendingIdleSignals(state, pubsub, key);
         return true;
@@ -6114,6 +7134,7 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.signalQueues.discardPreRunQueue(key);
+      this.#settleStoredReservation(state, pubsub, key, pendingIdle.runId, this.#leaseWinnerRunId(state, owns.owner));
       if (isRetakeLeaseOwner(owns.owner)) {
         // Keep the accepted input for the next natural drain trigger, rather
         // than forwarding to a token that no run can consume.
@@ -6139,7 +7160,30 @@ export class AgentThreadStreamRuntime {
       }
       // Only now is a held forward tracked, so the count never dips while the message moves to it.
       this.#notifyThreadEvents(state);
-      if (ownerRunId) {
+      if (ownerRunId && this.#forwardSignalsStore(state, pendingIdle.agent, forwardedSignalRunId(ownerRunId))) {
+        // A run that closed first takes nothing, as an owner whose run ended drops a forward; a held user message
+        // is queued again here once the lease stops naming that run.
+        const stored = await this.#forwardSignal(state, pubsub, key, pendingIdle.agent, ownerRunId, pendingIdle.signal)
+          .then(() => true)
+          .catch(error => {
+            pendingIdle.agent
+              .__getLogger?.()
+              ?.warn?.('Could not store a queued message for the run holding its thread', {
+                runId: ownerRunId,
+                signalId: pendingIdle.signal.id,
+                error,
+              });
+            return false;
+          });
+        if (!stored && !state.forwardedIdleSignalsByThread.get(key)?.has(pendingIdle.signal.id)) {
+          // Nothing holds it for the run, so it waits at the front of the queue for the next drain trigger, as a
+          // retake does.
+          const queue = state.pendingIdleSignalsByThread.get(key) ?? [];
+          state.pendingIdleSignalsByThread.set(key, [pendingIdle, ...queue]);
+          this.#notifyThreadEvents(state);
+          return true;
+        }
+      } else if (ownerRunId) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
           runId: ownerRunId,
@@ -6163,6 +7207,8 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      // The reservation won but never registers a run; the check below hands its rows to the thread's next turn.
+      if (signalsStore) state.storedReservations.delete(pendingIdle.runId);
       this.#notifyThreadEvents(state);
       // Input that joined this reservation was acknowledged as delivered, so it still needs a run. The pending
       // drain starts one for it (and then the next queued wake) under the lease this reservation holds, or
@@ -6173,6 +7219,7 @@ export class AgentThreadStreamRuntime {
         resourceId: pendingIdle.resourceId,
         threadId: pendingIdle.threadId,
         streamOptions: pendingIdle.streamOptions ?? {},
+        signalsStore,
       });
       return true;
     }
@@ -6223,6 +7270,7 @@ export class AgentThreadStreamRuntime {
         resourceId: pendingIdle.resourceId,
         threadId: pendingIdle.threadId,
         streamOptions: pendingIdle.streamOptions ?? {},
+        signalsStore,
       });
     } finally {
       state.startingQueuedRunIds.delete(pendingIdle.runId);
@@ -6428,10 +7476,13 @@ export class AgentThreadStreamRuntime {
       state.activeThreadRunIds.delete(key);
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
+        // Where input sent to the reservation went, read before the cleanup forgets it.
+        const signalsStore = state.storedReservations.get(runId)?.store;
         // Failed preparation never registers a completion watcher. Recover pending input before idle work.
         this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
         void this.#drainPendingSignals(state, pubsub, key, {
           ...failedRun,
+          signalsStore,
           threadId: target.threadId,
           resourceId: target.resourceId,
           runId,
@@ -6477,6 +7528,7 @@ export class AgentThreadStreamRuntime {
       if (state.remoteThreadKeysByRunId.get(runId) === key) {
         state.remoteThreadKeysByRunId.delete(runId);
         state.remoteAgentIdsByRunId.delete(runId);
+        state.remoteStoredRunIds.delete(runId);
         state.unobservedRemoteRunIds.delete(runId);
       }
     };
@@ -6746,6 +7798,12 @@ export class AgentThreadStreamRuntime {
 
     /** Owner agents of remote runs registered here, kept for runs whose lease check deferred them. */
     const remoteAgentIdsByRegisteredRunId = new Map<string, string>();
+    /** Remote runs registered here whose latest registration said they keep their signals in storage. */
+    const remoteStoredRegisteredRunIds = new Set<string>();
+    const noteRemoteSignalsStored = (runId: string, signalsStored: boolean) => {
+      if (signalsStored) state.remoteStoredRunIds.add(runId);
+      else state.remoteStoredRunIds.delete(runId);
+    };
     const markActiveIfLive = async (runId: string, streamId: string, local: boolean): Promise<boolean> => {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return false;
       state.activeThreadRunIds.set(key, runId);
@@ -6754,6 +7812,7 @@ export class AgentThreadStreamRuntime {
         state.remoteThreadKeysByRunId.set(runId, key);
         const agentId = remoteAgentIdsByRegisteredRunId.get(runId);
         if (agentId) state.remoteAgentIdsByRunId.set(runId, agentId);
+        noteRemoteSignalsStored(runId, remoteStoredRegisteredRunIds.has(runId));
         // The lease check awaited; only trust the run if someone still observes the thread.
         if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
       }
@@ -6807,6 +7866,7 @@ export class AgentThreadStreamRuntime {
       if (state.remoteThreadKeysByRunId.get(runId) === key) {
         state.remoteThreadKeysByRunId.delete(runId);
         state.remoteAgentIdsByRunId.delete(runId);
+        state.remoteStoredRunIds.delete(runId);
         state.unobservedRemoteRunIds.delete(runId);
       }
     };
@@ -7090,6 +8150,9 @@ export class AgentThreadStreamRuntime {
             : !displacesActiveRun &&
               (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
         if (!local && data.agentId) remoteAgentIdsByRegisteredRunId.set(data.runId, data.agentId);
+        // A later registration of the run (a recovery by another release) can say otherwise.
+        if (!local && data.signalsStored === true) remoteStoredRegisteredRunIds.add(data.runId);
+        else if (!local) remoteStoredRegisteredRunIds.delete(data.runId);
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
@@ -7097,6 +8160,7 @@ export class AgentThreadStreamRuntime {
             state.remoteThreadKeysByRunId.set(data.runId, key);
             if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
             if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
+            noteRemoteSignalsStored(data.runId, data.signalsStored === true);
           }
           // A live new segment of a run supersedes any earlier segment of the
           // same run that never saw a terminal event: that segment's process
@@ -7541,9 +8605,29 @@ export class AgentThreadStreamRuntime {
       }
     }
 
+    const signalsStore = this.#threadSignalsStore(state, key, agent);
+    let storedPending: CreatedAgentSignal[] = [];
+    if (signalsStore) {
+      try {
+        storedPending = decodeStoredSignals(await signalsStore.listPending({ threadKey: key }), (id, error) =>
+          agent.__getLogger?.()?.warn('Skipped a stored agent signal this version cannot read', {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            signalId: id,
+            error,
+          }),
+        ).map(({ signal }) => signal);
+      } catch (error) {
+        agent.__getLogger?.()?.warn('Could not read the pending input of the thread for its history', {
+          threadId: options.threadId,
+          resourceId: options.resourceId,
+          error,
+        });
+      }
+    }
     const currentRunId = activeRunId();
     // Pending input is not in saved history or a finished-step stream buffer.
-    for (const signal of state.signalQueues.queued(key)) {
+    for (const signal of signalsStore ? storedPending : state.signalQueues.queued(key)) {
       const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
       if (chunk) enqueuePresentation(chunk);
     }
@@ -7820,7 +8904,13 @@ export class AgentThreadStreamRuntime {
     }
     if (hasSignalIds) {
       const signalIds = new Set(target.signalIds);
-      const result = this.#cancelPendingSignals(state, key, signalIds, pubsub);
+      const result = this.#cancelPendingSignals(
+        state,
+        key,
+        signalIds,
+        pubsub,
+        this.#threadSignalsStore(state, key, agent),
+      );
       this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...signalIds] });
       if (result.cancelledSignalIds.length) {
         this.#notifyThreadEvents(state);
@@ -7880,11 +8970,15 @@ export class AgentThreadStreamRuntime {
     key: string,
     signalIds?: ReadonlySet<string>,
     pubsub?: PubSub,
+    store?: AgentSignalsStorage,
   ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
     for (const id of state.signalQueues.cancel(key, matches)) cancelled.add(id);
     const draining = state.drainingPendingSignalsByThread.get(key);
+    const settled = store
+      ? this.#cancelStoredPendingSignals(state, key, store, signalIds, draining, pubsub)
+      : undefined;
     if (
       draining &&
       !draining.cancelled &&
@@ -7905,7 +8999,65 @@ export class AgentThreadStreamRuntime {
     const control = state.threadControlSubscriptions.get(key);
     for (const id of cancelled) control?.admittedSignalIds.add(id);
     this.#publishCancelledUserMessages(pubsub, key, [...cancelled]);
-    return { cancelledSignalIds: [...cancelled] };
+    if (!settled) return { cancelledSignalIds: [...cancelled] };
+    const cancelledSignalIds = [...cancelled];
+    const all = settled.then(storeIds => ({
+      cancelledSignalIds: [...cancelledSignalIds, ...storeIds.filter(id => !cancelled.has(id))],
+    }));
+    // Callers that ignore `settled` must not see a failed store call as an unhandled rejection.
+    void all.catch(() => {});
+    return { cancelledSignalIds, settled: all };
+  }
+
+  /**
+   * The stored part of a cancellation: delete what no run has taken yet,
+   * behind this process's earlier writes for the thread, and announce only
+   * what the store deleted. A follow-up already started with a signal as its
+   * input keeps it.
+   */
+  async #cancelStoredPendingSignals(
+    state: AgentThreadRuntimeState,
+    key: string,
+    store: AgentSignalsStorage,
+    signalIds: ReadonlySet<string> | undefined,
+    draining: { signal: CreatedAgentSignal; handedOff: boolean } | undefined,
+    pubsub: PubSub | undefined,
+  ): Promise<string[]> {
+    const deleted = await this.#writeStoredSignals(state, key, async () => {
+      // An end-of-run check may have chosen its follow-up's input since this call: that choice is made in the
+      // link before this one, so it is visible here.
+      const current = state.drainingPendingSignalsByThread.get(key);
+      if (
+        current &&
+        current !== draining &&
+        !current.handedOff &&
+        !current.cancelled &&
+        (signalIds === undefined || signalIds.has(current.signal.id))
+      ) {
+        current.cancelled = true;
+      }
+      const started = current?.handedOff ? current.signal.id : undefined;
+      const ids = signalIds ? [...signalIds] : (await store.listPending({ threadKey: key })).map(row => row.id);
+      const cancellable = ids.filter(id => id !== started);
+      return this.#forgetStoredForwards(
+        state,
+        key,
+        cancellable.length ? await store.cancel({ threadKey: key, ids: cancellable }) : [],
+      );
+    });
+    // A follow-up that had not started when this was called is cancelled synchronously; its row is only deleted here.
+    const fresh = deleted.filter(id => id !== draining?.signal.id || draining.handedOff);
+    for (const id of fresh) {
+      const queued = state.claimedQueuedMessages.get(claimedQueuedMessageKey(key, id));
+      if (queued) {
+        queued.cancelled = true;
+        if (queued.identity && queued.runId) this.#markAcceptedMessageCancelled(state, queued.identity, queued.runId);
+      }
+      state.threadControlSubscriptions.get(key)?.admittedSignalIds.add(id);
+    }
+    this.#publishCancelledUserMessages(pubsub, key, fresh);
+    if (fresh.length) this.#notifyThreadEvents(state);
+    return deleted;
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -8131,12 +9283,16 @@ export class AgentThreadStreamRuntime {
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
+    let finishedStoredRecord: AgentThreadRunRecord<any> | undefined;
     let remoteCrossAgent = false;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = state.activeThreadRunIds.get(key);
       activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRecord && !this.#isThreadBlockingRun(state, activeRecord)) {
+        // A storage-backed run of this agent that finished here before this runtime handled its end. Usually it
+        // is closed in the store already, but another process may have taken it over under the same run id.
+        if (activeRecord.signalsStore && activeRecord.agent.id === agent.id) finishedStoredRecord = activeRecord;
         state.activeThreadRunIds.delete(key);
         activeRecord = undefined;
       }
@@ -8252,6 +9408,16 @@ export class AgentThreadStreamRuntime {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
           if (scopeMismatch(runId)) return refuseScopes(runId);
+          const store = activeRecord.signalsStore;
+          if (store) {
+            const deliveredTo = runId;
+            const accepted = this.#queueForStoredRun(state, pubsub, key, activeRecord, signal, store).then(() => ({
+              action: 'deliver' as const,
+              runId: deliveredTo,
+            }));
+            void accepted.catch(() => {});
+            return { signal, accepted };
+          }
           this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
           return {
             signal,
@@ -8280,6 +9446,28 @@ export class AgentThreadStreamRuntime {
         // Scopes of a reserved run owned by another process are unknown here, so a
         // signal naming scopes never joins one.
         if (scopeMismatch(runId)) return refuseScopes(runId);
+        if (pendingAdmission?.runId === runId && pendingAdmission.signalsStore) {
+          const accepted = this.#joinStoredReservation(
+            state,
+            pubsub,
+            key,
+            pendingAdmission,
+            pendingAdmission.signalsStore,
+            signal,
+            agent,
+            messageScopes,
+            {
+              agent,
+              runId,
+              resourceId,
+              threadId,
+              streamOptions: target.ifIdle?.streamOptions ?? {},
+              signalsStore: pendingAdmission.signalsStore,
+            },
+          );
+          void accepted.catch(() => {});
+          return { signal, accepted };
+        }
         if (pendingAdmission?.runId === runId) {
           const pendingKey = key;
           state.signalQueues.enqueue('pre-run', key, signal);
@@ -8341,6 +9529,21 @@ export class AgentThreadStreamRuntime {
             undefined,
             target.ifIdle?.streamOptions?.requestContext,
           );
+          void accepted.catch(() => {});
+          return { signal, accepted };
+        }
+        const store = isLocalReservedRun
+          ? this.#heldRunSignalsStore(state, runId).store
+          : this.#forwardSignalsStore(state, agent, forwardedSignalRunId(runId));
+        if (store) {
+          const accepted = this.#sendToStoredReservedRun(state, pubsub, key, runId, isLocalReservedRun, signal, store, {
+            agent,
+            runId,
+            resourceId,
+            threadId,
+            streamOptions: target.ifIdle?.streamOptions ?? {},
+            signalsStore: store,
+          });
           void accepted.catch(() => {});
           return { signal, accepted };
         }
@@ -8434,6 +9637,26 @@ export class AgentThreadStreamRuntime {
         signal,
         accepted: Promise.resolve({ action: 'deliver' as const, runId }),
       };
+    }
+
+    // The finished run still holds the thread's lease until this runtime handles its end, and a map-backed run's
+    // end-of-run drain takes input sent meanwhile. A signal naming scopes, or one a claimed owner routes, starts
+    // its own run instead. The signal is stored for that run, which takes it if it still runs in another process;
+    // only a run the store reports closed hands it to the thread's next turn.
+    const finishedStore = finishedStoredRecord?.signalsStore;
+    if (
+      finishedStoredRecord &&
+      finishedStore &&
+      messageScopes === undefined &&
+      !target.ifIdle?.requireClaimedOwner &&
+      !state.claimedThreadOwners.has(key)
+    ) {
+      const finishedRunId = finishedStoredRecord.runId;
+      const accepted = this.#queueForStoredRun(state, pubsub, key, finishedStoredRecord, signal, finishedStore).then(
+        () => ({ action: 'deliver' as const, runId: finishedRunId }),
+      );
+      void accepted.catch(() => {});
+      return { signal, accepted };
     }
 
     // No active same-agent run accepted the signal. Reserve the thread before starting
@@ -8559,6 +9782,13 @@ export class AgentThreadStreamRuntime {
           state.signalQueues.discardPreRunQueue(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
+        this.#settleStoredReservation(
+          state,
+          pubsub,
+          reservedKey,
+          reservedRunId,
+          this.#leaseWinnerRunId(state, lease.owner),
+        );
 
         const winnerRunId = lease.owner ? threadLeaseRunId(lease.owner) : undefined;
         if (isRetakeLeaseOwner(lease.owner)) {
@@ -8583,7 +9813,16 @@ export class AgentThreadStreamRuntime {
         // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
-        if (winnerRunId) {
+        if (winnerRunId && this.#forwardSignalsStore(state, agent, forwardedSignalRunId(winnerRunId))) {
+          if (!(await this.#forwardSignal(state, pubsub, reservedKey, agent, winnerRunId, signal))) {
+            // A closed run whose record is here still holds the lease until its end is handled.
+            const closed = state.threadRunsById.get(winnerRunId);
+            if (closed?.signalsStore && closed.agent.id === agent.id) {
+              return this.#sendToClosedStoredRun(state, pubsub, reservedKey, closed, signal, closed.signalsStore);
+            }
+            return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: winnerRunId };
+          }
+        } else if (winnerRunId) {
           await this.#publishAndWait(pubsub, reservedKey, {
             type: 'signal-enqueued',
             runId: winnerRunId,
@@ -8645,6 +9884,8 @@ export class AgentThreadStreamRuntime {
           if (admission.action === 'blocked') return { action: 'blocked' as const, runId: admission.runId };
           throw new Error(`Unexpected ${admission.action} result while reserving ${describeThreadKey(reservedKey)}`);
         }),
+        getAgentSignalsStore(agent),
+        agent.__getLogger?.(),
       );
     }
     void accepted.then(

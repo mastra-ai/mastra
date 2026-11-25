@@ -370,6 +370,7 @@ export function createWorkflowInput(params: {
   runId: string;
   agentId: string;
   agentName?: string;
+  signalsStored?: boolean;
   agentVersionId?: string;
   messageList: MessageList;
   tools: Record<string, CoreTool>;
@@ -400,6 +401,7 @@ export function createWorkflowInput(params: {
     runId: params.runId,
     agentId: params.agentId,
     agentName: params.agentName,
+    ...(params.signalsStored ? { signalsStored: true } : {}),
     agentVersionId: params.agentVersionId,
     messageListState: params.messageList.serialize(),
     toolsMetadata: serializeToolsMetadata(params.tools),

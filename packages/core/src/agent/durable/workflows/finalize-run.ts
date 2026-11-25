@@ -613,6 +613,19 @@ export function deadlineMessageListState(
 }
 
 /**
+ * The ids of the signals a transcript holds: a signal's message id is its signal id. A total deadline closes a run
+ * that stores its signals with the ids of the transcript it saves, so exactly the signals that reach memory are
+ * deleted and the run's other rows are left to the thread's next run.
+ */
+export function transcriptSignalIds(messageListState: SerializedMessageListState): string[] {
+  return new MessageList()
+    .deserialize(messageListState)
+    .get.all.db()
+    .filter(message => message.role === 'signal')
+    .map(message => message.id);
+}
+
+/**
  * Give the output processors (and with them memory) their one pass when a total deadline ends a
  * durable run. The run never reaches its finish step, so this runs over what the deadline saves
  * (see `deadlineMessageListState`), as the default loop's deadline pass does.
