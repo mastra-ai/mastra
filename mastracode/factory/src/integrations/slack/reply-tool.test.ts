@@ -1,8 +1,7 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, markNewChannelThread } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { markNewChannelSession } from './channel-session-link-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, partialStringField, REPLY_TOOL_NAME } from './reply-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 
@@ -69,7 +68,7 @@ describe('reply_in_thread', () => {
 
   it('ends the first reply of a new session with the session link, and only the first', async () => {
     const { requestContext, post } = channelRun();
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await tool.execute({ text: 'On it.' }, {});
@@ -85,7 +84,7 @@ describe('reply_in_thread', () => {
   it('keeps the session link for the retry when the first post fails', async () => {
     const post = vi.fn().mockRejectedValueOnce(new Error('rate_limited')).mockResolvedValue({});
     const { requestContext } = channelRun({ post });
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await expect(tool.execute({ text: 'On it.' }, {})).rejects.toThrow('rate_limited');
@@ -182,7 +181,7 @@ describe('streaming reply_in_thread into the thread', () => {
   it('shows the text while the model writes it, then finishes the same post with the session link', async () => {
     const thread = streamingThread();
     const { requestContext } = channelRun({ post: thread.post });
-    markNewChannelSession(requestContext);
+    markNewChannelThread(requestContext);
     const tool = await replyTool(requestContext);
 
     await feed(requestContext, ['{"text": "Hello', ' there', ', Caleb', '!"}']);

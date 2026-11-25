@@ -37,7 +37,7 @@ const WRITE_FOR_PEOPLE = [
  * a task-specific first message rather than a silent typing status until the
  * first tool finishes. The channel driver posts that opener on its own before
  * the tool widget, so the instruction and the rendering agree. The session
- * link is not the model's job: `FactoryChannelSessionLinkProcessor` appends it
+ * link is not the model's job: the session-link processor appends it
  * to the first reply of a new session, so it is there whether or not the
  * model judged the request worth an opener. A run on a Slack-linked session
  * that didn't start from Slack gets a shorter note on when to post there; runs

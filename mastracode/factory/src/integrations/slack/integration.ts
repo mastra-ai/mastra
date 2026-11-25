@@ -29,7 +29,7 @@ import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, Int
 import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
-import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
+import { factorySessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
@@ -223,7 +223,7 @@ export class SlackIntegration implements FactoryIntegration {
         ...(textHidden ? [new FactoryReplyReminderProcessor()] : []),
       ],
       output: [
-        new FactoryChannelSessionLinkProcessor(),
+        factorySessionLinkProcessor(),
         ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps)] : []),
       ],
     };

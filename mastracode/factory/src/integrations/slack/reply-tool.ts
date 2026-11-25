@@ -1,4 +1,4 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
 import type { ChatChannelRenderContext } from '@mastra/core/channels';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -8,7 +8,7 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../base.js';
 import { SESSION_LINK_LABEL } from './channel-reply-processor.js';
-import { NEW_CHANNEL_SESSION_KEY, sessionLinkFromRequest } from './channel-session-link-processor.js';
+import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 import { postTarget, resolveRenderContext } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 
@@ -60,11 +60,11 @@ export function createReplyTool(requestContext: RequestContext, deps: ShareFileT
 
 /**
  * The session link the first reply of a new session ends with. With reply
- * text hidden, `FactoryChannelSessionLinkProcessor`'s text delta never
+ * text hidden, the session-link processor's text delta never
  * reaches the thread, so the tool carries the link instead.
  */
 function firstReplyLink(requestContext: RequestContext): string | undefined {
-  if (!requestContext.get(NEW_CHANNEL_SESSION_KEY) || requestContext.get(LINKED_KEY)) return undefined;
+  if (!requestContext.get(NEW_CHANNEL_THREAD_KEY) || requestContext.get(LINKED_KEY)) return undefined;
   return sessionLinkFromRequest(requestContext);
 }
 

@@ -1,10 +1,9 @@
-import { AgentControllerChannels } from '@mastra/core/channels';
+import { AgentControllerChannels, ChannelThreadLinkProcessor } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
-import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { SlackIntegration } from './integration.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
@@ -107,7 +106,7 @@ describe('Slack channel tools', () => {
     expect(tools).toContain('attach_file');
     expect(tools).not.toContain(REPLY_TOOL_NAME);
     expect(slack.processors.input.map(p => p.constructor)).toEqual([FactoryChannelReplyProcessor]);
-    expect(slack.processors.output.map(p => p.constructor)).toEqual([FactoryChannelSessionLinkProcessor]);
+    expect(slack.processors.output.map(p => p.constructor)).toEqual([ChannelThreadLinkProcessor]);
   });
 
   it('hides reply text by default, so the reply tool comes with its reminder and streaming', async () => {
@@ -118,7 +117,7 @@ describe('Slack channel tools', () => {
       FactoryReplyReminderProcessor,
     ]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([
-      FactoryChannelSessionLinkProcessor,
+      ChannelThreadLinkProcessor,
       FactoryReplyStreamProcessor,
     ]);
   });
