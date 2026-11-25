@@ -6,10 +6,12 @@ import {
   MessageList,
 } from '@mastra/core/agent';
 import type { AgentSignalType, MastraDBMessage } from '@mastra/core/agent';
+import type { IMastraLogger } from '@mastra/core/logger';
+import { Mastra } from '@mastra/core/mastra';
 import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -3792,6 +3794,161 @@ describe('Memory', () => {
 
       expect(initEngine).not.toHaveBeenCalled();
       expect(await memory.getThreadById({ threadId })).toBeNull();
+    });
+  });
+
+  describe('deleteThread agent signals', () => {
+    const resourceId = 'signals-resource';
+    // Runs key a thread's agent-signal rows by `<resourceId>\u0000<threadId>`.
+    const threadKey = (threadId: string) => `${resourceId}\u0000${threadId}`;
+    const signal = { type: 'user-message', contents: 'hello' };
+
+    function createMastraMemory(storage: MastraCompositeStore) {
+      const memory = new Memory();
+      new Mastra({ logger: false, storage, memory: { chat: memory } });
+      const warn = vi.spyOn((memory as unknown as { logger: IMastraLogger }).logger, 'warn');
+      return { memory, warn };
+    }
+
+    async function saveThread(memory: Memory, threadId: string) {
+      await memory.saveThread({
+        thread: { id: threadId, resourceId, title: '', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+      });
+    }
+
+    /** A signal left for the thread's next run, and a run that closed with a signal it never took. */
+    async function seedSignals(storage: MastraCompositeStore, threadId: string, runId: string) {
+      const agentSignals = (await storage.getStore('agentSignals'))!;
+      const key = threadKey(threadId);
+      await agentSignals.enqueue({ id: `${threadId}-leftover`, threadKey: key, runId: null, scope: 'pending', signal });
+      await agentSignals.enqueue({ id: `${threadId}-untaken`, threadKey: key, runId, scope: 'pending', signal });
+      await agentSignals.closeRun({ threadKey: key, runId, consumedIds: [] });
+      return agentSignals;
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("deletes the thread's leftover signals and closed-run markers, and only that thread's", async () => {
+      const storage = new InMemoryStore();
+      const { memory, warn } = createMastraMemory(storage);
+      await saveThread(memory, 'deleted-thread');
+      await saveThread(memory, 'kept-thread');
+      const agentSignals = await seedSignals(storage, 'deleted-thread', 'run-deleted');
+      await seedSignals(storage, 'kept-thread', 'run-kept');
+
+      await memory.deleteThread('deleted-thread');
+
+      expect(await memory.getThreadById({ threadId: 'deleted-thread' })).toBeNull();
+      expect(await agentSignals.listPending({ threadKey: threadKey('deleted-thread') })).toEqual([]);
+      // The closed run's marker is gone, so the run accepts sends again.
+      expect(
+        await agentSignals.enqueue({
+          id: 'after-delete',
+          threadKey: threadKey('deleted-thread'),
+          runId: 'run-deleted',
+          scope: 'pending',
+          signal,
+        }),
+      ).toBe('accepted');
+
+      const kept = await agentSignals.listPending({ threadKey: threadKey('kept-thread') });
+      expect(kept.map(row => row.id)).toEqual(['kept-thread-leftover', 'kept-thread-untaken']);
+      expect(
+        await agentSignals.enqueue({
+          id: 'to-kept-run',
+          threadKey: threadKey('kept-thread'),
+          runId: 'run-kept',
+          scope: 'pending',
+          signal,
+        }),
+      ).toBe('run-closed');
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it("deletes the signals from the Mastra host's storage when the memory has its own storage", async () => {
+      const hostStorage = new InMemoryStore();
+      const memory = new Memory({ storage: new InMemoryStore() });
+      new Mastra({ logger: false, storage: hostStorage, memory: { chat: memory } });
+      await saveThread(memory, 'own-storage-thread');
+      // Runs keep their signals in the host's storage, not in the memory's.
+      const agentSignals = await seedSignals(hostStorage, 'own-storage-thread', 'run-own-storage');
+
+      await memory.deleteThread('own-storage-thread');
+
+      expect(await memory.getThreadById({ threadId: 'own-storage-thread' })).toBeNull();
+      expect(await agentSignals.listPending({ threadKey: threadKey('own-storage-thread') })).toEqual([]);
+    });
+
+    it('keeps the signals when deleting the thread itself fails', async () => {
+      const storage = new InMemoryStore();
+      const { memory } = createMastraMemory(storage);
+      await saveThread(memory, 'undeleted-thread');
+      const agentSignals = await seedSignals(storage, 'undeleted-thread', 'run-undeleted');
+      const memoryStore = (await storage.getStore('memory'))!;
+      vi.spyOn(memoryStore, 'deleteThread').mockRejectedValue(new Error('thread delete failed'));
+
+      await expect(memory.deleteThread('undeleted-thread')).rejects.toThrow('thread delete failed');
+
+      expect(await memory.getThreadById({ threadId: 'undeleted-thread' })).not.toBeNull();
+      const pending = await agentSignals.listPending({ threadKey: threadKey('undeleted-thread') });
+      expect(pending.map(row => row.id)).toEqual(['undeleted-thread-leftover', 'undeleted-thread-untaken']);
+    });
+
+    it('deletes the thread as before when the storage keeps no agent signals', async () => {
+      const storage = new MastraCompositeStore({
+        id: 'no-agent-signals',
+        default: new InMemoryStore(),
+        domains: { agentSignals: false },
+      });
+      const { memory, warn } = createMastraMemory(storage);
+      await saveThread(memory, 'plain-thread');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'plain-message',
+            threadId: 'plain-thread',
+            resourceId,
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            createdAt: new Date(),
+          },
+        ],
+      });
+
+      await memory.deleteThread('plain-thread');
+
+      expect(await memory.getThreadById({ threadId: 'plain-thread' })).toBeNull();
+      const memoryStore = (await storage.getStore('memory'))!;
+      expect((await memoryStore.listMessagesById({ messageIds: ['plain-message'] })).messages).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('still deletes the thread when deleting its agent signals fails', async () => {
+      const storage = new InMemoryStore();
+      const { memory, warn } = createMastraMemory(storage);
+      await saveThread(memory, 'failing-thread');
+      const memoryStore = (await storage.getStore('memory'))!;
+      await memoryStore.initializeObservationalMemory({
+        threadId: 'failing-thread',
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+      const agentSignals = await seedSignals(storage, 'failing-thread', 'run-failing');
+      const failure = new Error('agent signals unavailable');
+      vi.spyOn(agentSignals, 'deleteThread').mockRejectedValue(failure);
+
+      await expect(memory.deleteThread('failing-thread')).resolves.toBeUndefined();
+
+      expect(await memory.getThreadById({ threadId: 'failing-thread' })).toBeNull();
+      // The cleanup that runs after the agent-signals delete still happens.
+      expect(await memoryStore.getObservationalMemory('failing-thread', resourceId)).toBeNull();
+      expect(warn).toHaveBeenCalledWith('Failed to delete agent signals after deleting thread', {
+        threadId: 'failing-thread',
+        error: failure,
+      });
     });
   });
 
