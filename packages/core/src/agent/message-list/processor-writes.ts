@@ -27,17 +27,19 @@ export function recordDataPart(part: DBPart): DataPartRecord {
 
 /**
  * Adds a writer's `data-*` part message to the list and records the parts the merge added, so the runner can
- * tell a processor's writes from the parts its returned copy carries.
+ * tell a processor's writes from the parts its returned copy carries. The part is recorded against the message
+ * that received it, which can be a different message from `message.id` when the add merges into the latest one.
  */
 export function addWriterDataPart(messageList: MessageList, message: MastraDBMessage): void {
-  const find = () => messageList.get.all.db().find(m => m.id === message.id);
-  const partsBefore = new Set(find()?.content.parts);
+  const partsBefore = new Set(messageList.get.all.db().flatMap(m => m.content.parts));
   messageList.add(message, 'response');
   let log = writeLogs.get(messageList);
   if (!log) writeLogs.set(messageList, (log = []));
-  for (const part of find()?.content.parts ?? []) {
-    if (part.type.startsWith('data-') && !partsBefore.has(part)) {
-      log.push({ messageId: message.id, part: recordDataPart(structuredClone(part)) });
+  for (const received of messageList.get.all.db()) {
+    for (const part of received.content.parts) {
+      if (part.type.startsWith('data-') && !partsBefore.has(part)) {
+        log.push({ messageId: received.id, part: recordDataPart(structuredClone(part)) });
+      }
     }
   }
 }

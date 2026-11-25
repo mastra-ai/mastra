@@ -3074,13 +3074,13 @@ export class ProcessorRunner {
     const written = call?.written();
 
     // Re-add messages with correct sources
-    for (let message of messages) {
+    for (const returned of messages) {
+      const message = withDataPartsWrittenDuringCall(returned, call, written);
       if (currentById.get(message.id) === message) {
         continue;
       }
 
       messageList.removeByIds([message.id]);
-      message = withDataPartsWrittenDuringCall(message, call, written);
       if (message.role === 'system') {
         const systemText =
           (message.content.content as string | undefined) ??

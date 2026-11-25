@@ -1,8 +1,10 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { MockMemory } from '../../memory/mock';
 import type { MastraDBMessage } from '../../memory/types';
 import type { OutputProcessor } from '../../processors/index';
+import { createTool } from '../../tools';
 import { Agent } from '../index';
 
 const model = () =>
@@ -342,4 +344,129 @@ describe('parts held before the call follow the returned copy when the processor
       });
     }
   }
+});
+
+describe('writes recorded where the writer part actually lands', () => {
+  type Part = { type: string; data?: unknown };
+  const toolModel = () => {
+    let call = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        call++;
+        const body =
+          call === 1
+            ? [
+                {
+                  type: 'tool-call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'echo',
+                  input: JSON.stringify({ v: 'x' }),
+                },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'tool-calls' as const,
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'text-start' as const, id: 't1' },
+                { type: 'text-delta' as const, id: 't1', delta: 'DONE' },
+                { type: 'text-end' as const, id: 't1' },
+                {
+                  type: 'finish' as const,
+                  finishReason: 'stop' as const,
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: `id-${call}`, modelId: 'mock', timestamp: new Date(0) },
+            ...body,
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+  };
+
+  async function savedDataParts(options: { outputProcessors?: any[]; inputProcessors?: any[] }, thread: string) {
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'lands',
+      name: 'lands',
+      instructions: 'x',
+      model: toolModel(),
+      memory,
+      tools: {
+        echo: createTool({
+          id: 'echo',
+          description: 'echo',
+          inputSchema: z.object({ v: z.string() }),
+          execute: async () => 'ok',
+        }),
+      },
+      ...options,
+    });
+    const stream = await agent.stream('hi', { memory: { thread, resource: 'r' }, maxSteps: 3 });
+    await stream.consumeStream();
+    const { messages } = await memory.recall({ threadId: thread, resourceId: 'r' });
+    return messages
+      .filter(m => m.role === 'assistant')
+      .flatMap(m => m.content.parts as Part[])
+      .filter(p => p.type === 'data-e')
+      .map(p => p.data);
+  }
+
+  // Copies the latest assistant message's parts, writes, assigns the copy back to the same message and returns it.
+  const assignCopyBack = async ({ messages, writer }: any) => {
+    const target = (messages as MastraDBMessage[]).findLast(m => m.role === 'assistant');
+    const parts = target ? [...target.content.parts] : undefined;
+    await writer?.custom({ type: 'data-e', data: { v: 1 } });
+    if (target && parts) target.content.parts = parts;
+    return messages;
+  };
+
+  it('processToolResult: a copy of parts assigned back to the same message keeps the write', async () => {
+    const saved = await savedDataParts(
+      { outputProcessors: [{ id: 'assign-back', processToolResult: assignCopyBack }] },
+      'assign-tool',
+    );
+    expect(saved).toEqual([{ v: 1 }]);
+  });
+
+  it('processInputStep: a copy of parts assigned back to the same message keeps the write', async () => {
+    const saved = await savedDataParts(
+      {
+        inputProcessors: [
+          {
+            id: 'assign-back',
+            processInputStep: async (args: any) => (args.stepNumber === 1 ? assignCopyBack(args) : args.messages),
+          },
+        ],
+      },
+      'assign-input',
+    );
+    expect(saved).toEqual([{ v: 1 }]);
+  });
+
+  it('processOutputResult: a write to another message id that merges into the latest message is kept', async () => {
+    const saved = await savedDataParts(
+      {
+        outputProcessors: [
+          {
+            id: 'other-id',
+            processOutputResult: async ({ messages, writer }: any) => {
+              const copies = structuredClone(messages);
+              await writer?.custom({ type: 'data-e', data: { v: 1 } }, { messageId: 'another-message' });
+              return copies;
+            },
+          },
+        ],
+      },
+      'other-id',
+    );
+    expect(saved).toEqual([{ v: 1 }]);
+  });
 });
