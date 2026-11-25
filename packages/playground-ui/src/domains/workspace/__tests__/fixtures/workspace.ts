@@ -42,6 +42,13 @@ export const fileContents: Record<string, string> = {
   'src/index.ts': 'const answer = 42;',
   'skills/review/SKILL.md': '---\nname: review\ndescription: Reviews code\n---\n# Review skill',
   'logo.png': 'iVBORw0KGgo=',
+  'cache/digest.json': '{"rows":[{"id":12345678901234567890,"2":1.0,"1":"a,b:{c} \\"q\\""}],"empty":{},"list":[ ]}',
+  'cache/broken.json': '{"rows":[1,2',
+  'cache/large.json': JSON.stringify({
+    rows: Array.from({ length: 1_000 }, (_, i) => ({ id: `row-${i}`, text: 'shipped the change', ok: true })),
+  }),
+  'cache/nested.json': `${'['.repeat(5000)}1${']'.repeat(5000)}`,
+  'sfx/applause.wav': 'RIFF$\u00e2\u0004\u0000WAVEfmt \u0010\u0000\u0000\u0000\u0001\u0000',
 };
 
 const mimeTypes: Record<string, string> = { 'logo.png': 'image/png' };
