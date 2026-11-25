@@ -78,8 +78,14 @@ new ConnectEventWorker({
   },
 });
 
-// The docs' example: start a workflow from a Linear issue.
+// The docs' usage example.
 new ConnectEventWorker({
+  github: {
+    'pull_request.opened': async ({ event, mastra }) => {
+      const agent = mastra.getAgent('reviewer');
+      await agent.generate(`Review ${event.payload.pull_request.html_url}`);
+    },
+  },
   linear: {
     'Issue.create': async ({ event, mastra }) => {
       const run = await mastra.getWorkflow('triageIssue').createRun({
