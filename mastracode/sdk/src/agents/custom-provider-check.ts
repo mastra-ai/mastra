@@ -64,13 +64,21 @@ export function createCustomProviderChatModel(args: {
   modelId: string;
   requestHeaders?: Record<string, string>;
 }): CustomProviderChatModel {
+  return buildChatModel(args, fetchWithoutRedirects);
+}
+
+/** {@link createCustomProviderChatModel} with the `fetch` to call through, so the model test can cap what it reads. */
+function buildChatModel(
+  args: Parameters<typeof createCustomProviderChatModel>[0],
+  fetchImpl: typeof fetch,
+): CustomProviderChatModel {
   // The key never goes in `apiKey`: the AI SDK writes that header first, where
   // a custom header of the same name would replace it.
   const provider = createOpenAICompatible({
     name: args.providerId,
     baseURL: args.connection.url,
     headers: mergeHeadersIgnoringCase(args.requestHeaders, customProviderRequestHeaders(args.connection)),
-    fetch: fetchWithoutRedirects,
+    fetch: fetchImpl,
   });
   return provider.chatModel(args.modelId);
 }
@@ -104,7 +112,12 @@ export interface CustomProviderCheckOptions {
 }
 
 const LIST_TIMEOUT_MS = 10_000;
-const MAX_LIST_BODY_BYTES = 2 * 1024 * 1024;
+/**
+ * The most response bytes a check reads, for the model list and for the test
+ * message alike. A real answer to either is far smaller, and the cap keeps an
+ * endpoint from holding memory or the connection until the timeout.
+ */
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_DETAIL_LENGTH = 1000;
 /** Shorter values match too much ordinary text to be worth redacting. */
 const MIN_REDACTED_LENGTH = 4;
@@ -402,7 +415,10 @@ function isUsableModelId(id: string, sentSecrets: string[]): boolean {
  * is not a model list either.
  */
 function modelIdsFromList(body: unknown, secrets: SentSecrets): string[] | undefined {
-  const sent = [...secrets.redacted, ...secrets.tooShort];
+  // Only secrets long enough to redact are matched. A header such as `X-Ver: 1`
+  // is secret by default, and a one to three character value inside an id
+  // reveals nothing, while it would drop `gpt-4.1` and every id like it.
+  const sent = secrets.redacted;
   let entries: unknown[];
   let nameIsId = false;
   if (Array.isArray(body)) entries = body;
@@ -495,7 +511,7 @@ export async function listCustomProviderModels(
   }
   const contentType = response.headers.get('content-type') ?? undefined;
   try {
-    body = await readCappedBody(response, MAX_LIST_BODY_BYTES);
+    body = await readCappedBody(response, MAX_RESPONSE_BYTES);
   } catch (error) {
     // The status already says what went wrong, so an error body that breaks off only costs the detail.
     if (!response.ok) return fail(httpFailure({ status: response.status, url, body: '', summaryOnly, secrets }));
@@ -518,7 +534,7 @@ export async function listCustomProviderModels(
   if (body.truncated) {
     return fail({
       kind: 'invalid_response',
-      message: `The model list from ${url} is larger than ${MAX_LIST_BODY_BYTES / 1024 / 1024} MB`,
+      message: `The model list from ${url} is larger than ${MAX_RESPONSE_BYTES / 1024 / 1024} MB`,
     });
   }
   let parsed: unknown;
@@ -548,6 +564,37 @@ const MODEL_TEST_PROMPT = 'Reply with the single word "yes".';
  * A reply cut here is still a working model.
  */
 const MAX_REPLY_CHARS = 4000;
+
+/**
+ * `fetchWithoutRedirects` that counts the bytes of each response body and
+ * calls `onCap` once the count passes `maxBytes`. The body then ends with an
+ * error, and `onCap` aborts the request so the connection closes.
+ */
+function byteCappedFetch(maxBytes: number, onCap: () => void): typeof fetch {
+  return async (input, init) => {
+    const response = await fetchWithoutRedirects(input, init);
+    if (!response.body) return response;
+    let received = 0;
+    const counted = response.body.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+          received += chunk.byteLength;
+          if (received <= maxBytes) {
+            controller.enqueue(chunk);
+            return;
+          }
+          onCap();
+          controller.error(new Error(`response passed ${maxBytes} bytes`));
+        },
+      }),
+    );
+    return new Response(counted, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  };
+}
 
 /** A response header by name, ignoring case, from the plain object the AI SDK keeps on its errors. */
 function headerValue(headers: Record<string, string> | undefined, name: string): string | undefined {
@@ -651,10 +698,16 @@ export async function testCustomProviderModel(
   let streamError: unknown;
   let stopped = false;
   let replyCut = false;
+  let bytesCapped = false;
   const stopReading = new AbortController();
+  // Reasoning or empty deltas never reach the reply budget, so the bytes read are capped as well.
+  const cappedFetch = byteCappedFetch(MAX_RESPONSE_BYTES, () => {
+    bytesCapped = true;
+    stopReading.abort();
+  });
   try {
     const result = streamText({
-      model: createCustomProviderChatModel(args),
+      model: buildChatModel(args, cappedFetch),
       prompt: MODEL_TEST_PROMPT,
       maxRetries: 0,
       abortSignal: AbortSignal.any([signal, stopReading.signal]),
@@ -687,9 +740,18 @@ export async function testCustomProviderModel(
     stopped = true;
   }
 
+  // A model that produced text before the byte cap answered; one that produced none did not.
+  if (bytesCapped && !replyCut && !reply) {
+    const failure: CustomProviderCheckFailure = {
+      kind: 'invalid_response',
+      message: `The answer from ${chatUrl} passed ${MAX_RESPONSE_BYTES / 1024 / 1024} MB without any text`,
+    };
+    return { ok: false, failure: finishFailure(failure, secrets), latencyMs: latencyMs() };
+  }
+  const cut = replyCut || bytesCapped;
   // A signal that fires between parts can end the stream with neither `abort` nor `finish`.
   // A stream that reached `finish` keeps its result even if the signal fires afterwards.
-  if (!replyCut && (stopped || (signal.aborted && finishReason === undefined))) {
+  if (!cut && (stopped || (signal.aborted && finishReason === undefined))) {
     const failure = modelTestFailure({
       error: streamError,
       chatUrl,
@@ -701,22 +763,56 @@ export async function testCustomProviderModel(
   }
   return {
     ok: true,
-    reply: safeReply(reply, secrets),
+    reply: safeReply(reply, secrets, cut),
     ...(finishReason ? { finishReason } : {}),
     latencyMs: latencyMs(),
   };
 }
+
+/** Control characters except tab and newline, which a multi-line reply may keep. */
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+const REPLY_CONTROL_CHARACTERS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g;
 
 /**
  * The reply as it may be returned. An endpoint that echoes request headers
  * into its completion would hand a saved secret to someone allowed to run the
  * check but not to read the secret, so the reply is redacted like failure
  * text. Redaction runs before the cut to the reply budget so the cut cannot
- * split a secret, and a reply that holds a secret too short to redact is
- * returned empty.
+ * split a secret.
+ *
+ * Unlike `detail`, a reply is not emptied for a secret too short to redact:
+ * a one to three character value inside a one-word reply reveals nothing,
+ * while an error excerpt can repeat it next to its header name.
+ *
+ * When the reply was cut, by the reply budget or the byte cap, a trailing
+ * part that begins a secret is dropped, since the rest of that secret never
+ * arrived to be matched. Control characters become spaces because the TUI
+ * prints the reply.
  */
-function safeReply(reply: string, secrets: SentSecrets): string {
-  const redacted = redact(reply, secrets);
-  if (secrets.tooShort.some(secret => redacted.includes(secret))) return '';
-  return redacted.slice(0, MAX_REPLY_CHARS).trim();
+function safeReply(reply: string, secrets: SentSecrets, cut: boolean): string {
+  let kept = redact(reply, secrets).slice(0, MAX_REPLY_CHARS);
+  if (cut) kept = kept.slice(0, kept.length - trailingSecretPrefixLength(kept, secrets));
+  return kept.replace(REPLY_CONTROL_CHARACTERS, ' ').trim();
+}
+
+/**
+ * The length of the longest end of `text` that is the start of a sent secret.
+ * Candidate starts are scanned from the longest down, and each comparison
+ * stops at the first differing character, so ordinary text costs little.
+ */
+function trailingSecretPrefixLength(text: string, secrets: SentSecrets): number {
+  let longest = 0;
+  for (const secret of secrets.redacted) {
+    for (let start = Math.max(0, text.length - secret.length + 1); start < text.length - longest; start++) {
+      let matched = 0;
+      while (start + matched < text.length && text.charCodeAt(start + matched) === secret.charCodeAt(matched)) {
+        matched++;
+      }
+      if (start + matched === text.length) {
+        longest = matched;
+        break;
+      }
+    }
+  }
+  return longest;
 }

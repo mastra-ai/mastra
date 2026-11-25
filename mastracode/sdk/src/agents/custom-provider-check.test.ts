@@ -137,7 +137,6 @@ describe('listing the models of a custom endpoint', () => {
           { id: 'model-x' },
           { id: `echo ${request.headers.authorization}` },
           { id: `tenant-${request.headers['x-tenant']}` },
-          { id: `pin-${request.headers['x-pin']}` },
         ],
       })(request, res),
     );
@@ -145,13 +144,20 @@ describe('listing the models of a custom endpoint', () => {
     const result = await listCustomProviderModels({
       url: endpoint.url,
       apiKey: 'sk-echoed-key',
-      headers: [
-        { name: 'X-Tenant', value: 'tenant-secret', secret: true },
-        { name: 'X-Pin', value: '7q9', secret: true },
-      ],
+      headers: [{ name: 'X-Tenant', value: 'tenant-secret', secret: true }],
     });
 
     expect(result).toMatchObject({ ok: true, models: ['model-x'] });
+  });
+
+  // Headers are secret by default, and a short value such as a version is ordinary text inside an id.
+  it.each(['1', 'v1'])('keeps every id when a short secret header %s appears in them', async value => {
+    const ids = ['deepseek-r1', 'gpt-4.1', 'llama-3.1-70b', 'qwen-v1'];
+    const endpoint = await startEndpoint(json(200, { data: ids.map(id => ({ id })) }));
+
+    const result = await listCustomProviderModels({ url: endpoint.url, headers: [{ name: 'X-Ver', value }] });
+
+    expect(result).toMatchObject({ ok: true, models: ids });
   });
 
   it('reports a 200 that is not a model list', async () => {
@@ -472,14 +478,42 @@ describe('sending a test message to a custom endpoint model', () => {
     expect(result).toMatchObject({ ok: true, reply: 'auth=Bearer [redacted] tenant=[redacted]' });
   });
 
-  it('returns an empty reply when it echoes a secret too short to redact', async () => {
-    const endpoint = await startEndpoint((request, res) =>
-      chatStream(`your pin is ${request.headers['x-pin']}`)(request, res),
-    );
+  // A one-character key inside a one-word reply reveals nothing.
+  it('keeps a reply that contains a key too short to redact', async () => {
+    const endpoint = await startEndpoint(chatStream('yes'));
 
-    const result = await testModel({ url: endpoint.url, headers: [{ name: 'X-Pin', value: '7q9', secret: true }] });
+    const result = await testModel({ url: endpoint.url, apiKey: 'e' });
 
-    expect(result).toMatchObject({ ok: true, reply: '', finishReason: 'stop' });
+    expect(result).toMatchObject({ ok: true, reply: 'yes', finishReason: 'stop' });
+  });
+
+  // The TUI prints the reply, so an endpoint must not reach the terminal with escape sequences.
+  it('turns control characters in the reply into spaces and keeps tabs and newlines', async () => {
+    const endpoint = await startEndpoint(chatStream('hi \u001b[2J\u001b]52;c;Zm9v\u0007 done\n\tok'));
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: true, reply: 'hi  [2J ]52;c;Zm9v  done\n\tok' });
+  });
+
+  it('drops the start of a key that the reply budget cut in two', async () => {
+    const key = 'sk-SECRETVALUE1234';
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const delta = (content: string) =>
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 0,
+          model: 'model-x',
+          choices: [{ index: 0, delta: { content }, finish_reason: null }],
+        })}\n\n`;
+      res.end(`${delta('x'.repeat(3995))}${delta(key.slice(0, 8))}${delta(key.slice(8))}data: [DONE]\n\n`);
+    });
+
+    const result = await testModel({ url: endpoint.url, apiKey: key });
+
+    expect(result).toMatchObject({ ok: true, reply: 'x'.repeat(3995) });
   });
 
   it('passes when the model answers with no text', async () => {
@@ -600,6 +634,72 @@ describe('sending a test message to a custom endpoint model', () => {
     expect(result.ok ? result.finishReason : 'failed').toBeUndefined();
     await connectionClosed;
   }, 3000);
+
+  // Deltas without reply text never reach the reply budget, so only the byte cap stops them.
+  it.each([
+    ['reasoning', { reasoning_content: 'r'.repeat(1000) }],
+    ['empty', {}],
+  ])(
+    'stops a flood of %s deltas at the byte cap without text',
+    async (_, delta) => {
+      let closed!: () => void;
+      const connectionClosed = new Promise<void>(resolve => (closed = resolve));
+      const endpoint = await startEndpoint((_, res) => {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.on('close', closed);
+        const chunk = `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 0,
+          model: 'model-x',
+          choices: [{ index: 0, delta, finish_reason: null }],
+        })}\n\n`;
+        const pump = () => {
+          if (res.destroyed) return;
+          res.write(chunk);
+          setImmediate(pump);
+        };
+        pump();
+      });
+
+      const result = await testModel({ url: endpoint.url });
+
+      expect(result).toMatchObject({
+        ok: false,
+        failure: {
+          kind: 'invalid_response',
+          message: `The answer from ${endpoint.url}/chat/completions passed 2 MB without any text`,
+        },
+      });
+      await connectionClosed;
+    },
+    5000,
+  );
+
+  it('keeps the text a model sent before a flood reached the byte cap', async () => {
+    const endpoint = await startEndpoint((_, res) => {
+      res.writeHead(200, { 'content-type': 'text/event-stream' });
+      const chunk = (delta: unknown) =>
+        `data: ${JSON.stringify({
+          id: 'chatcmpl-test',
+          object: 'chat.completion.chunk',
+          created: 0,
+          model: 'model-x',
+          choices: [{ index: 0, delta, finish_reason: null }],
+        })}\n\n`;
+      res.write(chunk({ role: 'assistant', content: 'Yes' }));
+      const pump = () => {
+        if (res.destroyed) return;
+        res.write(chunk({ reasoning_content: 'r'.repeat(1000) }));
+        setImmediate(pump);
+      };
+      pump();
+    });
+
+    const result = await testModel({ url: endpoint.url });
+
+    expect(result).toMatchObject({ ok: true, reply: 'Yes' });
+  }, 5000);
 
   it('does not report a stream that breaks after a 200 as an HTTP error', async () => {
     const endpoint = await startEndpoint((_, res) => {
