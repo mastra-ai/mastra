@@ -160,15 +160,15 @@ describe('Postgres single-statement fenced writes', () => {
   // committed after the takeover and overwrote what the new owner may already have read.
   it('a fenced snapshot save racing a takeover lands before it or not at all', async () => {
     const writerStore = new PostgresStore({ ...TEST_CONFIG, id: 'fenced-write-racer', schemaName });
-    await writerStore.init();
-    const writer = (await writerStore.getStore('workflows'))!;
-    // A large snapshot makes the write's statement long enough to overlap the claim.
-    const padding = 'x'.repeat(256 * 1024);
-    const runId = `run-${crypto.randomUUID()}`;
-    let fence = await claim(runId, 'owner-0');
     let landed = 0;
     let refused = 0;
     try {
+      await writerStore.init();
+      const writer = (await writerStore.getStore('workflows'))!;
+      // A large snapshot makes the write's statement long enough to overlap the claim.
+      const padding = 'x'.repeat(256 * 1024);
+      const runId = `run-${crypto.randomUUID()}`;
+      let fence = await claim(runId, 'owner-0');
       for (let round = 1; round <= 400; round++) {
         const save = writer
           .persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId, { round, padding }), fence })
