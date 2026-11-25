@@ -1,7 +1,5 @@
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { KnowledgeGraphLoader } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeGraphLoader';
 import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import type {
   KnowledgeExplorerSource,
@@ -80,15 +78,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     setSearchParams(next);
   };
 
-  if (graph.isPending) return <KnowledgeGraphLoader />;
-  if (graph.isError) {
-    return (
-      <div className="p-4">
-        <Notice variant="destructive">{graph.error.message}</Notice>
-      </div>
-    );
-  }
-  if (graph.data.pages.length === 0) {
+  if (graph.data?.pages.length === 0) {
     return (
       <Txt tone="muted" as="p" variant="body" className="p-4">
         No knowledge in this project yet. Pages appear here as factory sessions write them.
@@ -99,6 +89,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string }) {
     <div className="flex min-h-0 flex-1 flex-col" onPointerDownCapture={onActivity} onWheelCapture={onActivity}>
       <KnowledgePageExplorer
         graph={graph.data}
+        graphError={graph.error?.message}
         source={source}
         selectedPageId={selectedPageId}
         onSelect={pageId => update({ page: pageId })}

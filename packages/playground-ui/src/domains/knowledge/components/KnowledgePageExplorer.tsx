@@ -26,6 +26,7 @@ import type {
   KnowledgePinPayload,
   KnowledgeScopeGrantPayload,
 } from '../pageTypes';
+import { KnowledgeGraphLoader } from './KnowledgeGraphLoader';
 import { KnowledgeDetailSection, KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import type { PageLinkLists } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
@@ -153,8 +154,11 @@ export interface KnowledgeExplorerSource {
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
 }
 
+const EMPTY_GRAPH: KnowledgeExplorerGraph = { pages: [], edges: [], pinnedIds: [], truncated: false };
+
 export interface KnowledgePageExplorerProps {
-  graph: KnowledgeExplorerGraph;
+  graph: KnowledgeExplorerGraph | undefined;
+  graphError?: string;
   source: KnowledgeExplorerSource;
   selectedPageId: string | null;
   /** `null` clears the selection: a click on empty graph canvas. */
@@ -869,7 +873,7 @@ function sameLevels(a: LevelResult, b: LevelResult) {
  */
 function useLazyTree(
   source: KnowledgeExplorerSource,
-  graph: KnowledgeExplorerGraph,
+  graph: KnowledgeExplorerGraph | undefined,
   selected: KnowledgeExplorerPageDetail | undefined,
   // Pages focused in the graph: their first level of children loads too, so the graph can draw them.
   graphOpened: readonly string[],
@@ -917,7 +921,8 @@ function useLazyTree(
 
   // With the whole graph loaded, its structure is complete: only pages with children get a chevron.
   const graphParents = useMemo(
-    () => (graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null))),
+    () =>
+      !graph || graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null)),
     [graph],
   );
   // A counted page has children exactly when its count says so. An uncounted one is guessed from the graph,
@@ -961,7 +966,8 @@ function useLazyTree(
  * page instead.
  */
 export function KnowledgePageExplorer({
-  graph,
+  graph: overview,
+  graphError,
   source,
   selectedPageId,
   onSelect,
@@ -971,6 +977,7 @@ export function KnowledgePageExplorer({
   flush = false,
   fullBleedGraph = false,
 }: KnowledgePageExplorerProps) {
+  const graph = overview ?? EMPTY_GRAPH;
   const narrow = useIsMobile(1024);
   const view = !narrow && requestedView === 'tree' ? 'graph' : requestedView;
   const selected = source.usePage(selectedPageId);
@@ -984,7 +991,7 @@ export function KnowledgePageExplorer({
   const [revealed, setRevealed] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [allLinks, setAllLinks] = useState(false);
   const [dotCounts, setDotCounts] = useState(true);
-  const lazy = useLazyTree(source, graph, selected.data, graphOpened);
+  const lazy = useLazyTree(source, overview, selected.data, graphOpened);
   const moreRoots = lazy.loadMore.has(KNOWLEDGE_TREE_ROOT);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.
@@ -1280,6 +1287,10 @@ export function KnowledgePageExplorer({
 
   const tabValue = explorerTab(view, showPage);
   const pageOverGraph = overlay && showPage;
+  const canvasOpen = graphShown && !pageOverGraph;
+  const loadingCanvas = canvasOpen && !overview && graphError === undefined && graphPages.length === 0;
+  const graphDrawn = canvasOpen && !loadingCanvas;
+  const rootLevelFailed = lazy.failed.has(KNOWLEDGE_TREE_ROOT) && !lazy.loaded.has(KNOWLEDGE_TREE_ROOT);
   const floatingToolbar = fullBleedGraph && graphShown && !showPage;
   const toolbar = useMeasuredAutoHeight();
   const noticeSurface = floatingToolbar ? cn('w-fit rounded-lg px-2 py-1', overlaySurfaceStyle) : undefined;
@@ -1359,21 +1370,30 @@ export function KnowledgePageExplorer({
             <TreeRowsSkeleton label="Loading pages" rows={6} />
           </div>
         ) : (
-          <KnowledgePageTree
-            key={focusScope ? focusScope.id : 'all'}
-            pages={treePages}
-            pinnedIds={graph.pinnedIds}
-            selectedPageId={selectedPageId}
-            onSelect={selectFromTree}
-            initiallyExpanded={focusScope ? [focusScope.id] : undefined}
-            {...(source.useTreeLevels
-              ? {
-                  mayHaveChildren: lazy.mayHaveChildren,
-                  onExpandedChange: lazy.onExpandedChange,
-                  loadMore: lazy.loadMore,
-                }
-              : {})}
-          />
+          <>
+            {rootLevelFailed ? (
+              <Txt as="p" variant="caption" tone="muted" className="p-3">
+                Couldn’t load the pages.
+              </Txt>
+            ) : null}
+            {rootLevelFailed && treePages.length === 0 ? null : (
+              <KnowledgePageTree
+                key={focusScope ? focusScope.id : 'all'}
+                pages={treePages}
+                pinnedIds={graph.pinnedIds}
+                selectedPageId={selectedPageId}
+                onSelect={selectFromTree}
+                initiallyExpanded={focusScope ? [focusScope.id] : undefined}
+                {...(source.useTreeLevels
+                  ? {
+                      mayHaveChildren: lazy.mayHaveChildren,
+                      onExpandedChange: lazy.onExpandedChange,
+                      loadMore: lazy.loadMore,
+                    }
+                  : {})}
+              />
+            )}
+          </>
         )}
       </div>
     </>
@@ -1444,6 +1464,15 @@ export function KnowledgePageExplorer({
               The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
             </Txt>
           ) : null}
+          {graphError !== undefined && !showPage ? (
+            <Txt
+              role="alert"
+              variant="caption"
+              className={cn('text-destructive-foreground', flush && 'px-3 pt-2', noticeSurface)}
+            >
+              {overview ? 'Couldn’t refresh the graph.' : 'Couldn’t load the full graph.'} {graphError}
+            </Txt>
+          ) : null}
           {selectedPageId && !showPage && isNotFound(selected.error) ? (
             <Txt
               role="alert"
@@ -1512,7 +1541,8 @@ export function KnowledgePageExplorer({
               )}
               data-testid="knowledge-graph-container"
             >
-              {graphShown && !pageOverGraph ? (
+              {loadingCanvas ? <KnowledgeGraphLoader className="absolute inset-0" /> : null}
+              {graphDrawn ? (
                 <div className="absolute top-[calc(var(--knowledge-toolbar-inset)+0.75rem)] right-3 z-10 -translate-x-(--knowledge-drawer-inset) transition-transform duration-slow ease-out-custom motion-reduce:transition-none">
                   <ButtonsGroup
                     orientation="vertical"
@@ -1556,7 +1586,7 @@ export function KnowledgePageExplorer({
                   </ButtonsGroup>
                 </div>
               ) : null}
-              {graphShown && !pageOverGraph ? (
+              {graphDrawn ? (
                 <KnowledgePageGraph
                   pages={graphPages}
                   edges={linkEdges}

@@ -128,6 +128,63 @@ describe('KnowledgePage', () => {
     vi.restoreAllMocks();
   });
 
+  describe('when the tree arrives before the graph', () => {
+    it('keeps the selected tree page when the overview supplies its pins', async ({ onTestFinished }) => {
+      stubKnowledge();
+      let releaseOverview!: () => void;
+      const pending = new Promise<void>(resolve => {
+        releaseOverview = resolve;
+      });
+      onTestFinished(releaseOverview);
+      server.use(
+        http.get(`${KNOWLEDGE}/graph`, async () => {
+          await pending;
+          return HttpResponse.json(graphFixture);
+        }),
+      );
+      const { router } = renderRoute();
+      const tree = await screen.findByRole('tree', {}, { timeout: 5_000 });
+      fireEvent.click(await within(tree).findByRole('button', { name: 'Expand Acme Factory' }));
+      fireEvent.click(await within(tree).findByText('Deploy runbook'));
+      const runbookRow = () => screen.getByRole('treeitem', { name: /Deploy runbook/ });
+      await waitFor(() => expect(runbookRow()).toHaveAttribute('aria-selected', 'true'));
+      expect(within(runbookRow()).queryByLabelText('Pinned')).toBeNull();
+
+      releaseOverview();
+      await waitFor(() => expect(within(runbookRow()).getByLabelText('Pinned')).toBeInTheDocument());
+      expect(runbookRow()).toHaveAttribute('aria-selected', 'true');
+      expect(router.state.location.search).toContain('page=runbook');
+    });
+
+    it('keeps the selected tree page when the overview fails, and says why the graph is incomplete', async ({
+      onTestFinished,
+    }) => {
+      stubKnowledge();
+      let failOverview!: () => void;
+      const pending = new Promise<void>(resolve => {
+        failOverview = resolve;
+      });
+      onTestFinished(failOverview);
+      server.use(
+        http.get(`${KNOWLEDGE}/graph`, async () => {
+          await pending;
+          return HttpResponse.json({ error: 'failed', message: 'The graph read timed out.' }, { status: 500 });
+        }),
+      );
+      const { router } = renderRoute();
+      const tree = await screen.findByRole('tree', {}, { timeout: 5_000 });
+      fireEvent.click(await within(tree).findByRole('button', { name: 'Expand Acme Factory' }));
+      fireEvent.click(await within(tree).findByText('Deploy runbook'));
+      const runbookRow = () => screen.getByRole('treeitem', { name: /Deploy runbook/ });
+      await waitFor(() => expect(runbookRow()).toHaveAttribute('aria-selected', 'true'));
+
+      failOverview();
+      expect(await screen.findByRole('alert', {}, { timeout: 5_000 })).toHaveTextContent('The graph read timed out.');
+      expect(runbookRow()).toHaveAttribute('aria-selected', 'true');
+      expect(router.state.location.search).toContain('page=runbook');
+    });
+  });
+
   it('keeps the mobile drawer trigger in the header while feature flags load', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
       matches: true,
@@ -342,9 +399,29 @@ describe('KnowledgePage', () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the server's message when the graph fails", async () => {
+  it('says why when neither the tree nor the graph can load', async () => {
     stubKnowledge({ status: 500, message: 'Knowledge is misconfigured' });
+    server.use(
+      http.get(`${KNOWLEDGE}/tree`, () =>
+        HttpResponse.json({ error: 'failed', message: 'Knowledge is misconfigured' }, { status: 500 }),
+      ),
+    );
     renderRoute();
-    expect(await screen.findByText('Knowledge is misconfigured', {}, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await screen.findByRole('alert', {}, { timeout: 5_000 })).toHaveTextContent('Knowledge is misconfigured');
+    expect(await screen.findByText('Couldn’t load the pages.')).toBeInTheDocument();
+  });
+
+  it('keeps the open page’s path in the tree when the top tree level fails', async () => {
+    stubKnowledge();
+    server.use(
+      http.get(`${KNOWLEDGE}/tree`, ({ request }) =>
+        new URL(request.url).searchParams.has('parentId')
+          ? HttpResponse.json({ pages: [], truncated: false })
+          : HttpResponse.json({ error: 'failed', message: 'Knowledge is misconfigured' }, { status: 500 }),
+      ),
+    );
+    renderRoute(`/factories/${FACTORY_ID}/knowledge?page=runbook`);
+    expect(await screen.findByText('Couldn’t load the pages.', {}, { timeout: 5_000 })).toBeInTheDocument();
+    expect(await screen.findByRole('treeitem', { name: /Deploy runbook/ })).toBeInTheDocument();
   });
 });
