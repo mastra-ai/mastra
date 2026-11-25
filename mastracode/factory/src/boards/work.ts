@@ -34,6 +34,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
   phases: {
     intake: {
       name: 'Intake',
+      description:
+        'New cards wait here for a person to decide what happens next: plan the work, send a pull request to review, or close it.',
       kind: 'resting',
       // Never straight to Building: a plan comes first. Review takes a pull request's own card;
       // Done is where a completed source closes it. New projects' Work has no Triage; projects
@@ -42,6 +44,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     planning: {
       name: 'Planning',
+      description:
+        'An agent researches the work and writes an implementation plan. The card moves on to Building once the plan is approved.',
       kind: 'working',
       // Planning and Building share one session, so the builder keeps the plan's context.
       runner: { skill: 'factory-plan', context: 'work' },
@@ -51,6 +55,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     execute: {
       name: 'Building',
+      description:
+        'An agent implements the approved plan on the work branch, runs its checks, pushes the branch and opens a pull request.',
       kind: 'working',
       runner: { skill: 'factory-build', context: 'work', goal: { objective: BUILD_OBJECTIVE, maxRuns: 20 } },
       // Review once the builder opened the change request; Planning again when the build shows
@@ -61,6 +67,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       // Keyed `pr-review`: projects stored before Work dropped its self-review phase hold a
       // `review` phase for it, and the retired Review board's cards read as `pr-review`.
       name: 'Review',
+      description:
+        'An independent agent reviews the pull request and records a verdict. Work that needs fixes goes back to Building.',
       // A card's pull request is reviewed here by the independent reviewer, in its own
       // review seat on the pull request's branch. Work has no self-review phase; a board that
       // wants one adds a review-context phase granting only factory_record_review_verdict.
@@ -73,12 +81,16 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     done: {
       name: 'Done',
+      description:
+        'Finished: the pull request merged or the source was closed as completed. A new review request reopens the review.',
       kind: 'terminal',
       // A review request on a finished pull request reopens its review.
       nextPhases: ['pr-review'],
     },
     canceled: {
       name: 'Canceled',
+      description:
+        'Dropped or closed without completing. A card can be revived into Intake.',
       kind: 'terminal',
       // Revived into Intake; a pull request closed without merging and then reopened goes back to Review.
       nextPhases: ['intake', 'pr-review'],

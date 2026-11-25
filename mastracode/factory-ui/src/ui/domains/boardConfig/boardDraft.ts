@@ -150,9 +150,22 @@ export function starterBoard(): BoardDraft {
     name: '',
     description: null,
     phases: [
-      { key: 'backlog', name: 'Backlog', kind: 'resting', nextPhases: ['doing'] },
-      { key: 'doing', name: 'Doing', kind: 'working', runner: { context: 'work' }, nextPhases: ['done'] },
-      { key: 'done', name: 'Done', kind: 'terminal', nextPhases: [] },
+      {
+        key: 'backlog',
+        name: 'Backlog',
+        description: 'Cards wait here until someone starts them.',
+        kind: 'resting',
+        nextPhases: ['doing'],
+      },
+      {
+        key: 'doing',
+        name: 'Doing',
+        description: 'An agent works on the card.',
+        kind: 'working',
+        runner: { context: 'work' },
+        nextPhases: ['done'],
+      },
+      { key: 'done', name: 'Done', description: 'Finished cards.', kind: 'terminal', nextPhases: [] },
     ],
   };
 }

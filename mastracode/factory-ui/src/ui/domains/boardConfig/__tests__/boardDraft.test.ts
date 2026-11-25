@@ -132,4 +132,10 @@ describe('starterBoard', () => {
     const parsed = storedBoardInputSchema.safeParse({ ...starterBoard(), key: 'bugs', name: 'Bugs' });
     expect(parsed.error?.issues).toBeUndefined();
   });
+
+  it('describes every phase', () => {
+    for (const phase of starterBoard().phases) {
+      expect(phase.description?.trim(), `phase "${phase.key}"`).toBeTruthy();
+    }
+  });
 });

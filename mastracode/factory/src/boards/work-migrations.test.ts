@@ -12,7 +12,11 @@ import type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from '../st
 import { defineBoard } from './define-board.js';
 import { ProjectBoardCache } from './project-boards.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
-import { WORK_PHASE_RUNNERS_MIGRATION, workSeedWithSelfReview } from './work-migrations.js';
+import {
+  WORK_PHASE_DESCRIPTIONS_MIGRATION,
+  WORK_PHASE_RUNNERS_MIGRATION,
+  workSeedWithSelfReview,
+} from './work-migrations.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -143,9 +147,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     const registry = await firstLoad(boards, scope);
 
     const row = (await boards.get(scope, 'work'))!;
-    expect(row).toMatchObject({ revision: 2, updatedBy: 'factory' });
+    // The runners, then the phase descriptions: one write each.
+    expect(row).toMatchObject({ revision: 3, updatedBy: 'factory' });
     for (const stored of row.phases) {
       expect({ key: stored.key, ...fieldsOf(stored) }).toEqual({ key: stored.key, ...fieldsOf(seedPhase(stored.key)) });
+      expect(stored.description).toBe(seedPhase(stored.key).description);
     }
     expect(registry.get('work')!.phases.execute).toMatchObject({
       runner: { skill: 'factory-build', context: 'work', goal: { maxRuns: 20 } },
@@ -174,7 +180,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
 
     await firstLoad(boards, scope);
 
-    expect((await boards.get(scope, 'work'))!.revision).toBe(3);
+    expect((await boards.get(scope, 'work'))!.revision).toBe(4);
     const triage = await phase(boards, scope, 'triage');
     // The instructions stay; the skill the phase needs to start anything is still filled.
     expect(triage.runner).toEqual({ skill: 'factory-triage', context: 'triage', instructions: 'Label it first.' });
@@ -247,7 +253,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
 
   it('changes nothing the second time, neither the row nor its revision nor the version', async () => {
     const { boards, scope } = await setup();
-    await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION]);
+    await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION, WORK_PHASE_DESCRIPTIONS_MIGRATION]);
     const row = await boards.get(scope, 'work');
     const version = await boards.readVersion(scope);
 
@@ -255,21 +261,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     await firstLoad(boards, scope);
 
     expect(await boards.get(scope, 'work')).toEqual(row);
-    expect(row!.revision).toBe(2);
+    expect(row!.revision).toBe(3);
     expect(await boards.readVersion(scope)).toBe(version);
   });
 
   it('never touches a row a person set back to the old values after the migration ran', async () => {
     const { boards, scope } = await setup();
-    await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION]);
+    await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION, WORK_PHASE_DESCRIPTIONS_MIGRATION]);
     const { key: _key, ...reverted } = OLD_WORK;
-    await boards.replace(scope, 'work', reverted, { expectedRevision: 2, actor: 'user-1' });
+    await boards.replace(scope, 'work', reverted, { expectedRevision: 3, actor: 'user-1' });
 
     expect(await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION])).toEqual([]);
     await firstLoad(boards, scope);
 
     const row = (await boards.get(scope, 'work'))!;
-    expect(row).toMatchObject({ revision: 3, updatedBy: 'user-1' });
+    expect(row).toMatchObject({ revision: 4, updatedBy: 'user-1' });
     expect((await phase(boards, scope, 'triage')).runner).toEqual({ context: 'triage' });
   });
 
@@ -343,5 +349,122 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase runn
     await boards.replace(scope, 'work', old, { expectedRevision: 1, actor: 'user-1' });
     expect(await boards.applyBoardMigrations(scope, [WORK_PHASE_RUNNERS_MIGRATION])).toEqual([]);
     expect((await phase(boards, scope, 'triage')).runner).toEqual({ context: 'triage' });
+  });
+});
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase descriptions migration on %s', backend => {
+  /** Work as a project stored it before phases had descriptions: today's runners, no descriptions. */
+  const UNDESCRIBED: StoredBoardInput = {
+    ...SEED,
+    phases: SEED.phases.map(({ description: _description, ...phase }) => phase),
+  };
+
+  async function setup(board: StoredBoardInput = UNDESCRIBED) {
+    const storage =
+      backend === 'postgres'
+        ? new PgFactoryStorage({ id: `work-descriptions-${randomUUID()}`, connectionString: postgresUrl! })
+        : new LibSQLFactoryStorage({ id: `work-descriptions-${randomUUID()}`, url: ':memory:' });
+    const boards = storage.registerDomain(new StoredBoardsStorage());
+    await storage.init();
+    onTestFinished(() => storage.close());
+    const scope: StoredBoardScope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'project-1' };
+    await boards.seedBoards(scope, [board]);
+    return { boards, scope };
+  }
+
+  async function descriptions(boards: StoredBoardsStorage, scope: StoredBoardScope) {
+    const row = (await boards.get(scope, 'work'))!;
+    return Object.fromEntries(row.phases.map(phase => [phase.key, phase.description]));
+  }
+
+  it('fills every phase still without a description, Triage and Self-review included, and nothing else', async () => {
+    const { boards, scope } = await setup();
+    const before = (await boards.get(scope, 'work'))!;
+
+    const changed = await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION]);
+
+    expect(changed).toHaveLength(1);
+    expect(await descriptions(boards, scope)).toEqual(
+      Object.fromEntries(SEED.phases.map(phase => [phase.key, phase.description])),
+    );
+    const after = (await boards.get(scope, 'work'))!;
+    expect(after.phases.map(({ description: _d, ...phase }) => phase)).toEqual(
+      before.phases.map(({ description: _d, ...phase }) => phase),
+    );
+    expect(after).toMatchObject({ name: before.name, description: before.description, updatedBy: 'factory' });
+  });
+
+  it('keeps a description a person wrote, also on a phase they renamed', async () => {
+    const { boards, scope } = await setup(
+      editPhase(editPhase(UNDESCRIBED, 'intake', { description: 'Our inbox.' }), 'pr-review', { name: 'PR review' }),
+    );
+
+    await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION]);
+
+    const stored = await descriptions(boards, scope);
+    expect(stored.intake).toBe('Our inbox.');
+    expect(stored['pr-review']).toBe(seedPhase('pr-review').description);
+  });
+
+  it('leaves a phase a person turned to another kind or skill without seed text that would describe it wrongly', async () => {
+    const { boards, scope } = await setup(
+      editPhase(
+        editPhase(UNDESCRIBED, 'execute', { runner: { skill: 'my-build', context: 'work' } }),
+        'canceled',
+        { kind: 'resting', nextPhases: ['intake'] },
+      ),
+    );
+
+    await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION]);
+
+    const stored = await descriptions(boards, scope);
+    expect(stored.execute).toBeNull();
+    expect(stored.canceled).toBeNull();
+    expect(stored.planning).toBe(seedPhase('planning').description);
+  });
+
+  it('runs once, so a description a person clears afterwards stays cleared', async () => {
+    const { boards, scope } = await setup();
+    await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION]);
+    const row = (await boards.get(scope, 'work'))!;
+    const { key: _key, ...cleared } = editPhase(UNDESCRIBED, 'intake', { description: null });
+    await boards.replace(scope, 'work', cleared, { expectedRevision: row.revision, actor: 'user-1' });
+    const version = await boards.readVersion(scope);
+
+    expect(await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION])).toEqual([]);
+
+    expect((await descriptions(boards, scope)).intake).toBeNull();
+    expect(await boards.readVersion(scope)).toBe(version);
+  });
+
+  it("leaves an app's own board under Work's key alone", async () => {
+    const { boards, scope } = await setup();
+    const appWork = defineBoard({
+      id: 'work',
+      name: 'Work',
+      initialPhase: 'intake',
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal', nextPhases: ['intake'] },
+      },
+    });
+    const cache = new ProjectBoardCache({ codeRegistry: boardRegistryOf([appWork]), storage: boards, warn: () => {} });
+
+    await cache.load(scope);
+
+    expect((await boards.get(scope, 'work'))!.revision).toBe(1);
+    expect((await descriptions(boards, scope)).intake).toBeNull();
+  });
+
+  it('records itself on a fresh project, whose seeded Work already has descriptions, without rewriting it', async () => {
+    const { boards } = await setup();
+    const scope: StoredBoardScope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'fresh' };
+    const cache = new ProjectBoardCache({ codeRegistry: createBoardRegistry(), storage: boards, warn: () => {} });
+
+    await cache.load(scope);
+
+    const fresh = (await boards.get(scope, 'work'))!;
+    expect(fresh.revision).toBe(1);
+    for (const phase of fresh.phases) expect(phase.description?.trim()).toBeTruthy();
   });
 });

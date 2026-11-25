@@ -87,6 +87,8 @@ export function workSeedWithSelfReview(): StoredBoardInput {
       {
         key: 'review',
         name: 'Review',
+        description:
+          "An agent reviews the branch's changes before the pull request review and records a verdict, sending work that needs fixes back to Building.",
         kind: 'working',
         runner: { skill: 'factory-self-review', context: 'review' },
         autoStart: true,
@@ -234,6 +236,35 @@ export const WORK_PHASE_RUNNERS_MIGRATION: StoredBoardMigration = {
 };
 
 /**
+ * Gives a project's stored Work board the phase descriptions of Factory's Work seed. Only a phase
+ * still without a description is filled, and only while it keeps the seed phase's kind and, for a
+ * working phase, its skill: a phase a person turned to another use keeps no seed text that would
+ * describe it wrongly. A description a person wrote stays as they left it.
+ */
+export function migrateWorkPhaseDescriptions(
+  board: StoredBoardRecord,
+  seed = workSeedWithSelfReview(),
+): { board: { name: string; description: string | null; phases: StoredPhaseInput[] }; filled: string[] } | undefined {
+  const filled: string[] = [];
+  const phases = board.phases.map(record => {
+    const phase = toInput(record);
+    const target = seed.phases.find(candidate => candidate.key === phase.key);
+    if (!target?.description || phase.description?.trim()) return phase;
+    if (target.kind !== phase.kind || target.runner?.skill !== phase.runner?.skill) return phase;
+    filled.push(`${phase.key}.description`);
+    return { ...phase, description: target.description };
+  });
+  if (filled.length === 0) return undefined;
+  return { board: { name: board.name, description: board.description, phases }, filled };
+}
+
+export const WORK_PHASE_DESCRIPTIONS_MIGRATION: StoredBoardMigration = {
+  key: 'work-phase-descriptions-v1',
+  boardKey: workBoard.id,
+  migrate: board => migrateWorkPhaseDescriptions(board),
+};
+
+/**
  * The board's review phases as {@link boardFlow} finds them: `pullRequestReview` is the first
  * review-seat phase granting `factory_review_source`; `selfReview` the first other one granting
  * `factory_record_review_verdict` and not `factory_review_source`; `build` the last other working
@@ -343,4 +374,5 @@ export const BOARD_MIGRATIONS: readonly StoredBoardMigration[] = [
   WORK_PHASE_RUNNERS_MIGRATION,
   SELF_REVIEW_MIGRATION,
   AUTO_RUN_MIGRATION,
+  WORK_PHASE_DESCRIPTIONS_MIGRATION,
 ];

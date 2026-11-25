@@ -6,6 +6,8 @@ import { workBoard } from './work.js';
 const TRIAGE_PHASE: StoredPhaseInput = {
   key: 'triage',
   name: 'Triage',
+  description:
+    'An agent investigates the issue and confirms its root cause. Confirmed bugs go to Planning; anything else waits in Intake for a person.',
   kind: 'working',
   runner: { skill: 'factory-triage', context: 'triage' },
   // A confirmed bug goes to Planning; any other open issue waits in Intake for a person.
