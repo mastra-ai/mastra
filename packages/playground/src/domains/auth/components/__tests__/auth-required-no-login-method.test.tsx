@@ -149,8 +149,8 @@ const useHeaderGatedHandler = (authorization: string) => {
 
 const saveAuthorizationHeader = (value: string) => {
   fireEvent.click(screen.getByRole('button', { name: 'Add header' }));
-  fireEvent.change(screen.getByPlaceholderText('e.g. Authorization'), { target: { value: 'Authorization' } });
-  fireEvent.change(screen.getByPlaceholderText('e.g. Bearer <token>'), { target: { value } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Header name' }), { target: { value: 'Authorization' } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Header value' }), { target: { value } });
   fireEvent.submit(screen.getByRole('button', { name: 'Save headers' }).closest('form')!);
 };
 

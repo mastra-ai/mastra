@@ -34,7 +34,7 @@ describe('StudioConfigForm', () => {
       const setConfig = vi.fn<StudioConfigContextType['setConfig']>();
       renderWithConfig(<StudioConfigForm initialConfig={customConfig} />, setConfig);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
       expect(setConfig).toHaveBeenCalledWith(customConfig);
     });
@@ -43,7 +43,7 @@ describe('StudioConfigForm', () => {
       const onSave = vi.fn();
       renderWithConfig(<StudioConfigForm initialConfig={customConfig} onSave={onSave} />);
 
-      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
       expect(onSave).toHaveBeenCalledOnce();
     });
@@ -55,7 +55,7 @@ describe('StudioConfigForm', () => {
       renderWithConfig(<StudioConfigForm initialConfig={customConfig} />, setConfig);
 
       fireEvent.change(screen.getByRole('textbox', { name: 'API prefix' }), { target: { value: '  ' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
       expect(setConfig).toHaveBeenCalledWith({ ...customConfig, apiPrefix: undefined });
     });
@@ -68,7 +68,7 @@ describe('StudioConfigForm', () => {
       renderWithConfig(<StudioConfigForm initialConfig={defaultConfig} />, setConfig);
 
       expect(screen.getByRole('textbox', { name: 'API prefix' })).toHaveProperty('value', '/api');
-      fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
       expect(setConfig).toHaveBeenCalledWith(defaultConfig);
     });

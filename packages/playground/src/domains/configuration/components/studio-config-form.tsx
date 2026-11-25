@@ -3,7 +3,6 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
@@ -54,48 +53,51 @@ export const StudioConfigForm = ({ initialConfig, onSave, onCancel, onReset }: S
     setHeaders(prev => prev.filter((_, i) => i !== index));
   };
 
-  const connectionFields = [
-    {
-      name: 'url',
-      label: 'Mastra instance URL',
-      placeholder: 'e.g: http://localhost:4111',
-      required: true,
-      defaultValue: initialConfig?.baseUrl,
-    },
-    {
-      name: 'apiPrefix',
-      label: 'API prefix',
-      placeholder: 'e.g: /api (default)',
-      defaultValue: initialConfig?.apiPrefix || '',
-    },
-  ];
-
   return (
     <TooltipProvider delayDuration={0}>
       <Form onSubmit={handleSubmit} className="gap-6">
-        {connectionFields.map(({ label, ...field }) => (
-          <Field key={field.name}>
-            <FieldLabel required={field.required}>{label}</FieldLabel>
-            <Input {...field} />
-            <FieldError />
-          </Field>
-        ))}
+        <Field>
+          <FieldLabel required>Mastra instance URL</FieldLabel>
+          <Input
+            name="url"
+            placeholder="http://localhost:4111"
+            spellCheck={false}
+            required
+            defaultValue={initialConfig?.baseUrl}
+          />
+          <FieldError />
+        </Field>
+
+        <Field>
+          <FieldLabel>API prefix</FieldLabel>
+          <Input
+            name="apiPrefix"
+            placeholder="/api (default)"
+            spellCheck={false}
+            defaultValue={initialConfig?.apiPrefix ?? ''}
+          />
+        </Field>
+
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          {onReset && (
-            <Button type="button" variant="ghost" onClick={onReset}>
-              Reset to default
-            </Button>
-          )}
-          {onCancel && (
-            <Button type="button" variant="ghost" onClick={onCancel}>
-              Cancel
-            </Button>
-          )}
-          <Button type="submit" icon={<IconFloppyDisk1 />}>
-            Save configuration
+        <div className="flex flex-col gap-2">
+          <Button type="submit" variant="primary" size="lg">
+            Connect
           </Button>
+          {(onCancel || onReset) && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {onCancel && (
+                <Button type="button" variant="ghost" onClick={onCancel}>
+                  Cancel
+                </Button>
+              )}
+              {onReset && (
+                <Button type="button" variant="ghost" onClick={onReset}>
+                  Reset to default
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </Form>
     </TooltipProvider>

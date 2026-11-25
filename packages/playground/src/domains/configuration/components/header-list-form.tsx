@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
@@ -20,34 +20,36 @@ export interface HeaderListFormProps {
 
 export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderListFormProps) => {
   return (
-    <div className="space-y-4">
-      <Txt as="h2" variant="body" tone="ink">
-        Headers
-      </Txt>
-
-      <div className="space-y-6">
-        {headers.length > 0 && (
-          <ul className="space-y-4">
-            {headers.map((header, index) => (
-              <li key={header.id ?? index}>
-                <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="flex items-center justify-between gap-2">
-          {headers.length === 0 && <Txt tone="muted">No header yet</Txt>}
-          <Button
-            type="button"
-            onClick={() => onAddHeader({ name: '', value: '' })}
-            size={headers.length === 0 ? 'md' : 'sm'}
-            icon={<IconPlusMedium />}
-          >
-            {headers.length === 0 ? 'Add header' : 'Add another header'}
-          </Button>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <Txt as="h2" variant="label" tone="ink">
+            Headers
+          </Txt>
+          <Txt variant="caption" tone="muted">
+            Sent with every request.
+          </Txt>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          className="shrink-0"
+          onClick={() => onAddHeader({ name: '', value: '' })}
+          icon={<IconPlusMedium />}
+        >
+          Add header
+        </Button>
       </div>
+
+      {headers.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {headers.map((header, index) => (
+            <li key={header.id ?? index}>
+              <HeaderListFormItem index={index} header={header} onRemove={() => onRemoveHeader(index)} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };
@@ -59,30 +61,38 @@ interface HeaderListFormItemProps {
 }
 
 const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps) => (
-  <div className="grid grid-cols-[1fr_1fr_auto] gap-x-4">
-    <Field className="row-span-3 grid-rows-subgrid gap-y-0">
-      <FieldLabel required className="mb-2">
-        Name
-      </FieldLabel>
-      <Input name={`headers.${index}.name`} placeholder="e.g. Authorization" required defaultValue={header.name} />
-      <FieldError className="mt-1" />
+  <div className="flex items-start gap-2">
+    <Field className="flex-1">
+      <Input
+        aria-label="Header name"
+        name={`headers.${index}.name`}
+        placeholder="Authorization"
+        spellCheck={false}
+        required
+        defaultValue={header.name}
+      />
+      <FieldError />
     </Field>
 
-    <Field className="row-span-3 grid-rows-subgrid gap-y-0">
-      <FieldLabel required className="mb-2">
-        Value
-      </FieldLabel>
-      <Input name={`headers.${index}.value`} placeholder="e.g. Bearer <token>" required defaultValue={header.value} />
-      <FieldError className="mt-1" />
+    <Field className="flex-1">
+      <Input
+        aria-label="Header value"
+        name={`headers.${index}.value`}
+        placeholder="Bearer <token>"
+        spellCheck={false}
+        required
+        defaultValue={header.value}
+      />
+      <FieldError />
     </Field>
 
     <Button
       size="icon-md"
       type="button"
+      variant="ghost"
       onClick={onRemove}
       aria-label="Remove header"
       tooltip="Remove header"
-      className="col-start-3 row-start-2"
     >
       <TrashIcon />
     </Button>

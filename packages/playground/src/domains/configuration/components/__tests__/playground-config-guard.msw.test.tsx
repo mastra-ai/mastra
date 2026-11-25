@@ -67,7 +67,7 @@ const urlField = () => screen.findByRole<HTMLInputElement>('textbox', { name: /M
 
 const saveUrl = async (url: string) => {
   fireEvent.change(await urlField(), { target: { value: url } });
-  fireEvent.click(screen.getByRole('button', { name: 'Save configuration' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 };
 
 const nextRetry = () => new Promise(resolve => setTimeout(resolve, 1500));
