@@ -5767,7 +5767,7 @@ describe('Agent Routes Authorization', () => {
       requestContext.set('user', user);
       const cancel = vi
         .spyOn(mockAgent, 'cancelQueuedMessages')
-        .mockReturnValue({ cancelledSignalIds: ['private-input'] });
+        .mockResolvedValue({ cancelledSignalIds: ['private-input'] });
       const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
       const params = {
         mastra,
@@ -5841,7 +5841,7 @@ describe('Agent Routes Authorization', () => {
       await mockMemory.createThread({ threadId: 'cancel-owned', resourceId: 'user-a', title: 'Owned' });
       const cancelQueuedMessages = vi
         .spyOn(mockAgent, 'cancelQueuedMessages')
-        .mockReturnValue({ cancelledSignalIds: ['first'] });
+        .mockResolvedValue({ cancelledSignalIds: ['first'] });
       const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
@@ -5859,12 +5859,24 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('waits for a cancellation that completes in storage and returns every cancelled id', async () => {
+    it('reports a cancellation that fails in storage through the route error', async () => {
       await mockMemory.createThread({ threadId: 'cancel-stored', resourceId: 'user-a', title: 'Stored' });
-      vi.spyOn(mockAgent, 'cancelQueuedMessages').mockReturnValue({
-        cancelledSignalIds: ['queued'],
-        settled: Promise.resolve({ cancelledSignalIds: ['queued', 'stored'] }),
+      vi.spyOn(mockAgent, 'cancelQueuedMessages').mockRejectedValue(new Error('memory storage unavailable'));
+      const result = CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'cancel-stored' }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'cancel-stored',
+        signalIds: ['stored'],
       });
+      await expect(result).rejects.toBeInstanceOf(HTTPException);
+    });
+
+    it('returns every cancelled id once the cancellation settled', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-stored', resourceId: 'user-a', title: 'Stored' });
+      vi.spyOn(mockAgent, 'cancelQueuedMessages').mockResolvedValue({ cancelledSignalIds: ['queued', 'stored'] });
       const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
         mastra,
         agentId: 'test-agent',
