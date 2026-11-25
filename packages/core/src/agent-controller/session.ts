@@ -4520,6 +4520,7 @@ export class Session<TState = unknown> {
 
   /** @internal Reset state fields whose durable source is the active thread. */
   resetThreadDerivedState(): void {
+    this.#releasePendingSaveWatch();
     (this.state as SessionState<TState>).rebind(THREAD_DERIVED_STATE_KEYS);
   }
 
@@ -4677,6 +4678,9 @@ export class Session<TState = unknown> {
    */
   emit(event: AgentControllerEvent): void {
     this.#bus.emit(event);
+    if (this.#pendingSaveWatch && this.displayState.get().pendingUserMessages.length === 0) {
+      this.#releasePendingSaveWatch();
+    }
   }
 
   /**
@@ -5797,6 +5801,11 @@ export class Session<TState = unknown> {
   }): Promise<void> {
     const kind = this.#nextSendKind;
     this.#nextSendKind = 'message';
+    if (this.thread.getId() === null) {
+      // Creating the thread resets the live projection, so list the message only once it exists.
+      await this.machinery.authorizeExecute?.(requestContextInput);
+      await this.thread.ensureId({ requestContext: requestContextInput });
+    }
     const pending = this.#addPendingUserMessage(content, kind);
     let admitted = () => {};
     if (scopes) {
@@ -6132,13 +6141,16 @@ export class Session<TState = unknown> {
     void this.#dropStoredPendingUserMessages(threadId);
   }
 
+  /** The listener holds the session, so it goes as soon as nothing pending needs it. */
+  #releasePendingSaveWatch(): void {
+    this.#pendingSaveWatch?.unsubscribe();
+    this.#pendingSaveWatch = undefined;
+  }
+
   async #dropStoredPendingUserMessages(threadId: string): Promise<void> {
     const ids = this.displayState.get().pendingUserMessages.map(message => message.id);
     if (ids.length === 0 || this.thread.getId() !== threadId) {
-      if (this.#pendingSaveWatch?.threadId === threadId) {
-        this.#pendingSaveWatch.unsubscribe();
-        this.#pendingSaveWatch = undefined;
-      }
+      if (this.#pendingSaveWatch?.threadId === threadId) this.#releasePendingSaveWatch();
       return;
     }
     try {

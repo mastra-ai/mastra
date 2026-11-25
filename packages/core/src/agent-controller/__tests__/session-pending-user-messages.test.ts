@@ -17,6 +17,25 @@ import type { AgentControllerEvent } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
+// The real save notifications, counted: a save listener holds its session, so the test checks none outlive their use.
+const saveListeners = vi.hoisted(() => ({ live: 0 }));
+vi.mock('../../agent/thread-saves', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../agent/thread-saves')>();
+  return {
+    ...actual,
+    onThreadMessagesSaved: (...args: Parameters<typeof actual.onThreadMessagesSaved>) => {
+      const unsubscribe = actual.onThreadMessagesSaved(...args);
+      saveListeners.live++;
+      let done = false;
+      return () => {
+        if (!done) saveListeners.live--;
+        done = true;
+        unsubscribe();
+      };
+    },
+  };
+});
+
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
 function deferred() {
@@ -48,7 +67,10 @@ function replyStream(text: string, gate?: Promise<void>) {
 
 type Hold = { reached: Promise<void>; release: () => void };
 
-async function createHarness(id: string, { blockText }: { blockText?: string } = {}) {
+async function createHarness(
+  id: string,
+  { blockText, withThread = true }: { blockText?: string; withThread?: boolean } = {},
+) {
   let inputHold: { reached: ReturnType<typeof deferred>; gate: ReturnType<typeof deferred> } | undefined;
   const processor: Processor = {
     id: 'hold-or-block-input',
@@ -110,8 +132,12 @@ async function createHarness(id: string, { blockText }: { blockText?: string } =
     modes: [{ id: 'default', name: 'Default', default: true, agent: mastra.getAgent(`${id}-agent`) }],
   });
   await controller.init();
-  const session = await controller.createSession({ id: `${id}-session`, ownerId: 'owner-1' });
-  await session.thread.create();
+  const session = await controller.createSession({
+    id: `${id}-session`,
+    ownerId: 'owner-1',
+    createInitialThread: withThread,
+  });
+  if (withThread) await session.thread.create();
   const events: AgentControllerEvent[] = [];
   session.subscribe(event => {
     events.push(event);
@@ -263,6 +289,36 @@ describe('a sent message is pending until stored, then stored', () => {
     expect(await h.storedUserTexts()).toEqual(['hello again']);
     expect(h.prompts.join('\n')).not.toContain('forbidden');
     expect(h.pending()).toEqual([]);
+  });
+
+  it("send on a session with no thread yet: pending while the run's input processors hold it, then stored", async () => {
+    const h = await createHarness('first-send', { withThread: false });
+    expect(h.session.thread.getId()).toBeNull();
+    const input = h.holdInput();
+
+    const sent = h.session.sendMessage({ content: 'hello there' });
+    await input.reached;
+    expect(h.pending()).toEqual([{ content: 'hello there', kind: 'message' }]);
+
+    input.release();
+    await sent;
+    await h.runsEnded(1);
+    expect(await h.storedUserTexts()).toEqual(['hello there']);
+    expect(h.pending()).toEqual([]);
+  });
+
+  it('no save listener outlives the pending messages it watches, even when nothing is saved', async () => {
+    const h = await createHarness('listener', { blockText: 'forbidden' });
+    const live = saveListeners.live;
+
+    await h.session.sendMessage({ content: 'forbidden words' });
+    await h.runsEnded(1);
+    expect(h.pending()).toEqual([]);
+    expect(saveListeners.live).toBe(live);
+
+    await h.session.sendMessage({ content: 'hello again' });
+    await h.runsEnded(2);
+    expect(saveListeners.live).toBe(live);
   });
 
   it('switching threads drops pending messages of the old thread', async () => {
