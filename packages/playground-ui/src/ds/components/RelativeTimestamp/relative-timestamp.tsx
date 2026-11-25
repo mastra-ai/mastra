@@ -1,4 +1,4 @@
-import { Badge } from '@/ds/components/Badge';
+import { TimestampZones } from './timestamp-zones';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useClock } from '@/hooks/use-clock';
@@ -58,31 +58,9 @@ function Since({ date }: { date: Date }) {
   return <>{useClock(now => formatSince(date, now))}</>;
 }
 
-function zoneName(date: Date, timeZone?: string) {
-  return new Intl.DateTimeFormat(undefined, { timeZone, timeZoneName: 'short' })
-    .formatToParts(date)
-    .find(part => part.type === 'timeZoneName')?.value;
-}
-
-function zoneRow(date: Date, timeZone?: string) {
-  return {
-    zone: zoneName(date, timeZone) ?? 'Local',
-    day: new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: 'numeric', year: 'numeric' }).format(date),
-    time: new Intl.DateTimeFormat(undefined, {
-      timeZone,
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    }).format(date),
-  };
-}
-
 export function RelativeTimestamp({ value, label, className }: RelativeTimestampProps) {
   const date = toDate(value);
   if (!date) return null;
-
-  const local = zoneRow(date);
-  const rows = local.zone === 'UTC' ? [local] : [local, zoneRow(date, 'UTC')];
 
   return (
     <Tooltip>
@@ -105,19 +83,9 @@ export function RelativeTimestamp({ value, label, className }: RelativeTimestamp
           {label ? `${label} ` : null}
           <Since date={date} />
         </span>
-        <table className="mt-1.5 border-t border-border font-mono tabular-nums">
-          <tbody>
-            {rows.map(row => (
-              <tr key={row.zone}>
-                <td className="pt-1.5 pr-3">
-                  <Badge size="xs">{row.zone}</Badge>
-                </td>
-                <td className="pt-1.5 pr-3">{row.day}</td>
-                <td className="pt-1.5 text-right">{row.time}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-1.5 border-t border-border pt-1.5">
+          <TimestampZones date={date} />
+        </div>
       </TooltipContent>
     </Tooltip>
   );

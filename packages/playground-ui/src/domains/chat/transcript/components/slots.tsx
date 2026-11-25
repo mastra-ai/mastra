@@ -1,5 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import type { DataPart } from '@mastra/react/ui';
 import { createContext, useContext } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 
@@ -10,13 +11,22 @@ import type {
   SubagentEntry,
   SuspensionPrompt,
 } from '../services/transcript';
+import type { DrawsDataPart } from './transcript-parts';
+import { ActivityItem } from '@/ds/components/ai/activity';
 import { ToolApproval } from '@/ds/components/ai/tool-approval';
+import { presentTool } from '@/ds/components/ai/tool-call';
+import { Badge } from '@/ds/components/Badge';
 
 import { Notice } from '@/ds/components/Notice';
 
 export interface TranscriptRunErrorProps {
   error: MastraErrorPart['error'];
   entryId: string;
+}
+
+export interface TranscriptDataPartSlot {
+  draws: DrawsDataPart;
+  Component: ComponentType<{ part: DataPart }>;
 }
 
 export interface TranscriptSubmitPlanProps {
@@ -29,7 +39,16 @@ export interface TranscriptSubmitPlanProps {
 
 /**
  * The rows a host draws itself: anything that acts on the host's own backend (recovery actions,
- * approvals, plan handoff, notification links). A host that leaves one out gets a plain read-only row.
+ * approvals, plan handoff, notification links). What a host that leaves one out gets instead:
+ *
+ * - `RunError`: an error notice with the provider's message.
+ * - `Notification`, `NotificationSummary`: a notice with the message, without links.
+ * - `Approval`: a working approve/decline card that calls `onApprove`.
+ * - `Suspension`: a read-only row naming what the agent waits on, marked "Waiting for input", with
+ *   no way to answer. A paused call inside a message that asks a question keeps its inline answer form.
+ * - `Subagent`: nothing; the tool call that started the subagent already names it in the message.
+ * - `SubmitPlan`: the generic tool row, with no way to approve or revise the plan.
+ * - `DataPart`: nothing; every `data-*` part stays hidden and leaves the activity line whole.
  */
 export interface TranscriptSlots {
   RunError?: ComponentType<TranscriptRunErrorProps>;
@@ -47,6 +66,7 @@ export interface TranscriptSlots {
   }>;
   Subagent?: ComponentType<{ entry: SubagentEntry }>;
   SubmitPlan?: ComponentType<TranscriptSubmitPlanProps>;
+  DataPart?: TranscriptDataPartSlot;
 }
 
 const TranscriptSlotsContext = createContext<TranscriptSlots>({});
@@ -102,5 +122,24 @@ export function DefaultNotification({ entry }: { entry: NotificationEntry | Noti
     <Notice className="my-2" variant="info">
       {entry.message}
     </Notice>
+  );
+}
+
+export function DefaultSuspension({ prompt }: { prompt: SuspensionPrompt }) {
+  const { icon: ToolIcon, label, detail } = presentTool(prompt.toolName, prompt.suspendPayload ?? prompt.args);
+  return (
+    <ActivityItem
+      appearance="inline"
+      className="my-2"
+      icon={<ToolIcon aria-hidden />}
+      label={label}
+      detail={detail}
+      badges={
+        <Badge size="xs" variant="warning">
+          Waiting for input
+        </Badge>
+      }
+      aria-label={`Waiting for input: ${label}`}
+    />
   );
 }

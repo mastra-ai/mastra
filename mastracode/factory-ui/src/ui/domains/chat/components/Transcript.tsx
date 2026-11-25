@@ -14,6 +14,7 @@ import {
   isEndedPrompt,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { drawsModelFallback, ModelFallbackPart } from './ModelFallbackActivity';
 import { RunErrorNotice } from './RunErrorNotice';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
@@ -33,6 +34,7 @@ export const FACTORY_TRANSCRIPT_SLOTS: TranscriptSlots = {
   Suspension: SuspensionCard,
   Subagent: SubagentCard,
   SubmitPlan: SubmitPlanCard,
+  DataPart: { draws: drawsModelFallback, Component: ModelFallbackPart },
 };
 
 export function TranscriptEntries(props: ComponentProps<typeof HostTranscriptEntries>) {

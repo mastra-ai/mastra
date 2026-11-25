@@ -71,7 +71,7 @@ function stubThreadRoute({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({

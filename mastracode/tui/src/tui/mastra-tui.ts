@@ -7,9 +7,9 @@ import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { onEmbedderPackageMissing } from '@mastra/code-sdk/agents/fastembed-subprocess';
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
+import type { PendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   getAvailableModePacks,
   ONBOARDING_VERSION,

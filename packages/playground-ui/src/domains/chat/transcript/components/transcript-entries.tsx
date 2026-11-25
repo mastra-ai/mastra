@@ -9,7 +9,7 @@ import type { EntryActivity } from './activity/activity-plan';
 import { MessageBubble } from './MessageBubble';
 
 import { agentWorkingDirectory, isTurnDivider } from './signals';
-import { ApprovalCard, DefaultNotification, DefaultRunError, useTranscriptSlots } from './slots';
+import { ApprovalCard, DefaultNotification, DefaultRunError, DefaultSuspension, useTranscriptSlots } from './slots';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { turnGaps } from './turn-gaps';
@@ -63,6 +63,7 @@ export function TranscriptEntries({
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: TranscriptTail;
 }) {
+  const drawsData = useTranscriptSlots().DataPart?.draws;
   const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
   // Keyed by the prompts on screen, not by the array holding them: a delta hands this
   // component a new `entries` every token, and a map rebuilt each time would be a new
@@ -82,7 +83,7 @@ export function TranscriptEntries({
 
   // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => draws(part, entry, suspensions));
+    entry.message.content.parts.some(part => draws(part, entry, suspensions, drawsData));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
   // A steer interjects into a reply still being written: it keeps its turn for the
@@ -110,7 +111,7 @@ export function TranscriptEntries({
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
         const reply = turnReply(steps, runningTurn);
-        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
+        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn, drawsData);
 
         return (
           <ChatShell.Turn
@@ -203,7 +204,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   onRespond,
   activity,
 }: TranscriptEntryContentProps) {
-  const { Approval, Suspension, Subagent, Notification, NotificationSummary } = useTranscriptSlots();
+  const { Approval, Suspension, Subagent, Notification, NotificationSummary, SubmitPlan } = useTranscriptSlots();
   switch (entry.kind) {
     case 'message':
       return (
@@ -228,10 +229,18 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
       return Notification ? <Notification entry={entry} /> : <DefaultNotification entry={entry} />;
     case 'notification_summary':
       return NotificationSummary ? <NotificationSummary entry={entry} /> : <DefaultNotification entry={entry} />;
-    case 'suspension':
-      return redundantSuspension || !Suspension ? null : (
-        <Suspension prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-      );
+    case 'suspension': {
+      if (Suspension) {
+        return redundantSuspension ? null : (
+          <Suspension prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      }
+      const payload = entry.suspendPayload ?? entry.args;
+      const answeredInline =
+        (isRecord(payload) && typeof payload.question === 'string' && payload.question.length > 0) ||
+        (entry.toolName === 'submit_plan' && SubmitPlan !== undefined);
+      return redundantSuspension && answeredInline ? null : <DefaultSuspension prompt={entry} />;
+    }
     case 'subagent':
       return Subagent ? <Subagent entry={entry} /> : null;
     default:

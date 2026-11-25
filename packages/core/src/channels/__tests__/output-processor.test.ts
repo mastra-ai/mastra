@@ -1819,11 +1819,15 @@ describe('ChatChannelOutputProcessor', () => {
       expect(typingStatuses).toEqual(['is typing…', '', 'is typing…', '']);
     });
 
-    it('does not emit a clear when the run never set a status', async () => {
+    it('clears a status set before the run even when the run sets none itself', async () => {
+      // A channel handler may pin a status (e.g. an early "is thinking..."
+      // acknowledgement) before dispatching. A run whose stream never maps to
+      // a status must still clear it, or it stays on the thread indefinitely.
       const { channels, calls, chatThread } = makeChannels({
         streaming: false,
         typingStatus: () => undefined,
       });
+      await chatThread.startTyping('is thinking...');
       await drive(
         channels,
         [
@@ -1832,7 +1836,27 @@ describe('ChatChannelOutputProcessor', () => {
         ],
         chatThread,
       );
-      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+      await drive(channels, [{ type: 'finish', payload: {} }], chatThread);
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is thinking...', '', '']);
+    });
+
+    it('leaves a status set before the run to the streaming post while the streaming gate is active', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: true, typingStatus: () => undefined });
+      await chatThread.startTyping('is thinking...');
+      // A streaming post still in flight when the run ends owns the clear.
+      async function* chunks() {
+        yield { type: 'text-delta', payload: { text: 'hi' } };
+        yield { type: 'finish', payload: {} };
+      }
+      const adapterConfig = { typingStatus: () => undefined };
+      for await (const _ of (channels as any).withTypingStatus(chunks(), chatThread, 'test', adapterConfig, {
+        active: true,
+      })) {
+        // drain
+      }
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toEqual(['is thinking...']);
     });
 
     it('typingStatus function exceptions are swallowed and stream continues', async () => {
@@ -1852,7 +1876,8 @@ describe('ChatChannelOutputProcessor', () => {
           chatThread,
         ),
       ).resolves.not.toThrow();
-      expect(calls.filter(c => c.kind === 'startTyping')).toEqual([]);
+      // No status from the throwing function; only the run-end clear.
+      expect(calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status)).toEqual(['']);
     });
   });
 

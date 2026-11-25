@@ -1,7 +1,14 @@
 import type { PlanResume } from '@mastra/client-js';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { MessageFactory } from '@mastra/react/ui';
-import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
+import type {
+  DataPart,
+  FilePart,
+  MessageRoleRenderers,
+  ReasoningPart,
+  TextPart,
+  ToolInvocationPart,
+} from '@mastra/react/ui';
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import { replyCredentialLabel } from '../services/reply-credential';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -92,17 +99,19 @@ export function MessageBubble({
   const RunError = slots.RunError ?? DefaultRunError;
   const NotificationCard = slots.Notification ?? DefaultNotification;
   const NotificationSummaryCard = slots.NotificationSummary ?? DefaultNotification;
-  const written = renderableParts(entry);
+  const drawsData = slots.DataPart?.draws;
+  const DataPartView = slots.DataPart?.Component;
+  const written = renderableParts(entry, drawsData);
   const paced = useRevealedParts(written, Boolean(entry.streaming));
   const parts = withLiveHost(entry.id, written, paced, activity);
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
-  const hasRenderablePart = written.some(part => draws(part, entry, suspensions));
+  const hasRenderablePart = written.some(part => draws(part, entry, suspensions, drawsData));
   const drawsOwnPart = written.some((part, index) => {
     const key = activityPartKey(entry.id, part, index);
     if (activity.hosts.has(key)) return true;
-    return draws(part, entry, suspensions) && !activity.hidden.has(key);
+    return draws(part, entry, suspensions, drawsData) && !activity.hidden.has(key);
   });
   const revealed = new Map<string, MessagePart>(
     paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
@@ -249,6 +258,7 @@ export function MessageBubble({
       );
     },
     File: (part: FilePart) => <UserFilePartRenderer part={part} />,
+    Data: (part: DataPart) => (DataPartView ? <DataPartView part={part} /> : null),
   };
 
   const view = messageEntryView(entry, parts);

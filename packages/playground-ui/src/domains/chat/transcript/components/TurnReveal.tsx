@@ -45,5 +45,5 @@ export function useTurnLanded(entryId: string, revealing: boolean): boolean {
     reveal.mark(entryId, revealing);
     return () => reveal.mark(entryId, false);
   }, [reveal, entryId, revealing]);
-  return useSyncExternalStore(reveal.subscribe, reveal.landed);
+  return useSyncExternalStore(reveal.subscribe, reveal.landed, reveal.landed);
 }
