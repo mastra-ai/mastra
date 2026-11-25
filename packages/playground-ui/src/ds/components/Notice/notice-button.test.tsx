@@ -51,6 +51,44 @@ describe('Notice.Button', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it('does not act while loading, by click or by key', () => {
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+    render(
+      <Notice.Button loading onClick={onClick} render={<button type="button" onKeyDown={onKeyDown} />}>
+        Retry
+      </Notice.Button>,
+    );
+
+    const button = screen.getByRole('button', { name: 'Retry', busy: true });
+    fireEvent.click(button);
+    fireEvent.keyDown(button, { key: 'Enter' });
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Enter', (button: HTMLElement) => fireEvent.keyDown(button, { key: 'Enter' })],
+    ['a released Space', (button: HTMLElement) => fireEvent.keyUp(button, { key: ' ' })],
+    [
+      'a middle click',
+      (button: HTMLElement) => fireEvent(button, new MouseEvent('auxclick', { bubbles: true, button: 1 })),
+    ],
+  ])('does not run the render element handlers for %s while loading', (_name, act) => {
+    const handler = vi.fn();
+    render(
+      <Notice.Button
+        loading
+        render={<button type="button" onKeyDown={handler} onKeyUp={handler} onAuxClick={handler} />}
+      >
+        Retry
+      </Notice.Button>,
+    );
+
+    act(screen.getByRole('button', { name: 'Retry' }));
+    expect(handler).not.toHaveBeenCalled();
+  });
+
   it('renders the element passed through render, with the icon before the label', () => {
     render(
       <Notice.Button icon={<svg data-testid="icon" />} render={<a href="https://example.com/guide" />}>

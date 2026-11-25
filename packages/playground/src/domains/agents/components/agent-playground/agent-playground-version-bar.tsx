@@ -17,7 +17,6 @@ import {
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
@@ -177,13 +176,14 @@ export function AgentPlaygroundVersionBar({
               </Button>
             ) : (
               <Button
-                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
                 variant="primary"
                 size="md"
                 onClick={() => void (isDirty ? onSaveDraft() : onPublish())}
                 disabled={codeSaveDisabled}
+                icon={<IconFloppyDisk1 />}
+                loading={isSavingDraft}
               >
-                {isSavingDraft ? 'Saving…' : 'Save to filesystem'}
+                Save to filesystem
               </Button>
             )}
           </div>
@@ -191,12 +191,13 @@ export function AgentPlaygroundVersionBar({
           <div className="flex flex-wrap items-center justify-end gap-2">
             <ButtonsGroup>
               <Button
-                icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
                 variant="default"
                 onClick={() => onSaveDraft()}
                 disabled={saveDisabled}
+                icon={<IconFloppyDisk1 />}
+                loading={isSavingDraft}
               >
-                {isSavingDraft ? 'Saving…' : 'Save new version'}
+                Save new version
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
@@ -216,7 +217,6 @@ export function AgentPlaygroundVersionBar({
             </ButtonsGroup>
 
             <Button
-              icon={isPublishing ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               size="md"
               onClick={onPublish}
@@ -225,8 +225,10 @@ export function AgentPlaygroundVersionBar({
                   ? selectedVersionId === activeVersionId || isPublishing || isSavingDraft
                   : readOnly || !hasDraft || isPublishing || isSavingDraft
               }
+              icon={<IconCheckmark2Medium />}
+              loading={isPublishing}
             >
-              {isPublishing ? 'Publishing…' : isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
+              {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
             </Button>
           </div>
         )}

@@ -592,8 +592,9 @@ export function retryTransient(
 
 /**
  * One `gh api` call, retried on transient errors, that neither starts, waits nor runs past
- * `stopAt`: a call still running then is killed. Either way it throws a transient error, which
- * ends the day's inspection early with what was settled kept. A --paginate call is repeated
+ * `stopAt`: a call still running then is killed. Either way it throws a transient error. While
+ * runs are inspected, `inspectRuns` then retries that run after the rest, or ends the day early
+ * once its own deadline has passed; other callers fail. A --paginate call is repeated
  * whole, so a retry never mixes pages from two attempts.
  */
 export function boundedGh(args, { stopAt = Infinity, now = Date.now, exec = execFileSync, delays, sleep } = {}) {

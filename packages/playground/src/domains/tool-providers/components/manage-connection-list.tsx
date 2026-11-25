@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialog';
 import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
 import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -54,11 +53,12 @@ export const ManageConnectionList = ({
       {onAddConnection && (
         <DialogFooter>
           <Button
-            icon={addingConnection ? <Spinner size="sm" /> : <IconPlusMedium />}
             type="button"
             onClick={onAddConnection}
-            disabled={disabled || addingConnection}
+            disabled={disabled}
             data-testid={`${testIdPrefix}-add`}
+            icon={<IconPlusMedium />}
+            loading={addingConnection}
           >
             Add connection
           </Button>

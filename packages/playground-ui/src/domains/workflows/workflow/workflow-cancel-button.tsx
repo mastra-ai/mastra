@@ -1,5 +1,4 @@
 import { Button } from '@/ds/components/Button';
-import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconStop } from '@/ds/icons/central/IconStop';
 
 export interface WorkflowCancelButtonProps {
@@ -32,9 +31,10 @@ export function WorkflowCancelButton({
       size="icon-md"
       tooltip={label}
       onClick={onCancel}
-      disabled={disabled || !!cancelMessage || isCancelling}
+      disabled={disabled || !!cancelMessage}
+      loading={isCancelling}
     >
-      {isCancelling ? <IconLoadingCircle className="motion-safe:animate-spin" /> : <IconStop />}
+      <IconStop />
     </Button>
   );
 }

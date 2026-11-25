@@ -604,8 +604,24 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * whose side effects must not be re-driven by a blanket restart — durable
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   *
+   * It also decides whether a default-engine run holds a storage run lease while
+   * it executes. On storage with run fencing, a leased run's saves carry that
+   * lease, so once another process takes the run over, storage refuses this
+   * process's saves and its call rejects with `STORAGE_RUN_FENCE_CONFLICT`.
    */
   autoRestartActiveRuns?: boolean;
+  /**
+   * How long, in milliseconds, the storage run lease of this workflow's runs lasts
+   * without a renewal. Only runs that take a lease use it (see
+   * `autoRestartActiveRuns`). The lease is renewed every third of it, so a step
+   * that blocks the event loop for longer than this lets another process take
+   * the run over. A restart over a lease that lapsed doubles it, up to 8 times
+   * this value. Defaults to `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15000).
+   * Values under 1000 are raised to 1000.
+   * `createRun({ leaseTtlMs })` overrides it for one run.
+   */
+  leaseTtlMs?: number;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   /**
    * Evaluates `shouldPersistSnapshot` before entering the durable operation so a

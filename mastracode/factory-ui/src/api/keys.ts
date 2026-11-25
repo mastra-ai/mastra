@@ -47,7 +47,6 @@ export const queryKeys = {
   board: (factoryProjectId: string | undefined, boardKey: string) =>
     ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
-  factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   factoryEnvironment: (factoryProjectId: string | undefined) =>
     ['factory', 'environment', factoryProjectId ?? null] as const,

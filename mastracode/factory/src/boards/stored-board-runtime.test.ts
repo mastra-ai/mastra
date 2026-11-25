@@ -521,9 +521,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       /**
        * The agent, answering only what was just asked of it (the messages after its last turn):
-       * started on the plan skill with Shipyard's instructions, it submits a plan; once the plan
-       * is approved, it moves the card to Building. Anything else gets a text answer, which ends
-       * the run.
+       * started on the plan skill with Shipyard's instructions, it submits a plan; the approved plan
+       * is Planning's outcome, so Factory moves the card to Building once the run ends. Started on
+       * the build skill, it reports Building's `done` outcome. It never moves the card itself.
+       * Anything else gets a text answer, which ends the run.
        */
       function shipyardAgent(input: string): ToolCall | undefined {
         const items = JSON.parse(input) as { type?: string; role?: string; output?: string }[];
@@ -534,12 +535,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         if (asked.includes('<skill name=\\"factory-plan\\">') && asked.includes(PLAN_NOTE)) {
           return { name: 'submit_plan', args: { path: PLAN_PATH } };
         }
-        if (items[lastTurn]?.type === 'function_call_output' && items[lastTurn].output?.includes('Plan approved.')) {
-          const revision = Number([...input.matchAll(/expectedRevision (\d+)/g)].at(-1)?.[1]);
-          return {
-            name: 'factory_transition_work_item',
-            args: { stage: 'execute', expectedRevision: revision, rationale: 'Plan approved.' },
-          };
+        if (asked.includes('<skill name=\\"factory-build\\">') && asked.includes('Quick fix')) {
+          return { name: 'factory_report_outcome', args: { outcome: 'done', reason: 'Nothing left to change.' } };
         }
         return undefined;
       }
@@ -737,8 +734,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         // card, and its plan is approved for it: the card moves on to Building.
         await ruleMoves(replica, orgId, projectId, quick, 'planning');
         await ruleMoves(replica, orgId, projectId, large, 'planning');
-        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['execute']), { timeout: 30_000 });
+        // Building's run reports `done`, and Factory moves the card there once that run ends. No session
+        // was offered, or called, a tool that moves the card: every move came from a reported outcome.
+        await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 30_000 });
         expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+        expect(runsOf(requests, 'factory-build', 'Quick fix')).not.toEqual([]);
+        const history = (await replica.workItems.get({ orgId, id: quick.id }))!.stageHistory.map(entry => entry.stage);
+        expect(history.slice(-3)).toEqual(['planning', 'execute', 'done']);
+        expect(requests.some(body => body.includes('factory_transition_work_item'))).toBe(false);
 
         // The unlabelled card's plan run waits for a person.
         expect(await stagesOf(large)).toEqual(['planning']);

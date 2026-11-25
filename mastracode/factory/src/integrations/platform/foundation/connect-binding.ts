@@ -48,6 +48,13 @@ export interface LinkOrgConnectionsOptions {
    * ones someone detached. Only an admin's explicit request does this.
    */
   relinkDetached?: boolean;
+  /** Consider only these connections; the rest of the org is neither linked nor remembered. */
+  only?: ReadonlySet<string>;
+  /**
+   * Link nothing unless link history is stored, so a detached connection can't
+   * be mistaken for one the project never had.
+   */
+  requireHistory?: boolean;
 }
 
 export interface PlatformConnectBindingOptions {
@@ -288,7 +295,12 @@ export class PlatformConnectBinding {
    * `relinkDetached` is set.
    */
   async linkOrgConnections(options: LinkOrgConnectionsOptions = {}): Promise<LinkOrgConnectionsResult> {
-    const candidates = await this.#orgCandidates();
+    if (options.requireHistory && !this.#linkStore) {
+      return { linked: [], needsLinking: this.needsLinking, detached: this.detached };
+    }
+    const candidates = (await this.#orgCandidates()).filter(
+      connection => !options.only || options.only.has(connection.id),
+    );
     const linkedBefore = new Set((await this.connect.listConnections()).map(connection => connection.id));
     const remembered = await this.#rememberedLinks();
     const attempted: string[] = [];

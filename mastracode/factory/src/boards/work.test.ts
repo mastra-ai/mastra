@@ -96,7 +96,11 @@ describe('the Work board seed', () => {
     expect(BUILD_OBJECTIVE).toContain('pushed');
     // The judge cannot see the project's self-review setting: the objective never asks it to.
     expect(BUILD_OBJECTIVE).not.toMatch(/self-review/i);
-    expect(BUILD_OBJECTIVE).toMatch(/out of Building \(to Review after opening the change request/);
+    // Builders report an outcome; Factory moves the card.
+    expect(BUILD_OBJECTIVE).toMatch(
+      /reported its outcome with factory_report_outcome \(review after opening the change request/,
+    );
+    expect(BUILD_OBJECTIVE).not.toContain('factory_transition_work_item');
     // A change request tracked on its own card never lets the card into Review: that hand-off is done too.
     expect(BUILD_OBJECTIVE).toContain('tracked on its own card');
     expect(BUILD_OBJECTIVE).toContain('says a person should confirm it is reviewed there');

@@ -15,7 +15,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  *
  * The gate is the single fetch-spinner-validate-or-throw boundary that replaces
  * the old static `P()` validator:
- * - while patterns load, it shows a spinner and never renders children;
+ * - while patterns load, it shows the loader and never renders children;
  * - once loaded with a complete pattern set, it renders children;
  * - when RBAC is off it renders children without ever requesting patterns;
  * - if a route literal isn't in the server's pattern set, it throws (surfacing
@@ -23,10 +23,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  */
 
 const BASE_URL = 'http://localhost:4111';
-
-vi.mock('@mastra/playground-ui/components/Spinner', () => ({
-  Spinner: () => <div data-testid="gate-spinner" />,
-}));
 
 import { RoutePermissionsGate } from '../route-permissions-gate';
 import { server } from '@/test/msw-server';
@@ -127,7 +123,7 @@ describe('RoutePermissionsGate', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a spinner (not the children) while permission patterns load', async () => {
+  it('shows the loader (not the children) while permission patterns load', async () => {
     const gate = new Promise<void>(resolve => {
       releaseGate = resolve;
     });
@@ -135,7 +131,7 @@ describe('RoutePermissionsGate', () => {
 
     renderGate();
 
-    expect(await screen.findByTestId('gate-spinner')).toBeTruthy();
+    expect(await screen.findByRole('status', { name: 'Loading' })).toBeTruthy();
     expect(screen.queryByTestId('app-content')).toBeNull();
   });
 
@@ -145,7 +141,7 @@ describe('RoutePermissionsGate', () => {
     renderGate();
 
     expect(await screen.findByTestId('app-content')).toBeTruthy();
-    expect(screen.queryByTestId('gate-spinner')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull();
     expect(screen.queryByTestId('boundary')).toBeNull();
   });
 

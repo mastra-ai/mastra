@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-browser",
-  "version": "0.7.0-alpha.1",
+  "version": "0.7.0",
   "description": "Browser automation for Mastra agents using Playwright",
   "type": "module",
   "files": [

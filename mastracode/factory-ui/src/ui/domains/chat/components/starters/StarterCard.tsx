@@ -8,7 +8,7 @@ import type { StarterPrompt } from '../../../factory/starterPrompts';
 import { usePromptButton } from '../../hooks/usePromptButton';
 import { StarterArt } from './StarterArt';
 import { starterCellClasses } from './starterGrid';
-import '../chat-enter.css';
+import './starter-enter.css';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 interface StaggerStyle extends CSSProperties {

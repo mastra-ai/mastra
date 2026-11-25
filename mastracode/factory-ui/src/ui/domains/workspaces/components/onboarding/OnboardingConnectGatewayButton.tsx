@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useId } from 'react';
 
@@ -29,7 +28,6 @@ export function OnboardingConnectGatewayButton({
   return (
     <div className="flex flex-col items-start gap-2">
       <Button
-        icon={connection.connectingGateway ? <Spinner size="sm" aria-hidden="true" /> : undefined}
         variant="primary"
         disabled={connection.pending || !allowed}
         aria-describedby={allowed ? undefined : reasonId}
@@ -41,8 +39,9 @@ export function OnboardingConnectGatewayButton({
           connection.chooseGateway();
           preview();
         }}
+        loading={connection.connectingGateway}
       >
-        {connection.connectingGateway ? 'Connecting…' : `${verb} Mastra Gateway`}
+        {`${verb} Mastra Gateway`}
       </Button>
       {!allowed && (
         <Txt id={reasonId} variant="meta" tone="muted">

@@ -20,6 +20,17 @@ const LINK_REFERENCES = [
 ].join('\n');
 
 /**
+ * People in the thread read what the agent posts, and it tends to write the way
+ * it reports to other agents: function names, ids and status shorthand that only
+ * make sense inside the session.
+ */
+const WRITE_FOR_PEOPLE = [
+  'Write for the people in the thread, not for another agent. A teammate who knows the product and programming, but has not read this code or this session, should follow your message on first read.',
+  'Lead with the answer or the outcome and anything you need from them, in plain sentences. Keep it short: a few sentences answer most questions, and when there is more, offer it rather than writing it all out. Say what code does rather than naming the function, file, field, error class or tool that does it; name one only when they need it to find the code. Use the project’s real terms, not invented analogies.',
+  'Leave out tool names and session and run ids unless someone asks for them, and always leave out agent shorthand such as checkpoint counts, RED → GREEN or STOPPED. When you pass on what a side session reported, say what it means for the people here in your own words; never paste its report.',
+].join(' ');
+
+/**
  * Tells the agent how to open a reply when the run came in over a chat
  * channel (Slack, …): acknowledge a job in one line that names it — "On it —
  * sleeping 30s, then running the echo" — before starting, so the sender sees
@@ -44,7 +55,7 @@ export class FactoryChannelReplyProcessor implements Processor {
       messageList.addSystem(
         {
           role: 'system',
-          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted. When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.\n${LINK_REFERENCES}`,
+          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted. When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.\n${LINK_REFERENCES}\n${WRITE_FOR_PEOPLE}`,
         },
         ID,
       );
@@ -64,7 +75,7 @@ export class FactoryChannelReplyProcessor implements Processor {
             'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
             'Finish with the outcome, not a replay of the steps.',
           ];
-    messageList.addSystem({ role: 'system', content: [...content, LINK_REFERENCES].join('\n') }, ID);
+    messageList.addSystem({ role: 'system', content: [...content, LINK_REFERENCES, WRITE_FOR_PEOPLE].join('\n') }, ID);
     return { messageList };
   }
 }

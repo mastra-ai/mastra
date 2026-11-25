@@ -10,13 +10,13 @@ import { queryKeys } from '../../../../api/keys';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import type { GithubStatus, SourceControlRepository } from '../services/github';
 import { githubCallbackAwaitsAccess } from '../services/githubCallbackRecovery';
 import { gitLabUnavailableReason, githubUnavailableReason, repositoryHost } from '../services/sourceControlHosts';
 import type { SourceControlHost } from '../services/sourceControlHosts';
 import type { GitHubAppCallbackResult } from './GitHubAppCallbackHandler';
+import { OnboardingConnectionSkeleton } from './onboarding/OnboardingConnectionSkeleton';
 import { OnboardingGithubHostRow } from './onboarding/OnboardingGithubHostRow';
 import { OnboardingGithubNotice } from './onboarding/OnboardingGithubNotice';
 import { OnboardingGitlabHostRow } from './onboarding/OnboardingGitlabHostRow';
@@ -173,12 +173,12 @@ export function VcsFactoryStep({
               Manage access
             </Button>
             <Button
-              icon={<IconArrowRotateClockwise className={refreshRepos.isPending ? 'animate-spin' : undefined} />}
               variant="ghost"
               size="sm"
               aria-label="Refresh GitHub repositories"
-              disabled={refreshRepos.isPending}
               onClick={refreshGithub}
+              icon={<IconArrowRotateClockwise />}
+              loading={refreshRepos.isPending}
             >
               Refresh
             </Button>
@@ -201,7 +201,7 @@ export function VcsFactoryStep({
     >
       {statusPending && (
         <OnboardingInset>
-          <SkeletonRows label="Loading source control status" rows={2} rowClassName="h-15 w-full" />
+          <OnboardingConnectionSkeleton label="Loading source control status" rows={2} />
         </OnboardingInset>
       )}
       {(showGithubRow || showGitlabRow) && (

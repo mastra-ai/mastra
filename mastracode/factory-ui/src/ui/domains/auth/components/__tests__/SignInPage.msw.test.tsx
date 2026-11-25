@@ -132,8 +132,7 @@ describe('SignInPage', () => {
       expect(screen.queryByRole('button', { name: 'Continue with GitHub' })).not.toBeInTheDocument();
 
       await userEvent.click(button);
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening Mastra Platform…');
+      expect(button).toHaveAttribute('aria-busy', 'true');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
 
@@ -170,8 +169,7 @@ describe('SignInPage', () => {
       expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
 
       await userEvent.click(button);
-      expect(button).toBeDisabled();
-      expect(button).toHaveTextContent('Opening GitHub…');
+      expect(button).toHaveAttribute('aria-busy', 'true');
       expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/factory/board');
     });
   });

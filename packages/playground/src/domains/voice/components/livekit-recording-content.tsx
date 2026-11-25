@@ -8,7 +8,7 @@ export function LiveKitRecordingContent({ traceId }: { traceId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <LiveKitRecordingState data={data} isFetching={isFetching} isError={isError} dataUpdatedAt={dataUpdatedAt} />
-      <Button icon={<IconArrowRotateClockwise />} size="sm" disabled={isFetching} onClick={() => void refetch()}>
+      <Button icon={<IconArrowRotateClockwise />} size="sm" loading={isFetching} onClick={() => void refetch()}>
         Refresh recording
       </Button>
     </div>

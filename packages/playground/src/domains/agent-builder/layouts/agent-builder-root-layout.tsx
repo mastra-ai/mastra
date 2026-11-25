@@ -1,6 +1,6 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
@@ -22,11 +22,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
   const { data: authCapabilities, isLoading } = useAuthCapabilities();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (authCapabilities?.enabled && !isAuthenticated(authCapabilities)) {
@@ -43,11 +39,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
   const { isLoading, denialReason, hasAgentFeature } = useBuilderAgentAccess();
 
   if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (denialReason === 'permission-denied') {

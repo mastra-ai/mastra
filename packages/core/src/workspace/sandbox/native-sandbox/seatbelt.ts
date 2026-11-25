@@ -181,6 +181,12 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
   for (const p of config.readWritePaths ?? []) {
     lines.push(`(allow file-write* (subpath ${escapePath(canonicalizePath(p))}))`);
   }
+
+  // Later SBPL rules take precedence, so these denies override every write
+  // grant above — including the workspace subpath — for nested paths.
+  for (const p of config.denyWritePaths ?? []) {
+    lines.push(`(deny file-write* (subpath ${escapePath(canonicalizePath(p))}))`);
+  }
   lines.push('');
 
   // Network

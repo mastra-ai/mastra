@@ -65,9 +65,9 @@ describe('ExperimentsList delete action', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Delete experiment entity-extraction / model-a' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
 
-      // "Deleting..." while pending; "Delete" again means the rejection was handled.
+      // Busy while pending; no longer busy means the rejection was handled.
       await waitFor(() => expect(onDeleteExperiment).toHaveBeenCalled());
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete' })).toBeDefined());
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', busy: false })).toBeDefined());
       expect(screen.getByText('Delete Experiment')).toBeDefined();
     });
   });

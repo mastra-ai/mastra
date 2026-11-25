@@ -19,6 +19,7 @@ export interface ModelPickerProps {
   providers: ModelPickerProvider[];
   value?: ModelPickerValue;
   onValueChange: (value: ModelPickerValue) => void;
+  customModel?: (query: string) => ModelPickerValue | undefined;
   /** Marked "Default" in the list. */
   defaultModel?: ModelPickerValue;
   /** Trigger content. Defaults to the selected provider's icon and the model's readable name. */
@@ -42,6 +43,7 @@ export interface ModelPickerProps {
   unavailableReason?: string;
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
+  chevron?: boolean;
   triggerClassName?: string;
   'aria-label'?: string;
 }
@@ -57,6 +59,7 @@ export function ModelPicker({
   providers,
   value,
   onValueChange,
+  customModel,
   defaultModel,
   children,
   renderProviderIcon = defaultProviderIcon,
@@ -69,6 +72,7 @@ export function ModelPicker({
   unavailableReason,
   side = 'top',
   align = 'end',
+  chevron = true,
   triggerClassName,
   'aria-label': ariaLabel,
 }: ModelPickerProps) {
@@ -100,11 +104,13 @@ export function ModelPicker({
           </span>
         </>
       )}
-      <IconChevronDownMedium
-        aria-hidden
-        className="size-icon-xs shrink-0"
-        data-composer-line-hidden={children || value?.provider ? true : undefined}
-      />
+      {chevron && (
+        <IconChevronDownMedium
+          aria-hidden
+          className="size-icon-xs shrink-0"
+          data-composer-line-hidden={children || value?.provider ? true : undefined}
+        />
+      )}
     </>
   );
 
@@ -148,6 +154,7 @@ export function ModelPicker({
       value={value}
       defaultModel={defaultModel}
       onSelect={select}
+      customModel={customModel}
       initialProviderFilter={openOnSelectedProvider ? selectedProvider?.id : undefined}
       renderProviderIcon={renderProviderIcon}
       header={header}

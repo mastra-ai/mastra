@@ -1,9 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Drawer, DrawerTrigger } from '@mastra/playground-ui/components/Drawer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import {
   SettingsContainer,
   SettingsEmptyRow,
+  SettingsItem,
   SettingsListHeader,
   SettingsNoticeRow,
   SettingsSkeleton,
@@ -64,7 +66,24 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </SettingsListHeader>
         )}
         {environmentQuery.isPending && (
-          <SettingsSkeleton label="Loading repository configuration" variant="item" rows={2} />
+          <SettingsSkeleton
+            label="Loading repository configuration"
+            rows={2}
+            placeholder={
+              <SettingsItem
+                aria-hidden
+                media={
+                  <>
+                    <span className="size-control-sm shrink-0" />
+                    <Skeleton className="size-avatar-md shrink-0 rounded-lg motion-reduce:before:animate-none" />
+                  </>
+                }
+                title={<SkeletonText line="text-label" className="w-32 motion-reduce:before:animate-none" />}
+              >
+                <Skeleton className="h-control-sm w-20 rounded-full motion-reduce:before:animate-none" />
+              </SettingsItem>
+            }
+          />
         )}
         {environmentQuery.isError && (
           <SettingsNoticeRow>
@@ -75,7 +94,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                   variant="ghost"
                   size="sm"
                   icon={<IconArrowRotateCounterClockwise />}
-                  disabled={environmentQuery.isFetching}
+                  loading={environmentQuery.isFetching}
                   onClick={() => void environmentQuery.refetch()}
                 >
                   Retry repository configuration

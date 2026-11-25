@@ -93,6 +93,11 @@ export class FakeLinear {
     connection.status = status;
   }
 
+  /** Removes a connection from the project only: the org still lists it, as after someone detaches it. */
+  detach(connectionId: string): void {
+    this.platform.linked.delete(connectionId);
+  }
+
   /** Deletes a connection on the platform: unlisted and unlinked; a migrated row still points at it. */
   dropConnection(connectionId: string): void {
     const index = this.platform.orgConnections.findIndex(candidate => candidate.id === connectionId);

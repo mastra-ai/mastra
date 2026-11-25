@@ -1,4 +1,4 @@
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
 import { listResolvableModePacks, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import type { PackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import {

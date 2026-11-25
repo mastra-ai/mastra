@@ -52,7 +52,9 @@ export interface PlatformLinearIntegrationConfig {
  *
  * Workspaces the platform still holds legacy OAuth tokens for are migrated
  * into Connect automatically: at boot and on every reconcile interval, under
- * a lease so only one replica migrates. Migration links each new connection
+ * a lease so only one replica migrates. A workspace is migrated once; one already
+ * migrated is never sent again, and its connection is linked only if this
+ * project has never had it. Migration links each new connection
  * to the Factory project, and the workspace's webhooks land in the
  * connection's platform event log from then on. Until a workspace is migrated, Platform
  * Linear reports `migration_required` for it; there is no legacy fallback.
@@ -89,6 +91,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
       connect: () => this.connect,
       coveredWorkspaceIds: async () =>
         new Set((await this.intake.listWorkspaces()).map(workspace => workspace.linearWorkspaceId)),
+      linkMigrated: connectionIds => this.linkOrgConnections({ only: connectionIds, requireHistory: true }),
       onMigrated: () => this.#connectionsChanged(),
     });
   }
@@ -320,11 +323,17 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
   }
 
   diagnostics(): Record<string, unknown> {
-    const { required, pending, skipped, lastError } = this.#migration.state;
+    const { required, pending, notLinked, skipped, lastError } = this.#migration.state;
     return {
       ...super.diagnostics(),
       endpointHost: this.#endpointHost,
-      migration: { required, pending, skipped, ...(lastError ? { lastError } : {}) },
+      migration: {
+        required,
+        pending,
+        ...(notLinked.length > 0 ? { notLinked } : {}),
+        skipped,
+        ...(lastError ? { lastError } : {}),
+      },
       ...(this.#unverifiedEventsDropped > 0 ? { unverifiedEventsDropped: this.#unverifiedEventsDropped } : {}),
       ...(this.intake.lastUnidentified.length > 0 ? { unidentifiedConnections: this.intake.lastUnidentified } : {}),
     };
@@ -364,11 +373,17 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
       this.intake.inventory(),
       this.#migration.refreshStatus().catch(() => this.#migration.state),
     ]);
-    const { required, pending, skipped, lastError } = migration;
+    const { required, pending, notLinked, skipped, lastError } = migration;
     return {
       ...(required ? { notConnectedReason: 'migration_required' } : {}),
       fields: {
-        migration: { required, pending, skipped, ...(lastError ? { lastError } : {}) },
+        migration: {
+          required,
+          pending,
+          ...(notLinked.length > 0 ? { notLinked } : {}),
+          skipped,
+          ...(lastError ? { lastError } : {}),
+        },
         ...(inventory.unusable.length > 0 ? { requiresFreshConnect: inventory.unusable } : {}),
         ...(inventory.duplicates.length > 0 ? { duplicates: inventory.duplicates } : {}),
         ...(inventory.unidentified.length > 0 ? { unidentified: inventory.unidentified } : {}),
