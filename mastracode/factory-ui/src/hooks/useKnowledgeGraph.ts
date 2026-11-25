@@ -3,7 +3,7 @@
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Query, QueryKey } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -57,28 +57,31 @@ export function useKnowledgeLiveUpdates(factoryProjectId: string | undefined): b
   // A hidden tab must not hold a stream: browsers cap HTTP/1.1 connections per host.
   const visible = useDocumentVisible();
   const [connected, setConnected] = useState(false);
+  // Outlives the stream: a tab switch mid-read must not drop the read a write is owed.
+  const owedReads = useRef(new Set<string>());
 
   useEffect(() => {
     if (!visible || !factoryProjectId) return;
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
     let burst: ReturnType<typeof setTimeout> | undefined;
-    const reading = new Map<string, { again: boolean }>();
+    const reading = new Set<string>();
     const reread = (query: Query, afterWrite: boolean) => {
-      const inFlight = reading.get(query.queryHash);
-      if (inFlight) {
-        inFlight.again = true;
+      const hash = query.queryHash;
+      if (reading.has(hash)) {
+        owedReads.current.add(hash);
         return;
       }
       // Aborting a read in the browser doesn't stop it on the server: join a running read, then read once more.
       const running = query.isActive() && query.state.fetchStatus === 'fetching';
-      const read = { again: running && (afterWrite || query.state.data !== undefined) };
-      reading.set(query.queryHash, read);
+      if (!running) owedReads.current.delete(hash);
+      else if (afterWrite || query.state.data !== undefined) owedReads.current.add(hash);
+      reading.add(hash);
       void queryClient
         .invalidateQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false })
         .finally(() => {
-          reading.delete(query.queryHash);
-          if (read.again && !abort.signal.aborted) reread(query, false);
+          reading.delete(hash);
+          if (!abort.signal.aborted && owedReads.current.delete(hash)) reread(query, false);
         });
     };
     const refresh = (afterWrite: boolean) => {
