@@ -384,6 +384,8 @@ describe('PosthogExporter', () => {
          * so it has no inference. `without-step` is the same step with MODEL_STEP spans excluded.
          */
         replayed?: 'with-step' | 'without-step';
+        /** Older core or observability packages still export an inference for the replayed step. */
+        replayedInference?: boolean;
         /** The end of the inference is exported after the end of its step. */
         inferenceExportedLast?: boolean;
       }
@@ -416,9 +418,10 @@ describe('PosthogExporter', () => {
           const inferenceSpan = createSpan({
             id: `inference-${step}`,
             traceId,
-            parentSpanId: stepSpan.id,
+            parentSpanId: call.replayed === 'without-step' ? generation.id : stepSpan.id,
             type: SpanType.MODEL_INFERENCE,
             output,
+            ...(call.replayed ? { startTime: new Date() } : {}),
             attributes: {
               model: 'gpt-4o',
               provider: 'openai',
@@ -461,6 +464,10 @@ describe('PosthogExporter', () => {
           }
           for (const toolSpan of toolSpans) {
             await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: toolSpan });
+          }
+          if (call.replayedInference) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
+            await endInference();
           }
           if (exportsStep) {
             await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: stepSpan });
@@ -582,6 +589,28 @@ describe('PosthogExporter', () => {
               content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'weather', output: { tempC: 21 } }],
             },
           ]);
+        },
+      );
+
+      it.each(['with-step', 'without-step'] as const)(
+        'should give the tool call and result once when an older package also exports the replayed inference (%s)',
+        async replayed => {
+          await exportGeneration(
+            [
+              {
+                offered: ['weather'],
+                replayed,
+                replayedInference: true,
+                toolCalls: [
+                  { id: 'call-1', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 0 },
+                ],
+              },
+              { offered: ['weather'], text: 'Paris is 21C.' },
+            ],
+            { resumed: true },
+          );
+
+          expect(captured('$ai_generation').map(message => message.properties.$ai_input.length)).toEqual([2, 4]);
         },
       );
 

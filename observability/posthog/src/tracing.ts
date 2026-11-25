@@ -538,7 +538,12 @@ export class PosthogExporter extends TrackingExporter<
     const exportsSteps = calls.some(call => call.type === SpanType.MODEL_STEP);
     if (exportsSteps || !generation.metadata?.resumed) return earlier;
 
+    // Older packages still export an inference for the replayed response.
+    const made = [span, ...calls].flatMap(
+      call => (call.output as { toolCalls?: Array<{ toolCallId: string }> } | undefined)?.toolCalls ?? [],
+    );
     const toolCalls = [...toolResults]
+      .filter(([toolCallId]) => !made.some(toolCall => toolCall.toolCallId === toolCallId))
       .filter(([, toolSpan]) => [span, ...calls].every(call => endedBefore(toolSpan, call)))
       .map(([toolCallId, toolSpan]) => ({
         toolCallId,
