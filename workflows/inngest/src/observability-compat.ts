@@ -28,12 +28,20 @@ export function executionFailureTermination(
   return coreFeatures.has('execution-outcomes') ? (coreObservability.executionFailureTermination?.(...args) ?? {}) : {};
 }
 
-/** Keep completed-request usage when a failed request makes the total incomplete. */
-export function generationUsage(usage: LanguageModelUsage, steps: Array<{ usage?: LanguageModelUsage }>) {
+/**
+ * Keep completed-request usage when a failed request makes the total incomplete, less what the
+ * MODEL_GENERATION spans of suspended segments already recorded; an older core recorded none.
+ */
+export function generationUsage(
+  usage: LanguageModelUsage,
+  steps: Array<{ usage?: LanguageModelUsage }>,
+  reported?: LanguageModelUsage,
+) {
   const usageIncomplete = coreFeatures.has('execution-outcomes') && coreObservability.isUsageIncomplete?.(usage);
+  const observed = usageIncomplete ? (coreObservability.calculateObservedUsage?.(steps) ?? usage) : usage;
   return {
     usageIncomplete,
-    usage: usageIncomplete ? (coreObservability.calculateObservedUsage?.(steps) ?? usage) : usage,
+    usage: coreObservability.subtractReportedUsage?.(observed, reported) ?? observed,
   };
 }
 

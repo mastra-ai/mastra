@@ -5,7 +5,6 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   connectInstallation,
-  createFactoryProject,
   deleteFactoryProject,
   isGitLabRepository,
   linkRepository,
@@ -63,19 +62,6 @@ export function useFactoryQuery(factoryId: string | undefined) {
     enabled: Boolean(factoryId),
   });
 }
-
-export function useCreateFactoryMutation() {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ name, description }: { name: string; description?: string }) =>
-      createFactoryProject(baseUrl, name, description),
-    onSuccess: () => refetchFactories(queryClient),
-  });
-}
-
-/** @deprecated Use useCreateFactoryMutation. */
-export const useAddFactoryMutation = useCreateFactoryMutation;
 
 // Link lands first so the list refreshes even if the intake write fails; the link is idempotent, so retry is safe.
 export function useLinkRepositoryMutation() {

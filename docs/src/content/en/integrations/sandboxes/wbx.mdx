@@ -1,0 +1,79 @@
+---
+title: "WBX Sandbox | Sandbox"
+description: "Run Mastra workspace commands in WBX Sandbox microVMs hosted in Europe that sleep between sessions and keep their files."
+---
+
+# WBX Sandbox
+
+Executes workspace commands in [WBX Sandbox](https://sandbox.wbx.cz), isolated Firecracker microVMs hosted in Europe. A named sandbox sleeps between sessions with its files kept, so an agent can continue where it left off. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+
+:::note
+
+The WBX Sandbox team maintains the `@wbx-sandbox/mastra` package. Report issues in the [package repository](https://github.com/WBX-Sandbox/mastra).
+
+:::
+
+## Before you begin
+
+- A WBX Sandbox account and API key
+- Node.js `v22.13.0` or later
+- `@mastra/core` `v1.80.0` or later
+
+## Installation
+
+```bash npm2yarn
+npm install @wbx-sandbox/mastra
+```
+
+Set your API key:
+
+```bash title=".env"
+WBXSANDBOX_API_KEY=your-api-key
+```
+
+## Usage
+
+Add a `WBXSandbox` to a workspace and assign it to an agent:
+
+```typescript title="src/mastra/agents/code-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { WBXSandbox } from '@wbx-sandbox/mastra'
+
+const workspace = new Workspace({
+  sandbox: new WBXSandbox({ id: 'my-project' }),
+})
+
+export const agent = new Agent({
+  id: 'code-agent',
+  name: 'Code Agent',
+  instructions: 'You write and run code in your sandbox.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  workspace,
+})
+```
+
+Ask the agent to run a command in the sandbox:
+
+```typescript
+const response = await agent.generate('Run `uname -a`.')
+console.log(response.text)
+```
+
+The response includes the sandbox's Linux kernel version.
+
+The `id` is the sandbox name. Starting a sandbox with the same `id` reconnects to the existing sandbox and its files instead of creating a new one. Every request that uses this agent shares the same sandbox. To give each user or thread its own sandbox, see [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
+
+## Lifecycle
+
+- `start()` gets the sandbox named `id` or creates it.
+- `stop()` stops background processes and, by default, puts the sandbox to sleep. Its files are kept.
+- `destroy()` deletes the sandbox and its files.
+
+For templates, network rules, checkpoints, desktop access, and all constructor options, see the [WBX Sandbox Mastra guide](https://sandbox.wbx.cz/docs/integrations/mastra).
+
+## Related
+
+- [Sandbox overview](/docs/sandbox/overview)
+- [WorkspaceSandbox interface](/reference/workspace/sandbox)
+- [Workspace class](/reference/workspace/workspace-class)

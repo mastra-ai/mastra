@@ -68,7 +68,7 @@ console.log(await output.text)
 output.cleanup?.()
 ```
 
-Both engines checkpoint each step. Use `'default'` to run on the default in-process engine, `'evented'` to run on workers over pubsub, or `false` for the plain agent loop, which doesn't checkpoint. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates. A host with no workflows store keeps evented execution.
+Both engines can checkpoint execution, but they differ in [when they persist snapshots](/docs/harness/durable-agents#snapshot-persistence). Use `'default'` to run on the default in-process engine, `'evented'` to run on workers over pubsub, or `false` for the plain agent loop, which doesn't checkpoint. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates. A host with no workflows store keeps evented execution.
 
 Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The native engine selection is fixed for the lifetime of the agent instance once it registers or first executes. Editor forks keep that selection. A wrapper factory chooses the engine for calls made through the wrapper without changing the underlying agent's selection.
 

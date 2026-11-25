@@ -34,6 +34,7 @@ import {
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
+import { openStepsOfCrashedSegment } from './segment-spans';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
   DurableAgentActiveRun,
@@ -823,6 +824,7 @@ export class DefaultAgentExecutionEngine {
     workflowInput: DurableAgenticWorkflowInput;
     finishPublishedBeforeCrash: boolean;
     originalSpansEnded: boolean;
+    openStepsOf: string[] | undefined;
   }> {
     const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
@@ -911,15 +913,18 @@ export class DefaultAgentExecutionEngine {
     }
 
     const finishPublishedBeforeCrash = snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+    const results = Object.values(snapshot.context ?? {}) as Array<{ status?: string; resumedAt?: number } | undefined>;
+    // The default engine keeps the suspended result until the resumed step finishes.
+    const stepSuspended = results.some(result => result?.status === 'suspended');
     // Spans from a segment after resume lived only in the lost process.
-    const resumed = Object.values(snapshot.context ?? {}).some(
-      result => result && typeof result === 'object' && 'resumedAt' in result && result.resumedAt != null,
-    );
+    const resumed = stepSuspended || results.some(result => result?.resumedAt != null);
     return {
       snapshot,
       workflowInput,
       finishPublishedBeforeCrash,
       originalSpansEnded: finishPublishedBeforeCrash || resumed,
+      // The suspension ended the step it saved, so the crash left none open.
+      openStepsOf: stepSuspended ? [] : openStepsOfCrashedSegment(snapshot.requestContext, runId),
     };
   }
 
