@@ -74,7 +74,7 @@ export const mastra = new Mastra({
     name: 'streamIdleTtlMs',
     type: 'number',
     description:
-      'Sliding idle expiry in milliseconds, refreshed on every write to a stream. A stream left idle for the full duration is deleted with its entries and consumer groups. Keep it above the longest time a grouped worker may be offline while still expecting to replay its backlog. Set to 0 to disable expiry; streams that never reach `clearTopic` then stay in Valkey forever.',
+      'Sliding idle expiry in milliseconds, refreshed on every write to a stream. A stream left idle for the full duration is deleted with its entries and consumer groups. Keep it above the longest time a grouped worker may be offline while still expecting to replay its backlog. Topics carrying a single agent run or thread (`agent.stream.*`, `agent.control.*`, `agent.thread-stream.*`) use shorter transport defaults instead: a day for run topics, matching the run record that authorizes reading them, and an hour for thread streams. Ungrouped subscribers starting at `earliest` can read retained entries on these topics; after the stream expires, those entries are unavailable. `streamIdleTtlMs` still caps their transport TTLs, so lowering it lowers them too. Changing `CachingPubSub`’s `runLogTtlMs` or `threadStreamLogTtlMs` changes the cache retention request, not these transport defaults. Set to 0 to disable expiry for every topic; streams that never reach `clearTopic` then stay in Valkey forever.',
     isOptional: true,
     defaultValue: '604800000 (7 days)',
   },
@@ -134,7 +134,7 @@ Set `maxmemory-policy` to `noeviction`. Consumer groups, unacknowledged entries,
 
 ## Cleanup and shutdown
 
-`clearTopic(topic)` deletes a topic stream and its consumer groups. `flush()` waits for in-flight publishes, and `close()` stops subscriptions and closes GLIDE connections.
+`clearTopic(topic)` deletes a topic stream and its consumer groups; Mastra's run lifecycles call it when a run ends, and a stream that never reaches the call is reclaimed by its sliding idle TTL instead. `flush()` waits for in-flight publishes, and `close()` stops subscriptions and closes GLIDE connections.
 
 ```typescript
 await pubsub.clearTopic('workflow.events.run-123')

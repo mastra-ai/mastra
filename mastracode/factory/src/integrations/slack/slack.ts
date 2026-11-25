@@ -981,8 +981,10 @@ async function reportPreDispatchError(
  * controller start hook, model time-to-first-token — is silent. Pin the same
  * status Factory's `typingStatus` uses for reasoning so the bot visibly
  * "picks up" as soon as the gate passes, and the stream's own status replaces
- * it without a visual change. Slack clears it on the first post; core clears
- * it when a run ends without posting.
+ * it without a visual change. Slack clears it on the first post; core's typing
+ * wrapper clears it when a run's stream ends, even when that stream never
+ * set a status of its own (e.g. a text-only run, since hidden reply text maps
+ * to no status).
  */
 const EARLY_TYPING_STATUS = 'is thinking...';
 

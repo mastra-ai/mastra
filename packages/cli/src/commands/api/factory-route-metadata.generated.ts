@@ -765,7 +765,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "projectCreate",
     "method": "POST",
     "path": "/web/factory/projects",
-    "description": "Create a Factory project",
+    "description": "Create a Factory project. Creating a second project in an organization is deprecated: each organization will have one Factory project.",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
