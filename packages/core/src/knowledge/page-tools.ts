@@ -1206,7 +1206,9 @@ function pageTool(host: KnowledgePageToolHost, canRead: boolean) {
         expectedVersion: {
           type: 'integer',
           minimum: 1,
-          description: 'The version you read or saw pinned; the write is refused if the page changed since.',
+          description: host.requireExpectedVersion
+            ? 'The version you read or saw pinned; the write is refused if the page changed since. Required to edit, move, merge or delete a page; creating one needs none.'
+            : 'The version you read or saw pinned; the write is refused if the page changed since.',
         },
       },
       required: ['op'],

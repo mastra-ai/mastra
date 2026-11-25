@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { standardSchemaToJSONSchema } from '../../schema';
+import { KnowledgeConflictError } from '../../storage/domains/knowledge/base';
 import { InMemoryStore } from '../../storage/mock';
 import { Knowledge } from '../index';
 
@@ -7,7 +9,7 @@ const scopes = {
   'team:$teamId': { access: [{ principal: 'agent:curator' as const, role: 'owner' as const }] },
 };
 
-type ToolMap = Record<string, { execute?: (input: any, context: any) => Promise<any> }>;
+type ToolMap = Record<string, { execute?: (input: any, context: any) => Promise<any>; inputSchema?: unknown }>;
 const call = (tools: ToolMap, name: string, input: unknown) => tools[name]!.execute!(input, {});
 
 async function setup(requireExpectedVersion?: boolean) {
@@ -45,10 +47,24 @@ describe('createTools({ requireExpectedVersion })', () => {
 
     it(`allows ${name} at the version read, and refuses it at a stale one`, async () => {
       const { tools } = await setup(true);
-      await expect(call(tools, 'knowledge_page', { ...input, expectedVersion: 7 })).rejects.toThrow();
+      await expect(call(tools, 'knowledge_page', { ...input, expectedVersion: 7 })).rejects.toBeInstanceOf(
+        KnowledgeConflictError,
+      );
       await expect(call(tools, 'knowledge_page', { ...input, expectedVersion: 1 })).resolves.toBeDefined();
     });
   }
+
+  it('tells the agent in the knowledge_page schema that expectedVersion is required, only when it is', async () => {
+    const description = async (flag: boolean) => {
+      const { tools } = await setup(flag);
+      const schema = standardSchemaToJSONSchema(tools.knowledge_page!.inputSchema as never, { io: 'input' }) as {
+        properties: { expectedVersion: { description: string } };
+      };
+      return schema.properties.expectedVersion.description;
+    };
+    expect(await description(true)).toContain('Required to edit, move, merge or delete a page');
+    expect(await description(false)).not.toContain('Required to edit, move, merge or delete a page');
+  });
 
   it('still creates pages without expectedVersion: there is no version to read yet', async () => {
     const { tools } = await setup(true);
