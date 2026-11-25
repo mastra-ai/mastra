@@ -1,18 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import type { ModelCatalog } from './config.js';
 import { SESSION_ID, setupSessionModelRoutes, viewerPack } from './__tests__/session-model-test-fixture.js';
 import type { SessionModelApp } from './__tests__/session-model-test-fixture.js';
+import type { ModelCatalog } from './config.js';
 
 function liveSession({ threadId = 'chat-thread', failSwitch = false } = {}) {
   const settings = new Map<string, unknown>();
-  const events: unknown[] = [];
+  const switches: unknown[] = [];
   const session = {
     model: {
       get: () => '',
       switch: async (modelId: string, options?: { thinkingLevel?: string }) => {
         if (failSwitch) throw new Error('no credential for that model');
-        events.push({ switched: modelId, thinkingLevel: options?.thinkingLevel });
+        switches.push({ modelId, thinkingLevel: options?.thinkingLevel });
       },
     },
     thread: {
@@ -21,13 +21,12 @@ function liveSession({ threadId = 'chat-thread', failSwitch = false } = {}) {
         input.threadId === threadId ? { metadata: Object.fromEntries(settings) } : null,
       setSettingOn: async ({ key, value }: { threadId: string; key: string; value: unknown }) => {
         settings.set(key, value);
-        events.push({ setting: key, value });
       },
     },
   };
   const getSession: NonNullable<ModelCatalog['getSession']> = async sessionId =>
     sessionId === SESSION_ID ? session : undefined;
-  return { settings, events, getSession };
+  return { settings, switches, getSession };
 }
 
 const putSelection = (app: SessionModelApp, selection: unknown, address: Record<string, string> = {}) =>
@@ -48,17 +47,16 @@ describe('PUT /web/config/session-model', () => {
     for (const notTheOwners of ['missing', viewerPack.id]) {
       const rejected = await putSelection(app, { kind: 'pack', packId: notTheOwners });
       expect(rejected.status).toBe(404);
-      expect(await rejected.json()).toEqual({ error: 'model_pack_not_found' });
+      expect(await rejected.json()).toMatchObject({ error: 'model_pack_not_found', message: expect.any(String) });
     }
-    expect(live.events).toEqual([]);
+    expect(live.switches).toEqual([]);
+    expect(live.settings.size).toBe(0);
 
     const chosen = await putSelection(app, { kind: 'pack', packId: 'owner-pack' });
     expect(chosen.status).toBe(200);
     expect(await chosen.json()).toEqual({ modelSelection: { kind: 'pack', packId: 'owner-pack' } });
-    expect(live.events).toEqual([
-      { setting: 'factoryModelSelection', value: { kind: 'pack', packId: 'owner-pack' } },
-      { switched: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' },
-    ]);
+    expect(live.settings.get('factoryModelSelection')).toEqual({ kind: 'pack', packId: 'owner-pack' });
+    expect(live.switches).toEqual([{ modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' }]);
     expect(await catalogSelection(app)).toEqual({ kind: 'pack', packId: 'owner-pack' });
   });
 
@@ -69,7 +67,7 @@ describe('PUT /web/config/session-model', () => {
     const chosen = await putSelection(app, { kind: 'default' });
     expect(await chosen.json()).toEqual({ modelSelection: { kind: 'pack', packId: 'owner-pack' } });
     expect(live.settings.get('factoryModelSelection')).toEqual({ kind: 'default' });
-    expect(live.events.at(-1)).toEqual({ switched: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' });
+    expect(live.switches.at(-1)).toEqual({ modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'high' });
   });
 
   it("runs an exact model even when it is the default pack's first model", async () => {
@@ -82,10 +80,8 @@ describe('PUT /web/config/session-model', () => {
       thinkingLevel: 'low',
     });
     expect(await chosen.json()).toEqual({ modelSelection: { kind: 'model' } });
-    expect(live.events).toEqual([
-      { setting: 'factoryModelSelection', value: { kind: 'model' } },
-      { switched: 'anthropic/claude-opus-4-6', thinkingLevel: 'low' },
-    ]);
+    expect(live.settings.get('factoryModelSelection')).toEqual({ kind: 'model' });
+    expect(live.switches).toEqual([{ modelId: 'anthropic/claude-opus-4-6', thinkingLevel: 'low' }]);
     expect(await catalogSelection(app)).toEqual({ kind: 'model' });
   });
 
@@ -103,14 +99,15 @@ describe('PUT /web/config/session-model', () => {
     const { app } = await setupSessionModelRoutes('user');
     const notRunning = await putSelection(app, { kind: 'default' });
     expect(notRunning.status).toBe(409);
-    expect(await notRunning.json()).toEqual({ error: 'session_not_running' });
+    expect(await notRunning.json()).toMatchObject({ error: 'session_not_running', message: expect.any(String) });
 
     const live = liveSession({ threadId: 'other-thread' });
     const mismatched = await setupSessionModelRoutes('user', 'org', live.getSession);
     const response = await putSelection(mismatched.app, { kind: 'default' });
     expect(response.status).toBe(409);
-    expect(await response.json()).toEqual({ error: 'session_thread_mismatch' });
-    expect(live.events).toEqual([]);
+    expect(await response.json()).toMatchObject({ error: 'session_thread_mismatch', message: expect.any(String) });
+    expect(live.switches).toEqual([]);
+    expect(live.settings.size).toBe(0);
   });
 
   it('uses the pack set the run uses when auth is disabled', async () => {
@@ -126,6 +123,6 @@ describe('PUT /web/config/session-model', () => {
     const chosen = await putSelection(app, { kind: 'pack', packId: 'factory-pack' });
     expect(chosen.status).toBe(200);
     expect(await chosen.json()).toEqual({ modelSelection: { kind: 'pack', packId: 'factory-pack' } });
-    expect(live.events.at(-1)).toEqual({ switched: 'deepseek/deepseek-flash', thinkingLevel: 'medium' });
+    expect(live.switches.at(-1)).toEqual({ modelId: 'deepseek/deepseek-flash', thinkingLevel: 'medium' });
   });
 });

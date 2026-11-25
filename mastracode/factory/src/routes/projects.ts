@@ -139,7 +139,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings' | 'addSources'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
+  boards?: Pick<ProjectBoardCache, 'seedNewProject'>;
 }
 
 /**
@@ -453,20 +453,15 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
           // Scope decides whose credentials every session bills against, so only
-          // admins may switch a shared Factory onto owners' personal keys. The
-          // thinking default sets the reasoning spend of every run that has not
-          // picked its own, so it is admin-only too, as are the model packs and the
-          // default model that rewrites the default pack.
+          // admins may switch a shared Factory onto owners' personal keys.
           const adminField =
             parsedBody.data.modelScope !== undefined
               ? 'model scope'
-              : parsedBody.data.defaultThinkingLevel !== undefined
-                ? 'thinking default'
-                : parsedBody.data.modelPacks !== undefined
-                  ? 'model packs'
-                  : parsedBody.data.defaultModelId !== undefined
-                    ? 'default model'
-                    : undefined;
+              : parsedBody.data.modelPackSet !== undefined
+                ? 'model packs'
+                : parsedBody.data.defaultModelId !== undefined
+                  ? 'default model'
+                  : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&
@@ -488,14 +483,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             autoRunEnabled: _autoRun,
             reviewTestChecksEnabled: _testChecks,
             selfReviewEnabled: _selfReview,
-            modelPacks,
-            defaultModelPackId,
-            ...fields
+            ...input
           } = parsedBody.data;
-          const input =
-            modelPacks !== undefined && defaultModelPackId !== undefined
-              ? { ...fields, modelPackSet: { modelPacks, defaultModelPackId } }
-              : fields;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
         },

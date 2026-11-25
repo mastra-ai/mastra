@@ -267,8 +267,7 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 /** Tools for every Factory session, or a resolver called per run. */
 export type FactoryTools =
-  | IntegrationTools
-  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+  IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -1390,8 +1389,7 @@ export class MastraFactory {
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     ) as GitLabIntegrationBase | undefined;
@@ -1787,7 +1785,6 @@ export class MastraFactory {
       const record = await memorySettingsStorage.get(await memorySettingsRowKey(requestContext, binding));
       requestContext.set('mastra__factoryMemorySettings', record);
     };
-    // Thinking and fallback defaults come from the session's defaults set, never the host's settings.json.
     const routedDefaultsDeps = {
       projects: factoryProjectsStorage,
       sourceControl: sourceControlSessions,

@@ -104,11 +104,15 @@ describe('Factory route contracts', () => {
       name: 'Factory',
       description: null,
     });
+    expect(
+      createProjectBodySchema.parse({ name: 'Factory', defaultModelId: ' anthropic/claude-opus-5.5 ' }),
+    ).toMatchObject({ defaultModelId: 'anthropic/claude-opus-5.5' });
+    expect(createProjectBodySchema.safeParse({ name: 'Factory', defaultModelId: 'sonnet 5.5' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', reviewTestChecksEnabled: true })).toEqual({
-      defaultModelId: null,
-      reviewTestChecksEnabled: true,
-    });
+    for (const cleared of ['  ', null]) {
+      expect(updateProjectBodySchema.safeParse({ defaultModelId: cleared }).success).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ reviewTestChecksEnabled: true })).toEqual({ reviewTestChecksEnabled: true });
     expect(updateProjectBodySchema.parse({ defaultModelId: ' anthropic/claude-opus-5.5 ' })).toEqual({
       defaultModelId: 'anthropic/claude-opus-5.5',
     });
@@ -131,17 +135,19 @@ describe('Factory route contracts', () => {
         defaultModelPackId: 'build',
       }),
     ).toEqual({
-      modelPacks: [
-        {
-          id: 'build',
-          name: 'Build',
-          models: [
-            { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
-            { modelId: 'openrouter/anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
-          ],
-        },
-      ],
-      defaultModelPackId: 'build',
+      modelPackSet: {
+        modelPacks: [
+          {
+            id: 'build',
+            name: 'Build',
+            models: [
+              { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+              { modelId: 'openrouter/anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+            ],
+          },
+        ],
+        defaultModelPackId: 'build',
+      },
     });
     const rejectedPackSets = {
       'a pack without a default id': { modelPacks: [pack(['openai/gpt-5.6-sol'])] },
@@ -173,8 +179,7 @@ describe('Factory route contracts', () => {
       expect(updateProjectBodySchema.safeParse(body).success, label).toBe(false);
     }
     expect(updateProjectBodySchema.parse({ modelPacks: [], defaultModelPackId: null })).toEqual({
-      modelPacks: [],
-      defaultModelPackId: null,
+      modelPackSet: { modelPacks: [], defaultModelPackId: null },
     });
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
@@ -340,9 +345,8 @@ describe('Factory route contracts', () => {
   it('accepts representative successful response envelopes', () => {
     const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
-      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({
-        projects: [{ id: projectId, modelPacks: [], defaultModelPackId: null, repositories: [] }],
-      }).success,
+      FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
+        .success,
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({

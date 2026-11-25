@@ -276,11 +276,8 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
   });
 
-  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
+  it('lets a member who is not an organization admin create a Factory on its default model', async () => {
     const seed = await createFactoryStorageForTests();
-    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
-    expect(project.defaultThinkingLevel).toBe('medium');
-    const isOrganizationAdmin = vi.fn(async () => false);
     const app = new Hono();
     app.use('*', async (context, next) => {
       context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
@@ -288,29 +285,25 @@ describe('ProjectRoutes', () => {
     });
     mountApiRoutes(
       app as never,
-      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+      projectRoutes(seed, undefined, undefined, undefined, {
+        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
+      }),
     );
-    const patch = (body: Record<string, unknown>) =>
-      app.request(`/web/factory/projects/${project.id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      });
 
-    const denied = await patch({ defaultThinkingLevel: 'high' });
-    expect(denied.status).toBe(403);
-    expect(await denied.json()).toMatchObject({
-      error: 'forbidden',
-      message: 'Organization administrator access is required to change the thinking default.',
+    const created = await app.request('/web/factory/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Shared', defaultModelId: 'anthropic/claude-opus-5.5' }),
     });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
-
-    isOrganizationAdmin.mockResolvedValue(true);
-    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
-    const saved = await patch({ defaultThinkingLevel: 'high' });
-    expect(saved.status).toBe(200);
-    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
-    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+    expect(created.status).toBe(201);
+    const defaultPack = {
+      defaultModelId: 'anthropic/claude-opus-5.5',
+      defaultModelPackId: 'default',
+      modelPacks: [{ id: 'default', models: [{ modelId: 'anthropic/claude-opus-5.5' }] }],
+    };
+    const { project } = (await created.json()) as { project: { id: string } };
+    expect(project).toMatchObject(defaultPack);
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject(defaultPack);
   });
 
   it('creates a project in the requested model scope and rejects unknown scopes', async () => {

@@ -48,7 +48,6 @@ async function unsignedFactoryProjectId(
   return sourceSession?.factoryProjectId ?? sessionlessFactoryProjectId(controller);
 }
 
-/** A session's unpicked thinking level and model packs: those of the defaults set it routes to; unsigned requests get the Factory's. */
 export async function resolveRoutedModelDefaults(
   requestContext: RequestContext | undefined,
   deps: RoutedModelDefaultsDependencies,
@@ -92,7 +91,6 @@ async function readRoutedModelDefaults(
         }
       : UNROUTED_DEFAULTS;
   } catch (error) {
-    // A missed lookup costs reasoning depth and fallbacks, not the run.
     console.warn('[factory] Could not read the model defaults; using medium and no model packs.', error);
     return UNROUTED_DEFAULTS;
   }
@@ -117,9 +115,9 @@ export async function resolveSessionModelRoute(
   if (!controller) return [];
   const stored = parseStoredModelSelection(await controller.getThreadSetting?.(FACTORY_MODEL_SELECTION_SETTING));
   const { modelPackSet } = await resolveRoutedModelDefaults(requestContext, deps);
-  const selection = resolveModelSelection(modelPackSet, stored, controller.session?.modelId);
+  const pack = resolveModelSelection(modelPackSet, stored, controller.session?.modelId);
   if (!stored && modelPackSet.modelPacks.length > 0) {
-    await stampModelSelection(controller, selection.kind === 'pack' ? { kind: 'default' } : { kind: 'model' });
+    await stampModelSelection(controller, pack ? { kind: 'default' } : { kind: 'model' });
   }
-  return selection.kind === 'pack' ? selection.pack.models : [];
+  return pack?.models ?? [];
 }

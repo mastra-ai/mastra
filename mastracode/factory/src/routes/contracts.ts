@@ -11,8 +11,7 @@ import {
   STATUS_EVENTS,
 } from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { MODEL_ID_PATTERN } from '../model-id.js';
-import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX } from '../model-packs.js';
+import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
 import type { ModelPackSet } from '../model-packs.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -586,15 +585,9 @@ const intakeTestResponseSchema = z.object({
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
-export const modelIdSchema = z
-  .string()
-  .trim()
-  .max(256)
-  .regex(MODEL_ID_PATTERN, 'Use a provider/model ID, e.g. "anthropic/claude-opus-5.5"');
-
 const MODEL_PACK_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 
-export const modelPackSchema = z
+const modelPackSchema = z
   .object({
     id: z.string().regex(MODEL_PACK_ID_PATTERN, 'A pack ID is 1 to 64 letters, digits, "-" or "_"'),
     name: z
@@ -635,9 +628,7 @@ export const modelPackSetSchema = z
     if (problem) ctx.addIssue({ code: 'custom', message: problem });
   });
 
-const projectSchema = entitySchema.and(
-  z.object({ modelPacks: z.array(modelPackSchema), defaultModelPackId: z.string().nullable() }),
-);
+const projectSchema = entitySchema;
 const projectResponseSchema = z.object({ project: projectSchema });
 
 /**
@@ -735,6 +726,7 @@ export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  defaultModelId: modelIdSchema.optional(),
   modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
@@ -742,9 +734,8 @@ export const updateProjectBodySchema = z
   .object({
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
-    defaultModelId: z.union([modelIdSchema, nullableTrimmed(0)]).optional(),
+    defaultModelId: modelIdSchema.optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     modelPacks: modelPacksSchema.optional(),
     defaultModelPackId: defaultModelPackIdSchema.optional(),
     /** @deprecated Ignored. Each board phase starts its own runs with `autoStart` and `autoStartWhen`. */
@@ -757,13 +748,19 @@ export const updateProjectBodySchema = z
     selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' })
-  .superRefine(({ modelPacks, defaultModelPackId }, ctx) => {
-    if (modelPacks === undefined && defaultModelPackId === undefined) return;
-    const problem =
-      modelPacks === undefined || defaultModelPackId === undefined
-        ? 'Send modelPacks and defaultModelPackId together'
-        : modelPackSetProblem({ modelPacks, defaultModelPackId });
-    if (problem) ctx.addIssue({ code: 'custom', message: problem });
+  .transform(({ modelPacks, defaultModelPackId, ...fields }, ctx) => {
+    if (modelPacks === undefined && defaultModelPackId === undefined) return { ...fields, modelPackSet: undefined };
+    if (modelPacks === undefined || defaultModelPackId === undefined) {
+      ctx.addIssue({ code: 'custom', message: 'Send modelPacks and defaultModelPackId together' });
+      return z.NEVER;
+    }
+    const modelPackSet = { modelPacks, defaultModelPackId };
+    const problem = modelPackSetProblem(modelPackSet);
+    if (problem) {
+      ctx.addIssue({ code: 'custom', message: problem });
+      return z.NEVER;
+    }
+    return { ...fields, modelPackSet };
   });
 
 const environmentBuildStatusSchema = z.enum(['pending', 'building', 'ready', 'failed', 'unknown']);

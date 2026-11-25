@@ -1,6 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { legacyModelPackSet } from '../model-packs.js';
 import type { ModelPack, ModelPackSet, StoredModelSelection } from '../model-packs.js';
 import type { FactoryModelScope } from '../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -95,8 +96,11 @@ async function setup(
   } else {
     await seed.modelDefaults.set({ orgId: 'org-1', userId: 'owner', modelId: 'anthropic/claude-opus-4-6' });
   }
-  await seed.modelDefaults.set({ orgId: 'org-1', userId: 'viewer', modelId: 'openai/gpt-5.5' });
-  await seed.modelDefaults.setThinkingLevel({ orgId: 'org-1', userId: 'viewer', thinkingLevel: 'max' });
+  await seed.modelDefaults.setModelPacks({
+    orgId: 'org-1',
+    userId: 'viewer',
+    ...legacyModelPackSet('openai/gpt-5.5', 'max'),
+  });
   const deps = {
     projects: seed.projects,
     sourceControl: createSourceControlSessionLookup([sourceControl]),
@@ -152,23 +156,6 @@ describe('resolveRoutedModelDefaults', () => {
   it('starts a chat on Factory routing at the Factory level', async () => {
     const { resolve } = await setup('factory');
     expect(await resolve('chat-thread')).toBe('low');
-  });
-
-  it('reads the defaults once per request', async () => {
-    const { deps } = await setup('factory');
-    const getById = vi.spyOn(deps.projects, 'getById');
-    const chat = () => contextFor({ sessionId: 'session-1', resourceId: 'session-1', threadId: 'chat-thread' });
-    const request = chat();
-    const factoryDefaults = { thinkingLevel: 'low', modelPackSet: factoryPacks };
-
-    expect(await resolveRoutedModelDefaults(request, deps)).toEqual(factoryDefaults);
-    const reads = getById.mock.calls.length;
-    expect(reads).toBeGreaterThan(0);
-    expect(await resolveRoutedModelDefaults(request, deps)).toEqual(factoryDefaults);
-    expect(getById).toHaveBeenCalledTimes(reads);
-
-    await resolveRoutedModelDefaults(chat(), deps);
-    expect(getById).toHaveBeenCalledTimes(2 * reads);
   });
 
   it("routes a personally routed chat to the owner's personal packs", async () => {
@@ -321,6 +308,12 @@ describe('resolveSessionModelRoute', () => {
     const { route, select } = await routeSetup();
     select({ kind: 'pack', packId: 'factory-review' });
     expect(await route('openai/gpt-5.5')).toEqual(reviewPack.models);
+  });
+
+  it('runs the default pack when the picked pack was deleted', async () => {
+    const { route, select } = await routeSetup();
+    select({ kind: 'pack', packId: 'deleted' });
+    expect(await route('openai/gpt-5.5')).toEqual(factoryPack.models);
   });
 
   it("follows an edit to the picked pack's first model on the next request", async () => {

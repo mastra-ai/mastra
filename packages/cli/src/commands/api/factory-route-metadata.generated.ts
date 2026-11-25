@@ -637,7 +637,6 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoRunEnabled",
       "defaultModelId",
       "defaultModelPackId",
-      "defaultThinkingLevel",
       "description",
       "modelPacks",
       "modelScope",
@@ -771,6 +770,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "defaultModelId",
       "description",
       "modelScope",
       "name"
@@ -1490,43 +1490,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               {
                 "type": "object",
                 "properties": {
-                  "modelPacks": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "$ref": "#/$defs/__schema0"
-                        },
-                        "name": {
-                          "$ref": "#/$defs/__schema1"
-                        },
-                        "models": {
-                          "$ref": "#/$defs/__schema2"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "name",
-                        "models"
-                      ]
-                    }
-                  },
-                  "defaultModelPackId": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                },
-                "required": [
-                  "modelPacks",
-                  "defaultModelPackId"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
                   "repositories": {
                     "type": "array",
                     "items": {
@@ -1592,51 +1555,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "projects"
-      ],
-      "$defs": {
-        "__schema0": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$"
-        },
-        "__schema1": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
-        },
-        "__schema2": {
-          "minItems": 1,
-          "maxItems": 4,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema3"
-          }
-        },
-        "__schema3": {
-          "type": "object",
-          "properties": {
-            "modelId": {
-              "type": "string",
-              "maxLength": 256,
-              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
-            },
-            "thinkingLevel": {
-              "type": "string",
-              "enum": [
-                "off",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            }
-          },
-          "required": [
-            "modelId",
-            "thinkingLevel"
-          ]
-        }
-      }
+      ]
     }
   },
   "GET /web/factory/projects/:id": {
@@ -1658,101 +1577,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "allOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            },
-            {
-              "type": "object",
-              "properties": {
-                "modelPacks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "name": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "models": {
-                        "$ref": "#/$defs/__schema2"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "models"
-                    ]
-                  }
-                },
-                "defaultModelPackId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "modelPacks",
-                "defaultModelPackId"
-              ]
-            }
-          ]
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "required": [
         "project"
-      ],
-      "$defs": {
-        "__schema0": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$"
-        },
-        "__schema1": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
-        },
-        "__schema2": {
-          "minItems": 1,
-          "maxItems": 4,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema3"
-          }
-        },
-        "__schema3": {
-          "type": "object",
-          "properties": {
-            "modelId": {
-              "type": "string",
-              "maxLength": 256,
-              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
-            },
-            "thinkingLevel": {
-              "type": "string",
-              "enum": [
-                "off",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            }
-          },
-          "required": [
-            "modelId",
-            "thinkingLevel"
-          ]
-        }
-      }
+      ]
     }
   },
   "GET /web/factory/projects/:id/attention": {
@@ -6127,26 +5961,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "modelScope": {
           "$ref": "#/$defs/__schema4"
         },
-        "defaultThinkingLevel": {
+        "modelPacks": {
           "$ref": "#/$defs/__schema5"
         },
-        "modelPacks": {
-          "$ref": "#/$defs/__schema6"
-        },
         "defaultModelPackId": {
-          "$ref": "#/$defs/__schema12"
+          "$ref": "#/$defs/__schema11"
         },
         "autoRunEnabled": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema12"
         },
         "autoApprovePlans": {
-          "$ref": "#/$defs/__schema14"
+          "$ref": "#/$defs/__schema13"
         },
         "reviewTestChecksEnabled": {
-          "$ref": "#/$defs/__schema15"
+          "$ref": "#/$defs/__schema14"
         },
         "selfReviewEnabled": {
-          "$ref": "#/$defs/__schema16"
+          "$ref": "#/$defs/__schema15"
         }
       },
       "$defs": {
@@ -6167,22 +5998,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema2": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/__schema3"
-            },
-            {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "maxLength": 0
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            }
-          ]
+          "$ref": "#/$defs/__schema3"
         },
         "__schema3": {
           "type": "string",
@@ -6198,34 +6014,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema5": {
-          "type": "string",
-          "enum": [
-            "off",
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ]
-        },
-        "__schema6": {
           "maxItems": 8,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema7"
+            "$ref": "#/$defs/__schema6"
           }
         },
-        "__schema7": {
+        "__schema6": {
           "type": "object",
           "properties": {
             "id": {
-              "$ref": "#/$defs/__schema8"
+              "$ref": "#/$defs/__schema7"
             },
             "name": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema8"
             },
             "models": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema9"
             }
           },
           "required": [
@@ -6234,24 +6039,24 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "models"
           ]
         },
-        "__schema8": {
+        "__schema7": {
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,64}$"
         },
-        "__schema9": {
+        "__schema8": {
           "type": "string",
           "minLength": 1,
           "maxLength": 40
         },
-        "__schema10": {
+        "__schema9": {
           "minItems": 1,
           "maxItems": 4,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema11"
+            "$ref": "#/$defs/__schema10"
           }
         },
-        "__schema11": {
+        "__schema10": {
           "type": "object",
           "properties": {
             "modelId": {
@@ -6274,11 +6079,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "thinkingLevel"
           ]
         },
-        "__schema12": {
+        "__schema11": {
           "type": [
             "string",
             "null"
           ]
+        },
+        "__schema12": {
+          "type": "boolean"
         },
         "__schema13": {
           "type": "boolean"
@@ -6288,9 +6096,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema15": {
           "type": "boolean"
-        },
-        "__schema16": {
-          "type": "boolean"
         }
       }
     },
@@ -6299,101 +6104,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "allOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            },
-            {
-              "type": "object",
-              "properties": {
-                "modelPacks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "name": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "models": {
-                        "$ref": "#/$defs/__schema2"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "models"
-                    ]
-                  }
-                },
-                "defaultModelPackId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "modelPacks",
-                "defaultModelPackId"
-              ]
-            }
-          ]
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "required": [
         "project"
-      ],
-      "$defs": {
-        "__schema0": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$"
-        },
-        "__schema1": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
-        },
-        "__schema2": {
-          "minItems": 1,
-          "maxItems": 4,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema3"
-          }
-        },
-        "__schema3": {
-          "type": "object",
-          "properties": {
-            "modelId": {
-              "type": "string",
-              "maxLength": 256,
-              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
-            },
-            "thinkingLevel": {
-              "type": "string",
-              "enum": [
-                "off",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            }
-          },
-          "required": [
-            "modelId",
-            "thinkingLevel"
-          ]
-        }
-      }
+      ]
     }
   },
   "PATCH /web/factory/projects/:id/boards/:boardKey": {
@@ -8550,6 +8270,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
+        "defaultModelId": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
+        },
         "modelScope": {
           "type": "string",
           "enum": [
@@ -8568,101 +8293,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "type": "object",
       "properties": {
         "project": {
-          "allOf": [
-            {
-              "type": "object",
-              "propertyNames": {
-                "type": "string"
-              },
-              "additionalProperties": {}
-            },
-            {
-              "type": "object",
-              "properties": {
-                "modelPacks": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "name": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "models": {
-                        "$ref": "#/$defs/__schema2"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "name",
-                      "models"
-                    ]
-                  }
-                },
-                "defaultModelPackId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              },
-              "required": [
-                "modelPacks",
-                "defaultModelPackId"
-              ]
-            }
-          ]
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "required": [
         "project"
-      ],
-      "$defs": {
-        "__schema0": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9_-]{1,64}$"
-        },
-        "__schema1": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 40
-        },
-        "__schema2": {
-          "minItems": 1,
-          "maxItems": 4,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema3"
-          }
-        },
-        "__schema3": {
-          "type": "object",
-          "properties": {
-            "modelId": {
-              "type": "string",
-              "maxLength": 256,
-              "pattern": "^[^\\s/]+\\/\\S(?:.*\\S)?$"
-            },
-            "thinkingLevel": {
-              "type": "string",
-              "enum": [
-                "off",
-                "low",
-                "medium",
-                "high",
-                "xhigh",
-                "max"
-              ]
-            }
-          },
-          "required": [
-            "modelId",
-            "thinkingLevel"
-          ]
-        }
-      }
+      ]
     }
   },
   "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive": {
