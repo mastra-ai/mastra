@@ -11,6 +11,8 @@ export type {
   ThreadBranchHistoryOutput,
 } from '../storage/types';
 
+// Compatibility note: @mastra/memory keeps a copy of these values in
+// packages/memory/src/branching/core-compat.ts so it loads on older @mastra/core versions. Keep both in sync.
 /** @internal Framework-owned thread metadata key used for shared-history lineage. */
 export const MASTRA_THREAD_BRANCH_METADATA_KEY = '__mastra_thread_branch';
 /**

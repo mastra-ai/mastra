@@ -12,13 +12,10 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import type { Mastra } from '@mastra/core/mastra';
 import {
-  MASTRA_THREAD_BRANCH_METADATA_KEY,
   MastraMemory,
   MESSAGE_EMBEDDING_CHARS_PER_TOKEN,
-  assertNoReservedThreadBranchMetadata,
   buildMessageEmbeddingRows,
   chunkMessageText,
-  createThreadBranchError,
   getMemoryTokenBoundary,
   isAfterMemoryTokenBoundary,
   loadMessageHistory,
@@ -80,6 +77,11 @@ import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
+import {
+  assertNoReservedThreadBranchMetadata,
+  createThreadBranchError,
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+} from './branching/core-compat';
 import {
   compareMessageTuples,
   hasChildThread,
