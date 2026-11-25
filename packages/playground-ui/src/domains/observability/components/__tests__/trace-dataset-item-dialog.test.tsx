@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { Trajectory } from '@mastra/core/evals';
+import { SpanType } from '@mastra/core/observability';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -12,6 +13,7 @@ import {
   datasetItem,
   datasetsList,
   trajectoryWithoutToolCalls,
+  trajectoryWithProviderToolCall,
   trajectoryWithToolCalls,
 } from './fixtures/add-trace-mocks';
 import { createAgentRunInput, createTraceDetails } from './fixtures/trace-as-item';
@@ -56,14 +58,16 @@ const traceData = (input: unknown, output: unknown, trajectory: Trajectory): Tra
   trajectory,
 });
 
-function renderDialog(data: TraceData) {
+function renderDialog(data: TraceData, options?: Partial<Pick<TraceDatasetItemDialogProps, 'traceId' | 'onClose'>>) {
+  const traceId = options && 'traceId' in options ? options.traceId : 'trace-1';
+  const onClose = options?.onClose ?? vi.fn();
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   const dialog = (props: TraceData) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <TraceDatasetItemDialog {...props} traceId="trace-1" isOpen onClose={vi.fn()} />
+        <TraceDatasetItemDialog {...props} traceId={traceId} isOpen onClose={onClose} />
       </QueryClientProvider>
     </MastraReactProvider>
   );
@@ -175,6 +179,47 @@ describe('TraceDatasetItemDialog', () => {
     });
   });
 
+  describe('when the root span recorded no input or output', () => {
+    it('starts from an empty object input and no ground truth', async () => {
+      setupHandlers();
+      renderDialog(traceData(undefined, undefined, trajectoryWithoutToolCalls));
+
+      expect((await editor('Input')).value).toBe('{}');
+      expect((await editor('Ground truth')).value).toBe('');
+    });
+  });
+
+  describe('when a span that is not an agent run has a messages field', () => {
+    it('keeps the input as recorded', async () => {
+      const { posted } = setupHandlers();
+      const { input } = createAgentRunInput();
+      renderDialog({ rootSpan: { ...createTraceDetails(input, 'hi there'), spanType: SpanType.WORKFLOW_RUN } });
+
+      await pickDataset('Dataset 1');
+      next();
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).toMatchObject({ input });
+    });
+  });
+
+  describe('when there is no trace id', () => {
+    it('saves the item without a source', async () => {
+      const { posted } = setupHandlers();
+      renderDialog(traceData('hello', 'hi there', trajectoryWithoutToolCalls), { traceId: undefined });
+
+      await pickDataset('Dataset 1');
+      next();
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).not.toHaveProperty('source');
+    });
+  });
+
   describe('when the trace recorded tool calls', () => {
     it('saves the item to the picked dataset with mocks and trajectory taken from the trace', async () => {
       const { posted } = setupHandlers();
@@ -205,6 +250,37 @@ describe('TraceDatasetItemDialog', () => {
           ],
         },
       });
+    });
+  });
+
+  describe('when the trace ran a provider-executed tool', () => {
+    it('expects that step by name only, without mocking it', async () => {
+      const { posted } = setupHandlers();
+      renderDialog(traceData('hello', 'hi there', trajectoryWithProviderToolCall));
+
+      await pickDataset('Dataset 1');
+      next();
+      expect((await editor('Tool mocks JSON')).value).toBe('');
+      next();
+      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
+
+      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
+      expect(posted.mock.calls[0]?.[0]).toMatchObject({
+        expectedTrajectory: { ordering: 'relaxed', steps: [{ name: 'web_search' }] },
+      });
+      expect(posted.mock.calls[0]?.[0]).not.toHaveProperty('expectedTrajectory.steps.0.stepType');
+    });
+  });
+
+  describe('when the user cancels', () => {
+    it('asks the host to close the dialog', async () => {
+      setupHandlers();
+      const onClose = vi.fn();
+      renderDialog(traceData('hello', 'hi there', trajectoryWithoutToolCalls), { onClose });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
     });
   });
 

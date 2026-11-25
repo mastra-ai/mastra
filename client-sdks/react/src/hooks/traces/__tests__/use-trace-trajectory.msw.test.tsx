@@ -37,6 +37,25 @@ describe('useTraceTrajectory', () => {
     });
   });
 
+  describe('when the trace id is missing', () => {
+    it('fails without requesting anything', async () => {
+      const onTrajectory = vi.fn<() => void>();
+      server.use(
+        http.get(`${BASE_URL}/api/observability/traces/:traceId/trajectory`, () => {
+          onTrajectory();
+          return HttpResponse.json(weatherTrajectory);
+        }),
+      );
+
+      const { result } = renderHook(() => useTraceTrajectory({ traceId: undefined }), {
+        wrapper: makeWrapper(newQueryClient()),
+      });
+
+      await waitFor(() => expect(result.current.error?.message).toBe('Trace ID is required'));
+      expect(onTrajectory).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when the query is disabled', () => {
     it('does not request the trajectory', async () => {
       const onTrajectory = vi.fn<() => void>();
