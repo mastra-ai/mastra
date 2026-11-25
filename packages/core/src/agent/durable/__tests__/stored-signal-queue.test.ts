@@ -686,6 +686,25 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(occurrences(prompts[2], 'AFTER_READ_ONLY_RUN')).toBe(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
+
+  it('leaves the thread to its active run when a run is prepared on it without starting', async () => {
+    const { agent, memoryStore, scope, prompts, toolGate, start } = setup();
+    const { stream, done } = await start();
+    // prepare() takes no hold on the thread, so the prepared run is not the thread's signal run.
+    const prepared = await agent.prepare('Prepared beside the run', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+    });
+    expect(prepared.runId).not.toBe(stream.runId);
+    expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).toBe(stream.runId);
+    const sent = agent.sendSignal({ type: 'user', contents: 'AFTER_PREPARE' }, scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+    toolGate.release();
+    await done;
+
+    expect(prompts).toHaveLength(2);
+    expect(occurrences(prompts[1], 'AFTER_PREPARE')).toBe(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
 });
 
 describe('drains of a storage-backed run', () => {
