@@ -8,8 +8,6 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { InMemoryStore } from '../../../storage';
-import type { AgentSignalClaimArgs, StoredAgentSignal } from '../../../storage/domains/agent-signals/base';
-import { InMemoryAgentSignalsStorage } from '../../../storage/domains/agent-signals/inmemory';
 import type { ChunkType } from '../../../stream/types';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -52,17 +50,6 @@ class DelayedReasoningPubSub extends JSONStreamPubSub {
   }
   async deliverPending() {
     for (const args of this.pending.splice(0)) await super.publish(...args);
-  }
-}
-
-/** Records which signal ids each run claimed. */
-class ClaimRecordingSignals extends InMemoryAgentSignalsStorage {
-  readonly claimed: Array<{ runId: string; ids: string[] }> = [];
-
-  override async claim(args: AgentSignalClaimArgs): Promise<StoredAgentSignal[]> {
-    const rows = await super.claim(args);
-    this.claimed.push({ runId: args.runId, ids: rows.map(row => row.id) });
-    return rows;
   }
 }
 
@@ -965,12 +952,9 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         await queued.accepted;
         await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
         // Isolate this run's cancellation from the existing queued-message follow-up routing.
-        const cancelled = agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] });
-        // An evented run keeps the signal in storage, so its cancellation completes there.
-        expect(cancelled.settled !== undefined).toBe(engine !== 'durable');
-        expect((await cancelled.settled)?.cancelledSignalIds ?? cancelled.cancelledSignalIds).toEqual([
-          queued.signal.id,
-        ]);
+        expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+          cancelledSignalIds: [queued.signal.id],
+        });
         if (cancellation === 'caller') controller.abort();
         await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2_500 });
         expect(prompts).toHaveLength(priorAccepted ? 2 : 1);
@@ -1110,7 +1094,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     const onError = vi.fn();
     const onStepFinish = vi.fn();
     const memory = new MockMemory();
-    const { agent, mastra, customPubsub } = createOwner(engine, {
+    const { agent, customPubsub } = createOwner(engine, {
       id: crypto.randomUUID(),
       name: 'Queued timeout precedence',
       instructions: 'Test',
@@ -1149,9 +1133,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         },
       ],
     });
-    // An evented run takes its signals from storage, so what it claims is recorded there.
-    const storedSignals = engine === 'durable' ? undefined : new ClaimRecordingSignals();
-    if (storedSignals) mastra.getStorage()!.stores.agentSignals = storedSignals;
+    // An evented run takes its signals from its memory storage.
+    const storedSignals = engine !== 'durable';
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
     const stream = await agent.stream('initial question', {
       memory: { thread: scope.threadId, resource: scope.resourceId },
@@ -1176,9 +1159,12 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await within(consumption);
       await within(entry.workflowExecution);
       expect(drain).not.toHaveBeenCalled();
-      expect(
-        storedSignals?.claimed.filter(claim => claim.runId === stream.runId && claim.ids.includes(queued.signal.id)),
-      ).toEqual(storedSignals ? [] : undefined);
+      if (storedSignals) {
+        // The run ended without taking it: the signal still waits for the thread's next run.
+        const memoryStore = (await memory.storage.getStore('memory'))!;
+        const pending = await memoryStore.listPendingSignals({ threadId: scope.threadId });
+        expect(pending.map(row => row.id)).toEqual([queued.signal.id]);
+      }
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
       expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(0);
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(0);
@@ -1186,7 +1172,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(onError).toHaveBeenCalledTimes(1);
       await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
     } finally {
-      if (queuedSignalId) agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
+      if (queuedSignalId) await agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
       held.release();
       stream.abort();
       await settle(consumption);

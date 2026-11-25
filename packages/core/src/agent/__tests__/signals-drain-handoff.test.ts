@@ -348,7 +348,7 @@ describe('Agent signals: drain and lease handoff', () => {
       await Promise.all([wrongResource.accepted, wrongThread.accepted]);
       const queued = runtime.queueMessage(agent, 'idle only', target, pubsub);
       await queued.accepted;
-      runtime.cancelQueuedMessages(agent, { ...target, signalIds: [queued.signal.id] }, pubsub);
+      await runtime.cancelQueuedMessages(agent, { ...target, signalIds: [queued.signal.id] }, pubsub);
       expect(admitted).toHaveLength(1);
       unsubscribe();
       const next = runtime.sendMessage(agent, 'after unsubscribe', target, pubsub);
@@ -1014,7 +1014,7 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
     expect(
-      agent.cancelQueuedMessages({
+      await agent.cancelQueuedMessages({
         resourceId: 'queue-message-user',
         threadId: 'queue-message-thread',
         signalIds: [result.signal.id],
@@ -1159,7 +1159,7 @@ describe('Agent signals: drain and lease handoff', () => {
     await result.accepted;
 
     expect(
-      agent.cancelQueuedMessages({
+      await agent.cancelQueuedMessages({
         resourceId: 'cancel-user',
         threadId: 'cancel-signal-thread',
         signalIds: [result.signal.id],
@@ -1255,20 +1255,22 @@ describe('Agent signals: drain and lease handoff', () => {
 
     expect(counts).toEqual([0, 1]);
     expect(sharedCounts).toEqual([0, 1, 2, 3]);
-    expect(runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub)).toEqual({
+    expect(
+      await runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub),
+    ).toEqual({
       cancelledSignalIds: [other.signal.id],
     });
     expect(counts).toEqual([0, 1]);
-    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub)).toEqual({
+    expect(await runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId: ownerId }, pubsub)).toEqual({
       cancelledSignalIds: [owned.signal.id],
     });
     expect(
-      runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
+      await runtime.cancelQueuedMessages(otherAgent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
     ).toEqual({
       cancelledSignalIds: [untagged.signal.id],
     });
     expect(
-      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
+      await runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [untagged.signal.id] }, pubsub),
     ).toEqual({
       cancelledSignalIds: [],
     });
@@ -1278,7 +1280,7 @@ describe('Agent signals: drain and lease handoff', () => {
       { type: 'queue-count-changed', count: 1 },
       { type: 'queue-count-changed', count: 0 },
     ]);
-    expect(() => runtime.cancelQueuedMessages(agent, { resourceId, threadId } as any, pubsub)).toThrow(
+    await expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId } as any, pubsub)).rejects.toThrow(
       'exactly one of signalIds or queueOwnerId',
     );
 
@@ -1292,7 +1294,7 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(sharedCounts).toEqual([0, 1, 2, 3, 2, 1, 0]);
   });
 
-  it('isolates listener errors and permits reentrant owner cancellation', () => {
+  it('isolates listener errors and permits reentrant owner cancellation', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();
     const resourceId = 'reentrant-queue-resource';
@@ -1317,7 +1319,7 @@ describe('Agent signals: drain and lease handoff', () => {
         if (event.type === 'queue-count-changed') {
           counts.push(event.count);
           if (event.count > 0) {
-            runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub);
+            void runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub);
           }
         }
       },
@@ -1335,7 +1337,7 @@ describe('Agent signals: drain and lease handoff', () => {
     const queued = runtime.queueMessage(agent, 'cancel from listener', { resourceId, threadId, queueOwnerId }, pubsub);
     expect(counts).toEqual([0, 1, 0]);
     expect(
-      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
+      await runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
     ).toEqual({
       cancelledSignalIds: [],
     });
@@ -1395,7 +1397,7 @@ describe('Agent signals: drain and lease handoff', () => {
     handoff.resolve();
     await waitForCondition(() => (agent.stream as any).mock.calls.length === 1);
     expect(counts).toEqual([0, 1, 0]);
-    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
+    expect(await runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
       cancelledSignalIds: [],
     });
     expect(queued.signal.id).toBeDefined();
@@ -1565,7 +1567,7 @@ describe('Agent signals: drain and lease handoff', () => {
     finishActiveRun();
     await transferStartedPromise;
 
-    expect(runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
+    expect(await runtime.cancelQueuedMessages(agent, { resourceId, threadId, queueOwnerId }, pubsub)).toEqual({
       cancelledSignalIds: [queued.signal.id],
     });
     pubsub.owners.set(`${resourceId}\u0000${threadId}`, 'remote-winner');
@@ -1608,7 +1610,7 @@ describe('Agent signals: drain and lease handoff', () => {
     finishActiveRun();
     await waitForCondition(() => handoffStarted);
     expect(
-      runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
+      await runtime.cancelQueuedMessages(agent, { resourceId, threadId, signalIds: [queued.signal.id] }, pubsub),
     ).toEqual({
       cancelledSignalIds: [queued.signal.id],
     });
