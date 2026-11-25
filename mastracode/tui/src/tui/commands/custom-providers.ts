@@ -534,15 +534,25 @@ async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: s
     if (!choice || choice === DONE) return;
 
     const picked = choice === ADD_ALL ? available : [choice];
-    // Read settings again: the list stayed open while another process may have saved changes.
-    const settings = loadSettings();
-    addModelsToCustomProviderInSettings(settings, providerId, picked);
-    saveSettings(settings);
+    // Read settings again: the list stayed open while another process may have
+    // renamed or deleted the provider, or added some of these models already.
+    const latest = loadProvider(ctx, providerId);
+    if (!latest) return;
+    const added = addModelsToCustomProviderInSettings(latest.settings, providerId, picked);
+    if (added > 0) saveSettings(latest.settings);
     if (choice === ADD_ALL) {
-      ctx.showInfo(`Added ${modelCount(picked.length)} to ${provider.name}.`);
+      ctx.showInfo(
+        added > 0
+          ? `Added ${modelCount(added)} to ${provider.name}.`
+          : `No models added: ${provider.name} already has them.`,
+      );
       return;
     }
-    ctx.showInfo(`Added model: ${toCustomProviderModelId(provider.name, choice)}`);
+    ctx.showInfo(
+      added > 0
+        ? `Added model: ${toCustomProviderModelId(provider.name, choice)}`
+        : `No models added: ${provider.name} already has ${choice}.`,
+    );
     // Keep the cursor where the user was: on the model that followed the one just added,
     // or the one before it when the last model was picked.
     const index = available.indexOf(choice);
