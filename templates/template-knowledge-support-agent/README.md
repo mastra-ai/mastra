@@ -2,13 +2,17 @@
 
 Describe a support issue in Mastra Studio and get a next step grounded in your team's guides, policies, and past cases. The support agent searches Mastra Knowledge, cites the pages it uses, and asks follow-up questions to narrow down the problem.
 
-[![Deploy to Mastra](https://img.shields.io/badge/Deploy_to_Mastra-18181B?style=for-the-badge)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
+[![Deploy](https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
 
 ## Why we built this
 
 When a fix lives in a closed ticket or an old chat, the next technician may have to investigate the same problem from scratch. With Mastra Knowledge, a reviewer can turn a confirmed fix into guidance that other technicians can find in future conversations.
 
 Teams can share guides while limiting access to each customer's case history. Pinned policies keep standing rules, like when to get approval before making a change, available to the agent as it works through a case.
+
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1795620320/Mastra_Knowledge_bsferd.mp4"></video>
 
 ## Prerequisites
 
@@ -33,21 +37,31 @@ Teams can share guides while limiting access to each customer's case history. Pi
 
 - Ask “Can I factory reset while offline payments are pending?” Look for guidance based on the pinned policy to preserve the pending payments.
 - Run `npm run knowledge:seed -- --dataset retail-pos-history`, then ask about Store 42 connectivity in a fresh chat. Look for dated cases and which observations remain open.
-- Use the [Studio walkthrough](docs/studio-walkthrough.md) to record an attributed confirmation, approve a fictional finding, then retrieve the approved tenant guidance in another technician's chat.
-
-- Use the new token from each launch to reopen an existing chat.
+- Use the [Studio walkthrough](https://github.com/mastra-ai/mastra/blob/main/templates/template-knowledge-support-agent/docs/studio-walkthrough.md) to record a technician's observation, approve it, and find the shared guidance in another technician's chat.
+- Reopen a saved chat using the token from your latest Studio launch.
 
 ## Customization
 
-- Ask your coding agent to explore the project and plan an adaptation before editing. For example, “Plan an IT help desk example with shared setup guides and private employee support cases.”
-- Add cases or replace the standing policy with [Datasets and examples](docs/datasets-and-examples.md). You can also try the [software integration](docs/datasets-and-examples.md#try-the-software-integration-example) and [IT helpdesk](docs/datasets-and-examples.md#try-the-it-helpdesk-example) examples.
+- Ask your coding agent to explore the project and suggest a plan before editing. For example, “Adapt this template for a field service team with shared equipment guides and a separate case history for each site.”
+- Add cases or replace the standing policy with [Datasets and examples](https://github.com/mastra-ai/mastra/blob/main/templates/template-knowledge-support-agent/docs/datasets-and-examples.md). You can also try the [software integration](https://github.com/mastra-ai/mastra/blob/main/templates/template-knowledge-support-agent/docs/datasets-and-examples.md#try-the-software-integration-example) and [IT helpdesk](https://github.com/mastra-ai/mastra/blob/main/templates/template-knowledge-support-agent/docs/datasets-and-examples.md#try-the-it-helpdesk-example) examples.
 
 ## Deploy to Mastra Platform
 
-Attach a managed database to your target environment and set `DATABASE_PROVIDER` there. The platform injects the corresponding connection variables. Keep the local `.env` for Studio and configure `OPENAI_API_KEY` in the target environment. [Managed database variables](https://mastra.ai/docs/mastra-platform/system-environment-variables#managed-database-variables). With `DATABASE_PROVIDER` unset, the template detects a single attached Turso or PostgreSQL database from its variables. When both are attached, set the provider explicitly.
+**Deploy** to Mastra Platform to create a project from this template. Attach a managed Turso, Neon, or PostgreSQL database to your environment. Mastra sets the database connection variables automatically. [Managed databases](https://mastra.ai/docs/mastra-platform/database)
+
+[![Deploy](https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
+
+Set these environment variables in the platform dashboard.
+
+- `OPENAI_API_KEY` with your OpenAI API key.
+- `DATABASE_PROVIDER` with `turso`, `neon`, or `postgres` to match the attached database.
+- `MASTRA_ORGANIZATION_ID` with the ID of the organization that owns the project.
+- `MASTRA_PLATFORM_STUDIO_AUTH=disabled` so Studio uses the template's Mastra sign-in and access rules.
+
+The database needs the example Knowledge before Support can answer questions. For a fresh database, `SUPPORT_SEED_ON_STARTUP=true` loads the example on first start when the deployment includes the dataset packaged by `npm run build`.
 
 ## About Mastra templates
 
 This official template is maintained in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and synchronized to a standalone repository.
 
-[Want to contribute?](CONTRIBUTING.md)
+[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-knowledge-support-agent/CONTRIBUTING.md)

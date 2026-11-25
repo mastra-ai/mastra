@@ -82,6 +82,7 @@ async function fixture(preload?: URL) {
   let selected = candidate('initial');
   let emitted: Candidate | undefined;
   let sharedRead: string | undefined;
+  let keepSearching = false;
   const f = await runtimeFixture({
     preload,
     modelScript: body => {
@@ -92,6 +93,16 @@ async function fixture(preload?: URL) {
       const tools = list.filter(message => message.role === 'tool');
       if (curator) {
         const definitions = body.tools as Array<{ function: { name: string } }>;
+        if (keepSearching) {
+          if (body.tool_choice === 'none' || !definitions?.length) {
+            assert.ok(
+              tools.some(tool => tool.content?.includes(evidence)),
+              'The final call receives the search evidence',
+            );
+            return { content: JSON.stringify(selected) };
+          }
+          return { tool: { name: 'knowledge_search', arguments: { query: 'SYNTHETIC' } } };
+        }
         assert.deepEqual(definitions.map(tool => tool.function.name).sort(), [
           'knowledge_activity',
           'knowledge_list',
@@ -193,6 +204,9 @@ async function fixture(preload?: URL) {
     emittedCandidate: () => emitted,
     shared(value: string) {
       sharedRead = value;
+    },
+    keepSearching() {
+      keepSearching = true;
     },
   });
 }
@@ -307,6 +321,23 @@ async function sql(f: Fixture, query: string, parameters: string[] = []) {
   });
   return JSON.parse(result.stdout) as Record<string, string>[];
 }
+
+test('review produces a proposal after the curator uses its evidence search budget', { timeout: 120000 }, async () => {
+  const f = await fixture();
+  try {
+    await f.start();
+    const input = await confirmation(f);
+    const finding = candidate('after evidence searches');
+    f.select(finding);
+    f.keepSearching();
+
+    const run = await pending(f, input);
+    assert.deepEqual(run.proposal.candidate, finding);
+    assert.equal(run.proposal.destination.scope, customer);
+  } finally {
+    await f.close();
+  }
+});
 
 test('publication preserves operator edits made after it checks the destination', { timeout: 120000 }, async () => {
   const f = await fixture();

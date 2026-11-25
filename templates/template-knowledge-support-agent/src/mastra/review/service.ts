@@ -220,6 +220,7 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
     const customerScope = customer(current);
     const curator = createCuratorAgent(knowledge, customerScope);
     if (mastra) curator.__registerMastra(mastra);
+    const maxSteps = 8;
     const response = await curator.generate(
       JSON.stringify({
         audience: input.audience,
@@ -229,7 +230,9 @@ export function createReviewService(knowledge: Knowledge, memory: Memory, author
       {
         requestContext: new RequestContext(),
         structuredOutput: { schema: candidateSchema },
-        maxSteps: 8,
+        maxSteps,
+        // Reserve the final model call for the proposal after the evidence checks.
+        prepareStep: ({ stepNumber }) => (stepNumber === maxSteps - 1 ? { toolChoice: 'none' } : undefined),
       },
     );
     const candidate = candidateSchema.parse(response.object);

@@ -1,13 +1,11 @@
 # Local telemetry
 
-Mastra Observability stores filtered traces and approved metric samples as spans in the template's local LibSQL database. Use them to inspect latency and failures in the support and review lifecycle.
+Mastra Observability stores traces and metrics in the local database. Use them to see which steps took time or failed.
 
-- **Support:** Authorization, customer-history preparation, policy readiness, Knowledge lookup, missing evidence, and reuse of reviewed findings.
-- **Review:** Proposal creation, suspension, resumption, and publication outcomes.
-- **Model usage:** Agent, model, tool, and workflow timings, plus token counts and supported cost estimates. A provider error records a failed run.
+- **Support** records access checks, case history and Knowledge lookups, and reuse of reviewed findings.
+- **Review** records when a proposal starts, waits for a decision, and is published or rejected.
+- **Model usage** includes timings, token counts, and cost estimates when available.
 
-Stored spans use bounded operation names and outcomes, timestamps, numeric values, and opaque correlation IDs. Metric samples use `metadata.value`, with operation and status in `metadata.labels`. Supported estimates appear in `metadata.costContext`. The exporter filters private prompts, model outputs, credentials, customer identifiers, and Knowledge references out of the persisted records.
+The exporter filters out private prompts, model replies, credentials, customer IDs, and Knowledge references before saving traces.
 
-To inspect stored data as a local operator, use the application's LibSQL database and the native `listTraces` and `getTrace` methods on `await store.getStore('observability')`, where `store` is the store returned by `mastra.getStorage()`. The store and exporter are wired in [bootstrap.ts](../src/mastra/bootstrap.ts). Exporter configuration lives in [observability.ts](../src/mastra/observability.ts).
-
-Run `node --test --test-concurrency=1 tests/integration/demo.test.ts` to verify lifecycle outcomes, usage samples, and redaction against a disposable database and scripted model provider.
+To read the data in code, get the observability store with `await mastra.getStorage()?.getStore('observability')` and call `listTraces` or `getTrace`. [Exporter configuration](../src/mastra/observability.ts)

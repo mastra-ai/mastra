@@ -1,32 +1,29 @@
 # Datasets and examples
 
-The default retail support example uses Square Terminal reference summaries and an example team policy. Run `npm run knowledge:seed` to load the initial dataset for the selected example. Load the retail history separately when you want fictional cases in customer history.
+Run `npm run knowledge:seed` to load the guides and policy for the example selected by `SUPPORT_EXAMPLE`. The default example covers Square Terminal support. Its fictional case history is available separately.
 
-| Dataset                | Contents                                                                                                                 |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `retail-pos-docs`      | Network, payment and printer guides, plus the standing safety policy. This is the retail default.                        |
-| `retail-pos-history`   | Fictional case history and follow-up notes for two customers and a second tenant.                                        |
-| `software-integration` | An HTTP authentication guide, an integration policy and one fictional case. This is the software integration default.    |
-| `it-helpdesk`          | A Windows network configuration guide, a standing helpdesk policy, and approved fictional history for two access groups. |
-| `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                                    |
-
-Each rendered page body can contain up to 1,000,000 UTF-16 code units, including expanded wiki links and generated attribution. The combined rendered page bodies and notes in one dataset can contain up to 32,000,000 code units.
+| Dataset                | Contents                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- |
+| `retail-pos-docs`      | Square Terminal network, payment, and printer guides and the retail policy. This is the default dataset. |
+| `retail-pos-history`   | Fictional retail cases and follow-up notes.                                                              |
+| `software-integration` | An HTTP authentication guide, an integration policy, and a fictional case.                               |
+| `it-helpdesk`          | A Windows network guide, a helpdesk policy, and fictional cases for two customer groups.                 |
+| `retail-pos`           | Earlier retail example with the `north-*` and `south-store` profiles.                                    |
 
 ## Write a required safety policy
 
-Use the Markdown headings `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Under each heading, give concrete instructions in the use case's language. Keep the rendered page within 800 characters after trimming surrounding whitespace, including seed attribution and links, so the native pin can deliver the full policy.
+1. Use `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Keep the rendered policy within 800 characters, including source attribution and links, so the agent receives it in full.
+2. Review the Markdown and manifest entry, then run `npm run knowledge:seed -- --dry-run`. For each unapproved revision, the output gives the Knowledge reference and the SHA-256 digest to approve.
+3. Put each reference and its approved digests in a JSON file, for example `{"tenant:example#policies/safe-changes": ["<64-character SHA-256>"]}`. Set `SUPPORT_POLICY_APPROVAL_FILE` to that file for both the seed and Studio. Allow only authorized operators to edit it.
+4. Run the dry run again, then run `npm run knowledge:seed` to apply the change. If Studio is running, replace the approval file atomically and keep the previous digest approved until the new seed succeeds.
 
-The bundled policies are approved for their configured references. To publish a custom or revised policy, have an operator review the Markdown and its manifest fields, including links and source attribution. Run the seed with `--dry-run`. For an unapproved revision, the error includes the Knowledge reference and the SHA-256 of the rendered body. Add that digest to a trusted JSON file mapping references to arrays of approved digests, for example `{"tenant:example#policies/safe-changes": ["<64-character SHA-256>"]}`. Set `SUPPORT_POLICY_APPROVAL_FILE` to the same file path for the seed and runtime. Keep the file writable only by operators who can approve policy content.
-
-Repeat the dry run until every policy revision is approved, then apply the seed. Replace the approval file atomically when updating a running server. Keep the current revision listed until the new seed succeeds so existing chats can continue during the update.
-
-To recover an older policy, restore its Markdown file and any changed policy fields in the dataset manifest from the revision you want to recover. Run `npm run knowledge:seed -- --dry-run` for the selected example and confirm that the rendered digest has bundled approval or is listed in the trusted approval file. Keep the currently published digest approved until recovery succeeds. Then apply with `npm run knowledge:seed`. For the legacy North retail profile, use `npm run knowledge:seed -- --dataset retail-pos --dry-run` to verify and `npm run knowledge:seed -- --dataset retail-pos` to apply.
+To restore an older policy, restore its Markdown and manifest entry, check its approval with a dry run, then run the seed again.
 
 ## Add a support case
 
-1. Add a Markdown file next to the [retail history manifest](../knowledge-datasets/retail-pos/history-manifest.json). Describe the reported symptom, what the technician observed, and what remains open or how the fix was verified.
-2. Add a page to the manifest. Give it a stable `key` and a unique `path` under `cases/`. Select the registered customer profile in `scope.profile`. Use `record` to make the case eligible for the agent's customer-history lookup.
-3. Run `npm run knowledge:seed -- --dataset retail-pos-history --dry-run` to preview the destinations. Apply the same command without `--dry-run`, then ask about the case topic in a fresh **Support** chat for that customer.
+1. Add a Markdown file next to the [retail history manifest](../knowledge-datasets/retail-pos/history-manifest.json). Describe the symptom, what the technician observed, and how they verified the fix or what still needs checking.
+2. Add the page to the manifest with a stable `key`, a unique `path` under `cases/`, and the customer's profile in `scope.profile`. The `record` fields help the agent find cases by topic.
+3. Run `npm run knowledge:seed -- --dataset retail-pos-history --dry-run` to preview the result. Apply it with the same command without `--dry-run`. Ask about the case in a fresh **Support** chat for that customer.
 
 For example, save the case narrative in `terminal-network-check.md` and add this entry to the `pages` array.
 
@@ -54,18 +51,18 @@ For example, save the case narrative in `terminal-network-check.md` and add this
 }
 ```
 
-Use `open` for unconfirmed observations and `approved` for verified outcomes. Add dated follow-ups under `notes` with stable keys and text. See the existing [Wi-Fi case entry](../knowledge-datasets/retail-pos/history-manifest.json) for an attributed note. Topic tags connect case records to the domain vocabulary in the runtime example.
+Use `open` for unresolved observations and `approved` for verified outcomes. Add dated follow-ups under `notes` with stable keys. The existing Wi-Fi case in the manifest shows how to attribute a note.
 
 ## Adapt the template to your application
 
-1. **Define who can access the information.** Add tenant, customer, technician, and reviewer identities in the [runtime example configuration](../src/examples/runtime.ts). Use distinct actor IDs for technicians and reviewers. A customer scope is derived from both the tenant and customer IDs.
-2. **Organize your content.** Put a schema-version-1 manifest and its Markdown files under `knowledge-datasets/`. Give the manifest a stable dataset ID and set its version. Use `docs` for shared references, `tenant` for tenant guidance and policy, and `customer` for private case history. Use a registered profile as the scope anchor. Add source attribution to imported references and use page aliases in `links` for relationships within the same manifest.
-3. **Register the dataset and policy.** Map the dataset directory, manifest, allowed profiles, and mandatory policy page aliases in the use case's typed `datasets` field in [runtime.ts](../src/examples/runtime.ts). [datasets.ts](../src/examples/datasets.ts) derives the seed registry, preserving the existing dataset aliases. Put the required policy at that use case's configured Knowledge path. Keep it concise so Studio can deliver it in full.
-4. **Set the initial context.** Give the runtime example an `initialDataset`, shared model ID, response `locale`, domain instructions, topic terms, policy path, guide listing, private case roots, and shared finding root. [support.ts](../src/examples/support.ts) exposes this selected configuration to the unchanged core. Topic matching accepts Unicode letters, including accented Portuguese. Use `selectProfile(example, id)` for stable profile selection instead of array positions. Preview and apply the dataset, then try a support question using each relevant profile.
+1. Copy an example in [runtime.ts](../src/examples/runtime.ts). Define the tenants, customers, technicians, and reviewers. Give technicians and reviewers different actor IDs.
+2. Copy a dataset under `knowledge-datasets/` and give its manifest a new ID. Use `docs` for shared references, `tenant` for team guidance and policies, and `customer` for private cases. Credit external sources in the manifest.
+3. Register the dataset in the new example and set `initialDataset`, the policy path, and the profiles that seed the data. Match the agent's instructions, topic terms, and response language to your content.
+4. Set `SUPPORT_EXAMPLE` to the new example ID. Preview the seed with `--dry-run`, apply it, and try a support question with each profile.
 
 ## Try the software integration example
 
-Stop the running retail Studio server. From a separate shell in the project directory, select the software integration example and its own local database.
+Stop Studio and run these commands from the project directory.
 
 ```sh
 export SUPPORT_EXAMPLE=software-integration
@@ -74,51 +71,27 @@ npm run knowledge:seed
 npm run dev
 ```
 
-Use the `integration-team` token. In **Support**, ask “Our HTTP integration returned 401. What evidence should I check?” Look for a citation to the RFC 9110 guide, a question about the authentication challenge, and the applicability of the fictional case. To exercise review, submit a structured fictional confirmation as `integration-team` and use the `integration-reviewer` token for **Review** with its returned reference. Follow the [confirmation and review steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding).
+Use the `integration-team` token. Ask **Support**, “Our HTTP integration returned 401. What evidence should I check?” Look for the RFC 9110 guide, a question about the authentication challenge, and whether the past case applies. To try review, use `integration-team` for the confirmation and `integration-reviewer` for the decision. [Confirmation and review steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding)
 
 ## Try the IT helpdesk example
 
-Stop the running server. Use the same shell to select the example, seed its local database, and start Studio.
+Stop Studio and run these commands from the project directory.
 
 ```sh
 export SUPPORT_EXAMPLE=it-helpdesk
 export SUPPORT_DATABASE_URL="file:$PWD/.local/helpdesk.db"
-npm run knowledge:seed -- --dry-run
 npm run knowledge:seed
 npm run dev
 ```
 
-If you've already seeded the Portuguese version, use the same helpdesk database URL and run the seed again before starting Studio to update its pages to English.
+Use the `helpdesk-office` token. Ask **Support**, “I need to investigate a Windows network connection. What should I check?” Look for the `ipconfig /all` guide, a question about the active adapter, and the fictional office case. Switch to `helpdesk-branch` and try to open `customer:helpdesk:office#cases/network-check` in **Knowledge**. The office case stays private to the office profiles.
 
-Use `helpdesk-office` in **Support** and ask “I need to investigate a Windows network connection. What should I check?” Look for guidance grounded in the Microsoft Learn summary, the `tenant:helpdesk#policies/helpdesk-safety` policy, and the approved fictional office history. `ipconfig /all` displays TCP/IP configuration. Establishing a cause or verifying a fix requires additional evidence.
+To try review, report a fictional outcome as `helpdesk-office` and decide as `helpdesk-reviewer`. For shared guidance, cite `docs:helpdesk#guides/network-configuration` with the `network-guide` version in the seed output. [Confirmation and review steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding)
 
-| Profile                    | Actor   | Customer scope             | Access                                                          |
-| -------------------------- | ------- | -------------------------- | --------------------------------------------------------------- |
-| `helpdesk-office`          | `ana`   | `customer:helpdesk:office` | Technician                                                      |
-| `helpdesk-colleague`       | `clara` | `customer:helpdesk:office` | Technician, shared customer history with a private conversation |
-| `helpdesk-reviewer`        | `davi`  | `customer:helpdesk:office` | Independent reviewer                                            |
-| `helpdesk-branch`          | `bruno` | `customer:helpdesk:branch` | Technician                                                      |
-| `helpdesk-branch-reviewer` | `elisa` | `customer:helpdesk:branch` | Independent reviewer                                            |
-
-Both groups read the same helpdesk guide and policy; neither reads the other's private cases or conversations. In **Knowledge**, inspect `customer:helpdesk:office#cases/network-check` with the office token and check that the branch token cannot open it. The branch has its own fictional case at the same path under its own scope.
-
-Submit a fictional confirmation using the `helpdesk-office` token and its Studio thread. Replace `<guide version>` with the version listed for `network-guide` in the seed output, then follow the [structured confirmation steps](studio-walkthrough.md#2-confirm-and-review-a-private-finding).
-
-```json
-{
-  "threadId": "<office technician thread from Studio URL>",
-  "observation": "The operator identified the active adapter in a local configuration check without copying private identifiers.",
-  "outcome": "The operator corrected the adapter selection with authorization, and three checks succeeded. Public reference docs:helpdesk#guides/network-configuration, version <guide version>."
-}
-```
-
-Paste the returned `confirmationReference` and `audience: "private"` into **Review** as `helpdesk-reviewer`. Inspect and approve the proposal using its exact revision, or reject it and verify that nothing was published. A branch reviewer cannot review this source. To try tenant publication, create a separate review with `audience: "tenant"` and inspect the public source and sanitization before deciding.
-
-Adding this use case changed configuration and dataset files; the Knowledge, preflight, confirmation, and review implementations are shared. All three supplied use cases use `OPENAI_API_KEY` and the model in their configuration. `SUPPORT_MODEL_BASE_URL` preserves the OpenAI-compatible wire override used by deterministic tests.
+If you used the earlier Portuguese example, run the seed again with the same database URL to update its pages to English.
 
 ## Manage local seed data
 
-- Studio and the seed command use `.local/support.db` with `DATABASE_PROVIDER=local`. Set `SUPPORT_DATABASE_URL` in `.env` or export it in the shell to use a different persistent local file.
-- Reapplying a dataset preserves IDs and versions for unchanged content. Keep dataset, page, and note keys stable so the seed can identify its records. Removed manifest entries are retained and reported by stored ID.
-- Privileged writes share a lock in the database's `.writer.sqlite` sidecar. If seeding exits with code `75`, retry after the active writer exits. The operating system releases the lock even if the writer crashes. Keep the sidecar in place while the database is in use.
-- Tenant-wide publication requires an HTTPS source declared in the documentation page's seed manifest. Rerun the seed after upgrading to record source provenance for existing documentation.
+- Studio and the seed use `.local/support.db` by default. Set `SUPPORT_DATABASE_URL` in `.env` or in your shell to use a different local file.
+- Keep dataset, page, and note keys stable when you update them. Reapplying the seed preserves IDs and versions for unchanged content. Removed entries stay in Knowledge and appear in the seed report.
+- If the seed exits with code `75`, another process is writing to the database. Retry when it finishes.
