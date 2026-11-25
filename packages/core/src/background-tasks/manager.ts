@@ -1313,7 +1313,8 @@ export class BackgroundTaskManager {
     if (task.maxRetries > 0) return;
     // Without retries the task can't run again. Shutdown didn't cancel it, so
     // it ends the way a crash ends it rather than looking like a user cancel.
-    if (await this.#failTerminated(storage, taskId, { expectedStatus: 'running', expectedOwnerId: this.workerId })) {
+    const fence = { expectedStatus: 'running' as const, expectedOwnerId: this.workerId };
+    if (await this.#failTerminated(storage, taskId, fence, { runLocalHooks: true })) {
       this.ownedLeases.delete(taskId);
       await this.#cancelWorkflowRun(taskId);
     }
@@ -2440,11 +2441,14 @@ export class BackgroundTaskManager {
    * Only the caller whose fenced write lands publishes, so peers racing on the
    * same row stay quiet. A failed publish is logged, not thrown, so a sweep
    * still reaches the rows after this one. Returns whether the write landed.
+   * Pass `runLocalHooks` when this process may still hold the task's per-task
+   * hooks, so they run, isolated, before the event, as for any other failure.
    */
   async #failTerminated(
     storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
     taskId: string,
     fence: UpdateBackgroundTaskOptions,
+    { runLocalHooks = false }: { runLocalHooks?: boolean } = {},
   ): Promise<boolean> {
     const failed = await storage.updateTask(
       taskId,
@@ -2460,7 +2464,10 @@ export class BackgroundTaskManager {
     if (!failed) return false;
     try {
       const failedTask = await storage.getTask(taskId);
-      if (failedTask?.status === 'failed') await this.publishLifecycleEvent('task.failed', failedTask);
+      if (failedTask?.status === 'failed') {
+        if (runLocalHooks) await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error });
+        await this.publishLifecycleEvent('task.failed', failedTask);
+      }
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn(`Failed to report background task ${taskId} as failed:`, error as any);
     }

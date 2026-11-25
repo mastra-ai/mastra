@@ -341,6 +341,45 @@ describe('BackgroundTaskManager lifecycle', () => {
     }
   });
 
+  it('still fires onTaskFailed on shutdown when a per-task hook of the failed task throws', async () => {
+    const onTaskFailed = vi.fn();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true, onTaskFailed },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue(
+        { runId: 'run-1', toolName: 'wait', toolCallId: 'call-1', args: {}, agentId: 'agent-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+              started.resolve();
+              return waitUntilAborted(args, options);
+            },
+          },
+          onResult: async () => {
+            throw new Error('memory unavailable');
+          },
+        },
+      );
+      await started.promise;
+
+      await manager.shutdown();
+
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({ id: task.id, status: 'failed' });
+      expect(unhandled.rejections).toEqual([]);
+    } finally {
+      unhandled.stop();
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
