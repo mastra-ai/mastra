@@ -111,6 +111,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
         stepSpanData: _stepSpanData,
         tracingDelegationFailure: _tracingDelegationFailure,
         response: _response,
+        sideBySide: _sideBySide,
         ...result
       }) => result,
     ),
