@@ -7,8 +7,18 @@ import {
   type KnowledgeUpsertPageResult,
 } from '@mastra/core/knowledge';
 import { knowledgePagePath } from '@mastra/core/storage';
+import { KnowledgePG, pgKnowledgeTransactionClient } from '@mastra/pg';
 
-export type PageMutations = Pick<KnowledgeStorage, 'createPage' | 'updatePage'>;
+export type PageMutations = Pick<KnowledgeStorage, 'updatePage' | 'transaction'>;
+
+async function lockPageDestinations(storage: KnowledgeStorage) {
+  // LibSQL takes the database's write lock before entering its transaction callback.
+  // PostgreSQL's default isolation allows a concurrent move unless page writes are locked.
+  if (storage instanceof KnowledgePG)
+    await pgKnowledgeTransactionClient(storage).none(
+      'LOCK TABLE public.mastra_knowledge_pages IN SHARE ROW EXCLUSIVE MODE',
+    );
+}
 
 /** Guard native leaf writes while preserving scope, parent, and link handling. */
 export async function upsertPageAtRevision(
@@ -26,14 +36,17 @@ export async function upsertPageAtRevision(
   const createPage: KnowledgeStorage['createPage'] = async input => {
     if (expected) throw conflict;
     if (input.body === undefined) return storage.createPage(input); // Native parent scaffolding.
-    const [scope] = await storage.getScopesByAddress([scopeAddress]);
-    const parent =
-      scope && path.length > 1
-        ? await storage.getPageByPath({ scopeId: scope.id, path: path.slice(0, -1), read: 'all' })
-        : scope;
-    if (parent?.id !== input.parentId) throw conflict;
     try {
-      return await mutations.createPage(input);
+      return await mutations.transaction(async transaction => {
+        await lockPageDestinations(transaction);
+        const [scope] = await transaction.getScopesByAddress([scopeAddress]);
+        const parent =
+          scope && path.length > 1
+            ? await transaction.getPageByPath({ scopeId: scope.id, path: path.slice(0, -1), read: 'all' })
+            : scope;
+        if (parent?.id !== input.parentId) throw conflict;
+        return transaction.createPage(input);
+      });
     } catch (error) {
       if ((error as Error)?.name === 'KnowledgePageKeyConflictError') throw conflict;
       throw error;
