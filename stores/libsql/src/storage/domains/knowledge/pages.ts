@@ -4,6 +4,7 @@ import {
   KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
   KnowledgeInvalidCursorError,
+  TABLE_KNOWLEDGE_PAGES_STATE,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
 import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
@@ -95,15 +96,24 @@ export async function upgradeKnowledgePinKinds(tx: PageExecutor): Promise<void> 
 
 /**
  * Activity tables from before feed positions have no `seq`. Adds it, numbers existing events in
- * insertion (rowid) order, which is the order they committed in, and indexes it. Run after
- * {@link KNOWLEDGE_PAGE_DDL}, in the same transaction; idempotent.
+ * createdAt order, and indexes it. Also gives the feed its incarnation id. Run after
+ * {@link KNOWLEDGE_PAGE_DDL} and the state row's insert, in the same transaction; idempotent.
  */
 export async function upgradeKnowledgeActivityFeed(tx: PageExecutor): Promise<void> {
   const columns = await tx.execute(`SELECT name FROM pragma_table_info('${T.activity}')`);
   if (!columns.rows.some(row => String(row.name) === 'seq')) {
     await tx.execute(`ALTER TABLE "${T.activity}" ADD COLUMN seq INTEGER`);
-    await tx.execute(`UPDATE "${T.activity}" SET seq = rowid WHERE seq IS NULL`);
+    await tx.execute(
+      `UPDATE "${T.activity}" SET seq = o.rank FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY createdAt, id) AS rank FROM "${T.activity}") AS o WHERE o.id = "${T.activity}".id`,
+    );
   }
+  const state = await tx.execute(`SELECT name FROM pragma_table_info('${TABLE_KNOWLEDGE_PAGES_STATE}')`);
+  if (!state.rows.some(row => String(row.name) === 'activityIncarnation')) {
+    await tx.execute(`ALTER TABLE "${TABLE_KNOWLEDGE_PAGES_STATE}" ADD COLUMN activityIncarnation TEXT`);
+  }
+  await tx.execute(
+    `UPDATE "${TABLE_KNOWLEDGE_PAGES_STATE}" SET activityIncarnation = ${NEW_INCARNATION} WHERE id = 'knowledge' AND activityIncarnation IS NULL`,
+  );
   await tx.execute(`CREATE UNIQUE INDEX IF NOT EXISTS idx_kactivity_seq ON "${T.activity}" (seq)`);
   // A writer from before feed positions inserts without seq. Number its event in the same write
   // transaction, so it still lands in commit order instead of staying invisible to oldest-first reads.
@@ -112,11 +122,16 @@ export async function upgradeKnowledgeActivityFeed(tx: PageExecutor): Promise<vo
   );
 }
 
-/** An oldest-first feed position: the event's `seq`, as a decimal string. */
-function parseActivityPosition(position: string): number {
-  if (/^\d{1,16}$/.test(position)) {
-    const seq = Number(position);
-    if (Number.isSafeInteger(seq)) return seq;
+/** SQL for a fresh feed incarnation id: 32 random hex digits. */
+const NEW_INCARNATION = 'lower(hex(randomblob(16)))';
+const FEED_INCARNATION = `(SELECT activityIncarnation FROM "${TABLE_KNOWLEDGE_PAGES_STATE}" WHERE id = 'knowledge')`;
+
+/** An oldest-first feed position: `<incarnation>:<seq>`. */
+function parseActivityPosition(position: string): { incarnation: string; seq: number } {
+  const match = /^([0-9a-f]{32}):(\d{1,16})$/.exec(position);
+  if (match) {
+    const seq = Number(match[2]);
+    if (Number.isSafeInteger(seq)) return { incarnation: match[1]!, seq };
   }
   throw new RangeError('Knowledge activity position is not one this store issued');
 }
@@ -422,6 +437,24 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       for (const table of [T.links, T.activity, T.pinAudiences, T.pins, T.mentions, T.stamps, T.notes, T.pages]) {
         await tx.execute({ sql: `DELETE FROM ${table}`, args: [] });
       }
+      // seq starts again at 1, so positions held from before must be refused, not resumed.
+      await this.#newIncarnation(tx);
+    });
+  }
+
+  /**
+   * Run once after restoring an older copy of the database file. `seq` is in the file and goes back
+   * with it, so numbers a reader already passed get handed out again. This gives the feed a fresh
+   * incarnation id: positions from before are refused and readers restart from `since`.
+   */
+  async rebaseActivityFeed(): Promise<void> {
+    await this.#transaction(tx => this.#newIncarnation(tx));
+  }
+
+  async #newIncarnation(tx: PageExecutor): Promise<void> {
+    await tx.execute({
+      sql: `UPDATE "${TABLE_KNOWLEDGE_PAGES_STATE}" SET activityIncarnation = ${NEW_INCARNATION} WHERE id = 'knowledge'`,
+      args: [],
     });
   }
 
@@ -1557,8 +1590,10 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         ? cursor
         : undefined;
     if (seqAfter !== undefined) {
-      filters += ` AND e.seq > ?`;
-      args.push(seqAfter);
+      // Checked in the same statement as the events. MAX(seq) only drops when the file goes back to
+      // an older copy; clearAll and rebaseActivityFeed change the incarnation.
+      filters += ` AND ${FEED_INCARNATION} = ? AND ? <= (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AND e.seq > ?`;
+      args.push(seqAfter.incarnation, seqAfter.seq, seqAfter.seq);
     } else if (position) {
       filters += ` AND (e.createdAt < ? OR (e.createdAt = ? AND e.id < ?))`;
       args.push(position[0]!, position[0]!, position[1]!);
@@ -1569,9 +1604,11 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     args.push(...noteVisible.args, limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT e.* FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
+      `SELECT e.*${ascending ? `, ${FEED_INCARNATION} AS feedIncarnation` : ''} FROM "${T.activity}" e JOIN "${T.pages}" p ON p.id = e.pageId WHERE ${readable.sql}${filters} AND (e.noteId IS NULL OR EXISTS (SELECT 1 FROM "${T.notes}" n WHERE n.id = e.noteId AND ${noteVisible.sql})) ORDER BY ${ascending ? 'e.seq ASC' : dated ? 'e.createdAt DESC, e.id DESC' : 'e.id DESC'} LIMIT ?`,
       args,
     );
+    if (seqAfter !== undefined && rows.length === 0) await this.#checkActivityPosition(seqAfter);
+    const feedPosition = (row: Row) => `${String(row.feedIncarnation)}:${String(row.seq)}`;
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
@@ -1583,16 +1620,37 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         ...(row.noteId ? { noteId: String(row.noteId) } : {}),
         provenance: provenance(row.provenance),
         createdAt: new Date(String(row.createdAt)),
-        ...(ascending ? { position: String(row.seq) } : {}),
+        ...(ascending ? { position: feedPosition(row) } : {}),
       })),
       ...(rows.length > limit && last
         ? {
             nextCursor: ascending
-              ? String(last.seq)
+              ? feedPosition(last)
               : encodeCursor(dated ? [String(last.createdAt), String(last.id)] : [String(last.id)]),
           }
         : {}),
     };
+  }
+
+  /**
+   * Explains an empty read after a position: refuses one from another incarnation of the feed
+   * (cleared or rebased since), or one past the highest `seq` (an older copy of the file restored).
+   */
+  async #checkActivityPosition(after: { incarnation: string; seq: number }): Promise<void> {
+    const [row] = await this.#query(
+      this.#read,
+      `SELECT ${FEED_INCARNATION} AS incarnation, (SELECT COALESCE(MAX(seq), 0) FROM "${T.activity}") AS maxSeq`,
+    );
+    if (row?.incarnation !== after.incarnation) {
+      throw new RangeError(
+        'Knowledge activity position is from before the feed was cleared or rebased (after a database restore); restart from since',
+      );
+    }
+    if (after.seq > Number(row.maxSeq)) {
+      throw new RangeError(
+        'Knowledge activity position is ahead of this feed (an older copy of the database was restored); run rebaseActivityFeed() once and restart from since',
+      );
+    }
   }
 
   /** Rewrites the audience index rows of one pin to match `audience`. */

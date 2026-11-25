@@ -246,10 +246,11 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /**
-   * Run once after restoring this database from a logical dump (`pg_dump`/`pg_restore`). Until it
-   * runs, restored activity stays hidden from oldest-first reads; afterwards, positions handed out
-   * before the restore are refused and readers restart from `since`. Not needed after `pg_upgrade`
-   * or a physical restore.
+   * Run once after any restore that doesn't replay to the end: a logical dump (`pg_dump`/`pg_restore`),
+   * a point-in-time recovery, or an older base backup. Until it runs, logically restored activity
+   * stays hidden from oldest-first reads; afterwards, positions handed out before are refused and
+   * readers restart from `since`. Not needed after `pg_upgrade` or a physical restore that replays
+   * all of the WAL.
    */
   rebaseActivityFeed(): Promise<void> {
     return this.#pages.rebaseActivityFeed();

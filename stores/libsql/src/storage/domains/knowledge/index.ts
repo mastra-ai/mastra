@@ -146,6 +146,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     await this.#pages.clearAll();
   }
 
+  /**
+   * Run once after restoring an older copy of the database file. Oldest-first positions held from
+   * before are then refused and readers restart from `since`, instead of skipping the events that
+   * reuse the numbers they passed.
+   */
+  rebaseActivityFeed(): Promise<void> {
+    return this.#pages.rebaseActivityFeed();
+  }
+
   // Schema-4 page store: delegates to LibSQLKnowledgePages.
   async #inspectPages(tx: Pick<Executor, 'execute'>) {
     return inspectKnowledgePagesSchema(await this.#pagesSnapshot(tx));
@@ -180,11 +189,11 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
       await upgradeKnowledgePinKinds(tx);
-      await upgradeKnowledgeActivityFeed(tx);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
         args: [KNOWLEDGE_PAGES_SCHEMA_VERSION],
       });
+      await upgradeKnowledgeActivityFeed(tx);
     });
   }
 

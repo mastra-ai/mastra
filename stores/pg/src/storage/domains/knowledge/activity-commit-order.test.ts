@@ -183,15 +183,111 @@ describe('PgKnowledgePages oldest-first activity under concurrent writes (real P
     expect((await drain(since, rebased.after)).events.map(event => event.pageId)).toEqual([next.id]);
   });
 
-  it('upgrades an activity table from before feed positions, keeping its events readable oldest first', async () => {
+  it('upgrades an activity table from before feed positions, numbering its events in createdAt order', async () => {
     const { left, since } = await setup();
-    await store.createPage({ parentId: left.id, name: 'old row', provenance });
-    const original = (await drain(since)).events.map(event => event.id);
+    const a = await store.createPage({ parentId: left.id, name: 'old row a', provenance });
+    const b = await store.createPage({ parentId: left.id, name: 'old row b', provenance });
+    // Heap order differs from time order: an update rewrites a's activity row at the heap's end.
+    await pool.query(`UPDATE ${activity} SET "provenance" = "provenance" WHERE "pageId" = $1`, [a.id]);
+    const byTime = (await pool.query(`SELECT "id" FROM ${activity} ORDER BY "createdAt", "id"`)).rows.map(row =>
+      String(row.id),
+    );
     await pool.query(`DROP INDEX "${schemaName}"."mastra_knowledge_activity_feed_idx"`);
     await pool.query(`ALTER TABLE ${activity} DROP COLUMN "xact", DROP COLUMN "seq"`);
     await initPgKnowledgePagesSchema(client, schemaName);
     await initPgKnowledgePagesSchema(client, schemaName);
-    const upgraded = (await drain(since)).events.map(event => event.id);
-    expect([...upgraded].sort()).toEqual([...original].sort());
+    const all = (await pool.query(`SELECT "id" FROM ${activity} ORDER BY "xact", "seq"`)).rows.map(row =>
+      String(row.id),
+    );
+    expect(all).toEqual(byTime);
+    expect((await drain(since)).events.map(event => event.pageId)).toEqual([a.id, b.id]);
+    // New writes come after the upgraded history.
+    const next = await store.createPage({ parentId: left.id, name: 'after upgrade', provenance });
+    expect((await drain(since)).events.map(event => event.pageId)).toEqual([a.id, b.id, next.id]);
+  });
+
+  it('refuses a position from before a second restore of the same dump, also after the same number of rebases', async () => {
+    const { left, since } = await setup();
+    const state = `"${schemaName}"."${PG_KNOWLEDGE_PAGES_TABLES.state}"`;
+    await store.createPage({ parentId: left.id, name: 'in the dump', provenance });
+    const dumpState = (await pool.query(`SELECT * FROM ${state}`)).rows;
+    const dumpActivity = (await pool.query(`SELECT * FROM ${activity}`)).rows;
+    const restore = async () => {
+      await pool.query(`DELETE FROM ${activity}`);
+      await pool.query(`DELETE FROM ${state}`);
+      for (const row of dumpState) {
+        const cols = Object.keys(row);
+        await pool.query(
+          `INSERT INTO ${state} (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+          cols.map(c => row[c]),
+        );
+      }
+      for (const row of dumpActivity) {
+        const cols = Object.keys(row);
+        await pool.query(
+          `INSERT INTO ${activity} (${cols.map(c => `"${c}"`).join(',')}) VALUES (${cols.map((_, i) => `$${i + 1}`).join(',')})`,
+          cols.map(c => row[c]),
+        );
+      }
+    };
+
+    await restore();
+    await store.rebaseActivityFeed();
+    const first = await drain(since);
+    expect(first.after).toBeDefined();
+
+    await restore();
+    await store.rebaseActivityFeed();
+    await expect(store.listPageActivity({ read, order: 'asc', after: first.after })).rejects.toThrow(
+      /rebased.*restart from since/,
+    );
+    const page = await store.createPage({ parentId: left.id, name: 'after second restore', provenance });
+    expect((await drain(since)).events.map(event => event.pageId)).toContain(page.id);
+  });
+
+  it('refuses a position ahead of the feed, as after a restore to an earlier point without a rebase', async () => {
+    const { left, since } = await setup();
+    await store.createPage({ parentId: left.id, name: 'a page', provenance });
+    const { after } = await drain(since);
+    const [incarnation] = after!.split(':');
+    // Above any transaction id this cluster has handed out: the cluster went back in time.
+    const ahead = `${incarnation}:900000000000:1`;
+    await expect(store.listPageActivity({ read, order: 'asc', after: ahead })).rejects.toThrow(
+      /ahead of this feed.*restart from since/,
+    );
+    // Also when there are events past it in seq terms.
+    await store.createPage({ parentId: left.id, name: 'another page', provenance });
+    await expect(store.listPageActivity({ read, order: 'asc', after: ahead })).rejects.toThrow(/ahead of this feed/);
+  });
+
+  it('reads the feed incarnation in the same statement as the events', async () => {
+    const { left, since } = await setup();
+    await store.createPage({ parentId: left.id, name: 'a page', provenance });
+    const { after } = await drain(since);
+    await store.createPage({ parentId: left.id, name: 'b page', provenance });
+    // A rebase that commits between any two statements of the read must not replay the feed:
+    // run one before every statement the read sends, and expect a refusal, never repeated events.
+    const statements: string[] = [];
+    const rebasing = new Proxy(client, {
+      get(target, prop, receiver) {
+        if (prop === 'any' || prop === 'manyOrNone' || prop === 'query' || prop === 'oneOrNone' || prop === 'one') {
+          const fn = Reflect.get(target, prop, receiver) as (...args: unknown[]) => Promise<unknown>;
+          return async (...args: unknown[]) => {
+            statements.push(String(args[0]));
+            if (statements.length > 1) await store.rebaseActivityFeed();
+            return fn.apply(target, args);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    const reader = new PgKnowledgePages({ client: rebasing as DbClient, schemaName, bounds });
+    let events: unknown[] = [];
+    try {
+      events = (await reader.listPageActivity({ read, since, order: 'asc', after })).events;
+    } catch (error) {
+      expect(String(error)).toMatch(/rebased/);
+    }
+    expect(events.length).toBeLessThanOrEqual(1);
   });
 });

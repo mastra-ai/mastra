@@ -186,15 +186,20 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_activity_page_idx', t.activity, '"pageId","createdAt","id"'),
     index('mastra_knowledge_activity_created_idx', t.activity, '"createdAt","id"'),
     // Commit-safe feed positions arrived after schema 4 shipped: additive, idempotent, no version
-    // bump. Rows from before get the migrating transaction's id, ordered among themselves by seq.
+    // bump. Rows from before get the migrating transaction's id, and seq numbers them in createdAt
+    // order (the column is added in heap order, then renumbered over the same range).
     `DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('${q(t.activity)}') AND attname = 'seq' AND NOT attisdropped) THEN
         ALTER TABLE ${q(t.activity)} ADD COLUMN "xact" xid8 NOT NULL DEFAULT pg_current_xact_id();
         ALTER TABLE ${q(t.activity)} ADD COLUMN "seq" bigserial NOT NULL;
+        UPDATE ${q(t.activity)} a SET "seq" = o."rank"
+          FROM (SELECT "id", ROW_NUMBER() OVER (ORDER BY "createdAt", "id") AS "rank" FROM ${q(t.activity)}) o
+          WHERE a."id" = o."id";
       END IF;
     END $$`,
     index('mastra_knowledge_activity_feed_idx', t.activity, '"xact","seq"'),
-    `ALTER TABLE ${q(t.state)} ADD COLUMN IF NOT EXISTS "activityGeneration" integer NOT NULL DEFAULT 1`,
+    // Positions carry this id; rebaseActivityFeed sets a fresh one, so no restore can bring one back.
+    `ALTER TABLE ${q(t.state)} ADD COLUMN IF NOT EXISTS "activityIncarnation" text NOT NULL DEFAULT replace(gen_random_uuid()::text, '-', '')`,
   ];
 }
 
@@ -305,16 +310,13 @@ function prefixUpperBound(prefix: string): string | null {
 
 const PG_XID8_MAX = 2n ** 64n - 1n;
 const PG_BIGINT_MAX = 2n ** 63n - 1n;
-const PG_INTEGER_MAX = 2n ** 31n - 1n;
 
-/** An oldest-first feed position: `<generation>:<xact>:<seq>`. */
-function parseActivityPosition(position: string): { generation: number; xact: string; seq: string } {
-  const match = /^(\d{1,10}):(\d{1,20}):(\d{1,19})$/.exec(position);
+/** An oldest-first feed position: `<incarnation>:<xact>:<seq>`. */
+function parseActivityPosition(position: string): { incarnation: string; xact: string; seq: string } {
+  const match = /^([0-9a-f]{32}):(\d{1,20}):(\d{1,19})$/.exec(position);
   if (match) {
-    const [, generation, xact, seq] = match as unknown as [string, string, string, string];
-    if (BigInt(generation) <= PG_INTEGER_MAX && BigInt(xact) <= PG_XID8_MAX && BigInt(seq) <= PG_BIGINT_MAX) {
-      return { generation: Number(generation), xact, seq };
-    }
+    const [, incarnation, xact, seq] = match as unknown as [string, string, string, string];
+    if (BigInt(xact) <= PG_XID8_MAX && BigInt(seq) <= PG_BIGINT_MAX) return { incarnation, xact, seq };
   }
   throw new RangeError('Knowledge activity position is not one this store issued');
 }
@@ -1816,26 +1818,28 @@ export class PgKnowledgePages implements KnowledgePageStore {
     if (ascending) {
       // Ordered by (transaction id, sequence) and capped at the snapshot horizon: every transaction
       // below it has committed or aborted, so no event can later appear behind a position handed out.
+      // The incarnation and the bounds check come from the same statement, so the same snapshot, as
+      // the events: a rebase that commits mid-read can't let an old position through.
       const from = input.after ?? input.cursor;
       const after = from === undefined ? undefined : parseActivityPosition(from);
-      const generation = await this.#activityGeneration();
-      if (after && after.generation !== generation) {
-        throw new RangeError(
-          'Knowledge activity position is from before the feed was rebased (after a database restore); restart from since',
-        );
-      }
+      const incarnation = `(SELECT "activityIncarnation" FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge')`;
       where.push(`a."xact" < pg_snapshot_xmin(pg_current_snapshot())`);
-      if (after)
-        where.push(`(a."xact", a."seq") > (${params.add(after.xact)}::xid8, ${params.add(after.seq)}::bigint)`);
+      let checks = '';
+      if (after) {
+        const xact = `${params.add(after.xact)}::xid8`;
+        checks = `${incarnation} = ${params.add(after.incarnation)} AND ${xact} < pg_snapshot_xmax(pg_current_snapshot())`;
+        where.push(checks, `(a."xact", a."seq") > (${xact}, ${params.add(after.seq)}::bigint)`);
+      }
       const rows = await this.#rows(
         this.#client,
-        `SELECT a.*, a."xact"::text AS "xactText", a."seq"::text AS "seqText" FROM ${join}
+        `SELECT a.*, a."xact"::text AS "xactText", a."seq"::text AS "seqText", ${incarnation} AS "feedIncarnation" FROM ${join}
          WHERE ${where.join(' AND ')} ORDER BY a."xact" ASC, a."seq" ASC LIMIT ${limit + 1}`,
         params.values,
       );
+      if (after && rows.length === 0) await this.#checkActivityPosition(after);
       const events = rows.slice(0, limit).map(row => ({
         ...toEvent(row),
-        position: `${generation}:${String(row.xactText)}:${String(row.seqText)}`,
+        position: `${String(row.feedIncarnation)}:${String(row.xactText)}:${String(row.seqText)}`,
       }));
       const last = events[events.length - 1];
       return { events, ...(rows.length > limit && last ? { nextCursor: last.position } : {}) };
@@ -1864,22 +1868,38 @@ export class PgKnowledgePages implements KnowledgePageStore {
     };
   }
 
-  async #activityGeneration(): Promise<number> {
+  /**
+   * Explains an empty read after `after`: refuses a position from another incarnation of the feed,
+   * or one ahead of every transaction id this cluster has handed out (the database went back to an
+   * earlier point and wasn't rebased). A position this cluster handed out is always below `xmax`.
+   */
+  async #checkActivityPosition(after: { incarnation: string; xact: string }): Promise<void> {
     const rows = await this.#rows(
       this.#client,
-      `SELECT "activityGeneration" FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge'`,
-      [],
+      `SELECT "activityIncarnation" AS "incarnation", $1::xid8 < pg_snapshot_xmax(pg_current_snapshot()) AS "inRange"
+       FROM ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} WHERE "id" = 'knowledge'`,
+      [after.xact],
     );
-    return rows[0] ? Number(rows[0].activityGeneration) : 1;
+    if (rows[0]?.incarnation !== after.incarnation) {
+      throw new RangeError(
+        'Knowledge activity position is from before the feed was rebased (after a database restore); restart from since',
+      );
+    }
+    if (!rows[0]?.inRange) {
+      throw new RangeError(
+        'Knowledge activity position is ahead of this feed (the database was restored to an earlier point); run rebaseActivityFeed() once and restart from since',
+      );
+    }
   }
 
   /**
-   * Run once after restoring this database from a logical dump (`pg_dump`/`pg_restore`) into another
-   * cluster. Oldest-first positions are built from transaction ids, which a logical restore doesn't
-   * carry over: restored events keep the old cluster's ids and stay hidden from oldest-first reads
-   * until this runs. It renumbers them into the new cluster, keeping their feed order, and moves the feed
-   * to a new generation, so positions handed out before are refused and readers restart from `since`.
-   * Not needed after `pg_upgrade` or a physical backup restore, which keep transaction ids.
+   * Run once after any restore that doesn't replay to the end: a logical dump (`pg_dump`/`pg_restore`),
+   * a point-in-time recovery, or an older base backup. Oldest-first positions are built from
+   * transaction ids. A logical restore keeps the old cluster's ids, which hide restored events from
+   * oldest-first reads until this runs; an earlier-point restore hands out ids again that readers
+   * already passed. This renumbers the events into this cluster, keeping their feed order, and gives
+   * the feed a fresh incarnation id, so positions handed out before are refused and readers restart
+   * from `since`. Not needed after `pg_upgrade` or a physical restore that replays all of the WAL.
    */
   async rebaseActivityFeed(): Promise<void> {
     await this.#tx(async tx => {
@@ -1892,7 +1912,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
          WHERE a."id" = o."id"`,
       );
       await tx.query(
-        `UPDATE ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} SET "activityGeneration" = "activityGeneration" + 1 WHERE "id" = 'knowledge'`,
+        `UPDATE ${this.#q(PG_KNOWLEDGE_PAGES_TABLES.state)} SET "activityIncarnation" = replace(gen_random_uuid()::text, '-', '') WHERE "id" = 'knowledge'`,
       );
     });
   }

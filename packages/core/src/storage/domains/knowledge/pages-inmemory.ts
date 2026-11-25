@@ -126,7 +126,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     this.#pins = copy.pins;
     this.#activity = copy.activity;
     this.#bodyLinks = copy.bodyLinks;
-    for (const event of this.#activity) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
+    for (const event of this.#activity) {
+      if (event.position !== undefined) this.#activitySeq = Math.max(this.#activitySeq, Number(event.position));
+    }
   }
 
   /** Drops every page, note, pin, body link and event. */

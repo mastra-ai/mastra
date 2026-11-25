@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,6 +7,7 @@ import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { afterAll, expect, it, vi } from 'vitest';
 
 import { LibSQLStore } from '../../index';
+import type { KnowledgeLibSQL } from './index';
 
 const dir = mkdtempSync(join(tmpdir(), 'knowledge-commit-order-'));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -52,7 +53,7 @@ it('a write from another client whose clock is behind still comes after a positi
   expect(all.events.map(event => event.pageId)).toEqual([x.id, y.id]);
 });
 
-it('upgrades an activity table from before feed positions, numbering its events in the order they were written', async () => {
+it('upgrades an activity table from before feed positions, numbering its events in createdAt order', async () => {
   const url = `file:${join(dir, 'upgrade.db')}`;
   const a = await open(url, 'old');
   const { scope } = await at(T - 60_000, () =>
@@ -71,7 +72,7 @@ it('upgrades an activity table from before feed positions, numbering its events 
   const upgraded = await open(url, 'new');
   await open(url, 'again');
   const events = (await upgraded.listPageActivity({ read, since, order: 'asc' })).events;
-  expect(events.map(event => event.pageId)).toEqual([late.id, early.id]);
+  expect(events.map(event => event.pageId)).toEqual([early.id, late.id]);
   const next = await at(T + 1000, () =>
     upgraded.createPage({ parentId: scope.id, name: 'after upgrade', provenance: alex }),
   );
@@ -108,4 +109,71 @@ it('numbers an event written by an older writer that leaves seq empty, after a p
   const later = await a.listPageActivity({ read, since, order: 'asc', after: held });
   expect(later.events.map(event => event.id)).toEqual(['01OLDWRITER0000000000000000']);
   expect(later.events[0]!.position).toEqual(expect.any(String));
+});
+
+const domain = async (url: string, id: string) => {
+  const storage = new LibSQLStore({ id, url });
+  const knowledge = await new Knowledge({ storage, scopes }).getStorage();
+  return { knowledge, domain: (await storage.getStore('knowledge')) as KnowledgeLibSQL };
+};
+
+it('refuses a position held from before clearAll, whose numbering starts again', async () => {
+  const url = `file:${join(dir, 'clear.db')}`;
+  const { knowledge, domain: store } = await domain(url, 'clear');
+  const make = async (name: string) => {
+    const { scope } = await knowledge.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'org:acme',
+      provenance: alex,
+    });
+    return knowledge.createPage({ parentId: scope.id, name, provenance: alex });
+  };
+  await make('one');
+  await make('two');
+  const held = (await knowledge.listPageActivity({ read, order: 'asc' })).events.at(-1)!.position!;
+
+  await store.dangerouslyClearAll();
+  for (let i = 0; i < 5; i++) await make(`again ${i}`);
+  await expect(knowledge.listPageActivity({ read, order: 'asc', after: held })).rejects.toThrow(
+    /rebased.*restart from since/,
+  );
+  expect((await knowledge.listPageActivity({ read, order: 'asc' })).events.length).toBeGreaterThan(5);
+});
+
+it('after restoring an older database file: refuses a held position ahead of the feed, and after rebaseActivityFeed any old one', async () => {
+  const path = join(dir, 'restore.db');
+  const url = `file:${path}`;
+  const { knowledge } = await domain(url, 'live');
+  const { scope } = await knowledge.materializeScope({
+    address: 'org:acme',
+    declaration: 'org:$orgId',
+    name: 'org:acme',
+    provenance: alex,
+  });
+  await knowledge.createPage({ parentId: scope.id, name: 'in the backup', provenance: alex });
+  const backup = createClient({ url });
+  await backup.execute(`VACUUM INTO '${join(dir, 'restore.backup.db')}'`);
+  backup.close();
+  await knowledge.createPage({ parentId: scope.id, name: 'after the backup 1', provenance: alex });
+  await knowledge.createPage({ parentId: scope.id, name: 'after the backup 2', provenance: alex });
+  const held = (await knowledge.listPageActivity({ read, order: 'asc' })).events.at(-1)!.position!;
+
+  for (const suffix of ['', '-wal', '-shm']) rmSync(`${path}${suffix}`, { force: true });
+  copyFileSync(join(dir, 'restore.backup.db'), path);
+  const restored = await domain(url, 'restored');
+  await expect(restored.knowledge.listPageActivity({ read, order: 'asc', after: held })).rejects.toThrow(
+    /ahead of this feed/,
+  );
+
+  await restored.domain.rebaseActivityFeed();
+  for (let i = 0; i < 4; i++) {
+    await restored.knowledge.createPage({ parentId: scope.id, name: `after restore ${i}`, provenance: alex });
+  }
+  // Writes have passed the held number again: only the new incarnation tells it apart.
+  await expect(restored.knowledge.listPageActivity({ read, order: 'asc', after: held })).rejects.toThrow(
+    /rebased.*restart from since/,
+  );
+  const fresh = await restored.knowledge.listPageActivity({ read, order: 'asc' });
+  expect(fresh.events.map(event => event.position)).not.toContain(held);
 });
