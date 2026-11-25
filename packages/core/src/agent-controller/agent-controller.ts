@@ -1652,6 +1652,21 @@ export class AgentController<TState = {}> {
       );
     }
     const result = await memory.branchThread({ threadId: sourceThreadId, branchPointMessageId, title, metadata });
+    // Memory may keep its threads in a different store than the controller's rows.
+    // Mirror the branch row there, as clone does, so getById and ownership checks
+    // find it; controller storage then refuses the lineage row and reads defer to memory.
+    if (this.#resolveStorage()) {
+      const memoryStorage = await this.getMemoryStorage();
+      if (!(await memoryStorage.getThreadById({ threadId: result.thread.id }))) {
+        try {
+          await memoryStorage.saveThread({ thread: result.thread });
+        } catch (error) {
+          // Without the controller row the branch is unreachable; remove it rather than orphan it.
+          await memory.deleteThread(result.thread.id).catch(() => {});
+          throw error;
+        }
+      }
+    }
     return {
       thread: {
         id: result.thread.id,

@@ -247,6 +247,46 @@ describe('AgentController thread branching', () => {
     expect(children.branches[0]?.branch.branchPointMessageId).toBe('fork-message-id');
   });
 
+  it('reads the bound branch when memory keeps its threads in a separate store', async () => {
+    const controllerStorage = new InMemoryStore();
+    const memoryStorage = new InMemoryStore();
+    const memory = await mockMemory(memoryStorage, {
+      supportsThreadBranching: true,
+      branchThread: vi.fn(async () => {
+        await saveThread(memoryStorage, 'branch-thread-id', 'controller-resource', READY_BRANCH_METADATA);
+        return {
+          thread: {
+            id: 'branch-thread-id',
+            resourceId: 'controller-resource',
+            title: 'Branch',
+            createdAt: now,
+            updatedAt: now,
+            metadata: READY_BRANCH_METADATA,
+          },
+          branch: {
+            parentThreadId: 'source-thread-id',
+            branchPointMessageId: 'fork-message-id',
+            branchPointCreatedAt: now,
+            branchCreatedAt: now,
+          },
+        };
+      }),
+    });
+    const controller = createController({ memory: vi.fn().mockResolvedValue(memory), storage: controllerStorage });
+
+    await controller.init();
+    await saveThread(controllerStorage, 'source-thread-id');
+    await saveThread(memoryStorage, 'source-thread-id');
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.branch({ sourceThreadId: 'source-thread-id', branchPointMessageId: 'fork-message-id' });
+
+    expect(session.thread.getId()).toBe('branch-thread-id');
+    await expect(session.thread.getById({ threadId: 'branch-thread-id' })).resolves.toMatchObject({
+      id: 'branch-thread-id',
+    });
+    await expect(session.thread.listActiveMessages()).resolves.toEqual([]);
+  });
+
   it('reads messages and switches to an owned branch thread when controller storage refuses branch rows', async () => {
     const storage = new InMemoryStore();
     const memoryFactory = vi.fn().mockResolvedValue(await mockMemory(storage, { getById: undefined }));
