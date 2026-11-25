@@ -20,6 +20,8 @@ import { createRunScopeKey } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import {
   MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
   assertNoReservedThreadBranchMetadata,
   createThreadBranchError,
 } from '../memory/branching';
@@ -2700,19 +2702,25 @@ export class AgentController<TState = {}> {
     }
 
     const memoryStorage = await this.getMemoryStorage();
-    const { threads } = await memoryStorage.listThreads({ perPage: false });
-    const target = threads.find(thread => thread.id === threadId);
+    const target = await memoryStorage.getThreadById({ threadId });
     const targetBranch = target ? getRawThreadBranchMetadata(target) : null;
     if (targetBranch?.state === 'pending') {
       throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
     }
-    if (
-      targetBranch?.state === 'ready' ||
-      threads.some(thread => {
-        const branch = getRawThreadBranchMetadata(thread);
-        return branch?.state === 'ready' && branch.parentThreadId === threadId;
-      })
-    ) {
+    const readyChildren = target
+      ? await memoryStorage.listThreads({
+          filter: {
+            resourceId: target.resourceId,
+            metadata: {
+              [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+              [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+            },
+          },
+          page: 0,
+          perPage: 1,
+        })
+      : null;
+    if (targetBranch?.state === 'ready' || (readyChildren?.threads.length ?? 0) > 0) {
       throw createThreadBranchError(
         'BRANCHING_UNSUPPORTED',
         'AgentController raw-storage reminder persistence does not support branch-tree participants.',

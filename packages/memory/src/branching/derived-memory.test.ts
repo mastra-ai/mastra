@@ -1,4 +1,9 @@
-import { MASTRA_THREAD_BRANCH_METADATA_KEY, MemoryRunState } from '@mastra/core/memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
+  MemoryRunState,
+} from '@mastra/core/memory';
 import type { MastraDBMessage, ObservationalMemoryRecord } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage } from '@mastra/core/storage';
@@ -164,6 +169,8 @@ describe('branch-owned Observational Memory', () => {
             observationalMemoryThreadId: 'pending-child',
             state: 'pending',
           },
+          [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'root',
+          [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'pending',
         },
       },
     });
