@@ -20,15 +20,20 @@ Follow-ups for agent version tags that are not in this branch. Remove this file 
 
 Unordered notes on how tags behave today and where that may surprise people. None of these are built.
 
-## Agent and prompt tags don't line up
+## One tag across a run
 
-- **An agent tag doesn't pin its prompts.** An agent tagged `production` still loads the published version of each prompt it references, so publishing a prompt changes what the tagged agent says. Callers must also send `promptVersionTag` to pin prompts. Option: when only `agentVersionTag` is sent, use it as the prompt tag too.
-- **A missing tag behaves differently for each.** An unknown agent tag returns 404. An unknown prompt tag silently falls back to the published prompt, so a typo in `promptVersionTag` looks like success.
-- **Sub-agents ignore the tag.** A tagged supervisor's sub-agents run their published versions.
+Built: the agent tag also selects sub-agents and prompt blocks, an unknown prompt tag returns 404, and agent run spans report the versions that ran. What is left:
+
+- **A partly tagged release still runs.** A sub-agent or prompt block without the tag uses its published version. The trace lists these (`promptBlocksWithoutTag`), but nothing refuses the run. Option: a strict mode that fails when anything in the run lacks the tag.
+- **The prompt tag check ignores rules.** The 404 looks at every prompt block the agents reference, including ones a rule would skip for this request.
+- **Only some run routes apply the tag to sub-agents and check the prompt tag.** Generate, stream, stream until idle, signals and messages, resume and recover do. The legacy, network and tool approval routes don't. Prompt blocks follow the tag on every route.
+- **Stored sub-agents of stored agents.** A stored agent only gets a stored sub-agent if the server has that sub-agent loaded when the parent is loaded, and any update unloads it. This predates tags; the tests use a code-defined sub-agent with stored versions.
+- **Traces for durable agents.** The span metadata is wired for durable runs but not tested there. Recovered runs don't report it.
 
 ## Knowing what ran
 
-- **Nothing reports which versions answered.** A response or trace should say which agent version and prompt versions ran and which tag selected them. Check what traces record today.
+- **Studio doesn't surface the versions in a trace.** The metadata is on the agent run span; there is no dedicated display or filter for it.
+- **Responses don't report versions.** Only traces do.
 - **No way to try a tag in Studio.** The chat view has no tag picker, and there is no "copy the API call for this tag" action next to a tag.
 
 ## Moving and removing tags safely

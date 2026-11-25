@@ -114,7 +114,12 @@ curl -X POST http://localhost:4111/api/agents/support-agent/generate \
   }'
 ```
 
-When several selectors are sent, `versionId` wins over `tag`, and `tag` wins over `status`. A tag the agent doesn't have returns a `404` response. Sub-agents of a tagged agent resolve to their published versions unless the request sets [sub-agent versions](#sub-agent-versioning).
+When several selectors are sent, `versionId` wins over `tag`, and `tag` wins over `status`. A tag the agent doesn't have returns a `404` response.
+
+The tag applies to the whole run:
+
+- **Sub-agents:** Each sub-agent that has the tag runs its tagged version. A sub-agent without the tag runs its published version. A version the request sets under [sub-agent versions](#sub-agent-versioning) wins over the tag.
+- **Prompt blocks:** Each prompt block the agent or a sub-agent references that has the tag renders its tagged version. A prompt block without the tag renders its published version. Send `promptVersionTag` to select prompt blocks with a different tag.
 
 ### Select a prompt block version by tag
 
@@ -124,7 +129,7 @@ Pass `tag` as a query parameter to read the tagged version of a prompt block. A 
 curl http://localhost:4111/api/stored/prompt-blocks/tone-of-voice?tag=production
 ```
 
-To run an agent with tagged prompt blocks, pass `promptVersionTag` in the request context. Every prompt block the agent references that has the tag renders its tagged version. A referenced prompt block without the tag renders its published version.
+To run an agent with tagged prompt blocks, pass `promptVersionTag` in the request context. Every prompt block the agent references that has the tag renders its tagged version. A referenced prompt block without the tag renders its published version. When none of the prompt blocks the agent and its sub-agents reference has the tag, the request returns a `404` response, so a mistyped tag doesn't run on published prompts.
 
 ```bash title="Run an agent with tagged prompt blocks"
 curl -X POST http://localhost:4111/api/agents/support-agent/generate \
@@ -135,7 +140,19 @@ curl -X POST http://localhost:4111/api/agents/support-agent/generate \
   }'
 ```
 
-`promptVersionTag` and `agentVersionTag` are independent, so one request can send both. The agent tag selects the agent version, and the prompt tag selects the versions of the prompt blocks that agent version references. The reserved names `published` and `draft` are ignored in `promptVersionTag`, so a run can't use it to load draft prompt blocks.
+A request can send both `agentVersionTag` and `promptVersionTag`. The agent tag selects the agent and sub-agent versions, and the prompt tag selects the versions of the prompt blocks they reference. Without `promptVersionTag`, the agent tag selects the prompt blocks too. The reserved names `published` and `draft` are ignored in `promptVersionTag`, so a run can't use it to load draft prompt blocks.
+
+### See which versions ran
+
+With [tracing](/docs/observability/tracing/overview) enabled, the agent run span of each agent in the run reports the versions it used in its metadata:
+
+- `entityVersionId`: The agent version that ran
+- `versionTag`: The tag that selected that agent version
+- `promptVersionTag`: The tag applied to the agent's prompt blocks
+- `promptBlockVersions`: A map of prompt block ID to the version ID that was rendered
+- `promptBlocksWithoutTag`: The IDs of rendered prompt blocks that don't have the tag and used their published version
+
+`promptBlockVersions` is reported for untagged runs too. The other tag fields are only present when a tag was used.
 
 ### Retention
 

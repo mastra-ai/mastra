@@ -27,6 +27,24 @@ export function resolveVersionContext(
   return versions;
 }
 
+/**
+ * Reserved request-context key carrying `Record<agentId, Record<string, unknown>>`: how each agent's
+ * version and its prompt block versions were chosen for this request, for example by a version tag.
+ * The server and the editor write it; the agent run span reports the agent's entry as metadata.
+ */
+export const MASTRA_VERSION_INFO_KEY = 'mastra__versionInfo';
+
+/** The entry `MASTRA_VERSION_INFO_KEY` holds for one agent, as span metadata. Empty when there is none. */
+export function versionInfoSpanMetadata(
+  requestContext: RequestContext | undefined,
+  agentId: string,
+): Record<string, unknown> {
+  const all = requestContext?.get(MASTRA_VERSION_INFO_KEY);
+  if (!all || typeof all !== 'object' || Array.isArray(all)) return {};
+  const info = (all as Record<string, unknown>)[agentId];
+  return info && typeof info === 'object' && !Array.isArray(info) ? { ...(info as Record<string, unknown>) } : {};
+}
+
 export function resolveRunId(runId: string | undefined, generateId?: () => string | undefined): string {
   return runId ?? generateId?.() ?? globalThis.crypto.randomUUID();
 }

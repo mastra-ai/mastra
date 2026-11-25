@@ -29,10 +29,31 @@ export interface InstructionBuilderDeps {
   versionTag?: string;
   /** Include the name and ID of each rendered prompt block reference in agent instructions. */
   includePromptBlockLabels?: boolean;
+  /** Called once with the version of every prompt block reference that was rendered. */
+  onResolved?: (resolved: ResolvedPromptBlockVersions) => void;
+}
+
+export interface ResolvedPromptBlockVersions {
+  /** The version tag that was applied, when one was. */
+  versionTag?: string;
+  /** Prompt block ID to the version ID that was rendered. */
+  promptBlockVersions: Record<string, string>;
+  /** Rendered prompt blocks that don't have `versionTag` and so used their published version. */
+  promptBlocksWithoutTag: string[];
 }
 
 /** Request context key that selects a version tag for every prompt block an agent references. */
 export const PROMPT_VERSION_TAG_KEY = 'promptVersionTag';
+
+/** Request context key that selects a version tag for the agent being called. */
+export const AGENT_VERSION_TAG_KEY = 'agentVersionTag';
+
+/**
+ * Reserved request context key the agent run span reads its version metadata from. Same value as
+ * `MASTRA_VERSION_INFO_KEY` in `@mastra/core`, repeated here so the editor still works with a core
+ * that predates it (the metadata is then not reported).
+ */
+export const VERSION_INFO_KEY = 'mastra__versionInfo';
 
 /** "published" and "draft" select a status, not a tag, so they can't name a prompt version here. */
 const RESERVED_VERSION_TAGS = new Set(['published', 'draft']);
@@ -72,6 +93,12 @@ export async function resolveInstructionBlocks(
   const versionTag =
     !deps.includeDrafts && deps.versionTag && !RESERVED_VERSION_TAGS.has(deps.versionTag) ? deps.versionTag : undefined;
   const resolvedBlocksMap = new Map<string, StorageResolvedPromptBlockType>();
+  const taggedBlockIds = new Set<string>();
+  const used: ResolvedPromptBlockVersions = {
+    ...(versionTag ? { versionTag } : {}),
+    promptBlockVersions: {},
+    promptBlocksWithoutTag: [],
+  };
   if (blockIds.length > 0) {
     // When includeDrafts is set, resolve the latest version (draft) instead of the published one
     const resolveOptions = deps.includeDrafts ? { status: 'draft' as const } : undefined;
@@ -93,7 +120,10 @@ export async function resolveInstructionBlocks(
           const versionId = getTaggedVersionId(block, versionTag);
           if (!versionId) return;
           const tagged = await deps.promptBlocksStorage.getByIdResolved(id, { versionId });
-          if (tagged) resolvedBlocksMap.set(id, tagged);
+          if (tagged) {
+            resolvedBlocksMap.set(id, tagged);
+            taggedBlockIds.add(id);
+          }
         }),
       );
     }
@@ -153,6 +183,11 @@ export async function resolveInstructionBlocks(
     // Render template content
     const rendered = renderTemplate(resolved.content, context);
     if (rendered.trim()) {
+      const versionId = resolved.resolvedVersionId ?? resolved.activeVersionId;
+      if (versionId) used.promptBlockVersions[resolved.id] = versionId;
+      if (versionTag && !taggedBlockIds.has(resolved.id) && !used.promptBlocksWithoutTag.includes(resolved.id)) {
+        used.promptBlocksWithoutTag.push(resolved.id);
+      }
       segments.push(
         deps.includePromptBlockLabels
           ? `Prompt block: ${JSON.stringify(resolved.name)} (ID: ${JSON.stringify(resolved.id)})\n${rendered}`
@@ -161,5 +196,6 @@ export async function resolveInstructionBlocks(
     }
   }
 
+  deps.onResolved?.(used);
   return segments.join('\n\n');
 }

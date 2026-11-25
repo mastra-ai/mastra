@@ -33,7 +33,12 @@ import { boundedStringify, deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions, AgentExecutionOptionsBase, DelegationConfig } from '../agent.types';
-import { convertInstructionsToString, getInitialSignalEchoes, resolveVersionContext } from '../helpers';
+import {
+  convertInstructionsToString,
+  getInitialSignalEchoes,
+  resolveVersionContext,
+  versionInfoSpanMetadata,
+} from '../helpers';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
@@ -567,6 +572,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           runId,
           resourceId,
           threadId,
+          ...versionInfoSpanMetadata(requestContext, publicAgentId),
           ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
         },
         tracingPolicy: agentTracingPolicy,

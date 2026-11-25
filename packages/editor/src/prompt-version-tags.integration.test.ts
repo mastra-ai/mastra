@@ -213,10 +213,14 @@ describe('prompt version tags', () => {
       expect(modelInput).not.toContain(TONE_V1);
     });
 
-    it('falls back to published versions when no referenced prompt has the tag', async () => {
-      const modelInput = await generateAndCaptureModelInput({ promptVersionTag: 'nope' });
-      expect(modelInput).toContain(TONE_V2);
-      expect(modelInput).toContain(POLICY_TEXT);
+    it('answers 404 without calling the model when no referenced prompt has the tag', async () => {
+      const result = await http('POST', `/agents/${AGENT}/generate`, {
+        messages: 'hi',
+        requestContext: { promptVersionTag: 'nope' },
+      });
+      expect(result.status).toBe(404);
+      expect(result.json.error).toContain('Version tag "nope" not found on any prompt block');
+      expect(llm.getRequests()).toHaveLength(0);
     });
 
     it('does not let the reserved "draft" name pull a draft prompt version into a run', async () => {

@@ -103,6 +103,7 @@ import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAutho
 import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
 import { isGatewayV2 } from './gateway-memory-client';
+import { applyRunVersionTags } from './run-version-tags';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -1891,6 +1892,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
 
       // Propagate draft/published default to sub-agents
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -2307,6 +2309,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
 
       // Propagate draft/published default to sub-agents
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -2455,6 +2458,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         normalizedIdleStreamOptions?.versions as VersionOverrides | undefined,
       );
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
@@ -2559,6 +2563,7 @@ async function handleAgentMessageRoute({
   });
   stashVersionOverrides(serverRequestContext, normalizedIdleStreamOptions?.versions as VersionOverrides | undefined);
   ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+  await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
@@ -3169,6 +3174,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
       // Merge body's requestContext values into the server's RequestContext instance.
       // Reserved keys stay server-controlled.
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
@@ -3738,6 +3744,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
 
       stashVersionOverrides(serverRequestContext, versions);
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
@@ -3866,6 +3873,7 @@ export const RECOVER_ROUTE = createRoute({
         versionOptions,
         requestContext: serverRequestContext,
       });
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       if (!hasDurableExecution(agent)) {
         throw new HTTPException(400, {
@@ -3952,6 +3960,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
 
       stashVersionOverrides(serverRequestContext, versions);
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+      await applyRunVersionTags({ mastra, agent, requestContext: serverRequestContext });
 
       let authorizedMemoryOption = memoryOption;
       const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;

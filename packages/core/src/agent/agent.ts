@@ -320,6 +320,7 @@ import {
   recoverySkip,
   TRANSIENT_RECOVERY_RETRY_DELAY_MS,
   applyReservedMemoryContextKeys,
+  versionInfoSpanMetadata,
 } from './helpers';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -9757,6 +9758,8 @@ export class Agent<
         resourceId,
         threadId: threadFromArgs?.id,
         ...(isResume ? { resumed: true, resumedFromSpanId: persistedTracingContext?.spanId } : {}),
+        // Which version tag chose this agent's version and which prompt block versions it rendered.
+        ...versionInfoSpanMetadata(requestContext, this.id),
         ...(this.toRawConfig()?.resolvedVersionId
           ? { entityVersionId: this.toRawConfig()!.resolvedVersionId as string }
           : {}),

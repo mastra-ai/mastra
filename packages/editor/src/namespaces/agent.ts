@@ -41,7 +41,13 @@ import { resolveStoredToolProviders } from '@mastra/core/tool-provider';
 import type { ToolProviders } from '@mastra/core/tool-provider';
 
 import { evaluateRuleGroup } from '../rule-evaluator';
-import { PROMPT_VERSION_TAG_KEY, resolveInstructionBlocks } from '../instruction-builder';
+import {
+  AGENT_VERSION_TAG_KEY,
+  PROMPT_VERSION_TAG_KEY,
+  VERSION_INFO_KEY,
+  resolveInstructionBlocks,
+} from '../instruction-builder';
+import type { ResolvedPromptBlockVersions } from '../instruction-builder';
 import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-graph-hydrator';
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
@@ -187,6 +193,41 @@ function isMemoryIdRef(ref: StorageMemoryRef | undefined): ref is { type: 'id'; 
 /** Tagged inline refs and legacy untagged configs both resolve to the serialized config. */
 function unwrapInlineMemory(ref: Exclude<StorageMemoryRef, { type: 'id' }>): SerializedMemoryConfig {
   return 'type' in ref && ref.type === 'inline' ? ref.config : (ref as SerializedMemoryConfig);
+}
+
+/**
+ * Records which prompt block versions an agent rendered, under the agent's entry of the reserved
+ * version info key, so the agent run span can report them. Nothing is written for an agent that
+ * rendered no prompt blocks and was given no tag.
+ */
+function recordPromptVersionInfo(
+  requestContext: RequestContext,
+  agentId: string,
+  resolved: ResolvedPromptBlockVersions,
+): void {
+  const hasVersions = Object.keys(resolved.promptBlockVersions).length > 0;
+  if (!hasVersions && !resolved.versionTag) return;
+  const existing = requestContext.get(VERSION_INFO_KEY);
+  const all =
+    existing && typeof existing === 'object' && !Array.isArray(existing) ? (existing as Record<string, object>) : {};
+  // Each run starts from a fresh entry for these fields, so a prompt that stops rendering is dropped.
+  const {
+    promptVersionTag: _tag,
+    promptBlockVersions: _versions,
+    promptBlocksWithoutTag: _missing,
+    ...rest
+  } = (all[agentId] ?? {}) as Record<string, unknown>;
+  requestContext.set(VERSION_INFO_KEY, {
+    ...all,
+    [agentId]: {
+      ...rest,
+      ...(resolved.versionTag ? { promptVersionTag: resolved.versionTag } : {}),
+      ...(hasVersions ? { promptBlockVersions: resolved.promptBlockVersions } : {}),
+      ...(resolved.promptBlocksWithoutTag.length > 0
+        ? { promptBlocksWithoutTag: resolved.promptBlocksWithoutTag }
+        : {}),
+    },
+  });
 }
 
 // ============================================================================
@@ -608,7 +649,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     // --- Instructions ---
     if (instructionsEditable && storedConfig.instructions !== undefined && storedConfig.instructions !== null) {
-      const resolved = this.resolveStoredInstructions(storedConfig.instructions);
+      const resolved = this.resolveStoredInstructions(storedConfig.instructions, agent.id);
       if (resolved !== undefined) {
         fork.__updateInstructions(this.mergeInstructionEnvelope(agent, resolved));
       }
@@ -911,7 +952,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
     this.logger?.debug(`[createAgentFromStoredConfig] Creating agent from stored config "${storedAgent.id}"`);
 
-    const instructions = this.resolveStoredInstructions(storedAgent.instructions);
+    const instructions = this.resolveStoredInstructions(storedAgent.instructions, storedAgent.id);
 
     // Determine if any conditional fields exist that require dynamic resolution
     const hasConditionalTools = storedAgent.tools != null && this.isConditionalVariants(storedAgent.tools);
@@ -1284,6 +1325,7 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
 
   private resolveStoredInstructions(
     instructions: string | AgentInstructionBlock[] | undefined,
+    agentId: string,
   ):
     | string
     | (({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) => Promise<string>)
@@ -1298,11 +1340,20 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       const promptBlocksStore = await storage.getStore('promptBlocks');
       if (!promptBlocksStore) throw new Error('Prompt blocks storage domain is not available');
       const context = requestContext.toJSON();
-      const versionTag = requestContext.get(PROMPT_VERSION_TAG_KEY);
+      // A prompt tag sent with the request wins. Without one, the tag the agent was called with also
+      // selects its prompts, so "production" pins the agent and the prompts it references together.
+      // A request for an exact agent version ID isn't a tagged call, so its tag is ignored here too.
+      const tagFrom = (key: string) => {
+        const value = requestContext.get(key);
+        return typeof value === 'string' && value ? value : undefined;
+      };
+      const versionTag =
+        tagFrom(PROMPT_VERSION_TAG_KEY) ?? (tagFrom('agentVersionId') ? undefined : tagFrom(AGENT_VERSION_TAG_KEY));
       return resolveInstructionBlocks(blocks, context, {
         promptBlocksStorage: promptBlocksStore,
         includePromptBlockLabels: true,
-        ...(typeof versionTag === 'string' && versionTag ? { versionTag } : {}),
+        ...(versionTag ? { versionTag } : {}),
+        onResolved: resolved => recordPromptVersionInfo(requestContext, agentId, resolved),
       });
     };
   }
