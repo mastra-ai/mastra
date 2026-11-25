@@ -58,8 +58,25 @@ Use a custom provider for any endpoint with an OpenAI-compatible API, such as a 
    - **Name**: A short identifier, such as `my-llm`.
    - **Base URL**: The endpoint's API root, such as `https://api.example.com/v1`.
    - **API key**: The key the endpoint expects, if any.
-   - **Models (comma-separated)**: The model IDs the endpoint serves.
-1. Save the provider, then choose one of its models as a default or in a session's model picker.
+   - **Auth scheme and headers** (optional): Send the key as `Authorization: Bearer <key>` or as an `x-api-key` header, and add any extra headers the endpoint needs on every request.
+   - **Models**: The model IDs to offer. Select **Test** to list the IDs the endpoint serves, then pick the ones you want. You can also type an ID the endpoint doesn't list.
+1. Select **Test & save**. Factory calls the endpoint's `/models` route first and saves the provider only if the call succeeds. If it fails, the form shows the status and the endpoint's error message. Fix the settings, or select **Save anyway** to keep them untested.
+1. Choose one of the provider's models as a default or in a session's model picker.
+
+**Test** checks the connection without saving and doesn't call a model. To check a model, pick it under **Test a model** and select **Send test message**. Factory sends it one short message and shows the reply or the endpoint's error.
+
+Each custom header is secret by default. Factory stores a secret value encrypted and never shows it again. When you edit the provider, the field stays empty: leave it empty to keep the saved value, or type a new one. Select the eye icon on a header to make it plain. Factory then shows its value when you edit the provider. A saved key or secret header value is only reused while the base URL stays on the same host.
+
+The provider's row in **Settings → Models** shows the result of its last connection test:
+
+| Status | Meaning |
+| - | - |
+| _N_ models | The last test passed. _N_ is the number of models you configured. |
+| Check failed | The last test failed. The row shows the reason. |
+| Not verified | The provider hasn't been tested since its settings last changed. |
+| URL not allowed | This Factory refuses to call the base URL. Edit the provider to fix it. |
+
+To test a saved provider again, open its row menu and select **Test connection**.
 
 ## Choose model routing for chats and runs
 
