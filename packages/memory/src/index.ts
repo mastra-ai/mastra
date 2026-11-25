@@ -35,7 +35,6 @@ import type {
   MemoryConfig,
   MemoryRunState,
 } from '@mastra/core/memory';
-import type { GeneratedMessagePersistenceInput } from '@mastra/core/memory/internal';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
@@ -59,13 +58,6 @@ import type {
   StorageCloneThreadOutput,
   StorageCopyThreadOutput,
   ThreadCloneMetadata,
-  BranchThreadInput,
-  BranchThreadOutput,
-  GetThreadBranchInput,
-  ListThreadBranchesInput,
-  ListThreadBranchesOutput,
-  ThreadBranchHistoryOutput,
-  InternalThreadBranchMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
 } from '@mastra/core/storage';
@@ -81,6 +73,16 @@ import {
   assertNoReservedThreadBranchMetadata,
   createThreadBranchError,
   MASTRA_THREAD_BRANCH_METADATA_KEY,
+} from './branching/core-compat';
+import type {
+  BranchThreadInput,
+  BranchThreadOutput,
+  GeneratedMessagePersistenceInput,
+  GetThreadBranchInput,
+  InternalThreadBranchMetadata,
+  ListThreadBranchesInput,
+  ListThreadBranchesOutput,
+  ThreadBranchHistoryOutput,
 } from './branching/core-compat';
 import {
   compareMessageTuples,
