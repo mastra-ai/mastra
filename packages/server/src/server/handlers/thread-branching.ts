@@ -1,5 +1,6 @@
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
@@ -9,6 +10,8 @@ import {
   inspectThreadBranchState,
   MASTRA_THREAD_BRANCH_METADATA_KEY,
   MASTRA_THREAD_BRANCH_METADATA_KEYS,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
   persistMessagesWithThreadCreation,
 } from './thread-branching-compat';
 import type {
@@ -182,6 +185,37 @@ export function assertLegacyThreadAvailableOrThrow({
   return sanitizeThreadForResponse(thread);
 }
 
+type LegacyThreadReader = Pick<MemoryStorage, 'getThreadById' | 'listThreads'> | MastraMemory;
+
+/**
+ * Same check as `assertLegacyThreadAvailableOrThrow`, read with one row lookup and one
+ * indexed ready-child query instead of listing the thread table.
+ */
+export async function loadLegacyThreadAvailableOrThrow({
+  threadId,
+  store,
+  thread,
+}: {
+  threadId: string;
+  store: LegacyThreadReader;
+  thread?: StorageThreadType | null;
+}): Promise<StorageThreadType> {
+  const row = thread === undefined ? await store.getThreadById({ threadId }) : thread;
+  if (!row) throwThreadBranchNotFound();
+  const readyChildren = await store.listThreads({
+    filter: {
+      resourceId: row.resourceId,
+      metadata: {
+        [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+        [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+      },
+    },
+    page: 0,
+    perPage: 1,
+  });
+  return assertLegacyThreadAvailableOrThrow({ threadId, threads: [row, ...readyChildren.threads] });
+}
+
 function isAccessDenied(error: unknown): boolean {
   return error instanceof HTTPException && (error.status === 403 || error.status === 404);
 }
@@ -306,10 +340,7 @@ export async function authorizeMemoryThreadAccess({
     return;
   }
 
-  assertLegacyThreadAvailableOrThrow({
-    threadId: thread.id,
-    threads: (await memory.listThreads({ perPage: false })).threads,
-  });
+  await loadLegacyThreadAvailableOrThrow({ threadId: thread.id, store: memory });
 }
 
 export async function filterThreadsByBranchAccess({

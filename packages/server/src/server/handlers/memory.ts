@@ -83,6 +83,7 @@ import {
 import type { GatewayMemoryClient } from './gateway-memory-client';
 import {
   assertLegacyThreadAvailableOrThrow,
+  loadLegacyThreadAvailableOrThrow,
   assertThreadBranchingSupported,
   authorizeMemoryThreadAccess,
   authorizeThreadBranchHistory,
@@ -266,10 +267,7 @@ async function enforceDeleteMessagesThreadAccess({
         permission: MastraFGAPermissions.MEMORY_DELETE,
       });
     } else {
-      const visibleThread = assertLegacyThreadAvailableOrThrow({
-        threadId,
-        threads: (await memoryStore.listThreads({ perPage: false })).threads,
-      });
+      const visibleThread = await loadLegacyThreadAvailableOrThrow({ threadId, store: memoryStore, thread });
       await enforceThreadAccess({
         mastra,
         requestContext,
@@ -1506,10 +1504,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         if (!thread) throwThreadBranchNotFound();
         const visibleThread = memory.supportsThreadBranching
           ? sanitizeThreadForResponse(thread)
-          : assertLegacyThreadAvailableOrThrow({
-              threadId: effectiveThreadId!,
-              threads: (await memory.listThreads({ perPage: false })).threads,
-            });
+          : await loadLegacyThreadAvailableOrThrow({ threadId: effectiveThreadId!, store: memory, thread });
         await authorizeMemoryThreadAccess({
           mastra,
           requestContext,
@@ -1525,10 +1520,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       if (storage) {
         const memoryStore = await storage.getStore('memory');
         if (memoryStore) {
-          const thread = assertLegacyThreadAvailableOrThrow({
-            threadId: effectiveThreadId!,
-            threads: (await memoryStore.listThreads({ perPage: false })).threads,
-          });
+          const thread = await loadLegacyThreadAvailableOrThrow({ threadId: effectiveThreadId!, store: memoryStore });
           await enforceThreadAccess({
             mastra,
             requestContext,
@@ -1687,10 +1679,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (storage) {
         const memoryStore = await storage.getStore('memory');
         if (memoryStore) {
-          const thread = assertLegacyThreadAvailableOrThrow({
-            threadId: effectiveThreadId,
-            threads: (await memoryStore.listThreads({ perPage: false })).threads,
-          });
+          const thread = await loadLegacyThreadAvailableOrThrow({ threadId: effectiveThreadId, store: memoryStore });
           await enforceThreadAccess({
             mastra,
             requestContext,
@@ -2709,9 +2698,10 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
       } else {
-        const visibleThread = assertLegacyThreadAvailableOrThrow({
+        const visibleThread = await loadLegacyThreadAvailableOrThrow({
           threadId: effectiveThreadId!,
-          threads: (await memoryStore!.listThreads({ perPage: false })).threads,
+          store: memoryStore!,
+          thread: sourceThread,
         });
         await enforceThreadAccess({
           mastra,
