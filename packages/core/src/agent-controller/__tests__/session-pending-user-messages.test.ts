@@ -307,6 +307,18 @@ describe('a sent message is pending until stored, then stored', () => {
     expect(h.pending()).toEqual([]);
   });
 
+  it('a Stop while the first thread is created cancels the send: nothing runs, pending or stored', async () => {
+    const h = await createHarness('first-stop', { withThread: false });
+
+    const sent = h.session.sendMessage({ content: 'stop me' });
+    h.session.abort();
+
+    await expect(sent).rejects.toMatchObject({ name: 'AbortError' });
+    expect(h.prompts).toEqual([]);
+    expect(h.pending()).toEqual([]);
+    expect(await h.storedUserTexts()).toEqual([]);
+  });
+
   it('no save listener outlives the pending messages it watches, even when nothing is saved', async () => {
     const h = await createHarness('listener', { blockText: 'forbidden' });
     const live = saveListeners.live;

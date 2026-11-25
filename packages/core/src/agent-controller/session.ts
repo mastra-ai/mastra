@@ -5801,21 +5801,27 @@ export class Session<TState = unknown> {
   }): Promise<void> {
     const kind = this.#nextSendKind;
     this.#nextSendKind = 'message';
-    if (this.thread.getId() === null) {
-      // Creating the thread resets the live projection, so list the message only once it exists.
-      await this.machinery.authorizeExecute?.(requestContextInput);
-      await this.thread.ensureId({ requestContext: requestContextInput });
-    }
-    const pending = this.#addPendingUserMessage(content, kind);
+    // Scoped sends start in call order, so the slot is taken before anything awaits.
     let admitted = () => {};
+    let previous: Promise<void> | undefined;
     if (scopes) {
-      const previous = this.#scopedSendTail;
+      previous = this.#scopedSendTail;
       this.#scopedSendTail = new Promise(resolve => {
         admitted = resolve;
       });
-      await previous;
     }
+    let pending: PendingSend | undefined;
     try {
+      if (this.thread.getId() === null) {
+        // Creating the thread resets the live projection, so list the message only once it exists.
+        const abortGeneration = this.#abortGeneration;
+        await this.machinery.authorizeExecute?.(requestContextInput);
+        await this.thread.ensureId({ requestContext: requestContextInput });
+        // A Stop while the thread was created cancels this send, as it does once the send is submitted.
+        if (this.#abortGeneration !== abortGeneration) throw new SessionStartupCancelledError();
+      }
+      pending = this.#addPendingUserMessage(content, kind);
+      if (previous) await previous;
       await this.#sendMessageUntilAdmitted(
         {
           content,
@@ -5832,7 +5838,7 @@ export class Session<TState = unknown> {
       );
     } finally {
       admitted();
-      if (!pending.handedToRun) this.#dropPendingUserMessages([pending.id]);
+      if (pending && !pending.handedToRun) this.#dropPendingUserMessages([pending.id]);
     }
   }
 
