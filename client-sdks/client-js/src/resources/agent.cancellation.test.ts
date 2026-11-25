@@ -175,6 +175,29 @@ describe('stream execution cancellation over HTTP', () => {
     13_000,
   );
 
+  it('keeps an unacknowledged caller cancellation retrying when onChunk throws', async () => {
+    attemptsBeforeAck = Infinity;
+    firstChunk = true;
+    const ac = new AbortController();
+    const response = await start('stream', ac.signal);
+    const failure = new Error('handler failed');
+    await expect(
+      response.processDataStream({
+        onChunk: () => {
+          ac.abort();
+          throw failure;
+        },
+      }),
+    ).rejects.toBe(failure);
+    await expect.poll(() => aborts.length).toBeGreaterThan(0);
+    const count = aborts.length;
+    await new Promise(resolve => setTimeout(resolve, 250));
+    expect(aborts.length).toBeGreaterThan(count);
+    attemptsBeforeAck = 0;
+    await expect.poll(() => acknowledged).toBe(true);
+    expect(new Set(aborts)).toEqual(new Set([runId]));
+  });
+
   it('stops registration retries when the observer is cancelled', async () => {
     attemptsBeforeAck = Infinity;
     const ac = new AbortController();
