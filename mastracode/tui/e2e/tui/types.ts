@@ -61,6 +61,8 @@ export type ScenarioName =
   | 'custom-pack-rename-active'
   | 'custom-provider-delete'
   | 'custom-provider-edit-share-import'
+  | 'custom-provider-endpoint-checks'
+  | 'custom-provider-headers'
   | 'custom-provider-management'
   | 'custom-provider-modal-validation'
   | 'custom-provider-model-selector'

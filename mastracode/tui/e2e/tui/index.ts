@@ -65,6 +65,8 @@ import { customPackImportRenameScenario } from './custom-pack-import-rename.js';
 import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
+import { customProviderEndpointChecksScenario } from './custom-provider-endpoint-checks.js';
+import { customProviderHeadersScenario } from './custom-provider-headers.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customProviderModalValidationScenario } from './custom-provider-modal-validation.js';
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
@@ -328,6 +330,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-pack-rename-active': customPackRenameActiveScenario,
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,
+  'custom-provider-endpoint-checks': customProviderEndpointChecksScenario,
+  'custom-provider-headers': customProviderHeadersScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-provider-modal-validation': customProviderModalValidationScenario,
   'custom-provider-model-selector': customProviderModelSelectorScenario,
