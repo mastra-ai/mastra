@@ -785,8 +785,16 @@ export class MessageList {
     output: Set<string>;
     context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
+    /** Serialized `data-*` parts of each message at the time the checker was made, keyed by message id. */
+    dataParts: Map<string, string[]>;
   } {
-    return this.stateManager.createSourceChecker();
+    const dataParts = new Map(
+      this.messages.map(message => [
+        message.id,
+        message.content.parts.flatMap(part => (part.type.startsWith('data-') ? [JSON.stringify(part)] : [])),
+      ]),
+    );
+    return { ...this.stateManager.createSourceChecker(), dataParts };
   }
 
   /**

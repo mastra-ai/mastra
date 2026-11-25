@@ -81,6 +81,32 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   }
 }
 
+/**
+ * The message a processor returned, plus any `data-*` parts the live message gained while the processor ran
+ * (`writer.custom()` merges its part into the list during the call) that the returned copy does not have.
+ * Parts the message already held before the call follow the processor's result, so it can still remove them.
+ */
+function withDataPartsWrittenDuringCall(
+  returned: MastraDBMessage,
+  current: MastraDBMessage | undefined,
+  dataPartsBefore: Map<string, string[]>,
+): MastraDBMessage {
+  if (!current || returned.role !== 'assistant') return returned;
+  const accounted = [
+    ...(dataPartsBefore.get(returned.id) ?? []),
+    ...returned.content.parts.flatMap(part => (part.type.startsWith('data-') ? [JSON.stringify(part)] : [])),
+  ];
+  const written = current.content.parts.filter(part => {
+    if (!part.type.startsWith('data-')) return false;
+    const index = accounted.indexOf(JSON.stringify(part));
+    if (index === -1) return true;
+    accounted.splice(index, 1);
+    return false;
+  });
+  if (!written.length) return returned;
+  return { ...returned, content: { ...returned.content, parts: [...returned.content.parts, ...written] } };
+}
+
 function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
   const liveMessages = messageList.get.response.db();
   const persistedMessages = messageList.getPersisted.response.db();
@@ -930,9 +956,14 @@ export class ProcessorRunner {
             messageList.removeByIds(deletedIds);
           }
           processableMessages = processResult || [];
+          const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
           for (const message of processResult) {
             messageList.removeByIds([message.id]);
-            messageList.add(message, check.getSource(message) || 'response', { merge: false });
+            messageList.add(
+              withDataPartsWrittenDuringCall(message, currentById.get(message.id), check.dataParts),
+              check.getSource(message) || 'response',
+              { merge: false },
+            );
           }
         }
 
@@ -2561,8 +2592,10 @@ export class ProcessorRunner {
           }
 
           // Re-add messages with correct sources
-          for (const message of result) {
+          const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+          for (let message of result) {
             messageList.removeByIds([message.id]);
+            message = withDataPartsWrittenDuringCall(message, currentById.get(message.id), check.dataParts);
             if (message.role === 'system') {
               const systemText =
                 (message.content.content as string | undefined) ??
@@ -3013,12 +3046,14 @@ export class ProcessorRunner {
     const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
 
     // Re-add messages with correct sources
-    for (const message of messages) {
-      if (currentById.get(message.id) === message) {
+    for (let message of messages) {
+      const current = currentById.get(message.id);
+      if (current === message) {
         continue;
       }
 
       messageList.removeByIds([message.id]);
+      message = withDataPartsWrittenDuringCall(message, current, check.dataParts);
       if (message.role === 'system') {
         const systemText =
           (message.content.content as string | undefined) ??
