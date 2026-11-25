@@ -1,3 +1,10 @@
+import { listCustomProviderModels, testCustomProviderModel } from '@mastra/code-sdk/agents/custom-provider-check';
+import type {
+  CustomProviderCheckFailure,
+  CustomProviderConnection,
+  CustomProviderModelsResult,
+  CustomProviderModelTestResult,
+} from '@mastra/code-sdk/agents/custom-provider-check';
 import { customProviderHeaderProblem } from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import {
   removeCustomProviderFromSettings,
@@ -12,8 +19,10 @@ import {
 import type {
   CustomProviderAuthScheme,
   CustomProviderHeader,
+  CustomProviderSetting,
   GlobalSettings,
 } from '@mastra/code-sdk/onboarding/settings';
+import { showProgress } from '../display.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -168,14 +177,20 @@ async function askOptionalText(
   return answer?.trim() || undefined;
 }
 
+/**
+ * Ask the user to pick one option and return its value, or null on Esc.
+ * `selectedLabel` starts the cursor on that option instead of the first one.
+ */
 async function askSelect(
   ctx: SlashCommandContext,
   question: string,
   options: Array<{ label: string; value: string; description?: string }>,
+  selectedLabel?: string,
 ): Promise<string | null> {
   const answer = await askModalQuestion(ctx.state.ui, {
     question,
     options: options.map(option => ({ label: option.label, description: option.description })),
+    selectedOptionLabel: selectedLabel,
   });
   const selected = options.find(option => option.label === answer);
   return selected?.value ?? null;
@@ -302,6 +317,286 @@ async function removeProviderModelFlow(ctx: SlashCommandContext, providerId: str
   ctx.showInfo(`Removed model: ${toCustomProviderModelId(provider.name, modelName)}`);
 }
 
+/** The connection a check uses: the provider exactly as saved. */
+function savedConnection(provider: CustomProviderSetting): CustomProviderConnection {
+  return { url: provider.url, apiKey: provider.apiKey, authScheme: provider.authScheme, headers: provider.headers };
+}
+
+/** Show a failed check as the SDK reports it, with the upstream detail on its own line. */
+function showCheckFailure(ctx: SlashCommandContext, failure: CustomProviderCheckFailure): void {
+  ctx.showError(failure.detail ? `${failure.message}\n${failure.detail}` : failure.message);
+}
+
+/** Menu action values. The NUL character keeps them apart from any model id or header name. */
+const ADD_ALL = '\u0000add-all';
+const DONE = '\u0000done';
+const ADD_HEADER = '\u0000add-header';
+
+/** The longest model reply shown after a model test. */
+const MAX_SHOWN_REPLY_LENGTH = 200;
+
+/**
+ * A model reply made safe to print. The reply is text from the endpoint, and
+ * escape sequences in it would act on the terminal instead of being shown.
+ */
+function shownReply(reply: string): string {
+  // oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+  const text = reply
+    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > MAX_SHOWN_REPLY_LENGTH ? `${text.slice(0, MAX_SHOWN_REPLY_LENGTH)}...` : text;
+}
+
+/** `1 model` or `N models`. */
+function modelCount(count: number): string {
+  return `${count} model${count === 1 ? '' : 's'}`;
+}
+
+/** Load the saved provider, or tell the user it is gone and return undefined. */
+function loadProvider(
+  ctx: SlashCommandContext,
+  providerId: string,
+): { settings: GlobalSettings; provider: CustomProviderSetting } | undefined {
+  const settings = loadSettings();
+  const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
+  if (!provider) {
+    ctx.showError('Provider not found.');
+    return undefined;
+  }
+  return { settings, provider };
+}
+
+/**
+ * Ask the endpoint for its model list, with a spinner while the call runs.
+ * Shows the failure and returns undefined when the call fails.
+ */
+async function listModelsWithProgress(
+  ctx: SlashCommandContext,
+  provider: CustomProviderSetting,
+): Promise<{ models: string[]; latencyMs: number } | undefined> {
+  const stopProgress = showProgress(ctx.state, `Testing connection to ${provider.url}`);
+  let result: CustomProviderModelsResult;
+  try {
+    result = await listCustomProviderModels(savedConnection(provider));
+  } finally {
+    stopProgress();
+  }
+  if (!result.ok) {
+    showCheckFailure(ctx, result.failure);
+    return undefined;
+  }
+  return result;
+}
+
+/** Call the endpoint's model list and show the model count and latency, or the failure. */
+async function testConnectionFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  const loaded = loadProvider(ctx, providerId);
+  if (!loaded) return;
+  const result = await listModelsWithProgress(ctx, loaded.provider);
+  if (!result) return;
+  ctx.showInfo(
+    `${loaded.provider.name} answered in ${result.latencyMs} ms and lists ${modelCount(result.models.length)}.`,
+  );
+}
+
+/** Send the test message to one configured model and show its reply or the failure. */
+async function testModelFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  const loaded = loadProvider(ctx, providerId);
+  if (!loaded) return;
+  const { provider } = loaded;
+  if (provider.models.length === 0) {
+    ctx.showInfo(`No custom models configured for ${provider.name}.`);
+    return;
+  }
+
+  const modelName = await askSelect(
+    ctx,
+    `Test a model on ${provider.name}`,
+    provider.models.map(model => ({ label: model, value: model })),
+  );
+  if (!modelName) return;
+
+  const stopProgress = showProgress(ctx.state, `Sending a test message to ${modelName}`);
+  let result: CustomProviderModelTestResult;
+  try {
+    result = await testCustomProviderModel({ providerId, connection: savedConnection(provider), modelId: modelName });
+  } finally {
+    stopProgress();
+  }
+  if (!result.ok) {
+    showCheckFailure(ctx, result.failure);
+    return;
+  }
+  const reply = shownReply(result.reply);
+  if (reply) {
+    ctx.showInfo(`${modelName} replied in ${result.latencyMs} ms: ${reply}`);
+    return;
+  }
+  // Some models answer with no text, for example when they stop on a length
+  // limit, so the finish reason is the only thing left to show.
+  const finish = result.finishReason ? ` (finish reason: ${result.finishReason})` : '';
+  ctx.showInfo(`${modelName} answered in ${result.latencyMs} ms with an empty reply${finish}.`);
+}
+
+/**
+ * Offer the models the endpoint lists that are not configured yet. Picking one
+ * adds it and shows the rest again, so several can be added in one visit.
+ */
+async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  const loaded = loadProvider(ctx, providerId);
+  if (!loaded) return;
+  const listed = await listModelsWithProgress(ctx, loaded.provider);
+  if (!listed) return;
+  if (listed.models.length === 0) {
+    ctx.showInfo(`${loaded.provider.name} lists no models.`);
+    return;
+  }
+
+  for (;;) {
+    // Settings are read again each round, so a model added on the last round is not offered twice.
+    const current = loadProvider(ctx, providerId);
+    if (!current) return;
+    const { settings, provider } = current;
+    const available = listed.models.filter(model => !provider.models.includes(model));
+    if (available.length === 0) {
+      ctx.showInfo(`Every model ${provider.name} lists is already added.`);
+      return;
+    }
+
+    const choice = await askSelect(ctx, `Add models from ${provider.name}`, [
+      { label: 'Add all', value: ADD_ALL, description: `Add the ${modelCount(available.length)} below` },
+      { label: 'Done', value: DONE, description: 'Stop adding models' },
+      ...available.map(model => ({ label: model, value: model })),
+    ]);
+    if (!choice || choice === DONE) return;
+
+    const picked = choice === ADD_ALL ? available : [choice];
+    addModelsToCustomProviderInSettings(settings, providerId, picked);
+    saveSettings(settings);
+    if (choice === ADD_ALL) {
+      ctx.showInfo(`Added ${modelCount(picked.length)} to ${provider.name}.`);
+      return;
+    }
+    ctx.showInfo(`Added model: ${toCustomProviderModelId(provider.name, choice)}`);
+  }
+}
+
+/** How a header value appears in lists. Secret values are never shown. */
+function shownHeaderValue(header: CustomProviderHeader): string {
+  return header.secret === false ? header.value : '••••';
+}
+
+/**
+ * List a provider's headers, add one, or remove one. The list is shown again
+ * after each change until the user leaves with Esc.
+ */
+async function headersFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  for (;;) {
+    const loaded = loadProvider(ctx, providerId);
+    if (!loaded) return;
+    const { provider } = loaded;
+    const headers = provider.headers ?? [];
+
+    const choice = await askSelect(ctx, `Headers for ${provider.name}`, [
+      { label: 'Add header', value: ADD_HEADER, description: 'Send an extra header on every call' },
+      ...headers.map(header => ({ label: header.name, value: header.name, description: shownHeaderValue(header) })),
+    ]);
+    if (!choice) return;
+    if (choice === ADD_HEADER) {
+      await addHeaderFlow(ctx, providerId);
+      continue;
+    }
+
+    const confirm = await askSelect(ctx, `Remove the ${choice} header?`, [
+      { label: 'Remove', value: 'remove', description: `Stop sending ${choice} to ${provider.name}` },
+    ]);
+    if (confirm !== 'remove') continue;
+    const latest = loadSettings();
+    if (removeHeaderFromCustomProviderInSettings(latest, providerId, choice)) {
+      saveSettings(latest);
+      ctx.showInfo(`Removed header ${choice} from ${provider.name}.`);
+    }
+  }
+}
+
+/** Ask for a header name, value and secret flag, then save the header. */
+async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  const loaded = loadProvider(ctx, providerId);
+  if (!loaded) return;
+  const { provider } = loaded;
+
+  const name = await askText(ctx, 'Header name');
+  if (!name) return;
+  // Check the name before asking for the value, so a refused name does not cost the user a typed secret.
+  const nameProblem = customProviderHeaderProblem([...(provider.headers ?? []), { name }], provider.authScheme);
+  if (nameProblem) {
+    ctx.showError(nameProblem);
+    return;
+  }
+
+  const value = await askText(ctx, `Value for ${name}`);
+  if (!value) return;
+  const visibility = await askSelect(ctx, `Is ${name} a secret?`, [
+    { label: 'Secret', value: 'secret', description: 'Hide the value in lists' },
+    { label: 'Plain', value: 'plain', description: 'Show the value in lists' },
+  ]);
+  if (!visibility) return;
+
+  const settings = loadSettings();
+  const problem = addHeaderToCustomProviderInSettings(settings, providerId, {
+    name,
+    value,
+    secret: visibility === 'secret',
+  });
+  if (problem) {
+    ctx.showError(problem);
+    return;
+  }
+  saveSettings(settings);
+  ctx.showInfo(`Added header ${name} to ${provider.name}.`);
+}
+
+const AUTH_SCHEME_OPTIONS: Array<{
+  label: string;
+  value: CustomProviderAuthScheme;
+  description: string;
+  header: string;
+}> = [
+  {
+    label: 'Bearer token',
+    value: 'bearer',
+    description: 'Send the API key as Authorization: Bearer <key>',
+    header: 'Authorization: Bearer <key>',
+  },
+  {
+    label: 'x-api-key header',
+    value: 'x-api-key',
+    description: 'Send the API key as x-api-key: <key>',
+    header: 'x-api-key: <key>',
+  },
+];
+
+/** Choose how the provider sends its API key. */
+async function authSchemeFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+  const loaded = loadProvider(ctx, providerId);
+  if (!loaded) return;
+  const { settings, provider } = loaded;
+  const current = AUTH_SCHEME_OPTIONS.find(option => option.value === (provider.authScheme ?? 'bearer'));
+
+  const choice = await askSelect(ctx, `Auth scheme for ${provider.name}`, AUTH_SCHEME_OPTIONS, current?.label);
+  const option = AUTH_SCHEME_OPTIONS.find(entry => entry.value === choice);
+  if (!option) return;
+
+  const problem = setCustomProviderAuthSchemeInSettings(settings, providerId, option.value);
+  if (problem) {
+    ctx.showError(problem);
+    return;
+  }
+  saveSettings(settings);
+  ctx.showInfo(`${provider.name} now sends its API key as ${option.header}.`);
+}
+
 async function manageProviderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const settings = loadSettings();
   const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
@@ -315,9 +610,33 @@ async function manageProviderFlow(ctx: SlashCommandContext, providerId: string):
     { label: 'Remove model', value: 'remove-model', description: 'Remove a model ID from this provider' },
     { label: 'Edit provider', value: 'edit-provider', description: 'Rename, change URL, or update API key' },
     { label: 'Delete provider', value: 'delete-provider', description: 'Remove provider and all its model IDs' },
+    { label: 'Test connection', value: 'test-connection', description: 'Ask the endpoint for its model list' },
+    { label: 'Test model', value: 'test-model', description: 'Send a short message to one model' },
+    {
+      label: 'Add models from endpoint',
+      value: 'add-models-from-endpoint',
+      description: 'Pick model IDs from the list the endpoint returns',
+    },
+    { label: 'Headers', value: 'headers', description: 'Extra headers sent on every call' },
+    { label: 'Auth scheme', value: 'auth-scheme', description: 'How the API key is sent' },
   ]);
 
   switch (action) {
+    case 'test-connection':
+      await testConnectionFlow(ctx, providerId);
+      break;
+    case 'test-model':
+      await testModelFlow(ctx, providerId);
+      break;
+    case 'add-models-from-endpoint':
+      await addModelsFromEndpointFlow(ctx, providerId);
+      break;
+    case 'headers':
+      await headersFlow(ctx, providerId);
+      break;
+    case 'auth-scheme':
+      await authSchemeFlow(ctx, providerId);
+      break;
     case 'add-model':
       await addProviderModelFlow(ctx, providerId);
       break;
