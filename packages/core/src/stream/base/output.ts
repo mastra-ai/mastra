@@ -1458,9 +1458,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 const callIndex = new Map(
                   self.#bufferedByStep.toolCalls.map((call, index) => [call.payload.toolCallId, index]),
                 );
-                const position = (result: (typeof stepToolResults)[number]) =>
-                  callIndex.get(result.payload.toolCallId) ?? Number.MAX_SAFE_INTEGER;
-                const sorted = [...stepToolResults].sort((a, b) => position(a) - position(b));
+                // Only this step's own calls are reordered. A result from an earlier step (e.g. one a
+                // processor held and flushed later) keeps its slot.
+                const ownSlots = stepToolResults.flatMap((result, slot) =>
+                  callIndex.has(result.payload.toolCallId) ? [slot] : [],
+                );
+                const ownInCallOrder = ownSlots
+                  .map(slot => stepToolResults[slot]!)
+                  .sort((a, b) => callIndex.get(a.payload.toolCallId)! - callIndex.get(b.payload.toolCallId)!);
+                const sorted = [...stepToolResults];
+                ownSlots.forEach((slot, index) => {
+                  sorted[slot] = ownInCallOrder[index]!;
+                });
                 // The step's results are the tail of the run's results; reorder both in place.
                 const runTail = self.#toolResults.length - stepToolResults.length;
                 if (stepToolResults.every((result, index) => self.#toolResults[runTail + index] === result)) {
