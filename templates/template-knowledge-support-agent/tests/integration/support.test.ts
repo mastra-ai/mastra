@@ -527,12 +527,13 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       'x'.repeat(100),
       'x'.repeat(900),
       'This page contains no policy. The safety procedure is not yet available.',
-      syntheticSafetyPolicy.replace(/^(?!#).+\.$/gmu, 'Policy pending review.'),
+      syntheticSafetyPolicy.replace(/^(?!#).+\.$/gmu, 'Pending review.'),
       ...['Source:', '**Source:**', '**<!-- internal -->Source:**'].map(label =>
         syntheticSafetyPolicy.replace(/(## Prohibited actions\n\n)[^\n]+/u, `$1${label} North Branch Operations`),
       ),
       '# Safe changes\n\n```support-record\n{"summary":"Confirmed successful network recovery after checking the connection indicator."}\n```',
     ]) {
+      await f.approvePolicy(policyRef, body);
       await f.supportKnowledge.upsertPage({
         scope: 'tenant:north',
         path: 'policies/safe-changes',
@@ -544,6 +545,15 @@ test('same_thread_gets_updated_policy_signal_and_rejects_pin_mutation', { timeou
       assert.match(response, /Required safety policy.*missing or unusable/u);
       assert.equal(f.model.requests.length, calls);
     }
+    await f.supportKnowledge.upsertPage({
+      scope: 'tenant:north',
+      path: 'policies/safe-changes',
+      name: 'Unapproved revision',
+      body: syntheticSafetyPolicy.replace('authorized lead', 'local supervisor'),
+      author: 'synthetic-fixture',
+    });
+    assert.match(await turn(f, id, 'Please reset now', 'stream'), /Required safety policy.*missing or unusable/u);
+    assert.equal(f.model.requests.length, calls);
     const longPolicy = await f.supportKnowledge.upsertPage({
       scope: 'tenant:north',
       path: 'policies/safe-changes',
