@@ -730,13 +730,13 @@ export class Agent extends BaseResource {
     }
   > {
     const { resourceId, threadId, withInitialHistory, withRunStatus } = params;
-    const requestSubscription = () =>
+    const requestSubscription = (history = withInitialHistory) =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
         body: {
           resourceId,
           threadId,
-          ...(withInitialHistory ? { withInitialHistory } : {}),
+          ...(history ? { withInitialHistory: history } : {}),
           ...(withRunStatus ? { withRunStatus } : {}),
         },
         stream: true,
@@ -983,9 +983,13 @@ export class Agent extends BaseResource {
 
         const reconnectOptions =
           reconnect === true
-            ? { maxRetries: Infinity, delayMs: 1000 }
+            ? { maxRetries: Infinity, delayMs: 1000, withInitialHistory }
             : reconnect
-              ? { maxRetries: reconnect.maxRetries ?? Infinity, delayMs: reconnect.delayMs ?? 1000 }
+              ? {
+                  maxRetries: reconnect.maxRetries ?? Infinity,
+                  delayMs: reconnect.delayMs ?? 1000,
+                  withInitialHistory: reconnect.withInitialHistory ?? withInitialHistory,
+                }
               : null;
         let response: Response = streamResponse;
         let attempts = 0;
@@ -1044,7 +1048,7 @@ export class Agent extends BaseResource {
             }
 
             try {
-              response = await requestSubscription();
+              response = await requestSubscription(reconnectOptions.withInitialHistory);
               break;
             } catch (error) {
               if (isClosed()) return;
