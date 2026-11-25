@@ -143,12 +143,46 @@ describe('a transcript drawn by a host that plugs in no slots', () => {
     expect(screen.getAllByText('explore')).toHaveLength(1);
   });
 
-  it('draws a plan handoff as a plain tool row with the plan title', () => {
-    drawWithoutSlots([assistantCalling('assistant-1', 'call-plan', 'submit_plan', { title: 'Migrate the queue' })]);
+  it('draws a plan handoff as a plain tool row, with no way to approve or revise the plan', () => {
+    drawWithoutSlots([
+      assistantCalling('assistant-1', 'call-plan', 'submit_plan', { path: '.plans/migrate-queue.md' }),
+    ]);
 
     const row = screen.getByRole('group', { name: 'Tool: submit_plan' });
     expect(within(row).getByText('Submit plan')).toBeTruthy();
-    expect(within(row).getByText('Migrate the queue')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /approve|reject|revise/i })).toBeNull();
+  });
+
+  it('marks a plan the agent is waiting on a review for', () => {
+    drawWithoutSlots([
+      assistantCalling('assistant-1', 'call-plan', 'submit_plan', { path: '.plans/migrate-queue.md' }),
+      {
+        kind: 'suspension',
+        id: 'suspension-plan',
+        toolCallId: 'call-plan',
+        toolName: 'submit_plan',
+        args: { path: '.plans/migrate-queue.md' },
+        suspendPayload: { path: '.plans/migrate-queue.md' },
+      },
+    ]);
+
+    expect(screen.getByRole('group', { name: 'Waiting for input: Submit plan' })).toBeTruthy();
+  });
+
+  it('lets the reader answer a question inside the message that asks it, without a second waiting row', () => {
+    drawWithoutSlots([
+      assistantCalling('assistant-1', 'call-ask', 'ask_user', { question: 'Which branch should I deploy?' }),
+      {
+        kind: 'suspension',
+        id: 'suspension-ask',
+        toolCallId: 'call-ask',
+        toolName: 'ask_user',
+        args: { question: 'Which branch should I deploy?' },
+        suspendPayload: { question: 'Which branch should I deploy?' },
+      },
+    ]);
+
+    expect(screen.getByRole('textbox', { name: 'Which branch should I deploy?' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: /^Waiting for input/ })).toBeNull();
   });
 });

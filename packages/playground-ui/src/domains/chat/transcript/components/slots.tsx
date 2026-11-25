@@ -40,7 +40,7 @@ export interface TranscriptSubmitPlanProps {
  * - `Suspension`: a read-only row naming what the agent waits on, marked "Waiting for input", with
  *   no way to answer. A paused call inside a message that asks a question keeps its inline answer form.
  * - `Subagent`: nothing; the tool call that started the subagent already names it in the message.
- * - `SubmitPlan`: the generic tool row with the plan's title, with no way to approve or revise the plan.
+ * - `SubmitPlan`: the generic tool row, with no way to approve or revise the plan.
  */
 export interface TranscriptSlots {
   RunError?: ComponentType<TranscriptRunErrorProps>;

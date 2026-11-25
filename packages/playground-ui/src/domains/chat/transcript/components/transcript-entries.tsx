@@ -203,7 +203,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   onRespond,
   activity,
 }: TranscriptEntryContentProps) {
-  const { Approval, Suspension, Subagent, Notification, NotificationSummary } = useTranscriptSlots();
+  const { Approval, Suspension, Subagent, Notification, NotificationSummary, SubmitPlan } = useTranscriptSlots();
   switch (entry.kind) {
     case 'message':
       return (
@@ -228,13 +228,18 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
       return Notification ? <Notification entry={entry} /> : <DefaultNotification entry={entry} />;
     case 'notification_summary':
       return NotificationSummary ? <NotificationSummary entry={entry} /> : <DefaultNotification entry={entry} />;
-    case 'suspension':
-      if (redundantSuspension) return null;
-      return Suspension ? (
-        <Suspension prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-      ) : (
-        <DefaultSuspension prompt={entry} />
-      );
+    case 'suspension': {
+      if (Suspension) {
+        return redundantSuspension ? null : (
+          <Suspension prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      }
+      const payload = entry.suspendPayload ?? entry.args;
+      const answeredInline =
+        (isRecord(payload) && typeof payload.question === 'string' && payload.question.length > 0) ||
+        (entry.toolName === 'submit_plan' && SubmitPlan !== undefined);
+      return redundantSuspension && answeredInline ? null : <DefaultSuspension prompt={entry} />;
+    }
     case 'subagent':
       return Subagent ? <Subagent entry={entry} /> : null;
     default:
