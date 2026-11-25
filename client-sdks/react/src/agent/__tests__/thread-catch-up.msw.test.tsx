@@ -414,6 +414,52 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
   });
 
+  // As a real server with memory answers (see the client-js e2e thread stream suite): nothing is stored mid-run, the
+  // question included, so the history is empty and the run comes again from its start, the question's echo with it.
+  it('goes on with a reply still running as a real server sends it again, the question’s echo included', async () => {
+    givenSendRoute();
+    const threads = givenThreadStreams();
+    const page = followThread();
+    unmount = page.unmount;
+    await threads.followedAgain(1);
+    await send(page, 'Tell me more');
+    const echo = {
+      type: 'data-user-message',
+      runId: 'run-1',
+      from: 'AGENT',
+      data: {
+        type: 'user-message',
+        id: 's1',
+        contents: 'Tell me more',
+        metadata: { [CLIENT_MESSAGE_ID_KEY]: page.result.current.messages[0]!.id },
+      },
+    };
+    const replyStart = [
+      chunk('start', { messageId: 'a1' }),
+      echo,
+      chunk('step-start', { messageId: 'a1' }),
+      chunk('text-start', { id: 't1' }),
+      chunk('text-delta', { id: 't1', text: 'Half' }),
+    ];
+    await threads.send(0, ...replyStart);
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half']));
+    threads.breakStream(0);
+    await threads.followedAgain(2);
+
+    await threads.send(
+      1,
+      historyOf([], 'run-1'),
+      ...replyStart,
+      chunk('text-delta', { id: 't1', text: ', then whole.' }),
+      chunk('text-end', { id: 't1' }),
+      chunk('finish', { stepResult: { reason: 'stop' } }),
+      ended('run-1'),
+    );
+
+    await waitFor(() => expect(page.result.current.isRunning).toBe(false));
+    expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']);
+  });
+
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
     const threads = givenThreadStreams();
     const page = followThread();
