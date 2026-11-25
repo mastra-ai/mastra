@@ -9,6 +9,7 @@ import {
   knowledgeScopeAddress,
 } from '@mastra/core/knowledge';
 import { supportConfiguration } from '../../examples/support.ts';
+import { actorIdSchema, profileSchema } from '../identity.ts';
 
 const text = (max: number) =>
   z
@@ -27,7 +28,7 @@ export const reviewInputSchema = z
   .object({
     threadId: confirmationInputSchema.shape.threadId,
     messageId: identifier,
-    sourceActorId: identifier,
+    sourceActorId: actorIdSchema,
     audience: z.enum(['private', 'tenant']),
   })
   .strict();
@@ -131,7 +132,7 @@ const proposalFields = z
   .object({
     id: z.uuid(),
     owner: text(1000),
-    reviewer: z.object({ id: identifier, actorId: identifier, tenantId: identifier, customerId: identifier }).strict(),
+    reviewer: profileSchema.strict(),
     source: reviewInputSchema.extend({ confirmation: text(4000), digest: z.string().length(64) }).strict(),
     candidate: candidateSchema,
     bindings: z

@@ -1,23 +1,25 @@
 import { knowledgeScopeAddress } from '@mastra/core/knowledge';
+import { z } from 'zod';
 
-export interface Profile {
-  id: string;
-  actorId: string;
-  tenantId: string;
-  customerId: string;
-}
+const identityFieldSchema = z
+  .string()
+  .min(1)
+  .max(200)
+  .regex(/^[^\u0000-\u001f\u007f]+$/u);
+export const actorIdSchema = identityFieldSchema.refine(
+  value => value === value.trim(),
+  'Actor ID cannot have leading or trailing whitespace',
+);
+export const profileSchema = z.object({
+  id: identityFieldSchema,
+  actorId: actorIdSchema,
+  tenantId: identityFieldSchema,
+  customerId: identityFieldSchema,
+});
+export type Profile = z.infer<typeof profileSchema>;
 
 export function validateProfile(profile: Profile): Profile {
-  for (const field of ['id', 'actorId', 'tenantId', 'customerId'] as const) {
-    if (
-      typeof profile[field] !== 'string' ||
-      !profile[field].length ||
-      profile[field].length > 200 ||
-      /[\u0000-\u001f\u007f]/u.test(profile[field])
-    ) {
-      throw new Error('Invalid local profile');
-    }
-  }
+  if (!profileSchema.safeParse(profile).success) throw new Error('Invalid local profile');
   return profile;
 }
 

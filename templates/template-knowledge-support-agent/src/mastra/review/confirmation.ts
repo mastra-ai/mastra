@@ -1,6 +1,5 @@
 import { z } from 'zod';
-
-const sourceActorId = z.string().min(1).max(200);
+import { actorIdSchema } from '../identity.ts';
 const referencePrefix = 'sc1.';
 // A JSON-escaped UTF-16 code unit can take six bytes before base64url encoding.
 const maxReferenceLength = 2048;
@@ -25,7 +24,7 @@ export const confirmationInputSchema = z
 export const confirmationMetadataSchema = confirmationInputSchema
   .extend({
     version: z.literal(1),
-    sourceActorId,
+    sourceActorId: actorIdSchema,
     confirmedAt: z.iso.datetime(),
   })
   .strict();
@@ -33,7 +32,7 @@ const locatorSchema = z
   .object({
     threadId: confirmationInputSchema.shape.threadId,
     messageId: z.uuid(),
-    sourceActorId,
+    sourceActorId: actorIdSchema,
   })
   .strict();
 export function confirmationText(input: z.infer<typeof confirmationInputSchema>) {

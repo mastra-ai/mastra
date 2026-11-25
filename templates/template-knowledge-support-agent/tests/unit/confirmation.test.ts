@@ -32,7 +32,9 @@ test('confirmation references support long Unicode actors and reject ambiguous l
   };
   assert.equal(confirmationInputSchema.safeParse(payload).success, true);
   assert.equal(confirmationInputSchema.safeParse({ ...payload, sourceActorId: 'claimed' }).success, false);
-  const sourceActorId = '\u0001'.repeat(200);
+  for (const invalid of [' padded', 'padded ', 'control\u0001'])
+    assert.throws(() => encodeConfirmationReference({ ...locator, sourceActorId: invalid }));
+  const sourceActorId = '\uD800'.repeat(200);
   const metadata = confirmationMetadataSchema.parse({
     ...payload,
     version: 1,
