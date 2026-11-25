@@ -33,6 +33,30 @@ export function createActiveRunSignalQueues() {
         queue?.some(signal => signal.id === signalId),
       );
     },
+
+    /** Whether either of the thread's queues is non-empty. */
+    hasSignals(key: string): boolean {
+      return (pendingSignalsByThread.get(key)?.length ?? 0) > 0 || (preRunSignalsByThread.get(key)?.length ?? 0) > 0;
+    },
+
+    /** Removes and returns the thread's whole queue for `scope`. */
+    take(scope: ActiveRunSignalScope, key: string): CreatedAgentSignal[] {
+      const queues = queuesFor(scope);
+      const queue = queues.get(key);
+      if (!queue || queue.length === 0) {
+        return [];
+      }
+
+      queues.delete(key);
+      return queue;
+    },
+
+    /** The thread's queued signals, pre-run first, iterated without copying the queues. */
+    *queued(key: string): Generator<CreatedAgentSignal> {
+      for (const queue of [preRunSignalsByThread.get(key), pendingSignalsByThread.get(key)]) {
+        yield* queue ?? [];
+      }
+    },
   };
 }
 
