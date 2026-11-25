@@ -96,6 +96,13 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
       HttpResponse.json({ workItems: releaseItems }),
     ),
+    http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+      HttpResponse.json({
+        runs: sessions
+          .filter(({ materializedAt }) => materializedAt === null)
+          .map(({ sessionId }) => ({ runId: `run-${sessionId}`, resourceId: sessionId, threadId: sessionId })),
+      }),
+    ),
   );
 });
 
