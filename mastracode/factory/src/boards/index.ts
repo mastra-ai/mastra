@@ -14,6 +14,7 @@ export type {
   BoardPhase,
   BoardPhaseDefinition,
   BoardPhaseExitTool,
+  BoardPhaseOutcome,
   BoardPhaseKind,
   BoardPhaseGoal,
   BoardPhaseRunner,

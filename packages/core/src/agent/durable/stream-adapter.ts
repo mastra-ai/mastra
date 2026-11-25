@@ -815,6 +815,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     if (streamEvent.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
     if (typeof streamEvent.index === 'number') {
+      // An index decrease only happens on legacy 0-based logs. An epoch-seeded
+      // log (see MastraServerCache.listPushIndexed) restarts *above* every
+      // earlier index, which `isPastSuspension` already answers correctly
+      // without this flag: a new segment's index can't sit below `attachedAt`.
       if (previousLogIndex !== undefined && streamEvent.index < previousLogIndex) logRestarted = true;
       previousLogIndex = streamEvent.index;
     }

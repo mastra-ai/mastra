@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -9,34 +8,9 @@ import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
 import type { ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
-export function ProviderRows({
-  children,
-  addDisabled,
-  onAdd,
-}: {
-  children: ReactNode;
-  addDisabled: boolean;
-  onAdd: () => void;
-}) {
-  return (
-    <ul className="divide-border divide-y">
-      {children}
-      <li>
-        <Button
-          icon={<IconPlusMedium />}
-          variant="ghost"
-          size="sm"
-          className="h-10 w-full justify-start"
-          disabled={addDisabled}
-          onClick={onAdd}
-        >
-          Add provider
-        </Button>
-      </li>
-    </ul>
-  );
+export function ProviderRows({ children }: { children: ReactNode }) {
+  return <ul className="divide-border divide-y">{children}</ul>;
 }
 
 export function ProviderRowsSkeleton() {

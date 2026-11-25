@@ -28,22 +28,91 @@ export function isRunLocalTopic(topic: string): boolean {
 }
 
 /**
- * How long a durable run's stream log (`agent.stream.<runId>`) is retained.
+ * How long a run's stream log (`agent.stream.<runId>`) is retained after its
+ * last append, by default.
  *
- * The log is what `observe({ offset })` replays from, and its counter numbers
- * every frame. A run parked on a tool approval can wait far longer than a
- * cache's default TTL; if the log expired meanwhile, numbering would restart at
- * 0 while an attached observer still held the old cursor. The run's suspension
- * frame is its last append before it parks, so stamping this on every append
- * covers the parked window. Run cleanup deletes the log when the run ends.
+ * This MUST match `AGENT_RUN_RECORD_TTL_MS` (`agent/streams/run-records.ts`;
+ * events cannot import from agent). A run parked on a tool approval appends
+ * nothing while it waits, so its retention is never refreshed — and its
+ * ownership record authorizes `observe()` for 24 hours. A log that expires
+ * sooner leaves that window authorized but empty: the observer hangs without
+ * ever receiving the approval request it is waiting to act on. The two
+ * lifetimes expire together, so an authorized run always still has its
+ * events.
+ *
+ * The log is a delivery buffer, not the system of record: messages and
+ * suspension snapshots live in storage. An expired log is recreated on the
+ * next append with indices past every index it could have issued before (see
+ * `MastraServerCache.listPushIndexed`), so attached observers resynchronise
+ * instead of dropping frames. Run cleanup deletes the log when the run ends;
+ * this retention bounds it when cleanup never runs.
  */
-export const RUN_LOG_TTL_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_RUN_LOG_TTL_MS = 24 * 60 * 60 * 1000;
+
+/** @deprecated Use {@link DEFAULT_RUN_LOG_TTL_MS}, or configure `runLogTtlMs` on `CachingPubSub`. */
+export const RUN_LOG_TTL_MS = DEFAULT_RUN_LOG_TTL_MS;
+
+/**
+ * How long a thread's event stream (`agent.thread-stream.<key>`) is retained
+ * after its last append, by default. Active threads re-stamp it on every
+ * publish; storage holds a thread's saved runs, and the runtime trims saved
+ * output off the topic, so an idle thread's leftover tail only needs to
+ * survive a reconnect window.
+ */
+export const DEFAULT_THREAD_STREAM_LOG_TTL_MS = 60 * 60 * 1000;
 
 const RUN_LOG_TOPIC_PREFIX = 'agent.stream.';
 
+/**
+ * `agent.control.<runId>` and `agent.control.<runId>.ack` carry one run's
+ * abort handshake. Mirrors AGENT_CONTROL_TOPIC / abortAckTopic in
+ * `agent/streams/`; events cannot import from agent.
+ */
+const RUN_CONTROL_TOPIC_PREFIX = 'agent.control.';
+
+/** Mirrors AGENT_THREAD_STREAM_TOPIC_PREFIX in `agent/thread-stream-topic.ts`; events cannot import from agent. */
+const THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream.';
+
+/** Per-topic retention used when stamping a cached log's TTL on append. */
+export interface CachedLogTtls {
+  /** Retention for `agent.stream.<runId>` logs. Defaults to {@link DEFAULT_RUN_LOG_TTL_MS}. */
+  runLogTtlMs?: number;
+  /** Retention for `agent.thread-stream.<key>` logs. Defaults to {@link DEFAULT_THREAD_STREAM_LOG_TTL_MS}. */
+  threadStreamLogTtlMs?: number;
+}
+
 /** Minimum retention for a topic's cached log, or `undefined` for the cache default. */
-export function cachedLogTtlMs(topic: string): number | undefined {
-  return topic.startsWith(RUN_LOG_TOPIC_PREFIX) ? RUN_LOG_TTL_MS : undefined;
+export function cachedLogTtlMs(topic: string, ttls?: CachedLogTtls): number | undefined {
+  if (topic.startsWith(RUN_LOG_TOPIC_PREFIX)) return ttls?.runLogTtlMs ?? DEFAULT_RUN_LOG_TTL_MS;
+  if (topic.startsWith(THREAD_STREAM_TOPIC_PREFIX))
+    return ttls?.threadStreamLogTtlMs ?? DEFAULT_THREAD_STREAM_LOG_TTL_MS;
+  return undefined;
+}
+
+/**
+ * Idle retention for a topic that belongs to a single run or thread, or
+ * `undefined` for a topic a transport should bound with its own backstop.
+ *
+ * A persistent transport (Redis/Valkey Streams) needs a long idle backstop
+ * for work-queue topics, whose grouped consumers must still find their
+ * backlog after an outage. A run's topics have no such consumer: they are
+ * fan-out, their replay history is bounded by {@link cachedLogTtlMs} in the
+ * server cache, and the run record that authorizes reading them expires in a
+ * day. So they share the retention of the cached log they mirror — a day for
+ * run topics, matching the record (a run parked on an approval must stay
+ * readable for as long as it is authorizable), and an hour for thread
+ * streams. Holding them for the transport's multi-day backstop instead just
+ * leaves finished runs in the store for days.
+ *
+ * Run cleanup deletes these topics promptly when the owning process survives;
+ * this retention is what bounds them when it does not.
+ */
+export function streamTopicIdleTtlMs(topic: string, ttls?: CachedLogTtls): number | undefined {
+  if (topic.startsWith(RUN_LOG_TOPIC_PREFIX) || topic.startsWith(RUN_CONTROL_TOPIC_PREFIX))
+    return ttls?.runLogTtlMs ?? DEFAULT_RUN_LOG_TTL_MS;
+  if (topic.startsWith(THREAD_STREAM_TOPIC_PREFIX))
+    return ttls?.threadStreamLogTtlMs ?? DEFAULT_THREAD_STREAM_LOG_TTL_MS;
+  return undefined;
 }
 
 /**

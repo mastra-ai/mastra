@@ -657,6 +657,11 @@ export interface KnowledgePageActivityEvent {
   noteId?: string;
   provenance: KnowledgeProvenance;
   createdAt: Date;
+  /**
+   * Set on events from oldest-first reads (`order: 'asc'`): this event's place in the feed, an
+   * opaque string. Pass it as `after` to continue from here.
+   */
+  position?: string;
 }
 
 /** @experimental */
@@ -672,6 +677,13 @@ export interface KnowledgePageActivityInput {
   until?: Date;
   /** Events strictly older than this one in dated `(createdAt, id)` order (dated mode). */
   before?: { createdAt: Date; id: string };
+  /**
+   * `asc` reads oldest first in the store's commit-safe feed order (on stores reporting
+   * `supportsActivityAscending`). Defaults to `desc`.
+   */
+  order?: 'desc' | 'asc';
+  /** Events after this `position` from an earlier oldest-first read. Only with `order: 'asc'`. */
+  after?: string;
 }
 
 /** @experimental */
@@ -890,6 +902,24 @@ export interface KnowledgePageStore {
    * first, the bounds apply before the limit, and `before` returns only events strictly older than
    * that event in this order. `before` can't be combined with `cursor`. Without any of them the
    * store's existing order and cursor are unchanged.
+   *
+   * `order: 'asc'`, only on stores reporting `supportsActivityAscending`, reads oldest first in a
+   * commit-safe order: an event never appears behind a position a reader already holds, even when
+   * its write committed after later-stamped ones. Each event carries a `position`; `after` returns
+   * only events past that position, so a reader can store the last position it handled and continue
+   * from it later without missing or repeating events. One exception: events of a page or note that
+   * becomes readable later (a page moved into the read scope, a note restamped or restored into view)
+   * keep their original positions, so they can sit behind a position the reader already holds and
+   * aren't returned after it. The move, restamp or restore itself is logged as a new event past that
+   * position (for a subtree move, one event for the moved root), so a reader sees it and can read
+   * that page's earlier changes newest first. The order is the store's own feed order, not
+   * `createdAt` (`since`/`until` still filter by `createdAt`), and it isn't always the order writes
+   * committed in: PostgreSQL orders by transaction id (taken at a transaction's first write) and holds back events until every earlier
+   * transaction has ended, so a write that started first comes first even if it committed last. `after` needs `order: 'asc'` and can't be combined with `cursor`;
+   * `before` can't be used with `order: 'asc'`. Invalid combinations and malformed positions throw
+   * a `RangeError`, and so do `order: 'asc'` and `after` on a store that doesn't report the
+   * capability. A store can also refuse a position it no longer recognises (for example after its
+   * feed was rebuilt by a database restore) with a `RangeError`; restart from `since` then.
    */
   listPageActivity(
     input: KnowledgePageActivityInput,

@@ -516,7 +516,7 @@ Every Mastra process with background tasks enabled runs its own manager. You can
 ### Deployment requirements
 
 - Every manager must use the same storage backend, and its `updateTask` must apply the write conditions atomically. Mastra's storage adapters do. In-memory storage is only shared within one process.
-- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with Network Time Protocol (NTP), to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. The startup scan recovers a task as soon as its lease has expired by the reader's clock. Follow-up scans wait about one second past the expiry to absorb small differences.
+- `leaseExpiresAt` is a timestamp written with the owner's clock and compared against the clock of the manager that reads it. Keep server clocks synchronized, for example with Network Time Protocol (NTP), to well under `leaseDurationMs`. If a reader's clock runs ahead by more than the lease, it can recover a task whose owner is still alive. If it runs behind, recovery is delayed. The startup scan and the periodic check recover a task as soon as its lease has expired by the reader's clock. Follow-up scans wait about one second past the expiry to absorb small differences.
 - A longer [`leaseDurationMs`](/reference/configuration#backgroundtasks) delays recovery after a crash. A shorter one adds storage writes and makes it more likely that a stalled owner loses its lease while still running. The default is 30 seconds and the minimum is 3000 ms.
 
 ### Lease guarantees and repeated tool calls
@@ -539,16 +539,19 @@ Before a manager runs a task, it claims the task with a conditional write. The w
 
 While the task runs, the owner renews the lease every `leaseDurationMs / 3`, with a minimum of one second. Each renewal is conditional on the task still being `running` under the same owner. The task's final writes, such as `completed`, `failed`, `timed_out`, or `suspended`, carry the same condition, so a manager that lost the task can't overwrite the result of the manager that replaced it.
 
-The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A lease that isn't released, for example because the process crashed, expires on its own.
+The owner stops renewing when the task completes, fails, or suspends. On shutdown, the manager releases the leases it still holds, so other managers can recover those tasks without waiting for the lease to expire. A running task with `maxRetries: 0` can't run again, so shutdown fails it with `Worker process terminated before task completed`, the same ending as a crash, rather than cancelling it. A lease that isn't released, for example because the process crashed, expires on its own.
 
 ### Recover a task from a dead owner
 
 A manager treats a `running` task as abandoned only after its lease expires.
 
-When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs tasks scans for abandoned tasks on startup. If the scan finds a lease that hasn't expired yet, the manager scans again shortly after that lease expires, and repeats until no live lease is left. A task that a manager starts after that and then abandons waits for the next startup scan. For each task the scan recovers:
+When `recoverStaleTasksOnStart` is `true`, the default, each manager that runs tasks scans for abandoned tasks on startup. If the scan finds a lease that hasn't expired yet, the manager scans again shortly after that lease expires, and repeats until no live lease is left. After startup, the manager also checks for running tasks with an expired lease every `leaseDurationMs`, so a task whose worker dies later is recovered without a restart. Each check reads up to `globalConcurrency` running tasks (at least 100, at most 1,000), which normally covers all of them, so the task is recovered within about one `leaseDurationMs` after its lease expires. When more tasks are running than that, for example because other servers use a higher `globalConcurrency`, each further page of running tasks adds one `leaseDurationMs`. For each task the scan recovers:
 
-- If the task has `maxRetries` above `0`, it returns to `pending` and is dispatched again.
-- Otherwise, it fails with `Worker process terminated before task completed`.
+- If the task's worker shut down gracefully, it returns to `pending` and is dispatched again without using a retry.
+- If the worker died and the task's `retryCount` is below `maxRetries`, it uses a retry, returns to `pending`, and is dispatched again.
+- Otherwise, it fails with `Worker process terminated before task completed`. The failure fires `task.failed` and `onTaskFailed` like any other failure.
+
+Only a crash counts against `maxRetries`, so a task that keeps taking its worker down stops after its retries are used, while a deploy doesn't use one.
 
 The recovery write is conditional on the owner and lease that the scan read, so only one manager recovers each task.
 

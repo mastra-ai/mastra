@@ -9,7 +9,6 @@ import type { DraftSessionStart } from '../../chat/context/DraftSessionStartCont
 import { useContinueIntoThread } from '../../chat/context/transcriptKey';
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useChatThinking } from '../../chat/context/useChatThinking';
 import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { startPromptHandoff } from '../../chat/hooks/useHandoffPrompt';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
@@ -33,8 +32,7 @@ export function useStartCardSessionFromDraft(
   sessionRepository: WorkItemSessionRepository | undefined,
 ): DraftSessionStart & { ownsSession: (sessionId: string) => boolean } {
   const { baseUrl } = useChatSessionContext();
-  const { activeModelId, defaultModelId, setModel } = useChatModels();
-  const { override: thinkingLevelOverride } = useChatThinking();
+  const { activeModelId, selection } = useChatModels();
   const { localUser, failLocalUser } = useChatTranscript();
   const queryClient = useQueryClient();
   const continueIntoThread = useContinueIntoThread();
@@ -90,17 +88,10 @@ export function useStartCardSessionFromDraft(
       [],
     );
     stashHandoffFiles(sessionId, files);
-    const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
-    // The thread shows this model until its session reports one.
-    void setModel(activeModelId);
     continueIntoThread(
       factoryId,
       { sessionId, threadId: sessionId },
-      startPromptHandoff(sessionId, prompt, {
-        shownMessageId,
-        modelId: draftKeepsServerDefaults ? undefined : activeModelId,
-        thinkingLevel: thinkingLevelOverride,
-      }),
+      startPromptHandoff(sessionId, prompt, { shownMessageId, modelSelection: selection }),
     );
   };
 

@@ -448,45 +448,55 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     },
   );
 
-  it('createStep() keeps the supplied agent config for a durable: true agent on a legacy v1 model', async () => {
-    const processInput = vi.fn(({ messages }: any) => messages);
-    const agent = new Agent({
-      id: 'v1-durable-agent',
-      name: 'v1-durable-agent',
-      instructions: 'test',
-      durable: true,
-      inputProcessors: [{ id: 'spy-input', processInput }],
-      model: new MockLanguageModelV1({
-        doStream: async () => ({
-          stream: simulateReadableStream({
-            initialDelayInMs: 0,
-            chunkDelayInMs: 0,
-            chunks: [
-              { type: 'text-delta', textDelta: 'legacy response' },
-              { type: 'finish', finishReason: 'stop', usage: { promptTokens: 1, completionTokens: 1 } },
-            ],
+  it.each([true, { executionEngine: 'default' }, { executionEngine: 'evented' }] as const)(
+    'createStep() preserves agent config on a legacy v1 model with durable: %j',
+    async durable => {
+      const processInput = vi.fn(({ messages }: any) => messages);
+      const agent = new Agent({
+        id: 'v1-durable-agent',
+        name: 'v1-durable-agent',
+        instructions: 'test',
+        durable,
+        inputProcessors: [{ id: 'spy-input', processInput }],
+        model: new MockLanguageModelV1({
+          doStream: async () => ({
+            stream: simulateReadableStream({
+              initialDelayInMs: 0,
+              chunkDelayInMs: 0,
+              chunks: [
+                { type: 'text-delta', textDelta: 'legacy response' },
+                { type: 'finish', finishReason: 'stop', usage: { promptTokens: 1, completionTokens: 1 } },
+              ],
+            }),
+            rawCall: { rawPrompt: [], rawSettings: {} },
           }),
-          rawCall: { rawPrompt: [], rawSettings: {} },
         }),
-      }),
-    });
-    const wf = createWorkflow({
-      id: 'v1-durable-agent-wf',
-      inputSchema: z.object({ prompt: z.string() }),
-      outputSchema: z.any(),
-    })
-      .then(createStep(agent))
-      .commit();
-    bind(wf, { agents: { agent } });
+      });
+      const wf = createWorkflow({
+        id: 'v1-durable-agent-wf',
+        inputSchema: z.object({ prompt: z.string() }),
+        outputSchema: z.any(),
+      })
+        .then(createStep(agent))
+        .commit();
+      const mastra = bind(wf, { agents: { agent } });
+      const warn = vi.spyOn(mastra.getLogger(), 'warn');
 
-    const run = await wf.createRun();
-    const result = await run.start({ inputData: { prompt: 'say hi' } });
-    expect(result.status).toBe('success');
-    expect(processInput).toHaveBeenCalled();
-    if (result.status === 'success') {
-      expect(result.result).toEqual({ text: 'legacy response' });
-    }
-  });
+      const run = await wf.createRun();
+      const result = await run.start({ inputData: { prompt: 'say hi' } });
+      expect(result.status).toBe('success');
+      expect(processInput).toHaveBeenCalled();
+      const legacyWarning = expect.stringContaining('uses a legacy v1 model');
+      if (durable === true) {
+        expect(warn).not.toHaveBeenCalledWith(legacyWarning);
+      } else {
+        expect(warn).toHaveBeenCalledWith(legacyWarning);
+      }
+      if (result.status === 'success') {
+        expect(result.result).toEqual({ text: 'legacy response' });
+      }
+    },
+  );
 
   it('createStep() runs a resumable agent from another Mastra without demanding a durable wrapper', async () => {
     const agent = textAgent('other-mastra-agent', 'plain response', true);

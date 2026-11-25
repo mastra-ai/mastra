@@ -90,7 +90,7 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
                     size="sm"
                     variant="ghost"
                     onClick={() => onRouteAgain(item)}
-                    disabled={routeAgain.isPending && routeAgain.variables === item.id}
+                    loading={routeAgain.isPending && routeAgain.variables === item.id}
                   >
                     Route again
                   </Button>
@@ -104,9 +104,9 @@ export function NotRoutedStep({ factoryId }: { factoryId: string }) {
                 size="sm"
                 variant="ghost"
                 onClick={() => void query.fetchNextPage()}
-                disabled={query.isFetchingNextPage}
+                loading={query.isFetchingNextPage}
               >
-                {query.isFetchingNextPage ? 'Loading…' : 'Load more'}
+                Load more
               </Button>
             </li>
           )}

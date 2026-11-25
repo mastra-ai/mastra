@@ -153,8 +153,9 @@ function DeadRepositoryRow({
           aria-label={`Remove ${UNAVAILABLE_LABEL}`}
           disabled={disabled}
           onClick={onRemove}
+          loading={removing}
         >
-          {removing ? 'Removing…' : 'Remove'}
+          Remove
         </Button>
       </SettingsItem>
       {removeError && <Notice variant="destructive">{removeError}</Notice>}
@@ -253,8 +254,9 @@ function RepositoryRow({
           aria-label={`Remove ${label}`}
           disabled={disabled}
           onClick={onRemove}
+          loading={removing}
         >
-          {removing ? 'Removing…' : 'Remove'}
+          Remove
         </Button>
       </SettingsItem>
       {removeError && <Notice variant="destructive">{removeError}</Notice>}

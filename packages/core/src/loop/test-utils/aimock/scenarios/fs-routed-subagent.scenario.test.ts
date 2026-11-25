@@ -25,7 +25,7 @@ import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
 import { assembleAgentFromFsEntry } from '../../../../agent/fs-routing';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
-import { SCENARIO_MODEL_ID } from '../types';
+import { nativeExecutionEngine, SCENARIO_MODEL_ID } from '../types';
 
 describeForAllEngines(
   'AIMock loop scenario: file-routed subagent delegation',
@@ -58,7 +58,13 @@ describeForAllEngines(
 
       // Register through the real file-routing path so the scenario exercises how
       // the bundler injects file-based agents.
-      const mastra = new Mastra({ agents: {}, logger: false, storage: new InMemoryStore() });
+      const executionEngine = nativeExecutionEngine(engine);
+      const mastra = new Mastra({
+        agents: {},
+        logger: false,
+        storage: new InMemoryStore(),
+        ...(executionEngine ? { durable: { executionEngine } } : {}),
+      });
       mastra.__registerFsAgents({ supervisor: supervisor as any });
       const parent = mastra.getAgent('supervisor');
 

@@ -27,7 +27,7 @@ vi.hoisted(() => {
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
-import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
+import { isDurableEngineVariant, nativeExecutionEngine } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
@@ -173,14 +173,20 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: agent as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: agent as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: agent as any });
     return mastra.getAgent('agent') as any;
   }
 
   async function startStream(agent: any, prompt: string, options: Record<string, any>) {
     const result = await agent.stream(prompt, options);
-    if (!isDurableEngineVariant(engine)) return { output: result, drain: () => result.consumeStream() };
+    if (!('output' in result)) return { output: result, drain: () => result.consumeStream() };
     return {
       output: result.output,
       drain: async () => {
@@ -460,7 +466,13 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {
@@ -531,7 +543,13 @@ function threadLeaseLoss(engine: EngineVariant) {
         : engine === 'evented'
           ? createEventedAgent({ agent: base, pubsub })
           : base;
-    const mastra = new Mastra({ agents: engine === 'fs' ? {} : { agent: built as any }, pubsub, logger: false });
+    const executionEngine = nativeExecutionEngine(engine);
+    const mastra = new Mastra({
+      ...(executionEngine && { durable: { executionEngine } }),
+      agents: engine === 'fs' ? {} : { agent: built as any },
+      pubsub,
+      logger: false,
+    });
     if (engine === 'fs') mastra.__registerFsAgents({ agent: built as any });
 
     try {
@@ -1684,17 +1702,8 @@ function threadLeaseLoss(engine: EngineVariant) {
     expect(afterStall).toEqual([]);
 
     stall = false;
-    if (isDurableEngineVariant(engine)) {
-      // A durable run also holds its own execution claim, which the 400ms stalls let lapse. That claim, not the
-      // thread lease, stops it, and it says so.
-      await done;
-      expect(afterStall).toEqual([]);
-      expect(String((await output.error)?.message ?? '')).toContain(
-        'could not verify that this execution still owns the run',
-      );
-      return;
-    }
-    // The backend answers again and nobody else took the thread: the run takes its lease back and goes on.
+    // The backend answers again and nobody else took the thread: the run takes its lease back and goes on. A durable
+    // run's own execution claim survives the stalls too, since its store kept confirming it (#30669).
     const ticksBack = ticks;
     await vi.waitFor(() => expect(ticks).toBeGreaterThan(ticksBack), { timeout: 5_000 });
     await done;

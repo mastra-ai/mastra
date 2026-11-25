@@ -15,11 +15,20 @@ export interface ValkeyServerCacheOptions {
 const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.toString() : String(value));
 
 /**
- * Atomic "allocate index + append + refresh TTLs" used by `listPushIndexed`.
+ * Atomic "seed + allocate index + append + refresh TTLs" used by
+ * `listPushIndexed`.
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
  * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
+ *
+ * An absent counter is seeded from the server clock (epoch MICROseconds, see
+ * the Redis cache for why not milliseconds) before the INCR, so a log
+ * recreated after expiry or eviction does not reissue an index a subscriber
+ * already consumed (see `MastraServerCache.listPushIndexed`). Only on a miss:
+ * an existing counter keeps counting. The seed is only as monotonic as the
+ * server clock, so readers still detect a restarted log rather than relying on
+ * an index never repeating.
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -27,13 +36,21 @@ const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.
  * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
  */
 const LIST_PUSH_INDEXED_SCRIPT = `
+if redis.call('EXISTS', KEYS[2]) == 0 then
+  local t = redis.call('TIME')
+  redis.call('SET', KEYS[2], string.format('%.0f', tonumber(t[1]) * 1000000 + tonumber(t[2])))
+end
 local i = redis.call('INCR', KEYS[2]) - 1
+-- Epoch-microsecond indices exceed Lua 5.1's default 14-significant-digit
+-- number formatting; %.0f keeps the full integer, where plain concatenation
+-- would round it and store a different index than the one allocated.
+local istr = string.format('%.0f', i)
 local body = ARGV[1]
 local doc
 if #body <= 2 then
-  doc = '{"index":' .. i .. '}'
+  doc = '{"index":' .. istr .. '}'
 else
-  doc = '{"index":' .. i .. ',' .. string.sub(body, 2)
+  doc = '{"index":' .. istr .. ',' .. string.sub(body, 2)
 end
 redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
@@ -41,7 +58,7 @@ if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
   redis.call('EXPIRE', KEYS[2], ttl)
 end
-return i
+return istr
 `.trim();
 
 /** GLIDE-backed Valkey cache for Mastra server state. */
@@ -148,9 +165,15 @@ export class ValkeyServerCache extends MastraServerCache {
       this.getKey(listKey),
       this.getKey(counterKey),
       JSON.stringify(body),
-      // A cache without expiry stays that way; otherwise `ttlMs` can only
-      // raise the default.
-      String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
+      // The longer of the cache default and the requested minimum wins. An
+      // explicit request applies even when the default expiry is disabled:
+      // the caller is stating a retention bound for this log.
+      String(
+        Math.max(
+          this.ttlSeconds > 0 ? this.ttlSeconds : 0,
+          ttlMs !== undefined ? Math.max(1, Math.ceil(ttlMs / 1000)) : 0,
+        ),
+      ),
     ]);
     return Number(result);
   }

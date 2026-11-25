@@ -2,13 +2,7 @@ import { expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { MockMemory } from '../../../../memory/mock';
 import type { ChunkType } from '../../../../stream/types';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  runLoopScenario,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: what a failed or cancelled turn leaves in the memory thread.
@@ -235,7 +229,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
       memory: { thread: threadId, resource: resourceId },
       abortSignal: controller.signal,
     });
-    const firstOutput = isDurableEngineVariant(engine) ? (first as unknown as { output: typeof first }).output : first;
+    const firstOutput = 'output' in first ? (first.output as typeof first) : first;
     let firstText = '';
     try {
       for await (const chunk of firstOutput.fullStream) {
@@ -254,9 +248,7 @@ describeForAllEngines('AIMock loop scenario: persistence of failed turns', engin
     const second = await agent.stream('MESSAGE_AFTER_ABORT', {
       memory: { thread: threadId, resource: resourceId },
     });
-    const secondOutput = isDurableEngineVariant(engine)
-      ? (second as unknown as { output: typeof second }).output
-      : second;
+    const secondOutput = 'output' in second ? (second.output as typeof second) : second;
     expect(await secondOutput.text).toBe('Second reply.');
 
     const requests = llm.getRequests();

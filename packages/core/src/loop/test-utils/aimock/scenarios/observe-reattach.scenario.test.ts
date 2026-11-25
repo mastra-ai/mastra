@@ -66,7 +66,7 @@ describeForAllEngines(
         const run = await agent.stream('Run three steps', { maxSteps: 5 });
         const live: ChunkType[] = [];
         const consuming = (async () => {
-          for await (const chunk of run.output.fullStream) live.push(chunk);
+          for await (const chunk of (run.output ?? run).fullStream) live.push(chunk);
         })();
         let observation: Awaited<ReturnType<typeof agent.observe>> | undefined;
         let observing: Promise<void> | undefined;
@@ -96,13 +96,15 @@ describeForAllEngines(
             await disconnected;
             await entered[1]!.promise;
             // The cache's numeric event index includes lifecycle events, not just chunks.
-            const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(run.runId));
-            const boundary = history.find(
-              event =>
-                event.type === AgentStreamEventTypes.CHUNK &&
-                event.data.type === 'tool-result' &&
-                event.data.payload.toolCallId === 'call_1',
-            );
+            const boundary =
+              engine === 'native-default' || engine === 'native-evented'
+                ? prefix.find(chunk => chunk.type === 'tool-result' && chunk.payload.toolCallId === 'call_1')
+                : (await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(run.runId))).find(
+                    event =>
+                      event.type === AgentStreamEventTypes.CHUNK &&
+                      event.data.type === 'tool-result' &&
+                      event.data.payload.toolCallId === 'call_1',
+                  );
             expect(boundary?.index).toBeTypeOf('number');
             if (variant === 'offset') observed.push(...prefix);
             observation = await agent.observe(

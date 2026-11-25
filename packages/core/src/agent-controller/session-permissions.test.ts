@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { z } from 'zod';
 
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 
-async function createSession(storage: InMemoryStore) {
+async function createSession(storage: InMemoryStore, stateSchema?: z.ZodType) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -17,6 +18,7 @@ async function createSession(storage: InMemoryStore) {
     id: 'test-controller',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    ...(stateSchema ? { stateSchema } : {}),
   });
   await controller.init();
   const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
@@ -71,5 +73,26 @@ describe('session.permissions', () => {
     const rules = session.permissions.getRules();
     expect(rules.categories.execute).toBe('deny');
     expect(rules.tools.fetch).toBe('allow');
+  });
+
+  it('leaves the rules unchanged when the state schema rejects an update', async () => {
+    const askOrDeny = z.record(z.string(), z.enum(['ask', 'deny'])).default({});
+    const { session } = await createSession(
+      storage,
+      z.looseObject({
+        permissionRules: z.object({ categories: askOrDeny, tools: askOrDeny }).default({ categories: {}, tools: {} }),
+      }),
+    );
+    await session.permissions.setForTool({ toolName: 'fetch', policy: 'deny' });
+
+    await expect(session.permissions.setForCategory({ category: 'execute', policy: 'allow' })).rejects.toThrow(
+      'Invalid state update',
+    );
+    await expect(session.permissions.setForTool({ toolName: 'fetch', policy: 'allow' })).rejects.toThrow(
+      'Invalid state update',
+    );
+
+    expect(session.permissions.getRules()).toEqual({ categories: {}, tools: { fetch: 'deny' } });
+    expect(session.resolveToolApproval('fetch')).toBe('deny');
   });
 });

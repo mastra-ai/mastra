@@ -285,6 +285,72 @@ describe('knowledge_activity: continuation', () => {
     expect(next.cursor).toBeUndefined();
   });
 
+  it('lists oldest first with order oldest, and resumes it after a token-limited result, every change exactly once', async () => {
+    const { T0, store, call, acme, page, note } = await setup({ maxTokens: 300 });
+    let seed = 11;
+    const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const p = await page(T0 + 1, acme.id, 'Log');
+    for (let i = 0; i < 30; i++) {
+      await note(T0 + 1000 * (i + 2), p.id, `entry ${i} ` + 'x'.repeat(Math.floor(rand() * 400)));
+    }
+    const walk: string[] = [];
+    let cursor: string | undefined;
+    let calls = 0;
+    let stoppedMidBatch = false;
+    do {
+      const result: any = await call({ since: day(T0), order: 'oldest', limit: 7, ...(cursor ? { cursor } : {}) });
+      calls++;
+      expect(result.changes.length).toBeGreaterThan(0);
+      if (result.cursor && result.changes.length < 7) stoppedMidBatch = true;
+      walk.push(...result.changes.map((change: any) => `${change.at}|${change.action}`));
+      // Oldest first returns a cursor even once caught up; more says whether to keep going now.
+      expect(result.cursor).toEqual(expect.any(String));
+      cursor = result.cursor;
+      if (!result.more) break;
+    } while (calls < 100);
+    const { events } = await store.listPageActivity({ read: 'all', since: new Date(T0), order: 'asc', limit: 100 });
+    const reference = events.map(event => `${event.createdAt.toISOString()}|${event.action}`);
+    expect(reference).toHaveLength(31);
+    expect(reference[0]).toMatch(/\|page-created$/);
+    expect(walk).toEqual(reference);
+    expect(stoppedMidBatch).toBe(true);
+
+    // The caught-up cursor returns nothing until a change lands, then exactly that change,
+    // even when its clock reads earlier than everything already listed.
+    const idle: any = await call({ since: day(T0), order: 'oldest', cursor });
+    expect(idle.changes).toEqual([]);
+    expect(idle.more).toBeUndefined();
+    await note(T0 + 500, p.id, 'late clock');
+    const fresh: any = await call({ since: day(T0), order: 'oldest', cursor: idle.cursor });
+    expect(fresh.changes.map((change: any) => change.note?.text)).toEqual(['late clock']);
+  });
+
+  it('returns a cursor from an oldest-first read that finds nothing yet, and it picks up the first change', async () => {
+    const { T0, call, acme, page } = await setup();
+    const empty: any = await call({ since: day(T0), order: 'oldest' });
+    expect(empty.changes).toEqual([]);
+    expect(empty.more).toBeUndefined();
+    expect(empty.cursor).toEqual(expect.any(String));
+    await page(T0 + 1000, acme.id, 'First');
+    const next: any = await call({ since: day(T0), order: 'oldest', cursor: empty.cursor });
+    expect(next.changes.map((change: any) => change.page.name)).toEqual(['First']);
+    const again: any = await call({ since: day(T0), order: 'oldest', cursor: next.cursor });
+    expect(again.changes).toEqual([]);
+  });
+
+  it('refuses a cursor from the other order, either way', async () => {
+    const { T0, call, acme, page } = await setup();
+    await page(T0 + 1000, acme.id, 'A');
+    await page(T0 + 2000, acme.id, 'B');
+    const newest = await call({ since: day(T0), limit: 1 });
+    const oldest = await call({ since: day(T0), order: 'oldest', limit: 1 });
+    expect(newest.changes[0].page.name).toBe('B');
+    expect(oldest.changes[0].page.name).toBe('A');
+    await expect(call({ since: day(T0), order: 'oldest', cursor: newest.cursor })).rejects.toThrow(/or order/);
+    await expect(call({ since: day(T0), cursor: oldest.cursor })).rejects.toThrow(/or order/);
+    expect((await call({ since: day(T0), order: 'newest', cursor: newest.cursor })).changes[0].page.name).toBe('A');
+  });
+
   it('refuses a cursor with different since, until or from', async () => {
     const { T0, call, acme, page } = await setup();
     const a = await page(T0 + 1000, acme.id, 'A');
@@ -296,7 +362,7 @@ describe('knowledge_activity: continuation', () => {
       { since: day(T0), until: day(T0 + 9000) },
       { since: day(T0), from: a.id },
     ]) {
-      await expect(call({ ...other, limit: 1, cursor })).rejects.toThrow(/different since, until or from/);
+      await expect(call({ ...other, limit: 1, cursor })).rejects.toThrow(/different since, until, from or order/);
     }
     await expect(call({ since: day(T0), cursor: 'not-a-cursor' })).rejects.toThrow(/did not come from/);
   });
@@ -391,5 +457,26 @@ describe('knowledge_activity: refusals before any listing', () => {
     expect(list).not.toHaveBeenCalled();
     // The store's own undated read still works.
     expect((await store.listPageActivity({ read: 'all', limit: 5 })).events.length).toBeGreaterThan(0);
+  });
+
+  it('refuses order oldest on a store without oldest-first support, on a first call and on a resume', async () => {
+    const { T0, store, call, acme, page } = await setup();
+    await page(T0 + 1000, acme.id, 'A');
+    await page(T0 + 2000, acme.id, 'B');
+    const { cursor } = await call({ since: day(T0), order: 'oldest', limit: 1 });
+    expect(cursor).toBeDefined();
+    const capabilities = store.getCapabilities();
+    vi.spyOn(store, 'getCapabilities').mockReturnValue({ ...capabilities, supportsActivityAscending: undefined });
+    const list = vi.spyOn(store, 'listPageActivity');
+    for (const input of [
+      { since: day(T0), order: 'oldest' },
+      { since: day(T0), order: 'oldest', limit: 1, cursor },
+    ]) {
+      const error = await rejection(call(input));
+      expect(error?.name).toBe('KnowledgeUnsupportedCapabilityError');
+    }
+    expect(list).not.toHaveBeenCalled();
+    // Newest first doesn't need it.
+    expect((await call({ since: day(T0) })).changes).toHaveLength(2);
   });
 });

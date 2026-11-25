@@ -141,6 +141,16 @@ export function formatToolResult(
   return `${header} · ${status}\n${resultBody}`;
 }
 
+/**
+ * Action id of a button that continues a stopped run. Put it on an error card
+ * (see `formatError`); a click sends {@link CONTINUE_RUN_MESSAGE} to the agent
+ * from the clicker, through the same handler as a reply in the thread.
+ */
+export const CONTINUE_RUN_ACTION_ID = 'run_continue';
+
+/** What a click on a {@link CONTINUE_RUN_ACTION_ID} button says to the agent. */
+export const CONTINUE_RUN_MESSAGE = 'Continue.';
+
 /** Format a tool approval request message */
 export function formatToolApproval(
   toolName: string,
