@@ -1387,18 +1387,28 @@ export const useChat = ({
       return;
     }
 
-    const response = await agent.declineToolCall({
-      runId: currentRunId,
-      toolCallId,
-      ...continuation,
-    });
+    try {
+      const response = await agent.declineToolCall({
+        runId: currentRunId,
+        toolCallId,
+        ...continuation,
+      });
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
+      await response.processDataStream({
+        onChunk: async (chunk: ChunkType) => {
+          await processStreamChunk(chunk, onChunk);
+        },
+      });
+      setIsRunning(false);
+    } catch (error) {
+      setToolCallApprovals(prev => {
+        const next = { ...prev };
+        delete next[toolCallId];
+        return next;
+      });
+      setIsRunning(false);
+      throw error;
+    }
   };
 
   const approveToolCallGenerate = async (toolCallId: string) => {

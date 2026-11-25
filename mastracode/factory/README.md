@@ -390,6 +390,23 @@ const releaseBoard = defineBoard({
 
 Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`. When a project [intake route](#status-events-move-existing-cards) on the card's board handles `work_item.closed`, as the default close routes do on Work, the routes decide the move instead and `sourceClosed` is only the fallback.
 
+### Board engine
+
+The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them. A card filed without a transition (re-filed by a reconcile pass, or moved to another board when an intake route changes) is requested as a placement, which runs no phase rules.
+
+Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
+
+```typescript
+import { MastraFactory, createDispatcherBoardEngine } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  boardEngine: createDispatcherBoardEngine,
+});
+```
+
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
+
 ### Board tool-result rules
 
 A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:
@@ -969,12 +986,22 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 - Settings › Skills groups built-in skills under Work. For each custom board it shows the skill each phase runs (`runner.skill`) and the roles of phases that run no skill; those phases' kickoff instructions live in the board definition. Your app's other skills appear under App skills.
 - Not yet board-aware: the Overview funnel and stage-hold metrics (Work-only), search scopes (Work sessions), and the automation toggles that are specific to Work triage and review. Custom-board cards still count toward in-flight totals and appear in activity and audit logs.
 
+### One project per Factory
+
+A Factory instance is moving to one project per organization. The Factory UI no longer offers **Create factory**: onboarding creates the organization's first project, and the project switcher only lists the projects that already exist. Creating another project with `POST /web/factory/projects` when the organization already has one is deprecated. It still works, and Factory logs once per process:
+
+```text
+[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.
+```
+
+Existing projects keep working and stay reachable from the switcher. To split work for different teams or repositories inside one project, use boards and [intake routes](#intake-routes).
+
 ### Choose which sources feed a project
 
 Intake bindings are explicit. A Linear project, Jira project, GitLab project, incident.io source or GitHub repository only feeds a Factory project once it is bound to it. The server files its items as cards; the board and search read only those cards and never ask a provider for its list, so nothing is filed just by opening a board. A binding decides only which project a source feeds. Where its cards land is up to the project's [intake routes](#intake-routes): a new card is filed in the default board's first phase, and the first route that matches it places it. To send one repository, Linear team or Jira project to its own board, add a route with a `source.repository` condition. A route sees where an item lives, not which binding brought it in: two Linear projects in the same team share the team key, so a route can't send them to different boards.
 
 - **Linear:** each project binding feeds one Factory project.
-- **Jira:** One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and binds it to the new Factory. Both `JiraIntegration` and `PlatformJiraIntegration` run a reconciliation sweep every five minutes by default, with or without an open browser: it reads the 150 most recently updated issues of each routed Jira project (five pages, counted per project so a busy one cannot starve the others) and files a work item for each new one, refreshes the status and metadata of imported cards, and transitions the linked card of a closed issue to done or canceled. Both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
+- **Jira:** One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. Both `JiraIntegration` and `PlatformJiraIntegration` run a reconciliation sweep every five minutes by default, with or without an open browser: it reads the 150 most recently updated issues of each routed Jira project (five pages, counted per project so a busy one cannot starve the others) and files a work item for each new one, refreshes the status and metadata of imported cards, and transitions the linked card of a closed issue to done or canceled. Both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** pull requests come from every repository linked to the project. Issues come only from repositories in the organization's GitHub list in Settings › Work Intake; linking a repository adds it to that list unless the link request sends `selectIntake: false`, and adding a repository to the list brings in its open issues. To send one repository's issues and pull requests to another board, add an intake route with a `source.repository` condition; for labelled issues, an `item.labels` condition. A label change on an issue updates its card's labels and never moves the card.
 
 Each connected service in Settings › Work Intake lists the sources it brings in, and a service with no source selected brings in nothing: there is no separate on/off switch, and a selection saved while a service was switched off reads as empty. Vanta has a single source, every active vulnerability on the connected account, which syncs only while it is selected. Dependabot alerts keep their own switch.
@@ -1615,14 +1642,16 @@ Voice clips recorded in Slack and sent to a Factory session (a mention, a DM, or
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
 
 ```
-https://<your-factory>/web/factory/projects/<projectId>/mcp
+https://<your-factory>/mcp
 ```
 
-The Factory UI does not show this URL while the MCP endpoint is being reworked. Build it from your Factory URL and project id as shown above.
+The endpoint serves the organization's Factory project. An organization that created more than one (deprecated, see [One project per Factory](#one-project-per-factory)) gets its first. The Factory UI does not show this URL yet.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
-Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/mcp`. Its `resource` is the endpoint URL, and clients ask the authorization server for a token bound to it.
+
+The Factory accepts only JWT access tokens issued for this endpoint: signed by a listed authorization server (keys from the `jwks_uri` in its `/.well-known/oauth-authorization-server` metadata, or its `/.well-known/openid-configuration` when it has none) with `aud` set to `https://<your-factory>/mcp`. The user and organization come from the token's `sub` and `org_id`. With self-managed WorkOS auth, the Factory also looks the user up in WorkOS on every request: someone removed from the organization is refused at once, even with an unexpired token, and audit entries carry their name. With Platform auth that lookup isn't available yet, so access lasts until the token expires. A Platform login token, a token issued for another Factory, or one issued for Platform's own MCP server is refused, and the Factory's other routes refuse tokens issued for this endpoint. With WorkOS or Platform auth they also refuse any token issued for another resource (one with an `aud` claim), since those providers don't check the audience themselves (also when they're wrapped in `CompositeAuth`). With Platform auth pinned to an organization, the endpoint refuses tokens for any other organization, like the rest of the Factory. The authorization server must have Resource Indicators (RFC 8707) enabled with the endpoint registered as a resource. Without them it issues tokens with no audience, which the endpoint refuses. An authorization server that doesn't know the endpoint as a resource may refuse to sign in at all: AuthKit answers `invalid_target`. A `http://localhost` Factory can't be registered there, so for local development use your own authorization server, or a public HTTPS tunnel: set `publicUrl` to the tunnel origin and register `https://<tunnel-origin>/mcp` as the resource, so the audience the endpoint expects matches the tokens it gets. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
 
 To connect a client:
 
@@ -1631,7 +1660,7 @@ To connect a client:
 
 The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Clients that still open with a 2025-era `initialize` request, such as VS Code and Cursor, are served too, statelessly: they sign in the same way and get the same tools, but no session id, no `GET` event stream and no activity events. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
 
-Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. Register `https://<your-factory>/mcp` as a Resource Indicator there. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
 ```ts
 new MastraFactory({

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Lets a test act while the runner is computing a flush digest. */
 const digestHook = vi.hoisted(() => ({ before: undefined as undefined | (() => Promise<void>) }));
@@ -727,5 +727,266 @@ describe('runKnowledgeImport', () => {
       expect(host.attempts).toHaveLength(1);
       expect(result).toMatchObject({ outcome: 'canceled', lastSeq: 0 });
     }, 3000);
+  });
+
+  describe('timed flush', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** A promise the test resolves, so an import can sit between items while time passes. */
+    const gate = () => {
+      let open!: () => void;
+      const opened = new Promise<void>(resolve => (open = resolve));
+      return { opened, open };
+    };
+
+    /** Lets real async work (the flush digest) run while fake time stands still. */
+    async function until(done: () => boolean) {
+      for (let i = 0; i < 500 && !done(); i++) await new Promise(resolve => setImmediate(resolve));
+      expect(done()).toBe(true);
+    }
+
+    it('writes slow items once the oldest has waited flushAfterMs, without saving the cursor', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'c0' };
+      const [second, done] = [gate(), gate()];
+      let pushed = 0;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            pushed++;
+            await second.opened;
+            await ctx.items.upsert(item(2));
+            pushed++;
+            await done.opened;
+            await ctx.state.set('cursor', 'c2');
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      await until(() => pushed === 1);
+      await vi.advanceTimersByTimeAsync(10_000);
+      second.open();
+      await until(() => pushed === 2);
+      // The timer runs from the oldest item, not the latest: 29.999s after item 1, nothing yet.
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(host.attempts).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      await until(() => host.flushes.length === 1);
+      expect(host.flushes.map(f => [f.seq, f.ops.map(op => op.op === 'upsert' && op.item.sourceId), f.state])).toEqual([
+        [1, ['e1', 'e2'], undefined],
+      ]);
+      expect(host.state).toEqual({ cursor: 'c0' });
+      done.open();
+      const result = await run;
+      expect(host.flushes.map(f => [f.seq, f.ops.length, f.state])).toEqual([
+        [1, 2, undefined],
+        [2, 0, { cursor: 'c2' }],
+      ]);
+      expect(result).toMatchObject({ outcome: 'succeeded', lastSeq: 2 });
+    });
+
+    it('starts the timer over after a size flush', async () => {
+      const host = new RecordingHost();
+      const [rest, done] = [gate(), gate()];
+      let pushed = 0;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            pushed++;
+            await rest.opened;
+            await ctx.items.upsert(item(2)); // fills the buffer: size flush
+            await ctx.items.upsert(item(3)); // the new oldest item, at 20s
+            pushed += 2;
+            await done.opened;
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        bufferSize: 2,
+        flushAfterMs: 30_000,
+      });
+      await until(() => pushed === 1);
+      await vi.advanceTimersByTimeAsync(20_000);
+      rest.open();
+      await until(() => pushed === 3 && host.flushes.length === 1);
+      // At 30s a timer left over from item 1 would fire; item 3 has waited only 10s.
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(host.attempts).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(1);
+      await until(() => host.flushes.length === 2);
+      expect(host.flushes.map(f => f.ops.map(op => op.op === 'upsert' && op.item.sourceId))).toEqual([
+        ['e1', 'e2'],
+        ['e3'],
+      ]);
+      done.open();
+      await expect(run).resolves.toMatchObject({ outcome: 'succeeded', lastSeq: 2 });
+    });
+
+    it('queues a timed flush behind one in flight, so flushes never overlap', async () => {
+      const host = new RecordingHost();
+      const answer = gate();
+      let inFlight = 0;
+      let most = 0;
+      let calls = 0;
+      const flushOnce = host.flush.bind(host);
+      host.flush = async flush => {
+        calls++;
+        inFlight++;
+        most = Math.max(most, inFlight);
+        try {
+          if (flush.seq === 1) await answer.opened;
+          return await flushOnce(flush);
+        } finally {
+          inFlight--;
+        }
+      };
+      const [second, done] = [gate(), gate()];
+      let pushed = 0;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            pushed++;
+            await second.opened;
+            await ctx.items.upsert(item(2));
+            pushed++;
+            await done.opened;
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+        hostCallTimeoutMs: 600_000,
+      });
+      await until(() => pushed === 1);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await until(() => calls === 1); // e1 sent; its answer is held
+      second.open();
+      await until(() => pushed === 2);
+      await vi.advanceTimersByTimeAsync(30_000); // e2's timed flush waits behind seq 1
+      for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+      expect(calls).toBe(1);
+      answer.open();
+      await until(() => host.flushes.length === 2);
+      done.open();
+      const result = await run;
+      expect(most).toBe(1);
+      expect(host.flushes.map(f => [f.seq, f.ops.map(op => op.op === 'upsert' && op.item.sourceId)])).toEqual([
+        [1, ['e1']],
+        [2, ['e2']],
+      ]);
+      expect(result).toMatchObject({ outcome: 'succeeded', lastSeq: 2 });
+    });
+
+    it('fails the run when a timed flush is rejected, so no later cursor skips its items', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'c0' };
+      const after = gate();
+      let pushed = false;
+      let setError: unknown;
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            await ctx.items.upsert({ ...item(2), sourceId: '' }); // the host can't take this batch
+            pushed = true;
+            await after.opened;
+            await ctx.items.upsert(item(3)).catch(() => {});
+            await ctx.state.set('cursor', 'c3').catch(error => (setError = error));
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      await until(() => pushed);
+      await vi.advanceTimersByTimeAsync(30_000);
+      for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+      after.open();
+      const result = await run;
+      // The run ends without waiting on the importer; its cursor save is refused when it gets there.
+      await until(() => setError !== undefined);
+      expect(host.attempts).toEqual([]);
+      expect(host.state).toEqual({ cursor: 'c0' });
+      expect(result).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' }, lastSeq: 0 });
+    });
+
+    it('fails the run when a batch the importer waited on is rejected, even if the importer catches it', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'c0' };
+      const result = await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert({ ...item(1), sourceId: '' });
+            await ctx.state.set('cursor', 'c1').catch(() => {});
+            await ctx.state.set('cursor', 'c2').catch(() => {});
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      expect(host.attempts).toEqual([]);
+      expect(host.state).toEqual({ cursor: 'c0' });
+      expect(result).toMatchObject({ outcome: 'failed', error: { code: 'importer_error' }, lastSeq: 0 });
+    });
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 31])(
+      'rejects flushAfterMs %s before starting a run',
+      async ms => {
+        const host = new RecordingHost();
+        const startRun = vi.spyOn(host, 'startRun');
+        await expect(
+          runKnowledgeImport({ importers: [importer(async () => {})], host, bindingId: 'b1', flushAfterMs: ms }),
+        ).rejects.toThrow(/flushAfterMs/);
+        expect(startRun).not.toHaveBeenCalled();
+      },
+    );
+
+    it('fires nothing after the run finishes', async () => {
+      const host = new RecordingHost();
+      const result = await runKnowledgeImport({
+        importers: [importer(async ctx => ctx.items.upsert(item(1)))],
+        host,
+        bindingId: 'b1',
+        flushAfterMs: 30_000,
+      });
+      expect(result).toMatchObject({ outcome: 'succeeded', lastSeq: 1 });
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(host.attempts).toHaveLength(1);
+    });
+
+    it('fires nothing after the run is canceled', async () => {
+      const host = new RecordingHost();
+      const run = runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            host.cancel = true;
+            await new Promise<void>(() => {});
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        heartbeatMs: 5_000,
+        flushAfterMs: 30_000,
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(run).resolves.toMatchObject({ outcome: 'canceled', lastSeq: 0 });
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(host.attempts).toEqual([]);
+    });
   });
 });

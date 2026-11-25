@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { cachedLogTtlMs, streamTopicIdleTtlMs } from '../../../events/topics';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
@@ -77,6 +78,20 @@ class OrderingPubSub extends EventEmitterPubSub {
 }
 
 describe('Agent run records', () => {
+  it('retains a run’s events for at least as long as the record that authorizes reading them', () => {
+    // A run parked on a tool approval appends nothing while it waits, so its
+    // event retention is never refreshed — while its record keeps authorizing
+    // observe() and resume for 24 hours. If the events expired first, that
+    // whole remaining window would be authorized but empty: observe() would
+    // hang without ever delivering the approval request. The default run-log
+    // retention must therefore cover the record's full lifetime, in the
+    // replay cache and on the transport alike.
+    const topic = AGENT_STREAM_TOPIC('parked-run');
+    expect(cachedLogTtlMs(topic)).toBeGreaterThanOrEqual(AGENT_RUN_RECORD_TTL_MS);
+    expect(streamTopicIdleTtlMs(topic)).toBeGreaterThanOrEqual(AGENT_RUN_RECORD_TTL_MS);
+    expect(streamTopicIdleTtlMs('agent.control.parked-run')).toBeGreaterThanOrEqual(AGENT_RUN_RECORD_TTL_MS);
+  });
+
   const getMock = useLoopScenarioAimock();
   const openai = () => createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` });
   const makeAgent = (config: Partial<AgentConfig<any, any, any>> = {}) =>
@@ -139,7 +154,13 @@ describe('Agent run records', () => {
       .filter(w => w.key === agentRunRecordKey('records-agent', output.runId))
       .map(w => w.value.status);
     expect(statuses).toEqual(['running', 'suspended', 'running', 'finished']);
-    expect(cache.writes.every(w => w.ttlMs === AGENT_RUN_RECORD_TTL_MS)).toBe(true);
+    // Every record carries the long authorization TTL, including the finished
+    // one: it is a single small key, and a run parked on a tool approval must
+    // stay authorizable long after its replay log expired.
+    const recordWrites = cache.writes.filter(w => w.key === agentRunRecordKey('records-agent', output.runId));
+    for (const write of recordWrites) {
+      expect(write.ttlMs).toBe(AGENT_RUN_RECORD_TTL_MS);
+    }
   });
 
   it.each(['read', 'write'] as const)(

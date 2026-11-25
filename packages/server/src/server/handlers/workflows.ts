@@ -41,7 +41,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
-import { handleError } from './error';
+import { handleError, runFenceConflictRunId } from './error';
 import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, validateRunOwnership } from './utils';
 
 /**
@@ -59,6 +59,23 @@ const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'cancel
 async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
   const steps: unknown = result.steps;
   return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
+
+/**
+ * Logs a run a route started in the background that rejected. A takeover of that run by another
+ * instance is not a failure here: the run's claim already logged a warning.
+ */
+function logBackgroundRunFailure(
+  mastra: Mastra,
+  message: string,
+  error: unknown,
+  context: { workflowId: string; runId: string },
+) {
+  if (runFenceConflictRunId(error) === context.runId) {
+    mastra.getLogger().debug(`${message}: another instance took the run over`, context);
+    return;
+  }
+  mastra.getLogger().error(message, { error, ...context });
 }
 
 /**
@@ -821,7 +838,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
           requestContext,
         })
         .catch(error => {
-          mastra.getLogger().error('Failed to start workflow run', { error, workflowId, runId });
+          logBackgroundRunFailure(mastra, 'Failed to start workflow run', error, { workflowId, runId });
         });
 
       return { message: 'Workflow run started' };
@@ -1045,7 +1062,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
       // Fire-and-forget: attach .catch so a rejected resume cannot become an
       // unhandledRejection and tear down the process.
       void _run.resume({ ...params, requestContext }).catch(error => {
-        mastra.getLogger().error('Failed to resume workflow run', { error, workflowId, runId });
+        logBackgroundRunFailure(mastra, 'Failed to resume workflow run', error, { workflowId, runId });
       });
 
       return { message: 'Workflow run resumed' };
@@ -1144,7 +1161,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
 
       void _run.restart({ ...params, requestContext }).catch(error => {
-        mastra.getLogger().error('Failed to restart workflow run in background', { error, workflowId, runId });
+        logBackgroundRunFailure(mastra, 'Failed to restart workflow run in background', error, { workflowId, runId });
       });
 
       return { message: 'Workflow run restarted' };
@@ -1325,7 +1342,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
       // Fire-and-forget: attach .catch so a rejected time travel cannot become
       // an unhandledRejection and tear down the process.
       void _run.timeTravel({ ...params, requestContext }).catch(error => {
-        mastra.getLogger().error('Failed to time travel workflow run', { error, workflowId, runId });
+        logBackgroundRunFailure(mastra, 'Failed to time travel workflow run', error, { workflowId, runId });
       });
 
       return { message: 'Workflow run time travel started' };

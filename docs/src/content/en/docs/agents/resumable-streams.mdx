@@ -22,7 +22,12 @@ Resumable streams don't make the run itself durable. Reconnecting isn't crash re
 | Plain agent with `durable: false` | Off, including registered agents |
 | Explicit `createDurableAgent()` wrapper | Always published; pass `cache: false` to the factory to disable the replay cache, not transport history |
 
-A registered agent, durable or not, publishes on `mastra.pubsub` and caches events in `mastra.serverCache`, or an in-memory cache when the server has none. Every `Mastra` instance that shares that PubSub and cache can observe the run. An agent-level `pubsub` takes precedence, except on the evented engine, whose steps always publish on `mastra.pubsub`.
+Mastra resolves the stream transport and replay cache separately:
+
+- **Transport:** For the plain loop and the default durable engine, Mastra uses the first configured option: the agent's `durable.pubsub`, the agent's top-level `pubsub`, or `mastra.pubsub`. Evented steps publish on `mastra.pubsub` so workers can publish to the same stream.
+- **Replay cache:** Mastra uses the agent's `durable.cache`, then `mastra.serverCache`, then an in-memory cache. Evented runs use the shared Mastra cache when replay caching is enabled. If the transport is already a `CachingPubSub`, Mastra reuses its cache. Set `durable.cache: false` to skip adding a replay cache without changing the transport or its retained history.
+
+For deployments with more than one process, see [PubSub setup for resumable streams](/docs/server/pubsub#resumable-streams).
 
 ## Configure streams
 
@@ -52,7 +57,9 @@ export const supportAgent = new Agent({
 
 `durable: true` turns streams on with these defaults, including for standalone agents.
 
-On a plain `Agent`, `durable` configures resumable streams only. For checkpoint-backed execution, wrap the agent explicitly with `createDurableAgent({ agent })`. To recover in-flight runs after a crash, also configure persistent workflow storage and `recovery: { durableAgents: 'auto' }`. For manual recovery instead, pass a `shouldPersistSnapshot` policy that includes `running` snapshots and call `recoverActiveRuns()` yourself. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for setup and persistence policies.
+To checkpoint execution as well as publish run frames, set `durable.executionEngine` to `'default'` or `'evented'` on the agent, or inherit the setting from `Mastra`. Without an engine setting, `durable: true` only enables stream publication.
+
+To continue an in-flight run after a crash, configure [crash recovery](/docs/harness/durable-agents#crash-recovery) separately.
 
 Configure the wrapper's stream cache and transport through the factory's `cache`, `pubsub`, `shouldCache`, and `cleanupTimeoutMs` options.
 
@@ -76,15 +83,17 @@ To keep live observation but skip the replay cache, pass `durable: { cache: fals
 
 ### How long runs stay available
 
-After a run finishes, the executing process schedules cleanup of its events and ownership record after `cleanupTimeoutMs`. The timer allows the process to exit before cleanup. Shared cache data then remains until expiry or eviction. Redis Streams retains its native topic data until `clearTopic()` succeeds or its idle TTL expires. The transport's default idle TTL is seven days. Configure `streamIdleTtlMs` to change it, or set it to `0` to disable transport expiry. A run parked on a tool approval or suspension isn't cleared by that timer, because resuming it continues on the same topic.
+When a run finishes, the executing process schedules deletion of its events and ownership record after `cleanupTimeoutMs` (30 seconds by default). That's the fast path. Everything is also bounded by idle retention, refreshed on every append, so a process that restarts before the deletion timer fires can't leave a run's state behind indefinitely. A run parked on a tool approval or suspension isn't deleted, because resuming it continues on the same topic.
 
-The cache bounds everything else:
+The retentions that apply:
 
-- Run logs and ownership records ask the cache for a 24-hour TTL. The in-memory cache uses at least this TTL for indexed run logs, unless cache expiry is disabled. Cache entry limits can evict data sooner.
+- A run's replay cache requests a minimum 24-hour lifetime after the last append (`runLogTtlMs` on [`CachingPubSub`](/reference/pubsub/caching-pubsub)). Redis and Valkey Streams use a separate 24-hour transport default for run topics. These defaults match the run record's own 24-hour lifetime, deliberately: a run parked on a tool approval appends nothing while it waits, so its retention is never refreshed, and the events must outlive every moment the record still authorizes an `observe()` or resume. For thread streams, `threadStreamLogTtlMs` requests one hour in the cache while the transport independently defaults to one hour, enough for an idle thread's tail to survive a reconnect. Cache TTL overrides leave the transport defaults unchanged, though `streamIdleTtlMs` can shorten them. The replay cache's retention is stamped only when an event is appended. The transport's is also refreshed when a reader subscribes.
+- A run's ownership record keeps a 24-hour lifetime, so a run parked overnight on an approval stays authorizable for observe and resume, and because its events share that lifetime, the approval request is still there to replay. The run log is a delivery buffer and messages live in storage: once both expire, `observe()` returns 404 rather than replaying, and a client fetches the conversation from storage.
+- Topics that don't belong to a single run or thread, such as work queues and application feeds, keep the transport's own idle TTL, seven days by default for [Redis Streams](/reference/pubsub/redis-streams) and [Valkey Streams](/reference/pubsub/valkey-streams). They need it: a grouped consumer that was offline must still find its backlog. Configure `streamIdleTtlMs` to change it, or set it to `0` to disable transport expiry. Lowering it also lowers the retention on run topics.
 - The in-memory cache holds 1,000 entries by default. Each run uses several entries (its event log, a counter and its ownership record), so heavy traffic evicts older runs sooner.
 - The server's observe and abort routes return 404 when a run's ownership record is evicted or expires. Evicted run events can't be replayed.
 
-Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
+A run log recreated after its retention lapsed normally numbers above the indices it issued before. An attached observer then keeps receiving the new frames. Treat that as the common case rather than a guarantee: the built-in Redis, Valkey and in-memory caches derive the numbering from a clock, Convex numbers densely instead, and the fallback that detects a restarted log only recognizes one that restarts at zero. An observer attached across a log recreated below its cursor can miss new frames. Reattaching without the old offset can replay the entries still retained in the new log, while reusing that offset can skip them. Storage remains the source of truth for a run's messages. Use a shared cache such as Redis, sized for your traffic, when runs must stay observable across servers or for long approval waits.
 
 ## Follow a run
 
