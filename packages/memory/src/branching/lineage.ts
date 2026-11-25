@@ -1,4 +1,10 @@
-import { MASTRA_THREAD_BRANCH_METADATA_KEY, createThreadBranchError } from '@mastra/core/memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_METADATA_KEYS,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
+  createThreadBranchError,
+} from '@mastra/core/memory';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import type { InternalThreadBranchMetadata, MemoryStorage, PublicThreadBranchMetadata } from '@mastra/core/storage';
 
@@ -41,7 +47,17 @@ export function compareMessageTuples(a: MessageTuple, b: MessageTuple): number {
 
 export function parseThreadBranchMetadata(thread: StorageThreadType): InternalThreadBranchMetadata | null {
   const raw = thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY];
-  if (raw === undefined) return null;
+  const indexedParent = thread.metadata?.[MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY];
+  const indexedState = thread.metadata?.[MASTRA_THREAD_BRANCH_STATE_METADATA_KEY];
+  if (raw === undefined) {
+    if (indexedParent !== undefined || indexedState !== undefined) {
+      throw createThreadBranchError(
+        'BRANCH_LINEAGE_CORRUPT',
+        `Stored branch lineage for thread "${thread.id}" is invalid.`,
+      );
+    }
+    return null;
+  }
   if (!isRecord(raw)) {
     throw createThreadBranchError(
       'BRANCH_LINEAGE_CORRUPT',
@@ -70,7 +86,9 @@ export function parseThreadBranchMetadata(thread: StorageThreadType): InternalTh
     raw.branchPointMessageId.length === 0 ||
     typeof raw.observationalMemoryThreadId !== 'string' ||
     raw.observationalMemoryThreadId.length === 0 ||
-    (raw.state !== 'pending' && raw.state !== 'ready')
+    (raw.state !== 'pending' && raw.state !== 'ready') ||
+    indexedParent !== raw.parentThreadId ||
+    indexedState !== raw.state
   ) {
     throw createThreadBranchError(
       'BRANCH_LINEAGE_CORRUPT',
@@ -99,6 +117,18 @@ export function serializeThreadBranchMetadata(branch: InternalThreadBranchMetada
   };
 }
 
+/**
+ * The thread metadata entries that store `branch`: the lineage record plus top-level copies of its
+ * parent and state, which `listThreads` metadata filters use to find a thread's branches.
+ */
+export function threadBranchMetadataFields(branch: InternalThreadBranchMetadata): Record<string, unknown> {
+  return {
+    [MASTRA_THREAD_BRANCH_METADATA_KEY]: serializeThreadBranchMetadata(branch),
+    [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: branch.parentThreadId,
+    [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: branch.state,
+  };
+}
+
 export function toPublicThreadBranchMetadata(branch: InternalThreadBranchMetadata): PublicThreadBranchMetadata {
   return {
     parentThreadId: branch.parentThreadId,
@@ -109,11 +139,14 @@ export function toPublicThreadBranchMetadata(branch: InternalThreadBranchMetadat
 }
 
 export function sanitizeThread(thread: StorageThreadType): StorageThreadType {
-  if (!thread.metadata || !Object.prototype.hasOwnProperty.call(thread.metadata, MASTRA_THREAD_BRANCH_METADATA_KEY)) {
+  const ownedKeys = MASTRA_THREAD_BRANCH_METADATA_KEYS.filter(
+    (key: string) => thread.metadata && Object.prototype.hasOwnProperty.call(thread.metadata, key),
+  );
+  if (!thread.metadata || ownedKeys.length === 0) {
     return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
   const metadata = { ...thread.metadata };
-  delete metadata[MASTRA_THREAD_BRANCH_METADATA_KEY];
+  for (const key of ownedKeys) delete metadata[key];
   return { ...thread, metadata: Object.keys(metadata).length > 0 ? metadata : undefined };
 }
 
@@ -228,32 +261,62 @@ export async function resolveThreadLineage(
   return { entries, messages: reachableMessages };
 }
 
-export async function listRawThreads(memoryStore: MemoryStorage, resourceId?: string): Promise<StorageThreadType[]> {
-  const { threads } = await memoryStore.listThreads({
-    perPage: false,
-    ...(resourceId !== undefined ? { filter: { resourceId } } : {}),
-  });
-  return threads.sort(compareThreadsByCreation);
-}
-
 function compareThreadsByCreation(a: StorageThreadType, b: StorageThreadType): number {
   const timeDifference = a.createdAt.getTime() - b.createdAt.getTime();
   return timeDifference === 0 ? a.id.localeCompare(b.id) : timeDifference;
 }
 
+type ThreadRef = Pick<StorageThreadType, 'id' | 'resourceId'>;
+
+function childThreadFilter(parent: ThreadRef, state?: 'pending' | 'ready') {
+  return {
+    resourceId: parent.resourceId,
+    metadata: {
+      [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: parent.id,
+      ...(state ? { [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: state } : {}),
+    },
+  };
+}
+
 /**
- * Lists the threads of every resource that owns one of `threadIds`, plus any extra `resourceIds`.
- * Branch lineages never cross resources, so the result holds every ancestor, child and descendant
- * of each existing thread without enumerating other resources' threads.
+ * Lists `parent`'s direct branches, optionally only those in `state`, oldest first (ties by ID).
+ * Storage filters on the indexed parent key, so only that thread's branches are read, never the
+ * rest of the resource. They come back in one query and are ordered here: stores differ in how
+ * they break `createdAt` ties, so storage offset pages could skip or repeat a branch.
  */
-export async function listOwningResourceThreads(
+export async function listChildThreads(
   memoryStore: MemoryStorage,
-  threadIds: Iterable<string>,
-  resourceIds: Iterable<string | undefined> = [],
+  parent: ThreadRef,
+  state?: 'pending' | 'ready',
 ): Promise<StorageThreadType[]> {
-  const owners = new Set([...resourceIds].filter((id): id is string => id !== undefined));
-  const threads = await Promise.all([...new Set(threadIds)].map(threadId => memoryStore.getThreadById({ threadId })));
-  for (const thread of threads) if (thread) owners.add(thread.resourceId);
-  const listed = await Promise.all([...owners].map(owner => listRawThreads(memoryStore, owner)));
-  return listed.flat().sort(compareThreadsByCreation);
+  const { threads } = await memoryStore.listThreads({ filter: childThreadFilter(parent, state), perPage: false });
+  return threads.sort(compareThreadsByCreation);
+}
+
+/** Whether `parent` has at least one direct branch, optionally only in `state`. */
+export async function hasChildThread(
+  memoryStore: MemoryStorage,
+  parent: ThreadRef,
+  state?: 'pending' | 'ready',
+): Promise<boolean> {
+  const result = await memoryStore.listThreads({
+    filter: childThreadFilter(parent, state),
+    page: 0,
+    perPage: 1,
+  });
+  return result.threads.length > 0;
+}
+
+/** Whether `resourceId` owns at least one branch thread in `state`. */
+export async function resourceHasBranch(
+  memoryStore: MemoryStorage,
+  resourceId: string,
+  state: 'pending' | 'ready',
+): Promise<boolean> {
+  const result = await memoryStore.listThreads({
+    filter: { resourceId, metadata: { [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: state } },
+    page: 0,
+    perPage: 1,
+  });
+  return result.threads.length > 0;
 }

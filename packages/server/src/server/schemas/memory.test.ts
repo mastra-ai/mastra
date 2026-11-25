@@ -620,11 +620,14 @@ describe('Thread branch schemas', () => {
     ).toBe(false);
   });
 
-  it.each(['workingMemory', '__mastra_thread_branch'])('rejects reserved metadata key %s', key => {
-    expect(
-      branchThreadBodySchema.safeParse({ branchPointMessageId: 'message-1', metadata: { [key]: {} } }).success,
-    ).toBe(false);
-  });
+  it.each(['workingMemory', '__mastra_thread_branch', '__mastra_thread_branch_parent', '__mastra_thread_branch_state'])(
+    'rejects reserved metadata key %s',
+    key => {
+      expect(
+        branchThreadBodySchema.safeParse({ branchPointMessageId: 'message-1', metadata: { [key]: {} } }).success,
+      ).toBe(false);
+    },
+  );
 
   it('parses unlimited direct-child pagination', () => {
     expect(listThreadBranchesQuerySchema.parse({ agentId: 'agent-1', perPage: 'false' })).toEqual({
