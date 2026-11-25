@@ -2,7 +2,7 @@
  * Ported from validation harness case T31 (parallel-tools).
  * Source: 23f640a. Staggered streaming belongs to COR-1344; recovery to COR-1449.
  * Result ordering within a parallel step is recorded, not asserted by the source.
- * Durable and evented stream a parallel step's results in the order the tools
+ * Every engine streams a parallel step's successful results in the order the tools
  * finish, so each tool finishes `n * STAGGER_MS` after it starts: completion
  * order is then fixed on any bus instead of depending on scheduler or delivery
  * timing.
@@ -41,12 +41,12 @@ describeParity('parallel-tools parity', target => {
               differences: {
                 [target]: {
                   reason:
-                    'COR-1390: wrapped tool-error chunks serialize the error instead of exposing the plain MastraError; T31 explicitly excludes ordering inside a parallel step.',
+                    'COR-1390: wrapped tool-error chunks serialize the error instead of exposing the plain MastraError. The plain Agent streams a tool error only once the whole parallel step is done, so it comes after the later success here.',
                   expect: plain => {
                     const expected = structuredClone(plain);
                     const turn = expected.turns[0]!;
                     for (const values of [turn.chunkPayloads, turn.chunkTypes, turn.chunks]) {
-                      [values[5], values[6]] = [values[6]!, values[5]!];
+                      [values[6], values[7]] = [values[7]!, values[6]!];
                     }
                     turn.chunkPayloads[6]!.error = { name: 'Error', message: 'T31 tool failure' };
                     return expected;
