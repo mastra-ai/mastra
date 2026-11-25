@@ -94,6 +94,7 @@ import {
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import {
   clearResumeInFlight,
+  DURABLE_CONTEXT_SEGMENT_KEY,
   getLiveRunRequestContext,
   getRunRegistryEntry,
   globalRunRegistry,
@@ -1091,7 +1092,9 @@ export function createDurableToolCallStep() {
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)),
+          [...approvalRequestContext.entries()].filter(
+            ([key]) => key !== DURABLE_CONTEXT_SEGMENT_KEY && !INTERNAL_APPROVAL_KEYS.has(key),
+          ),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.

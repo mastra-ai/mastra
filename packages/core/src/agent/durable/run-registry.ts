@@ -71,6 +71,12 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
 }
 
 /**
+ * Request-context key that identifies a run segment on engines whose steps carry no Core execution
+ * claim (Inngest). The engine stores the same value on the registry entry it seeds for the segment.
+ */
+export const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
+
+/**
  * The registry's live request context, when it belongs to the execution running this step. Once
  * another process claims the run (for example an approval from another host), the context cached
  * here still belongs to the previous caller and must not be reused for the new execution.
@@ -84,7 +90,11 @@ export function getLiveRunRequestContext(
   const live = entry?.requestContext;
   if (!live || entry.requestContextRebuilt) return undefined;
   const expectedExecutionId = executionId ?? (runId ? getExecutionClaim(stepContext, runId)?.executionId : undefined);
-  if (!expectedExecutionId) return live;
+  if (!expectedExecutionId) {
+    const stepSegment = stepContext?.get(DURABLE_CONTEXT_SEGMENT_KEY);
+    if (stepSegment === undefined) return live;
+    return stepSegment === entry.requestContextSegment ? live : undefined;
+  }
   return runId && getExecutionClaim(live, runId)?.executionId === expectedExecutionId ? live : undefined;
 }
 

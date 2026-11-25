@@ -849,6 +849,8 @@ export interface RunRegistryEntry {
   requestContext?: RequestContext;
   /** The stored context was rebuilt from a workflow snapshot, not supplied by the active caller. */
   requestContextRebuilt?: boolean;
+  /** Segment identity for engines that do not carry a Core execution claim. */
+  requestContextSegment?: string;
   /** MCP protocol context for in-process tool execution (non-serializable). */
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */

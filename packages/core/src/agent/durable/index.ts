@@ -120,6 +120,7 @@ export {
 export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 
 // Lets shared test suites simulate a process crash
+export { DURABLE_CONTEXT_SEGMENT_KEY } from './run-registry';
 export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
