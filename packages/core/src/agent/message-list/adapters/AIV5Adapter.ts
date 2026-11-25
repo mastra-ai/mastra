@@ -28,6 +28,37 @@ import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata'
 import { sanitizeToolName } from '../utils/tool-name';
 import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
+function isAIV5DataUIPart(part: AIV5Type.UIMessage['parts'][number]): part is AIV5Type.DataUIPart<AIV5.UIDataTypes> {
+  return part.type.startsWith('data-') && 'data' in part;
+}
+
+type AIV5AssistantModelMessage = Extract<AIV5Type.ModelMessage, { role: 'assistant' }>;
+type AIV5AssistantContentPart = Exclude<AIV5AssistantModelMessage['content'], string>[number];
+
+type ProviderCustomModelPart = {
+  type: 'custom';
+  kind: string;
+  providerMetadata?: AIV5Type.ProviderMetadata;
+};
+
+type ProviderCustomAssistantModelMessage = Omit<AIV5AssistantModelMessage, 'content'> & {
+  content: Array<AIV5AssistantContentPart | ProviderCustomModelPart>;
+};
+
+function getProviderCustomModelPart(part: unknown): ProviderCustomModelPart | undefined {
+  if (!part || typeof part !== 'object') return undefined;
+  if (
+    !('type' in part) ||
+    part.type !== 'custom' ||
+    !('kind' in part) ||
+    typeof part.kind !== 'string' ||
+    part.kind.length === 0
+  ) {
+    return undefined;
+  }
+  return part as ProviderCustomModelPart;
+}
+
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
  * Empty text blocks are not allowed by Anthropic's API and cause request failures.
@@ -523,6 +554,11 @@ export class AIV5Adapter {
               transformToolPayloads,
             ),
           });
+        } else if (part.type === 'custom') {
+          // AI SDK v5's UIMessage part type predates provider custom parts, even
+          // though newer providers emit and consume them at runtime.
+          parts.push(part as unknown as AIV5Type.UIMessage['parts'][number]);
+          hasNonToolReasoningParts = true;
         } else if (part.type === 'error') {
           // Mastra-only record of a terminal failure. Preserved for DB/UI history
           // (see sanitizeV5UIMessages, which strips it from provider prompts).
@@ -692,6 +728,15 @@ export class AIV5Adapter {
     // Build V2-compatible parts array
     const v2Parts = parts
       .map(p => {
+        const providerCustomPart = getProviderCustomModelPart(p);
+        if (providerCustomPart) {
+          return {
+            type: 'custom' as const,
+            kind: providerCustomPart.kind,
+            providerMetadata: providerCustomPart.providerMetadata,
+          };
+        }
+
         // Convert AIV5 UI parts to V2 parts
         if (AIV5.isToolUIPart(p)) {
           const toolName = getToolName(p);
@@ -834,11 +879,8 @@ export class AIV5Adapter {
         }
 
         // Handle data-* parts (custom parts emitted by tools via writer.custom())
-        if (typeof p.type === 'string' && p.type.startsWith('data-')) {
-          return {
-            type: p.type,
-            data: 'data' in p ? (p as any).data : undefined,
-          };
+        if (isAIV5DataUIPart(p)) {
+          return p;
         }
 
         return null;
@@ -957,7 +999,7 @@ export class AIV5Adapter {
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
   static fromModelMessage(
-    modelMsg: AIV5Type.ModelMessage,
+    modelMsg: AIV5Type.ModelMessage | ProviderCustomAssistantModelMessage,
     _messageSource?: MessageSource,
     context: { dbMessages?: MastraDBMessage[] } = {},
   ): MastraDBMessage {
@@ -973,6 +1015,7 @@ export class AIV5Adapter {
     const experimental_attachments: NonNullable<MastraDBMessage['content']['experimental_attachments']> = [];
 
     for (const part of content) {
+      const providerCustomPart = getProviderCustomModelPart(part);
       if (part.type === 'text') {
         const textPart: MastraDBMessage['content']['parts'][number] = {
           type: 'text' as const,
@@ -1110,6 +1153,12 @@ export class AIV5Adapter {
         }
         mastraDBParts.push(v2ReasoningPart);
         reasoningParts.push(part.text);
+      } else if (providerCustomPart) {
+        mastraDBParts.push({
+          type: 'custom',
+          kind: providerCustomPart.kind,
+          providerMetadata: providerCustomPart.providerMetadata,
+        });
       } else if (part.type === 'image') {
         const imagePart = part;
         const mimeType = imagePart.mediaType || 'image/jpeg';

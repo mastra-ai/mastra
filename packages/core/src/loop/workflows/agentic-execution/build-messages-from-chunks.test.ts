@@ -48,6 +48,30 @@ describe('buildMessagesFromChunks', () => {
     expect(result).toHaveLength(0);
   });
 
+  it('should preserve provider custom chunks as hidden message parts', () => {
+    const providerMetadata = {
+      openai: {
+        type: 'compaction',
+        itemId: 'cmp_123',
+        encryptedContent: 'opaque-encrypted-state',
+      },
+    };
+    const result = parts([
+      {
+        type: 'custom',
+        payload: { kind: 'openai.compaction', providerMetadata },
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        type: 'custom',
+        kind: 'openai.compaction',
+        providerMetadata,
+      },
+    ]);
+  });
+
   it('should keep an empty text span whose deltas carry providerMetadata (#20469)', () => {
     const meta = { google: { thoughtSignature: 'sig-abc' } };
     const result = parts([
