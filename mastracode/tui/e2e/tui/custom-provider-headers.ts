@@ -80,6 +80,18 @@ export const customProviderHeadersScenario = {
     // Test connection, Test model, Add models from endpoint, Headers, Auth scheme.
     await openManageItem(terminal, runtime, 7);
     await runtime.waitForScreenText(/Headers for Header Endpoint/i, terminal, 8_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Header name/i, terminal, 8_000);
+    terminal.write('Authorization\r');
+    await runtime.waitForScreenText(
+      /The Authorization header carries the API key for this auth scheme and cannot be sent as a custom header\./i,
+      terminal,
+      8_000,
+    );
+    await runtime.waitForScreenTextAbsent(/Value for Authorization/i, terminal, 8_000);
+
+    await openManageItem(terminal, runtime, 7);
+    await runtime.waitForScreenText(/Headers for Header Endpoint/i, terminal, 8_000);
     await addHeader(terminal, runtime, { name: 'X-Org-Secret', value: secretValue, secret: true });
     await addHeader(terminal, runtime, { name: 'X-Region', value: 'eu-west', secret: false });
     await runtime.waitForScreenText(/X-Org-Secret\s+••••/, terminal, 8_000);

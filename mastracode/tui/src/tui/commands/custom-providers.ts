@@ -518,7 +518,8 @@ async function headersFlow(ctx: SlashCommandContext, providerId: string): Promis
     ]);
     if (!choice) return;
     if (choice === ADD_HEADER) {
-      await addHeaderFlow(ctx, providerId);
+      // The list would open over a refusal message, so leave the list instead to keep it readable.
+      if ((await addHeaderFlow(ctx, providerId)) === 'refused') return;
       continue;
     }
 
@@ -534,28 +535,31 @@ async function headersFlow(ctx: SlashCommandContext, providerId: string): Promis
   }
 }
 
-/** Ask for a header name, value and secret flag, then save the header. */
-async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+/**
+ * Ask for a header name, value and secret flag, then save the header.
+ * Returns whether the header was added, refused, or the user cancelled.
+ */
+async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Promise<'added' | 'refused' | 'cancelled'> {
   const loaded = loadProvider(ctx, providerId);
-  if (!loaded) return;
+  if (!loaded) return 'refused';
   const { provider } = loaded;
 
   const name = await askText(ctx, 'Header name');
-  if (!name) return;
+  if (!name) return 'cancelled';
   // Check the name before asking for the value, so a refused name does not cost the user a typed secret.
   const nameProblem = customProviderHeaderProblem([...(provider.headers ?? []), { name }], provider.authScheme);
   if (nameProblem) {
     ctx.showError(nameProblem);
-    return;
+    return 'refused';
   }
 
   const value = await askText(ctx, `Value for ${name}`);
-  if (!value) return;
+  if (!value) return 'cancelled';
   const visibility = await askSelect(ctx, `Is ${name} a secret?`, [
     { label: 'Secret', value: 'secret', description: 'Hide the value in lists' },
     { label: 'Plain', value: 'plain', description: 'Show the value in lists' },
   ]);
-  if (!visibility) return;
+  if (!visibility) return 'cancelled';
 
   const settings = loadSettings();
   const problem = addHeaderToCustomProviderInSettings(settings, providerId, {
@@ -565,10 +569,11 @@ async function addHeaderFlow(ctx: SlashCommandContext, providerId: string): Prom
   });
   if (problem) {
     ctx.showError(problem);
-    return;
+    return 'refused';
   }
   saveSettings(settings);
   ctx.showInfo(`Added header ${name} to ${provider.name}.`);
+  return 'added';
 }
 
 const AUTH_SCHEME_OPTIONS: Array<{
