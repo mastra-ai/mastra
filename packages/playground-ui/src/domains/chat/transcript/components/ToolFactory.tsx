@@ -1,0 +1,161 @@
+import type { PlanResume } from '@mastra/client-js';
+import { memo } from 'react';
+import type { ReactNode } from 'react';
+import { ChannelReplyMessage, REPLY_IN_THREAD_TOOL, replyText } from './ChannelReplyMessage';
+import type { ReplyFooter } from './ChannelReplyMessage';
+import { useTranscriptSlots } from './slots';
+
+import { SkillMessage } from '@/domains/chat/messages/skill-message';
+import { AskUser } from '@/ds/components/ai/ask-user';
+import type { AskUserAnswer, AskUserOption, AskUserPayload } from '@/ds/components/ai/ask-user';
+import { isTaskTool } from '@/ds/components/ai/tool-call';
+
+type ToolStatus = 'running' | 'done' | 'error';
+
+type ToolResponse = AskUserAnswer | PlanResume;
+
+export interface ToolFactoryProps {
+  toolName: string;
+  toolCallId: string;
+  input?: unknown;
+  /** The args JSON streamed so far, before `input` is parsed. */
+  argsText?: string;
+  /** Model, copy and time under a finished `reply_in_thread` post, copying `text`. */
+  replyFooter?: (text: string) => ReplyFooter;
+  output?: unknown;
+  status: ToolStatus;
+  isSubmitting?: boolean;
+  onRespond?: (response: ToolResponse) => void;
+  fallback: () => ReactNode;
+}
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function askUserResultContent(output: unknown): string | undefined {
+  return stringValue(output) ?? stringValue(record(output)?.content);
+}
+
+function askUserOptions(value: unknown): AskUserOption[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const options = value.flatMap(option => {
+    const optionValue = record(option);
+    const label = stringValue(optionValue?.label);
+    if (!label) return [];
+
+    const normalized: AskUserOption = { label };
+    const description = stringValue(optionValue?.description);
+    if (description) normalized.description = description;
+    if (optionValue?.recommended === true) normalized.recommended = true;
+    return [normalized];
+  });
+
+  return options.length > 0 ? options : undefined;
+}
+
+function askUserPayload(input: unknown): AskUserPayload | undefined {
+  const payload = record(input);
+  const question = stringValue(payload?.question);
+  if (!question) return undefined;
+
+  const options = askUserOptions(payload?.options);
+  const selectionMode = payload?.selectionMode === 'multi_select' ? 'multi_select' : 'single_select';
+
+  return { question, ...(options ? { options, selectionMode } : {}) };
+}
+
+function ToolFactoryComponent({
+  toolName,
+  toolCallId,
+  input,
+  argsText,
+  replyFooter,
+  output,
+  status,
+  isSubmitting = false,
+  onRespond,
+  fallback,
+}: ToolFactoryProps) {
+  const { SubmitPlan } = useTranscriptSlots();
+  if (toolName === 'ask_user') {
+    const payload = askUserPayload(input);
+    if (status === 'running' && (!payload || !onRespond)) return null;
+
+    const resultContent = status !== 'running' ? askUserResultContent(output) : undefined;
+    const result = resultContent ? { content: resultContent, isError: status === 'error' } : undefined;
+    return (
+      <AskUser
+        role="group"
+        aria-label="Question from the agent"
+        payload={payload ?? { question: 'Question from the agent' }}
+        {...(result ? { result } : {})}
+        isSubmitting={isSubmitting}
+        onSubmit={answer => onRespond?.(answer)}
+        className="w-full max-w-full"
+      />
+    );
+  }
+
+  if (isTaskTool(toolName)) return null;
+
+  if (toolName === REPLY_IN_THREAD_TOOL) {
+    const text = replyText(input, argsText);
+    // A call core rejected (too long, blank, extra keys) also ends as a result, so only the tool's own
+    // `posted` flag says the text reached the thread.
+    const replyStatus = status === 'done' && record(output)?.posted !== true ? 'error' : status;
+    if (text)
+      return (
+        <ChannelReplyMessage
+          text={text}
+          status={replyStatus}
+          footer={replyStatus === 'done' ? replyFooter?.(text) : undefined}
+        />
+      );
+  }
+
+  if (toolName === 'skill') {
+    const name = stringValue(record(input)?.name);
+    const instructions = stringValue(output);
+    if (name && instructions) return <SkillMessage activation={{ name, instructions }} appearance="inline" />;
+  }
+
+  if (toolName === 'submit_plan' && SubmitPlan) {
+    return (
+      <SubmitPlan
+        toolCallId={toolCallId}
+        input={input}
+        output={output}
+        isSubmitting={isSubmitting}
+        onRespond={onRespond}
+      />
+    );
+  }
+
+  // Any other tool paused with a question (a role's stage move asking for approval)
+  // is answered on its own row, as the standalone suspension card would.
+  const pausedQuestion = status === 'running' && onRespond ? askUserPayload(input) : undefined;
+  if (pausedQuestion) {
+    return (
+      <AskUser
+        role="group"
+        aria-label="Question from the agent"
+        payload={pausedQuestion}
+        isSubmitting={isSubmitting}
+        onSubmit={answer => onRespond?.(answer)}
+        className="w-full max-w-full"
+      />
+    );
+  }
+
+  return fallback();
+}
+
+export const ToolFactory = memo(ToolFactoryComponent);

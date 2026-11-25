@@ -11,7 +11,6 @@ describe('telemetry page categories', () => {
     ['/factories/id/workspaces/private-session/threads/private-thread', 'thread'],
     ['/factories/id/user/threads/private-thread', 'thread'],
     ['/factories/id/new', 'new_session'],
-    ['/factories/id/new-factory', 'new_factory'],
   ])('normalizes %s to %s', (path, page) => {
     expect(telemetryPage(path)).toBe(page);
   });

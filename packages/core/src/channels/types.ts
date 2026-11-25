@@ -499,7 +499,8 @@ export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | fals
 /**
  * Handler function for action events (button clicks, select changes).
  * Receives the original Chat SDK event, the default handler implementation
- * (built-in tool approval card handling; a no-op for other action ids), and a
+ * (built-in tool approval cards and `run_continue` retry buttons; a no-op for
+ * other action ids), and a
  * runtime context carrying the resolved Mastra instance.
  */
 export type ActionChannelHandler = (
@@ -598,8 +599,9 @@ export interface ChannelHandlers {
   /**
    * Handler for action events (button clicks, select changes).
    * Default: Handles the built-in tool approval cards
-   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and ignores other action ids.
-   * Setting `false` also disables the built-in tool approval buttons.
+   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and `run_continue` buttons,
+   * which send `Continue.` from the clicker through `onSubscribedMessage`. Ignores other action ids.
+   * Setting `false` also disables these built-in buttons.
    */
   onAction?: ActionChannelHandlerConfig;
 }

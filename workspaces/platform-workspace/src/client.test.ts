@@ -34,6 +34,58 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it('calls an access token getter before every request', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test/');
+    const fetchMock = vi.fn().mockImplementation(async () => response('{}', { status: 200 }));
+    let minted = 0;
+    const client = new PlatformClient({
+      accessToken: async () => `tok_${++minted}`,
+      projectId: 'proj_123',
+      fetch: fetchMock,
+    });
+
+    await client.request('/sandbox');
+    await client.request('/sandbox');
+
+    const auth = fetchMock.mock.calls.map(([, init]) => (init.headers as Headers).get('authorization'));
+    expect(auth).toEqual(['Bearer tok_1', 'Bearer tok_2']);
+  });
+
+  it.each(['already canceled', 'caller cancels', 'default timeout'] as const)(
+    'does not send a request when %s during token resolution',
+    async scenario => {
+      const controller = new AbortController();
+      const reason = new DOMException('Canceled', scenario === 'default timeout' ? 'TimeoutError' : 'AbortError');
+      const timeout =
+        scenario === 'default timeout'
+          ? vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal)
+          : undefined;
+      const { promise: token, resolve: releaseToken } = Promise.withResolvers<string>();
+      const accessToken = vi.fn(() => token);
+      const fetch = vi
+        .fn<NonNullable<ConstructorParameters<typeof PlatformClient>[0]['fetch']>>()
+        .mockResolvedValue(response('{}'));
+      const client = new PlatformClient({ accessToken, projectId: 'proj_123', fetch });
+
+      try {
+        if (scenario === 'already canceled') controller.abort(reason);
+        const outcome = client
+          .request('/sandbox', { signal: timeout ? undefined : controller.signal })
+          .catch(error => error);
+        if (scenario !== 'already canceled') controller.abort(reason);
+        // The request must settle while the getter is still pending, not when it finishes.
+        expect(await Promise.race([outcome, new Promise(resolve => setImmediate(resolve))])).toBe(reason);
+        expect(accessToken).toHaveBeenCalledTimes(scenario === 'already canceled' ? 0 : 1);
+        if (timeout) expect(timeout).toHaveBeenCalledWith(60_000);
+      } finally {
+        releaseToken('late_token');
+        timeout?.mockRestore();
+      }
+      await new Promise(resolve => setImmediate(resolve));
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('uses E2B provider routes when SANDBOX_PROVIDER is unset', async () => {
     vi.stubEnv('SANDBOX_PROVIDER', undefined);
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');

@@ -31,7 +31,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-6-luna": [
+    "openai/gpt-6.1-terra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -43,31 +43,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-6.1-terra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-sonnet-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-haiku-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-opus-5.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-fable-5.1": [
+    "openai/gpt-6-luna": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -79,16 +55,10 @@
         "values": ["low", "high"]
       }
     ],
-    "sparrow/auto": [
+    "google/gemini-3.8-flash": [
       {
         "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [
@@ -103,13 +73,43 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "google/gemini-3.8-flash": [
+    "google/gemini-4-argon": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "google/gemini-4-argon": [
+    "sparrow/auto": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-opus-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-sonnet-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-fable-5.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

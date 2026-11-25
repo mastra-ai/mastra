@@ -354,8 +354,9 @@ A long-running process's output stream reconnects periodically, and the process 
   content={[
   {
     name: 'accessToken',
-    type: 'string',
-    description: 'Platform access token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
+    type: 'string | (() => string | Promise<string>)',
+    description:
+      'Platform access token or a function called before every request to resolve the token. Falls back to the MASTRA_PLATFORM_ACCESS_TOKEN environment variable.',
     isOptional: true,
   },
   {

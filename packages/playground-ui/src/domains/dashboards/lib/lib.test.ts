@@ -1,6 +1,12 @@
 import { MastraClient } from '@mastra/client-js';
 import type { DashboardQuery } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
+import {
+  countTraceAggregateBuckets,
+  TRACE_AGGREGATE_DEFAULT_LIMIT,
+  TRACE_AGGREGATE_MAX_ROWS,
+} from '@mastra/core/storage';
+import type { TraceAggregateInterval } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import { kpisIssues } from '../kinds/kpis/options';
 import type { KpisOptions } from '../kinds/kpis/options';
@@ -9,7 +15,7 @@ import type { ResolvedView } from '../widget-kind';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, pageQuery, sendRequest } from './requests';
-import type { DashboardAnswer, DashboardPageContext, DashboardRequestOptions } from './requests';
+import type { DashboardAnswer, DashboardPageContext, DashboardRequest, DashboardRequestOptions } from './requests';
 import {
   buildTableRows,
   countRows,
@@ -187,6 +193,40 @@ describe('buildRequest', () => {
     const previous = buildPreviousRequest(query, page, {});
     expect(previous).toMatchObject({ priority: 2 });
     expect(previous?.args).toMatchObject({ timeRange: { to: window.start.toISOString() } });
+  });
+
+  describe('a bucketed trace or span series without a limit of its own', () => {
+    const week = { start: new Date('2026-10-21T12:00:00Z'), end: window.end };
+    const weekPage: DashboardPageContext = { ...page, window: week, filters: { timestamp: week } };
+    const rowsOf = (request: DashboardRequest) => {
+      const { limit, interval } = request.args as { limit?: number; interval?: TraceAggregateInterval };
+      if (limit === undefined || interval === undefined) throw new Error('no limit or interval');
+      return limit * countTraceAggregateBuckets(week.start.getTime(), week.end.getTime(), interval);
+    };
+
+    it.each(['traceAggregate', 'spanAggregate'] as const)(
+      "%s: keeps an hourly week under the server's row cap",
+      source => {
+        const request = buildRequest({ source, measures: ['count'] }, weekPage, { interval: '1h' });
+        if (!request) throw new Error('no request');
+        expect(rowsOf(request)).toBeLessThanOrEqual(TRACE_AGGREGATE_MAX_ROWS);
+      },
+    );
+
+    it('keeps as many groups as the cap allows, the default where it fits', () => {
+      const query: DashboardQuery = { source: 'spanAggregate', groupBy: ['entityName'], measures: ['count'] };
+      expect(buildRequest(query, weekPage, { interval: '1h' })?.args).toMatchObject({ limit: 59 });
+      expect(built(query, { interval: '1h' }).args).toMatchObject({ limit: TRACE_AGGREGATE_DEFAULT_LIMIT });
+    });
+
+    it('caps its own stored interval too, and leaves a set limit or an unbucketed query alone', () => {
+      const own: DashboardQuery = { source: 'traceAggregate', measures: ['count'], interval: '1h' };
+      expect(buildRequest(own, weekPage, {})?.args).toMatchObject({ limit: 59 });
+      const set: DashboardQuery = { source: 'traceAggregate', measures: ['count'], limit: 500 };
+      expect(buildRequest(set, weekPage, { interval: '1h' })?.args).toMatchObject({ limit: 500 });
+      const total: DashboardQuery = { source: 'traceAggregate', measures: ['count'] };
+      expect(buildRequest(total, weekPage, {})?.args).not.toHaveProperty('limit');
+    });
   });
 });
 
@@ -664,12 +704,102 @@ describe('shapeTimeseries', () => {
       const shaped = shapeTimeseries({
         options: options({ query: 'runs' }),
         responses: new Map([['runs', answer]]),
+        queries: [runs],
         window,
-        hasTraceQueries: false,
       });
       expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.runs).toBe(7);
       // A bucket no series answers stays unset rather than zero.
       expect(shaped.data.filter(b => b.runs !== undefined)).toHaveLength(1);
+    });
+  });
+
+  describe('when a ref reads some groups of a grouped span aggregate', () => {
+    const grouped = (groupBy: string[]): DashboardQuery => ({
+      id: 'runs',
+      source: 'spanAggregate',
+      measures: ['count'],
+      groupBy,
+    });
+    const shape = (ref: Omit<ValueRef, 'query'>, query: DashboardQuery, answer: DashboardAnswer) =>
+      shapeTimeseries({
+        options: options({ query: 'runs', measure: 'count', ...ref }),
+        responses: new Map([['runs', answer]]),
+        queries: [query],
+        window,
+      });
+    const bucketOf = (shaped: ReturnType<typeof shapeTimeseries>) =>
+      shaped.data.find(b => b.ts === new Date(at).getTime())?.runs;
+    const byAgent = spans([
+      { bucket: at, dimensions: { entityName: 'support' }, measures: { count: 3 } },
+      { bucket: at, dimensions: { entityName: 'billing' }, measures: { count: 4 } },
+      { bucket: at, dimensions: { entityName: null }, measures: { count: 5 } },
+    ]);
+
+    it('adds up only the groups it picks, or every group but those it leaves out', () => {
+      const query = grouped(['entityName']);
+      expect(bucketOf(shape({ groups: ['support'] }, query, byAgent))).toBe(3);
+      expect(bucketOf(shape({ groups: ['support', 'billing'] }, query, byAgent))).toBe(7);
+      expect(bucketOf(shape({ notGroups: ['support'] }, query, byAgent))).toBe(9);
+      expect(bucketOf(shape({}, query, byAgent))).toBe(12);
+    });
+
+    it('names a group without a value as the empty string', () => {
+      expect(bucketOf(shape({ groups: [''] }, grouped(['entityName']), byAgent))).toBe(5);
+    });
+
+    it("names a group by its values in the query's groupBy order, joined as metrics series are", () => {
+      const answer = spans([
+        { bucket: at, dimensions: { model: 'gpt-4o', entityName: 'support' }, measures: { count: 3 } },
+        { bucket: at, dimensions: { model: 'gpt-4o', entityName: 'billing' }, measures: { count: 4 } },
+      ]);
+      expect(bucketOf(shape({ groups: ['support|gpt-4o'] }, grouped(['entityName', 'model']), answer))).toBe(3);
+    });
+
+    it('totals only its groups over a range sent without buckets', () => {
+      const answer = spans([
+        { dimensions: { entityName: 'support' }, measures: { count: 3 } },
+        { dimensions: { entityName: 'billing' }, measures: { count: 4 } },
+      ]);
+      const shaped = shapeTimeseries({
+        options: {
+          ...options({ query: 'runs', measure: 'count', groups: ['support'] }),
+          totals: ['runs'],
+          total: { value: { query: 'runs', measure: 'count', groups: ['support'] } },
+        },
+        responses: new Map([['runs', answer]]),
+        queries: [grouped(['entityName'])],
+        window,
+      });
+      expect(shaped.total).toBe(3);
+    });
+  });
+
+  describe('when a span aggregate has buckets nothing happened in', () => {
+    const latency: DashboardQuery = { id: 'latency', source: 'spanAggregate', measures: ['count', 'duration.p95'] };
+    const answer = spans([{ bucket: at, measures: { count: 3, 'duration.p95': 800 } }]);
+    const shape = (measure: string) =>
+      shapeTimeseries({
+        options: {
+          chart: 'line',
+          format: 'count',
+          series: [{ dataKey: 'v', label: 'V', value: { query: 'latency', measure } }],
+        },
+        responses: new Map([['latency', answer]]),
+        queries: [latency],
+        window,
+      });
+
+    it('counts them as 0 for a count or sum', () => {
+      const shaped = shape('count');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(3);
+      expect(shaped.data.every(b => b.v !== undefined)).toBe(true);
+      expect(shaped.data.filter(b => b.v === 0)).toHaveLength(shaped.data.length - 1);
+    });
+
+    it('leaves them out for a percentile, as the line has no value to draw there', () => {
+      const shaped = shape('duration.p95');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(800);
+      expect(shaped.data.filter(b => b.v !== undefined)).toHaveLength(1);
     });
   });
 });
@@ -736,6 +866,34 @@ describe('timeseriesIssues', () => {
     it('takes a ref picking one group of an average, or every group of a count', () => {
       expect(timeseriesIssues(options({ query: 'duration', groups: ['support'] }), [grouped('avg')])).toEqual([]);
       expect(timeseriesIssues(options({ query: 'duration' }), [grouped('count')])).toEqual([]);
+    });
+  });
+
+  describe.each(['traceAggregate', 'spanAggregate'] as const)('when a grouped %s reads every group', source => {
+    const grouped = (measures: string[], groupBy = ['entityName']): DashboardQuery => ({
+      id: 'duration',
+      source,
+      measures,
+      groupBy,
+    });
+
+    it.each(['duration.p95', 'duration.avg', 'tokens.total.avg', 'errorRate', 'countDistinct.traceId'])(
+      "reports %s, since its groups' values don't add up",
+      measure => {
+        expect(timeseriesIssues(options({ query: 'duration', measure }), [grouped([measure])])).toEqual([
+          "a value reading query 'duration' must pick one group, since its groups' values can't be added up",
+        ]);
+      },
+    );
+
+    it.each(['count', 'errorCount', 'cost.sum', 'timeToFirstToken.count'])('takes %s, which adds up', measure => {
+      expect(timeseriesIssues(options({ query: 'duration', measure }), [grouped([measure])])).toEqual([]);
+    });
+
+    it('takes one group of a percentile, or a percentile of an ungrouped query', () => {
+      const p95 = { query: 'duration', measure: 'duration.p95' };
+      expect(timeseriesIssues(options({ ...p95, groups: ['support'] }), [grouped(['duration.p95'])])).toEqual([]);
+      expect(timeseriesIssues(options(p95), [grouped(['duration.p95'], [])])).toEqual([]);
     });
   });
 });

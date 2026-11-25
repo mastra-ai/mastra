@@ -219,6 +219,23 @@ describe('checks.matches', () => {
     expect(result.score).toBe(0);
   });
 
+  test.each([
+    [/yes|no/, 'yes', 1],
+    [/yes|no/, 'no', 1],
+    [/yes|no/, 'yes, but only on Tuesdays', 0],
+    [/yes|no/, 'I said no', 0],
+    [/YES|NO/i, 'I said no', 0],
+    [/(a)\1|b/, 'aa', 1],
+  ])('exact mode matches the whole output for every alternative: %s on "%s"', async (pattern, output, score) => {
+    const result = await checks.matches(pattern, { exact: true }).run(
+      createAgentTestRun({
+        inputMessages: [createTestMessage({ content: 'Answer', role: 'user', id: 'i1' })],
+        output: [createTestMessage({ content: output, role: 'assistant', id: 'o1' })],
+      }),
+    );
+    expect(result.score).toBe(score);
+  });
+
   test.each(['g', 'y'])('scores every matching run when the pattern uses the %s flag', async flag => {
     const scorer = checks.matches(new RegExp('\\d+°[FC]', flag));
     const run = (content: string) =>

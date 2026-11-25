@@ -5,7 +5,11 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
@@ -167,13 +171,31 @@ function CredentialMenu({
       <DropdownMenu.Content align="end">
         {credential === 'oauth' ? (
           <>
-            {onSignInAgain && <DropdownMenu.Item onClick={onSignInAgain}>Sign in again</DropdownMenu.Item>}
-            <DropdownMenu.Item onClick={onSignOut}>Sign out</DropdownMenu.Item>
+            {onSignInAgain && (
+              <>
+                <DropdownMenu.Item onClick={onSignInAgain}>
+                  <IconArrowRotateClockwise /> Sign in again
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+              </>
+            )}
+            <DropdownMenu.Item variant="destructive" onClick={onSignOut}>
+              <IconArrowBoxLeft /> Sign out
+            </DropdownMenu.Item>
           </>
         ) : (
           <>
-            {onUpdateKey && <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>}
-            <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
+            {onUpdateKey && (
+              <>
+                <DropdownMenu.Item onClick={onUpdateKey}>
+                  <IconKey2 /> Update key
+                </DropdownMenu.Item>
+                <DropdownMenu.Separator />
+              </>
+            )}
+            <DropdownMenu.Item variant="destructive" onClick={onRemoveKey}>
+              <TrashIcon /> Remove key
+            </DropdownMenu.Item>
           </>
         )}
       </DropdownMenu.Content>
