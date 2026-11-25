@@ -78,7 +78,8 @@ export function EmptyState({
       )}
     >
       {split ? (
-        <div className="flex flex-col items-center gap-6 text-center @2xl:flex-row @2xl:gap-12 @2xl:text-left">
+        <div className="flex flex-col-reverse items-center gap-6 text-center @2xl:flex-row @2xl:gap-12 @2xl:text-left">
+          <div className="flex w-80 max-w-full flex-col items-center @2xl:items-start">{text}</div>
           {iconSlot && (
             <div
               data-slot="empty-state-art-slot"
@@ -90,7 +91,6 @@ export function EmptyState({
               {iconSlot}
             </div>
           )}
-          <div className="flex w-80 max-w-full flex-col items-center @2xl:items-start">{text}</div>
         </div>
       ) : (
         <>

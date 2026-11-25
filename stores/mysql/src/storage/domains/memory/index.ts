@@ -3,9 +3,11 @@ import {
   assertActiveObservationsApplied,
   isAppendOnlySince,
   isBufferedChunkCoveredByCursor,
+  isBufferedReflectionUnchangedSince,
   maxObservationCursor,
   planReflectionGenerationText,
   withObservationalMemoryLifecycleColumns,
+  withBufferedReflectionVerified,
 } from '@internal/core/memory';
 import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 
@@ -2761,6 +2763,11 @@ export class MemoryMySQL extends MemoryStorage {
         if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
           return stored;
         }
+        // The swap must consume the buffer and reflected line count the caller read; another
+        // writer may have extended both since, which the activated text alone cannot reveal.
+        if (!isBufferedReflectionUnchangedSince(stored, currentRecord)) {
+          return stored;
+        }
 
         // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
         // Lines after reflectedLineCount were added after reflection started → kept as-is.
@@ -2778,7 +2785,15 @@ export class MemoryMySQL extends MemoryStorage {
           input.tokenCount +
           Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-        return this.rollOverOMRow(connection, stored.id, newObservations, tokenCount, input.newRecordId, true);
+        const successor = await this.rollOverOMRow(
+          connection,
+          stored.id,
+          newObservations,
+          tokenCount,
+          input.newRecordId,
+          true,
+        );
+        return withBufferedReflectionVerified(successor, currentRecord);
       }, 'swapBufferedReflectionToActive');
     } catch (error) {
       rethrowOrWrapOM(error, input.currentRecord.id, 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE');

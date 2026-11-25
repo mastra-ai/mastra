@@ -229,10 +229,11 @@ export const ToolkitConnectionControl = ({
         type="button"
         size="sm"
         onClick={handleConnect}
-        disabled={disabled || authorize.isPending}
+        disabled={disabled}
         data-testid={`toolkit-connect-${testIdSuffix}`}
+        loading={authorize.isPending}
       >
-        {authorize.isPending ? 'Connecting…' : 'Connect'}
+        Connect
       </Button>
     );
   }

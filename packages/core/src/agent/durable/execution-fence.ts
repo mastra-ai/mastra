@@ -685,6 +685,7 @@ export class ExecutionFence implements RunFenceScope {
   /** The grace for a release of this claim is spent: a renewal already found it released before this fence settled. */
   #releaseSeen = false;
   #settlement?: Promise<ExecutionSettlement>;
+  #detached = false;
   #settledAs?: ExecutionSettlement;
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
@@ -975,6 +976,11 @@ export class ExecutionFence implements RunFenceScope {
     return this.#settledAs;
   }
 
+  /** This process stopped coordinating the run and left its settlement to the workers. */
+  get detached(): boolean {
+    return this.#detached;
+  }
+
   /** An owned deadline settlement revokes writes without handing its topics to another execution. */
   ownsRunTopics(): boolean {
     return this.#settledAs === 'owned' || !this.#lossError;
@@ -1197,6 +1203,7 @@ export class ExecutionFence implements RunFenceScope {
   /** Detach a coordinator without changing the claim shared with remote workers. */
   detach(): void {
     if (this.#settlement) return;
+    this.#detached = true;
     this.stopHeartbeat();
     this.#settledAs = 'superseded';
     this.#settlement = Promise.resolve('superseded');

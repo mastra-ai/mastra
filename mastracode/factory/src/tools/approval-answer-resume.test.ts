@@ -136,10 +136,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           models: { activeModelPackId: null, modeDefaults: { build: `openai/${MODEL}`, plan: `openai/${MODEL}` } },
         }),
       );
-      const plansDir = path.join(directory, 'plans');
-      mkdirSync(plansDir, { recursive: true });
+      // Same shape the SDK actually uses: `plansDir` is workspace-relative, so
+      // it is read against the session's project path (`cwd` here).
+      const plansDir = 'plans';
+      mkdirSync(path.join(directory, plansDir), { recursive: true });
       const planPath = path.join(plansDir, 'fix.md');
-      writeFileSync(planPath, '# Fix\n\n1. Do it.\n');
+      writeFileSync(path.join(directory, planPath), '# Fix\n\n1. Do it.\n');
       const toolArguments = {
         plan: { path: planPath },
         release: { version: '1.2.0' },
@@ -279,8 +281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         const workItemTools = createFactoryWorkItemTools(scope, {
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
-          transitionService: {
-            transition: async request => ({
+          boardEngine: {
+            requestMove: async request => ({
               status: 'accepted',
               transitionId: randomUUID(),
               itemId: request.workItemId,

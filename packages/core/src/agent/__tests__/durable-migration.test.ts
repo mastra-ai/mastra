@@ -4,7 +4,12 @@ import { Mastra } from '../../mastra';
 import { Agent } from '../index';
 import type { AgentDurableOption, AgentStreamsConfig } from '../index';
 
-const config = { id: 'migration-agent', name: 'Migration Agent', model: 'openai/gpt-4o' } as const;
+const config = {
+  id: 'migration-agent',
+  name: 'Migration Agent',
+  instructions: 'Help the user.',
+  model: 'openai/gpt-4o',
+} as const;
 
 describe('plain Agent durable migration', () => {
   it('keeps addAgent registration resumable without enabling checkpoint recovery', async () => {
@@ -23,41 +28,45 @@ describe('plain Agent durable migration', () => {
     expect(new Agent({ ...config, durable }).durable).toEqual(durable);
   });
 
-  it.each([
-    { maxSteps: 50 },
-    { shouldPersistSnapshot: () => true },
-    { id: 'legacy-id' },
-    { name: 'legacy-name' },
-    { maxSteps: 50, id: 'legacy-id', name: 'legacy-name', shouldPersistSnapshot: () => true },
-  ])('warns once about ignored JavaScript durable execution options %j', legacy => {
-    const mastra = new Mastra();
-    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-    try {
-      const agent = new Agent({ ...config, mastra, durable: { cleanupTimeoutMs: 0, ...legacy } });
-      mastra.addAgent(agent);
-      expect(warn).toHaveBeenCalledTimes(1);
-      const message = warn.mock.calls[0]![0];
-      for (const key of Object.keys(legacy)) expect(message).toContain(key);
-      expect(message).toContain('createDurableAgent');
-      expect(message).toContain('streams');
-      expect(message).toContain('durable');
-      expect(agent.durable).toEqual({ cleanupTimeoutMs: 0, ...legacy });
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it.each([undefined, true, false, { cleanupTimeoutMs: 0 }, { cache: false }])(
-    'does not warn for supported durable configuration %j',
-    durable => {
+  it.each([{ id: 'legacy-id' }, { name: 'legacy-name' }, { id: 'legacy-id', name: 'legacy-name' }])(
+    'warns once about ignored JavaScript durable execution options %j',
+    legacy => {
       const mastra = new Mastra();
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+      const durable = { cleanupTimeoutMs: 0, maxSteps: 50, ...legacy };
       try {
-        mastra.addAgent(new Agent({ ...config, mastra, durable }));
-        expect(warn).not.toHaveBeenCalled();
+        const agent = new Agent({ ...config, mastra, durable });
+        mastra.addAgent(agent);
+        expect(warn).toHaveBeenCalledTimes(1);
+        const message = warn.mock.calls[0]?.[0];
+        for (const key of Object.keys(legacy)) expect(message).toContain(key);
+        expect(message).not.toContain('maxSteps');
+        expect(message).toContain('createDurableAgent');
+        expect(message).toContain('streams');
+        expect(message).toContain('durable');
+        expect(agent.durable).toEqual(durable);
       } finally {
         warn.mockRestore();
       }
     },
   );
+
+  it.each([
+    undefined,
+    true,
+    false,
+    { maxSteps: 50 },
+    { cleanupTimeoutMs: 0 },
+    { cache: false },
+    { shouldPersistSnapshot: () => true },
+  ] satisfies (AgentDurableOption | undefined)[])('does not warn for supported durable configuration %j', durable => {
+    const mastra = new Mastra();
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    try {
+      mastra.addAgent(new Agent({ ...config, mastra, durable }));
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

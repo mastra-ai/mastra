@@ -18,7 +18,7 @@ import type {
   RunLoopScenarioOptions,
   ScenarioEngineHost,
 } from './types';
-import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
+import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, nativeExecutionEngine, SCENARIO_MODEL_ID } from './types';
 
 export { isDurableEngineVariant } from './types';
 
@@ -130,6 +130,7 @@ export async function createSharedAgent(
     | 'cache'
     | 'streamReplay'
     | 'observability'
+    | 'tracingPolicy'
     | 'engine'
     | 'inputProcessors'
   > = {},
@@ -174,6 +175,7 @@ async function buildScenarioAgent({
   maxRetries,
   inputProcessorsOnAgent,
   agentOutputProcessors,
+  tracingPolicy,
 }: { inputProcessorsOnAgent?: boolean } & Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -201,6 +203,7 @@ async function buildScenarioAgent({
   | 'fsRouted'
   | 'maxRetries'
   | 'agentOutputProcessors'
+  | 'tracingPolicy'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -220,6 +223,12 @@ async function buildScenarioAgent({
   // `fsRouted` flag is kept as an alias so a single scenario can opt in without
   // running across the whole engine matrix.
   const isFs = engine === 'fs' || fsRouted === true;
+  const executionEngine = nativeExecutionEngine(engine);
+  const durable = executionEngine
+    ? { executionEngine, ...(streamReplay === false ? { cache: false as const } : {}) }
+    : streamReplay === false && !isDurableEngineVariant(engine)
+      ? { cache: false as const }
+      : undefined;
 
   let agent: any;
   if (isFs) {
@@ -248,7 +257,8 @@ async function buildScenarioAgent({
         ...(maxRetries === undefined ? {} : { maxRetries }),
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
         ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
-        ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
+        ...(durable ? { durable } : {}),
+        ...(tracingPolicy ? { options: { tracingPolicy } } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -271,7 +281,8 @@ async function buildScenarioAgent({
       ...(defaultOptions ? { defaultOptions } : {}),
       ...(maxRetries === undefined ? {} : { maxRetries }),
       ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
-      ...(streamReplay === false && !isDurableEngineVariant(engine) ? { durable: { cache: false } } : {}),
+      ...(durable ? { durable } : {}),
+      ...(tracingPolicy ? { options: { tracingPolicy } } : {}),
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
@@ -282,7 +293,8 @@ async function buildScenarioAgent({
   // The evented engine publishes on `mastra.pubsub` and the agent's stream
   // follows it (source-follower wiring at registration). Share one bus between
   // the agent and the Mastra host, mirroring the evented conformance leg.
-  const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
+  const eventedPubsub =
+    engine === 'evented' || executionEngine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
 
   // Wrap with the durable/evented wrapper for those engine variants
   const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub, streamReplay);
@@ -416,6 +428,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     server,
     engine = 'normal',
     fsRouted,
+    tracingPolicy,
   } = opts;
 
   fixtures(llm);
@@ -425,12 +438,14 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   let agent: any;
   let mastra: any;
   if (sharedAgent) {
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter, so discriminate against a real
-    // wrapper by checking `agent.agent !== agent`. See `Mastra.addAgent`.
+    // Wrapper variants may need to wrap a shared plain agent on the first call.
     const sharedIsRealDurableWrapper =
       isDurableAgentLike(sharedAgent.agent) && (sharedAgent.agent as any).agent !== sharedAgent.agent;
-    if (isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
+    const nativeEngine = nativeExecutionEngine(engine);
+    if (nativeEngine && sharedAgent.agent.__getExecutionEnginePolicy?.() !== nativeEngine) {
+      throw new Error(`Build the shared scenario agent with engine: '${engine}'.`);
+    }
+    if (!nativeEngine && isDurableEngineVariant(engine) && !sharedIsRealDurableWrapper) {
       // sharedAgent provides a regular Agent on the first call; wrap it for
       // the durable/evented engine and re-register on the Mastra instance so
       // .getAgent() returns the wrapper.  On subsequent calls
@@ -476,6 +491,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       fsRouted,
       maxRetries,
       agentOutputProcessors,
+      tracingPolicy,
     });
     agent = built.agent;
     mastra = built.mastra;
@@ -542,24 +558,11 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...memoryOption,
   };
 
-  let rawResult: any;
-  if (isDurable) {
-    rawResult = streamUntilIdle
-      ? await agent.streamUntilIdle(prompt, streamOptions)
-      : await agent.stream(prompt, streamOptions);
-  } else {
-    rawResult = streamUntilIdle
-      ? await agent.streamUntilIdle(prompt, streamOptions)
-      : await agent.stream(prompt, streamOptions);
-  }
-
-  // DurableAgent.stream() returns { output, fullStream, ... }; regular returns MastraModelOutput directly
-  const output: MastraModelOutput<unknown> = isDurable
-    ? (rawResult.output as unknown as MastraModelOutput<unknown>)
-    : (rawResult as unknown as MastraModelOutput<unknown>);
-
-  // For durable, fullStream is on the result object, not on output
-  const fullStream = isDurable ? rawResult.fullStream : output.fullStream;
+  const rawResult = streamUntilIdle
+    ? await agent.streamUntilIdle(prompt, streamOptions)
+    : await agent.stream(prompt, streamOptions);
+  const output: MastraModelOutput<unknown> = rawResult.output ?? rawResult;
+  const fullStream = rawResult.fullStream;
 
   // Drain the stream so every loop turn (and every AIMock request) completes
   // before we hand back the captured journal.

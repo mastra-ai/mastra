@@ -184,6 +184,9 @@ async function resolveStore(
   }
   const readers = requirePageReaders();
   const read = await callerReadScope(mastra, requestContext, instance);
+  // `scopeGrants` and `scopeLabel` read the declarations as last resolved; this loads the store's.
+  // Older cores without it compile every declaration from config.
+  await instance.resolveScopeDeclarations?.();
   return { instance, store: await instance.getStorage(), read, readers };
 }
 

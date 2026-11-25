@@ -6,7 +6,7 @@ export function SidebarPanel({ children, className }: { children: ReactNode; cla
     <div
       data-slot="sidebar-panel"
       className={cn(
-        'ml-px flex size-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tr-studio-panel border-t border-r border-surface-rim bg-card',
+        'flex size-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tr-studio-panel border-t border-r border-surface-rim bg-card',
         className,
       )}
     >

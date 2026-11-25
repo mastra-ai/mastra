@@ -137,7 +137,7 @@ export const Crumb = ({
       </li>
       {!isCurrent && (
         <li role="separator" className="flex h-full items-center">
-          <Icon className="text-placeholder">
+          <Icon className="text-subtle-foreground">
             <SlashIcon />
           </Icon>
         </li>

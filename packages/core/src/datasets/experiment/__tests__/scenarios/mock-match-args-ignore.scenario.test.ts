@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { recordingTool, runToolMockScenario } from './scenario-helpers';
+import { EXPERIMENT_PATHS, recordingTool, runToolMockScenario } from './scenario-helpers';
 
 /**
  * BDD scenario: `matchArgs: 'ignore'` serves the mock even when the call args
@@ -15,11 +15,12 @@ import { recordingTool, runToolMockScenario } from './scenario-helpers';
  * When the model calls it with a DIFFERENT prompt (plus runtime-injected fields)
  * Then the mock still serves, the live sub-agent never runs, and the item passes.
  */
-describe('Tool mock scenario: matchArgs ignore', () => {
+describe.each(EXPERIMENT_PATHS)('Tool mock scenario: matchArgs ignore (%s)', path => {
   it('serves the mock even when the call args differ from the recorded args', async () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { 'agent-balanceAgent': recordingTool('agent-balanceAgent', liveLog) },
       turns: [
         // The model authors a different prompt than the one recorded in the mock.
@@ -48,6 +49,7 @@ describe('Tool mock scenario: matchArgs ignore', () => {
     const liveLog: string[] = [];
 
     const { item } = await runToolMockScenario({
+      path,
       tools: { 'agent-sub': recordingTool('agent-sub', liveLog) },
       turns: [
         // Three calls with different args; only two ignore mocks are provided.

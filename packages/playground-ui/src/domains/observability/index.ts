@@ -41,3 +41,4 @@ export type {
   SavedViewsProviderProps,
   SavedViewsSource,
 } from './saved-views';
+export { ComputedTag } from './components/computed-tag';

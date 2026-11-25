@@ -46,14 +46,23 @@ const filledDestructiveLadder: { token: FillToken; use: string }[] = [
 ];
 
 const fieldSurfaceTokens = [
+  { token: 'field-on-page', use: 'Field fill on the page' },
   { token: 'field-on-surface', use: 'Field fill inside a raised surface' },
-  { token: 'field-rim', use: 'Field edge on the canvas' },
+  { token: 'field-on-nested', use: 'Field fill on a box inside a card' },
+  { token: 'field-hover', use: 'Tint of a hovered field' },
+  { token: 'field-hover-on-page', use: 'Hover tint on the page' },
+  { token: 'field-hover-on-surface', use: 'Hover tint inside a card, overlay or dialog' },
+  { token: 'field-open', use: 'Tint of a field with its menu open' },
+  { token: 'field-open-on-page', use: 'Open tint on the page' },
+  { token: 'field-open-on-surface', use: 'Open tint inside a card, overlay or dialog' },
+  { token: 'field-rim', use: 'Field edge' },
   { token: 'field-rim-focus', use: 'Focused field edge' },
-  { token: 'field-rim-on-surface', use: 'Field edge inside a raised surface' },
+  { token: 'control-rim', use: 'Edge of a control made of segments' },
 ];
 
 const boundaryLadder: { token: BoundaryToken; use: string }[] = [
   { token: 'border', use: 'Rim of a filled control, divider' },
+  { token: 'separator', use: 'Line between rows of the same kind' },
   { token: 'border-strong', use: 'Edge of a transparent control at rest' },
   { token: 'border-hover', use: 'Hover on either of those' },
   { token: 'border-focus', use: 'Focus, at 3:1 against its fill' },
@@ -65,8 +74,8 @@ const overlayWashes: { token: FillToken; use: string }[] = [
 ];
 
 const tintValues = [
-  { theme: 'Dark', value: '100%', use: 'Light catching a dark surface' },
-  { theme: 'Light', value: '20.5%', use: 'Shade landing on a light one' },
+  { theme: 'Dark', value: '97.02%', use: 'Light catching a dark surface' },
+  { theme: 'Light', value: '22.64%', use: 'Shade landing on a light one' },
 ];
 
 const FillLadderRow = ({ onSidebar = false }: { onSidebar?: boolean }) => (
@@ -182,11 +191,9 @@ export const SurfaceFoundations: Story = {
             <Specimen key={token} name={`--${token}`} note={use}>
               <div
                 role="img"
-                aria-label={`--${token} ${token === 'field-on-surface' ? 'fill' : 'edge'}`}
-                className={token === 'field-on-surface' ? 'h-16 rounded-md' : 'h-16 rounded-md border'}
-                style={
-                  token === 'field-on-surface' ? { background: `var(--${token})` } : { borderColor: `var(--${token})` }
-                }
+                aria-label={`--${token} ${token.includes('rim') ? 'edge' : 'fill'}`}
+                className={token.includes('rim') ? 'h-16 rounded-md border' : 'h-16 rounded-md'}
+                style={token.includes('rim') ? { borderColor: `var(--${token})` } : { background: `var(--${token})` }}
               />
             </Specimen>
           ))}
@@ -295,13 +302,16 @@ export const SurfaceFoundations: Story = {
         description="The shared edge for app frames, cards and panels. border-surface-rim and shadow-rim use the same token. Raised and overlay recipes compose it with other effects."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Specimen name="--overlay-rim" note="Edge of a menu, popover or dialog">
+            <div role="img" aria-label="overlay-rim edge" className="h-20 rounded-md border border-(--overlay-rim)" />
+          </Specimen>
           <Specimen name="--surface-rim" note="border-surface-rim — isolated 1px edge">
             <div role="img" aria-label="surface-rim edge" className="h-20 rounded-md border border-surface-rim" />
           </Specimen>
           <Specimen name="Inset rim only" note="shadow-rim — same color, inside the box">
             <div role="img" aria-label="surface-rim inset edge" className="h-20 rounded-md shadow-rim" />
           </Specimen>
-          <Specimen name="Raised composition" note="Card fill + lip + rim + drops">
+          <Specimen name="Raised composition" note="Card fill + rim + drops">
             <div className="h-20 rounded-md bg-card shadow-raised" />
           </Specimen>
           <Specimen name="Focused rim comparison" note="Raised composition with --border-focus replacing its rim">

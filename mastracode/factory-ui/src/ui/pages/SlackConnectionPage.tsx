@@ -262,10 +262,15 @@ export function SlackConnectionSettings() {
                   <Button
                     size="sm"
                     aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
-                    disabled={disconnectMutation.isPending}
                     onClick={() => disconnect(account)}
+                    disabled={disconnectMutation.isPending}
+                    loading={
+                      disconnectMutation.isPending &&
+                      disconnectMutation.variables.externalTeamId === account.externalTeamId &&
+                      disconnectMutation.variables.externalUserId === account.externalUserId
+                    }
                   >
-                    {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
+                    Disconnect
                   </Button>
                 </SettingsRow>
               ))}

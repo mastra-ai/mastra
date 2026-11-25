@@ -34,21 +34,17 @@ import { initContextStorage } from '../../observability/context-storage';
 import { executionFailureTermination } from '../../observability/execution-outcome';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
-import {
-  ProcessorRunner,
-  ProcessorState,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  createProcessorSendSignal,
-} from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
 import {
   OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  ProcessorRunner,
+  ProcessorState,
   endOutputStreamSpanAtStepEnd,
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../../processors/runner';
 import type { ProcessorLateSignalSink } from '../../processors/send-signal';
-import { PROCESSOR_LATE_SIGNAL_SINK } from '../../processors/send-signal';
+import { PROCESSOR_LATE_SIGNAL_SINK, createProcessorSendSignal } from '../../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -62,6 +58,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors/step-schema';
 import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -109,6 +106,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
+import { warnUnsupportedEventedSetup } from './setup-warning';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -807,14 +805,21 @@ function createStepFromProcessor<TProcessorId extends string>(
       metrics,
       mastra,
       runId: workflowRunId,
+      abortSignal: runAbortSignal,
     }) => {
       const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
+      // Never read the signal from the payload: a serializing pubsub encodes it as `{}`.
+      // Abort on either the caller's signal or a cancel of this processor workflow run.
+      const scopedSignal = mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_ABORT_SIGNAL);
+      const abortSignal =
+        scopedSignal && runAbortSignal
+          ? AbortSignal.any([scopedSignal, runAbortSignal])
+          : (scopedSignal ?? runAbortSignal);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
-        abortSignal?: AbortSignal;
         lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
@@ -854,8 +859,6 @@ function createStepFromProcessor<TProcessorId extends string>(
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
-        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
-        abortSignal,
         // Receives sendSignal calls made after the creating durable step returned
         lateSignalSink,
       } = input;
@@ -1715,6 +1718,16 @@ function createStepFromProcessor<TProcessorId extends string>(
   >;
 }
 
+/**
+ * Builds a workflow on the evented execution engine: each step is an event on
+ * the Mastra host's pubsub, so any worker can run the next one.
+ *
+ * In one process it runs on any pubsub, including the default one. Running it
+ * on several processes needs a pubsub that redelivers unacknowledged events and
+ * a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ */
 export function createWorkflow<
   TWorkflowId extends string = string,
   TInputSchema extends PublicSchema<any> = PublicSchema<any>,
@@ -1845,6 +1858,10 @@ export class EventedWorkflow<
         details: { workflowId: this.id, storage: storageName },
       });
     }
+
+    // Internal workflows are left out: they run where they were registered, except an evented
+    // agent's loop, which the agent's execution engine checks.
+    if (!this.isInternal) warnUnsupportedEventedSetup(this.mastra, workflowsStore);
 
     const cachedRun = this.runs.get(runIdToUse);
     const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({

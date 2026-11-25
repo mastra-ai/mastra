@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { Section } from '../Section';
 import { TextAndIcon } from '../Text';
@@ -82,16 +81,10 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
             onNext={index < items.length - 1 ? () => setIndex(index + 1) : undefined}
           />
           <div className="ml-auto flex items-center gap-2">
-            <Button size="sm">
-              <Icon>
-                <IconPencil />
-              </Icon>
+            <Button icon={<IconPencil />} size="sm">
               Edit
             </Button>
-            <Button size="sm">
-              <Icon>
-                <TrashIcon />
-              </Icon>
+            <Button icon={<TrashIcon />} size="sm">
               Delete
             </Button>
           </div>

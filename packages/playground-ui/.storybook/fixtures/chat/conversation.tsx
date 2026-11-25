@@ -33,8 +33,7 @@ function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () =
             <Txt as="h1" variant="body">
               Composer review
             </Txt>
-            <Button size="sm" variant="ghost" onClick={onReset}>
-              <IconArrowRotateCounterClockwise />
+            <Button icon={<IconArrowRotateCounterClockwise />} size="sm" variant="ghost" onClick={onReset}>
               Reset conversation
             </Button>
           </ChatShell.Column>

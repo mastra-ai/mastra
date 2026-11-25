@@ -30,8 +30,8 @@
     "eval:conversations": "tsc -p tsconfig.eval.json && node --env-file-if-exists=.env build/eval/mastra/evaluation/conversation-query-runner.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1095.0",
-    "@aws-sdk/types": "3.974.5",
+    "@aws-sdk/client-s3": "3.1174.0",
+    "@aws-sdk/types": "3.975.1",
     "@libsql/client": "0.18.0",
     "@mastra/core": "latest",
     "@mastra/google-drive": "latest",
@@ -58,5 +58,9 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.70.0",
     "vitest": "5.0.1"
+  },
+  "overrides": {
+    "@aws-sdk/client-s3": "3.1174.0",
+    "@aws-sdk/types": "3.975.1"
   }
 }

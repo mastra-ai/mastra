@@ -1,0 +1,445 @@
+'use client';
+
+import type { DatasetExperimentResult } from '@mastra/client-js';
+import type { ExperimentItemUsage } from '@mastra/react/hooks/experiments';
+import type { ReactNode } from 'react';
+import { useMemo } from 'react';
+import { sideDurationMs } from './comparison/build-comparison-rows';
+import { ComparisonMetricList } from './comparison/comparison-metric-list';
+import type { ComparisonMetric } from './comparison/comparison-metric-list';
+import { ComparisonPayload } from './comparison/comparison-payload';
+import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
+import { itemMetrics } from './comparison/item-metrics';
+import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
+import { ToolMockReportSection } from './tool-mock-report-section';
+import {
+  getMissingTextNotice,
+  getResultErrorMessage,
+  getResultOutputText,
+  getResultToolCalls,
+} from '@/domains/experiments/utils/result-output';
+import { ComputedTag } from '@/domains/observability';
+import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
+import { SpanPayloadToolCalls } from '@/domains/traces/components/span-payload/span-payload-primitives';
+import { Button } from '@/ds/components/Button';
+import { CopyButton } from '@/ds/components/CopyButton';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { Skeleton } from '@/ds/components/Skeleton';
+import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { Txt } from '@/ds/components/Txt';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFingerPrint1 } from '@/ds/icons/central/IconFingerPrint1';
+import { IconLab } from '@/ds/icons/central/IconLab';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { CircleDotIcon } from '@/ds/icons/CircleDotIcon';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
+import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/utils/cn';
+import { formatDate } from '@/utils/date-format';
+import { getShortId } from '@/utils/id';
+
+/**
+ * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue
+ * items satisfy it too, so the same panel serves experiments and review flows.
+ */
+export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | 'itemId' | 'input' | 'output'> &
+  Partial<
+    Pick<
+      DatasetExperimentResult,
+      'targetType' | 'createdAt' | 'startedAt' | 'completedAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'
+    >
+  > & {
+    error?: unknown;
+    tags?: string[] | null;
+  };
+
+export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number; reason?: string | null };
+
+export type ExperimentResultPanelProps = {
+  /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
+  result?: ExperimentResultPanelResult;
+  /** Item the panel is opened for while `result` is not available yet; keeps the drawer open showing `fallback`. */
+  itemId?: string;
+  /** Rendered instead of the result body while `itemId` is set but `result` is missing (loading / not found). */
+  fallback?: ReactNode;
+  /** Accessible dialog name. Defaults to `Experiment item <itemId>` when opened by item, else `Result <id>`. */
+  title?: string;
+  scores?: ExperimentResultPanelScore[];
+  onPrevious?: () => void;
+  onNext?: () => void;
+  onClose: () => void;
+  onShowTrace?: () => void;
+  onScoreClick?: (scoreId: string) => void;
+  featuredScoreId?: string | null;
+  onFlagForReview?: (resultId: string) => void;
+  /** When provided, tags become editable in the metadata block (add via picker, remove via badge). */
+  onTagsChange?: (tags: string[]) => void;
+  /** Known tags offered by the tag picker. */
+  tagVocabulary?: string[];
+  isUpdatingTags?: boolean;
+  /** Link to the experiment that produced this result; renders a "See experiment" header action. */
+  experimentLink?: string;
+  /** Renders a "Mark as reviewed" header action for `needs-review` results. */
+  onComplete?: () => void | Promise<void>;
+  /**
+   * When provided (and the result has a trace), the body splits into Details and
+   * Feedback tabs; this renders the feedback tab, keyed by trace id.
+   */
+  feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
+  /** Feedback on the result's trace, shown on the Feedback tab. */
+  feedbackCount?: number;
+  /** Token/cost usage of the result's trace; agent runs only. */
+  usage?: ExperimentItemUsage;
+  /** While true, agent results reserve the cost and tokens rows so the panel doesn't shift once usage lands. */
+  isUsageLoading?: boolean;
+  /**
+   * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
+   * (e.g. inside the route side panel) and renders nothing while there is no `result`/`itemId`.
+   */
+  variant?: 'drawer' | 'inline';
+};
+
+export function ExperimentResultPanel({
+  result,
+  itemId,
+  fallback,
+  title,
+  onClose,
+  variant = 'drawer',
+  ...bodyProps
+}: ExperimentResultPanelProps) {
+  const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Experiment result ${result?.id ?? ''}`);
+  const content = result ? (
+    <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+  ) : itemId ? (
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>
+          Experiment item
+          <DataPanel.CopyId id={itemId} />
+        </DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      {fallback}
+    </>
+  ) : null;
+
+  if (variant === 'inline') {
+    if (!content) return null;
+    return (
+      <DataPanel variant="inline" title={dialogTitle}>
+        {content}
+      </DataPanel>
+    );
+  }
+
+  return (
+    <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1}>
+      {content}
+    </DataPanel>
+  );
+}
+
+type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback' | 'variant'> & {
+  result: ExperimentResultPanelResult;
+};
+
+function ExperimentResultPanelBody({
+  result,
+  scores,
+  onPrevious,
+  onNext,
+  onClose,
+  onShowTrace,
+  onScoreClick,
+  featuredScoreId,
+  onFlagForReview,
+  onTagsChange,
+  tagVocabulary = [],
+  isUpdatingTags = false,
+  experimentLink,
+  onComplete,
+  feedbackTabSlot,
+  feedbackCount,
+  usage,
+  isUsageLoading = false,
+}: ExperimentResultPanelBodyProps) {
+  const inputStr = formatValue(result.input);
+  const outputStr = formatValue(result.output);
+  const outputText = getResultOutputText(result);
+  const toolCalls = getResultToolCalls(result);
+  const missingTextNotice = getMissingTextNotice(result);
+  const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
+  const tags = Array.isArray(result.tags) ? result.tags : [];
+  const selectedResults = useMemo(() => [result], [result]);
+  const showTagsRow = Boolean(onTagsChange) || tags.length > 0;
+  const { Link } = useLinkComponent();
+  const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
+  // Only agent runs report usage: reserve its rows while loading so the panel doesn't shift once it lands.
+  const isUsagePending = isUsageLoading && (result.targetType == null || result.targetType === 'agent');
+  const usageMetrics = itemMetrics({
+    usage,
+    showUsage: !!usage || isUsagePending,
+    durationMs: sideDurationMs(result),
+    scores: [],
+  }).map(metric =>
+    isUsagePending && (metric.id === 'cost' || metric.id === 'tokens')
+      ? { ...metric, value: <Skeleton aria-hidden className="h-4 w-14" /> }
+      : metric,
+  );
+
+  const errorMessage = typeof result.error === 'string' && result.error ? result.error : getResultErrorMessage(result);
+  const metrics: ComparisonMetric[] = [
+    ...usageMetrics,
+    {
+      id: 'item-id',
+      icon: <IconFingerPrint1 />,
+      label: 'Item Id',
+      value: (
+        <span className="flex items-center gap-1.5">
+          <span className="font-mono" title={result.itemId}>
+            {getShortId(result.itemId)}
+          </span>
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
+        </span>
+      ),
+      delta: null,
+    },
+    ...(result.createdAt
+      ? [
+          {
+            id: 'created',
+            icon: <IconCalendar1 />,
+            label: 'Created',
+            value: formatDate(result.createdAt, 'date-time'),
+            delta: null,
+          },
+        ]
+      : []),
+    ...(result.status
+      ? [
+          {
+            id: 'status',
+            icon: <CircleDotIcon />,
+            label: 'Status',
+            value: <ReviewStatusBadge status={result.status} />,
+            delta: null,
+          },
+        ]
+      : []),
+    ...(showTagsRow
+      ? [
+          {
+            id: 'tags',
+            icon: <IconTag />,
+            label: 'Tags',
+            value: (
+              <ResultTags
+                tags={tags}
+                selectedResults={selectedResults}
+                onTagsChange={onTagsChange}
+                tagVocabulary={tagVocabulary}
+                isUpdatingTags={isUpdatingTags}
+              />
+            ),
+            delta: null,
+          },
+        ]
+      : []),
+    ...itemMetrics({
+      showUsage: false,
+      durationMs: null,
+      scores: (scores ?? []).map(score => ({
+        scorerId: score.scorerId,
+        value: score.score,
+        reason: score.reason,
+        label: onScoreClick ? (
+          <ScoreButton
+            scorerId={score.scorerId}
+            featured={featuredScoreId === score.id}
+            onClick={() => onScoreClick(score.id)}
+          />
+        ) : undefined,
+      })),
+    }),
+  ];
+
+  const details = (
+    <DataPanel.Content>
+      <div className={sectionStackClass}>
+        <ComparisonMetricList metrics={metrics} />
+
+        <ComparisonSection title="Input" framed actions={<CopyButton content={inputStr} />}>
+          <ComparisonPayload value={result.input} />
+        </ComparisonSection>
+
+        {result.groundTruth != null && (
+          <ComparisonSection
+            title="Ground Truth"
+            framed
+            actions={<CopyButton content={formatValue(result.groundTruth)} />}
+          >
+            <ComparisonPayload value={result.groundTruth} />
+          </ComparisonSection>
+        )}
+
+        {errorMessage ? (
+          <ComparisonSection title="Error" tone="negative" framed actions={<CopyButton content={errorMessage} />}>
+            <Txt tone="muted" className="p-3 break-words">
+              {errorMessage}
+            </Txt>
+          </ComparisonSection>
+        ) : (
+          <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
+            {missingTextNotice ? (
+              <Txt tone="muted" className="p-3 break-words">
+                {missingTextNotice}
+              </Txt>
+            ) : (
+              <ComparisonPayload value={outputText ?? result.output} />
+            )}
+          </ComparisonSection>
+        )}
+
+        {toolCalls.length > 0 && (
+          <ComparisonSection title={`Tool calls (${toolCalls.length})`}>
+            <SpanPayloadToolCalls toolCalls={toolCalls} />
+          </ComparisonSection>
+        )}
+
+        {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
+      </div>
+    </DataPanel.Content>
+  );
+
+  return (
+    <>
+      <DataPanel.Header>
+        {canFlag && (
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<IconClipboard2 />}>
+            Request review
+          </Button>
+        )}
+        {onComplete && result.status === 'needs-review' && (
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<IconCircleCheck />}>
+            Mark as reviewed
+          </Button>
+        )}
+        <DataPanel.HeaderActions>
+          {experimentLink && (
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              render={<Link href={experimentLink} />}
+              tooltip="See experiment"
+              aria-label="See experiment"
+            >
+              <IconLab />
+            </Button>
+          )}
+          {result.traceId && onShowTrace && (
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+              <TraceIcon />
+            </Button>
+          )}
+          <DataPanel.NextPrevNav
+            onPrevious={onPrevious}
+            onNext={onNext}
+            previousLabel="Go to previous result"
+            nextLabel="Go to next result"
+          />
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+
+      {feedbackTabSlot && feedbackTraceId ? (
+        <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+          <DataPanel.Header>
+            <TabList variant="pill-ghost" size="sm">
+              <Tab value="details">Details</Tab>
+              <Tab value="feedback">Feedback{feedbackCount != null && <> ({feedbackCount})</>}</Tab>
+            </TabList>
+          </DataPanel.Header>
+          <TabContent value="details" flush>
+            {details}
+          </TabContent>
+          <TabContent value="feedback" flush>
+            <DataPanel.Content>{feedbackTabSlot({ traceId: feedbackTraceId })}</DataPanel.Content>
+          </TabContent>
+        </Tabs>
+      ) : (
+        details
+      )}
+    </>
+  );
+}
+
+/** Scorer key that opens the score in the sibling drawer instead of linking to the scorer page. */
+function ScoreButton({ scorerId, featured, onClick }: { scorerId: string; featured: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={featured}
+      onClick={onClick}
+      className={cn(
+        'min-w-0 cursor-pointer truncate hover:text-foreground hover:underline',
+        featured && 'text-foreground',
+      )}
+    >
+      {scorerId}
+    </button>
+  );
+}
+
+type ResultTagsProps = {
+  tags: string[];
+  selectedResults: ExperimentResultPanelResult[];
+  onTagsChange?: (tags: string[]) => void;
+  tagVocabulary: string[];
+  isUpdatingTags: boolean;
+};
+
+/** Tag badges; editable (remove via badge, add via picker) when `onTagsChange` is provided. */
+function ResultTags({ tags, selectedResults, onTagsChange, tagVocabulary, isUpdatingTags }: ResultTagsProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {tags.map(tag => (
+        <ComputedTag key={tag} value={tag} className={onTagsChange ? 'gap-1 pr-1' : undefined}>
+          {tag}
+          {onTagsChange && (
+            <button
+              type="button"
+              aria-label={`Remove tag ${tag}`}
+              disabled={isUpdatingTags}
+              onClick={() => onTagsChange(tags.filter(t => t !== tag))}
+              className="cursor-pointer rounded-sm hover:opacity-70 disabled:opacity-50"
+            >
+              <IconCrossMedium className="size-icon-xs" />
+            </button>
+          )}
+        </ComputedTag>
+      ))}
+      {onTagsChange && (
+        <ExperimentResultsTagPicker
+          selectedResults={selectedResults}
+          vocabulary={tagVocabulary}
+          onAddTag={tag => onTagsChange([...tags, tag])}
+          disabled={isUpdatingTags}
+          variant="ghost"
+        />
+      )}
+    </div>
+  );
+}
+
+/** Format unknown value for display */
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return '-';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value, null, 2);
+}

@@ -73,8 +73,8 @@ export function LoadErrorState({ title, error, onRetry, retrying }: RetryProps &
             Sign in
           </Button>
         ) : (
-          <Button icon={<IconArrowRotateCounterClockwise />} disabled={retrying} onClick={onRetry}>
-            {retrying ? 'Trying again…' : 'Try again'}
+          <Button icon={<IconArrowRotateCounterClockwise />} onClick={onRetry} loading={retrying}>
+            Try again
           </Button>
         )
       }

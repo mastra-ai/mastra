@@ -50,7 +50,7 @@ export function GithubIntakeSection({
             size="sm"
             variant="ghost"
             icon={<IconArrowRotateCounterClockwise />}
-            disabled={statusQuery.isFetching}
+            loading={statusQuery.isFetching}
             onClick={() => void statusQuery.refetch()}
           >
             Retry

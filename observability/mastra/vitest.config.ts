@@ -10,7 +10,11 @@ export default defineConfig({
     isolate: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    // Keep cost estimates on the bundled snapshot; `pricing-registry.test.ts` turns refresh on per test.
-    env: { MASTRA_AUTO_REFRESH_PRICING: 'false' },
+    env: {
+      // Keep cost estimates on the bundled snapshot; `pricing-registry.test.ts` turns refresh on per test.
+      MASTRA_AUTO_REFRESH_PRICING: 'false',
+      // Tests that set MASTRA_DEV must not start core's live registry refresh, which rewrites packages/core/dist.
+      MASTRA_AUTO_REFRESH_PROVIDERS: 'false',
+    },
   },
 });

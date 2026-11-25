@@ -9,10 +9,6 @@ import { AgentBuilderRoot } from '../index';
 import { emptyStoredAgents, oneDraftAgent, onePublishedAgent } from './fixtures/stored-agents';
 import { server } from '@/test/msw-server';
 
-vi.mock('@mastra/playground-ui/components/Spinner', () => ({
-  Spinner: () => <div data-testid="spinner" />,
-}));
-
 vi.mock('react-router', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -55,7 +51,7 @@ const deferred = () => {
 };
 
 describe('AgentBuilderRoot', () => {
-  it('renders a spinner while the stored-agents requests are pending', async () => {
+  it('renders the loader while the stored-agents requests are pending', async () => {
     const gate = deferred();
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, async () => {
@@ -66,11 +62,11 @@ describe('AgentBuilderRoot', () => {
 
     renderRoot();
 
-    expect(screen.getByTestId('spinner')).not.toBeNull();
+    expect(screen.getByRole('status', { name: 'Loading' })).not.toBeNull();
     expect(screen.queryByTestId('navigate')).toBeNull();
 
     gate.resolve();
-    await waitFor(() => expect(screen.queryByTestId('spinner')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull());
   });
 
   it('navigates to the create page when both stored-agents lists are empty', async () => {
@@ -80,7 +76,7 @@ describe('AgentBuilderRoot', () => {
 
     const navigate = await screen.findByTestId('navigate');
     expect(navigate.getAttribute('data-to')).toBe('/agent-builder/agents/create');
-    expect(screen.queryByTestId('spinner')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull();
   });
 
   it('navigates to the agents list when at least one draft agent exists', async () => {

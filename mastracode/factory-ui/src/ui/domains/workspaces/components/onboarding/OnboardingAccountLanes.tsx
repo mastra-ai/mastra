@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { AccountSourceChoice } from '../../hooks/useAccountSource';
@@ -35,8 +34,7 @@ export function OnboardingAccountLanes({
         <Txt variant="caption" role="alert">
           {catalogError.message}
         </Txt>
-        <Button disabled={retrying} onClick={retry}>
-          {retrying && <Spinner size="sm" aria-hidden="true" />}
+        <Button onClick={retry} loading={retrying}>
           Retry
         </Button>
       </div>

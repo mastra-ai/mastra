@@ -151,7 +151,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               <Txt as="span" variant="body">
                 <span
                   className={cn(
-                    'flex items-center gap-2 rounded bg-sidebar px-2 py-1',
+                    'flex items-center gap-2 rounded bg-nested px-2 py-1',
                     surfaceGroupStateLayerStyle,
                     quietTextHoverInGroup,
                     controlStateColorTransition,
