@@ -22,10 +22,18 @@ function branchMetadata(parentThreadId: string, state: 'ready' | 'pending') {
   };
 }
 
-async function setup({ withAgentMemory, branching = false }: { withAgentMemory: boolean; branching?: boolean }) {
+async function setup({
+  withAgentMemory,
+  branching = false,
+  count = 5,
+}: {
+  withAgentMemory: boolean;
+  branching?: boolean;
+  count?: number;
+}) {
   const storage = new InMemoryStore();
   const memoryStore = (await storage.getStore('memory')) as MemoryStorage;
-  for (let index = 0; index < 5; index++) {
+  for (let index = 0; index < count; index++) {
     await memoryStore.saveThread({
       thread: {
         id: `thread-${index}`,
@@ -180,6 +188,10 @@ describe.each([
     expect(error).toBeUndefined();
     expect(result).toMatchObject({ total: 5, page: 1, perPage: 2 });
     expect(result.threads.map((thread: { id: string }) => thread.id)).toEqual(['thread-2', 'thread-3']);
+    // The fallback that keeps the total right reads in batches, not the whole listing.
+    for (const [args] of listThreads.mock.calls) {
+      expect(args?.perPage).not.toBe(false);
+    }
   });
 });
 
@@ -193,5 +205,46 @@ describe('list threads paging (branching memory)', () => {
     expect((result as any).threads.map((thread: { id: string }) => thread.id)).toEqual(['thread-2', 'thread-3']);
     expect(listThreads).toHaveBeenCalledTimes(1);
     expect(listThreads.mock.calls[0]?.[0]).toMatchObject({ page: 1, perPage: 2 });
+  });
+});
+
+// With FGA the route filters threads in process. It reads storage in batches of 100 and keeps
+// only the requested page, instead of loading every matching thread at once.
+describe.each([
+  { name: 'agent memory', withAgentMemory: true, branching: false },
+  { name: 'branching agent memory', withAgentMemory: true, branching: true },
+  { name: 'storage fallback', withAgentMemory: false, branching: false },
+])('list threads paging with FGA ($name)', ({ withAgentMemory, branching }) => {
+  it('authorizes in bounded batches and keeps the total exact', async () => {
+    const { listThreads, mastra } = await setup({ withAgentMemory, branching, count: 250 });
+    const filterAccessible = vi.fn(async (_user: unknown, threads: Array<{ id: string }>) =>
+      threads.filter(thread => Number(thread.id.slice('thread-'.length)) % 2 === 0),
+    );
+    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { filterAccessible, require: vi.fn() } } as any);
+    const ctx = createTestServerContext({ mastra });
+    ctx.requestContext.set('user', { id: 'user-1' });
+
+    const result: any = await LIST_THREADS_ROUTE.handler({
+      ...ctx,
+      ...(withAgentMemory ? { agentId: 'test-agent' } : {}),
+      resourceId: 'resource',
+      page: 6,
+      perPage: 10,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    } as any);
+
+    expect(result).toMatchObject({ total: 125, page: 6, perPage: 10, hasMore: true });
+    expect(result.threads.map((thread: { id: string }) => thread.id)).toEqual(
+      Array.from({ length: 10 }, (_, index) => `thread-${120 + index * 2}`),
+    );
+    expect(listThreads).toHaveBeenCalled();
+    for (const [args] of listThreads.mock.calls) {
+      expect(args?.perPage).toBe(100);
+      expect(args?.filter?.resourceId).toBe('resource');
+    }
+    expect(filterAccessible).toHaveBeenCalledTimes(3);
+    for (const [, threads] of filterAccessible.mock.calls) {
+      expect(threads.length).toBeLessThanOrEqual(100);
+    }
   });
 });
