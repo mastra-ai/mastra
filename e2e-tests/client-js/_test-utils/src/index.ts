@@ -5,3 +5,4 @@ export * from './tool-tests';
 export * from './vector-tests';
 export * from './workflow-tests';
 export * from './server-setup';
+export * from './thread-stream-tests';
