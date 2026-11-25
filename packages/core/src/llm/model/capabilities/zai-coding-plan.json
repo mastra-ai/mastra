@@ -20,11 +20,6 @@
     "glm-5.4"
   ],
   "reasoning": {
-    "glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -45,13 +40,15 @@
         "type": "toggle"
       }
     ],
-    "glm-5.2-highspeed": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-4.7": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-5.3-highspeed": [
@@ -60,10 +57,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "glm-5.2-highspeed": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
     "glm-5.4": [

@@ -13,7 +13,13 @@
   "temperature": ["gpt-6.1-terra", "grok-4.7"],
   "structuredOutput": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "grok-4.7"],
   "reasoning": {
-    "gpt-6-astra": [
+    "grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "claude-fable-5.2": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -25,19 +31,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-fable-5.1": [
+    "claude-opus-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-fable-5.2": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-6.1-sol": [
+    "gpt-6-astra": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -55,16 +55,16 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-5.5": [
+    "claude-fable-5.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "grok-4.7": [
+    "gpt-6.1-sol": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }
