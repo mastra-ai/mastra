@@ -1930,29 +1930,6 @@ params = { page_size: '50', before };`,
       },
     ],
   },
-  'update-variables': {
-    statements: [
-      {
-        pattern: /(const VariableModeValueSchema = )/,
-        replacement: `const VariableComposedColorSchema = z.union([
-  z.object({ color: ColorSchema, opacity: VariableAliasSchema }),
-  z.object({ color: VariableAliasSchema, opacity: z.union([z.number(), VariableAliasSchema]) }),
-]);
-
-$1`,
-        count: 1,
-        what: 'composed color',
-      },
-      {
-        pattern:
-          /value: z\.union\(\[z\.boolean\(\), z\.number\(\), z\.string\(\), ColorSchema, VariableAliasSchema, z\.null\(\)\]\)/,
-        replacement:
-          'value: z.union([z.boolean(), z.number(), z.string(), VariableComposedColorSchema, ColorSchema, VariableAliasSchema, z.null()])',
-        count: 1,
-        what: 'composed color value',
-      },
-    ],
-  },
   'update-dev-resources': {
     statements: [
       {
@@ -2840,6 +2817,10 @@ const EXCLUDED_ACTIONS: Readonly<Record<string, string>> = {
   'figma/get-webhook': 'excluded: webhooks are managed by Mastra, not agents',
   'figma/update-webhook': 'excluded: webhooks are managed by Mastra, not agents',
   'figma/delete-webhook': 'excluded: webhooks are managed by Mastra, not agents',
+  // Figma only grants the file_variables scopes to Enterprise organization members.
+  'figma/get-local-variables': 'excluded: needs file_variables:read, which Figma grants only to Enterprise members',
+  'figma/get-published-variables': 'excluded: needs file_variables:read, which Figma grants only to Enterprise members',
+  'figma/update-variables': 'excluded: needs file_variables:write, which Figma grants only to Enterprise members',
 };
 
 /**

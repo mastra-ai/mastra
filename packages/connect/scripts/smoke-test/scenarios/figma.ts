@@ -6,19 +6,13 @@ import { errorMessage, makeStep, probeTool, refusedByPlatform, requireTools, run
  * tester owns. It reads the file's nodes, versions, comments, published
  * library, and dev resources; renders a frame; posts a comment, reacts to it,
  * replies, and deletes all three; attaches a dev resource link to a frame,
- * renames it, and deletes it; and creates and deletes a variable collection.
+ * and renames and deletes it.
  *
  * Figma's REST API cannot create files or publish libraries, so the file is
  * `MASTRA_SMOKE_FIGMA_FILE_KEY` and the scenario skips its file tools when it
  * is unset. Team library listings need `MASTRA_SMOKE_FIGMA_TEAM_ID`, and run
  * without a file. When the file and team publish no components, component
  * sets, or styles, reading one by key probes a made-up key.
- *
- * Variables need a Figma Enterprise organization; elsewhere Figma answers 403
- * "Limited by Figma plan" (or "Incorrect account type" for a seat that can't
- * use them), which the variable reads accept as the endpoint being reached,
- * and the write deletes a made-up collection instead of creating one. Any
- * other 403, such as a missing scope or an expired token, fails.
  *
  * Dev resources need Dev Mode, which needs a paid plan and a Full or Dev seat.
  * Without it Figma answers "File not found" for a file the other tools read,
@@ -48,8 +42,6 @@ const FIGMA_TOOLS = [
   'figma_get_file_components',
   'figma_get_file_node',
   'figma_get_file_styles',
-  'figma_get_local_variables',
-  'figma_get_published_variables',
   'figma_get_style',
   'figma_get_version',
   'figma_list_comment_reactions',
@@ -62,11 +54,8 @@ const FIGMA_TOOLS = [
   'figma_list_versions',
   'figma_render_images',
   'figma_update_dev_resources',
-  'figma_update_variables',
 ] as const;
 
-/** Figma's 403 for variables outside an Enterprise organization or on a seat that can't use them. */
-const ENTERPRISE_ONLY = /Limited by Figma plan|Incorrect account type/i;
 /**
  * A made-up library key Figma does not know. The styles endpoint answers an
  * unknown key with 403 "You don't have permission to view this style" instead
@@ -151,27 +140,6 @@ async function reconcile(
   }
   for (const id of ids) {
     await cleanup(steps, log, runId, name, toolId, `${what} ${id}`, () => remove(id));
-  }
-}
-
-/** Accepts the Enterprise-only 403 as the endpoint being reached, but not a Platform refusal. */
-async function enterpriseStep(steps: ScenarioStep[], name: string, toolId: string, run: () => Promise<unknown>) {
-  try {
-    await run();
-    steps.push(makeStep(name, toolId, 'pass'));
-    return true;
-  } catch (error) {
-    const message = errorMessage(error);
-    const gated = /status=403/.test(message) && ENTERPRISE_ONLY.test(message) && !refusedByPlatform(message);
-    steps.push(
-      makeStep(
-        name,
-        toolId,
-        gated ? 'pass' : 'fail',
-        gated ? `Enterprise only (403): ${message.slice(0, 120)}` : message,
-      ),
-    );
-    return false;
   }
 }
 
@@ -532,84 +500,9 @@ async function runDevResourceLifecycle(
   }
 }
 
-async function runVariables(
-  call: Call,
-  tools: ScenarioContext['tools'],
-  log: Log,
-  runId: string,
-  fileKey: string,
-  steps: ScenarioStep[],
-) {
-  const enterprise = await enterpriseStep(steps, 'local variables', 'figma_get_local_variables', () =>
-    call('figma_get_local_variables', { file_key: fileKey }),
-  );
-  await enterpriseStep(steps, 'published variables', 'figma_get_published_variables', () =>
-    call('figma_get_published_variables', { file_key: fileKey }),
-  );
-  if (!enterprise) {
-    // Deleting a made-up collection writes nothing, whatever the plan.
-    steps.push(
-      await probeTool(
-        call,
-        tools,
-        'update variables (made-up collection)',
-        'figma_update_variables',
-        { file_key: fileKey, variableCollections: [{ action: 'DELETE', id: 'VariableCollectionId:0:0' }] },
-        // A plan-limit 403 is the endpoint reached; a missing-scope 403 is a broken connection.
-        new RegExp(`status=(400|404)|${ENTERPRISE_ONLY.source}`, 'i'),
-      ),
-    );
-    return;
-  }
-
-  let collectionId: string | undefined;
-  await attempt(steps, 'create variable collection', 'figma_update_variables', async () => {
-    const result = await call<{ meta?: { tempIdToRealId?: Record<string, string> } }>('figma_update_variables', {
-      file_key: fileKey,
-      variableCollections: [{ action: 'CREATE', id: 'smoke_collection', name: `mastra-smoke-${runId}` }],
-    });
-    collectionId = result.meta?.tempIdToRealId?.['smoke_collection'];
-    if (!collectionId) throw new Error('Figma returned no id for the new collection');
-    return collectionId;
-  });
-  const deleteCollection = (id: string) =>
-    call('figma_update_variables', { file_key: fileKey, variableCollections: [{ action: 'DELETE', id }] });
-  if (collectionId) {
-    const id = collectionId;
-    await cleanup(
-      steps,
-      log,
-      runId,
-      'delete variable collection',
-      'figma_update_variables',
-      `variable collection ${id}`,
-      () => deleteCollection(id),
-    );
-  } else {
-    await reconcile(
-      steps,
-      log,
-      runId,
-      'delete kept variable collection',
-      'figma_update_variables',
-      'variable collection',
-      async () => {
-        const result = await call<{ meta: { variableCollections: Record<string, { id: string; name: string }> } }>(
-          'figma_get_local_variables',
-          { file_key: fileKey },
-        );
-        return Object.values(result.meta.variableCollections)
-          .filter(collection => collection.name === `mastra-smoke-${runId}`)
-          .map(collection => collection.id);
-      },
-      deleteCollection,
-    );
-  }
-}
-
 export const figmaScenario: Scenario = {
   integrationId: 'figma',
-  summary: 'current user + file reads → comment/reaction/reply → dev resource → variables → library',
+  summary: 'current user + file reads → comment/reaction/reply → dev resource → library',
   async run({ tools, call, runId, log }): Promise<ScenarioStep[]> {
     const steps: ScenarioStep[] = [];
     const missing = requireTools(tools, FIGMA_TOOLS);
@@ -651,7 +544,6 @@ export const figmaScenario: Scenario = {
         makeStep('attach dev resource', 'figma_create_dev_resources', 'fail', 'file has no node to attach to'),
       );
     }
-    await runVariables(call, tools, log, runId, fileKey, steps);
     return steps;
   },
 };
