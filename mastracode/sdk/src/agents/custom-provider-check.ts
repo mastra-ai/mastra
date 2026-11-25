@@ -20,6 +20,11 @@ export type CustomProviderChatModel = ReturnType<OpenAICompatibleProvider['chatM
 
 /** Everything needed to call a custom endpoint, with saved secrets already resolved. */
 export interface CustomProviderConnection {
+  /**
+   * Base URL, such as `https://host/v1`. Paths are appended to it as text, so
+   * a query string or fragment (`https://host/v1/?api-version=1`) ends up in
+   * the middle of every request path and is not supported.
+   */
   url: string;
   apiKey?: string;
   authScheme?: CustomProviderAuthScheme;
@@ -290,7 +295,7 @@ function causeMessages(error: unknown): string[] {
 /**
  * The failure for a request that got no response. `fetchWithoutRedirects`
  * refuses a redirect before any status is read, so a redirect is only
- * recognisable by its cause message.
+ * recognizable by its cause message.
  */
 function connectionFailure(error: unknown, url: string, abort: AbortState): CustomProviderCheckFailure {
   if (abort.timedOut) {
