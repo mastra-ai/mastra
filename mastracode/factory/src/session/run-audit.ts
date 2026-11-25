@@ -22,7 +22,7 @@ export type { FactoryOpenRun };
  */
 export type OpenRunLedger = Pick<
   OpenRunsStorage,
-  'listByThread' | 'get' | 'open' | 'heartbeat' | 'end' | 'close' | 'importLegacy' | 'known'
+  'listByThread' | 'get' | 'open' | 'heartbeat' | 'end' | 'close' | 'takeOver' | 'importLegacy' | 'known'
 >;
 
 /** A heartbeat older than this means the owner is gone; nothing renews it once the run's dispatcher dies. */
@@ -276,16 +276,24 @@ async function recordRunEnds(
   );
   if (runs.length === 0) return;
   const ending = runs.filter(run => !kickoffId || run.kickoffId === kickoffId);
+  // A run whose end an earlier worker recorded, and whose usage this session never held, ended in
+  // that worker (it took the run over as lost, or died before the audit record): its usage is not
+  // this session's turn, so it bills nothing here.
+  for (const run of ending) {
+    if (!usage.held.has(run.kickoffId) && (await openRuns.get(run.kickoffId))?.end) {
+      usage.held.set(run.kickoffId, { status: 'unreported' });
+    }
+  }
+  const billing = ending.filter(run => !usage.held.has(run.kickoffId));
   // An end event bills the turn it closed. A run whose ledger entry lands after its turn ended
   // bills the latest ended turn, unless an open run already claimed it.
   const turn = endedTurn ?? usage.lastTurn;
   const steps = turn && !turn.claimed ? turn.steps : [];
-  if (turn && ending.length > 0) turn.claimed = true;
+  if (turn && billing.length > 0) turn.claimed = true;
   const turnUsage = runUsage(steps);
   // Held before any write that can fail, so a retry bills the turn this end claimed.
-  for (const run of ending) {
-    if (usage.held.has(run.kickoffId)) continue;
-    const shared = ending.filter(other => other !== run).map(other => other.kickoffId);
+  for (const run of billing) {
+    const shared = billing.filter(other => other !== run).map(other => other.kickoffId);
     usage.held.set(
       run.kickoffId,
       turnUsage.status === 'recorded' && shared.length > 0 ? { ...turnUsage, sharedWithKickoffIds: shared } : turnUsage,
@@ -351,6 +359,78 @@ export function recordSessionRunStart(
     });
     await recordRunEnds(session, audit, openRuns, observedEnd(), run.kickoffId);
   });
+}
+
+/**
+ * Hands the runs that died with their worker to the run resuming them. In one transaction, each
+ * lost run is ended as aborted on its row and a single entry for the resumed run, owned by this
+ * worker, is added. The ledger never loses the evidence: if this worker dies too before the
+ * resumed run lands, that entry goes stale and the next worker resumes again.
+ *
+ * `lost` are the entries as the caller read them when it judged them stale. Resolves `false`,
+ * leaving the ledger and the audit log untouched, when any lost entry changed or left since:
+ * another worker took the run over, or its run came back. Only a takeover that won records the
+ * lost runs as aborted in the audit log. It resolves `true` once the takeover commits, even when
+ * that record fails: the lost run then stays on the ledger, ended, until a later run end on the
+ * thread records it, so a caller must not retry the takeover.
+ */
+export async function takeOverInterruptedSessionRuns(
+  session: RunEndCaptureSession,
+  {
+    audit,
+    openRuns,
+    lost,
+    resumeKickoffId,
+    ownerId,
+  }: {
+    audit: AuditRecorder | undefined;
+    openRuns: OpenRunLedger;
+    lost: FactoryOpenRun[];
+    resumeKickoffId: string;
+    ownerId: string;
+  },
+): Promise<boolean> {
+  if (lost.length === 0) return false;
+  let tookOver = false;
+  await serializeRunAudit(session, async () => {
+    const now = Date.now();
+    tookOver = await openRuns.takeOver(lost, {
+      ...lost[0]!,
+      kickoffId: resumeKickoffId,
+      ownerId,
+      heartbeatAt: now,
+      startedAt: now,
+    });
+    // Only a takeover that won records the lost runs' ends: a refused one leaves a run that came
+    // back, or that another worker took over, to the worker that has it.
+    if (!tookOver) return;
+    const usage = usageFor(session);
+    for (const run of lost) {
+      const input = runAuditInput(run);
+      const recorded = audit
+        ? await audit
+            .record({
+              ...input,
+              actorId: `agent:${run.threadId}`,
+              actorType: 'agent',
+              action: 'factory.run.ended',
+              metadata: { ...input.metadata, reason: 'aborted', usage: { status: 'unreported' } },
+            })
+            .catch(() => null)
+        : null;
+      if (recorded || !audit) {
+        await openRuns.close(run, Date.now());
+      } else {
+        // Its aborted end is on its row and it stays on the ledger, so the session's next run end
+        // records it; its usage ran in the lost process.
+        usage.held.set(run.kickoffId, { status: 'unreported' });
+        console.warn(
+          `[Factory run audit] The end of lost run ${run.kickoffId} was not recorded; keeping it for the next attempt.`,
+        );
+      }
+    }
+  });
+  return tookOver;
 }
 
 /** Renew `ownerId`'s claim on an open run so other replicas keep treating it as live. */

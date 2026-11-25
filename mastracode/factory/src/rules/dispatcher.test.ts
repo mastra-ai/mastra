@@ -33,6 +33,7 @@ import { resolveFactoryCredentialTenant } from '../session/credential-policy.js'
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listThreadOpenRuns,
+  isOpenRunLiveElsewhere,
   observeSessionRunEnd,
   waitForSessionRunAudit,
 } from '../session/run-audit.js';
@@ -376,6 +377,31 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
     evaluation: { outcome: 'accepted', decisions: [] },
     autonomy: 'arm',
   });
+}
+
+async function bindReviewRun(storage: WorkItemsStorage, workItemId: string) {
+  const prepared = await storage.prepareRunStart({
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: PROJECT_ID,
+    workItem: {
+      id: workItemId,
+      input: {
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+        title: 'Fix issue',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    },
+    role: 'review',
+    session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+    resourceId: PROJECT_ID,
+    kickoffKey: `kickoff-review-${workItemId}`,
+    kickoffMessage: null,
+  });
+  await storage.markPendingStart(prepared.binding.id, 'sent');
+  return prepared.binding;
 }
 
 async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
@@ -3317,6 +3343,454 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+  });
+
+  describe('a Building run whose worker was lost', () => {
+    /** The lost worker claimed the kickoff, delivered it and recorded the run open, then stopped heartbeating. */
+    async function lostBuild(
+      key: string,
+      heartbeatAt: number,
+      options?: {
+        ledgerSuffix?: string;
+        legacySetting?: boolean;
+        /** A review pass instead of a Building run, with this metadata on its card. */
+        review?: (requestedAt: Date) => Record<string, unknown>;
+      },
+    ) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const { item, transitionService } = await queueDecision(
+        storage,
+        options?.review
+          ? {
+              type: 'invokeSkill',
+              role: 'review',
+              skillName: 'factory-review',
+              arguments: 'PR 7',
+              idempotencyKey: key,
+              resume: true,
+            }
+          : { type: 'invokeSkill', role: 'work', skillName: 'understand-issue', idempotencyKey: key },
+        { armed: true },
+      );
+      const binding = options?.review ? await bindReviewRun(storage, item.id) : await bindWorkRun(storage, item.id);
+      if (options?.review) {
+        const [queued] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        await storage.update({
+          orgId: 'org-1',
+          id: item.id,
+          userId: 'user-1',
+          patch: { metadata: options.review(queued!.createdAt) },
+        });
+      }
+      const lostAt = new Date('2030-01-01T00:00:00Z');
+      const [lost] = await storage.claimDeferredDecisions({
+        ownerId: 'lost-worker',
+        now: lostAt,
+        leaseExpiresAt: new Date(lostAt.getTime() + 1_000),
+        limit: 1,
+      });
+      const { controller, session, emitAgentEnd } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+        initialDeliveredSignalIds: [lost!.id],
+      });
+      const ledger = [
+        {
+          kickoffId: `${lost!.id}${options?.ledgerSuffix ?? ''}`,
+          bindingId: binding.id,
+          role: binding.role,
+          startedBy: 'factory-rule-dispatcher',
+          orgId: binding.orgId,
+          factoryProjectId: binding.factoryProjectId,
+          workItemId: binding.workItemId,
+          sessionId: binding.sessionId,
+          threadId: binding.threadId,
+          branch: binding.branch,
+          ownerId: 'lost-worker',
+          heartbeatAt,
+        },
+      ];
+      if (options?.legacySetting) {
+        await session.thread.setSetting({ key: FACTORY_OPEN_RUNS_SETTING, value: ledger });
+      } else {
+        await seedOpenRuns(seed, ledger);
+      }
+      observeSessionRunEnd(session, { audit: seed.audit, openRuns: seed.openRuns });
+      const dispatcherAs = (ownerId: string) =>
+        new FactoryDecisionDispatcher({
+          controller: controller as never,
+          boards: autoStartingBoards(),
+          transitionService,
+          storage,
+          audit: seed.audit,
+          openRuns: seed.openRuns,
+          ownerId,
+          primeCredentials: vi.fn(async () => {}),
+        });
+      const dispatcher = dispatcherAs('worker-2');
+      return { seed, storage, session, emitAgentEnd, dispatcher, dispatcherAs, binding, lost: lost!, lostAt };
+    }
+
+    const endedRecords = async (seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) =>
+      (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+
+    it('lets another worker resume when the continuation was not delivered, without waiting out its heartbeat', async () => {
+      const { session, storage, dispatcherAs, lost, lostAt } = await lostBuild('lost-handoff', Date.now() - 60_000);
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcherAs('worker-2').runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcherAs('worker-3').runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      expect(session.sendSignal.mock.calls[1]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}:retry:\\d+:resume:\\d+$`)),
+      });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('settles, instead of sending the prompt again, when a continuation landed and its run ended', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-continuation-landed',
+        Date.now() - 60_000,
+      );
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      // Another worker resumed the next delivery generation; its run completed, then the worker died
+      // before it could settle the decision.
+      const [reserved] = await seed.openRuns.listByThread(session.thread.getId());
+      const continuation = `${lost.id}:retry:1:resume:3`;
+      await seed.openRuns.takeOver([reserved!], { ...reserved!, kickoffId: continuation, ownerId: 'worker-3' });
+      await seed.openRuns.end(continuation, { reason: 'complete', endedAt: Date.now() });
+      const listed = session.thread.listActiveMessages.getMockImplementation()!;
+      session.thread.listActiveMessages.mockImplementation(async () => [...(await listed()), { id: continuation }]);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('does not send the continuation when the run is stopped while this worker takes it over', async () => {
+      const { seed, session, emitAgentEnd, storage, dispatcher, binding, lost, lostAt } = await lostBuild(
+        'lost-stopped-during-takeover',
+        Date.now() - 60_000,
+      );
+      const takeOver = seed.openRuns.takeOver.bind(seed.openRuns);
+      vi.spyOn(seed.openRuns, 'takeOver').mockImplementationOnce(async (...args) => {
+        const tookOver = await takeOver(...args);
+        await storage.requestRunBindingStop({ orgId: 'org-1', sessionId: binding.sessionId, at: new Date() });
+        return tookOver;
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).not.toBe('succeeded');
+      const resumeId = `${lost.id}:resume:2`;
+      await expect(seed.openRuns.get(resumeId)).resolves.toMatchObject({ end: { reason: 'aborted' } });
+
+      // The session's next run end (a person's turn, say) is not the stopped resume completing.
+      emitAgentEnd('complete');
+      await waitForSessionRunAudit(session);
+      const ended = await endedRecords(seed);
+      expect(ended).not.toContainEqual([resumeId, 'complete']);
+      expect(ended).toContainEqual([resumeId, 'aborted']);
+    });
+
+    it('ends the resume it reserved as aborted when the resume fails for good', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-resume-failed-for-good',
+        Date.now() - 60_000,
+      );
+      const [claimed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      session.sendSignal.mockImplementation(() => ({
+        accepted: Promise.reject(new Error('session gone')),
+      }));
+      // The final attempt: its failure is terminal.
+      for (let attempt = claimed!.attempts; attempt < 5; attempt++) {
+        await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000 + attempt * 3_600_000));
+        if ((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status === 'failed') break;
+      }
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'failed' });
+      const resumes = (await seed.openRuns.listByThread(session.thread.getId())).filter(run =>
+        run.kickoffId.includes(':resume:'),
+      );
+      // Each attempt took the previous one's reservation over; the last one's is what remains.
+      expect(resumes).toHaveLength(1);
+      for (const resume of resumes) {
+        await expect(seed.openRuns.get(resume.kickoffId)).resolves.toMatchObject({ end: { reason: 'aborted' } });
+      }
+    });
+
+    it('postpones, without spending an attempt or recording anything, a takeover the lost run won back', async () => {
+      const { seed, session, storage, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-came-back',
+        Date.now() - 60_000,
+      );
+      const takeOver = seed.openRuns.takeOver.bind(seed.openRuns);
+      vi.spyOn(seed.openRuns, 'takeOver').mockImplementationOnce(async (...args) => {
+        await seed.openRuns.heartbeat(lost.id, 'lost-worker', Date.now());
+        return takeOver(...args);
+      });
+      const [before] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      const [after] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(after).toMatchObject({ attempts: before!.attempts, lastError: before!.lastError });
+      expect(after?.status).not.toBe('failed');
+      await expect(endedRecords(seed)).resolves.toEqual([]);
+    });
+
+    it('does not resume a review whose verdict on the current head is already recorded', async () => {
+      const head = '4dab505b024aeec72011b015149f1060ee696f24';
+      const { seed, session, storage, dispatcher, lostAt } = await lostBuild(
+        'lost-review-covered',
+        Date.now() - 60_000,
+        {
+          review: requestedAt => ({
+            pullRequestHeadSha: head,
+            reviewVerdict: 'request changes',
+            reviewedHeadSha: head,
+            reviewedAt: new Date(requestedAt.getTime() + 60_000).toISOString(),
+          }),
+        },
+      );
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      await expect(endedRecords(seed)).resolves.toEqual([]);
+    });
+
+    it('resumes the run on the worker that reclaims its kickoff', async () => {
+      // Liveness is judged on the wall clock: a heartbeat a minute old is past the 30s window.
+      const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild('lost-build', Date.now() - 60_000);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({
+        id: `${lost.id}:resume:2`,
+        type: 'reactive',
+        tagName: 'system-reminder',
+        contents: expect.stringContaining('Your previous run was interrupted'),
+      });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'succeeded',
+        attempts: 2,
+      });
+      await waitForSessionRunAudit(session);
+      // The lost run closes as aborted; the resumed run is the one that completed.
+      const ended = (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+      expect(ended).toEqual(
+        expect.arrayContaining([
+          [lost.id, 'aborted'],
+          [`${lost.id}:resume:2`, 'complete'],
+        ]),
+      );
+      expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([]);
+    });
+
+    it('resumes a run lost before a deploy, while the ledger was still a thread setting', async () => {
+      const { seed, session, dispatcher, lost, lostAt } = await lostBuild('lost-before-deploy', Date.now() - 60_000, {
+        legacySetting: true,
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ id: `${lost.id}:resume:2` });
+      await waitForSessionRunAudit(session);
+      // The setting is left as the earlier release wrote it; its copy on the ledger is what ended.
+      expect(await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })).toEqual([
+        expect.objectContaining({ kickoffId: lost.id }),
+      ]);
+      expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([]);
+      const ended = (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+      expect(ended).toEqual(
+        expect.arrayContaining([
+          [lost.id, 'aborted'],
+          [`${lost.id}:resume:2`, 'complete'],
+        ]),
+      );
+    });
+
+    it('keeps the lost run on the ledger, owned by the resuming worker, until the continuation is sent', async () => {
+      const { seed, session, dispatcher, lost, lostAt } = await lostBuild('lost-build-ledger', Date.now() - 60_000);
+      const ledgerAtSend: Promise<unknown>[] = [];
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementation((...args) => {
+        ledgerAtSend.push(seed.openRuns.listByThread(session.thread.getId()));
+        return send(...args);
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      // Had this worker died while sending, the entry would go stale and the next worker resume again.
+      expect(await Promise.all(ledgerAtSend)).toEqual([
+        [expect.objectContaining({ kickoffId: `${lost.id}:resume:2`, ownerId: 'worker-2' })],
+      ]);
+    });
+
+    it('resumes again when the worker resuming a lost run is lost too', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-twice', Date.now() - 60_000, {
+        ledgerSuffix: ':resume:1',
+      });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ id: `${lost.id}:resume:2` });
+    });
+
+    it('resumes, rather than restarting the prompt, when sending the continuation failed', async () => {
+      const { session, dispatcher, lost, lostAt } = await lostBuild('lost-build-send-fails', Date.now() - 60_000);
+      const send = session.sendSignal.getMockImplementation()!;
+      session.sendSignal.mockImplementationOnce(() => ({ accepted: Promise.reject(new Error('signal bus down')) }));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      for (const [signal] of session.sendSignal.mock.calls) {
+        expect(signal).toMatchObject({
+          id: expect.stringMatching(new RegExp(`^${lost.id}:.*resume:\\d+$`)),
+          contents: expect.stringContaining('Your previous run was interrupted'),
+        });
+      }
+    });
+
+    it('resumes on the next delivery generation when the continuation was not delivered', async () => {
+      const { storage, session, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-build-not-delivered',
+        Date.now() - 60_000,
+      );
+      const send = session.sendSignal.getMockImplementation()!;
+      // A named non-delivery action: no run began, so the retry starts a new delivery generation.
+      session.sendSignal.mockImplementationOnce(() => ({
+        accepted: Promise.resolve({ accepted: true, action: 'persist' }),
+      }));
+      session.sendSignal.mockImplementation(send);
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(2);
+      expect(session.sendSignal.mock.calls[1]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}:retry:\\d+:resume:\\d+$`)),
+        contents: expect.stringContaining('Your previous run was interrupted'),
+      });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    });
+
+    it('resumes a run whose worker was still heartbeating at the first reclaim but was lost by the next', async () => {
+      const { seed, session, dispatcher, lost, lostAt } = await lostBuild('lost-after-refusal', Date.now());
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      for (const entry of await seed.openRuns.listByThread(session.thread.getId())) {
+        await seed.openRuns.heartbeat(entry.kickoffId, entry.ownerId!, Date.now() - 60_000);
+      }
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 3_600_000));
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({
+        id: expect.stringMatching(new RegExp(`^${lost.id}(:retry:\\d+)?:resume:\\d+$`)),
+        contents: expect.stringContaining('Your previous run was interrupted'),
+      });
+    });
+
+    it('resumes while the audit store is down, and records the lost run as aborted at the next run end', async () => {
+      const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-build-audit-down',
+        Date.now() - 60_000,
+      );
+      const record = seed.audit.record.bind(seed.audit);
+      let down = true;
+      vi.spyOn(seed.audit, 'record').mockImplementation(input => {
+        if (down && input.action === 'factory.run.ended') {
+          down = false;
+          return Promise.reject(new Error('audit store down'));
+        }
+        return record(input);
+      });
+      const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await waitForSessionRunAudit(session);
+      warning.mockRestore();
+
+      expect(session.sendSignal).toHaveBeenCalledTimes(1);
+      expect(session.sendSignal.mock.calls[0]![0]).toMatchObject({ id: `${lost.id}:resume:2` });
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+      const ended = (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+      expect(ended).toEqual(
+        expect.arrayContaining([
+          [lost.id, 'aborted'],
+          [`${lost.id}:resume:2`, 'complete'],
+        ]),
+      );
+      expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([]);
+    });
+
+    it('takes a run whose end is recorded as landed, not as lost, while that end awaits its audit record', async () => {
+      const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild(
+        'lost-build-ended',
+        Date.now() - 60_000,
+      );
+      // Its worker recorded the end on the run's row, then died before the audit record.
+      await seed.openRuns.end(lost.id, { reason: 'complete', endedAt: Date.now() - 50_000 });
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+      await waitForSessionRunAudit(session);
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      const decision = (await storage.listDeferredDecisions('org-1', PROJECT_ID))[0];
+      expect(decision?.lastError ?? '').not.toContain('could not take over');
+      const ended = (await seed.audit.list({ orgId: 'org-1' })).events
+        .filter(event => event.action === 'factory.run.ended')
+        .map(event => [event.metadata?.kickoffId, event.metadata?.reason]);
+      expect(ended).not.toContainEqual([lost.id, 'aborted']);
+      await expect(seed.openRuns.get(lost.id)).resolves.toMatchObject({ end: { reason: 'complete' } });
+    });
+
+    it('leaves a run another worker still heartbeats alone', async () => {
+      const { seed, storage, session, dispatcher, lost, lostAt } = await lostBuild('live-build', Date.now());
+
+      await dispatcher.runOnce(new Date(lostAt.getTime() + 125_000));
+
+      expect(session.sendSignal).not.toHaveBeenCalled();
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+        status: 'retry',
+        failureCode: 'session_unavailable',
+      });
+      expect(await seed.openRuns.listByThread(session.thread.getId())).toEqual([
+        expect.objectContaining({ kickoffId: lost.id, ownerId: 'lost-worker' }),
+      ]);
+    });
   });
 
   describe("a phase's kickoff after the previous role's agent moved the card", () => {
@@ -10174,30 +10648,6 @@ describe('review status comment lifecycle', () => {
       await publish(event);
     });
     return { reportReviewStatus, events, writes, publish, comments: () => comments };
-  }
-
-  async function bindReviewRun(storage: WorkItemsStorage, workItemId: string) {
-    const prepared = await storage.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      workItem: {
-        id: workItemId,
-        input: {
-          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
-          title: 'Fix issue',
-          stages: ['execute'],
-          sessions: {},
-          metadata: {},
-        },
-      },
-      role: 'review',
-      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
-      resourceId: PROJECT_ID,
-      kickoffKey: `kickoff-review-${workItemId}`,
-      kickoffMessage: null,
-    });
-    await storage.markPendingStart(prepared.binding.id, 'sent');
   }
 
   const SESSION_REF = { sessionId: 'session-1', threadId: 'thread-1' };
