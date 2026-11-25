@@ -16,7 +16,8 @@
     "knowledge:seed": "node --env-file-if-exists=.env scripts/seed-knowledge.ts",
     "typecheck": "tsc --noEmit",
     "test:unit": "node --test tests/unit/*.test.ts",
-    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts"
+    "test:integration": "node --test --test-concurrency=1 tests/integration/*.test.ts",
+    "test:hosted": "node tests/hosted/verify.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
