@@ -1,7 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
-import { agentThreadStreamTopic } from '../agent/thread-stream-topic';
+import { agentThreadStreamKey, agentThreadStreamTopic } from '../agent/thread-stream-topic';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -290,6 +290,34 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
       await this.#mastra?.pubsub?.clearTopic(agentThreadStreamTopic(resourceId, threadId));
     } catch (error) {
       this.logger.warn('Failed to clear thread event stream after deleting thread', { threadId, error });
+    }
+  }
+
+  /**
+   * Delete what a thread's agent runs kept in the `agentSignals` domain:
+   * signals waiting for the thread's next run and the markers of its closed
+   * runs. Nothing else deletes them. Call after the thread itself is deleted,
+   * with the thread's resource id, which is the one its runs built the thread
+   * key from.
+   *
+   * Uses the storage of the Mastra instance this memory is registered with,
+   * because runs keep their signals there, not in the memory's own storage. A
+   * memory not registered with a Mastra instance deletes nothing.
+   *
+   * A run still open on the thread can recreate its marker and rows after
+   * this, and its close leaves those rows as leftovers, which a later thread
+   * with the same id and resource takes over. If the process stops between
+   * the thread delete and this call, the rows stay: the thread record that
+   * held the resource id is gone. Best-effort; no-op when the storage has no
+   * `agentSignals` domain.
+   */
+  protected async clearThreadSignals(threadId: string, resourceId?: string): Promise<void> {
+    const agentSignals = this.#mastra?.getStorage()?.stores?.agentSignals;
+    if (!agentSignals) return;
+    try {
+      await agentSignals.deleteThread({ threadKey: agentThreadStreamKey(resourceId, threadId) });
+    } catch (error) {
+      this.logger.warn('Failed to delete agent signals after deleting thread', { threadId, error });
     }
   }
 
