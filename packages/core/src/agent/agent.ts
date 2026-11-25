@@ -13143,11 +13143,12 @@ export class Agent<
       try {
         await publisher?.settle(status);
       } catch (error) {
+        const unverified = error instanceof DurableExecutionFenceError && error.id === EXECUTION_UNVERIFIED_ERROR_ID;
+        // The local reader still finishes, but cannot mutate shared lifecycle state.
+        if (unverified) this.#unverifiedReaderFences.add(executionFence);
         // The detach can also land while the write waits in the publisher's queue.
         if (executionFence.detached) return;
-        if (!(error instanceof DurableExecutionFenceError) || error.id !== EXECUTION_UNVERIFIED_ERROR_ID) throw error;
-        // The local reader still finishes, but cannot mutate shared lifecycle state.
-        this.#unverifiedReaderFences.add(executionFence);
+        if (!unverified) throw error;
         this.logger.warn(`[DurableAgent:${this.id}] run ${runId}: terminal ownership could not be verified`, { error });
       }
     };
