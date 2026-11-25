@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
@@ -42,6 +43,8 @@ export interface StoredPhaseRunner {
   instructions?: string;
   /** The objective the phase's runs pursue as a goal. */
   goal?: { objective: string; maxRuns?: number };
+  model?: string;
+  thinking?: ThinkingLevelSetting;
 }
 
 export interface StoredPhaseExitTool {

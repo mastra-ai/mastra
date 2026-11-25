@@ -1,4 +1,6 @@
 import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
@@ -110,6 +112,10 @@ export interface BoardPhaseRunner {
    * latest messages, so it must say when the work is done.
    */
   readonly goal?: BoardPhaseGoal;
+  /** Model the phase's runs use instead of the agent's own, as `provider/model`. */
+  readonly model?: string;
+  /** Thinking level the phase's runs use instead of the agent's own. */
+  readonly thinking?: ThinkingLevelSetting;
 }
 
 /** The objective a phase's runs pursue, judged in-loop until met. */
@@ -318,7 +324,15 @@ const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
 const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
 const MAX_GOAL_RUNS = 50;
-const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions', 'goal']);
+const RUNNER_KEYS: ReadonlySet<string> = new Set([
+  'agentId',
+  'skill',
+  'context',
+  'instructions',
+  'goal',
+  'model',
+  'thinking',
+]);
 const GOAL_KEYS: ReadonlySet<string> = new Set(['objective', 'maxRuns']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
 const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
@@ -346,6 +360,14 @@ function resolveName(name: unknown, title: unknown, label: string): string {
     throw new BoardDefinitionError(`${label} must declare a name.`);
   }
   return value;
+}
+
+/** `provider/model`, as model ids are written everywhere else. */
+const MODEL_ID_RE = /^[\w.-]+\/[\w.:@/-]{1,200}$/;
+
+/** Whether `value` is a `provider/model` id a phase or session may pick. */
+export function isModelId(value: unknown): value is string {
+  return typeof value === 'string' && MODEL_ID_RE.test(value);
 }
 
 function optionalText(value: unknown, label: string, max: number): string | undefined {
@@ -376,7 +398,7 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
   const runner: unknown = phase.runner ?? {};
   if (!isPlainObject(runner) || Object.keys(runner).some(key => !RUNNER_KEYS.has(key))) {
     throw new BoardDefinitionError(
-      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions and goal.`,
+      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions, goal, model and thinking.`,
     );
   }
   const role: unknown = phase.role;
@@ -408,12 +430,22 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
       `Phase "${phaseId}" runner.goal needs runner.skill: the skill's run pursues the goal.`,
     );
   }
+  const model = runner.model;
+  if (model !== undefined && !isModelId(model)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.model must be a provider/model id.`);
+  }
+  const thinking = runner.thinking;
+  if (thinking !== undefined && !isThinkingLevelSetting(thinking)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.thinking must be a thinking level.`);
+  }
   return Object.freeze({
     agentId,
     context,
     ...(skill !== undefined ? { skill } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
     ...(goal !== undefined ? { goal } : {}),
+    ...(model !== undefined ? { model } : {}),
+    ...(thinking !== undefined ? { thinking } : {}),
   });
 }
 

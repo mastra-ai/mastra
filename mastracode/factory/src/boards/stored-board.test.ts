@@ -356,6 +356,21 @@ describe('stored boards with code behaviour', () => {
     expect(phaseRunDecision(unedited, 'triage', entering(unedited, 'triage'))?.arguments).not.toContain('Shipyard');
   });
 
+  it("keeps a stored phase's model and thinking picks", () => {
+    const edited = compileStoredBoard(
+      editWork('triage', phase => ({
+        ...phase,
+        runner: { ...phase.runner, model: 'anthropic/claude-sonnet-4-5', thinking: 'low' },
+      })),
+      workBoard,
+    );
+    const triage = edited.phases.triage;
+    expect(triage?.kind === 'working' && triage.runner).toMatchObject({
+      model: 'anthropic/claude-sonnet-4-5',
+      thinking: 'low',
+    });
+  });
+
   it("keeps the code board's source-closed phases and runs the stored Planning runner", () => {
     const edited = compileStoredBoard(
       editWork('planning', phase => ({ ...phase, name: 'Plan it' })),

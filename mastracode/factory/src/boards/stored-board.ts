@@ -1,3 +1,5 @@
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
@@ -19,6 +21,8 @@ const storedRunnerSchema = z
     context: z.string().optional(),
     instructions: z.string().optional(),
     goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).strict().optional(),
+    model: z.string().optional(),
+    thinking: z.enum(THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]]).optional(),
   })
   .strict();
 
@@ -354,6 +358,8 @@ function storedPhase(key: string, phase: BoardPhase<string>): StoredPhaseInput {
             context: phase.runner.context,
             instructions: phase.runner.instructions,
             goal: phase.runner.goal ? { ...phase.runner.goal } : undefined,
+            model: phase.runner.model,
+            thinking: phase.runner.thinking,
           }),
           autoStart: phase.autoStart ? true : undefined,
           autoStartWhen: phase.autoStartWhen,

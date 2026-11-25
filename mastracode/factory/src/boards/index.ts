@@ -74,3 +74,8 @@ export { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
+export { phaseStreamOptions } from './phase-stream-options.js';
+export type { PhaseStreamOptions } from './phase-stream-options.js';
+export { isModelId } from './define-board.js';
+export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+export type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';

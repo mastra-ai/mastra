@@ -8,7 +8,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
-import type { LanguageModelMiddleware } from 'ai';
+import type { JSONValue, LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
@@ -159,23 +159,35 @@ function runAnthropicRequestLevel(modelId: string, level: ThinkingLevel): Thinki
 }
 
 /**
- * Middleware that maps the session thinking level onto Anthropic extended
- * thinking. Returns `undefined` (no middleware) when the level is `off` or the
- * model doesn't support thinking, preserving the previous request shape.
+ * Anthropic extended-thinking provider options for a level, or `undefined` when the level is `off` or the model
+ * doesn't think.
  *
- * - Adaptive-era models (Sonnet 4.6+/Opus 4.6+): `thinking: adaptive` plus
- *   `output_config.effort`, the closest effort the model accepts.
- * - Budget-era models (Claude 3.7 – Opus 4.5): `thinking: enabled` with a
- *   `budget_tokens` value derived from the level.
+ * - Adaptive-era models (Sonnet 4.6+/Opus 4.6+): `thinking: adaptive` plus `effort`, the closest effort the model
+ *   accepts.
+ * - Budget-era models (Claude 3.7 – Opus 4.5): `thinking: enabled` with a `budgetTokens` value derived from the level.
+ */
+export function anthropicThinkingOptions(
+  modelId: string,
+  thinkingLevel?: ThinkingLevel,
+): Record<string, JSONValue> | undefined {
+  if (!thinkingLevel || thinkingLevel === 'off') return undefined;
+  const level = runAnthropicRequestLevel(modelId, thinkingLevel);
+  if (level === 'off') return undefined;
+  return getAnthropicThinkingCapability(modelId) === 'adaptive'
+    ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: level }
+    : { thinking: { type: 'enabled', budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS[level] } };
+}
+
+/**
+ * Middleware that maps the session thinking level onto Anthropic extended thinking ({@link anthropicThinkingOptions}).
+ * Returns `undefined` (no middleware) when there is nothing to send, preserving the previous request shape.
  */
 export function createAnthropicThinkingMiddleware(
   modelId: string,
   thinkingLevel?: ThinkingLevel,
 ): LanguageModelMiddleware | undefined {
-  if (!thinkingLevel || thinkingLevel === 'off') return undefined;
-  const capability = getAnthropicThinkingCapability(modelId);
-  const level = runAnthropicRequestLevel(modelId, thinkingLevel);
-  if (level === 'off') return undefined;
+  const thinking = anthropicThinkingOptions(modelId, thinkingLevel);
+  if (!thinking) return undefined;
 
   return {
     specificationVersion: 'v4',
@@ -193,12 +205,7 @@ export function createAnthropicThinkingMiddleware(
 
       params.providerOptions = {
         ...params.providerOptions,
-        anthropic: {
-          ...anthropicOptions,
-          ...(capability === 'adaptive'
-            ? { thinking: { type: 'adaptive', display: 'summarized' }, effort: level }
-            : { thinking: { type: 'enabled', budgetTokens: ANTHROPIC_THINKING_BUDGET_TOKENS[level] } }),
-        },
+        anthropic: { ...anthropicOptions, ...thinking },
       } as typeof params.providerOptions;
 
       return params;
