@@ -23,8 +23,11 @@ for (const [address, prefix] of [
 
 const LOCAL_HOSTNAME = /(^|\.)(localhost|local|internal)$/;
 
-/** The platform stamps every deploy with its id; a Factory run anywhere else has none. */
-function hostedOnPlatform(): boolean {
+/**
+ * Whether this Factory runs on the Mastra platform. The platform stamps every
+ * deploy with its id, and a Factory run anywhere else has none.
+ */
+export function hostedOnPlatform(): boolean {
   return Boolean(process.env.MASTRA_DEPLOYMENT_ID?.trim());
 }
 
