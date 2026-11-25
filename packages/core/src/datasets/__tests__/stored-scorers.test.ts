@@ -18,6 +18,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows';
+import { createScorerResolver } from '../experiment/scorer';
 import { EXPERIMENT_WORKFLOW_ID } from '../experiment/workflow';
 
 const TextInput = z.object({ text: z.string() });
@@ -36,8 +37,8 @@ const upperTarget = createWorkflow({ id: 'upper', inputSchema: TextInput, output
 const judge = (id: string, score: number) =>
   createScorer({ id, description: `Stored judge ${id}` }).generateScore(() => score);
 
-/** Editor stand-in: `stored` plays the scorerDefinitions table. */
-function storedScorerEditor(stored: Map<string, MastraScorer<any, any, any, any>>) {
+/** Editor stand-in: `stored` plays the scorerDefinitions table; ids in `unreachable` fail to load like a storage outage. */
+function storedScorerEditor(stored: Map<string, MastraScorer<any, any, any, any>>, unreachable: Set<string>) {
   let mastra: Mastra | undefined;
   return {
     registerWithMastra: (instance: Mastra) => {
@@ -45,6 +46,7 @@ function storedScorerEditor(stored: Map<string, MastraScorer<any, any, any, any>
     },
     scorer: {
       getById: async (id: string) => {
+        if (unreachable.has(id)) throw new Error(`scorer storage unavailable while loading ${id}`);
         const scorer = stored.get(id);
         if (!scorer) return null;
         mastra!.addScorer(scorer, id, { source: 'stored' });
@@ -65,17 +67,18 @@ describe('stored scorers in experiments', () => {
 
   async function setup(storedScorers: MastraScorer<any, any, any, any>[]) {
     const stored = new Map(storedScorers.map(scorer => [scorer.id, scorer]));
+    const unreachable = new Set<string>();
     const storage = new InMemoryStore();
     const mastra = new Mastra({
       workflows: { upper: upperTarget },
       storage,
       pubsub: new EventEmitterPubSub(),
-      editor: storedScorerEditor(stored),
+      editor: storedScorerEditor(stored, unreachable),
       logger: false,
     });
     await mastra.startWorkers();
     started.push(mastra);
-    return { mastra, storage, stored };
+    return { mastra, storage, stored, unreachable };
   }
 
   async function seedDataset(mastra: Mastra, scorerIds?: string[]) {
@@ -259,5 +262,54 @@ describe('stored scorers in experiments', () => {
       [{ text: 'b' }, null],
     ]);
     expect(await scoresFor(storage, experimentId)).toEqual([['item-judge', 0.3]]);
+  });
+
+  it('reports a failed scorer lookup as that error, not as an unknown scorer ID', async () => {
+    const { mastra, storage, unreachable } = await setup([judge('managed-judge', 1)]);
+    const dataset = await seedDataset(mastra);
+    unreachable.add('managed-judge');
+
+    const rejection = dataset.createExperiment({
+      targetType: 'workflow',
+      targetId: 'upper',
+      scorers: ['managed-judge'],
+    });
+    await expect(rejection).rejects.toThrow('scorer storage unavailable while loading managed-judge');
+    await expect(rejection).rejects.not.toMatchObject({ id: 'EXPERIMENT_SCORER_NOT_FOUND' });
+    const { experiments } = await (await storage.getStore('experiments'))!.listExperiments({
+      pagination: { page: 0, perPage: 10 },
+    });
+    expect(experiments).toHaveLength(0);
+  });
+
+  it('fails a durable run whose scorer lookup fails mid-run, instead of reporting the scorer as missing', async () => {
+    const { mastra, storage, unreachable } = await setup([judge('managed-judge', 1)]);
+    const dataset = await seedDataset(mastra);
+    const { experimentId } = await dataset.createExperiment({
+      targetType: 'workflow',
+      targetId: 'upper',
+      scorers: ['managed-judge'],
+    });
+    mastra.removeScorer('managed-judge');
+    unreachable.add('managed-judge');
+
+    await runDurably(mastra, dataset.id, experimentId);
+
+    expect((await waitForExperiment(storage, experimentId)).status).toBe('failed');
+    const errors = (await resultErrors(storage, experimentId)).map(([, error]) => error);
+    expect(errors).not.toContainEqual(expect.objectContaining({ code: 'EXPERIMENT_ITEM_SCORER_NOT_FOUND' }));
+  });
+
+  it('retries a scorer lookup that failed, rather than caching the failure for the run', async () => {
+    const { mastra, unreachable } = await setup([judge('managed-judge', 1)]);
+    const resolve = createScorerResolver(mastra);
+    unreachable.add('managed-judge');
+
+    await expect(resolve(['managed-judge'])).rejects.toThrow('scorer storage unavailable');
+
+    unreachable.delete('managed-judge');
+    const resolution = await resolve(['managed-judge']);
+    expect(resolution.missingIds).toEqual([]);
+    expect(resolution.scorers.map(scorer => scorer.id)).toEqual(['managed-judge']);
   });
 });

@@ -83,6 +83,10 @@ export type ScorerResolver = (scorers: (ResolvedScorer | string)[]) => Promise<S
  * looked up in Mastra's registry, then loaded as stored scorers through the
  * editor (which registers them). Resolutions, including misses, are cached so
  * concurrent items hydrate a stored scorer at most once per run.
+ *
+ * Only a scorer that doesn't exist is reported in `missingIds`. A failed lookup
+ * (for example, storage being unavailable) rejects with its own error and isn't
+ * cached, so it isn't mistaken for a bad scorer ID.
  */
 export function createScorerResolver(mastra: Mastra): ScorerResolver {
   const resolutionCache = new Map<string, Promise<ResolvedScorer | null>>();
@@ -97,11 +101,7 @@ export function createScorerResolver(mastra: Mastra): ScorerResolver {
 
       const editor = mastra.getEditor?.();
       if (editor) {
-        try {
-          await editor.scorer.getById(scorerId);
-        } catch {
-          // A missing or unavailable stored scorer is reported through missingIds.
-        }
+        await editor.scorer.getById(scorerId);
         scorer = getItemScorerById(mastra, scorerId);
       }
 
@@ -109,6 +109,7 @@ export function createScorerResolver(mastra: Mastra): ScorerResolver {
     })();
 
     resolutionCache.set(scorerId, resolution);
+    resolution.catch(() => resolutionCache.delete(scorerId));
     return resolution;
   };
 
