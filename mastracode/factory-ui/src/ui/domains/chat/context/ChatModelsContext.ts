@@ -1,18 +1,18 @@
-import type { ModelPack } from '@mastra/factory/model-packs';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ModelPack, ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { createContext } from 'react';
 
 export interface ChatModelsApi {
   activeModelId: string | undefined;
-  defaultModelId: string | undefined;
   modelPacks: readonly ModelPack[];
-  defaultModelPackId: string | null;
-  activeModelPack: ModelPack | undefined;
-  pendingModelId: string | undefined;
-  pendingModelPackId: string | undefined;
+  defaultModelPack: ModelPack | undefined;
+  selectedPack: ModelPack | undefined;
+  selection: ModelSelectionRequest | undefined;
+  selectedThinkingLevel: ThinkingLevelSetting | undefined;
+  switching: boolean;
   isLoading: boolean;
   error: Error | undefined;
-  setModel: (modelId: string) => Promise<void>;
-  setModelPack: (pack: ModelPack) => Promise<void>;
+  select: (selection: ModelSelectionRequest) => Promise<void>;
 }
 
 export const ChatModelsContext = createContext<ChatModelsApi | null>(null);

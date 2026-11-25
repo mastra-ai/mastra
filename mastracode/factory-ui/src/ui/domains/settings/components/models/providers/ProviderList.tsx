@@ -1,5 +1,7 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
@@ -17,6 +19,7 @@ import {
   useCredentialAccess,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
+import { ListHeading } from '../ListHeading';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
@@ -105,8 +108,24 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
   if (providersQuery.isPending || customProvidersQuery.isPending) return <ProviderRowsSkeleton />;
 
   return (
-    <div className="flex flex-col gap-2">
-      <ProviderRows addDisabled={actionsDisabled} onAdd={() => setAddOpen(true)}>
+    <div className="flex flex-col gap-1">
+      <ListHeading label="Providers" description={requestScope === 'org' && !readOnly ? ORG_SCOPE_AUDIENCE : undefined}>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          tooltip="Add provider"
+          disabled={actionsDisabled}
+          onClick={() => setAddOpen(true)}
+        >
+          <IconPlusMedium />
+        </Button>
+      </ListHeading>
+      {connections.length === 0 && customProviders.length === 0 && (
+        <Txt as="p" variant="caption" tone="muted">
+          No providers yet.
+        </Txt>
+      )}
+      <ProviderRows>
         {connections.map(connection => (
           <ConnectedProviderRow
             key={connection.provider.provider}
@@ -130,11 +149,6 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
       {memberReason && (
         <Txt as="p" variant="caption" tone="muted">
           {memberReason}
-        </Txt>
-      )}
-      {requestScope === 'org' && !readOnly && (
-        <Txt as="p" variant="caption" tone="muted">
-          {ORG_SCOPE_AUDIENCE}
         </Txt>
       )}
       {error && (

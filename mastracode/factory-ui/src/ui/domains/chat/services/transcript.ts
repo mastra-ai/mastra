@@ -219,7 +219,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       return { ...state, entries: state.entries.filter(e => !('id' in e) || e.id !== action.id) };
     case 'event': {
       const next = applyEvent(state, action.event, action.viewerId, action.opensStream);
-      return action.event.type === 'info' ? dropNoticesShownAsModelFallbacks(next) : next;
+      return showsModelFallback(action.event) ? dropNoticesShownAsModelFallbacks(next) : next;
     }
     default:
       return state;
@@ -836,6 +836,20 @@ function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMess
     entries.push(entry);
   }
   return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+function showsModelFallback(event: AgentControllerEvent): boolean {
+  if (!isKnownAgentControllerEvent(event)) return false;
+  switch (event.type) {
+    case 'info':
+      return true;
+    case 'message_start':
+      return event.message.content.parts.some(part => part.type === MODEL_FALLBACK_PART_TYPE);
+    case 'message_update':
+      return event.event.type === 'part' && event.event.part.type === MODEL_FALLBACK_PART_TYPE;
+    default:
+      return false;
+  }
 }
 
 function dropNoticesShownAsModelFallbacks(state: TranscriptState): TranscriptState {

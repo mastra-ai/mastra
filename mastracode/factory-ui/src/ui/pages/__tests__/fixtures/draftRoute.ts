@@ -1,9 +1,11 @@
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { http, HttpResponse } from 'msw';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import type { WorkItemStarters } from '../../../../api/types';
+import type { SessionModelTarget } from '../../../../hooks/useSessionModel';
 import type { FactoryUserSession } from '../../../domains/workspaces/services/user-sessions';
 
 export const FACTORY_ID = 'factory-draft-handoff';
@@ -44,7 +46,7 @@ interface DraftRouteOptions {
   createGate?: Promise<void>;
   /** Answers this many session creates with a server error before accepting one. */
   failedCreates?: number;
-  /** Holds each session model switch response until it settles. */
+  /** Holds each session model selection response until it settles. */
   modelSwitchGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
@@ -230,15 +232,22 @@ export function stubDraftRoute({
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
-      const body = await request.json();
-      const thinkingLevel = readBody(body, 'thinkingLevel');
-      const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
-      route.modelSwitchRequests += 1;
-      await modelSwitchGate;
-      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
-      return HttpResponse.json({ ok: true });
-    }),
+    http.put<never, SessionModelTarget & { selection: ModelSelectionRequest }>(
+      `${TEST_BASE_URL}/web/config/session-model`,
+      async ({ request }) => {
+        const { selection } = await request.json();
+        route.modelSwitchRequests += 1;
+        await modelSwitchGate;
+        if (selection.kind === 'model') {
+          const thinkingSuffix = selection.thinkingLevel ? ` thinking:${selection.thinkingLevel}` : '';
+          route.bindings.push(`model:${selection.modelId}${thinkingSuffix}`);
+          return HttpResponse.json({ modelSelection: { kind: 'model' } });
+        }
+        const packId = selection.kind === 'pack' ? selection.packId : 'personal';
+        route.bindings.push(selection.kind === 'pack' ? `pack:${packId}` : 'default');
+        return HttpResponse.json({ modelSelection: { kind: 'pack', packId } });
+      },
+    ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
       route.bindingsBeforePrompt = [...route.bindings];
       route.posted.push(readSentMessage(await request.json()));

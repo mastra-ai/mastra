@@ -78,16 +78,15 @@ function renderModelCredential({
   };
   const models: ChatModelsApi = {
     activeModelId: modelId,
-    defaultModelId: undefined,
     modelPacks: [],
-    defaultModelPackId: null,
-    activeModelPack: undefined,
-    pendingModelId: undefined,
-    pendingModelPackId: undefined,
+    defaultModelPack: undefined,
+    selectedPack: undefined,
+    selection: modelId ? { kind: 'model', modelId } : undefined,
+    selectedThinkingLevel: undefined,
+    switching: false,
     isLoading: false,
     error: undefined,
-    setModel: async () => {},
-    setModelPack: async () => {},
+    select: async () => {},
   };
   const submitComposer = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
   const view = renderWithProviders(

@@ -2550,6 +2550,31 @@ describe('transcript reducer model fallback notices', () => {
     expect(hopParts).toHaveLength(1);
   });
 
+  it('shows a hop once when the streamed reply carries it after the live notice', () => {
+    const hop = 'anthropic/claude-opus-5.5 is rate-limited, switched to openai/gpt-5.6-sol';
+    const question = dbMessage('user-1', 'user', [{ type: 'text', text: 'Review the PR' }]);
+    let state = createInitialTranscript({ messages: [question] });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'info', message: hop } });
+    const reply = dbMessage('reply-1', 'assistant', [
+      {
+        type: 'data-mastracode-model-fallback',
+        data: {
+          from: { entryId: 'anthropic/claude-opus-5.5', label: 'anthropic/claude-opus-5.5' },
+          to: { entryId: 'openai/gpt-5.6-sol', label: 'openai/gpt-5.6-sol' },
+          reason: 'pool-exhausted',
+          at: '2026-11-23T10:00:00.000Z',
+          failure: { kind: 'rate_limited' },
+        },
+      },
+    ]);
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: reply } });
+
+    expect(state.entries.filter(entry => entry.kind === 'notice')).toEqual([]);
+    expect(state.entries.flatMap(messageParts)).toContainEqual(
+      expect.objectContaining({ type: 'data-mastracode-model-fallback' }),
+    );
+  });
+
   it('keeps a live hop notice whose saved twin belongs to an earlier turn', () => {
     const hop = 'anthropic/claude-opus-5.5 is rate-limited, switched to openai/gpt-5.6-sol';
     const question = dbMessage('user-1', 'user', [{ type: 'text', text: 'Review the PR' }]);

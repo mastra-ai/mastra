@@ -87,9 +87,19 @@ function renderRoute(initialThreadId: string) {
       const threadId = params.get('threadId') ?? '';
       requestedThreads.push(threadId);
       const factoryBilled = threadId === WORK_THREAD_ID;
+      const defaultModelId = factoryBilled ? 'openai/gpt-5' : 'anthropic/claude-sonnet-4-6';
       return HttpResponse.json({
         modelScope: factoryBilled ? 'factory' : 'user',
-        defaultModelId: factoryBilled ? 'openai/gpt-5' : 'anthropic/claude-sonnet-4-6',
+        defaultModelId,
+        modelPacks: [
+          {
+            id: 'default',
+            name: factoryBilled ? 'Factory build' : 'My build',
+            models: [{ modelId: defaultModelId, thinkingLevel: 'medium' }],
+          },
+        ],
+        defaultModelPackId: 'default',
+        modelSelection: { kind: 'pack', packId: 'default' },
         models: models.filter(model => model.provider === (factoryBilled ? 'openai' : 'anthropic')),
       });
     }),
@@ -143,8 +153,10 @@ function renderRoute(initialThreadId: string) {
 
 async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /GPT-5/ });
-  expect(within(option).getByText('Default')).toBeVisible();
+  const pack = await screen.findByRole('button', { name: 'Factory build' });
+  expect(pack).toHaveAttribute('aria-pressed', 'true');
+  expect(pack).toHaveAccessibleDescription(/GPT-5/);
+  expect(screen.getByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
   expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
@@ -152,8 +164,10 @@ async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
 
 async function expectInteractiveCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
-  expect(within(option).getByText('Default')).toBeVisible();
+  const pack = await screen.findByRole('button', { name: 'My build' });
+  expect(pack).toHaveAttribute('aria-pressed', 'true');
+  expect(pack).toHaveAccessibleDescription(/Claude Sonnet 4\.6/);
+  expect(screen.getByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeInTheDocument();
   expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
   await user.keyboard('{Escape}');

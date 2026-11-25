@@ -1,17 +1,14 @@
 import { defaultModelPack } from '@mastra/factory/model-packs';
 import type { ModelPackSet } from '@mastra/factory/model-packs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
 
 import { useOrgKeyAdminQuery } from '../../../../../../hooks/use-providers';
-import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
+import { useScopeModelCatalogQuery } from '../../../../../../hooks/useAvailableModels';
 import {
-  useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
   useSetFactoryModelPacksMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
-import { SwitchRunningSessionsDialog } from '../defaults/SwitchRunningSessionsDialog';
 import { ModelPackList } from './ModelPackList';
 
 function packWriteFailureMessage(error: Error | null): string | undefined {
@@ -23,10 +20,8 @@ function packWriteFailureMessage(error: Error | null): string | undefined {
 export function FactoryModelPacks({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const isAdminQuery = useOrgKeyAdminQuery();
-  const modelsQuery = useAvailableModelsQuery({ scope: 'org' });
+  const catalogQuery = useScopeModelCatalogQuery('org');
   const savePacks = useSetFactoryModelPacksMutation(factoryId);
-  const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
-  const [confirmModelId, setConfirmModelId] = useState<string>();
 
   if (projectQuery.error) {
     return (
@@ -41,43 +36,20 @@ export function FactoryModelPacks({ factoryId }: { factoryId: string }) {
     modelPacks: projectQuery.data.modelPacks ?? [],
     defaultModelPackId: projectQuery.data.defaultModelPackId ?? null,
   };
-  const defaultModelId = defaultModelPack(packSet)?.models[0]?.modelId;
-
-  const save = async (next: ModelPackSet) => {
-    applyToSessions.reset();
-    await savePacks.mutateAsync(next);
-    const nextDefaultModelId = defaultModelPack(next)?.models[0]?.modelId;
-    if (nextDefaultModelId && nextDefaultModelId !== defaultModelId) setConfirmModelId(nextDefaultModelId);
-  };
 
   return (
-    <>
-      <div className="flex min-w-0 flex-col gap-2">
-        <ModelPackList
-          label="Factory model packs"
-          packSet={packSet}
-          models={modelsQuery.data}
-          readOnly={isAdminQuery.data === false}
-          saving={savePacks.isPending}
-          error={packWriteFailureMessage(savePacks.error) ?? applyToSessions.error?.message}
-          onSave={save}
-        />
-        <SharedCredentialNotice modelId={defaultModelId} />
-        {applyToSessions.data && (
-          <Txt as="p" variant="meta" role="status">
-            Switch started in the background. Running sessions will pick up the new model on their next step.
-          </Txt>
-        )}
-      </div>
-
-      {confirmModelId && (
-        <SwitchRunningSessionsDialog
-          modelId={confirmModelId}
-          pending={applyToSessions.isPending}
-          onConfirm={() => applyToSessions.mutate(undefined, { onSuccess: () => setConfirmModelId(undefined) })}
-          onClose={() => setConfirmModelId(undefined)}
-        />
-      )}
-    </>
+    <div className="flex min-w-0 flex-col gap-2">
+      <ModelPackList
+        label="Factory model packs"
+        packSet={packSet}
+        models={catalogQuery.data?.models}
+        startModelId={catalogQuery.data?.fallbackModelId}
+        readOnly={isAdminQuery.data === false}
+        saving={savePacks.isPending}
+        error={packWriteFailureMessage(savePacks.error)}
+        onSave={next => savePacks.mutateAsync(next)}
+      />
+      <SharedCredentialNotice modelId={defaultModelPack(packSet)?.models[0]?.modelId} />
+    </div>
   );
 }

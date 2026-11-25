@@ -39,7 +39,7 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual([]);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -139,7 +139,7 @@ describe('a user session draft on the real thread route', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('starts the session on the defaults when the draft level is reset before the first message', async () => {
+  it('starts the session on the draft model at its default level when the draft level is reset before the first message', async () => {
     const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
@@ -162,7 +162,7 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() => expect(route.posted).toEqual(['use the default']));
-    expect(route.bindingsBeforePrompt).toEqual([]);
+    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
 
     route.finishWorkspace();
     await waitForMutationsIdle(client);

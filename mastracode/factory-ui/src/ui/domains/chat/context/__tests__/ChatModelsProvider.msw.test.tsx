@@ -1,3 +1,4 @@
+import type { ModelPack } from '@mastra/factory/model-packs';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -34,9 +35,13 @@ function ActiveModelProbe() {
   return <div>{activeModelId}</div>;
 }
 
-function DefaultModelProbe() {
-  const { defaultModelId } = useChatModels();
-  return <div data-testid="default-model">{defaultModelId}</div>;
+function DefaultPackProbe() {
+  const { defaultModelPack } = useChatModels();
+  return <div data-testid="default-pack">{defaultModelPack?.name}</div>;
+}
+
+function packOf(id: string, modelId: string): ModelPack {
+  return { id, name: id, models: [{ modelId, thinkingLevel: 'high' }] };
 }
 
 function LoadingProbe() {
@@ -60,11 +65,11 @@ function renderDraft(probes: ReactNode) {
 }
 
 describe('ChatModelsProvider', () => {
-  it('shows the default the server routes for the session without replacing its selected model', async () => {
+  it('shows the default pack the server routes for the session without replacing its selected model', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
         HttpResponse.json({
-          project: { id: 'factory-1', modelScope: 'factory', defaultModelId: 'deepseek/deepseek-flash' },
+          project: { id: 'factory-1', modelScope: 'factory', modelPacks: [packOf('Flash', 'deepseek/deepseek-flash')] },
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
@@ -74,7 +79,13 @@ describe('ChatModelsProvider', () => {
         const params = new URL(request.url).searchParams;
         expect(params.get('resourceId')).toBe('session-1');
         expect(params.get('threadId')).toBe('thread-1');
-        return HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: 'anthropic/claude-opus-4-1' });
+        return HttpResponse.json({
+          models: [],
+          modelScope: 'user',
+          modelPacks: [packOf('Opus', 'anthropic/claude-opus-4-1')],
+          defaultModelPackId: 'Opus',
+          modelSelection: { kind: 'model' },
+        });
       }),
     );
 
@@ -103,27 +114,32 @@ describe('ChatModelsProvider', () => {
         >
           <ChatModelsProvider>
             <ActiveModelProbe />
-            <DefaultModelProbe />
+            <DefaultPackProbe />
           </ChatModelsProvider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>,
     );
 
-    expect(await screen.findByText('anthropic/claude-opus-4-1')).toBeVisible();
+    expect(await screen.findByText('Opus')).toBeVisible();
     expect(screen.getByText('openai/gpt-5')).toBeVisible();
   });
 
-  it('uses the personal default model ahead of the Factory default for a new chat', async () => {
+  it("starts a new chat on the personal default pack's first model ahead of the Factory's", async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
+        HttpResponse.json({
+          project: {
+            id: 'factory-1',
+            modelPacks: [packOf('fable', 'openrouter/fable-5')],
+            defaultModelPackId: 'fable',
+          },
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({
-          modelId: 'anthropic/claude-opus-4-1',
           thinkingLevel: null,
-          modelPacks: [],
-          defaultModelPackId: null,
+          modelPacks: [packOf('opus', 'anthropic/claude-opus-4-1')],
+          defaultModelPackId: 'opus',
         }),
       ),
     );
@@ -140,11 +156,11 @@ describe('ChatModelsProvider', () => {
     });
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
+        HttpResponse.json({ project: { id: 'factory-1' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultPending;
-        return HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null });
+        return HttpResponse.json({ thinkingLevel: null, modelPacks: [], defaultModelPackId: null });
       }),
     );
 
@@ -159,7 +175,14 @@ describe('ChatModelsProvider', () => {
   it("surfaces personal default loading failures instead of starting a personal-routed chat on the Factory's model", async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user', defaultModelId: 'openrouter/fable-5' } }),
+        HttpResponse.json({
+          project: {
+            id: 'factory-1',
+            modelScope: 'user',
+            modelPacks: [packOf('fable', 'openrouter/fable-5')],
+            defaultModelPackId: 'fable',
+          },
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({ error: 'model_defaults_unavailable' }, { status: 503 }),
@@ -185,12 +208,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({
-          modelId: 'anthropic/claude-opus-4-1',
-          thinkingLevel: null,
-          modelPacks: [],
-          defaultModelPackId: null,
-        }),
+        HttpResponse.json({ thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
     );
     const liveSession: ChatSessionContextApi = {

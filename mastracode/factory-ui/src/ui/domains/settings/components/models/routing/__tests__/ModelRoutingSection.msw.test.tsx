@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
 import type { FactoryModelScope } from '../../../../../workspaces/services/github';
-import { pickModel } from '../../defaults/__tests__/default-model-test-utils';
+import { pickPackModel } from '../../packs/__tests__/pack-model-test-utils';
 import { ModelRoutingSection } from '../ModelRoutingSection';
 
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
@@ -58,10 +58,14 @@ describe('ModelRoutingSection', () => {
     renderRoutingSection();
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
-    expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
-    expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
-    expect(await within(region('Personal defaults')).findByRole('button', { name: 'New pack' })).toBeInTheDocument();
-    expect(await within(region('Factory defaults')).findByRole('button', { name: 'New pack' })).toBeInTheDocument();
+    expect(within(region('Personal defaults')).getByText('Chats')).toBeInTheDocument();
+    expect(within(region('Factory defaults')).getByText('Work-item runs')).toBeInTheDocument();
+    expect(
+      await within(region('Personal defaults')).findByRole('button', { name: 'Choose a model' }),
+    ).toBeInTheDocument();
+    expect(
+      await within(region('Factory defaults')).findByRole('button', { name: 'Choose a model' }),
+    ).toBeInTheDocument();
   });
 
   it('saves a new routing and collapses the defaults it leaves unused', async () => {
@@ -71,7 +75,9 @@ describe('ModelRoutingSection', () => {
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(within(region('Factory defaults')).queryByRole('button', { name: 'New pack' })).not.toBeInTheDocument();
+    expect(
+      within(region('Factory defaults')).queryByRole('button', { name: 'Choose a model' }),
+    ).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));
     await confirmSwitch(user);
@@ -80,9 +86,11 @@ describe('ModelRoutingSection', () => {
     expect(patchedBodies).toEqual([{ modelScope: 'factory' }]);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(routing('Factory')).toBeChecked();
-    expect(within(region('Chats')).getByText('Uses Factory defaults')).toBeInTheDocument();
+    expect(within(region('Factory defaults')).getByText('Chats')).toBeInTheDocument();
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
-    expect(within(region('Personal defaults')).queryByRole('button', { name: 'New pack' })).not.toBeInTheDocument();
+    expect(
+      within(region('Personal defaults')).queryByRole('button', { name: 'Choose a model' }),
+    ).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
     expect(within(region('Factory defaults')).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
   });
@@ -117,7 +125,7 @@ describe('ModelRoutingSection', () => {
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(patchedBodies).toEqual([]);
     expect(routing('Personal')).toBeChecked();
-    expect(within(region('Work-item runs')).getByText('Uses Personal defaults')).toBeInTheDocument();
+    expect(within(region('Personal defaults')).getByText('Work-item runs')).toBeInTheDocument();
   });
 
   it('drops an open routing request when the page moves to another Factory', async () => {
@@ -207,22 +215,19 @@ describe('ModelRoutingSection', () => {
     await waitFor(() => expect(routing('Personal')).toBeChecked());
     const factoryDefaults = region('Factory defaults');
     await user.click(within(factoryDefaults).getByRole('button', { name: 'Settings' }));
-    await user.click(await within(factoryDefaults).findByRole('button', { name: 'New pack' }));
-    await user.type(within(factoryDefaults).getByRole('textbox', { name: 'Name' }), 'Build');
-    await pickModel(user, 'Choose a model', 'openai/gpt-5');
-    await user.click(within(factoryDefaults).getByRole('button', { name: 'Save' }));
+    await pickPackModel(user, 'Choose a model', 'GPT-5', factoryDefaults);
     await waitForMutationsIdle(client);
 
     expect(patchedBodies).toEqual([
       {
         modelPacks: [
           {
-            id: expect.any(String),
-            name: 'Build',
+            id: 'default',
+            name: 'Default',
             models: [{ modelId: 'openai/gpt-5', thinkingLevel: DEFAULT_THINKING_LEVEL }],
           },
         ],
-        defaultModelPackId: expect.any(String),
+        defaultModelPackId: 'default',
       },
     ]);
   });
@@ -233,7 +238,7 @@ describe('ModelRoutingSection', () => {
 
     expect(
       await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('button', {
-        name: 'New pack',
+        name: 'Choose a model',
       }),
     ).toBeInTheDocument();
   });

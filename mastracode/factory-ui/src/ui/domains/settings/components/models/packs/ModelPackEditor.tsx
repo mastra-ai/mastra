@@ -41,6 +41,7 @@ export function ModelPackEditor({ packSet, models, saving, error, onSave, onCanc
     >
       <SettingsRow label="Name" errorMsg={submitted ? nameError : undefined} controlPlacement="below">
         <Input
+          autoFocus
           value={name}
           maxLength={MODEL_PACK_NAME_MAX}
           placeholder="Build"

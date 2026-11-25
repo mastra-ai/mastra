@@ -2,15 +2,16 @@ import type { ReactNode } from 'react';
 import type { ModelPickerModel, ModelPickerProvider } from './model-picker-types';
 import { Badge } from '@/ds/components/Badge';
 import { CommandItem } from '@/ds/components/Command';
+import { Txt } from '@/ds/components/Txt';
 import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
-import { formatModelName } from '@/utils/model';
 
 interface ModelPickerOptionProps {
   provider: ModelPickerProvider;
   model: ModelPickerModel;
+  name: string;
+  showModelId: boolean;
   selected: boolean;
   isDefault: boolean;
-  fallbackLabel?: string;
   onSelect: () => void;
   renderProviderIcon: (providerId: string) => ReactNode;
 }
@@ -18,32 +19,30 @@ interface ModelPickerOptionProps {
 export function ModelPickerOption({
   provider,
   model,
+  name,
+  showModelId,
   selected,
   isDefault,
-  fallbackLabel,
   onSelect,
   renderProviderIcon,
 }: ModelPickerOptionProps) {
-  const name = formatModelName(model.id);
+  const id = `${provider.id}/${model.id}`;
   return (
-    <CommandItem
-      value={`${provider.id}/${model.id}`}
-      keywords={[provider.name, name]}
-      title={model.id}
-      onSelect={onSelect}
-    >
+    <CommandItem value={id} keywords={[provider.name, name]} title={id} onSelect={onSelect}>
       <span aria-hidden className="flex shrink-0">
         {renderProviderIcon(provider.id)}
       </span>
-      <span className="truncate">{name}</span>
+      <span className="grid min-w-0">
+        <span className="truncate">{name}</span>
+        {showModelId ? (
+          <Txt as="span" variant="caption" tone="muted" className="truncate">
+            {id}
+          </Txt>
+        ) : null}
+      </span>
       {isDefault ? (
         <Badge variant="blue" size="xs">
           Default
-        </Badge>
-      ) : null}
-      {fallbackLabel ? (
-        <Badge variant="neutral" size="xs">
-          {fallbackLabel}
         </Badge>
       ) : null}
       {selected ? <IconCheckmark2Medium aria-hidden className="ml-auto shrink-0" /> : null}

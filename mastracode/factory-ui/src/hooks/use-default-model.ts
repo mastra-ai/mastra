@@ -43,16 +43,3 @@ export function useSetPersonalModelPacks() {
     },
   });
 }
-
-export interface ApplyDefaultModelResponse {
-  modelId: string;
-  applied: string[];
-  skipped: Array<{ sessionId: string; reason: 'not-running' | 'thread-missing' | 'factory-scope' | 'apply-failed' }>;
-}
-
-export function useApplyDefaultModel() {
-  const { client } = useApiConfig();
-  return useMutation({
-    mutationFn: () => client.post<ApplyDefaultModelResponse>('/web/config/default-model/apply', {}),
-  });
-}

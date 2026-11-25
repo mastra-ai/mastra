@@ -408,27 +408,6 @@ export async function updateFactoryProject(
   return project;
 }
 
-export interface ApplyFactoryDefaultModelResult {
-  modelId: string;
-  status: 'started';
-}
-
-/** Start applying the Factory default model to currently running work and review sessions. */
-export async function applyFactoryDefaultModelToSessions(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<ApplyFactoryDefaultModelResult> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/apply-default-model`,
-    {
-      method: 'POST',
-      credentials: 'include',
-      headers: { Accept: 'application/json' },
-    },
-  );
-  return readJsonOrThrow<ApplyFactoryDefaultModelResult>(res, 'Failed to switch running sessions');
-}
-
 /**
  * Ensure the Factory project has a source-control connection for the given
  * GitHub installation, reusing an existing one when present. Returns the

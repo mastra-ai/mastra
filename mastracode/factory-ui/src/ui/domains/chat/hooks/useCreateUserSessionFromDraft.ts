@@ -8,7 +8,6 @@ import { createUserSession, DraftSessionCreateError } from '../../workspaces/ser
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatThinking } from '../context/useChatThinking';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { stashHandoffFiles } from '../services/handoffFiles';
@@ -23,8 +22,7 @@ import { startPromptHandoff } from './useHandoffPrompt';
  */
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
-  const { activeModelId, defaultModelId, activeModelPack, defaultModelPackId } = useChatModels();
-  const { override: thinkingLevelOverride } = useChatThinking();
+  const { activeModelId, selection } = useChatModels();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -34,13 +32,10 @@ export function useCreateUserSessionFromDraft() {
     if (!draftSessionId || !factoryId || !projectRepositoryId) {
       throw new Error('Could not create the session. Reload the page and try again.');
     }
-    if (!activeModelId) {
+    if (!activeModelId || !selection) {
       throw new Error('Session configuration is not ready. Try again.');
     }
 
-    const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
-    const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
-    const handoffModelPackId = activeModelPack?.id === defaultModelPackId ? undefined : activeModelPack?.id;
     const draftPath = `/factories/${factoryId}/user/new/${draftSessionId}`;
     void queryClient
       .query({
@@ -58,12 +53,7 @@ export function useCreateUserSessionFromDraft() {
             const message = error instanceof Error ? error.message : 'Session creation failed';
             throw new DraftSessionCreateError(
               `Could not create the session: ${message}. Try again.`,
-              {
-                prompt,
-                modelId: handoffModelId,
-                thinkingLevel: thinkingLevelOverride,
-                modelPackId: handoffModelPackId,
-              },
+              { prompt, modelSelection: selection },
               draftPath,
               { cause: error },
             );
@@ -87,11 +77,7 @@ export function useCreateUserSessionFromDraft() {
     stashHandoffFiles(draftSessionId, files);
     void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
       replace: true,
-      state: startPromptHandoff(draftSessionId, prompt, {
-        modelId: handoffModelId,
-        thinkingLevel: thinkingLevelOverride,
-        modelPackId: handoffModelPackId,
-      }),
+      state: startPromptHandoff(draftSessionId, prompt, { modelSelection: selection }),
     });
   };
 }

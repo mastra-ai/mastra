@@ -222,11 +222,8 @@ export function ChatSessionBoundary({
           isLoadingMoreHistory={messagesQuery.isLoadingMore}
           loadMoreHistory={messagesQuery.loadMore}
         >
-          <ChatModelsProvider
-            initialDraftModelId={failedDraft?.modelId}
-            initialDraftModelPackId={failedDraft?.modelPackId}
-          >
-            <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
+          <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
+            <ChatThinkingProvider>
               <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
                 <ComposerImagesProvider initialImages={failedDraft?.files}>
                   {/* Below the keyed transcript, so each thread starts with no annotations. */}

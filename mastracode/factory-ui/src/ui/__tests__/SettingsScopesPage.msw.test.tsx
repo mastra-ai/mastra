@@ -9,7 +9,7 @@ import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/confi
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
-import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
+import { pickPackModel } from '../domains/settings/components/models/packs/__tests__/pack-model-test-utils';
 import { environmentPayload } from '../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../router';
 import {
@@ -231,10 +231,7 @@ describe('Settings ownership', () => {
     await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
     expect(router.state.location.hash).toBe('#personal-defaults');
     const personal = await screen.findByRole('region', { name: 'Personal defaults' });
-    await user.click(await within(personal).findByRole('button', { name: 'New pack' }));
-    await user.type(within(personal).getByRole('textbox', { name: 'Name' }), 'Everyday');
-    await pickModel(user, 'Choose a model', 'openai/gpt-5');
-    await user.click(within(personal).getByRole('button', { name: 'Save' }));
+    await pickPackModel(user, 'Choose a model', 'GPT-5', personal);
     await waitFor(() => expect(personalDefaults.modelId).toBe('openai/gpt-5'));
     await act(() => router.navigate(-1));
 

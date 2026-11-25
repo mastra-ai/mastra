@@ -1,19 +1,17 @@
-import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import { MODEL_PACK_MODELS_MAX } from '@mastra/factory/model-packs';
 import type { ModelPackModel } from '@mastra/factory/model-packs';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
+import { IconArrowDown } from '@mastra/playground-ui/icons/central/IconArrowDown';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
-import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { ArrowDown, ArrowUp, Ellipsis } from 'lucide-react';
-import { useMemo } from 'react';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
-import { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '../../../../chat/services/thinkingLevels';
-import { ModelCombobox } from '../../ModelCombobox';
+import { THINKING_LEVEL_LABELS } from '../../../../chat/services/thinkingLevels';
+import { ModelPackEntryLabel } from './ModelPackEntryLabel';
+import { ModelPackModelPicker } from './ModelPackModelPicker';
 
 const EMPTY_CATALOG: AvailableModelOption[] = [];
 
@@ -21,141 +19,111 @@ interface ModelPackTimelineProps {
   entries: ModelPackModel[];
   models: AvailableModelOption[] | undefined;
   disabled: boolean;
-  onChange?: (entries: ModelPackModel[]) => void;
+  onChange?: (entries: ModelPackModel[]) => void | Promise<unknown>;
+  renderProviderIcon?: (provider: string) => ReactNode;
 }
 
-export function ModelPackTimeline({ entries, models = EMPTY_CATALOG, disabled, onChange }: ModelPackTimelineProps) {
-  const occupiedIds = useMemo(() => entries.map(entry => entry.modelId), [entries]);
+export function ModelPackTimeline({
+  entries,
+  models = EMPTY_CATALOG,
+  disabled,
+  onChange,
+  renderProviderIcon,
+}: ModelPackTimelineProps) {
+  const occupiedIds = new Set(entries.map(entry => entry.modelId));
   const addLabel = entries.length ? 'Add model' : 'Choose a model';
 
   return (
-    <ol aria-label="Models in this pack" className="min-w-0">
-      {entries.map((entry, index) => {
-        const label = index === 0 ? 'Primary model' : `Fallback ${index}`;
-        const update = (next: ModelPackModel) => onChange?.(entries.with(index, next));
-        const move = (target: number) => {
-          const reordered = [...entries];
-          reordered[index] = reordered[target];
-          reordered[target] = entry;
-          onChange?.(reordered);
-        };
+    <div className="min-w-0">
+      {entries.length > 0 && (
+        <ol aria-label="Models in this pack">
+          {entries.map((entry, index) => {
+            const label = index === 0 ? 'Primary model' : `Fallback ${index}`;
+            const update = (next: ModelPackModel) => onChange?.(entries.with(index, next));
+            const move = (target: number) => {
+              const reordered = [...entries];
+              reordered[index] = reordered[target];
+              reordered[target] = entry;
+              onChange?.(reordered);
+            };
 
-        return (
-          <PackStep key={label}>
-            <Txt as="span" variant="meta" tone="muted" className="block pt-1">
-              {label}
-            </Txt>
-            {onChange ? (
-              <div className="flex min-w-0 flex-wrap items-center gap-x-1">
-                <ModelCombobox
-                  models={models}
-                  occupiedModelIds={occupiedIds}
-                  value={entry.modelId}
-                  onValueChange={modelId => modelId && modelId !== entry.modelId && update({ ...entry, modelId })}
-                  aria-label={label}
-                  size="sm"
-                  variant="ghost"
-                  showChevron
-                  className="min-w-32 flex-1 justify-start"
-                  disabled={disabled}
-                />
-                <div className="ml-auto flex items-center">
-                  <Select
-                    value={entry.thinkingLevel}
-                    disabled={disabled}
-                    onValueChange={value => {
-                      const level = ALL_THINKING_LEVEL_OPTIONS.find(option => option.value === value)?.value;
-                      if (level && level !== entry.thinkingLevel) update({ ...entry, thinkingLevel: level });
-                    }}
-                  >
-                    <SelectTrigger size="sm" variant="ghost" aria-label={`${label} thinking`}>
-                      {THINKING_LEVEL_LABELS[entry.thinkingLevel]}
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ALL_THINKING_LEVEL_OPTIONS.map(option => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {entries.length > 1 && (
-                    <DropdownMenu>
-                      <DropdownMenu.Trigger
-                        size="icon-sm"
-                        variant="ghost"
-                        aria-label={`${label} actions`}
-                        tooltip={`${label} actions`}
+            return (
+              <li key={label} className={cn('group/model relative min-w-0', index > 0 && 'ms-5 ps-2')}>
+                {index > 0 && (
+                  <span
+                    aria-hidden
+                    className="border-border-strong pointer-events-none absolute inset-s-0 top-0 h-1/2 w-2 rounded-es-md border-s border-b"
+                  />
+                )}
+                {index > 0 && index < entries.length - 1 && (
+                  <span
+                    aria-hidden
+                    className="bg-border-strong pointer-events-none absolute inset-y-0 inset-s-0 w-px"
+                  />
+                )}
+                {onChange ? (
+                  <div className="flex min-w-0 items-center gap-1">
+                    <div className="min-w-0 flex-1">
+                      <ModelPackModelPicker
+                        label={label}
+                        entry={entry}
+                        models={models}
+                        occupiedIds={occupiedIds}
+                        onChange={update}
                         disabled={disabled}
-                      >
-                        <Ellipsis />
-                      </DropdownMenu.Trigger>
-                      <DropdownMenu.Content align="end">
-                        <DropdownMenu.Item disabled={index === 0} onClick={() => move(index - 1)}>
-                          <ArrowUp /> Move up
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item disabled={index === entries.length - 1} onClick={() => move(index + 1)}>
-                          <ArrowDown /> Move down
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          variant="destructive"
-                          onClick={() => onChange(entries.filter((_, at) => at !== index))}
+                      />
+                    </div>
+                    {entries.length > 1 && (
+                      <DropdownMenu>
+                        <DropdownMenu.Trigger
+                          size="icon-sm"
+                          variant="ghost"
+                          aria-label={`${label} actions`}
+                          className="pointer-fine:opacity-0 pointer-fine:group-focus-within/model:opacity-100 pointer-fine:group-hover/model:opacity-100 pointer-fine:aria-expanded:opacity-100"
+                          tooltip={`${label} actions`}
+                          disabled={disabled}
                         >
-                          <TrashIcon /> Remove model
-                        </DropdownMenu.Item>
-                      </DropdownMenu.Content>
-                    </DropdownMenu>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-2 py-1">
-                <Txt as="span" variant="caption" className="min-w-0 wrap-break-word">
-                  {formatModelName(entry.modelId)}
-                </Txt>
-                <Txt as="span" variant="caption" tone="muted">
-                  {THINKING_LEVEL_LABELS[entry.thinkingLevel]}
-                </Txt>
-              </div>
-            )}
-          </PackStep>
-        );
-      })}
-      {onChange && entries.length < MODEL_PACK_MODELS_MAX && (
-        <PackStep add>
-          <ModelCombobox
-            models={models}
-            occupiedModelIds={occupiedIds}
-            value=""
-            onValueChange={modelId =>
-              modelId && onChange([...entries, { modelId, thinkingLevel: DEFAULT_THINKING_LEVEL }])
-            }
-            placeholder={addLabel}
-            aria-label={addLabel}
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-          />
-        </PackStep>
+                          <IconDotGrid1x3Horizontal />
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item disabled={index === 0} onClick={() => move(index - 1)}>
+                            <IconArrowUp /> Move up
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item disabled={index === entries.length - 1} onClick={() => move(index + 1)}>
+                            <IconArrowDown /> Move down
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            variant="destructive"
+                            onClick={() => onChange(entries.filter((_, at) => at !== index))}
+                          >
+                            <TrashIcon /> Remove model
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-label flex min-w-0 items-center gap-1.5 px-3 py-1">
+                    <span className="sr-only">{label}: </span>
+                    <ModelPackEntryLabel entry={entry} renderProviderIcon={renderProviderIcon} />
+                    <span className="sr-only">, thinking: {THINKING_LEVEL_LABELS[entry.thinkingLevel]}</span>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ol>
       )}
-    </ol>
-  );
-}
-
-function PackStep({ add, children }: { add?: boolean; children: ReactNode }) {
-  return (
-    <li className="group/step grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-x-1">
-      <span aria-hidden="true" className="flex flex-col items-center self-stretch">
-        <span className="bg-border-strong h-2.5 w-px shrink-0 group-first/step:invisible" />
-        {add ? (
-          <IconPlusMedium className="text-muted-foreground size-icon-sm -mt-1 shrink-0" />
-        ) : (
-          <span className="bg-muted-foreground size-2 shrink-0 rounded-full" />
-        )}
-        <span className="bg-border-strong w-px flex-1 group-last/step:invisible" />
-      </span>
-      <div className="min-w-0">{children}</div>
-    </li>
+      {onChange && entries.length < MODEL_PACK_MODELS_MAX && (
+        <ModelPackModelPicker
+          label={addLabel}
+          models={models}
+          occupiedIds={occupiedIds}
+          onChange={entry => onChange([...entries, entry])}
+          disabled={disabled}
+        />
+      )}
+    </div>
   );
 }

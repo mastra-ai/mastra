@@ -10,11 +10,7 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import {
-  applyFactoryDefaultModelToSessions,
-  fetchFactoryProject,
-  updateFactoryProject,
-} from '../ui/domains/workspaces/services/github';
+import { fetchFactoryProject, updateFactoryProject } from '../ui/domains/workspaces/services/github';
 import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
 
 /**
@@ -71,11 +67,4 @@ export function usePendingFactoryModelScope(factoryProjectId: string | undefined
     filters: { mutationKey: modelScopeMutationKey(factoryProjectId), status: 'pending' },
     select: mutation => mutation.state.variables as FactoryModelScope,
   }).at(-1);
-}
-
-export function useApplyFactoryDefaultModelMutation(factoryProjectId: string) {
-  const { baseUrl } = useApiConfig();
-  return useMutation({
-    mutationFn: () => applyFactoryDefaultModelToSessions(baseUrl, factoryProjectId),
-  });
 }

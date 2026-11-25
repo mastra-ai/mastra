@@ -181,7 +181,7 @@ describe('Composer on a lazy user-session draft', () => {
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}/model`, () =>
+      http.put(`${TEST_BASE_URL}/web/config/session-model`, () =>
         HttpResponse.json({ error: 'Model unavailable' }, { status: 500 }),
       ),
     );
