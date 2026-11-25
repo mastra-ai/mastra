@@ -156,29 +156,11 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     'quota',
   ],
   [
-    'Anthropic ramp limit on 429',
-    apiError(429, 'Your organization’s usage is ramping up too quickly. Please slow down.', undefined, {
-      type: 'error',
-      error: { type: 'rate_limit_error', details: { error_code: 'ramp_limit_exceeded' } },
-    }),
-    'rate_limited',
-  ],
-  [
     'OpenAI organization_usage_limit_exceeded on 429',
     apiError(429, 'Your organization has reached its budget for this billing period.', undefined, {
       error: { code: 'organization_usage_limit_exceeded', type: 'invalid_request_error' },
     }),
     'quota',
-  ],
-  [
-    'Gemini free-tier per-minute quota on 429 with a retry hint',
-    apiError(
-      429,
-      'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 15, model: gemini-2.0-flash\nPlease retry in 41.97s.',
-      undefined,
-      { error: { code: 429, status: 'RESOURCE_EXHAUSTED' } },
-    ),
-    'rate_limited',
   ],
   [
     'Gemini free-tier per-day quota on 429 with a short retry hint',
@@ -199,11 +181,6 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
         },
       }),
     ),
-    'quota',
-  ],
-  [
-    'usage cap whose retry hint is a week away',
-    { name: 'AI_APICallError', message: 'Usage limit reached. Please retry in 10080 minutes.' },
     'quota',
   ],
   ['402', apiError(402, 'Payment Required'), 'quota'],

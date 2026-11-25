@@ -101,8 +101,10 @@ async function startSession(initialRoute?: readonly ModelFallback[]) {
   expect(threadId).toBeTruthy();
   const errors: string[] = [];
   const pendingMarkers: unknown[] = [];
+  const infos: string[] = [];
   session.subscribe(event => {
     if (event.type === 'error') errors.push(event.error.message);
+    if (event.type === 'info') infos.push(event.message);
     if (event.type === 'state_changed' && event.changedKeys.includes(MODEL_FALLBACK_STATE_KEY)) {
       pendingMarkers.push(event.state[MODEL_FALLBACK_STATE_KEY]);
     }
@@ -128,14 +130,14 @@ async function startSession(initialRoute?: readonly ModelFallback[]) {
   const setRoute = (next: readonly ModelFallback[]) => {
     route = next;
   };
-  return { session, send, savedHops, lastReply, errors, pendingMarkers, setRoute };
+  return { session, send, savedHops, lastReply, errors, infos, pendingMarkers, setRoute };
 }
 
 describe('a Factory session whose model is rate-limited, with a host fallback configured', () => {
   it('finishes the turn on the fallback, records why, and starts the next turn on the route primary', async () => {
     mock.on({ model: /claude/ }, ANTHROPIC_RATE_LIMIT);
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, lastReply, errors, pendingMarkers } = await startSession([
+    const { send, savedHops, lastReply, errors, infos, pendingMarkers } = await startSession([
       { modelId: PRIMARY },
       { modelId: FALLBACK },
     ]);
@@ -156,6 +158,7 @@ describe('a Factory session whose model is rate-limited, with a host fallback co
       }),
     ]);
     expect(pendingMarkers).toEqual([]);
+    expect(infos).toEqual([]);
 
     mock.clearFixtures();
     mock.clearRequests();
@@ -343,8 +346,8 @@ describe('a Factory session whose first fallback has no tenant credential', () =
   });
 });
 
-describe('a Factory session whose model rejects the request', () => {
-  it('ends the turn with the provider error without trying the fallback', async () => {
+describe('a Factory session whose prompt is too long for its first model', () => {
+  it('hands the turn to the fallback and records the context overflow', async () => {
     mock.on(
       { model: /claude/ },
       {
@@ -353,15 +356,13 @@ describe('a Factory session whose model rejects the request', () => {
       },
     );
     mock.on({ model: /gpt/ }, { content: 'Reviewed on the fallback' });
-    const { send, savedHops, errors } = await startSession([{ modelId: PRIMARY }, { modelId: FALLBACK }]);
+    const { send, savedHops, lastReply, errors } = await startSession([{ modelId: PRIMARY }, { modelId: FALLBACK }]);
 
     await send('Review the diff.');
 
-    expect(errors).toEqual(['prompt is too long: 250000 tokens > 200000 maximum']);
-    expect(await savedHops()).toEqual([]);
-    expect(new Set(mock.getRequests().map(request => `${request.path} ${request.response.status}`))).toEqual(
-      new Set(['/v1/messages 400']),
-    );
+    expect(errors).toEqual([]);
+    expect(await lastReply()).toBe('Reviewed on the fallback');
+    expect(await savedHops()).toMatchObject([{ to: { entryId: FALLBACK }, failure: { kind: 'context_overflow' } }]);
   });
 });
 
@@ -403,20 +404,5 @@ describe('a session whose host configures no fallbacks', () => {
 
     expect(errors).toEqual(['Rate limited']);
     expect(await savedHops()).toEqual([]);
-  });
-});
-
-describe('a Factory session that still holds a model pack pinned to another account', () => {
-  it('answers with the tenant key when the host configures no fallbacks', async () => {
-    mock.on({ model: /claude/ }, { content: 'Answered with the tenant key' });
-    const { session, send, lastReply, errors } = await startSession([]);
-    await session.state.set({
-      modelRoute: { entries: [{ id: 'pinned', label: 'Pinned', modelId: PRIMARY, accountId: 'stale-account' }] },
-    });
-
-    await send('Review the diff.');
-
-    expect(errors).toEqual([]);
-    expect(await lastReply()).toBe('Answered with the tenant key');
   });
 });

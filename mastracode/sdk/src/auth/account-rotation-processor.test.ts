@@ -247,10 +247,10 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(apiError(402))).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
   });
 
-  it('falls back past a model the provider no longer serves without touching the account pool', () => {
+  it('never rotates accounts on a 404, whether or not the model is gone', () => {
     expect(
       classifyRotationError(apiError(404, { message: 'model_not_found: The model `claude-retired` does not exist' })),
-    ).toEqual({ kind: 'model-missing' });
+    ).toEqual({ kind: 'never' });
     expect(classifyRotationError(apiError(404, { message: 'Not Found' }))).toEqual({ kind: 'never' });
   });
 
@@ -1148,7 +1148,7 @@ describe('model-route fallback parts', () => {
     });
   });
 
-  it('vetoes the route fallback for a never-rotate error while a route fallback remains', async () => {
+  it('moves to the next model, announced, when the provider rejects the request', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({
       modelId: 'anthropic/claude-fable-5',
@@ -1160,11 +1160,17 @@ describe('model-route fallback parts', () => {
     const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
-    expect(await processor.processAPIError(args as never)).toEqual({ retry: false, fallback: false });
-    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'anthropic', label: 'Anthropic' },
+        to: { entryId: 'openai', label: 'OpenAI' },
+      }),
+    });
   });
 
-  it('does not hop on a Codex Fast rejection when the route uses the canonical ID', async () => {
+  it('finds the route entry of a Codex Fast model by its canonical ID', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({
       modelId: 'openai/gpt-6.2-sol:fast',
@@ -1176,8 +1182,14 @@ describe('model-route fallback parts', () => {
     const args = makeArgs({ error: apiError(400), requestContext: route.requestContext });
     const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
 
-    expect(await processor.processAPIError(args as never)).toEqual({ retry: false, fallback: false });
-    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'openai', label: 'OpenAI' },
+        to: { entryId: 'anthropic', label: 'Anthropic' },
+      }),
+    });
   });
 
   it('returns retry false when no route fallback remains', async () => {

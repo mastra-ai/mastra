@@ -52,7 +52,6 @@ import type {
   ComputeStateSignalResult,
   ErrorProcessorOrWorkflow,
   OutputResult,
-  ProcessAPIErrorResult,
   ProcessInputStepResult,
   Processor,
   ProcessorMessageResult,
@@ -2827,7 +2826,7 @@ export class ProcessorRunner {
    * Called when an LLM API call fails with a non-retryable error.
    * Iterates through both input and output processors.
    *
-   * @returns whether to retry the LLM call, and `fallback: false` when a processor vetoed fallback models
+   * @returns { retry: boolean } indicating whether to retry the LLM call
    */
   async runProcessAPIError(
     args: {
@@ -2843,11 +2842,9 @@ export class ProcessorRunner {
       abortSignal?: AbortSignal;
       rotateResponseMessageId?: () => string;
     } & Partial<ObservabilityContext>,
-  ): Promise<ProcessAPIErrorResult> {
+  ): Promise<{ retry: boolean }> {
     const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
     const observabilityContext = resolveObservabilityContext(args);
-    let fallbackVetoed = false;
-    const verdict = (retry: boolean): ProcessAPIErrorResult => ({ retry, ...(fallbackVetoed && { fallback: false }) });
 
     const allProcessors: ProcessorOrWorkflow[] = [
       ...this.inputProcessors,
@@ -2947,9 +2944,7 @@ export class ProcessorRunner {
         const systemMessagesAfter = messageList.getAllSystemMessages();
         const output: Record<string, unknown> = {
           retry: result?.retry ?? false,
-          ...(result?.fallback === false && { fallback: false }),
         };
-        if (result?.fallback === false) fallbackVetoed = true;
 
         if (!areProcessorMessageArraysEqual(processableMessages, messagesAfter)) {
           output.messages = messagesAfter;
@@ -2968,7 +2963,9 @@ export class ProcessorRunner {
           attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
         });
 
-        if (result?.retry) return verdict(true);
+        if (result?.retry) {
+          return { retry: true };
+        }
       } catch (processorError) {
         // Stop recording on error
         messageList.stopRecording();
@@ -2998,7 +2995,7 @@ export class ProcessorRunner {
       }
     }
 
-    return verdict(false);
+    return { retry: false };
   }
 
   static applyMessagesToMessageList(

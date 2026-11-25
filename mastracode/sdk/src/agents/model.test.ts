@@ -433,7 +433,7 @@ describe('getDynamicModel model route', () => {
         at: '2026-10-05T00:00:00.000Z',
       },
     });
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [
+    setHostModelRoute(request.requestContext, [
       { modelId: 'anthropic/claude-fable-5' },
       { modelId: 'openai/gpt-5.6-sol' },
     ]);
@@ -458,7 +458,7 @@ describe('getDynamicModel model route', () => {
         at: '2026-10-05T00:00:00.000Z',
       },
     });
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', []);
+    setHostModelRoute(request.requestContext, []);
 
     const model = getDynamicModel(request);
 
@@ -468,7 +468,7 @@ describe('getDynamicModel model route', () => {
 
   it("runs a host route's first model instead of the session model", () => {
     const request = requestWithSession('anthropic/claude-fable-5');
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [
+    setHostModelRoute(request.requestContext, [
       { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
       { modelId: 'anthropic/claude-fable-5' },
     ]);
