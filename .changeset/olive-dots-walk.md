@@ -24,7 +24,7 @@ Added connection checks, an auth scheme and custom headers for custom OpenAI-com
 - `headers` is the full list. A header is secret unless it is sent with `secret: false`, and secret values are never returned. On an edit, leave out `headers` to keep the saved list, or send a header without `value` to keep its saved value.
 - `check: true` calls `GET {url}/models` first and saves only when the endpoint lists its models. Otherwise the response is 422 `custom_endpoint_check_failed` with the upstream `failure`, and nothing is saved.
 
-Each provider in `GET /web/config/custom-providers` now has `authScheme`, `headers` (with values for plain headers only) and `lastCheck`. `lastCheck` is absent until a connection test has run, and an edit that changes the URL, key, auth scheme or headers without `check: true` clears it. It records the connection test only, never a test message.
+Each provider in `GET /web/config/custom-providers` now has `authScheme`, `headers` (with values for plain headers only) and `lastCheck`. `lastCheck` is absent until a connection test has run, and an edit that changes the URL, key, auth scheme or headers without `check: true` clears it. A save with `check: true` that passes stores a fresh `lastCheck`. It records the connection test only, never a test message.
 
 **New route `POST /web/config/custom-providers/check`**
 
