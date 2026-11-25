@@ -181,6 +181,101 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     },
   );
 
+  const historyOf = (messages: MastraDBMessage[], hasMore = false) => ({
+    type: 'thread-history',
+    runId: '',
+    from: 'AGENT',
+    payload: { messages, hasMore, activeRunId: null },
+  });
+
+  it('keeps the first history page of a page that asks for one, when the catch-up page no longer holds it', async () => {
+    const threads = givenThreadStreams();
+    const page = renderHookWithProviders(() =>
+      useChat({
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        enableThreadSignals: true,
+        withInitialHistory: { perPage: 2 },
+      }),
+    );
+    unmount = page.unmount;
+    await waitFor(() => expect(threads.streams).toHaveLength(1));
+    await threads.send(0, historyOf([question, stored('a1', 'assistant', 'Half, then whole.')]));
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.']));
+
+    act(() => threads.streams[0]!.controller.error(new TypeError('network error')));
+    await waitFor(() => expect(threads.streams).toHaveLength(2), { timeout: 3000 });
+    await threads.send(
+      1,
+      historyOf([stored('u2', 'user', 'And then?'), stored('a2', 'assistant', 'Then, the end.')], true),
+    );
+
+    await waitFor(() =>
+      expect(texts(page.result.current.messages)).toEqual([
+        'Tell me more',
+        'Half, then whole.',
+        'And then?',
+        'Then, the end.',
+      ]),
+    );
+    // Still the first page's: the page loads older ones from there.
+    expect(page.result.current.initialHistoryPagination).toEqual({ hasMore: false });
+    expect(threads.streams[1]!.body).toMatchObject({ withInitialHistory: { perPage: 2 } });
+  });
+
+  const task = (id: string, content: string) => ({ id, content, status: 'in_progress', activeForm: content });
+
+  it.each([{ withInitialHistory: false }, { withInitialHistory: true }])(
+    'shows the task list stored while the stream was down (withInitialHistory: $withInitialHistory)',
+    async ({ withInitialHistory }) => {
+      const threads = givenThreadStreams();
+      const page = renderHookWithProviders(() =>
+        useChat({
+          agentId: 'agent-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+          initialMessages: opened,
+          withInitialHistory,
+        }),
+      );
+      unmount = page.unmount;
+      await waitFor(() => expect(threads.streams).toHaveLength(1));
+      if (withInitialHistory) await threads.send(0, historyOf([question]));
+      await threads.send(
+        0,
+        chunk('start', { messageId: 'a1' }),
+        chunk('tool-result', { toolCallId: 'call-1', toolName: 'task_write', result: { tasks: [task('t1', 'Plan')] } }),
+      );
+      await waitFor(() => expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan']));
+
+      act(() => threads.streams[0]!.controller.error(new TypeError('network error')));
+      await waitFor(() => expect(threads.streams).toHaveLength(2), { timeout: 3000 });
+      const written: MastraDBMessage = {
+        ...stored('a1', 'assistant', ''),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'call-2',
+                toolName: 'task_write',
+                args: {},
+                result: { tasks: [task('t1', 'Plan'), task('t2', 'Cook')] },
+              },
+            },
+          ],
+        },
+      };
+      await threads.send(1, historyOf([question, written]));
+
+      await waitFor(() => expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan', 'Cook']));
+    },
+  );
+
   it('follows the thread no more once the page leaves', async () => {
     const threads = givenThreadStreams();
     const page = renderHookWithProviders(() =>

@@ -73,8 +73,12 @@ export const catchUpWithHistory = ({
     const clientMessageId = liveClientMessageId(message);
     return historyIds.has(message.id) || (clientMessageId !== undefined && storedClientMessageIds.has(clientMessageId));
   };
+  // Still on its way: the server has not stored it yet, so it comes after all it has stored.
+  const isOnItsWay = (message: MastraDBMessage) => liveClientMessageId(message) !== undefined && !isStored(message);
   const firstStored = conversation.findIndex(isStored);
-  const older = firstStored === -1 ? conversation : conversation.slice(0, firstStored);
+  const older = (firstStored === -1 ? conversation : conversation.slice(0, firstStored)).filter(
+    message => !isOnItsWay(message),
+  );
   const caughtUp = firstStored === -1 ? [] : conversation.slice(firstStored);
   const liveClientMessageIds = new Set(caughtUp.flatMap(message => liveClientMessageId(message) ?? []));
   const liveById = new Map(caughtUp.map(message => [message.id, message]));
@@ -95,7 +99,7 @@ export const catchUpWithHistory = ({
       },
     };
   });
-  const onTheirWay = caughtUp.filter(message => liveClientMessageId(message) !== undefined && !isStored(message));
+  const onTheirWay = conversation.filter(isOnItsWay);
 
   return [...older, ...stored, ...onTheirWay];
 };

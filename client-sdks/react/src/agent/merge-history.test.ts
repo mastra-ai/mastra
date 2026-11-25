@@ -65,6 +65,21 @@ describe('catching a conversation up with the stored history', () => {
     expect(caughtUp[1]?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('client-set-1');
   });
 
+  it('keeps a message still on its way after the history, when the page had none of the history', () => {
+    const conversation = [
+      message('a0', 'assistant', 'Earlier'),
+      message('client-set-1', 'user', 'On its way', { [CLIENT_MESSAGE_ID_KEY]: 'client-set-1', status: 'pending' }),
+    ];
+    const history = [message('u2', 'user', 'Later'), message('a2', 'assistant', 'Much later')];
+
+    expect(texts(catchUpWithHistory({ conversation, history }))).toEqual([
+      'a0:Earlier',
+      'u2:Later',
+      'a2:Much later',
+      'client-set-1:On its way',
+    ]);
+  });
+
   it('shows the stored history whole when the page had none of it', () => {
     const conversation = [message('a1', 'assistant', 'Half')];
     const history = [message('u2', 'user', 'Later'), message('a2', 'assistant', 'Much later')];

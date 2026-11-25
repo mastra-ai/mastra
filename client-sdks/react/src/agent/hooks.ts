@@ -22,6 +22,7 @@ import {
   extractLatestTasksFromMessages,
   extractTasksFromSignalChunk,
   extractTasksFromToolResultChunk,
+  findLatestTasksInMessages,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { catchUpWithHistory, mergeHistoryIntoConversation } from './merge-history';
@@ -711,18 +712,30 @@ export const useChat = ({
                       _currentRunId.current = activeRunId;
                       setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
                     }
-                    setSubscriptionPagination(
-                      typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
-                    );
+                    // `initialHistoryPagination` describes the first page, the one the page loads older ones from.
+                    if (!catchingUp) {
+                      setSubscriptionPagination(
+                        typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
+                      );
+                    }
                   }
                   // Merge history into `messages` now, as a queued update, so the
                   // live chunks right behind it accumulate onto the stored parts.
                   const history = resolveInitialMessages(chunk.payload.messages);
+                  if (catchingUp) {
+                    // Applied once, here: the page's hydration stays the first history's, which merging this one
+                    // again would undo. Its task list is the newest the page can know of, as live results follow it.
+                    setMessages(current => catchUpWithHistory({ conversation: current, history }));
+                    const storedTasks = findLatestTasksInMessages(history);
+                    if (storedTasks) {
+                      liveTasks.current = storedTasks;
+                      setTasks(storedTasks);
+                    }
+                    return;
+                  }
                   const previousHistory = lastHydration.current?.formattedMessages ?? [];
                   setMessages(current =>
-                    catchingUp
-                      ? catchUpWithHistory({ conversation: current, history })
-                      : mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
+                    mergeHistoryIntoConversation({ conversation: current, history, previousHistory }),
                   );
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
