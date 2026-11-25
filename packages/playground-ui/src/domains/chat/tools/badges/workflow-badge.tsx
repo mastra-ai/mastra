@@ -178,7 +178,7 @@ const WorkflowBadgeStepDetail = ({ requestContext }: { requestContext: Record<st
   const { stepDetail } = useWorkflowStepDetail();
   if (!stepDetail) return null;
   return (
-    <div className="mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md border border-border bg-background">
+    <div className="mt-2 flex max-h-[60vh] flex-col overflow-hidden rounded-md bg-nested">
       <WorkflowStepDetailContent requestContext={requestContext} />
     </div>
   );

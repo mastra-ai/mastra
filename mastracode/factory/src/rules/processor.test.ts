@@ -3,13 +3,17 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
 import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, finishQueuedRunsForTests } from '../storage/test-utils.js';
+import { setFactoryToolsRole } from './binding-context.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -515,7 +519,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         // The tool's result never moves the card by itself.
@@ -587,7 +591,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       // A person sends the card to Building and back; the old result is read again from the thread.
@@ -634,7 +638,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -666,7 +670,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [approved()]));
         expect(await stageOf(storage, prepared.item.id)).toEqual([board.stage]);
@@ -707,7 +711,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         await processor.processInputStep(inputArgs(requestContext(), [c.message]));
         const card = await storage.get({ orgId: 'org-1', id: prepared.item.id });
@@ -794,7 +798,7 @@ describe('FactoryPhaseStateProcessor', () => {
           configVersion: 'rules-v1',
           boards,
           storage,
-          transitionService,
+          boardEngine: new DispatcherBoardEngine({ transitionService }),
         });
         return { storage, prepared, transitionService, processor };
       };
@@ -834,7 +838,7 @@ describe('FactoryPhaseStateProcessor', () => {
         configVersion: 'rules-v1',
         boards,
         storage,
-        transitionService,
+        boardEngine: new DispatcherBoardEngine({ transitionService }),
       });
       await processor.processInputStep(inputArgs(requestContext(), [approved()]));
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
@@ -847,7 +851,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
 
     await processor.processInputStep(
       inputArgs(requestContext(), [
@@ -874,7 +883,12 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'plan');
     const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
     const update = storage.update.bind(storage);
     let raced = false;
     vi.spyOn(storage, 'update').mockImplementation(async args => {
@@ -982,7 +996,7 @@ describe('FactoryPhaseStateProcessor', () => {
       configVersion: 'rules-v1',
       storage,
       boards,
-      transitionService,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
       messageReader: reader as never,
     });
 
@@ -1019,6 +1033,75 @@ describe('FactoryPhaseStateProcessor', () => {
         }),
       }),
     ]);
+  });
+
+  it("keeps a tool-result move the host's board engine refused undone when the dispatcher replays it", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        finish: {
+          onResult: () => ({ type: 'transition' as const, idempotencyKey: 'finish', board: 'custom', stage: 'done' }),
+        },
+      },
+    });
+    const boards = boardRegistryOf([board]);
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'finish' })], hasMore: false })),
+    };
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const defaultEngine = new DispatcherBoardEngine({ transitionService });
+    const asked: string[] = [];
+    // A host engine that refuses a move an agent's tool result asks for, but would take the same move from a rule.
+    const boardEngine: FactoryBoardEngine = {
+      requestMove: async request => {
+        asked.push(request.cause ?? 'none');
+        if (request.cause !== 'tool_result_rule') return defaultEngine.requestMove(request);
+        return {
+          status: 'rejected',
+          transitionId: 'host-refusal',
+          itemId: request.workItemId,
+          code: 'forbidden',
+          reason: 'Agents cannot close cards on this host.',
+        };
+      },
+      requestPlacement: placement => defaultEngine.requestPlacement(placement),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      boardEngine,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { listActiveThreadRuns: () => [] } as never,
+      storage,
+      boards,
+      transitionService,
+      boardEngine,
+      ownerId: 'replay-worker',
+    });
+    await dispatcher.runOnce(new Date(Date.now() + 60_000));
+
+    expect(asked).toEqual(['tool_result_rule']);
+    expect((await storage.get({ orgId: 'org-1', id: prepared.item.id }))?.stages).toEqual(['building']);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(entry => entry.idempotencyKey === 'finish'),
+    ).toMatchObject({
+      status: 'failed',
+      lastError: expect.stringContaining('Agents cannot close cards on this host.'),
+    });
   });
 
   it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {
@@ -1269,7 +1352,12 @@ describe('FactoryPhaseStateProcessor', () => {
       },
     });
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards,
+      storage,
+      boardEngine: new DispatcherBoardEngine({ transitionService }),
+    });
     const context = requestContext();
 
     await processor.processInputStep(
@@ -1553,6 +1641,46 @@ describe('FactoryPhaseStateProcessor', () => {
     );
   });
 
+  it('tells a request whose binding rotated mid-run that its part is done, keeping the role its tools have', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const building = await prepare(storage, 'work', 'issue', { id: 'work', stage: 'execute' });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: new Map([['work', selfReviewWorkBoard]]),
+      storage,
+    });
+    // The builder's request built its tools under the work binding.
+    const builderRequest = requestContext();
+    setFactoryToolsRole(builderRequest, 'work');
+
+    // The builder moves the card to Self-review: the thread's binding rotates to review mid-request.
+    await storage.update({ orgId: 'org-1', id: building.item.id, userId: 'user-1', patch: { stages: ['review'] } });
+    const reviewing = await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: { id: building.item.id },
+      role: 'review',
+      session: { sessionId: 'resource-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-review',
+      kickoffMessage: null,
+    });
+    expect(reviewing.binding.id).not.toBe(building.binding.id);
+    expect(reviewing.binding.threadId).toBe(building.binding.threadId);
+
+    const stillBuilding = await processor.computeStateSignal(stateArgs(builderRequest));
+    expect(stillBuilding?.contents).toContain('Role: work');
+    expect(stillBuilding?.contents).toContain('runs in the review context in another session. Your part is done');
+
+    // The self-review kickoff starts a fresh request with review tools.
+    const reviewRequest = requestContext();
+    setFactoryToolsRole(reviewRequest, 'review');
+    const selfReview = await processor.computeStateSignal(stateArgs(reviewRequest));
+    expect(selfReview?.contents).toContain('Role: review');
+    expect(selfReview?.contents).not.toContain('Your part is done');
+  });
+
   it('keeps a plan session that still works a Planning card planned before Planning ran in work', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan');
@@ -1777,7 +1905,11 @@ describe('FactoryPhaseStateProcessor', () => {
       patch: { parentWorkItemId: epic.item.id },
     });
     await card('Unrelated work', 'github-issue:11');
+    // Children created in the same millisecond tie on creation time; space them so "newest first" is decided.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
+    onTestFinished(() => void vi.useRealTimers());
     await card('Older child', 'github-issue:12', prepared.item.id);
+    vi.setSystemTime(Date.now() + 1_000);
     await card('Newer child', 'github-issue:13', prepared.item.id);
     const listShared = vi.spyOn(storage, 'listShared');
 

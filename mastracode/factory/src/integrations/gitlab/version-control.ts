@@ -471,6 +471,13 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         throw new GitLabApiError('GitLab installation metadata must include a valid connection.', 400);
       }
       const context = await deps.contextForConnection(requestedConnection);
+      // Re-registering must not move repositories already linked on one
+      // instance over to another; the same-instance checks rely on this host.
+      const existing = await sourceControlStorage().installations.findByExternalId({
+        orgId,
+        externalId: installation.externalId,
+      });
+      assertSameInstance(existing?.providerMetadata.host, context.host);
       return sourceControlStorage().installations.upsert({
         orgId,
         connectedByUserId: userId,
@@ -518,6 +525,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         connection,
         typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
       );
+      assertSameInstance(installation.providerMetadata.host, context.host);
       // The API uses GitLab's immutable numeric project ID because Platform's
       // proxy normalizes encoded path slashes; retain the slug for browser URLs.
       return { connection: context.connection, sourceId: `${repository.externalId}:${repository.slug}` };
@@ -536,6 +544,7 @@ export function buildGitLabVersionControl(deps: GitLabVersionControlDependencies
         connection,
         typeof installation.providerMetadata.host === 'string' ? installation.providerMetadata.host : undefined,
       );
+      assertSameInstance(installation.providerMetadata.host, context.host);
       if (!context.repositoryAccessToken) {
         throw notSupported('This GitLab connection does not expose credentials for repository cloning.');
       }
@@ -912,6 +921,15 @@ function parseConnection(value: unknown): IntegrationConnection | null {
     return { type: 'app-installation', installationId: Number(connection.installationId) };
   }
   return null;
+}
+
+/** Repositories belong to the instance they were linked on; refuse to reach or re-register them through a connection that now points elsewhere. */
+function assertSameInstance(linkedHost: unknown, connectionHost: string): void {
+  if (typeof linkedHost !== 'string' || normalizeHost(linkedHost) === normalizeHost(connectionHost)) return;
+  throw new GitLabApiError(
+    `This repository was linked on ${normalizeHost(linkedHost)}, but its GitLab connection now points at ${normalizeHost(connectionHost)}. Link it again from the new instance.`,
+    409,
+  );
 }
 
 function normalizeHost(value: string): string {

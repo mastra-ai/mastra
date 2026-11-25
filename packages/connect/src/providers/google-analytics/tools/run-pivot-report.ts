@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const runPivotReportInputSchema = z.object({
-  property: z.string().describe('Google Analytics property numeric ID. Example: 535258304'),
+  property: z.string().describe('GA4 property ID. Example: "properties/123456789" or "123456789"'),
   dimensions: z.array(z.record(z.string(), z.unknown())).optional(),
   metrics: z.array(z.record(z.string(), z.unknown())).optional(),
   dateRanges: z.array(z.record(z.string(), z.unknown())).optional(),
@@ -44,7 +44,7 @@ export function runPivotReportTool(proxy: PlatformProxy) {
 
       const response = await platformProxy.post({
         // https://developers.google.com/analytics/devguides/reporting/data/v1/rest/v1beta/properties/runPivotReport
-        endpoint: `/v1beta/properties/${encodeURIComponent(property)}:runPivotReport`,
+        endpoint: `/v1beta/properties/${encodeURIComponent(property.replace(/^properties\//, ''))}:runPivotReport`,
         data: requestBody,
         baseUrlOverride: 'https://analyticsdata.googleapis.com',
         retries: 3,

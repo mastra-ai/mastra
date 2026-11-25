@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { CONTINUATION_STOP_CAUSES } from '../../../../loop/shared/continuation-core';
 import type { SpanTermination } from '../../../../observability/types/outcome';
+import type { ProviderMetadata } from '../../../../stream/types';
 
 /**
  * Shared Zod schemas for durable agentic workflows.
@@ -125,9 +126,15 @@ export const accumulatedUsageSchema = z.object({
 }) as z.ZodType<AccumulatedUsage>;
 
 /**
- * Provider id and serving model of one response.
+ * One response: the provider's id and model for it, the configured model that
+ * answered, and the cost the provider reported for it.
  */
-export const responseRecordSchema = z.object({ id: z.string().optional(), modelId: z.string().optional() });
+export const responseRecordSchema = z.object({
+  id: z.string().optional(),
+  modelId: z.string().optional(),
+  servedBy: z.object({ provider: z.string(), modelId: z.string() }).optional(),
+  reportedCost: z.custom<ProviderMetadata>().optional(),
+});
 
 export type ResponseRecord = z.infer<typeof responseRecordSchema>;
 
@@ -145,6 +152,7 @@ export const durableAgenticOutputSchema = z.object({
   }),
   state: z.any(),
   tracingTermination: z.custom<SpanTermination>().optional(),
+  stopCause: z.enum(CONTINUATION_STOP_CAUSES).optional(),
 });
 
 /**
@@ -204,6 +212,12 @@ export const baseIterationStateSchema = z.object({
   // Identifies states whose usage accumulator preserves unknown counters. Older
   // states have no marker and may contain partial totals presented as complete.
   usageAggregationVersion: z.literal(1).optional(),
+  // Run-total usage that MODEL_GENERATION spans ended by a suspension already recorded; the
+  // segment that finishes the run reports the rest. Absent on runs that started before this
+  // field existed, whose final step reports the whole run as before.
+  generationReportedUsage: accumulatedUsageSchema.optional(),
+  // How many of the run's steps that usage covers.
+  generationReportedSteps: z.number().optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
   // Step-finish waits here until the loop's continuation policy resolves.
@@ -238,6 +252,8 @@ export const baseIterationStateSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Provider id and model of the latest response, carried the same way
   lastResponse: responseRecordSchema.optional(),
+  // The cost each step's provider reported, one entry per step record
+  reportedCosts: z.array(z.custom<ProviderMetadata>().nullable()).optional(),
   // How the run ended, as decided at the runtime boundary. Carried in the state so the
   // final step can end the root spans with the real outcome on a worker that never held
   // the deciding process's run-registry entry.

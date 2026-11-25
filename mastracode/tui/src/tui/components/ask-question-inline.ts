@@ -36,7 +36,7 @@ export type AskQuestionSelectionMode = 'single_select' | 'multi_select';
 
 export interface AskQuestionInlineOptions {
   question: string;
-  options?: Array<{ label: string; description?: string }>;
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>;
   /** Controls whether options are single- or multi-select. Defaults to single_select. */
   selectionMode?: AskQuestionSelectionMode;
   /** Format the text shown after an answer is selected. Defaults to `question → answer`. */
@@ -74,7 +74,7 @@ export class AskQuestionBorderedBox {
   private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
-  items: Array<{ label: string; description?: string }>;
+  items: Array<{ label: string; description?: string; recommended?: boolean }>;
   private answered = false;
   private cancelled = false;
   private selectedValue?: string;
@@ -89,7 +89,7 @@ export class AskQuestionBorderedBox {
   constructor(
     questionLines: string[],
     hintText: string,
-    items: Array<{ label: string; description?: string }>,
+    items: Array<{ label: string; description?: string; recommended?: boolean }>,
     selectList?: WrappingSelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
@@ -278,7 +278,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    */
   static fromHistory(
     question: string,
-    options: Array<{ label: string; description?: string }> | undefined,
+    options: Array<{ label: string; description?: string; recommended?: boolean }> | undefined,
     answer: string,
     cancelled: boolean,
   ): AskQuestionInlineComponent {
@@ -387,7 +387,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     }
     if (Array.isArray(a.options)) {
       this.borderedBox.items = a.options.filter(
-        (o: unknown): o is { label: string; description?: string } =>
+        (o: unknown): o is { label: string; description?: string; recommended?: boolean } =>
           typeof o === 'object' && o !== null && typeof (o as any).label === 'string',
       );
     }
@@ -399,7 +399,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
    */
   activate(options: {
     question: string;
-    options?: Array<{ label: string; description?: string }>;
+    options?: Array<{ label: string; description?: string; recommended?: boolean }>;
     selectionMode?: AskQuestionSelectionMode;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
@@ -450,11 +450,14 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
       : '↑↓ to navigate · Enter to select · Esc to skip';
   }
 
-  private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
-    const items: SelectItem[] = opts.map(opt => ({
-      value: opt.label,
-      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
-    }));
+  private buildSelectMode(opts: Array<{ label: string; description?: string; recommended?: boolean }>): void {
+    const items: SelectItem[] = opts.map(opt => {
+      const label = opt.recommended ? `${opt.label}  ${theme.fg('accent', '(recommended)')}` : opt.label;
+      return {
+        value: opt.label,
+        label: opt.description ? `${label}  ${theme.fg('dim', opt.description)}` : label,
+      };
+    });
 
     // "Custom response..." only applies to single-select: it switches to free-text.
     // Multi-select toggles a fixed option set, so the escape hatch doesn't apply.

@@ -5,12 +5,14 @@ import type { IntegrationTools } from '../../base.js';
 
 // Factory's own source-control tools enforce repository scope and self-review; Connect's would bypass both.
 const SOURCE_CONTROL_PROVIDERS = ['github', 'gitlab'];
+// Self-hosted GitLab connections get the gitlab_* tools, so only their integration id differs.
+const SOURCE_CONTROL_INTEGRATION_IDS = [...SOURCE_CONTROL_PROVIDERS, 'gitlab-self-hosted'];
 const SOURCE_CONTROL_TOOL = new RegExp(`^(${SOURCE_CONTROL_PROVIDERS.join('|')})_`);
 const DESTRUCTIVE_TOOL = /delete|archive/i;
 const RESOLVE_TIMEOUT_MS = 15_000;
 
 export function offersSessionTools(integrationId: string): boolean {
-  return !SOURCE_CONTROL_PROVIDERS.includes(integrationId);
+  return !SOURCE_CONTROL_INTEGRATION_IDS.includes(integrationId);
 }
 
 /** Why Factory keeps a Connect tool from sessions by default, or `undefined` when sessions get it. */

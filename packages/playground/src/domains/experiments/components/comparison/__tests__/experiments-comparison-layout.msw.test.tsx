@@ -3,8 +3,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CompareMetricsMenu } from '../compare-metrics-menu';
-import { ExperimentsComparison } from '../experiments-comparison';
+import { StudioCompareMetricsMenu } from '../studio-compare-metrics-menu';
+import { StudioExperimentsComparison } from '../studio-experiments-comparison';
 import {
   BASELINE_ID,
   CHALLENGER_ID,
@@ -105,7 +105,7 @@ const useMetricsUsage = (release?: Promise<void>) => {
 const renderComparison = (contenderIds: string[] = [CONTENDER_ID]) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={contenderIds} />
+      <StudioExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={contenderIds} />
     </TestLinkProvider>,
     { router: true },
   );
@@ -643,8 +643,8 @@ describe('experiments comparison table', () => {
     const renderWithPicker = () =>
       renderWithProviders(
         <TestLinkProvider>
-          <CompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
-          <ExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioCompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioExperimentsComparison datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
         </TestLinkProvider>,
         { router: true },
       );
@@ -711,7 +711,7 @@ describe('experiments comparison table', () => {
     it('offers no cost or tokens entry in the metrics picker', async () => {
       renderWithProviders(
         <TestLinkProvider>
-          <CompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
+          <StudioCompareMetricsMenu datasetId={DATASET_ID} baselineId={BASELINE_ID} contenderIds={[CONTENDER_ID]} />
         </TestLinkProvider>,
         { router: true },
       );

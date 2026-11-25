@@ -17,7 +17,6 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
-  sourcemap: true,
   deps: {
     // json-schema-to-zod and zod-to-json-schema only expose a real default export in their ESM
     // builds; when externalized, the CJS output calls `require(...).default` which is undefined.

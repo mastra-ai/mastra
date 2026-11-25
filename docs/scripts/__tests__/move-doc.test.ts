@@ -216,8 +216,8 @@ export const OTHER_ROUTE = '/docs/auth/overview-extra'
 export const TEMPLATE_ROUTE = \`/docs/auth/overview\``,
   },
   {
-    path: 'src/learn/content/auth.mdx',
-    content: `# Learn auth
+    path: 'src/mastra-code/auth.mdx',
+    content: `# Mastra Code auth
 
 [Auth](/docs/auth/overview)
 [Auth website](https://mastra.ai/docs/auth/overview)`,
@@ -407,9 +407,9 @@ describe('move-doc Mastra integration tests', () => {
     expect(content).toContain("href: '/docs/authentication/guide#object-href'")
     expect(content).toContain('[auth-ref]: /docs/authentication/guide#ref')
 
-    const learnContent = await tempSetup.readFile('src/learn/content/auth.mdx')
-    expect(learnContent).toContain('[Auth](/docs/authentication/guide)')
-    expect(learnContent).toContain('[Auth website](https://mastra.ai/docs/authentication/guide)')
+    const mastraCodeContent = await tempSetup.readFile('src/mastra-code/auth.mdx')
+    expect(mastraCodeContent).toContain('[Auth](/docs/authentication/guide)')
+    expect(mastraCodeContent).toContain('[Auth website](https://mastra.ai/docs/authentication/guide)')
   })
 
   test('rewrites quoted routes in MDX props, sidebars, and JS/TS sources', async () => {

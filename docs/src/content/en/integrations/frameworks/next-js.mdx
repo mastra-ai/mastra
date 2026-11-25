@@ -136,8 +136,9 @@ import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '@/mastra'
 import { NextResponse } from 'next/server'
 
-const THREAD_ID = 'example-user-id'
-const RESOURCE_ID = 'weather-chat'
+const THREAD_ID = 'weather-chat'
+// Replace with the signed-in user's ID from your auth provider
+const RESOURCE_ID = 'example-user-id'
 
 export async function POST(req: Request) {
   const params = await req.json()
@@ -177,6 +178,8 @@ export async function GET() {
 ```
 
 The `POST` route accepts a prompt and streams the agent's response back in AI SDK format, while the `GET` route fetches message history from memory so the UI can be hydrated when the client reloads.
+
+The `THREAD_ID` identifies the conversation, and the `RESOURCE_ID` identifies the user who owns it. Both are constants here, so the app has a single shared conversation. In a real app, take the resource ID from your authentication, such as the signed-in user's ID, and create a thread ID per conversation. Don't use one resource ID for every user in production, or all users share the same memory. The `GET` route must use the same IDs as the `POST` route to load the right history.
 
 ### Create a chat page
 

@@ -30,17 +30,23 @@ jobs:
     steps:
       - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       # Before pnpm writes anything: what is written to a disk after its step is what it publishes.
       - name: pnpm store disk
         id: store
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           preset: pnpm-store
           publish: on-change
 
       - name: pnpm cache disk
         id: cache
-        uses: starslingdev/disks@v0
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
         with:
           name: pnpm-cache
           path: ~/.cache/pnpm

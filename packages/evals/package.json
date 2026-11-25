@@ -1,10 +1,11 @@
 {
   "name": "@mastra/evals",
-  "version": "1.10.12-alpha.0",
+  "version": "1.10.12",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

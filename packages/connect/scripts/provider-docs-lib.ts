@@ -161,9 +161,9 @@ function noteBlock(note: string | undefined): string {
   return note ? `:::note\n\n${note}\n\n:::\n\n` : '';
 }
 
-function admonitions(docs: ProviderDocs, mcp: boolean): string {
+function admonitions(docs: ProviderDocs): string {
   const warning = docs.warning ? `:::warning\n\n${docs.warning}\n\n:::\n\n` : '';
-  return warning + (mcp ? '' : noteBlock((docs as ToolProviderDocs).note));
+  return warning + noteBlock(docs.note);
 }
 
 function possessive(name: string): string {
@@ -185,7 +185,7 @@ export const ${camelCase(id)}Agent = new Agent({
   name: ${tsString(`${docs.name} agent`)},
   instructions: ${tsString(`You help people ${docs.summary} in ${docs.name}.`)},
   model: '${MODEL}',
-  tools: tools({ providers: ['${id}'] }),
+  tools: tools({ providers: ['${id}']${docs.requireApproval ? ', requireApproval: true' : ''} }),
 })
 \`\`\``;
 }
@@ -216,7 +216,7 @@ export function renderProviderPage(id: string, docs: ProviderDocs, meta: DocsMet
   const mcp = tools === undefined;
   const description = `Give Mastra agents ${docs.name} tools through Mastra Connect to ${docs.summary}.`;
   const usage = mcp ? mcpSummary(id, docs as McpProviderDocs) : toolsetSummary(id, docs, tools);
-  const note = admonitions(docs, mcp);
+  const note = admonitions(docs);
 
   return `---
 title: ${yamlString(`${docs.name} | ${docs.category}`)}
@@ -256,7 +256,7 @@ ${usage}
 export function renderPartial(id: string, docs: ProviderDocs, tools?: Tool[]): string {
   const mcp = tools === undefined;
   const usage = mcp ? mcpSummary(id, docs as McpProviderDocs) : toolsetSummary(id, docs, tools);
-  const note = admonitions(docs, mcp);
+  const note = admonitions(docs);
   const source = mcp ? ` from ${possessive(docs.name)} hosted Model Context Protocol (MCP) server` : '';
 
   return `${GENERATED_MARKER}

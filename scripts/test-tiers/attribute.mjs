@@ -52,14 +52,21 @@ export function candidateRange(commits, max = MAX_CANDIDATES) {
 /**
  * The next commit to test: the middle of the first unsettled file's range, run for every file
  * whose range holds it. `lo` is the index of the last commit seen passing (-1: the green commit),
- * `hi` of the first seen failing.
+ * `hi` of the first seen failing, `skipped` the commits in between that could not be built. When the
+ * middle was skipped, the untested commit nearest it (the later one on a tie) is tested instead.
  */
 export function nextBisectStep(states) {
-  const open = Object.entries(states).find(([, s]) => s.hi - s.lo > 1);
+  const untested = s => {
+    const mid = Math.floor((s.lo + s.hi) / 2);
+    const left = [];
+    for (let i = s.lo + 1; i < s.hi; i++) if (!s.skipped?.includes(i)) left.push(i);
+    return left.sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid) || b - a)[0];
+  };
+  const open = Object.values(states).find(s => untested(s) !== undefined);
   if (!open) return null;
-  const index = Math.floor((open[1].lo + open[1].hi) / 2);
+  const index = untested(open);
   const files = Object.entries(states)
-    .filter(([, s]) => s.lo < index && index < s.hi)
+    .filter(([, s]) => s.lo < index && index < s.hi && !s.skipped?.includes(index))
     .map(([file]) => file);
   return { index, files };
 }
@@ -81,15 +88,18 @@ export async function attribute({ files, good, commits, runFileAt, deadline = In
   const results = new Map();
   const settle = (file, result) => results.set(file, { file, ...result });
   const outOfTime = () => now() >= deadline;
-  const run = async (sha, list) => {
+  const run = async (sha, list, { skippable = false } = {}) => {
     if (outOfTime()) {
       for (const f of list) settle(f, { verdict: 'unconfirmed', reason: 'ran out of time' });
       return null;
     }
     const got = await runFileAt(sha, list);
     for (const f of list) {
-      if (got[f] !== 'pass' && got[f] !== 'fail')
-        settle(f, { verdict: 'unconfirmed', reason: `could not run the file at ${sha}` });
+      if (got[f] === 'pass' || got[f] === 'fail' || (skippable && got[f] === 'unbuildable')) continue;
+      settle(f, {
+        verdict: 'unconfirmed',
+        reason: got[f] === 'unbuildable' ? `could not build ${sha}` : `could not run the file at ${sha}`,
+      });
     }
     return got;
   };
@@ -106,31 +116,40 @@ export async function attribute({ files, good, commits, runFileAt, deadline = In
     for (const f of open) if (atGood && atGood[f] === 'fail') settle(f, { verdict: 'already-failing' });
   }
   const states = Object.fromEntries(
-    open.filter(f => !results.has(f)).map(f => [f, { lo: -1, hi: commits.length - 1, culprit: ['fail'] }]),
+    open.filter(f => !results.has(f)).map(f => [f, { lo: -1, hi: commits.length - 1, skipped: [], culprit: ['fail'] }]),
   );
 
+  // A merge that doesn't build is skipped, like `git bisect skip`: its neighbours are tested instead.
   for (let step = nextBisectStep(states); step; step = nextBisectStep(states)) {
-    const got = await run(shaAt(step.index), step.files);
+    const got = await run(shaAt(step.index), step.files, { skippable: true });
     for (const f of step.files) {
       if (results.has(f)) delete states[f];
+      else if (got[f] === 'unbuildable') states[f] = { ...states[f], skipped: [...states[f].skipped, step.index] };
       else if (got[f] === 'fail') states[f] = { ...states[f], hi: step.index, culprit: ['fail'] };
       else states[f] = { ...states[f], lo: step.index };
     }
   }
 
+  // The red end of each file's range is rerun to confirm it. With no unbuildable merge left inside
+  // the range it is the culprit; otherwise any merge from the first one after `lo` to `hi` may be.
   const byCulprit = Map.groupBy(Object.keys(states), f => states[f].hi);
   for (const [hi, list] of byCulprit) {
     const sha = shaAt(hi);
     const got = await run(sha, list);
     for (const f of list) {
       if (results.has(f)) continue;
+      const { lo, skipped } = states[f];
       const verdict = verdictFor({ culprit: [...states[f].culprit, got[f]], parent: ['pass'] });
-      settle(
-        f,
-        verdict === 'culprit'
-          ? { verdict, culprit: sha, parent: shaAt(hi - 1) }
-          : { verdict, reason: `passed when rerun at ${sha}` },
-      );
+      const inside = skipped.filter(i => lo < i && i < hi).sort((a, b) => a - b);
+      if (verdict !== 'culprit') settle(f, { verdict, reason: `passed when rerun at ${sha}` });
+      else if (!inside.length) settle(f, { verdict, culprit: sha, parent: shaAt(hi - 1) });
+      else
+        settle(f, {
+          verdict: 'candidates',
+          candidates: commits.slice(lo + 1, hi + 1),
+          unbuildable: inside.map(i => commits[i]),
+          parent: shaAt(lo),
+        });
     }
   }
   return files.map(f => results.get(f));
@@ -144,6 +163,12 @@ export function prForCommit(pulls, subject) {
   return m ? { number: Number(m[2]), title: m[1], author: null, bot: false } : null;
 }
 
+/**
+ * Whether to look up who else answers for a culprit PR: a bot opened it, or a person missing from
+ * the Slack map did (Dane's `daneatmastra` is a GitHub User, so mapping it would silence this).
+ */
+export const needsStandIns = (pr, slackUsers) => Boolean(pr?.author && (pr.bot || !slackUsers[pr.author]));
+
 const isBot = user => !user?.login || user.type === 'Bot' || user.login.endsWith('[bot]');
 
 const PR_COMMITS_LIMIT = 250;
@@ -151,9 +176,10 @@ const PR_COMMITS_LIMIT = 250;
 const COAUTHOR = /^co-authored-by:.*<(?:\d+\+)?([^@<>\s]+)@users\.noreply\.github\.com>\s*$/gim;
 
 /**
- * Who answers for a PR a bot opened: the person who merged it, else every person whose latest
- * review approved it, else the person credited on the most commits (as author or in a
- * Co-authored-by trailer with a GitHub noreply address; ties go to all). None: `logins` is empty.
+ * Who answers for a PR a bot or a person missing from the Slack map opened: the person who
+ * merged it, else every person whose latest review approved it, else the person credited on the
+ * most commits (as author or in a Co-authored-by trailer with a GitHub noreply address; ties go
+ * to all). None: `logins` is empty.
  * A lookup that failed is passed as null (or undefined for the merger) and its rung is skipped.
  */
 export function standIns({ mergedBy, reviews, commits }) {
@@ -179,8 +205,8 @@ export const escapeMrkdwn = text => String(text).replace(/&/g, '&amp;').replace(
 
 const code = text => `\`${escapeMrkdwn(text)}\``;
 
-/** One message per culprit PR, then one for everything that couldn't be pinned on a merge. */
-export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, results, jobs, prs }) {
+/** One message per culprit PR, one per set of candidate merges, then one for everything that couldn't be pinned on a merge. */
+export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, results, jobs, prs, subjects = {} }) {
   const run = `<${runUrl}|Versioning run>`;
   const messages = [];
   const culprits = Map.groupBy(
@@ -191,10 +217,15 @@ export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, res
     const pr = prs[sha];
     const files = list.map(r => code(r.file)).join(', ');
     const tag = login => (slackUsers[login] ? `<@${slackUsers[login]}>` : `@${escapeMrkdwn(login)}`);
-    const stand = pr?.standIns?.logins.length
-      ? `, ${pr.standIns.role} ${pr.standIns.logins.map(tag).join(', ')}`
-      : ', no person found on the PR <!here>';
-    const by = !pr?.author ? '' : pr.bot ? ` by ${escapeMrkdwn(pr.author)} (bot)${stand}` : ` by ${tag(pr.author)}`;
+    const others = pr?.standIns?.logins.filter(login => login !== pr.author) ?? [];
+    const stand = others.length ? `, ${pr.standIns.role} ${others.map(tag).join(', ')}` : '';
+    const by = !pr?.author
+      ? ''
+      : pr.bot
+        ? ` by ${escapeMrkdwn(pr.author)} (bot)${stand || ', no person found on the PR <!here>'}`
+        : slackUsers[pr.author]
+          ? ` by ${tag(pr.author)}`
+          : ` by ${tag(pr.author)}${stand}`;
     const merge = pr
       ? `<https://github.com/${repo}/pull/${pr.number}|#${pr.number}> "${escapeMrkdwn(pr.title)}"${by}`
       : `<https://github.com/${repo}/commit/${sha}|${sha.slice(0, 7)}>`;
@@ -202,6 +233,28 @@ export function alertMessages({ repo, runUrl, good, bad, reason, slackUsers, res
     messages.push(
       `Test-tier escape: ${files} (skipped on PRs, no failure in 30 days) started failing on main with ${merge}. ` +
         `Fails on ${code(sha.slice(0, 7))}, passes on its parent. ${run}. ${them} on every PR again for 30 days.`,
+    );
+  }
+  // Several merges may be to blame, so nobody is tagged: the list says which one couldn't be tested.
+  const sets = Map.groupBy(
+    results.filter(r => r.verdict === 'candidates'),
+    r => `${r.candidates.join(' ')}|${r.parent}`,
+  );
+  for (const list of sets.values()) {
+    const { candidates, unbuildable, parent } = list[0];
+    const merges = candidates.map(sha => {
+      const pr = prs[sha];
+      const link = pr
+        ? `<https://github.com/${repo}/pull/${pr.number}|#${pr.number}> "${escapeMrkdwn(pr.title)}"`
+        : `<https://github.com/${repo}/commit/${sha}|${sha.slice(0, 7)}>${subjects[sha] ? ` "${escapeMrkdwn(subjects[sha])}"` : ''}`;
+      return unbuildable.includes(sha) ? `${link} (does not build, so not tested on its own)` : link;
+    });
+    const files = list.map(r => code(r.file)).join(', ');
+    const them = list.length === 1 ? 'The file now runs' : 'They now run';
+    const red = candidates[candidates.length - 1];
+    messages.push(
+      `Test-tier escape: ${files} (skipped on PRs, no failure in 30 days) started failing on main with one of ${merges.join(', ')}. ` +
+        `Fails on ${code(red.slice(0, 7))}, passes on ${code(parent.slice(0, 7))}. ${run}. ${them} on every PR again for 30 days.`,
     );
   }
   const left = [
@@ -282,10 +335,21 @@ export function checkoutRunner(dir, { log = console.error, exec = sh, deadline =
     const report = path.join(os.tmpdir(), `attribute-${sha}-${process.pid}-${Date.now()}.json`);
     try {
       step('checkout', 'git', ['checkout', '--quiet', '--detach', '--force', sha]);
-      step('install', 'pnpm', ['install', '--frozen-lockfile', '--prefer-offline']);
       const present = files.filter(f => fs.existsSync(path.join(dir, f)));
       const names = [...new Set(present.map(f => packageNameFor(dir, f)).filter(Boolean))];
-      if (names.length) step('build', 'pnpm', ['turbo', 'build', ...names.flatMap(n => ['--filter', `${n}...`])]);
+      try {
+        step('install', 'pnpm', ['install', '--frozen-lockfile', '--prefer-offline']);
+        if (names.length) step('build', 'pnpm', ['turbo', 'build', ...names.flatMap(n => ['--filter', `${n}...`])]);
+      } catch (error) {
+        if (error.code === 'ETIMEDOUT' || error.message === 'ran out of time') throw error;
+        // The bisect skips a commit that doesn't install or build; its tests never run on stale output.
+        log(
+          `  does not build at ${sha}: ${String(error.stderr ?? error.message)
+            .trim()
+            .slice(-2000)}`,
+        );
+        return all('unbuildable');
+      }
       const t = Date.now();
       try {
         if (present.length)
@@ -376,7 +440,7 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     if (r.culprit in prs) continue;
     const subject = git('log', '-1', '--format=%s', r.culprit);
     const pr = prForCommit(gh(`repos/${repo}/commits/${r.culprit}/pulls`), subject);
-    if (pr?.bot) {
+    if (needsStandIns(pr, users)) {
       const lookup = (what, fn, unknown) => {
         try {
           return fn();
@@ -393,6 +457,12 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     }
     prs[r.culprit] = pr;
   }
+  const subjects = {};
+  for (const sha of new Set(results.filter(r => r.verdict === 'candidates').flatMap(r => r.candidates))) {
+    if (sha in prs) continue;
+    subjects[sha] = git('log', '-1', '--format=%s', sha);
+    prs[sha] = prForCommit(gh(`repos/${repo}/commits/${sha}/pulls`), subjects[sha]);
+  }
   const messages = alertMessages({
     repo,
     runUrl,
@@ -403,10 +473,11 @@ async function runCommand({ escapes, out, workdir, slackUsers, deadlineMinutes }
     results,
     jobs: input.jobs,
     prs,
+    subjects,
   });
   for (const r of results)
     console.error(
-      `${r.verdict.padEnd(15)} ${r.file}${r.culprit ? ` ${r.culprit}` : ''}${r.reason ? ` (${r.reason})` : ''}`,
+      `${r.verdict.padEnd(15)} ${r.file}${r.culprit ? ` ${r.culprit}` : ''}${r.candidates ? ` one of ${r.candidates.join(' ')}` : ''}${r.reason ? ` (${r.reason})` : ''}`,
     );
   console.error(`attribution took ${((Date.now() - startedAt) / 1000).toFixed(0)} s`);
   fs.writeFileSync(out, `${JSON.stringify({ run_id: input.run_id, good, bad, results, prs, messages }, null, 2)}\n`);

@@ -1,4 +1,5 @@
 import { hasPullRequest } from '../boards/semantics.js';
+import { externallyAuthoredWorkItem } from '../rules/types.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { workItemBoardSource } from '../work-item-branch.js';
@@ -12,6 +13,8 @@ import type { SearchableCard } from './search-terms.js';
 /** What a board view's search and filters read of a card. */
 export interface CardFacts extends SourceFacts {
   hasPullRequest: boolean;
+  /** The card's author is inside the write-access circle, as intake routes read `item.trusted`; cards no outsider can file count as trusted. */
+  trusted: boolean;
   labels: ReadonlySet<string>;
   /** The people the card's source names. */
   people: Record<ProviderPersonRole, ProviderPerson[]>;
@@ -70,6 +73,7 @@ export function cardFacts(card: Card): CardFacts {
     source,
     metadata,
     hasPullRequest: hasPullRequest({ source, workItem: card.workItem }),
+    trusted: !externallyAuthoredWorkItem(card),
     labels: new Set(metadataLabels(metadata)),
     people,
     relations: {

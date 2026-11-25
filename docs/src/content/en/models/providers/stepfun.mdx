@@ -7,7 +7,7 @@ description: "Browse StepFun (China) model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/stepfun.svg" alt="StepFun (China) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />StepFun (China)
 
-Access 7 StepFun (China) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
+Access 9 StepFun (China) models through Mastra's model router. Authentication is handled automatically using the `STEPFUN_API_KEY` environment variable.
 
 Learn more in the [StepFun (China) documentation](https://platform.stepfun.com/docs/zh/overview/concept).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "stepfun/step-3.5-flash"
+  model: "stepfun/step-1o-turbo-vision"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "stepfun/step-1o-turbo-vision",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.37429,
+    "outputCost": 1.1977
+  },
   {
     "model": "stepfun/step-3.5-flash",
     "imageInput": false,
@@ -118,6 +130,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
+    "model": "stepfun/stepaudio-2.5-chat",
+    "imageInput": false,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": null,
+    "maxOutput": null,
+    "inputCost": 1.9463,
+    "outputCost": 4.7909
+  },
+  {
     "model": "stepfun/stepaudio-2.5-tts",
     "imageInput": false,
     "audioInput": false,
@@ -146,7 +170,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.stepfun.com/v1",
-    id: "stepfun/step-3.5-flash",
+    id: "stepfun/step-1o-turbo-vision",
     apiKey: process.env.STEPFUN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -167,7 +191,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "stepfun/stepaudio-2.5-tts"
-      : "stepfun/step-3.5-flash";
+      : "stepfun/step-1o-turbo-vision";
   }
 });
 ```

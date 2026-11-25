@@ -1,12 +1,13 @@
 {
   "name": "@mastra/json-render",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Let Mastra agents compose json-render interfaces that stream to the client and stay in memory",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {

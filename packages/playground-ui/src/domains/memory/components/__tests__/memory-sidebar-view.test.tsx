@@ -45,7 +45,8 @@ describe('CloneThreadControl', () => {
     expect(onClone).toHaveBeenCalledOnce();
 
     rerender(<CloneThreadControl isCloning onClone={onClone} />);
-    expect(screen.getByRole('button', { name: 'Cloning...' }).hasAttribute('disabled')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Clone', busy: true }));
+    expect(onClone).toHaveBeenCalledOnce();
     rerender(<CloneThreadControl disabled onClone={onClone} />);
     expect(screen.getByRole('button', { name: 'Clone' }).hasAttribute('disabled')).toBe(true);
     expect(onClone).toHaveBeenCalledOnce();

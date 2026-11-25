@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { checkFrontmatter } from '../checks/frontmatter'
 import { checkLinks, remarkFindings } from '../checks/mdx'
 import { checkRedirectList } from '../checks/redirects'
-import { valeFindings } from '../checks/vale'
+import { syncedMdxFiles, valeFindings } from '../checks/vale'
 import { parseContentFile } from '../content'
 import { formatHuman, parseArgs } from '../index'
 import { parseMdx } from '../mdx'
@@ -340,6 +340,39 @@ describe('vale adapter', () => {
   })
 })
 
+describe('syncedMdxFiles', () => {
+  it('lists .mdx files in every synced source dir, relative to the docs root', async () => {
+    const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'synced-mdx-'))
+    try {
+      const write = async (file: string, content = '# Page\n') => {
+        await fs.mkdir(path.dirname(path.join(repo, file)), { recursive: true })
+        await fs.writeFile(path.join(repo, file), content)
+      }
+      await write('docs/src/site/index.mdx')
+      await write('docs/src/site/nested/page.mdx')
+      await write('docs/src/site/sidebars.js', 'export default {}')
+      await write('docs/src/site-ref/api.mdx')
+      await write('docs/src/ignored/page.mdx')
+      const source = (dir: string) => ({ source: dir })
+      await write(
+        '.github/docs-sync.json',
+        JSON.stringify({
+          targets: [source('docs/src/site'), source('docs/src/site-ref'), source('docs/src/site'), source('../etc')],
+        }),
+      )
+      expect(await syncedMdxFiles(path.join(repo, 'docs'))).toEqual([
+        'src/site-ref/api.mdx',
+        'src/site/index.mdx',
+        'src/site/nested/page.mdx',
+      ])
+      await write('.github/docs-sync.json', '{ not json')
+      expect(await syncedMdxFiles(path.join(repo, 'docs'))).toEqual([])
+    } finally {
+      await fs.rm(repo, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('CLI', () => {
   it('parses flags and files', () => {
     expect(
@@ -383,6 +416,16 @@ describe('runChecks', () => {
 
   afterEach(async () => {
     await fs.rm(rootDir, { recursive: true, force: true })
+  })
+
+  it('keeps MDX parse errors on generated Gateway API pages', async () => {
+    const file = path.join(rootDir, 'src/content/en/docs/mastra-platform/gateway/api/broken.api.mdx')
+    await fs.mkdir(path.dirname(file), { recursive: true })
+    await fs.writeFile(file, `${VALID_FRONTMATTER}\n\n# Broken\n\n<Unclosed>\n`)
+    const report = await runChecks({ rootDir, categories: ['prose'], skipVale: true })
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({ ruleId: 'mastra/remark-mdx-parse', file: expect.stringContaining('broken.api.mdx') }),
+    )
   })
 
   it('fails when Vale is not installed unless --no-vale is passed', async () => {

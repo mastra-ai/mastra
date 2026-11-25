@@ -59,8 +59,8 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
           </AlertDialog.Body>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={recreate.isPending}>Cancel</AlertDialog.Cancel>
-            <Button variant="destructive" size="md" disabled={recreate.isPending} onClick={() => recreate.mutate()}>
-              {recreate.isPending ? 'Recreating…' : 'Recreate'}
+            <Button variant="destructive" size="md" onClick={() => recreate.mutate()} loading={recreate.isPending}>
+              Recreate
             </Button>
           </AlertDialog.Footer>
         </AlertDialog.Content>
