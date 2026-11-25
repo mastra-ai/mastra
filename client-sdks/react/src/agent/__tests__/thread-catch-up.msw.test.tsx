@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
+import { CLIENT_MESSAGE_ID_KEY } from '../../lib/mastra-db';
 import { server } from '../../test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../test/render';
 import type { MastraChatProps } from '../hooks';
@@ -182,6 +183,102 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
       await waitFor(() => expect(page.result.current.isRunning).toBe(false));
     },
   );
+
+  // The server takes a message sent from the page, or keeps it on its way (the request still in flight).
+  const givenSendRoute = ({ inFlight = false } = {}) => {
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/send-message`, async () => {
+        if (inFlight) await new Promise(() => {});
+        return HttpResponse.json({ accepted: true, runId: 'run-0', signal: { id: 's0' } });
+      }),
+    );
+  };
+  const send = (page: { result: { current: ReturnType<typeof useChat> } }, message: string) =>
+    act(() => void page.result.current.sendMessage({ message, threadId: 'thread-1' }).catch(() => {}));
+  const clientIdOf = (message: MastraDBMessage | undefined) => message?.content.metadata?.[CLIENT_MESSAGE_ID_KEY];
+
+  it('keeps in place a sent message the server confirmed, older than the catch-up history page', async () => {
+    givenSendRoute();
+    const threads = givenThreadStreams();
+    const page = followThread();
+    unmount = page.unmount;
+    await threads.followedAgain(1);
+    await send(page, 'Hello');
+    const clientMessageId = page.result.current.messages[0]!.id;
+    await threads.send(
+      0,
+      {
+        type: 'data-user-message',
+        runId: 'run-0',
+        from: 'AGENT',
+        data: {
+          type: 'user-message',
+          id: 's0',
+          contents: 'Hello',
+          metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId },
+        },
+      },
+      chunk('start', { messageId: 'a0' }, 'run-0'),
+      chunk('text-start', { id: 't0' }, 'run-0'),
+      chunk('text-delta', { id: 't0', text: 'Hi' }, 'run-0'),
+      ended('run-0'),
+    );
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Hello', 'Hi']));
+    expect(clientIdOf(page.result.current.messages[0])).toBe(clientMessageId);
+
+    threads.breakStream(0);
+    await threads.followedAgain(2);
+    await threads.send(
+      1,
+      historyOf([stored('u2', 'user', 'Later'), stored('a2', 'assistant', 'Much later')], null, true),
+    );
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Hello', 'Hi', 'Later', 'Much later']));
+  });
+
+  it('keeps after the history a message still on its way, once, when the server presents it again', async () => {
+    givenSendRoute({ inFlight: true });
+    const { send: sendChunks, page } = await givenReplyCut();
+    await send(page, 'And then?');
+    const clientMessageId = page.result.current.messages.at(-1)!.id;
+
+    await sendChunks(1, historyOf([question, stored('a1', 'assistant', 'Whole.')]));
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Whole.', 'And then?']));
+    await sendChunks(1, {
+      type: 'data-user-message-pending',
+      runId: '',
+      from: 'AGENT',
+      data: {
+        id: 's2',
+        contents: 'And then?',
+        metadata: { status: 'pending', [CLIENT_MESSAGE_ID_KEY]: clientMessageId },
+      },
+    });
+    await waitFor(() => expect(page.result.current.messages.at(-1)?.id).toBe('s2'));
+    expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Whole.', 'And then?']);
+  });
+
+  it('swaps a message the server stored meanwhile for its stored copy, keeping the row’s client id', async () => {
+    givenSendRoute({ inFlight: true });
+    const { send: sendChunks, page } = await givenReplyCut();
+    await send(page, 'And then?');
+    const clientMessageId = page.result.current.messages.at(-1)!.id;
+    const storedSignal: MastraDBMessage = {
+      ...stored('s2', 'user', 'And then?'),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'And then?' }],
+        metadata: { signal: { id: 's2', type: 'user', metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } } },
+      },
+    };
+
+    await sendChunks(1, historyOf([question, stored('a1', 'assistant', 'Whole.'), storedSignal]));
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Whole.', 'And then?']));
+    expect(page.result.current.messages.at(-1)?.id).toBe('s2');
+    expect(clientIdOf(page.result.current.messages.at(-1))).toBe(clientMessageId);
+  });
 
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
     const threads = givenThreadStreams();
