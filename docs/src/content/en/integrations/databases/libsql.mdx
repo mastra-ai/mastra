@@ -126,9 +126,15 @@ storage: new LibSQLStore({
 
 ## Managed tables
 
-The storage implementation creates the core storage tables automatically, including `mastra_notifications` for notification inbox records and delivery metadata. It also creates `mastra_agent_signals` for signals sent to running evented agents, and `mastra_agent_signal_runs` to record which evented agent runs have closed.
+The storage implementation creates the core storage tables automatically, including `mastra_notifications` for notification inbox records and delivery metadata.
 
-`LibSQLStore` exposes notification storage through `getStore('notifications')`, and agent signal storage through `getStore('agentSignals')`. Agent signals are [shared across processes](/docs/server/pubsub#evented-workflows-and-agents) except with an in-memory database (`:memory:`), an embedded replica (`syncUrl`), or a `client` you pass in that isn't connected to a remote database. A local `file:` URL is shared only by processes on the same machine. Deleting a thread with `memory.deleteThread()` also deletes its agent signal rows from the storage of the Mastra instance the memory is registered with.
+`LibSQLStore` exposes notification storage through `getStore('notifications')`.
+
+### Pending signals
+
+The memory domain keeps the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of evented agents as hidden rows of `mastra_messages`. Message reads, `updateMessages`, and thread cloning skip them until the run saves its messages, and deleting a thread deletes them with its messages. Processes share them when the store opens a file or a remote database. An in-memory database (`:memory:`), an embedded replica (`syncUrl`), and a local `client` you pass in keep them to one process. A `file:` URL is shared only by processes on the same machine.
+
+`init()` adds three nullable columns for pending signals, `signalStatus` and `signalClaimedBy` on `mastra_messages` and `signalRunId` on `mastra_threads`, and a partial index on the `mastra_messages` rows where `signalStatus` or `signalClaimedBy` is set. Existing messages and threads are unchanged. Message reads use these columns, so a store created with `disableInit: true` needs `init()` or your own migration run against the database before it serves reads.
 
 ## Initialization
 

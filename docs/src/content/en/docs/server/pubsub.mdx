@@ -21,7 +21,7 @@ Several built-in systems publish and subscribe to events through the same pub/su
 - **Workflow execution**: The scheduler publishes a `workflow.start` event, and a long-lived worker consumes it to run the workflow. Step and lifecycle events flow over pub/sub during execution.
 - **Scheduled workflows**: The scheduler dispatches due runs by publishing to the workflow topic. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
 - **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/harness/background-tasks#subscribe-to-all-task-events).
-- **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic, so a run executing in another process receives the signal.
+- **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic. The event reaches the process that holds the run. A step of an evented run that executes in a different process gets the signal only through [storage that shares pending signals across processes](#signals-sent-to-a-running-evented-agent).
 - **Resumable streams**: Stream chunks are published per run, so a client that reconnects can replay what it missed.
 
 Because these systems run on one bus, the backend you choose applies to all of them at once.
@@ -120,23 +120,27 @@ Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#
 
 The backends that redeliver are marked **Yes** in the [Choosing a backend](#choosing-a-backend) table. A backend's reference page says whether redelivery can be turned off. The storage adapters with workflow step guards are `@mastra/pg` and `@mastra/libsql`. With `@mastra/libsql`, see [evented agent worker takeover](/reference/pubsub/redis-streams#evented-agent-worker-takeover) for the database setups that work across machines.
 
-Messages and other signals sent to a running evented agent also depend on the storage adapter. These pages use two terms for it:
-
-- **Storage that keeps agent signals**: The adapter implements the `agentSignals` storage domain. An evented agent stores the signals sent to a running run there until the run takes them. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep agent signals.
-- **Storage that shares agent signals across processes**: Storage that keeps agent signals in a database every process of the deployment reads. A run then reads its signals in whichever process executes its next step.
-
-| Storage adapter | Keeps agent signals | Shares them across processes |
-| - | - | - |
-| `@mastra/pg` | Yes | Yes |
-| `@mastra/libsql` | Yes | Yes, except with an in-memory database (`:memory:`), an embedded replica (`syncUrl`), or a `client` you pass in that isn't connected to a remote database. A local `file:` URL is shared only by processes on the same machine |
-| `InMemoryStore` | Yes | No |
-
-Without storage that shares agent signals across processes, a signal sent to a running evented agent is forwarded to the process that holds the run and kept in that process's memory. It reaches the run only when that process also executes the run's next step. Otherwise the agent answers it in a new turn after the run ends.
-
 [`EventEmitterPubSub`](/reference/pubsub/event-emitter) and [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) don't redeliver an event that a stopped process received and never acknowledged. On the default `EventEmitterPubSub`, evented workflows and agents run in one process, which is how you try the evented engine locally and run it in tests. Don't use either backend to run evented workflows or agents on several processes:
 
 - `EventEmitterPubSub` delivers inside one process. An event never reaches another instance, and each instance that boots restarts the active evented workflow runs of the others.
 - `UnixSocketPubSub` reaches the other processes on the host, but no other process picks up the step of a process that stopped, and each process that boots restarts the active evented workflow runs of the others.
+
+### Signals sent to a running evented agent
+
+Messages and other signals sent to an evented agent's active run wait until a model request of the run takes them. Where they wait depends on the storage of the agent's [memory](/docs/memory/overview):
+
+- **Storage that keeps pending signals**: Each signal is a hidden row of the memory messages table until the run takes it, and message reads skip it. When the run saves its messages, the row becomes the message the signal would have been. A transient signal is deleted instead. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep pending signals.
+- **Storage that shares pending signals across processes**: Every process of the deployment reads and writes the same pending signals. A stored signal then reaches the run's next model request in whichever process executes it.
+
+| Storage adapter | Keeps pending signals | Shares them across processes |
+| - | - | - |
+| `@mastra/pg` | Yes | Yes |
+| `@mastra/libsql` | Yes | [Depends on the connection](/integrations/databases/libsql#pending-signals) |
+| `InMemoryStore` | Yes | No |
+
+A run keeps its signals in storage when the agent's memory uses storage that keeps pending signals and the run is the thread's active run, with a thread and a `resourceId`. A run started with `prepare()` and a run with `readOnly` memory aren't the thread's active run. Any other evented run keeps its signals in the memory of the process that started it, and they reach the run only when that process executes the run's next step. Otherwise the agent answers them in a new turn after the run ends. Input from `queueMessage()` and `queueSignal()` always stays in process memory.
+
+A stored signal that the run never takes waits for the thread's next run. The process that started the run starts that next run with the signal when the run ends, if that process is still up. A run that fails on a worker puts back the signals it took and never saved, and the thread's next run receives them. A suspended run stops receiving signals once another run uses its thread, and signals sent to it afterwards wait for the thread's next run or are answered `blocked`, as [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) describes. A signal taken by a step that crashes before the run saves its progress stays hidden if the run never recovers or ends.
 
 ### Warning for unsupported setups
 
@@ -144,7 +148,9 @@ Mastra logs a warning the first time an evented run is created in a setup that c
 
 - The PubSub backend delivers to other processes and doesn't redeliver unacknowledged events.
 - The PubSub backend redelivers unacknowledged events and the storage adapter has no workflow step guards.
-- The PubSub backend delivers to other processes and the storage doesn't share agent signals across processes. Mastra logs this one separately, the first time an evented agent run is prepared, starting with `Signals sent to running evented agents aren't supported on several processes with this setup`.
+- The PubSub backend delivers to other processes and an evented agent's active run keeps its signals in one process.
+
+Mastra logs the last case as a separate warning, the first time such a run starts, beginning with `Signals sent to running evented agents aren't supported on several processes with this setup`. It names the cause: the run has no memory, thread, or `resourceId`, the agent's memory storage doesn't keep pending signals, or that storage keeps them in one process.
 
 The default `EventEmitterPubSub` doesn't trigger the warning, because its events never leave the process. `UnixSocketPubSub` triggers it even when one process uses the socket, because Mastra can't tell how many processes share it.
 

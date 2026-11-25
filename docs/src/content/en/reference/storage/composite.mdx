@@ -125,30 +125,9 @@ export const mastra = new Mastra({
 })
 ```
 
-### Agent signals in a mixed setup
+### Pending signals and the memory domain
 
-Unlike `threadState`, the `agentSignals` domain has no in-memory fallback. When neither `domains` nor `default` provides it, evented agents keep the signals sent to a running run in process memory, so those signals don't reach steps that run in another process. Route the domain to a store that [shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents) with `AgentSignalsPG` from `@mastra/pg` or `AgentSignalsLibSQL` from `@mastra/libsql`:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraCompositeStore } from '@mastra/core/storage'
-import { MemoryStorageMongoDB } from '@mastra/mongodb'
-import { AgentSignalsPG, WorkflowsPG } from '@mastra/pg'
-
-export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      memory: new MemoryStorageMongoDB({
-        uri: process.env.MONGODB_URI,
-        dbName: 'mastra_memory',
-      }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      agentSignals: new AgentSignalsPG({ connectionString: process.env.DATABASE_URL }),
-    },
-  }),
-})
-```
+Evented agents keep the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of an active run in the `memory` domain, so they live in whichever store provides that domain. When an agent's memory has its own storage, they live in the `memory` domain of that storage instead. The `memory` domains of `@mastra/pg` (`MemoryPG`), `@mastra/libsql` (`MemoryLibSQL`), and `InMemoryStore` keep pending signals. With another memory store, such as `MemoryStorageMongoDB` in the previous example, evented agents keep these signals in process memory, so they don't reach steps that run in another process. To run evented agents on several processes, route `memory` to a store that shares pending signals across processes, such as `MemoryPG`.
 
 ### Disabling a domain
 
@@ -352,12 +331,6 @@ export const mastra = new Mastra({
             name: 'threadState',
             type: 'ThreadStateStorage',
             description: 'Storage for per-thread agent state, such as task lists and goals.',
-            isOptional: true,
-          },
-          {
-            name: 'agentSignals',
-            type: 'AgentSignalsStorage',
-            description: 'Storage for signals sent to running evented agents, until the run takes them.',
             isOptional: true,
           },
           {
