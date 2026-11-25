@@ -30,7 +30,6 @@ import type {
   ResolvedClient,
 } from './client.js';
 import { MastraConnectError } from './errors.js';
-import { EventsClient, resolveEventsUrl } from './events.js';
 
 /** Auth and identity headers the client sets; per-call headers can't override them. */
 const RESERVED_REQUEST_HEADERS = new Set([
@@ -61,12 +60,6 @@ export interface ConnectClientConfig extends ConnectClientOptions {
    * `MastraConnectError` with code `timeout`.
    */
   timeoutMs?: number;
-  /**
-   * Events service base URL, for the events client. Falls back to
-   * MASTRA_EVENTS_API_URL, then the regional default from
-   * MASTRA_PLATFORM_REGION, then https://events.mastra.ai.
-   */
-  eventsUrl?: string;
 }
 
 export interface ListConnectionsInput {
@@ -92,7 +85,6 @@ export interface ConnectRequestInit {
 /** Credentials, project and URLs a client resolves once, at construction. */
 interface ConnectClientIdentity {
   client: ResolvedClient;
-  eventsUrl: string;
   timeoutMs: number;
 }
 
@@ -105,10 +97,8 @@ function resolveIdentity(config: ConnectClientConfig): ConnectClientIdentity {
       `Invalid timeoutMs: expected a positive whole number of milliseconds up to ${MAX_TIMER_MS}, got ${timeoutMs}.`,
     );
   }
-  // Resolved here, not on first `events` access, so a bad URL fails fast.
-  const eventsUrl = resolveEventsUrl(config);
   const client = resolveClient(config);
-  return { client: { ...client, baseUrl: stripVersionSuffix(client.baseUrl) }, eventsUrl, timeoutMs };
+  return { client: { ...client, baseUrl: stripVersionSuffix(client.baseUrl) }, timeoutMs };
 }
 
 /**
@@ -129,7 +119,6 @@ function resolveIdentity(config: ConnectClientConfig): ConnectClientIdentity {
 export class ConnectClient {
   readonly #identity: ConnectClientIdentity;
   readonly #client: ResolvedClient;
-  #events: EventsClient | undefined;
 
   /**
    * @param identity Internal: what a parent client resolved, so `withResource`
@@ -153,15 +142,6 @@ export class ConnectClient {
   /** The end-user resource key this client asserts, when scoped. */
   get resourceId(): string | undefined {
     return this.#client.resourceId;
-  }
-
-  /**
-   * Events service client sharing this client's credentials and project.
-   * Streams are long-lived, so `timeoutMs` does not apply to them.
-   */
-  get events(): EventsClient {
-    this.#events ??= new EventsClient({}, { client: this.#identity.client, eventsUrl: this.#identity.eventsUrl });
-    return this.#events;
   }
 
   /** Returns a client scoped to an end-user resource; this client is unchanged. */

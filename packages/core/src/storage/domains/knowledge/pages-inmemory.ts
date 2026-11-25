@@ -8,6 +8,7 @@ import {
   assertKnowledgeNoteTextWithinBound,
   assertKnowledgePageDescriptionWithinBound,
   canonicalKnowledgeName,
+  KnowledgeInvalidCursorError,
   KnowledgeMoveTooLargeError,
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
@@ -49,8 +50,10 @@ function pageSize(limit: number | undefined): number {
 }
 
 function paginate<T>(items: T[], cursor: string | undefined, limit: number | undefined) {
+  // The store issues plain decimal offsets; reject anything else (`0x10`, `1e3`, ` 5`) rather than coerce it.
+  if (cursor !== undefined && !/^(0|[1-9]\d*)$/.test(cursor)) throw new KnowledgeInvalidCursorError(cursor);
   const start = cursor === undefined ? 0 : Number(cursor);
-  if (!Number.isInteger(start) || start < 0) throw new RangeError(`Invalid Knowledge cursor: ${cursor}`);
+  if (!Number.isSafeInteger(start)) throw new KnowledgeInvalidCursorError(String(cursor));
   const size = pageSize(limit);
   const slice = items.slice(start, start + size);
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };
@@ -77,6 +80,14 @@ const pinKey = (pageId: string, kind: KnowledgePinKind) => `${kind}:${pageId}`;
  *
  * @experimental
  */
+export interface InMemoryKnowledgePageSnapshot {
+  pages: Map<string, KnowledgePage>;
+  notes: Map<string, KnowledgeNote>;
+  pins: Map<string, KnowledgePin>;
+  activity: KnowledgePageActivityEvent[];
+  bodyLinks: Map<string, KnowledgePageBodyLink[]>;
+}
+
 export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #pages = new Map<string, KnowledgePage>();
   #notes = new Map<string, KnowledgeNote>();
@@ -84,6 +95,27 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #activity: KnowledgePageActivityEvent[] = [];
   #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
+
+  /** A deep copy of every page, note, pin, body link and event, for {@link restore}. */
+  snapshot(): InMemoryKnowledgePageSnapshot {
+    return structuredClone({
+      pages: this.#pages,
+      notes: this.#notes,
+      pins: this.#pins,
+      activity: this.#activity,
+      bodyLinks: this.#bodyLinks,
+    });
+  }
+
+  /** Puts back what {@link snapshot} copied. */
+  restore(snapshot: InMemoryKnowledgePageSnapshot): void {
+    const copy = structuredClone(snapshot);
+    this.#pages = copy.pages;
+    this.#notes = copy.notes;
+    this.#pins = copy.pins;
+    this.#activity = copy.activity;
+    this.#bodyLinks = copy.bodyLinks;
+  }
 
   /** Drops every page, note, pin, body link and event. */
   clear(): void {
@@ -865,6 +897,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   }
 
   async listPageActivity(input: Parameters<Store['listPageActivity']>[0]) {
+    if (input.before !== undefined && input.cursor !== undefined) {
+      throw new RangeError('Knowledge activity takes either a cursor or a before position, not both');
+    }
     const events = this.#activity
       .filter(event => {
         const page = this.#pages.get(event.pageId);
@@ -875,6 +910,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
           const note = this.#notes.get(event.noteId);
           if (!note || !this.#noteVisible(note, input.read)) return false;
         }
+        if (input.since !== undefined && event.createdAt.getTime() < input.since.getTime()) return false;
+        if (input.until !== undefined && event.createdAt.getTime() >= input.until.getTime()) return false;
+        if (input.before !== undefined && newestFirst(event, input.before) <= 0) return false;
         return true;
       })
       .sort(newestFirst);

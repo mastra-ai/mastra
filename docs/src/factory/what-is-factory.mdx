@@ -1,0 +1,103 @@
+---
+title: What's Factory?
+description: Learn what Mastra Factory is, how a change moves from intake to pull request, and which parts of the process you can customize.
+---
+
+{/* vale Mastra.HeadingSentenceCase = NO */}
+
+# What's Factory?
+
+Mastra Factory is an open-source software factory. Connect your repository, bring issues into a work board, and guide a change through investigation, planning, implementation, and pull request review. At each stage, you set how much the agent does on its own and when a person steps in.
+
+Start with one issue and keep control of the decisions at each phase. Review the proposed work and plan before deciding whether to merge the result.
+
+Mastra Factory is a separate project from the code it changes. Create the Factory project in its own directory, outside the repository you want agents to work on. Factory clones that repository into an isolated sandbox for each session, then makes changes there and opens pull requests. It never edits your local checkout. Connecting an existing repository is the standard setup, and it doesn't need to be new or empty.
+
+## Choose your starting point
+
+| Your task | Start here |
+| - | - |
+| Set up your first Factory | [Get started](/) |
+| Turn an issue into a pull request | [Create your first pull request](/#create-your-first-pull-request) |
+| Join a Factory your team already runs | [Models](/configure/models), then [GitHub](/configure/github) |
+| Bring work from another service | [Linear](/configure/linear), [Jira](/configure/jira), [incident.io](/configure/incidentio), or [Slack](/configure/slack) |
+| Run Factory for a team | [Deployment](/deployment) |
+
+## Understand the pieces
+
+Use Factory from a web or mobile browser, or interact with agents through [Slack](/configure/slack). [GitHub](/configure/github) or [GitLab](/configure/gitlab) supplies repositories and issues, and Factory writes pull requests or merge requests back to it. [Linear](/configure/linear), [Jira](/configure/jira), and [incident.io](/configure/incidentio) can also bring work into Factory.
+
+Mastra Factory brings together the Factory Server, [auth](/configure/auth), [sandboxes](/configure/sandboxes), and [storage](/configure/storage). The server provides the web UI and coordinates work. Mastra Factory works with your preferred model providers.
+
+Each session runs a coding agent built on Mastra Code, with the same tools as any other session. The conversation you are in can file a card and start the run for it. It can also message the session already working on a card. With observational memory, the agent turns a growing conversation into condensed notes. Long sessions keep their context without carrying every message. Each session gets its own sandbox, where the agent can run your app and share an [app preview](/using/previews). On Mastra platform, sessions can also use the Mastra Connect tools of the connections attached to the Factory's project, which reaches other tools your team uses. Delete, archive, and GitHub or GitLab tools are left out, because Factory's own tools handle repository access and review.
+
+<figure>
+  <picture>
+    <source media="(max-width: 600px)" srcSet="/img/docs/factory-components-mobile.svg" />
+
+    <img
+      src="/img/docs/factory-components.svg"
+      width="960"
+      alt="Mastra Factory contains the Factory Server, auth, sandboxes, and storage. Browsers and Slack connect users to Factory. Linear supplies issues. GitHub sends issues and code into Factory and receives pull requests. Factory connects to external large language model providers."
+    />
+  </picture>
+</figure>
+
+Choose the large language models (LLMs) for your coding agents through a model provider with an API key or a supported subscription.
+
+## Change the process
+
+A Factory is meant to match how your team already builds software. Each part can be changed on its own:
+
+| Part | What you can change | Learn more |
+| - | - | - |
+| Stages and approvals | Add boards for your own process, and set which steps start an agent and which need a person. | [Boards and rules](/configure/boards-and-rules) |
+| Skills | Add skills that give the agent instructions for your own tasks. | [Custom skills](/configure/custom-skills) |
+| Models | Route chats and work-item runs to personal or Factory defaults. | [Models](/configure/models) |
+| Sandboxes | Pick a provider, then set setup and teardown for each repository and builds for the Factory. | [Sandboxes](/configure/sandboxes) |
+| Sources | Bring work in from GitHub, GitLab, Linear, Jira, or incident.io. | [Intake](/using/intake) |
+| Server setup | Choose auth, storage, deployment, and health metrics. | [Deployment](/deployment) |
+
+## Where Factory runs
+
+Factory supports three setups:
+
+- **Fully on Mastra platform:** Run the Factory Server, authentication, storage, and sandboxes on Mastra platform.
+- **Local server with platform resources:** Run the Factory Server on your computer while Mastra platform provides authentication, storage, and sandboxes.
+- **Fully self-hosted:** Run the server and configure your own authentication, storage, and sandbox providers without Mastra platform services.
+
+You can configure authentication, storage, and sandboxes independently of where the server runs. New Factory projects use platform services by default. See [Deployment](/deployment) for deployment options.
+
+## Understand Factory terms
+
+| Term | Meaning |
+| - | - |
+| Factory project | The server configuration and dependencies for a Factory. Keep it in its own directory so its configuration and Git history stay independent of the target repository. |
+| Target repository | The codebase you ask agents to change. |
+| Platform project | The Platform resource used to manage the server's database and deployment environments. |
+| Factory | A codebase and its settings, work, and sessions in the UI. |
+| [Intake](/using/intake) | Incoming issues or pull requests that are available for work. |
+| [Work item](/using/work-and-approvals) | A card tracking an issue or another task through the Work board. |
+| [Review item](/using/reviews) | A separate card tracking review of a pull request. |
+| [Session](/using/sessions) | The agent conversation and workspace associated with a piece of work. |
+
+## Follow a change
+
+Issues arrive in **Intake**, where you can start an investigation. The agent investigates the issue, requests your input when needed, then plans and implements the changes. It opens a pull request, which gets its own card in **Review** and a session for the review. Follow the review and inspect the changes. Then decide whether to merge the pull request.
+
+The issue's card and the pull request's card have separate completion rules. See [Work items](/using/work-and-approvals) for the actions, automation settings, and external events that move cards.
+
+Factory acts on its own for some steps and waits for a person on others. It syncs issues from connected sources and moves cards when a source event arrives. It also proposes investigations. These steps wait for a person:
+
+- Starting a run on a card, unless the phase it moves into starts runs on its own and the item is eligible.
+- Accepting a task before it enters planning or building.
+- Approving a plan before implementation continues.
+- Merging a pull request.
+
+Watch progress on the Factory's **Overview** page, in each session's transcript, and in the **Audit log**.
+
+## Next steps
+
+- [Get started](/) and investigate one GitHub issue.
+- Continue to [Create your first pull request](/#create-your-first-pull-request) after investigation.
+- [Troubleshoot setup](/troubleshooting) when an expected result is missing.

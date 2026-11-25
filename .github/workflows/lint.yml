@@ -206,7 +206,7 @@ jobs:
           install-dependencies: 'false'
 
       - name: Test npm package existence check, publish and placeholder scripts
-        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs
+        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs .github/scripts/sync-docs.test.mjs
 
       - name: Test the test-tier scripts
         run: node --test scripts/test-tiers/*.test.mjs
@@ -260,6 +260,12 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
 
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
+
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
       - name: Run lint and format checks
@@ -284,6 +290,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
+
+      # Read before any step runs: keep the checkout above as the first step, and this step without if:.
+      - name: Speed up checkout with the StarSling git mirror
+        uses: starslingdev/disks@de780d2849eb11f317f7e393de0949f100dd4eb2 # v0.2.0
+        with:
+          git-mirror: true
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

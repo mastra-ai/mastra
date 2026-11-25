@@ -2,6 +2,7 @@ import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
+import { Spinner } from '@/ds/components/Spinner/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
 import { Icon } from '@/ds/icons/Icon';
@@ -17,6 +18,8 @@ import {
 import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
+import './button.css';
+
 // Text-mode buttons are pills. Each size takes `--control-px` (the label's side padding) and
 // `--control-gap` from `controlSpacing`, shared with every other pill control. The
 // icon side gets 2px less, because a glyph draws inside its box: the icon then reads as far
@@ -30,14 +33,14 @@ import { cn } from '@/lib/utils';
 // segment a ButtonsGroup gives one) sets `--control-border` and the padding gives that width
 // back, so its label sits where a borderless `default` button's does.
 const TEXT_MODE_ADORNMENTS = cn(
-  'rounded-full px-[calc(var(--control-px)-var(--control-border,0px))]',
+  'rounded-full px-[calc(var(--control-px)-var(--control-border,0px))] [--control-icon-inset:2px]',
   'has-[>[data-slot=button-icon]]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
   'has-[>svg]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
   'has-[>[data-slot=button-icon-end]]:pr-[calc(var(--control-px)-2px-var(--control-border,0px))]',
 );
 
 const LINK_LAYOUT = cn(
-  'relative size-auto gap-1 rounded-xs px-0 text-label',
+  'relative size-auto gap-1 rounded-xs px-0 text-label [--control-gap:0.25rem] [--control-icon-inset:0px]',
   'before:absolute before:-inset-x-2',
   'has-[>[data-slot=button-icon-end]]:pr-0 has-[>[data-slot=button-icon]]:pl-0 has-[>svg]:pl-0',
 );
@@ -70,6 +73,7 @@ export const buttonVariants = cva(
           'border-0',
           raisedControlSurfaceStyle,
           controlIconState,
+          '[--control-icon-rest:var(--icon)]',
           'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
@@ -169,6 +173,12 @@ export interface ButtonProps
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
   iconEnd?: React.ReactNode;
+  /**
+   * The button's own action is in progress. A loader takes the place of the icon (`icon`, else `iconEnd`, else
+   * the glyph of an icon-mode size); a button without an icon gets the loader on the left. The label stays.
+   * Clicks do nothing while loading, and the button keeps focus, so `disabled` doesn't need to repeat it.
+   */
+  loading?: boolean;
   tooltip?: React.ReactNode;
   /** Side of the trigger the tooltip opens on. Defaults to `top`. */
   tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
@@ -228,9 +238,17 @@ function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
  */
 
 /** A trigger's leading icon. */
-export function ButtonIcon({ size, children }: { size: ButtonSize; children: React.ReactNode }) {
+export function ButtonIcon({
+  size,
+  loading,
+  children,
+}: {
+  size: ButtonSize;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <ButtonAdornment slot="button-icon" size={iconSizeMap[size]}>
+    <ButtonAdornment slot="button-icon" size={iconSizeMap[size]} loading={loading}>
       {children}
     </ButtonAdornment>
   );
@@ -254,14 +272,84 @@ export function ButtonChevron({ size }: { size: ButtonSize }) {
   );
 }
 
-function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {
-  if (!children) return undefined;
+function ButtonAdornment({
+  slot,
+  size,
+  loading,
+  children,
+}: {
+  slot: string;
+  size: IconSize;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!children && !loading) return undefined;
   return (
-    <Icon data-slot={slot} size={size}>
+    <Icon data-slot={slot} data-loader-slot={loading ? loaderSlot(children) : undefined} size={size}>
       {children}
+      {loading && <ButtonLoader />}
     </Icon>
   );
 }
+
+function loaderSlot(icon: React.ReactNode): 'replaced' | 'added' {
+  return icon ? 'replaced' : 'added';
+}
+
+// Hidden from assistive technology, and so from the button's name: `aria-busy` on the button says it.
+function ButtonLoader() {
+  return <Spinner data-slot="button-loader" size="sm" role="presentation" aria-hidden />;
+}
+
+// A loading button is aria-disabled but not unavailable. It keeps its own colours, since the disabled ones are too
+// faint for a label and a loader that still carry meaning, and it keeps the pointer, so its tooltip opens and a click
+// lands on it instead of falling through to a clickable row behind. It just doesn't answer hover and press, so the
+// recipe's classes for those states are left out; gating each one instead would change specificities that the
+// recipes built on `buttonVariants` (menu rows, triggers) override.
+const STATE_CLASS = /(?:hover|active|aria-disabled):/;
+
+// eslint-disable-next-line react-refresh/only-export-components -- shared with NoticeButton
+export function buttonLoadingClassName(className: string): string {
+  const classes = className.split(' ').filter(name => !STATE_CLASS.test(name));
+  return cn(classes, 'cursor-default');
+}
+
+function blockActivation(event: React.SyntheticEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+// Enter and Space press a button; the arrows open the menu it triggers, but still scroll the page. Every other key,
+// browser and app shortcuts included, goes through. (Base UI's `focusableWhenDisabled` cancels those too.)
+function blockActivationKeys(event: React.KeyboardEvent): void {
+  if (event.metaKey || event.ctrlKey) return;
+  if (event.key === 'Enter' || event.key === ' ') blockActivation(event);
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') event.stopPropagation();
+}
+
+// Not prevented, so a press still moves focus to the button.
+function stopPropagation(event: React.SyntheticEvent): void {
+  event.stopPropagation();
+}
+
+/**
+ * What every loading button puts on its element, whichever element that is. The handlers capture, so neither the
+ * button's own (a `render` element's included) nor a clickable parent's see the press.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with NoticeButton
+export const BUTTON_LOADING_PROPS = {
+  disabled: undefined,
+  'aria-busy': true,
+  'aria-disabled': true,
+  'data-button-loading': '',
+  onClickCapture: blockActivation,
+  onAuxClickCapture: blockActivation,
+  onDoubleClickCapture: blockActivation,
+  onPointerDownCapture: stopPropagation,
+  onMouseDownCapture: stopPropagation,
+  onKeyDownCapture: blockActivationKeys,
+  onKeyUpCapture: blockActivationKeys,
+} as const;
 
 export function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
   if (variant !== 'link') return children;
@@ -308,6 +396,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       size,
       variant = 'default',
       disabled,
+      loading = false,
       children,
       icon,
       iconEnd,
@@ -328,19 +417,26 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const ariaLabel =
       ariaLabelProp ?? ((iconMode || isIconOnly(children)) && typeof tooltip === 'string' ? tooltip : undefined);
 
+    const loaderAtEnd = loading && !icon && Boolean(iconEnd);
+
     const content = iconMode ? (
-      <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
+      <Icon size={iconSizeMap[resolvedSize]} data-loader-slot={loading ? loaderSlot(children) : undefined}>
+        {children}
+        {loading && <ButtonLoader />}
+      </Icon>
     ) : (
       <>
-        <ButtonAdornment slot="button-icon" size={adornmentSize}>
+        <ButtonAdornment slot="button-icon" size={adornmentSize} loading={loading && !loaderAtEnd}>
           {icon}
         </ButtonAdornment>
         <ButtonLabel variant={resolvedVariant}>{children}</ButtonLabel>
-        <ButtonAdornment slot="button-icon-end" size={adornmentSize}>
+        <ButtonAdornment slot="button-icon-end" size={adornmentSize} loading={loaderAtEnd}>
           {iconEnd}
         </ButtonAdornment>
       </>
     );
+
+    const recipe = buttonVariants({ variant, size: resolvedSize });
 
     const sharedProps = {
       disabled,
@@ -356,8 +452,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       // Icon-mode is a square: a group that overrides the rung has to move the width with
       // the height or the circle turns into a pill (see buttons-group.css).
       'data-shape': iconMode ? 'icon' : undefined,
-      className: cn(buttonVariants({ variant, size: resolvedSize }), className),
+      className: cn(loading ? buttonLoadingClassName(recipe) : recipe, className),
       ...props,
+      ...(loading ? BUTTON_LOADING_PROPS : undefined),
     };
 
     // The deprecated `as` API keeps its original element path rather than going through
@@ -391,18 +488,19 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const renderedLinkProps = renderedLink?.props;
     const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
     const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
-    const disabledLinkProps = disabled
-      ? {
-          ...(isLinkVariant ? null : { href: disabledHref }),
-          ...(isLinkVariant ? null : { to: disabledTo }),
-          'aria-disabled': true,
-          onClick: preventLinkActivation,
-          onAuxClick: preventLinkActivation,
-          onKeyDown: (event: React.KeyboardEvent) => {
-            if (event.key === 'Enter' || event.key === ' ') preventLinkActivation(event);
-          },
-        }
-      : undefined;
+    const disabledLinkProps =
+      disabled && !loading
+        ? {
+            ...(isLinkVariant ? null : { href: disabledHref }),
+            ...(isLinkVariant ? null : { to: disabledTo }),
+            'aria-disabled': true,
+            onClick: preventLinkActivation,
+            onAuxClick: preventLinkActivation,
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === 'Enter' || event.key === ' ') preventLinkActivation(event);
+            },
+          }
+        : undefined;
 
     const button = LegacyComponent ? (
       <LegacyComponent ref={ref} {...legacyLinkProps} {...sharedProps}>

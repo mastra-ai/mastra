@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Button } from '../Button';
 import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
+import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
 import { cn } from '@/lib/utils';
@@ -24,12 +25,6 @@ const meta: Meta<typeof Tooltip> = {
 export default meta;
 type Story = StoryObj<typeof Tooltip>;
 
-const KbdHint = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="ml-1 inline-flex items-center justify-center rounded-sm bg-muted px-1.5 py-0.5 font-mono text-meta text-muted-foreground">
-    {children}
-  </kbd>
-);
-
 export const Default: Story = {
   render: () => (
     <Tooltip>
@@ -50,8 +45,7 @@ export const WithKeyboardShortcut: Story = {
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        Save changes
-        <KbdHint>S</KbdHint>
+        <ShortcutHint label="Save changes" shortcut="S" />
       </TooltipContent>
     </Tooltip>
   ),

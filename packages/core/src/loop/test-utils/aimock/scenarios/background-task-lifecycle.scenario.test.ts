@@ -1,6 +1,3 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect, onTestFinished, vi } from 'vitest';
@@ -21,8 +18,8 @@ import {
 import { ExecutionFence, executionLeaseKey, resolveLeaseProvider } from '../../../../agent/durable/execution-fence';
 import { BackgroundTaskManager } from '../../../../background-tasks/manager';
 import type { PubSub } from '../../../../events/pubsub';
-import { UnixSocketPubSub } from '../../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../../mastra';
+import { sharedBroker } from '../../../../mastra/test-utils/shared-broker';
 import type { MemoryStorage } from '../../../../storage/domains/memory/base';
 import { WorkflowsInMemory } from '../../../../storage/domains/workflows/inmemory';
 import { RUN_FENCE_CONFLICT_ERROR_ID } from '../../../../storage/run-fencing';
@@ -1759,8 +1756,7 @@ describeForAllEngines(
     it.runIf(engine === 'evented')(
       'parks a deferred tool that asks for input while a shared evented run is still releasing its thread (#30182)',
       async () => {
-        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
-        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const pubsub = sharedBroker({ leases: true }).connect();
         const run = await startResearchDuringCleanup('bg-suspend-during-lease-release-thread', {
           hold: 'thread-lease',
           pubsub,
@@ -1789,7 +1785,6 @@ describeForAllEngines(
           run.finishCleanup();
           await run.cleanedUp;
           await pubsub.close();
-          await rm(directory, { recursive: true, force: true });
         }
       },
       30_000,
@@ -1802,8 +1797,7 @@ describeForAllEngines(
     it.runIf(engine === 'evented')(
       "parks a deferred tool that asks for input while a shared evented run's claim release has not returned (#30182)",
       async () => {
-        const directory = await mkdtemp(join(tmpdir(), 'mastra-30182-'));
-        const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+        const pubsub = sharedBroker({ leases: true }).connect();
         const run = await startResearchDuringCleanup('bg-suspend-during-shared-claim-release-thread', {
           hold: 'claim-release',
           pubsub,
@@ -1832,7 +1826,6 @@ describeForAllEngines(
           run.finishCleanup();
           await run.cleanedUp;
           await pubsub.close();
-          await rm(directory, { recursive: true, force: true });
         }
       },
       30_000,

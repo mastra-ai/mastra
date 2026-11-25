@@ -447,7 +447,14 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
       const [direct] = await this.activeContexts();
       if (direct && normalizeGitLabHost(host) === normalizeGitLabHost(direct.host)) return direct;
     }
+    const connectionId = connectionIdFromConnection(connection);
+    if (connectionId && host) return this.contextByIdForLinkedHost(connectionId, host);
     return this.#versionControlContext(connection);
+  }
+
+  /** The context for a connection a stored repository link says belongs to `host`. */
+  protected contextByIdForLinkedHost(connectionId: string, _host: string): Promise<GitLabConnectionContext> {
+    return this.contextById(connectionId);
   }
   async #contextForReference(reference: GitLabSourceReference): Promise<GitLabConnectionContext> {
     if (reference.connectionId) return this.contextById(reference.connectionId);
@@ -513,13 +520,21 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
   async #listSources(): Promise<IntakeSource[]> {
     const sources = new Map<string, IntakeSource>();
     for (const context of await this.activeContexts()) {
-      for (let page = 1; ; page++) {
-        const projects = await context.api.listProjects({ page });
-        for (const project of projects) {
-          const source = this.#toIntakeSource(context, project);
-          if (!sources.has(source.id)) sources.set(source.id, source);
+      const listed: IntakeSource[] = [];
+      try {
+        for (let page = 1; ; page++) {
+          const projects = await context.api.listProjects({ page });
+          listed.push(...projects.map(project => this.#toIntakeSource(context, project)));
+          if (projects.length < GITLAB_PROJECTS_PAGE_SIZE) break;
         }
-        if (projects.length < GITLAB_PROJECTS_PAGE_SIZE) break;
+      } catch (error) {
+        // A connection that moved to another instance mid-listing is left out,
+        // as it is once the connection list refreshes; its pages so far are discarded.
+        if (error instanceof GitLabApiError && error.status === 409) continue;
+        throw error;
+      }
+      for (const source of listed) {
+        if (!sources.has(source.id)) sources.set(source.id, source);
       }
     }
     return [...sources.values()];

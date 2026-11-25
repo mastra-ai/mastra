@@ -154,7 +154,7 @@ export async function envPullAction(file: string | undefined, opts: { config?: s
 
   const stored = await getServerProjectEnv(token, orgId, projectId);
   // Write-only secrets come back as a placeholder: list their names, never the placeholder.
-  const envVars: Record<string, string> = {};
+  const envVars: Record<string, string> = Object.create(null);
   const secretVarNames: string[] = [];
   for (const [key, value] of Object.entries(stored)) {
     if (isSecretPlaceholder(value)) secretVarNames.push(key);

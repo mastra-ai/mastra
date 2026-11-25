@@ -34,7 +34,7 @@ import {
   emitOwnershipClaimedEvent,
   emitSuspendedEvent,
 } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 const IDLE = 60;
 
@@ -82,7 +82,7 @@ describe('durable run stream claim generations', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
   it('snapshots private request metadata before callbacks and queued chunks, without publishing it', async () => {
     const pubsub = new EventEmitterPubSub();

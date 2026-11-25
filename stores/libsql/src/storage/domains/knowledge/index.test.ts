@@ -6,10 +6,16 @@ import { join } from 'node:path';
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
 import { KNOWLEDGE_PAGES_TABLE_NAMES } from '@internal/core/knowledge-compat';
 import {
+  createKnowledgeImporterExportDDLTests,
+  createKnowledgeImporterHostTests,
+  createKnowledgeHostedImporterHostTests,
+  createKnowledgeImportersStorageTests,
   createKnowledgeLegacyUpgradeTests,
   createKnowledgeSchemaResetTests,
   createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
+  createKnowledgeTransactionTests,
+  knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
@@ -23,7 +29,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
-import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from '.';
+import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL, libsqlKnowledgeTransaction } from '.';
 
 const COMPAT_CONSTANTS = [
   'KNOWLEDGE_STORAGE_CONTRACT_VERSION',
@@ -50,6 +56,91 @@ describe('Knowledge Core compatibility', () => {
 
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+
+describe('through transaction views', () => {
+  createKnowledgePageStoreTests(() =>
+    knowledgeStoreThroughTransactions(new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' })),
+  );
+});
+
+createKnowledgeTransactionTests(async () => {
+  // A file database, so the reader is a real second connection.
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-tx-'));
+  const url = `file:${join(dir, 'knowledge.db')}`;
+  const writer = createClient({ url });
+  const readerClient = createClient({ url });
+  const store = new KnowledgeLibSQL({ client: writer });
+  await store.init();
+  const sql = (tx: Parameters<typeof libsqlKnowledgeTransaction>[0]) => libsqlKnowledgeTransaction(tx);
+  return {
+    store,
+    reader: new KnowledgeLibSQL({ client: readerClient }),
+    rows: {
+      reset: async () => {
+        await writer.executeMultiple(`
+          CREATE TABLE IF NOT EXISTS tx_nodes (source_id TEXT PRIMARY KEY, page_id TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS tx_state (binding_id TEXT PRIMARY KEY, cursor TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS tx_receipts (run_id TEXT, seq INTEGER, digest TEXT NOT NULL, applied INTEGER NOT NULL, PRIMARY KEY (run_id, seq));
+          CREATE TABLE IF NOT EXISTS tx_runs (run_id TEXT PRIMARY KEY, last_seq INTEGER NOT NULL);
+          DELETE FROM tx_nodes; DELETE FROM tx_state; DELETE FROM tx_receipts; DELETE FROM tx_runs;`);
+      },
+      startRun: async runId => {
+        await writer.execute({ sql: 'INSERT INTO tx_runs VALUES (?, 0)', args: [runId] });
+      },
+      receipt: async (tx, runId, seq) => {
+        const { rows } = await sql(tx).execute({
+          sql: 'SELECT digest, applied FROM tx_receipts WHERE run_id = ? AND seq = ?',
+          args: [runId, seq],
+        });
+        return rows[0] ? { digest: String(rows[0].digest), applied: Number(rows[0].applied) } : null;
+      },
+      // SQLite's write transaction already holds the database lock.
+      lastSeq: async (tx, runId) =>
+        Number(
+          (await sql(tx).execute({ sql: 'SELECT last_seq FROM tx_runs WHERE run_id = ?', args: [runId] })).rows[0]!
+            .last_seq,
+        ),
+      addNode: async (tx, sourceId, pageId) => {
+        await sql(tx).execute({ sql: 'INSERT INTO tx_nodes VALUES (?, ?)', args: [sourceId, pageId] });
+      },
+      setCursor: async (tx, cursor) => {
+        await sql(tx).execute({
+          sql: "INSERT INTO tx_state VALUES ('b1', ?) ON CONFLICT (binding_id) DO UPDATE SET cursor = excluded.cursor",
+          args: [cursor],
+        });
+      },
+      addReceipt: async (tx, runId, seq, digest, applied) => {
+        await sql(tx).execute({
+          sql: 'INSERT INTO tx_receipts VALUES (?, ?, ?, ?)',
+          args: [runId, seq, digest, applied],
+        });
+      },
+      setLastSeq: async (tx, runId, seq) => {
+        await sql(tx).execute({ sql: 'UPDATE tx_runs SET last_seq = ? WHERE run_id = ?', args: [seq, runId] });
+      },
+      observe: async runId => {
+        const nodes = await readerClient.execute('SELECT source_id FROM tx_nodes ORDER BY source_id');
+        const state = await readerClient.execute("SELECT cursor FROM tx_state WHERE binding_id = 'b1'");
+        const receipts = await readerClient.execute({
+          sql: 'SELECT seq FROM tx_receipts WHERE run_id = ? ORDER BY seq',
+          args: [runId],
+        });
+        const run = await readerClient.execute({ sql: 'SELECT last_seq FROM tx_runs WHERE run_id = ?', args: [runId] });
+        return {
+          nodes: nodes.rows.map(row => String(row.source_id)),
+          cursor: state.rows[0] ? String(state.rows[0].cursor) : null,
+          receipts: receipts.rows.map(row => Number(row.seq)),
+          lastSeq: run.rows[0] ? Number(run.rows[0].last_seq) : null,
+        };
+      },
+    },
+    cleanup: async () => {
+      writer.close();
+      readerClient.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+});
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
   const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
@@ -179,4 +270,71 @@ createKnowledgeLegacyUpgradeTests({
   knowledgeTables: knowledgeTableNames,
   otherTableRows: async () =>
     Number((await legacyClient.execute('SELECT COUNT(*) AS n FROM existing_domain')).rows[0]!.n),
+});
+
+createKnowledgeImportersStorageTests(async () => {
+  // File databases, so the reader is a real second connection.
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importers-'));
+  const url = `file:${join(dir, 'knowledge.db')}`;
+  const writer = createClient({ url });
+  const readerClient = createClient({ url });
+  const store = new KnowledgeLibSQL({ client: writer });
+  await store.init();
+  await store.importers!.init();
+  const unprovisionedClient = createClient({ url: `file:${join(dir, 'unprovisioned.db')}` });
+  return {
+    store,
+    reader: new KnowledgeLibSQL({ client: readerClient }),
+    unprovisioned: {
+      store: new KnowledgeLibSQL({ client: unprovisionedClient }),
+      importerTablesExist: async () =>
+        Number(
+          (
+            await unprovisionedClient.execute(
+              "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name LIKE 'mastra\\_knowledge\\_importer\\_%' ESCAPE '\\'",
+            )
+          ).rows[0]!.n,
+        ) === 8,
+    },
+    // One client's write transactions are serialized, which is what the lock tests observe.
+    concurrentTransactions: true,
+    cleanup: async () => {
+      writer.close();
+      readerClient.close();
+      unprovisionedClient.close();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+});
+
+const importerHostFixture = async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importer-host-'));
+  const storage = new LibSQLStore({ id: 'importer-host', url: `file:${join(dir, 'knowledge.db')}` });
+  return {
+    storage,
+    cleanup: async () => {
+      await storage.close?.();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+};
+createKnowledgeImporterHostTests(importerHostFixture);
+createKnowledgeHostedImporterHostTests(importerHostFixture);
+
+createKnowledgeImporterExportDDLTests(async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'knowledge-importer-export-'));
+  const url = `file:${join(dir, 'knowledge.db')}`;
+  // LibSQL exports no page DDL: the pages domain provisions itself, the importer tables come from the export.
+  const client = createClient({ url });
+  await new KnowledgeLibSQL({ client }).init();
+  for (const statement of KnowledgeLibSQL.getImportersExportDDL()) await client.execute(statement);
+  client.close();
+  const storage = new LibSQLStore({ id: 'importer-export', url, disableInit: true });
+  return {
+    storage,
+    cleanup: async () => {
+      await storage.close?.();
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
 });

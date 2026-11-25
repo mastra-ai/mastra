@@ -41,6 +41,12 @@ export interface PlatformConnectProviderRegistration {
   connectionIntegrationIds: readonly string[];
   /** The owning integration's Connect plumbing. */
   binding: PlatformConnectBinding;
+  /**
+   * Connection settings a reconnect must keep, such as a self-hosted
+   * instance's hostname. The reconnect session returns them so the form
+   * submits them unchanged instead of asking for them again.
+   */
+  reconnectParams?: (connectionId: string) => Promise<Record<string, string>>;
 }
 
 /** An integration that registers providers with the platform connect routes. */
@@ -356,10 +362,11 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
               candidate.id === connectionId && provider.connectionIntegrationIds.includes(candidate.integrationId),
           );
           if (!connection) return c.json({ error: 'connection_not_found' }, 404);
+          const params = await provider.reconnectParams?.(connectionId);
           const session = await provider.binding.connect.createReconnectSession(connectionId);
           provider.binding.invalidateConnections();
           c.header('Cache-Control', 'no-store');
-          return c.json(session, 201);
+          return c.json({ ...session, ...(params ? { params } : {}) }, 201);
         } catch (err) {
           return platformError(c, err);
         }

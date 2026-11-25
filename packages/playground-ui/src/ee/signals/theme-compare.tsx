@@ -126,7 +126,7 @@ export function ThemeCompare({
         </Txt>
       </div>
       {fromIndex === toIndex ? (
-        <Txt tone="muted" className="rounded-lg border border-border bg-background p-6">
+        <Txt tone="muted" className="rounded-lg bg-nested p-6">
           Pick two different landmarks on the timeline to compare them.
         </Txt>
       ) : !fromFlow || !toFlow ? (

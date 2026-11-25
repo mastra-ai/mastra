@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -351,6 +351,26 @@ describe('Board source and Linear project filters', () => {
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
     expect(screen.queryByText('Billing: export invoices')).not.toBeInTheDocument();
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
+  });
+
+  it('narrows the board by pull request and by trust, next to the source filter', async () => {
+    stubSources();
+    const view = renderBoard();
+    await screen.findByText('GitHub: update dependencies');
+    await waitForMutationsIdle(view.client);
+
+    // The GitHub card carries no trust stamp, so like intake it counts as from outside.
+    await selectMany('Trust', ['From outside']);
+    await waitForMutationsIdle(view.client);
+    expect(view.router.state.location.search).toContain('trust=untrusted');
+    await waitFor(() => expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument());
+    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
+
+    await selectMany('Pull request', ['Has a pull request']);
+    await waitForMutationsIdle(view.client);
+    expect(view.router.state.location.search).toContain('pullRequest=with');
+    expect(await screen.findAllByText('No work items match filters')).not.toHaveLength(0);
+    expect(screen.queryByText('GitHub: update dependencies')).not.toBeInTheDocument();
   });
 
   it('explains that filters excluded Intake cards instead of suggesting an integration setup', async () => {

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { checkFrontmatter } from '../checks/frontmatter'
 import { checkLinks, remarkFindings } from '../checks/mdx'
 import { checkRedirectList } from '../checks/redirects'
-import { valeFindings } from '../checks/vale'
+import { syncedMdxFiles, valeFindings } from '../checks/vale'
 import { parseContentFile } from '../content'
 import { formatHuman, parseArgs } from '../index'
 import { parseMdx } from '../mdx'
@@ -337,6 +337,39 @@ describe('vale adapter', () => {
         column: 3,
       }),
     ])
+  })
+})
+
+describe('syncedMdxFiles', () => {
+  it('lists .mdx files in every synced source dir, relative to the docs root', async () => {
+    const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'synced-mdx-'))
+    try {
+      const write = async (file: string, content = '# Page\n') => {
+        await fs.mkdir(path.dirname(path.join(repo, file)), { recursive: true })
+        await fs.writeFile(path.join(repo, file), content)
+      }
+      await write('docs/src/site/index.mdx')
+      await write('docs/src/site/nested/page.mdx')
+      await write('docs/src/site/sidebars.js', 'export default {}')
+      await write('docs/src/site-ref/api.mdx')
+      await write('docs/src/ignored/page.mdx')
+      const source = (dir: string) => ({ source: dir })
+      await write(
+        '.github/docs-sync.json',
+        JSON.stringify({
+          targets: [source('docs/src/site'), source('docs/src/site-ref'), source('docs/src/site'), source('../etc')],
+        }),
+      )
+      expect(await syncedMdxFiles(path.join(repo, 'docs'))).toEqual([
+        'src/site-ref/api.mdx',
+        'src/site/index.mdx',
+        'src/site/nested/page.mdx',
+      ])
+      await write('.github/docs-sync.json', '{ not json')
+      expect(await syncedMdxFiles(path.join(repo, 'docs'))).toEqual([])
+    } finally {
+      await fs.rm(repo, { recursive: true, force: true })
+    }
   })
 })
 

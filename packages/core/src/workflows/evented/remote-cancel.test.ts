@@ -1,11 +1,6 @@
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import type { PubSub } from '../../events/pubsub';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { WorkflowEventProcessor } from './workflow-event-processor';
@@ -113,39 +108,6 @@ function withTimeout<T>(promise: Promise<T>): Promise<T | 'timed out'> {
   ]);
 }
 
-type PubSubFactory = {
-  name: string;
-  create: () => { owner: PubSub; other: PubSub; cleanup: () => Promise<void> | void };
-};
-
-const PUBSUBS: PubSubFactory[] = [
-  {
-    name: 'EventEmitterPubSub',
-    create: () => {
-      const shared = new EventEmitterPubSub();
-      return { owner: shared, other: shared, cleanup: () => {} };
-    },
-  },
-  {
-    name: 'UnixSocketPubSub',
-    create: () => {
-      const dir = mkdtempSync(join(tmpdir(), 'mastra-remote-cancel-'));
-      const socketPath = join(dir, 'pubsub.sock');
-      const owner = new UnixSocketPubSub(socketPath);
-      const other = new UnixSocketPubSub(socketPath);
-      return {
-        owner,
-        other,
-        cleanup: async () => {
-          await other.close();
-          await owner.close();
-          rmSync(dir, { recursive: true, force: true });
-        },
-      };
-    },
-  },
-];
-
 const cleanups: Array<() => Promise<void> | void> = [];
 
 afterEach(async () => {
@@ -154,43 +116,31 @@ afterEach(async () => {
 });
 
 describe('evented workflow cancel from another instance', () => {
-  describe.each(PUBSUBS)('$name', pubsubFactory => {
-    it.each(SHAPES)("settles the owner's start() as canceled and aborts the step (%s)", async shape => {
-      const storage = new MockStore();
-      const { owner: ownerPubsub, other: otherPubsub, cleanup } = pubsubFactory.create();
-      const blocker = createBlocker();
-      const ownerWorkflow = buildWorkflow(shape, blocker);
-      // A separate workflow object per instance, as in two processes: Workflow caches runs by id.
-      const otherWorkflow = buildWorkflow(shape, createBlocker());
-      const owner = new Mastra({
-        logger: false,
-        storage,
-        pubsub: ownerPubsub,
-        workflows: { [WORKFLOW_ID]: ownerWorkflow },
-      });
-      const other = new Mastra({
-        logger: false,
-        storage,
-        pubsub: otherPubsub,
-        workflows: { [WORKFLOW_ID]: otherWorkflow },
-      });
-      cleanups.push(cleanup, () => owner.stopWorkers());
-      await owner.startWorkers();
+  it.each(SHAPES)("settles the owner's start() as canceled and aborts the step (%s)", async shape => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const blocker = createBlocker();
+    const ownerWorkflow = buildWorkflow(shape, blocker);
+    // A separate workflow object per instance, as in two processes: Workflow caches runs by id.
+    const otherWorkflow = buildWorkflow(shape, createBlocker());
+    const owner = new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: ownerWorkflow } });
+    new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: otherWorkflow } });
+    cleanups.push(() => owner.stopWorkers());
+    await owner.startWorkers();
 
-      const run = await ownerWorkflow.createRun();
-      const resultPromise = run.start({ inputData: { count: 0 } });
-      await blocker.entered;
+    const run = await ownerWorkflow.createRun();
+    const resultPromise = run.start({ inputData: { count: 0 } });
+    await blocker.entered;
 
-      const remoteRun = await otherWorkflow.createRun({ runId: run.runId });
-      await remoteRun.cancel();
+    const remoteRun = await otherWorkflow.createRun({ runId: run.runId });
+    await remoteRun.cancel();
 
-      const result = await withTimeout(resultPromise);
-      expect(result === 'timed out' ? result : result.status).toBe('canceled');
-      expect(blocker.state.aborted).toBe(true);
+    const result = await withTimeout(resultPromise);
+    expect(result === 'timed out' ? result : result.status).toBe('canceled');
+    expect(blocker.state.aborted).toBe(true);
 
-      const stored = await otherWorkflow.getWorkflowRunById(run.runId);
-      expect(stored?.status).toBe('canceled');
-    });
+    const stored = await otherWorkflow.getWorkflowRunById(run.runId);
+    expect(stored?.status).toBe('canceled');
   });
 
   it('surfaces a failed workflow.cancel publish and lets the caller retry the cancel', async () => {
@@ -655,119 +605,91 @@ describe('evented workflow cancel with workers on both replicas', () => {
     await expectStepSkipped(setup, stepGate, runX.runId, createBlocker());
   });
 
-  describe.each(PUBSUBS)('$name', pubsubFactory => {
-    // UnixSocketPubSub delivers the ungrouped push `workflows` subscription to every replica that
-    // owns the workflow, so both process each event (pre-existing; also true on main). Exactly-once
-    // end, the cross-replica routing proof and repeated runs only apply where one replica consumes each event.
-    const groupedDelivery = pubsubFactory.name === 'EventEmitterPubSub';
-    // Without grouping, a nested run is executed on both replicas: a duplicate child can finish and
-    // clean up the run while the first call is still blocking, so nested cases need grouped delivery.
-    const cases = [
-      { canceller: 'owner' as const, nested: false },
-      { canceller: 'other' as const, nested: false },
-      { canceller: 'owner' as const, nested: true },
-      { canceller: 'other' as const, nested: true },
-    ].filter(({ nested }) => groupedDelivery || !nested);
-    it.each(cases)(
-      'aborts the step wherever it runs (cancel from $canceller, nested: $nested)',
-      async ({ canceller, nested }) => {
-        const storage = new MockStore();
-        const { owner: ownerPubsub, other: otherPubsub, cleanup } = pubsubFactory.create();
-        const { holder, block } = createSharedBlocker();
-        const ownerWorkflow = buildBothWorkflow(nested, block('owner'));
-        const otherWorkflow = buildBothWorkflow(nested, block('other'));
-        const owner = new Mastra({
-          logger: false,
-          storage,
-          pubsub: ownerPubsub,
-          workflows: { [WORKFLOW_ID]: ownerWorkflow },
-        });
-        const other = new Mastra({
-          logger: false,
-          storage,
-          pubsub: otherPubsub,
-          workflows: { [WORKFLOW_ID]: otherWorkflow },
-        });
-        cleanups.push(
-          cleanup,
-          () => owner.stopWorkers(),
-          () => other.stopWorkers(),
-        );
-
-        // Control subscriptions opened, per topic: one per processor, however many runs and steps.
-        const controlSubscriptions = new Map<string, number>();
-        const ends = new Map<string, number>();
-        for (const pubsub of new Set([ownerPubsub, otherPubsub])) {
-          const subscribe = pubsub.subscribe.bind(pubsub);
-          const publish = pubsub.publish.bind(pubsub);
-          vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
-            await subscribe(topic, cb, options);
-            if (topic.startsWith('workflow.control')) {
-              controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) + 1);
-            }
-          });
-          vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {
-            if (topic === 'workflows' && event.type === 'workflow.end' && !event.data?.parentWorkflow) {
-              ends.set(event.runId, (ends.get(event.runId) ?? 0) + 1);
-            }
-            return (publish as any)(topic, event, ...rest);
-          });
-        }
-
-        // Which replica finalized each cancel, to prove the cross-replica case was exercised.
-        const cancelledOn: Label[] = [];
-        const processCancel = WorkflowEventProcessor.prototype['processWorkflowCancel'];
-        vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowCancel').mockImplementation(function (
-          this: any,
-          args: any,
-        ) {
-          if (!args.parentWorkflow) cancelledOn.push(this.mastra === owner ? 'owner' : 'other');
-          return processCancel.call(this, args);
-        });
-
-        await owner.startWorkers();
-        await other.startWorkers();
-
-        const processors = new Set<any>();
-        const retain = WorkflowEventProcessor.prototype['retainRunsForStep'];
-        vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
-          this: any,
-          runIds: any,
-        ) {
-          processors.add(this);
-          return retain.call(this, runIds);
-        });
-
-        // Several runs let the consumer group route cancels to both replicas. Without grouping, duplicate
-        // processing can leave a late step call that would take the next run's blocker, so run once.
-        for (let i = 0; i < (groupedDelivery ? RUNS : 1); i++) {
-          holder.current = createBlocker();
-          const run = await ownerWorkflow.createRun();
-          const resultPromise = run.start({ inputData: { count: 0 } });
-          await holder.current.entered;
-
-          const cancelWorkflow = canceller === 'owner' ? ownerWorkflow : otherWorkflow;
-          await (await cancelWorkflow.createRun({ runId: run.runId })).cancel();
-
-          const result = await withTimeout(resultPromise);
-          expect(result === 'timed out' ? result : result.status).toBe('canceled');
-          await vi.waitFor(() => expect(holder.current.state.aborted).toBe(true), { timeout: SETTLE_TIMEOUT_MS });
-          await vi.waitFor(
-            () => {
-              for (const processor of processors) expect([...processor.stepRunRefs.keys()]).toEqual([]);
-            },
-            { timeout: SETTLE_TIMEOUT_MS },
-          );
-          if (groupedDelivery) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            expect(ends.get(run.runId)).toBe(1);
-          }
-        }
-
-        expect([...controlSubscriptions.keys()]).toEqual(['workflow.control']);
-        expect(controlSubscriptions.get('workflow.control')).toBeLessThanOrEqual(processors.size);
-        if (groupedDelivery) expect(cancelledOn.some((label, i) => label !== holder.ranOn[i])).toBe(true);
-      },
+  it.each([
+    { canceller: 'owner' as const, nested: false },
+    { canceller: 'other' as const, nested: false },
+    { canceller: 'owner' as const, nested: true },
+    { canceller: 'other' as const, nested: true },
+  ])('aborts the step wherever it runs (cancel from $canceller, nested: $nested)', async ({ canceller, nested }) => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const { holder, block } = createSharedBlocker();
+    const ownerWorkflow = buildBothWorkflow(nested, block('owner'));
+    const otherWorkflow = buildBothWorkflow(nested, block('other'));
+    const owner = new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: ownerWorkflow } });
+    const other = new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: otherWorkflow } });
+    cleanups.push(
+      () => owner.stopWorkers(),
+      () => other.stopWorkers(),
     );
+
+    // Control subscriptions opened, per topic: one per processor, however many runs and steps.
+    const controlSubscriptions = new Map<string, number>();
+    const ends = new Map<string, number>();
+    const subscribe = pubsub.subscribe.bind(pubsub);
+    const publish = pubsub.publish.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, cb, options) => {
+      await subscribe(topic, cb, options);
+      if (topic.startsWith('workflow.control')) {
+        controlSubscriptions.set(topic, (controlSubscriptions.get(topic) ?? 0) + 1);
+      }
+    });
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {
+      if (topic === 'workflows' && event.type === 'workflow.end' && !event.data?.parentWorkflow) {
+        ends.set(event.runId, (ends.get(event.runId) ?? 0) + 1);
+      }
+      return (publish as any)(topic, event, ...rest);
+    });
+
+    // Which replica finalized each cancel, to prove the cross-replica case was exercised.
+    const cancelledOn: Label[] = [];
+    const processCancel = WorkflowEventProcessor.prototype['processWorkflowCancel'];
+    vi.spyOn(WorkflowEventProcessor.prototype as any, 'processWorkflowCancel').mockImplementation(function (
+      this: any,
+      args: any,
+    ) {
+      if (!args.parentWorkflow) cancelledOn.push(this.mastra === owner ? 'owner' : 'other');
+      return processCancel.call(this, args);
+    });
+
+    await owner.startWorkers();
+    await other.startWorkers();
+
+    const processors = new Set<any>();
+    const retain = WorkflowEventProcessor.prototype['retainRunsForStep'];
+    vi.spyOn(WorkflowEventProcessor.prototype as any, 'retainRunsForStep').mockImplementation(function (
+      this: any,
+      runIds: any,
+    ) {
+      processors.add(this);
+      return retain.call(this, runIds);
+    });
+
+    // Several runs let the consumer group route cancels to both replicas.
+    for (let i = 0; i < RUNS; i++) {
+      holder.current = createBlocker();
+      const run = await ownerWorkflow.createRun();
+      const resultPromise = run.start({ inputData: { count: 0 } });
+      await holder.current.entered;
+
+      const cancelWorkflow = canceller === 'owner' ? ownerWorkflow : otherWorkflow;
+      await (await cancelWorkflow.createRun({ runId: run.runId })).cancel();
+
+      const result = await withTimeout(resultPromise);
+      expect(result === 'timed out' ? result : result.status).toBe('canceled');
+      await vi.waitFor(() => expect(holder.current.state.aborted).toBe(true), { timeout: SETTLE_TIMEOUT_MS });
+      await vi.waitFor(
+        () => {
+          for (const processor of processors) expect([...processor.stepRunRefs.keys()]).toEqual([]);
+        },
+        { timeout: SETTLE_TIMEOUT_MS },
+      );
+      await new Promise(resolve => setTimeout(resolve, 100));
+      expect(ends.get(run.runId)).toBe(1);
+    }
+
+    expect([...controlSubscriptions.keys()]).toEqual(['workflow.control']);
+    expect(controlSubscriptions.get('workflow.control')).toBeLessThanOrEqual(processors.size);
+    expect(cancelledOn.some((label, i) => label !== holder.ranOn[i])).toBe(true);
   });
 });

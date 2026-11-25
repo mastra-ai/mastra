@@ -65,16 +65,20 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
             value={safeStringify(value, 2)}
             editable={false}
             lineNumbers={false}
-            className="min-w-0 rounded-lg bg-background p-3"
+            className="min-w-0 rounded-lg bg-nested p-3"
           />
         )}
       </div>
       {result?.status === 'suspended' && (
         <div className="shrink-0 border-t border-border p-2">
-          <Button variant="ghost" className="w-full justify-start text-warning-foreground" onClick={closeStepDetail}>
-            <IconPause />
-            Return to suspended step
-            <IconChevronRightMedium className="ml-auto" />
+          <Button
+            iconEnd={<IconChevronRightMedium />}
+            icon={<IconPause />}
+            variant="ghost"
+            className="w-full justify-start text-warning-foreground"
+            onClick={closeStepDetail}
+          >
+            <span className="flex-1 text-left">Return to suspended step</span>
           </Button>
         </div>
       )}

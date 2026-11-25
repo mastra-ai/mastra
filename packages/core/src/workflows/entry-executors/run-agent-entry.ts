@@ -1,4 +1,5 @@
 import type { ReadableStream } from 'node:stream/web';
+import { hasDurableExecution } from '../../agent/streams/execution-capability';
 import { TripWire } from '../../agent/trip-wire';
 import { isDurableAgentLike } from '../../agent/types';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -19,12 +20,13 @@ import type { EntryExecuteContext } from './types';
  * unwrapped to the agent it wraps. Warns because the step runs non-durably.
  */
 export function resolveLegacyAgent<T>(agent: T, mastra?: Mastra): T {
-  if (!isDurableAgentLike(agent)) return agent;
+  if (!hasDurableExecution(agent)) return agent;
   mastra
     ?.getLogger()
     ?.warn(
       `Agent "${agent.id}" is durable but uses a legacy v1 model, which has no durable execution path, so the step runs it non-durably.`,
     );
+  if (!isDurableAgentLike(agent)) return agent;
   const inner: unknown = agent.agent;
   return (inner !== agent ? inner : agent) as T;
 }

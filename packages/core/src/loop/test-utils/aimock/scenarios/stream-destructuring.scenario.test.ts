@@ -76,7 +76,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     );
     const { agent } = await createSharedAgent(llm, { engine, instructions: 'You are a helpful assistant.' });
     const result: any = await agent.stream('Say hello');
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     return { llm, result, output };
   }
 
@@ -153,7 +153,7 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
         },
       });
       try {
-        const output = isDurableEngineVariant(engine) && method === 'stream' ? result.output : result;
+        const output = method === 'stream' ? (result.output ?? result) : result;
         if (method === 'stream') await output.consumeStream();
         const request = await output.request;
         expect(request.body).toMatchObject({ model: llm.getRequests()[0]!.body!.model });
