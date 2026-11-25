@@ -62,7 +62,7 @@ export function BoardCard({
         href={href}
         draggable={false}
         aria-label={`Open ${title}`}
-        className={`rounded-card absolute inset-0 cursor-pointer ${focusRingInset}`}
+        className={`absolute inset-0 cursor-pointer rounded-card ${focusRingInset}`}
       />
       {children}
     </article>
