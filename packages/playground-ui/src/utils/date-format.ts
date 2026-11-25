@@ -43,6 +43,15 @@ const PRESET_OPTIONS = {
     fractionalSecondDigits: 3,
   },
   timePrecise: { hour: 'numeric', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3 },
+  logLine: {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    fractionalSecondDigits: 2,
+    hourCycle: 'h23',
+  },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
 
 type FormatterKey = keyof typeof PRESET_OPTIONS;
@@ -139,6 +148,23 @@ export function formatDate(value: DateInput, preset: DatePreset, options: Format
   return getFormatter(preset, locale, timeZone).format(date);
 }
 
+function calendarDay(date: Date, timeZone?: string) {
+  const { year, month, day } = calendarDate(date, timeZone);
+  return Date.UTC(Number(year), Number(month) - 1, Number(day)) / 86_400_000;
+}
+
+/** When something happened, by its day and clock: `Today at 10:44:44 AM`, `Yesterday at …`, `Oct 21 at …`. */
+export function formatMoment(value: DateInput, options: FormatOptions = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const clock = formatDate(date, 'time-seconds', options);
+  const daysAgo =
+    calendarDay(new Date(options.now ?? Date.now()), options.timeZone) - calendarDay(date, options.timeZone);
+  if (daysAgo === 0) return `Today at ${clock}`;
+  if (daysAgo === 1) return `Yesterday at ${clock}`;
+  return `${formatShortDate(date, options)} at ${clock}`;
+}
+
 /** Locale-aware compact date range, e.g. `Sep 2 – 5, 2026`. */
 export function formatDateRange(start: DateInput, end: DateInput, options: Omit<FormatOptions, 'now'> = {}) {
   const from = toDate(start);
@@ -147,6 +173,33 @@ export function formatDateRange(start: DateInput, end: DateInput, options: Omit<
   return getFormatter('dayMonthYear', options.locale, options.timeZone)
     .formatRange(from, to)
     .replace(/\u2009/g, ' ');
+}
+
+export interface LogLineTimestampParts {
+  day: string;
+  time: string;
+  fraction: string;
+}
+
+export function formatLogLineTimestamp(
+  value: DateInput,
+  { locale, timeZone }: { locale?: string; timeZone?: string } = {},
+): LogLineTimestampParts | undefined {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const parts = getFormatter('logLine', locale, timeZone).formatToParts(date);
+  const timeStart = parts.findIndex(part => part.type === 'hour');
+  const fractionStart = parts.findIndex(part => part.type === 'fractionalSecond');
+  const join = (from: number, to: number) =>
+    parts
+      .slice(from, to)
+      .map(part => part.value)
+      .join('');
+  return {
+    day: join(0, timeStart).trim().replace(/,$/, ''),
+    time: join(timeStart, fractionStart - 1),
+    fraction: join(fractionStart - 1, parts.length),
+  };
 }
 
 /** Date and time down to milliseconds, for trace debugging. `withDate: false` keeps only the time. */

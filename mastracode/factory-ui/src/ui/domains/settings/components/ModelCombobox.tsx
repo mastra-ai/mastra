@@ -1,12 +1,14 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
-import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
@@ -23,7 +25,9 @@ function modelOption(id: string, provider: string): ComboboxOption {
     label: name,
     // The full id tells apart models that share a name across providers (e.g. OpenAI and OpenAI Codex).
     description: id,
-    start: <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />,
+    start: (
+      <ProviderBrandIcon provider={provider} fallback={<IconBox className="text-muted-foreground size-icon-md" />} />
+    ),
     keywords: provider ? [id, providerDisplayName(provider)] : [id],
   };
 }
@@ -34,10 +38,10 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
     value: AUTO_VALUE,
     label: 'Auto',
     description: effectiveName ? `Currently ${effectiveName}` : 'Picked for you',
-    displayLabel: effectiveName ? `Auto · ${effectiveName}` : 'Auto',
+    displayLabel: effectiveName ? `Auto (${effectiveName})` : 'Auto',
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-        <Sparkles className="text-muted-foreground size-4" />
+        <IconSparklesTwo className="text-muted-foreground size-icon-md" />
       </span>
     ),
     keywords: ['automatic', 'default', ...(effectiveModelId ? [effectiveModelId] : [])],
@@ -61,6 +65,7 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
+  fallbackModelId,
   placeholder,
   disabled,
   className,
@@ -72,6 +77,7 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
+  fallbackModelId?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -101,8 +107,12 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={placeholder ?? 'Select model…'}
-      searchPlaceholder="Search models…"
+      placeholder={
+        fallbackModelId
+          ? `${formatModelName(fallbackModelId)} (${DEFAULT_SOURCE_LABELS['built-in']})`
+          : (placeholder ?? 'Select model')
+      }
+      searchPlaceholder="Search models"
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}

@@ -1,5 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -23,7 +23,6 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
-import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -68,6 +67,7 @@ import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import IntegrationsPage from './pages/integrations';
+import KnowledgePage from './pages/knowledge';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -101,6 +101,7 @@ import { PlaygroundConfigGuard } from '@/domains/configuration/components/playgr
 
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
@@ -134,18 +135,19 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <KeyboardShortcutsProvider>
         <GlobalShortcuts />
-        <Layout>
-          <RoutePermissionGuard>
-            <Outlet />
-          </RoutePermissionGuard>
-        </Layout>
+        <StudioKnowledgeLinks>
+          <Layout>
+            <RoutePermissionGuard>
+              <Outlet />
+            </RoutePermissionGuard>
+          </Layout>
+        </StudioKnowledgeLinks>
       </KeyboardShortcutsProvider>
     </LinkComponentProvider>
   );
@@ -153,8 +155,7 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -461,6 +462,8 @@ export const routes: RouteObject[] = [
         ],
       },
 
+      { path: '/knowledge', element: <KnowledgePage /> },
+
       ...(isExperimentalFeatures
         ? [
             { path: '/datasets', element: <Datasets /> },
@@ -534,11 +537,7 @@ function App() {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
     // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
-    return (
-      <div className="flex h-screen w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
+    return <BrandLoader fill="screen" />;
   }
 
   if (!baseUrl) {

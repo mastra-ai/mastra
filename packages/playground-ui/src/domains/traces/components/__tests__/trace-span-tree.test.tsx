@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import type { SpanRowContext } from '../span-rows';
 import { TraceSpanTree } from '../trace-span-tree';
-import { deepTraceFixture, nestedSpanFixture } from './fixtures/trace-data-panel-view';
+import { deepTraceFixture, nestedSpanFixture } from './fixtures/trace-spans';
 
 // jsdom has no layout, so it ships no scrollIntoView.
 const scrollIntoView = vi.fn();

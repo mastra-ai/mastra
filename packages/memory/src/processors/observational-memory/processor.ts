@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
+import { classifyProviderError } from '@mastra/core/error';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryRunState } from '@mastra/core/memory';
 import type { MemoryOperationAttributes, ObservabilityContext } from '@mastra/core/observability';
@@ -15,14 +16,15 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
-import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
+import { getOmFailureMetadata } from './error';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
+import { idsMarkedForResave, resaveCountedMessagesFor, withMessagesMarkedForResave } from './resave-counted-messages';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
 import type { ObservationModelContext } from './types';
@@ -83,14 +85,29 @@ function getOmObservabilityContext(
   };
 }
 
-/** Key used to store gateway detection result in per-processor state. */
-const GATEWAY_STATE_KEY = '__isGatewayModel';
+/** Key used to store whether the gateway manages memory for the current step in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayMemoryManaged';
 
 /** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
 const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
-/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
-function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
+/**
+ * Whether the Mastra gateway serves Observational Memory for this step's model.
+ *
+ * Gateway models only get memory from the gateway when the credential is a Gateway project
+ * key. Organization keys (`msk-gateway-…`, `mskv2_…`) are served by a gateway without the
+ * memory API, so memory has to stay local. Newer `@mastra/core` exposes that decision on the
+ * router model; when it is absent (older core, or a plain model) fall back to the historical
+ * `mastra/` prefix check so gateway-side memory is never double-processed.
+ *
+ * A model that fails the check is not treated as local. Core answers `false` only for a model
+ * that isn't on the gateway, and throws when the credential can't be resolved — including when it
+ * is missing; letting that through keeps the two sides in agreement.
+ */
+async function isGatewayMemoryManaged(model: ProcessInputStepArgs['model']): Promise<boolean> {
+  if (typeof model === 'object' && model !== null && typeof (model as any).isGatewayMemoryManaged === 'function') {
+    return Boolean(await (model as any).isGatewayMemoryManaged());
+  }
   return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
 }
 
@@ -98,12 +115,15 @@ function injectObservationContextMessages({
   messageList,
   systemMessages,
   continuationMessage,
+  hasObservations,
   threadId,
   resourceId,
 }: {
   messageList: MessageList;
   systemMessages: string[] | undefined;
   continuationMessage: MastraDBMessage | undefined;
+  /** Whether observations have replaced earlier messages. The continuation hint only makes sense then. */
+  hasObservations: boolean;
   threadId: string;
   resourceId?: string;
 }): void {
@@ -114,6 +134,13 @@ function injectObservationContextMessages({
   messageList.clearSystemMessages('observational-memory');
   for (const msg of systemMessages) {
     messageList.addSystem(msg, 'observational-memory');
+  }
+
+  // Before the first observation the system messages are only retrieval guidance — no earlier
+  // context was summarized away, so the continuation hint would be an empty instruction (and an
+  // extra synthetic user message) on every turn of a fresh thread.
+  if (!continuationMessage && !hasObservations) {
+    return;
   }
 
   const contMsg = continuationMessage ?? {
@@ -177,6 +204,47 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     this.temporalMarkers = options?.temporalMarkers ?? false;
   }
 
+  /**
+   * End any locally started turn without leaving it dangling.
+   *
+   * A gateway-managed step short-circuits both processor phases, so a turn started on an
+   * earlier step of the same run — a delegation run whose model changed, or a run whose key
+   * changed — would otherwise never be ended and its messages never persisted. `end()` with
+   * no arguments flushes what the turn already tracked; finalization passes the accepted
+   * terminal list for the same reason the regular output path does.
+   *
+   * A rejected write is not swallowed. `end()` marks the turn ended before it persists, so a
+   * failed write leaves the turn unusable and its messages would be lost silently while the run
+   * reported success. The drain persists those messages directly and rethrows, so a storage
+   * failure surfaces instead of dropping the turn.
+   */
+  private async endActiveTurn(state: Record<string, unknown>, messageList?: MessageList): Promise<void> {
+    const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+    this.turn = undefined;
+    state.__omTurn = undefined;
+    if (!activeTurn || activeTurn.ended) return;
+
+    const terminalList = messageList ?? activeTurn.messageList;
+    const ownMessages = [...terminalList.get.input.db(), ...terminalList.get.response.db()];
+    const unsavedMessages = withMessagesMarkedForResave(terminalList, ownMessages);
+
+    try {
+      await activeTurn.end(terminalList);
+    } catch (error) {
+      if (unsavedMessages.length > 0) {
+        await this.engine
+          .persistMessages(
+            unsavedMessages,
+            activeTurn.threadId,
+            activeTurn.resourceId,
+            idsMarkedForResave(terminalList, ownMessages),
+          )
+          .catch(() => {});
+      }
+      throw error;
+    }
+  }
+
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
@@ -204,14 +272,20 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       return messageList;
     }
 
-    // When the agent is using a Mastra gateway model, the gateway handles OM
-    // (observation, reflection, context injection) server-side. Running it
-    // locally would double-process messages and cause history duplication.
-    // We detect this from the model directly (not requestContext) so that
-    // the flag doesn't leak to child agents in delegation scenarios.
-    if (isMastraGatewayModel(model)) {
-      state[GATEWAY_STATE_KEY] = true;
-      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
+    // When the gateway serves Observational Memory for this model it handles OM
+    // (observation, reflection, context injection) server-side, so running it locally would
+    // double-process messages and cause history duplication. We ask the model itself (not
+    // requestContext) so the answer stays per-step: a delegation run can move from a
+    // gateway-managed model to a directly-configured one, and the flag must not stay sticky.
+    // Gateway organization keys resolve to `false` here — the gateway has no memory API for
+    // them, so memory stays local.
+    const gatewayMemoryManaged = await isGatewayMemoryManaged(model);
+    state[GATEWAY_STATE_KEY] = gatewayMemoryManaged;
+    if (gatewayMemoryManaged) {
+      // A turn started on an earlier step of this run would otherwise never end, because
+      // processOutputResult short-circuits on the same flag — flush it before skipping.
+      await this.endActiveTurn(state);
+      omDebug(`[OM:processInputStep:GATEWAY] gateway manages memory — skipping local processing`);
       return messageList;
     }
 
@@ -264,6 +338,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           messageList,
           systemMessages,
           continuationMessage: ctx.continuationMessage,
+          hasObservations: Boolean(ctx.omRecord?.activeObservations),
           threadId,
           resourceId,
         });
@@ -306,6 +381,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           await this.turn.end().catch(() => {});
         }
         this.turn = this.engine.beginTurn({
+          abortSignal,
           threadId,
           resourceId,
           messageList,
@@ -402,14 +478,20 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {
         const step = this.turn.step(stepNumber);
+        // Counts prepare() makes for stored history are saved with the messages by the normal save.
+        const resaveCounted = resaveCountedMessagesFor(messageList, threadId);
         let ctx;
         try {
           ctx = await step.prepare();
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
+          // Name the abort's reason (e.g. a lost thread lease): the tripwire replaces the run's abort chunk.
+          const abortReason: unknown = abortSignal?.reason;
           const abortMessage = abortSignal?.aborted
-            ? 'Agent execution was aborted'
+            ? abortReason instanceof Error && abortReason.name !== 'AbortError'
+              ? `Agent execution was aborted: ${abortReason.message}`
+              : 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
           // A tripwire skips output processors, so end the turn here to save the user message and
           // finished steps. The step that failed never reached the model, so nothing blocked is saved.
@@ -420,7 +502,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           }
           state.__omTurn = undefined;
           if (typeof abort === 'function') {
-            abort(abortMessage);
+            abort(abortMessage, { metadata: getOmFailureMetadata(error, 'abort') });
           }
           throw err;
         }
@@ -430,6 +512,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           messageList,
           systemMessages: ctx.systemMessage,
           continuationMessage: this.turn.context.continuation,
+          hasObservations: Boolean(this.turn.record.activeObservations),
           threadId,
           resourceId,
         });
@@ -448,12 +531,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
         });
 
+        resaveCounted();
+
         // ── Token persistence (processor-specific) ──────────
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          await runOMCommit(
+            this.engine.buffering.getLockKey(threadId, resourceId),
+            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            { abortSignal },
           );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
@@ -493,8 +580,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
 
-    // Gateway handles OM — skip local output processing (see processInputStep).
-    if (state[GATEWAY_STATE_KEY]) return messageList;
+    // Gateway manages memory for the current step — skip local output processing (see
+    // processInputStep). Never leave an open local turn behind on the way out: a turn started
+    // on an earlier, locally-managed step of the same run would otherwise never be ended and
+    // its messages would never persist. Persist from the accepted terminal list, exactly like
+    // the regular finalization path below.
+    if (state[GATEWAY_STATE_KEY]) {
+      await this.endActiveTurn(state, messageList.cloneForPersistence());
+      return messageList;
+    }
 
     const observabilityContext = getOmObservabilityContext(args);
     state.__omObservabilityContext = observabilityContext;
@@ -506,6 +600,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
         const persistenceMessageList = messageList.cloneForPersistence();
+        // The final reply has had no step after it to count it. Count it now, so it's saved with
+        // its counts and the next request reads them instead of counting it again.
+        this.engine.getTokenCounter().countMessages(persistenceMessageList.get.response.db());
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
@@ -533,9 +630,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // messages so the final assistant text from the resumed turn is not lost.
           const newOutput = persistenceMessageList.get.response.db();
           const newInput = persistenceMessageList.get.input.db();
-          const messagesToSave = [...newInput, ...newOutput];
+          const ownMessages = [...newInput, ...newOutput];
+          const messagesToSave = withMessagesMarkedForResave(persistenceMessageList, ownMessages);
           if (messagesToSave.length > 0 && context.threadId) {
-            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            await this.engine.persistMessages(
+              messagesToSave,
+              context.threadId,
+              context.resourceId,
+              idsMarkedForResave(persistenceMessageList, ownMessages),
+            );
           }
         }
 
@@ -547,10 +650,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const { error, messageList, requestContext, stepNumber, state } = args;
 
     if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
+    // Gateway-served memory means the gateway owns the prompt and its compaction.
     if (state[GATEWAY_STATE_KEY]) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
-    if (!isContextOverflowError(error)) return;
+    if (classifyProviderError(error) !== 'context_overflow') return;
 
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return;
@@ -563,9 +667,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // threshold. Activate buffered observations and observe what's left regardless of it; the
     // retry's input step then drops the observed messages from the prompt.
     const { threadId, resourceId } = context;
-    await this.engine.waitForBuffering(threadId, resourceId);
+    await this.engine.waitForBuffering(threadId, resourceId, undefined, args.abortSignal);
     const messages = getObservableMessages(messageList);
     const { activated } = await this.engine.activate({
+      abortSignal: args.abortSignal,
       threadId,
       resourceId,
       messages,
@@ -576,6 +681,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
         this.engine.observe({
+          abortSignal: args.abortSignal,
           threadId,
           resourceId,
           messages: getObservableMessages(messageList),

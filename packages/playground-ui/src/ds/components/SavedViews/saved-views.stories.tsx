@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleDotIcon, KanbanIcon, ListIcon, UserIcon } from 'lucide-react';
 import { useState } from 'react';
 import { z } from 'zod/v4';
 import { SavedViewEditor } from './saved-view-editor';
@@ -10,6 +9,10 @@ import { FilterBar } from '@/ds/components/FilterBar/filter-bar';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Txt } from '@/ds/components/Txt';
+import { IconKanbanView } from '@/ds/icons/central/IconKanbanView';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { CircleDotIcon } from '@/ds/icons/CircleDotIcon';
 
 const layoutSchema = z.enum(['list', 'board']);
 const settingsSchema = z.object({ layout: layoutSchema.catch('list') });
@@ -27,7 +30,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'author',
     label: 'Author',
-    icon: UserIcon,
+    icon: IconUser,
     operators: ['is'],
     strict: true,
     suggestions: [
@@ -92,17 +95,17 @@ export const Default: Story = {
             </Txt>
           )}
         />
-        <SavedViewEditor views={views}>
+        <SavedViewEditor views={views} saveCaption="Saved in this browser">
           <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={filters} onValueChange={setFilters}>
             <FilterBar.Chips />
-            <FilterBar.Input placeholder="Filter issues…" />
+            <FilterBar.Input placeholder="Filter issues" />
           </FilterBar>
           <SegmentedControl aria-label="Layout" size="sm" iconOnly value={settings.layout} onValueChange={setLayout}>
             <SegmentedControlItem value="list" aria-label="List" title="List">
-              <ListIcon aria-hidden />
+              <IconListBullets aria-hidden />
             </SegmentedControlItem>
             <SegmentedControlItem value="board" aria-label="Board" title="Board">
-              <KanbanIcon aria-hidden />
+              <IconKanbanView aria-hidden />
             </SegmentedControlItem>
           </SegmentedControl>
         </SavedViewEditor>

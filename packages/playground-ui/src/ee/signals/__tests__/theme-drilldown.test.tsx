@@ -440,16 +440,16 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       const themeNode = await screen.findByLabelText(/Add transcript.+2 traces \(67%\)/);
       expect(themeNode.getAttribute('role')).toBe('button');
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·');
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull();
 
       fireEvent.click(themeNode);
 
       const banner = await screen.findByLabelText('Active theme drill-in');
-      expect(within(banner).getByText('Goal · Add transcript')).not.toBeNull();
+      expect(within(banner).getByText('Goal')).not.toBeNull();
+      expect(within(banner).getByText('Add transcript')).not.toBeNull();
       expect(await within(banner).findByText('Showing the 2 of 3 traces that flow through this theme')).not.toBeNull();
-      expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull();
       // Themes outside the drilled paths disappear instead of lingering as
       // zero-count ghosts.
       expect(screen.queryByLabelText(/^Other/)).toBeNull();
@@ -457,7 +457,7 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.getAllByLabelText(/^Other/).length).toBeGreaterThan(0);
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
     });
@@ -484,13 +484,13 @@ describe('SankeySignals drill-in', () => {
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
       expect(await screen.findByLabelText('Active theme drill-in')).not.toBeNull();
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · '));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull());
 
       fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
       expect(screen.getByLabelText('Active theme drill-in')).not.toBeNull();
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull();
     });
 
     it('opens theme details from the drill-in banner', async () => {
@@ -508,7 +508,6 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
       expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
       expect(await screen.findByRole('heading', { name: 'Trend' })).not.toBeNull();
-      expect(screen.queryByText(/^birth$/i)).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next' }));
@@ -517,7 +516,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when a Noise node is selected', () => {
-    it('opens its definition and summary examples', async () => {
+    it('opens its definition and summary examples instead of a drill-in', async () => {
       useFlowHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
@@ -541,6 +540,7 @@ describe('SankeySignals drill-in', () => {
       );
       renderSignals();
       const noiseNode = await screen.findByLabelText(/^Noise.+2 traces \(67%\)/);
+      expect(noiseNode.getAttribute('role')).toBe('button');
 
       fireEvent.click(noiseNode);
 
@@ -551,36 +551,6 @@ describe('SankeySignals drill-in', () => {
         ),
       ).not.toBeNull();
       expect(await within(dialog).findByText('2 of 3 traces in this snapshot (67%)')).not.toBeNull();
-      expect(within(dialog).queryByText('Stage share')).toBeNull();
-      expect(
-        await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.'),
-      ).not.toBeNull();
-    });
-  });
-
-  describe('when a noise chart node is activated', () => {
-    it('opens the Noise details panel for that trace signal instead of a drill-in', async () => {
-      useFlowHandlers();
-      server.use(
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {
-          expectExactQuery(new URL(request.url), {
-            entityType: 'agent',
-            signalName: 'behavior',
-            snapshotId: 'opaque-snapshot-cursor',
-          });
-          return HttpResponse.json(noiseResponse);
-        }),
-        http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, () =>
-          HttpResponse.json(noiseExamplesResponse),
-        ),
-      );
-      renderSignals();
-      const noiseNode = await screen.findByLabelText(/^Noise.+2 traces \(67%\)/);
-      expect(noiseNode.getAttribute('role')).toBe('button');
-
-      fireEvent.click(noiseNode);
-
-      const dialog = await screen.findByRole('dialog', { name: 'Noise' });
       expect(
         await within(dialog).findByText('The agent retried a fetch without establishing a recurring behavior pattern.'),
       ).not.toBeNull();
@@ -608,7 +578,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText(/This theme is not present in the selected snapshot/)).not.toBeNull();
@@ -647,7 +617,7 @@ describe('SankeySignals drill-in', () => {
         </QueryClientProvider>,
       );
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(replacementPathsRequests).toBe(0);
     });
@@ -764,7 +734,7 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.queryByText('Unable to load trace signal flow.')).toBeNull();
     });
 
@@ -794,7 +764,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
       await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
@@ -832,11 +802,10 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       expect(await screen.findByText('Filters unavailable for this snapshot')).not.toBeNull();
 
-      expect(screen.queryByLabelText('Trace signal distributions')).toBeNull();
       expect(screen.getByLabelText('Trace signal theme flow')).not.toBeNull();
       expect(requestedSnapshotIds).not.toContain('older-opaque-snapshot-cursor');
     });

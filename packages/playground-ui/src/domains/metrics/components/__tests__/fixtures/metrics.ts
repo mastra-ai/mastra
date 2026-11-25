@@ -66,6 +66,7 @@ export function agentLatencyFixture(): PercentilesResponse {
     series: [
       { percentile: 0.5, points: [{ timestamp: recent(), value: 1200 }] },
       { percentile: 0.95, points: [{ timestamp: recent(), value: 4500 }] },
+      { percentile: 0.99, points: [{ timestamp: recent(), value: 9800 }] },
     ],
   };
 }

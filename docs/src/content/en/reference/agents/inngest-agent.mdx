@@ -519,6 +519,8 @@ interface InngestAgentStreamResult<OUTPUT = undefined> {
   runId: string
   threadId?: string
   resourceId?: string
+  traceId?: string
+  spanId?: string
   cleanup: () => void
 }
 ```
@@ -551,6 +553,19 @@ interface InngestAgentStreamResult<OUTPUT = undefined> {
     type: 'string',
     isOptional: true,
     description: 'Resource ID when using memory.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Trace ID of the run when the run is traced. Use it to link a score, feedback, or a log line to the trace.',
+  },
+  {
+    name: 'spanId',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the agent run span when the run is traced.',
   },
   {
     name: 'cleanup',

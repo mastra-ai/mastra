@@ -2,7 +2,13 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import { getCustomRouteHTTPExceptionResponse } from '@mastra/server/server-adapter';
+import type { DispatchAdapterHandle } from '@mastra/server/server-adapter';
+import {
+  cancelReaderOnResponseClose,
+  getCustomRouteHTTPExceptionResponse,
+  registerDispatchAdapter,
+  writeWithBackpressure,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -34,6 +40,8 @@ export class CustomRouteService {
   private readonly routes: HonoApiRoute[];
   private readonly authConfig: Map<string, boolean>;
   private fetchPromise?: Promise<CustomRouteFetch>;
+  /** Recorded on each request this module serves, so `dispatchRoute` applies this module's paths. */
+  readonly dispatchAdapter: DispatchAdapterHandle;
 
   constructor(
     @Inject(MASTRA) private readonly mastra: Mastra,
@@ -49,6 +57,13 @@ export class CustomRouteService {
         this.authConfig.set(key, route.requiresAuth !== false);
       }
     }
+
+    // NestMastraServer is not built on @mastra/server's MastraServer, so tell dispatchRoute where routes are served.
+    this.dispatchAdapter = registerDispatchAdapter(mastra, {
+      prefix: options.prefix ?? '',
+      getCustomRouteAuthConfig: () => this.authConfig,
+      getCustomApiRoutes: () => mastra.getServer()?.apiRoutes ?? [],
+    });
   }
 
   /** Auth config for custom routes, keyed by `METHOD:path`. */
@@ -96,26 +111,15 @@ export class CustomRouteService {
     }
 
     const reader = response.body.getReader();
-    const onClose = () => void reader.cancel().catch(() => {});
-    res.once('close', onClose);
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
     try {
       while (!res.destroyed) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (!res.write(value)) {
-          await new Promise<void>(resolve => {
-            const resume = () => {
-              res.off('drain', resume);
-              res.off('close', resume);
-              resolve();
-            };
-            res.once('drain', resume);
-            res.once('close', resume);
-          });
-        }
+        await writeWithBackpressure(res, value);
       }
     } finally {
-      res.off('close', onClose);
+      readerCancel.dispose();
       res.end();
     }
     return true;

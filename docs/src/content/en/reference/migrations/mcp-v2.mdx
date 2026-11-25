@@ -1,8 +1,6 @@
 ---
 title: "Migration: @mastra/mcp v1 to v2 | Migration Guide"
 description: "Migrate @mastra/mcp to v2, which serves only the MCP 2026-07-28 revision and replaces elicitation with suspend/resume. Clients still connect to older servers."
-packages:
-  - "@mastra/mcp"
 ---
 
 # Migrate @mastra/mcp from v1 to v2
@@ -165,7 +163,7 @@ On a legacy-negotiated connection the shared verbs work (`tools/list`, `tools/ca
   },
 ```
 
-### OAuth clients are pre-registered or use a Client ID Metadata Document
+### OAuth clients are pre-registered or use a client ID metadata document
 
 `MCPOAuthClientProvider` no longer registers clients dynamically. Pass either `clientInformation` for a client you registered with the authorization server, or `clientMetadataUrl` (SEP-991) so the server fetches your client metadata from an HTTPS URL. Constructing the provider with neither throws, and no request is ever sent to a `registration_endpoint`.
 

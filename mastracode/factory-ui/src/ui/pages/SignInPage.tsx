@@ -4,6 +4,7 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { useState } from 'react';
@@ -36,34 +37,29 @@ export function safeReturnTo(raw?: string): string {
 
 function CustomDomainAuthError({ hostname }: { hostname: string }) {
   return (
-    <div role="alert" className="border-destructive-edge bg-card rounded-lg border px-4 py-3">
-      <Txt as="h2" variant="subheading" className="text-destructive-foreground">
-        Mastra Platform sign-in isn&apos;t available on custom domains
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-2">
+    <Notice
+      variant="destructive"
+      role="alert"
+      title={<h2>Mastra Platform sign-in isn&apos;t available on custom domains</h2>}
+      action={
+        <>
+          <Notice.Button render={<a href="https://mastra.ai/docs/auth/overview" target="_blank" rel="noreferrer" />}>
+            Auth overview
+          </Notice.Button>
+          <Notice.Button
+            render={<a href="https://mastra.ai/integrations/auth/workos" target="_blank" rel="noreferrer" />}
+          >
+            WorkOS integration
+          </Notice.Button>
+        </>
+      }
+    >
+      <Notice.Message>
         This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
-        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
-        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
-      </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-        <a
-          href="https://mastra.ai/docs/auth/overview"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          Auth overview
-        </a>
-        <a
-          href="https://mastra.ai/integrations/auth/workos"
-          target="_blank"
-          rel="noreferrer"
-          className="text-foreground hover:underline"
-        >
-          WorkOS integration
-        </a>
-      </Txt>
-    </div>
+        (*.mastra.cloud). To use a custom domain, configure your own auth provider, such as WorkOS (WORKOS_API_KEY +
+        WORKOS_CLIENT_ID) or Better Auth, and redeploy.
+      </Notice.Message>
+    </Notice>
   );
 }
 
@@ -141,8 +137,8 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           {error}
         </Txt>
       ) : null}
-      <Button type="submit" variant="primary" size="lg" className="w-full" disabled={pending}>
-        {pending ? 'Please wait…' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
+      <Button type="submit" variant="primary" size="lg" className="w-full" loading={pending}>
+        {mode === 'sign-up' ? 'Create account' : 'Sign in'}
       </Button>
       {!signUpDisabled ? (
         <Button
@@ -183,7 +179,6 @@ export function SignInPage() {
       authError === CUSTOM_DOMAIN_UNSUPPORTED_ERROR ||
       !isPlatformAuthSupportedHost(window.location.hostname));
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
-  const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
   // A cached signed-in result may predate the redirect here. Check the cookie
   // again before sending the user back into the protected app.
@@ -208,28 +203,24 @@ export function SignInPage() {
 
           <section aria-label="Authentication" className="mt-10 w-full max-w-md lg:mt-12">
             {authError && !customDomainBlocked ? (
-              <div role="alert" className="border-destructive-edge bg-card mb-6 rounded-lg border px-4 py-3">
-                <Txt as="p" variant="subheading" className="text-destructive-foreground">
-                  {accessDenied ? 'Access denied' : 'Sign-in failed'}
-                </Txt>
-                {authErrorDescription ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    {authErrorDescription}
-                  </Txt>
-                ) : null}
+              <Notice
+                variant="destructive"
+                role="alert"
+                title={accessDenied ? 'Access denied' : 'Sign-in failed'}
+                className="mb-6"
+              >
+                {authErrorDescription ? <Notice.Message>{authErrorDescription}</Notice.Message> : null}
                 {accessDenied ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
-                    Ask an organization admin to add your account, then sign in again.
-                  </Txt>
+                  <Notice.Message>Ask an organization admin to add your account, then sign in again.</Notice.Message>
                 ) : null}
-              </div>
+              </Notice>
             ) : null}
             {auth.isError ? (
               <div role="alert" className="space-y-3">
                 <Txt as="p" variant="body" tone="muted">
                   Unable to check your sign-in status. Check your connection and try again.
                 </Txt>
-                <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+                <Button onClick={() => void auth.refetch()} loading={auth.isFetching}>
                   Try again
                 </Button>
               </div>
@@ -252,18 +243,15 @@ export function SignInPage() {
                 variant="primary"
                 size="lg"
                 className="w-80 max-w-full"
-                disabled={redirecting || auth.isPending}
+                icon={studioAuth ? <LogoWithoutText /> : <GithubIcon />}
+                loading={redirecting}
+                disabled={auth.isPending}
                 onClick={() => {
                   setRedirecting(true);
                   redirectToLogin(baseUrl, returnTo);
                 }}
               >
-                {studioAuth ? (
-                  <LogoWithoutText className="w-4" aria-hidden="true" />
-                ) : (
-                  <GithubIcon aria-hidden="true" />
-                )}
-                {redirecting ? hostedLoginPendingLabel : hostedLoginLabel}
+                {hostedLoginLabel}
               </Button>
             )}
           </section>

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { UserRound } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '../Button';
@@ -7,6 +6,7 @@ import { Checkbox } from '../Checkbox';
 import { Spinner } from '../Spinner';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
 import { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof ComposerHeader> = {
   title: 'AI/Composer Header',
@@ -36,11 +36,33 @@ export const ConnectionStatus: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Write a message…" disabled />
+          <ComposerInput aria-label="Message" placeholder="Write a message" disabled />
           <ComposerActions />
         </ComposerBox>
       </ComposerRing>
     </Composer>
+  ),
+};
+
+export const OverlayPlacement: Story = {
+  render: () => (
+    <div className="flex h-64 flex-col justify-end gap-2">
+      <p className="text-body-sm text-muted-foreground">The header floats over this content instead of pushing it.</p>
+      <Composer aria-label="Message composer" className="relative">
+        <ComposerHeader placement="overlay">
+          <ComposerHeaderRow role="status" aria-live="polite">
+            <Spinner size="sm" aria-hidden="true" role="presentation" />
+            <ComposerHeaderContent>Reconnecting…</ComposerHeaderContent>
+          </ComposerHeaderRow>
+        </ComposerHeader>
+        <ComposerRing>
+          <ComposerBox>
+            <ComposerInput aria-label="Message" placeholder="Keep typing while reconnecting" />
+            <ComposerActions />
+          </ComposerBox>
+        </ComposerRing>
+      </Composer>
+    </div>
   ),
 };
 
@@ -49,7 +71,7 @@ function OwnershipRow() {
 
   return (
     <ComposerHeaderRow>
-      <UserRound aria-hidden="true" />
+      <IconUser aria-hidden="true" />
       <ComposerHeaderContent>
         {owned ? 'You own this session.' : "You're viewing Sam's session. Take ownership to change its model."}
       </ComposerHeaderContent>
@@ -93,7 +115,7 @@ export const OwnershipAndTasks: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Steer the agent…" />
+          <ComposerInput aria-label="Message" placeholder="Steer the agent" />
           <ComposerActions>
             <Button type="submit" size="sm">
               Send message
@@ -126,7 +148,7 @@ function ToggleHeaderPreview() {
           <OptionalContext />
         </ComposerHeader>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes…" />
+          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes" />
           <ComposerActions />
         </ComposerBox>
       </Composer>

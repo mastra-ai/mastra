@@ -1,4 +1,4 @@
-import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -9,6 +9,7 @@ export default defineConfig({
   ignorePatterns: ['storybook-static/**'],
   rules: {
     'playground-ui/icon-button-size': 'error',
+    'playground-ui/button-icon-prop': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
@@ -42,18 +43,28 @@ export default defineConfig({
       files: ['src/**/*.{ts,tsx}'],
       rules: playgroundUiRules,
     },
+    copyRuleExclusions,
     {
       files: ['src/ds/**/*.{ts,tsx}'],
       rules: { 'playground-ui/font-mono': 'off' },
     },
     {
       files: ['src/**/*.test.*', 'src/**/*.stories.*'],
-      rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
+      rules: {
+        'playground-ui/text-role': 'off',
+        'playground-ui/txt-tone': 'off',
+        'playground-ui/font-mono': 'off',
+        'playground-ui/icon-size-from-parent': 'off',
+      },
     },
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.test.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off' },
+      rules: {
+        'mastra/sentence-case-labels': 'off',
+        'playground-ui/placeholder-text': 'off',
+        'playground-ui/button-icon-prop': 'off',
+      },
     },
     {
       files: ['**/*.stories.tsx'],

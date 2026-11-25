@@ -14,10 +14,11 @@ import type { MastraBase } from '../../base';
 import { Classifier } from '../../classifier';
 import type { ClassifierQuestions } from '../../classifier';
 import { RequestContext } from '../../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import { latestProcessedModelOutput } from '../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -25,27 +26,25 @@ import {
   createObservabilityContext,
   getOrCreateSpan,
   getRootExportSpan,
+  getWorkflowResumeTracingContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { initContextStorage } from '../../observability/context-storage';
+import { executionFailureTermination } from '../../observability/execution-outcome';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
-import {
-  ProcessorRunner,
-  ProcessorState,
-  ProcessorStepOutputSchema,
-  ProcessorStepSchema,
-  createProcessorSendSignal,
-} from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
 import {
   OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  ProcessorRunner,
+  ProcessorState,
   endOutputStreamSpanAtStepEnd,
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../../processors/runner';
 import type { ProcessorLateSignalSink } from '../../processors/send-signal';
-import { PROCESSOR_LATE_SIGNAL_SINK } from '../../processors/send-signal';
+import { PROCESSOR_LATE_SIGNAL_SINK, createProcessorSendSignal } from '../../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -59,9 +58,10 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors/step-schema';
+import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
-import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
@@ -80,6 +80,8 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
   WorkflowRunStatus,
+  WorkflowOptions,
+  StepTripwireInfo,
   WorkflowRunState,
   StepParams,
   ToolStep,
@@ -87,21 +89,24 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  NestedWorkflowParent,
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
+import { resolveLegacyAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
-import { createStepFromClassifier } from '../step-factories';
+import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
+import { createRunStorage } from '../run-storage';
+import { createStepFromClassifier, createStepFromTool } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
+import { warnUnsupportedEventedSetup } from './setup-warning';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -267,7 +272,7 @@ export function createStep<
 export function createStep<TStepId extends string, TStepOutput>(
   agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
-    structuredOutput: { schema: TStepOutput };
+    structuredOutput: { schema: PublicSchema<TStepOutput> };
     retries?: number;
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
@@ -300,7 +305,12 @@ export function createStep<
   TRequestContext extends Record<string, any> | unknown = unknown,
 >(
   tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TRequestContext>,
-  toolOptions?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+  toolOptions?: {
+    retries?: number;
+    scorers?: DynamicArgument<MastraScorers>;
+    metadata?: StepMetadata;
+    actor?: ActorSignal;
+  },
 ): Step<TId, any, TSchemaIn, TSchemaOut, TSuspend, TResume, DefaultEngineType, TRequestContext>;
 
 /** Creates a workflow step from a configured Classifier. */
@@ -592,7 +602,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
-      const agent = resolveRegisteredAgent(params, mastra);
+      const agent = params;
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
@@ -704,69 +714,6 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
   };
 }
 
-function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
-  params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
-  agentOrToolOptions?: Record<string, unknown>,
-): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
-  const toolOpts = agentOrToolOptions as
-    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
-    | undefined;
-  if (!params.inputSchema || !params.outputSchema) {
-    throw new Error('Tool must have input and output schemas defined');
-  }
-
-  return {
-    id: params.id,
-    description: params.description,
-    inputSchema: params.inputSchema,
-    outputSchema: params.outputSchema,
-    resumeSchema: params.resumeSchema,
-    suspendSchema: params.suspendSchema,
-    retries: toolOpts?.retries,
-    scorers: toolOpts?.scorers,
-    metadata: toolOpts?.metadata,
-    execute: async ({
-      inputData,
-      mastra,
-      requestContext,
-      suspend,
-      resumeData,
-      runId,
-      workflowId,
-      state,
-      setState,
-      abortSignal,
-      ...obsFields
-    }) => {
-      const observabilityContext = resolveObservabilityContext(obsFields);
-      // Tools receive (input, context) - just call the tool's execute
-      if (!params.execute) {
-        throw new Error(`Tool ${params.id} does not have an execute function`);
-      }
-
-      // Build context matching ToolExecutionContext structure
-      const context = {
-        mastra,
-        requestContext,
-        ...observabilityContext,
-        abortSignal,
-        workflow: {
-          runId,
-          workflowId,
-          state,
-          setState,
-          suspend,
-          resumeData,
-        },
-      };
-
-      // Tool.execute already handles the v1.0 signature properly
-      return params.execute(inputData, context) as TStepOutput;
-    },
-    component: 'TOOL',
-  };
-}
-
 function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
 ): Step<
@@ -858,14 +805,21 @@ function createStepFromProcessor<TProcessorId extends string>(
       metrics,
       mastra,
       runId: workflowRunId,
+      abortSignal: runAbortSignal,
     }) => {
       const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
+      // Never read the signal from the payload: a serializing pubsub encodes it as `{}`.
+      // Abort on either the caller's signal or a cancel of this processor workflow run.
+      const scopedSignal = mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_ABORT_SIGNAL);
+      const abortSignal =
+        scopedSignal && runAbortSignal
+          ? AbortSignal.any([scopedSignal, runAbortSignal])
+          : (scopedSignal ?? runAbortSignal);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
       const input = inputData as ProcessorStepOutput & {
         processorStates?: Map<string, ProcessorState>;
-        abortSignal?: AbortSignal;
         lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
@@ -901,11 +855,10 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
-        // Abort signal for cancelling in-flight processor work (e.g. OM observations)
-        abortSignal,
         // Receives sendSignal calls made after the creating durable step returned
         lateSignalSink,
       } = input;
@@ -1224,6 +1177,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
       };
 
@@ -1696,6 +1650,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                // The mapping an earlier processor committed, not the original.
+                modelOutput: latestProcessedModelOutput(passThrough.messageList, toolCallId ?? '', modelOutput),
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],
@@ -1762,6 +1718,16 @@ function createStepFromProcessor<TProcessorId extends string>(
   >;
 }
 
+/**
+ * Builds a workflow on the evented execution engine: each step is an event on
+ * the Mastra host's pubsub, so any worker can run the next one.
+ *
+ * In one process it runs on any pubsub, including the default one. Running it
+ * on several processes needs a pubsub that redelivers unacknowledged events and
+ * a workflows store with step guards.
+ *
+ * @see https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents
+ */
 export function createWorkflow<
   TWorkflowId extends string = string,
   TInputSchema extends PublicSchema<any> = PublicSchema<any>,
@@ -1777,7 +1743,18 @@ export function createWorkflow<
     EventedEngineType
   >[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
->(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
+  TStorageVersion extends 1 | 2 = 1,
+>(
+  params: CreateWorkflowParams<
+    TWorkflowId,
+    TStateSchema,
+    TInputSchema,
+    TOutputSchema,
+    TSteps,
+    TRequestContextSchema,
+    TStorageVersion
+  >,
+) {
   const eventProcessor = new WorkflowEventProcessor({ mastra: params.mastra! });
   const executionEngine = new EventedExecutionEngine({
     mastra: params.mastra!,
@@ -1799,7 +1776,8 @@ export function createWorkflow<
     InferSchemaOutput<TStateSchema>,
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
-    InferPublicSchema<TInputSchema>
+    InferPublicSchema<TInputSchema>,
+    TStorageVersion
   >({
     ...(params as any),
     executionEngine,
@@ -1814,8 +1792,9 @@ export class EventedWorkflow<
   TInput = unknown,
   TOutput = unknown,
   TPrevSchema = TInput,
-> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps>) {
+  TStorageVersion extends 1 | 2 = any,
+> extends Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema, unknown, TStorageVersion> {
+  constructor(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, unknown, TStorageVersion>) {
     super(params);
     this.engineType = 'evented';
   }
@@ -1829,7 +1808,10 @@ export class EventedWorkflow<
     runId?: string;
     resourceId?: string;
     disableScorers?: boolean;
-  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+  }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion>> {
+    // Taken before the first await: concurrent parent runs share this workflow instance, so a
+    // later execute() would otherwise swap in its own input and state.
+    const nestedRun = this.takeNestedRun();
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -1877,12 +1859,34 @@ export class EventedWorkflow<
       });
     }
 
+    // Internal workflows are left out: they run where they were registered, except an evented
+    // agent's loop, which the agent's execution engine checks.
+    if (!this.isInternal) warnUnsupportedEventedSetup(this.mastra, workflowsStore);
+
+    const cachedRun = this.runs.get(runIdToUse);
+    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
+      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+      stepResults: {},
+    });
+
+    // A freshly-minted run for a workflow that never persists a snapshot cannot have
+    // a stored row, so this existence read would be a guaranteed miss. Skipping it
+    // avoids a storage round trip on every createRun for transient workflows (#19015).
+    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
+      runId: runIdToUse,
+      reopen: !!options?.runId,
+      cachedRun,
+      nestedRun,
+      lookUpStoredRun: !!shouldPersistSnapshot || !!options?.runId,
+    });
+
     // Return a new Run instance with object parameters
-    const run: Run<TEngineType, TSteps, TState, TInput, TOutput> =
-      this.runs.get(runIdToUse) ??
+    const run: Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> =
+      cachedRun ??
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        parentWorkflow: stored?.parentWorkflow,
         resourceId: options?.resourceId,
         isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
@@ -1897,29 +1901,14 @@ export class EventedWorkflow<
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
         tracingPolicy: this.options?.tracingPolicy,
+        storageVersion,
       });
 
     this.runs.set(runIdToUse, run);
 
-    const shouldPersistSnapshot = this.options?.shouldPersistSnapshot?.({
-      workflowStatus: run.workflowRunStatus,
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot cannot have
-    // a stored row, so this existence read would be a guaranteed miss. Skipping it
-    // avoids a storage round trip on every createRun for transient workflows (#19015).
-    const existingRun =
-      shouldPersistSnapshot || options?.runId
-        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
-        : undefined;
-
-    // Check if run exists in persistent storage (not just in-memory)
-    const existsInStorage = existingRun && !existingRun.isFromInMemory;
-
     // Sync status from storage to in-memory run (fixes status tracking across workflow instances)
-    if (existsInStorage && existingRun.status) {
-      run.workflowRunStatus = existingRun.status as WorkflowRunStatus;
+    if (stored) {
+      run.workflowRunStatus = stored.status;
     }
 
     if (!existsInStorage && shouldPersistSnapshot) {
@@ -1938,14 +1927,12 @@ export class EventedWorkflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: this.options?.pruneSnapshot
+      await run.runStorage.writeSnapshot(
+        this.options?.pruneSnapshot && run.storageVersion === 1
           ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
-      });
+        options?.resourceId,
+      );
     }
 
     return run;
@@ -1958,10 +1945,12 @@ export class EventedRun<
   TState = unknown,
   TInput = unknown,
   TOutput = unknown,
-> extends Run<TEngineType, TSteps, TState, TInput, TOutput> {
+  TStorageVersion extends 1 | 2 = any,
+> extends Run<TEngineType, TSteps, TState, TInput, TOutput, unknown, TStorageVersion> {
   constructor(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
@@ -1979,9 +1968,57 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
+    storageVersion?: 1 | 2;
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
+  }
+
+  private completeWorkflowTracing(
+    span: TracingContext['currentSpan'],
+    completion: Parameters<typeof completeWorkflowSpan>[1],
+  ): void {
+    completeWorkflowSpan(span, completion);
+  }
+
+  private releaseWorkflowTracing(span: TracingContext['currentSpan']): void {
+    if (span && this.mastra?.__getRunTracingContext(this.runId)?.currentSpan === span)
+      this.mastra.__unregisterRunTracingContext(this.runId);
+  }
+
+  #cancelPublished = false;
+  /** True while resumeStream() drives resume(); it closes the stream after setting its result. */
+  #resumeStreamOwnsClose = false;
+
+  /**
+   * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
+   * Runs at most once per run handle, whether triggered by cancel() or by abortController.abort().
+   * A failed publish is rethrown and can be retried.
+   */
+  private async publishCancel(): Promise<void> {
+    if (this.#cancelPublished) return;
+    this.#cancelPublished = true;
+    try {
+      const header = await createRunStorage({
+        storageVersion: this.storageVersion,
+        workflowName: this.workflowId,
+        runId: this.runId,
+        getStore: async () => this.mastra?.getStorage()?.getStore('workflows'),
+      }).loadHeader();
+      await this.mastra?.pubsub.publish('workflows', {
+        type: 'workflow.cancel',
+        runId: this.runId,
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          requestContext: header?.requestContext,
+          ...(this.storageVersion === 2 && { storageVersion: 2 }),
+        },
+      });
+    } catch (err) {
+      this.#cancelPublished = false;
+      throw err;
+    }
   }
 
   /**
@@ -1989,21 +2026,14 @@ export class EventedRun<
    * This ensures consistent cancellation behavior whether abort() is called directly or via cancel().
    */
   private setupAbortHandler(): void {
-    const abortHandler = () => {
-      this.mastra?.pubsub
-        .publish('workflows', {
-          type: 'workflow.cancel',
-          runId: this.runId,
-          data: {
-            workflowId: this.workflowId,
-            runId: this.runId,
-          },
-        })
-        .catch(err => {
-          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err);
-        });
-    };
-    this.abortController.signal.addEventListener('abort', abortHandler, { once: true });
+    this.abortController.signal.addEventListener(
+      'abort',
+      () =>
+        void this.publishCancel().catch(err =>
+          this.mastra?.getLogger()?.error(`Failed to publish workflow.cancel for runId ${this.runId}:`, err),
+        ),
+      { once: true },
+    );
   }
 
   async start({
@@ -2025,7 +2055,7 @@ export class EventedRun<
     };
     tracingContext?: TracingContext;
     actor?: ActorSignal;
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     // Add validation checks
     if (this.serializedStepGraph.length === 0) {
       throw new Error(
@@ -2038,7 +2068,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2050,33 +2080,6 @@ export class EventedRun<
       getInitData: () => inputDataToUse,
       requestContext,
       state: initialStateToUse as Record<string, any>,
-    });
-
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    // Always persist the initial run record regardless of shouldPersistSnapshot.
-    // The evented engine relies on this record for parallel branch result
-    // aggregation (aggregateBranchResults reads stepResults via storage).
-    const initialRunSnapshot: WorkflowRunState = {
-      runId: this.runId,
-      serializedStepGraph: this.serializedStepGraph,
-      status: 'running',
-      value: {},
-      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: withoutAuthToken(requestContext.toJSON()),
-      activePaths: [],
-      activeStepsPath: {},
-      suspendedPaths: {},
-      resumeLabels: {},
-      waitingPaths: {},
-      timestamp: Date.now(),
-    };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
     });
 
     if (!this.mastra?.pubsub) {
@@ -2091,6 +2094,7 @@ export class EventedRun<
     // spans under it (see `WorkflowEventProcessor.resolveRunTracingContext`).
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -2107,9 +2111,44 @@ export class EventedRun<
       this.mastra?.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
 
-    let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
+    // It also carries the resume tracing context from the start: a worker in
+    // another process that suspends this run has no live span to save it from.
+    const initialRunSnapshot: WorkflowRunState = {
+      runId: this.runId,
+      serializedStepGraph: this.serializedStepGraph,
+      status: 'running',
+      value: {},
+      context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      waitingPaths: {},
+      tracingContext:
+        this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan),
+      timestamp: Date.now(),
+    };
+
+    let result: WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+    let wroteRunning = false;
+    let dispatched = false;
     try {
-      result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      await this.runStorage.writeSnapshot(
+        this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
+          ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+          : initialRunSnapshot,
+        this.resourceId,
+      );
+      wroteRunning = true;
+      result = await this.executionEngine.execute<
+        TState,
+        TInput,
+        WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
+      >({
         workflowId: this.workflowId,
         runId: this.runId,
         resourceId: this.resourceId,
@@ -2124,24 +2163,41 @@ export class EventedRun<
         abortController: this.abortController,
         perStep,
         outputOptions,
+        storageVersion: this.storageVersion,
+        onDispatched: () => {
+          dispatched = true;
+        },
       });
     } catch (error) {
-      workflowSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
-      this.mastra?.__unregisterRunTracingContext(this.runId);
+      if (wroteRunning && !dispatched) await this.#failUndispatchedRun(error);
+      this.completeWorkflowTracing(workflowSpan, {
+        error: {
+          ...executionFailureTermination(error),
+          error: error instanceof Error ? error : new Error(String(error)),
+        },
+      });
+
+      this.releaseWorkflowTracing(workflowSpan);
       throw error;
     }
 
     this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      if (result.status === 'failed') {
-        const err = (result as { error?: unknown }).error;
-        workflowSpan?.error({ error: err instanceof Error ? err : new Error(String(err)) });
-      } else {
-        workflowSpan?.end({ output: (result as { result?: unknown }).result });
-      }
-      this.mastra?.__unregisterRunTracingContext(this.runId);
-      this.cleanup?.();
+    if (result.status === 'failed') {
+      const err = result.error;
+      this.completeWorkflowTracing(workflowSpan, {
+        error: {
+          ...workflowTermination(result),
+          error: err instanceof Error ? err : new Error(String(err)),
+        },
+      });
+    } else {
+      this.completeWorkflowTracing(workflowSpan, {
+        end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
+      });
     }
+
+    this.releaseWorkflowTracing(workflowSpan);
+    if (result.status !== 'suspended') this.cleanup?.();
 
     return result;
   }
@@ -2176,7 +2232,7 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const inputDataToUse = await this._validateInput(inputData);
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     // Pre-flight gate: runs ahead of the initial run-record write below, and rejects the caller
@@ -2190,7 +2246,6 @@ export class EventedRun<
       state: initialStateToUse as Record<string, any>,
     });
 
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2208,35 +2263,71 @@ export class EventedRun<
       waitingPaths: {},
       timestamp: Date.now(),
     };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
-        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
-        : initialRunSnapshot,
-    });
-
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
-    // Fire-and-forget: publish the workflow start event without subscribing for completion
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.start',
-      runId: this.runId,
-      data: {
+    await this.runStorage.writeSnapshot(
+      this.executionEngine.options?.pruneSnapshot && this.storageVersion === 1
+        ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
+        : initialRunSnapshot,
+      this.resourceId,
+    );
+
+    // Dispatch-only callers do not own execution spans; the worker may run in
+    // another process, so no local span or tracing registry entry is created here.
+    // execute() still waits for the worker's finish event in the background so the
+    // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
+    let markDispatched!: () => void;
+    let isDispatched = false;
+    const dispatched = new Promise<void>(resolve => {
+      markDispatched = () => {
+        isDispatched = true;
+        resolve();
+      };
+    });
+    const execution = this.executionEngine
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: requestContext.toJSON(),
-        actor,
+        resourceId: this.resourceId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: inputDataToUse,
         initialState: initialStateToUse,
+        pubsub: this.mastra.pubsub,
+        retryConfig: this.retryConfig,
+        requestContext,
+        actor,
+        abortController: this.abortController,
         perStep,
-      },
-    });
+        storageVersion: this.storageVersion,
+        onDispatched: markDispatched,
+      })
+      .catch(async error => {
+        if (!isDispatched) await this.#failUndispatchedRun(error);
+        throw error;
+      });
 
-    // Return immediately without waiting for completion
+    // execute() only tracks the wait for the finish event. Nobody awaits this run's
+    // callbacks, so track the whole execution now, before the dispatch wait, so
+    // shutdown() drains them before it closes storage and pubsub. Failures before
+    // dispatch reject the caller below, so only later ones are logged here.
+    // `background` always fulfills, even if the logger throws, so shutdown's drain never
+    // sees a rejection from it and the release chain cannot raise an unhandled rejection.
+    const background = execution.catch(error => {
+      if (!isDispatched) return;
+      try {
+        this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+      } catch {
+        // A failing logger must not fail the run's tracking or shutdown.
+      }
+    });
+    const releaseTracking = this.mastra.__trackEventedRun(background);
+    void background.then(releaseTracking);
+
+    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
+    await Promise.race([dispatched, execution]);
     return { runId: this.runId };
   }
 
@@ -2262,7 +2353,7 @@ export class EventedRun<
         includeResumeLabels?: boolean;
       };
       actor?: ActorSignal;
-    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    }): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     if (this.closeStreamAction && this.streamOutput) {
       return this.streamOutput;
     }
@@ -2322,7 +2413,7 @@ export class EventedRun<
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -2359,7 +2450,7 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+  } = {}): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     this.closeStreamAction = async () => {};
 
     const self = this;
@@ -2389,6 +2480,7 @@ export class EventedRun<
           }
         };
 
+        self.#resumeStreamOwnsClose = true;
         try {
           const executionResults = await self.resume({
             resumeData,
@@ -2410,11 +2502,13 @@ export class EventedRun<
         } catch (err) {
           self.streamOutput?.rejectResults(err as Error);
           self.closeStreamAction?.().catch(() => {});
+        } finally {
+          self.#resumeStreamOwnsClose = false;
         }
       },
     });
 
-    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>({
+    this.streamOutput = new WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
       runId: this.runId,
       workflowId: this.workflowId,
       stream,
@@ -2423,21 +2517,32 @@ export class EventedRun<
     return this.streamOutput;
   }
 
-  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
-    const claimed = await workflowsStore.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
-    });
+  /**
+   * The run was written as `running`, but its start event never reached a worker, so nothing
+   * will ever finish it. Record the failure instead of leaving it `running` forever.
+   */
+  async #failUndispatchedRun(error: unknown): Promise<void> {
+    try {
+      await this.runStorage.updateHeader({
+        status: 'failed',
+        expectedStatus: 'running',
+        error: getErrorFromUnknown(error).toJSON(),
+      });
+    } catch (persistError) {
+      this.mastra
+        ?.getLogger()
+        ?.error(`[Workflow ${this.workflowId}] Failed to mark undispatched run ${this.runId} as failed:`, persistError);
+    }
+  }
+
+  async #claimResume(): Promise<void> {
+    const claimed = await this.runStorage.updateHeader({ status: 'running', expectedStatus: 'suspended' });
 
     if (claimed) {
       return;
     }
 
-    const current = await workflowsStore.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const current = await this.runStorage.loadHeader();
 
     if (!current) {
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
@@ -2478,7 +2583,8 @@ export class EventedRun<
       includeState?: boolean;
       includeResumeLabels?: boolean;
     };
-  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    tracingContext?: TracingContext;
+  }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const fgaProvider = this.mastra?.getServer()?.fga;
     if (fgaProvider && !this.isInternalWorkflow) {
       await requireFGA({
@@ -2503,7 +2609,7 @@ export class EventedRun<
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
     }
-    const snapshot = await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId);
+    const snapshot = await this.runStorage.loadForResume({ wait: true });
     if (!snapshot) {
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
@@ -2579,6 +2685,25 @@ export class EventedRun<
       }
     }
 
+    // A label raised inside a nested workflow is recorded against the step that
+    // wraps it, so follow it down through the nested snapshots to the step that
+    // owns it. Otherwise the nested run would resume whichever step it finds first.
+    if (params.label && snapshotResumeLabel) {
+      let levelSnapshot: WorkflowRunState | null = snapshot;
+      while (levelSnapshot) {
+        const stepResult = (levelSnapshot.context as any)?.[steps[steps.length - 1]!];
+        const nestedRunId = stepResult?.metadata?.nestedRunId ?? stepResult?.suspendPayload?.__workflow_meta?.runId;
+        if (!nestedRunId) break;
+        levelSnapshot = await workflowsStore.loadWorkflowSnapshot({
+          workflowName: steps[steps.length - 1]!,
+          runId: nestedRunId,
+        });
+        const nestedStepId = levelSnapshot?.resumeLabels?.[params.label]?.stepId;
+        if (!nestedStepId) break;
+        steps = [...steps, nestedStepId];
+      }
+    }
+
     // Validate that the step is actually suspended
     const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
     const isStepSuspended = suspendedStepIds.includes(steps?.[0] ?? '');
@@ -2591,8 +2716,9 @@ export class EventedRun<
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
     // Start with the snapshot's request context (old values). Rows written before the
-    // auth token was stripped may still hold one; never restore a stale bearer token.
-    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
+    // auth token was stripped may still hold one; never restore a stale bearer token
+    // or the user who started the run.
+    const requestContextObj = withoutLiveRequestKeys(snapshot.requestContext);
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot
@@ -2616,37 +2742,38 @@ export class EventedRun<
     }
 
     this.setupAbortHandler();
-    await this.#claimResume(workflowsStore);
+    await this.#claimResume();
+
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      outcome: null,
+      name: `workflow run: '${this.workflowId}' (resumed)`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
+      input: resumeDataToUse,
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
+        resumed: true,
+        resumedFromSpanId: snapshot.tracingContext?.spanId,
+      },
+      tracingPolicy: this.tracingPolicy,
+      tracingContext: params.tracingContext,
+      resumeFrom: snapshot.tracingContext,
+      requestContext,
+      mastra: this.mastra,
+    });
+    this.workflowRunSpan = workflowSpan;
+    if (workflowSpan) this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
 
     const releaseClaimIfUnused = async () => {
       try {
-        const current = await workflowsStore.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-
-        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
-        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
-        const claimedStepIds = Object.keys(snapshot.context ?? {});
-        const currentStepIds = Object.keys(current?.context ?? {});
-        const resumedStepResult = current?.context?.[steps?.[0] ?? ''] as { status?: string } | undefined;
-        const engineNeverStarted =
-          current?.status === 'running' &&
-          currentPaths.length === claimedPaths.length &&
-          claimedPaths.every(path => currentPaths.includes(path)) &&
-          currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
-          resumedStepResult?.status === 'suspended';
-
-        if (!engineNeverStarted) {
+        if (!(await this.runStorage.isClaimUnused(snapshot, steps?.[0] ?? ''))) {
           return;
         }
 
-        await workflowsStore.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await this.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.mastra
           ?.getLogger()
@@ -2654,13 +2781,76 @@ export class EventedRun<
       }
     };
 
+    let parentClaimed = false;
+    // A nested run is on its parent's storage version.
+    const parentRunStorage =
+      this.parentWorkflow &&
+      createRunStorage({
+        storageVersion: this.storageVersion,
+        workflowName: this.parentWorkflow.workflowId,
+        runId: this.parentWorkflow.runId,
+        getStore: async () => this.mastra?.getStorage()?.getStore('workflows'),
+      });
+    const releaseParentClaim = async () => {
+      if (!parentClaimed || !this.parentWorkflow || !parentRunStorage) return;
+      try {
+        await parentRunStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
+      } catch (releaseError) {
+        this.mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] Failed to release parent resume claim for run ${this.parentWorkflow.runId}`,
+            releaseError,
+          );
+      }
+    };
+
+    if (this.parentWorkflow && parentRunStorage) {
+      let claimedParent;
+      try {
+        claimedParent = await parentRunStorage.updateHeader({ status: 'running', expectedStatus: 'suspended' });
+      } catch (error) {
+        await releaseClaimIfUnused();
+        throw error;
+      }
+      if (!claimedParent) {
+        await releaseClaimIfUnused();
+        throw new MastraError({
+          id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Workflow run ${this.parentWorkflow.runId} has already been resumed by another caller`,
+          details: { workflowId: this.parentWorkflow.workflowId, runId: this.parentWorkflow.runId },
+        });
+      }
+      parentClaimed = true;
+    }
+
+    // A worker in another process that suspends this segment has no live span to save, so
+    // save the resumed root's context now; its next resume then continues this segment.
+    // A failed or late save only costs that next resume its link, so this resume does not wait
+    // for it: the engine must listen for the run's end before another caller can cancel the run.
+    const resumeTracingContext =
+      this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan);
+    if (resumeTracingContext) {
+      void this.runStorage
+        .updateHeader({ status: 'running', expectedStatus: 'running', tracingContext: resumeTracingContext })
+        .catch(error => {
+          this.mastra
+            ?.getLogger()
+            ?.warn(`[Workflow ${this.workflowId}] Failed to save resume tracing context for run ${this.runId}`, error);
+        });
+    }
+
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
 
+    const resumePubsub = this.mastra.pubsub;
     const executionResultPromise = this.executionEngine
-      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input as TInput,
@@ -2672,23 +2862,49 @@ export class EventedRun<
           resumePath,
           forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
         },
-        pubsub: this.mastra.pubsub,
+        pubsub: resumePubsub,
         requestContext,
         actor: params.actor,
         abortController: this.abortController,
         perStep: params.perStep,
         outputOptions: params.outputOptions,
+        storageVersion: this.storageVersion,
       })
-      .then(result => {
+      .then(async result => {
         this.workflowRunStatus = result.status;
+        if (result.status === 'failed') {
+          const error = result.error;
+          this.completeWorkflowTracing(workflowSpan, {
+            error: {
+              ...workflowTermination(result),
+              error: error instanceof Error ? error : new Error(String(error)),
+            },
+          });
+        } else {
+          this.completeWorkflowTracing(workflowSpan, {
+            end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
+          });
+        }
+
+        this.releaseWorkflowTracing(workflowSpan);
         if (result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => {});
+          // Closing here would finish the stream before resumeStream() sets its result.
+          if (!this.#resumeStreamOwnsClose) this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
         }
 
         return result;
       })
       .catch(async error => {
+        this.completeWorkflowTracing(workflowSpan, {
+          error: {
+            ...executionFailureTermination(error),
+            error: error instanceof Error ? error : new Error(String(error)),
+          },
+        });
+
+        this.releaseWorkflowTracing(workflowSpan);
+        await releaseParentClaim();
         await releaseClaimIfUnused();
         throw error;
       });
@@ -2733,24 +2949,35 @@ export class EventedRun<
   }
 
   async cancel() {
-    if (await this.hasReachedTerminalStatus()) return;
+    if (await this.hasReachedTerminalStatus()) {
+      return this.cancelSuspendedNestedRuns();
+    }
+
+    // Publish directly instead of relying on the abort handler: a handle created on another
+    // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
+    // publishCancel() claims its once-guard synchronously, so the abort listener below won't publish again.
+    const published = this.publishCancel();
+    this.abortController.abort();
+    // Only mark the run canceled once the processor can see the cancel. If the publish fails, storage
+    // keeps the run's live status so a retry from any handle or instance is not treated as finished.
+    await published;
 
     // Update storage directly for immediate status update (same pattern as Inngest)
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: {
-        status: 'canceled',
-      },
-    });
+    await this.runStorage.updateHeader({ status: 'canceled' });
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    const span = this.workflowRunSpan;
+    // Older observability implementations may only support end({ endTree: true }).
+    const endTree = span?.endTree ?? span?.end;
+    endTree?.call(span, {
+      endTree: true,
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      stopReasonContext: null,
+      attributes: { status: 'canceled' },
+    });
 
-    // Trigger abort signal - the abort handler will publish the workflow.cancel event
-    // This ensures consistent behavior whether cancel() or abort() is called
-    this.abortController.abort();
+    await this.cancelSuspendedNestedRuns();
   }
 }

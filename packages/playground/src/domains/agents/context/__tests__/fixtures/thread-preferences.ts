@@ -14,3 +14,8 @@ export const workingMemory: RouteResponse<'GET /memory/threads/:threadId/working
   workingMemoryTemplate: null,
   threadExists: false,
 };
+export const agentModelProviders: RouteResponse<'GET /agents/providers'> = {
+  providers: [
+    { id: 'openai', name: 'OpenAI', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-4o', 'gpt-4o-mini'] },
+  ],
+};

@@ -1,0 +1,107 @@
+---
+title: GitHub | Configuration
+description: Connect a GitHub repository and select which issues to sync into Factory.
+---
+
+# GitHub
+
+GitHub supplies the repository, issues, and pull requests Factory works with.
+
+## Connect the repository
+
+Use [Get started](/) to create and start the server, then select the codebase agents should change. During onboarding you need to install the GitHub App to configure access to your repositories. Link the project Factory should work in.
+
+GitHub shows the permissions the Mastra GitHub App requests, and an organization owner approves them. See [repository permissions](#repository-permissions) for what Factory needs and why. If the App's permissions change later, the installation needs approval again before Factory can use the new set.
+
+If a repository is missing from the picker, select **Manage GitHub connection**. In GitHub, update the installation to include the intended repository, then return to Factory and reopen the picker. Request an organization administrator's help if you can't change the installation.
+
+Access to all repositories is optional. Grant access to the repositories you intend to use.
+
+## Select your issue intake
+
+1. Open **Settings → Work Intake**.
+1. Under **GitHub issues**, enable **Sync GitHub issues**.
+1. Select the repositories you want to follow.
+1. Wait for **Intake sources updated**, then return to **Work**.
+
+Selections are organization-wide: every member reads the same sources. Factory brings pull requests from your linked repository into **Review**. See [Review items](/using/reviews).
+
+If issues don't appear in Factory, read [Troubleshooting](/troubleshooting#intake-is-empty).
+
+## How issues sync
+
+Factory syncs issues, not your GitHub structure. Each issue in a selected repository becomes its own Work item, and epics, parent issues, and sub-issues receive no special handling. A sub-issue arrives as an ordinary card with no link to its parent. See [Order and priority](/using/intake#order-and-priority) for how to sequence work.
+
+The only parent-child link Factory tracks is between a pull request's Review item and the Work item for the issue it addresses.
+
+Intake starts when you connect a repository. Factory creates a card for an issue when GitHub reports that it was opened while the repository was connected, so issues that were already open before then never produce that report. A repository's existing backlog therefore stays out of Factory. This is expected, not a synchronization gap. To work an item from that backlog, create a new issue for it in the connected repository.
+
+## Use your own GitHub App
+
+Most users can use the Platform-backed connection. For a server with a separate GitHub App, the generated entry recognizes a complete App configuration through its `GITHUB_APP_*` variables.
+
+Create a GitHub App with the permissions and events below, install it on the target repositories, then set these values on the Factory Server and restart it:
+
+```dotenv title=".env"
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_APP_CLIENT_ID=
+GITHUB_APP_CLIENT_SECRET=
+GITHUB_APP_SLUG=
+GITHUB_APP_WEBHOOK_SECRET=
+```
+
+Use escaped `\n` characters in the private key. Generate the webhook secret with `openssl rand -hex 32`, and keep it stable across restarts and replicas.
+
+The first five variables must all be present. When one is missing, Factory doesn't use your App: it falls back to the Platform-backed connection when Platform credentials are present, and the GitHub status route reports what's missing. See the [environment variables](/reference/environment-variables#custom-integration-credentials) and [GitHub's App documentation](https://docs.github.com/en/apps/creating-github-apps) before switching an existing server.
+
+### Repository permissions
+
+Grant the App these repository permissions:
+
+| Permission | Why Factory needs it |
+| - | - |
+| Contents: write | Clone repositories and push session branches. |
+| Issues: write | Read issues for intake, comment on them, and add labels as work progresses. |
+| Pull requests: write | Open pull requests, reply to review feedback, and request reviewers. |
+| Metadata: read | Read basic repository data, including a collaborator's permission level. GitHub grants this permission to every App automatically. |
+
+GitHub permissions are hierarchical: a `write` permission also covers `read`. Factory needs no organization permissions, and checking a comment author's repository role uses `Metadata: read` alone.
+
+### Webhook events
+
+Subscribe the App to these events. Factory ignores any other event it receives.
+
+| Event | Why Factory needs it |
+| - | - |
+| `issues` | Create and update Work items. |
+| `issue_comment` | Tell a card's session about a new comment on its issue, and route comments on pull requests to the review item. |
+| `pull_request` | Create and update Review items. |
+| `pull_request_review` | Add review submissions to Review items. |
+| `pull_request_review_comment` | Add inline review comments to Review items. |
+
+Subscribing to `push` is optional. Factory accepts `push` deliveries and ignores them. CI check events aren't part of the subscription list. A check result never wakes a session. Factory handles `pull_request` `synchronize` deliveries. New commits pushed to an existing pull request update its **Review** item.
+
+## Webhook delivery
+
+Point the App's webhook at your public origin plus `/web/github/webhook`, and set the App's webhook secret to the same value you set for `GITHUB_APP_WEBHOOK_SECRET`.
+
+On the Platform-backed connection there is nothing to configure on your server. GitHub delivers events to Platform, and Factory polls Platform's event log.
+
+Only one of the two is ever active. A complete `GITHUB_APP_*` group selects your App, and the Platform integration isn't also installed.
+
+GitHub delivers events only for repositories the installation can access. If an event never arrives, confirm that the App installation includes the repository.
+
+## Agent identity
+
+Agents don't act as the person who started a session. By default, every GitHub action comes from the GitHub App: `mastra-platform[bot]` on the Platform-backed connection, or your own App when you configure one.
+
+To have agents act as a GitHub account, save that account's token under [Sandbox command line access](#sandbox-command-line-access). `gh` commands in sandboxes then run as that account. A pull request an agent opens with `gh pr create` comes from it. Pushes, pull requests, and comments made through Factory's built-in source control tools still come from the App. The tokens are organization-wide, not per user. Sessions use the worker token. Review sessions use the reviewer token when one is set.
+
+## Sandbox command line access
+
+App installation tokens don't work for `gh` commands inside a sandbox. GitHub answers them with `Resource not accessible by integration`, even when every permission the commands need is granted to the App.
+
+Save a classic personal access token under **Settings → Repositories → GitHub CLI tokens**. Factory sets sandbox `GH_TOKEN` to that token and uses it in the `github_refresh_token` tool instead of an installation token. The token's account needs access to the linked repositories. This setting applies to both connection modes.
+
+The same section includes an optional reviewer token that keeps pull request reviews coming from an account other than the author. Review sessions fall back to the worker token when no reviewer token is configured.

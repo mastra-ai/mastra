@@ -1,9 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -22,25 +20,20 @@ function CreateLayoutWrapper() {
   });
 
   const actions = (
-    <Button variant="primary" size="sm" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
-      {isSubmitting ? (
-        <>
-          <Spinner className="h-4 w-4" />
-          Creating...
-        </>
-      ) : (
-        <>
-          <Icon>
-            <Check />
-          </Icon>
-          Create agent
-        </>
-      )}
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={() => void handlePublish()}
+      disabled={!canPublish}
+      icon={<IconCheckmark2Medium />}
+      loading={isSubmitting}
+    >
+      Create agent
     </Button>
   );
 
   return (
-    <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
+    <PageLayout variant="page" body="fixed" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={actions}>
       <h1 className="sr-only">Create agent</h1>
       <AgentCmsFormShell
         form={form}

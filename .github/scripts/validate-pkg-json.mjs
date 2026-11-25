@@ -5,7 +5,6 @@ const IGNORE_LIST = [
   '@internal',
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
-  '@mastra/mcp-configuration',
   '@mastra/server-adapters-test-suite',
   'mastra-docs',
 ];
@@ -80,7 +79,7 @@ async function main() {
     let pkg;
     try {
       pkg = JSON.parse(content);
-    } catch (e) {
+    } catch {
       console.error(`❌ Invalid JSON in ${file}`);
       hasError = true;
       continue;
@@ -89,9 +88,10 @@ async function main() {
 
     // Check files array
     const filesArr = pkg.files || [];
-    const missing = ['dist'].filter(f => !filesArr.includes(f));
+    // Declaration maps point at src/ files that are not published, so they must stay out of the tarball.
+    const missing = ['dist', '!dist/**/*.d.*ts.map'].filter(f => !filesArr.includes(f));
     if (missing.length > 0) {
-      console.log(`❌ ${file}: missing ${missing.join(', ')}`);
+      console.log(`❌ ${file}: files is missing ${missing.join(', ')}`);
       hasError = true;
     }
 

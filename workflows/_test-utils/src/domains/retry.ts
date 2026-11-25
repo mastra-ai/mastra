@@ -159,6 +159,47 @@ export function createRetryWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: a retried attempt of a resumed step keeps the resume data
+  {
+    mockRegistry.register('retry-after-resume:approve', () => {
+      let resumedAttempts = 0;
+      return vi.fn().mockImplementation(async ({ resumeData, suspend }: any) => {
+        if (!resumeData) return suspend({ reason: 'needs approval' });
+        resumedAttempts++;
+        if (resumedAttempts === 1) throw new Error('transient failure');
+        return { approvedBy: resumeData.approvedBy };
+      });
+    });
+
+    const approve = createStep({
+      id: 'approve',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approvedBy: z.string() }),
+      resumeSchema: z.object({ approvedBy: z.string() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      retries: 1,
+      execute: async ctx => mockRegistry.get('retry-after-resume:approve')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'retry-after-resume',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approvedBy: z.string() }),
+    });
+
+    workflow.then(approve).commit();
+
+    workflows['retry-after-resume'] = {
+      workflow,
+      mocks: {
+        get approve() {
+          return mockRegistry.get('retry-after-resume:approve');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -166,7 +207,7 @@ export function createRetryWorkflows(ctx: WorkflowCreatorContext) {
  * Create tests for retry.
  */
 export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
-  const { execute } = ctx;
+  const { execute, skipTests } = ctx;
 
   describe('Retry', () => {
     it('should retry a step default 0 times', async () => {
@@ -219,5 +260,32 @@ export function createRetryTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(mocks.step1Execute).toHaveBeenCalledTimes(1);
       expect(mocks.step2Execute).toHaveBeenCalledTimes(6); // 5 retries + 1 initial call
     });
+
+    it.skipIf(skipTests.retryAfterResume || !ctx.resume)(
+      'should finish a resumed step whose first resumed attempt fails, using the same resume data',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['retry-after-resume']!;
+        resetMocks?.();
+        const runId = `retry-after-resume-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const suspended = await execute(workflow, {}, { runId });
+        expect(suspended.status).toBe('suspended');
+
+        const result = await ctx.resume!(workflow, {
+          runId,
+          step: 'approve',
+          resumeData: { approvedBy: 'alice' },
+        });
+
+        expect(result.status).toBe('success');
+        expect(result.steps.approve).toMatchObject({
+          status: 'success',
+          output: { approvedBy: 'alice' },
+          resumePayload: { approvedBy: 'alice' },
+        });
+        // suspend, failed resumed attempt, retried attempt
+        expect(mocks.approve).toHaveBeenCalledTimes(3);
+      },
+    );
   });
 }

@@ -7,15 +7,15 @@ packages:
 
 # Themes
 
-Mastra Code ships with bundled themes and loads custom ones from `~/.mastracode/themes/<name>.json`.
+Mastra Code includes bundled themes and loads custom ones from `~/.mastracode/themes/<name>.json`.
 
-- `/theme` — open the theme picker (built-ins + pairs + bundled + custom, live preview)
-- `/theme list` — list all available themes
-- `/theme <name>` — apply and persist a theme by name
-- `/theme auto|dark|light` — built-in modes
-- `/theme <light>/<dark>` — follow the terminal appearance with a theme pair
-- `/theme status` — show the active mode and stored preference
-- `MASTRA_THEME=<name>` — environment override (mode, theme name, or pair)
+- `/theme`: open the theme picker (built-ins + pairs + bundled + custom, live preview)
+- `/theme list`: list all available themes
+- `/theme <name>`: apply and persist a theme by name
+- `/theme auto|dark|light`: built-in modes
+- `/theme <light>/<dark>`: follow the terminal appearance with a theme pair
+- `/theme status`: show the active mode and stored preference
+- `MASTRA_THEME=<name>`: environment override (mode, theme name, or pair)
 
 ## Bundled themes
 
@@ -79,7 +79,7 @@ The picker offers a pair for every bundled light/dark family: `catppuccin-latte/
 ```
 
 - `appearance` (required): `"dark"` or `"light"`. Selects the surface palette and the built-in theme used as a fallback for any color you don't set.
-- `bg` (optional): the terminal background the theme is designed for. Panel and overlay shades derive from it, and foreground colors contrast-adapt against it. Mastra Code does not paint the terminal background, so set it in your terminal for a theme whose `bg` differs from it. Background color keys you don't set explicitly (`overlayBg`, `selectedBg`, `userMessageBg`, `systemReminderBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`, `errorBg`) are derived from `bg` so overlays and panels match instead of falling back to the built-in near-black/white values.
+- `bg` (optional): the terminal background the theme is designed for. Panel and overlay shades derive from this color, and foreground colors contrast-adapt against it, so set the terminal background in your terminal to match a theme whose `bg` differs from it, since Mastra Code doesn't paint that background itself. Background color keys you leave unset (`overlayBg`, `selectedBg`, `userMessageBg`, `systemReminderBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`, `errorBg`) are derived from `bg` so overlays and panels match instead of falling back to the built-in near-black/white values.
 - `vars` (optional): named palette. Values must be hex colors (`#rrggbb` or `#rgb`).
 - `colors` (optional): any subset of the color keys below. Values are a hex color or the name of a `var`. The loader ignores unknown keys, but the JSON schema is stricter and flags them so typos show up in your editor.
 
@@ -192,7 +192,7 @@ Without a `bg`, foreground colors contrast-adapt against the terminal's actual b
 
 ## Translating themes from other tools
 
-Any existing theme can be converted — pi themes (`~/.pi/agent/themes/*.json`), VS Code color themes, terminal schemes (iTerm2, Ghostty, Alacritty, Windows Terminal), base16/base24 palettes, and editor themes like Tokyo Night, Catppuccin, or Gruvbox. The job is always the same: extract the source's palette, then map it onto the color keys above.
+Any existing theme can be converted: pi themes (`~/.pi/agent/themes/*.json`), VS Code color themes, terminal schemes (iTerm2, Ghostty, Alacritty, Windows Terminal), base16/base24 palettes, and editor themes like Tokyo Night, Catppuccin, or Gruvbox. The job is always the same: extract the source's palette, then map it onto the color keys above.
 
 Common source vocabularies and where they land:
 
@@ -213,9 +213,9 @@ Common source vocabularies and where they land:
 
 Specific source hints:
 
-- **pi** (`vars` + `colors`): structure is nearly identical — keep `vars`, remap `colors` keys per the table.
+- **pi** (`vars` + `colors`): structure is the same. Keep `vars` and remap `colors` keys per the table.
 - **VS Code** (`.json` theme): use `editor.foreground` for `text`, `editor.background` for `bg`, `editor.selectionBackground` for `selectedBg`, and `tokenColors` scopes (keyword → `textHighlight`, string → `success`-family, comment → `muted`). Set `appearance` to `"dark"` or `"light"` based on the source theme's variant.
 - **Terminal schemes** (ANSI 16): foreground → `text`, blue → `accent`, green/red/yellow → `success`/`error`/`warning`, bright black → `muted`, magenta → `textHighlight`.
 - **base16**: base05 → `text`, base03 → `muted`, base0D → `accent`, base0B/base08/base0A → `success`/`error`/`warning`, base0E → `textHighlight`, base02 → `selectedBg`.
 
-Keep hex values as-is; drop source keys with no counterpart and let the built-in fallback fill the rest. Ask your agent: "translate the theme file or name to a mastracode theme at `~/.mastracode/themes/<name>.json` using the mapping in themes.mdx".
+Keep hex values as-is. Drop source keys with no counterpart and let the built-in fallback fill the rest. Ask your agent: "translate the theme file or name to a mastracode theme at `~/.mastracode/themes/<name>.json` using the mapping in themes.mdx".

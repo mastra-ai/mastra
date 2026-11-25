@@ -25,7 +25,7 @@ export function ScorerEditMain({ form }: ScorerEditMainProps) {
               onChange={field.onChange}
               language="markdown"
               showCopyButton={false}
-              placeholder="Enter scorer instructions..."
+              placeholder="Enter scorer instructions"
               className="min-h-[200px] flex-1"
             />
           </div>

@@ -7,20 +7,28 @@ import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs 
 import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-
 import type { MastraFGAPermissionInput } from '../../auth/ee';
+
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
-import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { MastraLanguageModel, MastraModelConfig, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ToolResultCommitOutcome } from '../../loop/shared/steps/tool-result-commit-core';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
+import type {
+  AIModelGenerationSpan,
+  Span,
+  SpanTermination,
+  SpanType,
+  TracingContext,
+  TracingOptions,
+} from '../../observability';
 import type {
   InputProcessorOrWorkflow,
   LLMRequestProcessorOrWorkflow,
@@ -29,7 +37,13 @@ import type {
 } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
-import type { ChunkType, StepTripwireData } from '../../stream/types';
+import type { MastraModelOutput } from '../../stream/base/output';
+import type {
+  ChunkType,
+  MastraOnFinishCallback,
+  MastraStreamTransformOptions,
+  StepTripwireData,
+} from '../../stream/types';
 import type { ToolPayloadTransformMetadata } from '../../tools/payload-transform';
 import type {
   CoreTool,
@@ -38,15 +52,20 @@ import type {
   ToolPayloadTransformPolicy,
   ToolPayloadTransformTarget,
 } from '../../tools/types';
+import type { DynamicArgument } from '../../types';
+import type { ShouldPersistSnapshotFn, WorkflowRunStatus } from '../../workflows/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { AgentStreamsConfig } from '../streams/types';
 import type { TripwireData } from '../trip-wire';
-import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsInput } from '../types';
 import type { ExecutionFence } from './execution-fence';
+import type { ResponseRecord } from './workflows/shared/schemas';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -166,6 +185,8 @@ export interface SerializableStructuredOutput {
    * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
+  /** The model answers omitted optional fields with `null` (OpenAI strict mode); validate with null → undefined. */
+  nullToUndefined?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
   errorStrategy?: 'strict' | 'warn' | 'fallback';
   /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
@@ -306,6 +327,8 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    fromAgentDefaults?: boolean;
+    scorerIds?: string[];
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
@@ -405,10 +428,14 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: ResponseRecord;
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps that an output processor held until this step's stream ended */
+  releasedToolResultIds?: string[];
   /** Updated serializable state */
   state: SerializableDurableState;
   /** Exported model_generation span data (only set when there are tool calls) */
@@ -421,6 +448,10 @@ export interface DurableLLMStepOutput {
   deferredStepFinishChunk?: unknown;
   /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
+  timeToFirstTokenMs?: number;
+  /** Outcome of a step that ended the run itself (fatal model failure or a tripwire), for the root spans */
+  tracingTermination?: SpanTermination;
 }
 
 /**
@@ -443,6 +474,8 @@ export interface DurableToolCallInput {
   activeTools?: string[] | null;
   /** First-chunk clock of the step that produced this call, applied when spans end on suspend */
   completionStartTime?: Date;
+  /** Time to first token of the same step, applied the same way */
+  timeToFirstTokenMs?: number;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -456,6 +489,10 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Response of that step: the model that answered and the cost its provider reported */
+  response?: ResponseRecord;
+  /** Other tool calls of the step run at the same time, so a suspension of this one reports no model usage */
+  sideBySide?: boolean;
 }
 
 /**
@@ -484,6 +521,13 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  tripwire?: StepTripwireData;
+  /**
+   * Set when an output processor dropped the tool-result chunk without a
+   * tripwire. The model still gets the result, but callbacks leave it out of
+   * `toolResults`, as the stream never emitted it.
+   */
+  resultHidden?: boolean;
   /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
@@ -494,6 +538,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   processorDataParts?: Array<{
     type: string;
     data?: unknown;
+    id?: string;
     messageId?: string;
   }>;
   /**
@@ -517,6 +562,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * the same iteration on every engine (G3).
    */
   delegationBailed?: boolean;
+  /** Why the delegation that bailed failed, carried beside `delegationBailed` for the root spans */
+  tracingDelegationFailure?: SpanTermination;
+  /** Set when the total deadline aborted this tool call; carried so any worker ends the run as the deadline */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped this tool call; carried so any worker ends the run as aborted */
+  runAborted?: boolean;
   /** Error if tool execution failed */
   error?: {
     name: string;
@@ -564,14 +615,30 @@ export interface DurableAgenticExecutionOutput {
   /** Processor retry tracking */
   processorRetryCount?: number;
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps emitted at the end of this iteration's stream */
+  releasedToolResultIds?: string[];
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Set when the total deadline aborted a tool call this iteration */
+  deadlineTimeout?: { timeoutType: 'total'; timeoutMs: number };
+  /** Set when abort() stopped a tool call this iteration */
+  runAborted?: boolean;
   /** Step-finish chunk awaiting the loop's final continuation decision */
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
   completionStartTime?: Date;
+  /** Time to first token of the inference that streamed this iteration's first chunk */
+  timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: ResponseRecord;
+  /** Outcome of a step that ended the run itself, see DurableLLMStepOutput */
+  tracingTermination?: SpanTermination;
+  /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
+  tracingDelegationFailure?: SpanTermination;
+  /** An earlier segment's suspension ended this iteration's MODEL_STEP and reported the run's usage so far */
+  suspensionReportedUsage?: boolean;
 }
 
 /**
@@ -592,48 +659,13 @@ export interface DurableAgenticLoopOutput {
   };
   /** Final state */
   state: SerializableDurableState;
+  /** The outcome the run's spans ended with; a recovery of the saved run ends its own spans with it. */
+  tracingTermination?: SpanTermination;
+  /** Why the loop stopped, as on the FINISH this step published; a recovery that republishes FINISH reads it. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
-/**
- * Event types emitted via pubsub for agent streaming
- */
-export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete'
-  | 'ownership-claimed';
-
-/**
- * Event emitted via pubsub for agent streaming
- */
-export interface AgentStreamEvent<T = unknown> {
-  /** Event type */
-  type: AgentStreamEventType;
-  /** Run identifier */
-  runId: string;
-  /** Event payload */
-  data: T;
-  /** Epoch ms at which a `chunk` event's chunk was produced. */
-  producedAt?: number;
-  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
-  generation?: number;
-  /**
-   * Position of this event in its run topic's log. Only present on events read
-   * back from the topic; it is stripped before an event reaches an `observe()`
-   * consumer.
-   */
-  index?: number;
-  /**
-   * The `chunk` event's chunk already ran through the run's output processors
-   * before it was published, so the stream consumer must not run them again.
-   */
-  outputProcessed?: boolean;
-}
+export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
 
 /**
  * Chunk event data
@@ -665,6 +697,14 @@ export interface AgentFinishEventData {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
+  /** Why the loop stopped calling the model, as on the default loop's finish chunk. */
+  stopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
 }
 
 /**
@@ -746,6 +786,10 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
+  tracingTermination?: SpanTermination;
+  tracingDelegationFailure?: SpanTermination;
+  tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
   /**
@@ -781,6 +825,12 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /**
+   * The method that started the run (`stream` or `generate`). A warm resume
+   * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
+   * streaming whatever the resume's `closeOnSuspend` is (#29436).
+   */
+  methodType?: AgentMethodType;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -803,6 +853,27 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
+  /**
+   * Text the step in flight has streamed (as published) before a total deadline cut it off; cleared once the
+   * step completes. Only kept for runs with a total deadline.
+   */
+  streamedStepText?: string[];
+  /**
+   * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
+   * the run before the step merges its results, the deadline save records them.
+   */
+  settledToolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    outcome: ToolResultCommitOutcome;
+    /** The approval decision of an approved approval-gated tool, so it round-trips on recall. */
+    approval?: { id: string; approved: boolean; reason?: string };
+    /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
+    providerMetadata?: Record<string, any>;
+  }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**
@@ -819,6 +890,8 @@ export interface RunRegistryEntry {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** Processor state map (carried across steps) */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this run, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
   /** Background task manager instance (non-serializable) */
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
@@ -828,17 +901,15 @@ export interface RunRegistryEntry {
   /** Live MODEL_GENERATION span for this run (non-serializable) */
   modelSpan?: AIModelGenerationSpan;
   /**
-   * On resume, a fresh AGENT_RUN span is opened for the resumed segment (the
-   * original was ended as `suspended`). These override the frozen span IDs so
-   * post-resume steps nest under the resumed root and end it on completion.
+   * The live spans of the segment a resume or recovery opened in this process. Steps read the
+   * segment's pair from the request context and end these in place when they match it.
    */
   resumeAgentSpan?: Span<SpanType.AGENT_RUN>;
   resumeModelSpan?: AIModelGenerationSpan;
-  /** Exported forms of the resume spans, read by the workflow steps (same process). */
-  resumeAgentSpanData?: unknown;
-  resumeModelSpanData?: unknown;
   /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
   resumeCompletionStartTime?: Date;
+  /** Time to first token of the resumed segment's spans, kept the same way. */
+  resumeTimeToFirstTokenMs?: number;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from
@@ -900,6 +971,12 @@ export interface RunRegistryEntry {
    */
   requireToolApproval?: RequireToolApproval;
   /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
+  /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
    * closure retrieves and clears those queues, keyed by scope:
@@ -920,7 +997,7 @@ export interface RunRegistryEntry {
   /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
   pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
-  subscribePendingSignals?: (listener: () => void) => () => void;
+  subscribePendingSignals?: (listener: PendingSignalListener) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**
@@ -993,12 +1070,13 @@ export interface RunRegistryEntry {
   /** A late subscriber re-publishes the winning deadline error at most once per segment. */
   deadlineErrorRedelivered?: boolean;
   /**
-   * Whether this process has already subscribed to cross-process abort
-   * requests for the run. Set by `ensureRemoteAbortListener`, which every
-   * durable step calls on entry — the flag is what keeps a run's many steps
-   * from installing duplicate subscriptions.
+   * This process's subscription to cross-process abort requests for the run.
+   * Set by `ensureRemoteAbortListener`, which every durable step calls on
+   * entry; its presence keeps a run's many steps from installing duplicate
+   * subscriptions. `releaseRemoteAbortListener` detaches and clears it once
+   * the run reaches a final status.
    */
-  remoteAbortListenerInstalled?: boolean;
+  remoteAbortListener?: { detach(): Promise<void> };
   /**
    * Promise tracking the in-flight workflow execution (or resume) for this
    * run. Resolves once the workflow has fully settled (finished, errored,
@@ -1014,6 +1092,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.
@@ -1103,3 +1183,465 @@ export type DurableAgenticWorkflowInputSchema = z.ZodType<DurableAgenticWorkflow
 export type DurableLLMStepOutputSchema = z.ZodType<DurableLLMStepOutput>;
 export type DurableToolCallInputSchema = z.ZodType<DurableToolCallInput>;
 export type DurableToolCallOutputSchema = z.ZodType<DurableToolCallOutput>;
+
+/**
+ * Options for DurableAgent.stream()
+ */
+export interface DurableAgentStreamOptions<OUTPUT = undefined> {
+  /** Signal chunks to hide from this caller's stream. Does not affect generated results. */
+  hideSignals?: AgentExecutionOptions<OUTPUT>['hideSignals'];
+  /** Custom instructions that override the agent's default instructions for this execution */
+  instructions?: AgentExecutionOptions<OUTPUT>['instructions'];
+  /** Additional context messages to provide to the agent */
+  context?: AgentExecutionOptions<OUTPUT>['context'];
+  /** Memory configuration for conversation persistence and retrieval */
+  memory?: AgentExecutionOptions<OUTPUT>['memory'];
+  /** Scopes this run acts with. See `AgentExecutionOptions.scopes`. */
+  scopes?: string[];
+  /** Unique identifier for this execution run */
+  runId?: string;
+  /** Request Context containing dynamic configuration and state */
+  requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
+  /** Maximum number of steps to run */
+  maxSteps?: number;
+  /**
+   * Model to run for this call instead of the agent's model.
+   *
+   * A model instance can't be persisted, so `recover()` in another process falls back to the
+   * agent's own model and logs a warning.
+   */
+  model?: DynamicArgument<MastraModelConfig>;
+  /**
+   * Conditions for stopping execution (e.g., step count, token limit).
+   *
+   * The predicate is non-serializable, so it's parked on the in-process run
+   * registry and evaluated by the durable loop on every iteration. Cross-process
+   * durable engines (e.g. Inngest after a worker restart) cannot recover the
+   * closure and degrade to `maxSteps` only.
+   */
+  stopWhen?: AgentExecutionOptions<OUTPUT>['stopWhen'];
+  /** Additional tool sets that can be used for this execution */
+  toolsets?: AgentExecutionOptions<OUTPUT>['toolsets'];
+  /** Client-side tools available during execution */
+  clientTools?: AgentExecutionOptions<OUTPUT>['clientTools'];
+  /** Tool selection strategy */
+  toolChoice?: AgentExecutionOptions<OUTPUT>['toolChoice'];
+  /** Tool names enabled for this execution */
+  activeTools?: AgentExecutionOptions<OUTPUT>['activeTools'];
+  /** Model-specific settings like temperature */
+  modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
+  /** Provider-specific options forwarded to the model (serialized into the durable workflow input) */
+  providerOptions?: AgentExecutionOptions<OUTPUT>['providerOptions'];
+  /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
+  requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
+  /** Automatically resume suspended tools */
+  autoResumeSuspendedTools?: boolean;
+  /** Maximum number of tool calls to execute concurrently, or an object with `limit`/`strategy` */
+  toolCallConcurrency?: AgentExecutionOptions<OUTPUT>['toolCallConcurrency'];
+  /** Whether to include raw chunks in the stream output */
+  includeRawChunks?: boolean;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Maximum processor retries */
+  maxProcessorRetries?: number;
+  /** Structured output configuration */
+  structuredOutput?: AgentExecutionOptions<OUTPUT>['structuredOutput'];
+  /** Whether to return detailed scoring data in the response */
+  returnScorerData?: boolean;
+  /** Version overrides for sub-agent delegation */
+  versions?: AgentExecutionOptions<OUTPUT>['versions'];
+  /** Callback when chunk is received */
+  onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Callback when step finishes */
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
+  /** Callback when execution finishes — receives rich step data (text, steps, toolResults) */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Callback on error */
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when workflow suspends (e.g., for tool approval) */
+  onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: AgentExecutionOptions<OUTPUT>['onAbort'];
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: AgentExecutionOptions<OUTPUT>['onIterationComplete'];
+  /** Additional system message appended after context but before user messages. */
+  system?: AgentExecutionOptions<OUTPUT>['system'];
+  /** When true, background tasks are disabled for this run. */
+  disableBackgroundTasks?: AgentExecutionOptions<OUTPUT>['disableBackgroundTasks'];
+  /** Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: AgentExecutionOptions<OUTPUT>['backgroundTaskPolicy'];
+  /** Tracing options forwarded to the agent/model spans. */
+  tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
+  /** Per-call actor signal forwarded to FGA checks and tool execution. */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
+  /** MCP protocol context forwarded to tools for in-process durable runs. */
+  mcp?: AgentExecutionOptions<OUTPUT>['mcp'];
+  /**
+   * Per-call tool lifecycle hooks. Applied when tools are prepared for this execution.
+   * Function hooks are not serialized; a cross-process recovery cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
+  /**
+   * Per-invocation tool payload transform policy. The closure rides on the
+   * in-process run registry; only the JSON-safe `targets` shadow is serialized
+   * for cross-process engines.
+   */
+  transform?: AgentExecutionOptions<OUTPUT>['transform'];
+  /**
+   * Per-step preparation hook. Closure-only: stored on the in-process run
+   * registry and invoked as a `PrepareStepProcessor` at the start of every
+   * iteration. Cross-process resumes lose the hook.
+   */
+  prepareStep?: AgentExecutionOptions<OUTPUT>['prepareStep'];
+  /**
+   * Per-call `isTaskComplete` policy. Scorer instances and `onComplete` are
+   * closure-only and live on the in-process run registry; the JSON-safe
+   * primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`,
+   * `scorerNames`) are serialized for cross-process observability.
+   */
+  isTaskComplete?: AgentExecutionOptions<OUTPUT>['isTaskComplete'];
+  /**
+   * Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, etc.). The callbacks are forwarded into `convertTools`
+   * at prepare time and burned into the sub-agent `CoreTool` wrappers on the
+   * in-process run registry. Cross-process resumes lose the callbacks (only
+   * `includeSubAgentToolResultsInModelContext` would be JSON-safe), so a
+   * fresh worker degrades to default delegation behaviour.
+   */
+  delegation?: AgentExecutionOptions<OUTPUT>['delegation'];
+  /**
+   * When set, `stream()` delegates to the idle-loop wrapper that keeps the
+   * outer stream open across background-task continuations — the same
+   * behaviour as the now-deprecated `streamUntilIdle()`.
+   *
+   * Pass `true` for default idle timeout (5 min), or `{ maxIdleMs }` to
+   * customise.
+   *
+   * @example
+   * ```typescript
+   * const { output, cleanup } = await durableAgent.stream('Research topic', {
+   *   untilIdle: true,
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   * ```
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
+  /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
+  _skipBgTaskWait?: boolean;
+  /**
+   * @internal
+   * Detach HTTP observers on reader cancellation instead of aborting execution.
+   */
+  _detachObserverOnCancel?: boolean;
+  /**
+   * External abort signal. The durable agent always installs its own internal
+   * `AbortController` for the run; when this signal is provided, its `abort`
+   * event is forwarded to the internal controller so either source can cancel
+   * the run.
+   *
+   * Cross-process resumes (e.g. Inngest after a worker restart) cannot
+   * recover the signal — call `resume(runId, ..., { abortSignal })` with a
+   * fresh signal on each segment if you need abortability post-resume.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Whether this caller's stream closes when the run suspends (e.g. for tool
+   * approval). Defaults to `false`: the stream stays open across suspension so
+   * a later resume can continue streaming on this same reader.
+   *
+   * Set to `true` so `fullStream`, `text`, and `getFullOutput()` resolve at the
+   * suspension boundary (matching non-durable `Agent.stream()`), letting callers
+   * such as AG-UI or A2A react instead of hanging. Resume the run with
+   * `resumeStream()`/`resume()` — those always return a fresh stream.
+   */
+  closeOnSuspend?: boolean;
+}
+
+/**
+ * Result from DurableAgent.stream()
+ */
+export interface DurableAgentStreamResult<OUTPUT = undefined> {
+  /** The streaming output */
+  output: MastraModelOutput<OUTPUT>;
+  /** The full stream - delegates to output.fullStream for server compatibility */
+  readonly fullStream: ReadableStream<any>;
+  /** The unique run ID for this execution */
+  runId: string;
+  /** Thread ID if using memory */
+  threadId?: string;
+  /** Resource ID if using memory */
+  resourceId?: string;
+  /** Trace ID of the run, when the run is traced */
+  traceId?: string;
+  /** ID of the agent run span, when the run is traced */
+  spanId?: string;
+  /** Cleanup function to call when done (unsubscribes from pubsub) */
+  cleanup: () => void;
+  /**
+   * Abort the run. Flips the internal `AbortController` for this run, which
+   * surfaces as an `AbortError` inside the durable LLM-execution step and
+   * is bridged to the user's `onAbort` callback via the run's pubsub topic.
+   *
+   * Safe to call after the run has already finished — it's a no-op in that
+   * case.
+   *
+   * Also publishes an abort request over pubsub so the abort reaches the
+   * process executing the run, which in a load-balanced deployment is usually
+   * not this one. That process flips its own controller and unwinds normally;
+   * the workflow run is never hard-cancelled, so the terminal `finish` event
+   * still reaches stream consumers. Await the returned promise to know the
+   * request has been dispatched; ignoring it keeps the previous
+   * fire-and-forget behaviour.
+   */
+  abort: (reason?: unknown) => Promise<void>;
+}
+
+/**
+ * Configuration for DurableAgent - wraps an existing Agent with durable execution
+ */
+export interface DurableAgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+> extends AgentStreamsConfig {
+  /**
+   * The Agent to wrap with durable execution capabilities.
+   * All agent methods (getModel, listTools, etc.) delegate to this agent.
+   */
+  agent: Agent<TAgentId, TTools, TOutput>;
+
+  /**
+   * Optional ID override. Defaults to agent.id.
+   */
+  id?: TAgentId;
+
+  /**
+   * Optional name override. Defaults to agent.name.
+   */
+  name?: string;
+
+  /**
+   * Maximum steps for the agentic loop.
+   * Defaults to the workflow default if not specified.
+   */
+  maxSteps?: number;
+
+  /**
+   * Overrides the snapshot-persistence policy for this agent's durable
+   * workflows. Returning false for a status skips that snapshot write.
+   *
+   * The default policy always persists `pending | paused | suspended`
+   * (required for human-in-the-loop `resume()`), and persists `running`
+   * when the Mastra instance is configured with
+   * `recovery: { durableAgents: 'auto' }`, or at each step boundary after
+   * `mastra.shutdown()` starts (even with recovery off). `running`
+   * checkpoints exist solely so `listActiveRuns()` / `recover()` /
+   * `recoverActiveRuns()` can see in-flight runs after a crash or shutdown.
+   *
+   * Footguns when providing a custom predicate:
+   * - Excluding `paused` / `suspended` breaks human-in-the-loop resume.
+   * - Excluding `running` makes the agent invisible to crash recovery.
+   * A guardrail warning is logged for both cases (detected by probing the
+   * predicate with an empty `stepResults`, so predicates that read
+   * `stepResults` may probe inaccurately — the warning is best-effort).
+   *
+   * EventedAgent and InngestAgent own their persistence policy and ignore
+   * this option with a warning.
+   */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
+  /**
+   * How this agent's new runs are stored. `1` rewrites one snapshot per run
+   * on every write. `2` stores a run header plus per-step entries, and each
+   * write sends only what changed.
+   *
+   * Where the storage adapter doesn't support version 2, new runs are stored
+   * as version 1 and a warning is logged. Runs keep the version they were
+   * created with: a run resumed after this option changes continues in its
+   * stored version.
+   *
+   * @default 1
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
+}
+
+/**
+ * DurableAgent wraps an existing Agent with durable execution capabilities.
+ *
+ * Key features:
+ * 1. Resumable streams - clients can disconnect and reconnect without missing events
+ * 2. Serializable workflow inputs - works with durable execution engines
+ * 3. PubSub-based streaming - events flow through pubsub for distribution
+ *
+ * DurableAgent extends Agent, delegating most methods to the wrapped agent.
+ * It overrides stream() to use durable execution with the agentic workflow.
+ *
+ * Subclasses (EventedAgent, InngestAgent) override executeWorkflow() to
+ * customize how the workflow is executed.
+ *
+ * @example
+ * ```typescript
+ * import { Agent } from '@mastra/core/agent';
+ * import { DurableAgent } from '@mastra/core/agent/durable';
+ *
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: openai('gpt-4'),
+ * });
+ *
+ * const durableAgent = new DurableAgent({ agent });
+ *
+ * const { output, runId, cleanup } = await durableAgent.stream('Hello!');
+ * const text = await output.text;
+ * cleanup();
+ * ```
+ */
+
+/**
+ * Statuses of durable agent runs discoverable via {@link DurableAgent.listActiveRuns}.
+ *
+ * `running` is the status reported by the workflow engine while the durable
+ * agent's agentic loop is actively executing (i.e. between suspend
+ * boundaries). Persisted `running` snapshots are the recovery source for runs
+ * orphaned by a process restart.
+ */
+export type DurableAgentActiveRunStatus = Extract<WorkflowRunStatus, 'running'>;
+
+/**
+ * Filters for {@link DurableAgent.listActiveRuns}. Mirrors the
+ * `listWorkflowRuns` filter contract, plus the agent-level `threadId` /
+ * `resourceId` filters used by the base {@link Agent.listSuspendedRuns}.
+ */
+export interface DurableAgentListActiveRunsOptions {
+  /** Only return runs that belong to this memory thread. */
+  threadId?: string;
+  /** Only return runs that belong to this memory resource. */
+  resourceId?: string;
+  /** Only return runs created at or after this date. */
+  fromDate?: Date;
+  /** Only return runs created at or before this date. */
+  toDate?: Date;
+  /**
+   * Number of items per page. Pagination is applied when both `perPage` and
+   * `page` are provided; otherwise all matching runs are returned.
+   */
+  perPage?: number;
+  /** Zero-indexed page number. */
+  page?: number;
+}
+
+/**
+ * A durable agent run currently reported as `running` in workflow snapshot
+ * storage. These are the runs that a boot-time or operator-initiated
+ * recovery would re-drive after a process restart.
+ */
+export interface DurableAgentActiveRun {
+  /** Run ID accepted by {@link DurableAgent.recoverActiveRuns} and workflow `restart`. */
+  runId: string;
+  status: DurableAgentActiveRunStatus;
+  threadId?: string;
+  resourceId?: string;
+  /** When the run's snapshot was last persisted while running. */
+  updatedAt: Date;
+}
+
+export interface DurableAgentListActiveRunsResult {
+  runs: DurableAgentActiveRun[];
+  /** Total number of matching runs, before pagination. */
+  total: number;
+}
+
+/**
+ * Outcome of a single run restart attempted by
+ * {@link DurableAgent.recoverActiveRuns}. `success` means `run.restart()`
+ * returned; `failed` means it threw and the error was captured so recovery
+ * of remaining runs could proceed; `skipped` means the run was not orphaned,
+ * recovery hit a transient error, its recovery wait timed out, or recovery was interrupted by shutdown.
+ */
+export interface DurableAgentRecoveredRun {
+  runId: string;
+  status: 'success' | 'failed' | 'skipped';
+  /** Set when `status` is `failed`. */
+  error?: Error;
+  /**
+   * Set when `status` is `skipped`:
+   * - `run-active`: another execution, possibly in another process, is live.
+   *   Check again at `retryAt`.
+   * - `run-active-locally`: this process is executing the run.
+   * - `already-in-progress`: this process is already recovering the run.
+   * - `transient-error`: recovery hit a transient infrastructure error. Check again at `retryAt`.
+   * - `recovery-timeout`: the attempt is still pending or its 30-second wait expired. Check again at `retryAt`.
+   */
+  reason?: 'run-active' | 'run-active-locally' | 'already-in-progress' | 'transient-error' | 'recovery-timeout';
+  /** Epoch ms to check again: claim expiry for `run-active`, or a retry delay for `transient-error` / `recovery-timeout`. */
+  retryAt?: number;
+}
+
+/**
+ * Filters for {@link DurableAgent.recoverActiveRuns}. Reuses the
+ * {@link DurableAgentListActiveRunsOptions} discovery filters and adds an
+ * escape hatch for targeting a specific run ID.
+ */
+export interface DurableAgentRecoverActiveRunsOptions extends DurableAgentListActiveRunsOptions {
+  /**
+   * Recover a specific run by ID. When set, the discovery filters and
+   * pagination fields are ignored. Useful when the caller already knows the
+   * run ID from another source (e.g. their own bookkeeping).
+   */
+  runId?: string;
+}
+
+export interface DurableAgentRecoverActiveRunsResult {
+  recovered: DurableAgentRecoveredRun[];
+  /** Number of runs that restarted successfully. */
+  succeeded: number;
+  /** Number of runs whose restart threw. */
+  failed: number;
+}
+
+/**
+ * Options for {@link DurableAgent.recover}, a single-run streamable recovery
+ * counterpart to {@link DurableAgent.resume}.
+ *
+ * `recover()` rebuilds the run's non-serializable state from the persisted
+ * workflow snapshot (message list, model, tools, memory, saveQueueManager,
+ * request context, agent span) and returns a fresh {@link DurableAgentStreamResult}
+ * whose `fullStream` observes the recovered run through pubsub. Callbacks
+ * mirror `stream()` / `resume()`.
+ */
+export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
+  /** Callback when chunk is received */
+  onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Experimental transforms applied whenever `fullStream` is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
+  /** Callback when a step finishes */
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
+  /** Callback when the recovered run finishes */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Callback when the recovered run errors */
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when the recovered run is aborted */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
+  /** Callback when the recovered run suspends again */
+  onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * Close the recovered stream once the run suspends (e.g. awaiting tool
+   * approval) so callers can hand off to `resume()`. Defaults to `false`.
+   */
+  closeOnSuspend?: boolean;
+  /**
+   * Optional abort signal for the recovered segment. Forwarded onto a fresh
+   * internal `AbortController` installed on the run's registry entry, so
+   * `result.abort()` and the external signal can both cancel the recovered run.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Take the run over even while another execution is live. The other
+   * execution loses the run and stops; its writes are rejected when the
+   * workflows store supports run fencing. Without `force`, `recover()` throws
+   * `DURABLE_AGENT_RUN_ACTIVE` for a live run.
+   */
+  force?: boolean;
+}

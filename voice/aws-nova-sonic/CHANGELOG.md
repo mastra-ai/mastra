@@ -1,5 +1,43 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.7
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 0.2.7-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 0.2.6
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1156.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1156.0) (from `^3.1095.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.88` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.88) (from `^3.972.72`, in `dependencies`)
+  - Updated dependency [`@smithy/node-http-handler@^4.12.1` ↗︎](https://www.npmjs.com/package/@smithy/node-http-handler/v/4.12.1) (from `^4.0.0`, in `dependencies`)
+  - Updated dependency [`@smithy/types@^4.19.0` ↗︎](https://www.npmjs.com/package/@smithy/types/v/4.19.0) (from `^4.0.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.2.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1156.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1156.0) (from `^3.1095.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.88` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.88) (from `^3.972.72`, in `dependencies`)
+  - Updated dependency [`@smithy/node-http-handler@^4.12.1` ↗︎](https://www.npmjs.com/package/@smithy/node-http-handler/v/4.12.1) (from `^4.0.0`, in `dependencies`)
+  - Updated dependency [`@smithy/types@^4.19.0` ↗︎](https://www.npmjs.com/package/@smithy/types/v/4.19.0) (from `^4.0.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
 ## 0.2.5
 
 ### Patch Changes

@@ -12,21 +12,15 @@ import type { ToolPartFields } from '@/domains/chat/messages/renderers/tool-part
 import { isRecord } from '@/domains/chat/messages/signal-data';
 import { isSettledState } from '@/domains/chat/tools/tool-card-kind';
 
-export interface ToolCallEffectsProps extends ToolPartFields {
-  readOnly?: boolean;
-}
+export type ToolCallEffectsProps = ToolPartFields;
 
 const PROBE_QUERY = { queryKey: ['browser-session-probe'] };
 
-/** What a call does to the page besides drawing. Mounted per call, so a card folded away still does it. */
-export function ToolCallEffects({
-  toolName,
-  toolCallId,
-  input,
-  output,
-  state,
-  readOnly = false,
-}: ToolCallEffectsProps) {
+/**
+ * What a live call does to the page besides drawing. Mounted per call, so a card folded away still does it.
+ * A call read back from a record does nothing to the page: `MessageRow` does not mount it then.
+ */
+export function ToolCallEffects({ toolName, toolCallId, input, output, state }: ToolCallEffectsProps) {
   const browserCalls = useBrowserToolCallsSafe();
   const queryClient = useQueryClient();
   const { activateSkill } = useActivatedSkills();
@@ -35,7 +29,7 @@ export function ToolCallEffects({
   const skillName = toolName === 'skill' && isRecord(input) && typeof input.name === 'string' ? input.name : '';
 
   useEffect(() => {
-    if (readOnly || !isBrowser || !browserCalls) return;
+    if (!isBrowser || !browserCalls) return;
     browserCalls.registerToolCall({
       toolCallId,
       toolName,
@@ -51,12 +45,12 @@ export function ToolCallEffects({
     queryClient.setQueriesData<BrowserSessionProbe>(PROBE_QUERY, probe =>
       probe?.screencastAvailable && !probe.hasSession ? { ...probe, hasSession: true } : probe,
     );
-  }, [readOnly, isBrowser, browserCalls, queryClient, toolCallId, toolName, input, output]);
+  }, [isBrowser, browserCalls, queryClient, toolCallId, toolName, input, output]);
 
   useEffect(() => {
-    if (readOnly || !settled || skillName === '') return;
+    if (!settled || skillName === '') return;
     activateSkill(skillName);
-  }, [readOnly, settled, skillName, activateSkill]);
+  }, [settled, skillName, activateSkill]);
 
   return null;
 }

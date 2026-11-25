@@ -27,7 +27,7 @@ Use the pageObserveTool to find elements on webpages.
 Use the pageExtractTool to extract data from webpages.
 Use the pageNavigateTool to navigate to a URL.
 `,
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
   tools: { pageActTool, pageObserveTool, pageExtractTool, pageNavigateTool },
   memory: new Memory(),
 });

@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -43,19 +43,18 @@ function renderBoard() {
 }
 
 describe('List row actions menu', () => {
-  it('reveals the actions and details buttons on hover or keyboard focus of any row, not only the selected one', async () => {
+  it('reveals the actions button on hover or keyboard focus of any row, not only the selected one', async () => {
     renderBoard();
     const triage = await screen.findByTestId('board-column-triage');
     await within(triage).findByText('Moved recently');
 
-    for (const name of ['Actions for Moved recently', 'Details for Moved recently', 'Actions for Created later']) {
+    for (const name of ['Actions for Moved recently', 'Actions for Created later']) {
       const button = within(triage).getByRole('button', { name });
       expect(button).toHaveClass(...ROW_HOVER_REVEAL);
     }
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('moves an unselected card in two clicks without opening its details', async () => {
+  it('moves an unselected card in two clicks from its actions menu', async () => {
     const { transitions } = renderBoard();
     const user = userEvent.setup();
     const triage = await screen.findByTestId('board-column-triage');
@@ -66,11 +65,6 @@ describe('List row actions menu', () => {
 
     await waitFor(() => expect(transitions).toHaveLength(1));
     expect(transitions[0]).toMatchObject({ itemId: 'recent-card', body: { stage: 'planning' } });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(within(triage).getByRole('button', { name: 'Details for Moved recently' })).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
   });
 
   it('opens the actions menu from the keyboard on a row that is not selected', async () => {
@@ -82,17 +76,6 @@ describe('List row actions menu', () => {
     const trigger = within(triage).getByRole('button', { name: 'Actions for Created later' });
     act(() => trigger.focus());
     await user.keyboard('{Enter}');
-
-    expect(await screen.findByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
-  it('opens the same actions menu on right-click without selecting the row', async () => {
-    renderBoard();
-    const triage = await screen.findByTestId('board-column-triage');
-    const row = await within(triage).findByRole('article', { name: 'Moved recently' });
-
-    fireEvent.contextMenu(row);
 
     expect(await screen.findByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

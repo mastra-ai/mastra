@@ -6,15 +6,14 @@
  * reach the caller on a later redelivery; otherwise `agent.stream()` never
  * finishes.
  *
- * Only the evented engine runs this: it is the only variant whose loop is
- * driven by the evented workflow processor over `mastra.pubsub`. The normal
- * and fs variants run the loop in-process, and durable runs on the default
- * execution engine, so none of them publish `workflow.step.end` /
- * `workflow.fail` through a PubSub that this scenario can make fail.
+ * Both evented variants exercise the workflow processor over `mastra.pubsub`.
+ * Native default is a control: the injected workflow publish failures must
+ * never run because its loop does not use evented workflow delivery.
  */
 
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { DurableStepIds } from '../../../../agent/durable/constants';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { createTool } from '../../../../tools';
 import { createFlakyPublishPubSub } from '../../../../workflows/evented/test-utils/flaky-publish-pubsub';
@@ -57,7 +56,7 @@ describeForAllEngines(
       clearTimeout(timer);
       if (result === 'HANG') return { outcome: 'HANG', flaky };
       // The failed step reaches the caller as a rejected stream / finishReason.
-      const outcome = await (result as any).output.finishReason.then(
+      const outcome = await result.output.finishReason.then(
         (reason: string) => `finish:${reason}`,
         (error: Error) => `error:${error.message}`,
       );
@@ -66,12 +65,22 @@ describeForAllEngines(
 
     it('control: the run ends with an error when workflow.fail publishes', async () => {
       const { outcome, flaky } = await run(0);
+      if (engine === 'native-default') {
+        expect(flaky.attempts).toEqual({});
+        expect(outcome).toBe('finish:stop');
+        return;
+      }
       expect(flaky.rejected['workflow.step.end']).toBe(3);
       expect(outcome).toBe('error:injected publish failure for workflow.step.end');
     });
 
     it('the run ends with an error when the first workflow.fail publish throws', async () => {
       const { outcome, flaky } = await run(1);
+      if (engine === 'native-default') {
+        expect(flaky.attempts).toEqual({});
+        expect(outcome).toBe('finish:stop');
+        return;
+      }
       expect(flaky.rejected['workflow.fail']).toBe(1);
       expect(outcome).toBe('error:injected publish failure for workflow.step.end');
     });
@@ -81,6 +90,12 @@ describeForAllEngines(
       const controlRequests = getMock().getRequests().length;
       getMock().clearRequests();
       const { outcome, flaky } = await run(3);
+      if (engine === 'native-default') {
+        expect(flaky.attempts).toEqual({});
+        expect(outcome).toBe('finish:stop');
+        expect(getMock().getRequests()).toHaveLength(controlRequests);
+        return;
+      }
       // Bounded give-up: the caller gets no result (same as main), but the
       // processor does not keep republishing or rerunning the model step.
       expect(outcome).toBe('HANG');
@@ -93,8 +108,8 @@ describeForAllEngines(
     });
 
     it('retries the workflow.fail publish for a throwing stopWhen without calling it again', async () => {
-      // A throwing stopWhen is non-redeliverable, so it goes terminal on the
-      // first delivery; the first workflow.fail publish for it then throws.
+      // A throwing stopWhen ends the loop step as failed on the first delivery; the
+      // workflow.fail that follows throws once and is published again on redelivery.
       const flaky = createFlakyPublishPubSub(new EventEmitterPubSub(), { 'workflow.fail': 1 });
       let stopWhenCalls = 0;
       let toolCalls = 0;
@@ -140,9 +155,22 @@ describeForAllEngines(
 
       expect(result).not.toBe('HANG');
       const { streamError, requests } = result as Awaited<typeof scenario>;
+      if (engine === 'native-default') {
+        expect(flaky.attempts).toEqual({});
+        expect(stopWhenCalls).toBe(1);
+        expect(toolCalls).toBe(1);
+        expect(requests).toHaveLength(1);
+        expect(streamError).toMatchObject({ message: 'stopWhen exploded' });
+        return;
+      }
       expect(flaky.rejected['workflow.fail']).toBe(1);
-      // Two workflow.fail publishes happen without rejections; the rejected one is retried once.
-      expect(flaky.attempts['workflow.fail']).toBe(3);
+      // The rejected publish is retried once, and both attempts fail the agent loop's run,
+      // not the iteration run whose end evaluated stopWhen.
+      expect(flaky.attempts['workflow.fail']).toBe(2);
+      expect(flaky.attemptWorkflowIds['workflow.fail']).toEqual([
+        DurableStepIds.AGENTIC_LOOP,
+        DurableStepIds.AGENTIC_LOOP,
+      ]);
       expect(stopWhenCalls).toBe(1);
       expect(toolCalls).toBe(1);
       expect(requests).toHaveLength(1);

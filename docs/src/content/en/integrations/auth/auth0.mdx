@@ -16,7 +16,7 @@ The `@mastra/auth-auth0` package provides authentication for Mastra using Auth0.
 
 ## Prerequisites
 
-This example uses Auth0 authentication. Make sure to:
+This example uses Auth0 authentication. Ensure you have:
 
 1. Create an Auth0 account at [auth0.com](https://auth0.com/)
 1. Set up an Application in your Auth0 Dashboard
@@ -77,11 +77,11 @@ export const mastra = new Mastra({
 
 ## Configuration
 
-### User Authorization
+### User authorization
 
 By default, `MastraAuthAuth0` allows all authenticated users who have valid Auth0 tokens for the specified audience. The token verification ensures that:
 
-1. The token is properly signed by Auth0
+1. The token is signed by Auth0
 1. The token isn't expired
 1. The token audience matches your configured audience
 1. The token issuer matches your Auth0 domain

@@ -16,9 +16,7 @@ afterEach(() => cleanup());
 
 describe('CodeDiff', () => {
   it('shows both versions of a Playground observation', async () => {
-    const { container } = render(
-      <CodeDiff codeA={'Remember Paris'} codeB={'Remember Lyon'} filename="observations.md" />,
-    );
+    const { container } = render(<CodeDiff codeA="Remember Paris" codeB="Remember Lyon" filename="observations.md" />);
 
     await waitFor(() => {
       const content = container.querySelector('diffs-container')?.shadowRoot?.textContent;

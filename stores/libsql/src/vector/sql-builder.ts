@@ -57,13 +57,12 @@ const createNumericOperator = (symbol: string) => {
         sql: `CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?`,
         needsValue: true,
       };
-    } else {
-      // For non-numeric strings (like ISO dates), compare as text
-      return {
-        sql: `CAST(json_extract(metadata, ${jsonPath}) AS TEXT) ${symbol} ?`,
-        needsValue: true,
-      };
     }
+    // For non-numeric strings (like ISO dates), compare as text
+    return {
+      sql: `CAST(json_extract(metadata, ${jsonPath}) AS TEXT) ${symbol} ?`,
+      needsValue: true,
+    };
   };
 };
 
@@ -90,14 +89,13 @@ function buildElemMatchConditions(value: any) {
       const jsonPath = parseJsonPathKey(field);
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$.${jsonPath}')`);
       return { sql: elemSql, values };
-    } else {
-      const jsonPath = parseJsonPathKey(field);
-      // Simple field equality (warehouse: 'A')
-      return {
-        sql: `json_extract(elem.value, '$.${jsonPath}') = ?`,
-        values: [fieldValue],
-      };
     }
+    const jsonPath = parseJsonPathKey(field);
+    // Simple field equality (warehouse: 'A')
+    return {
+      sql: `json_extract(elem.value, '$.${jsonPath}') = ?`,
+      values: [fieldValue],
+    };
   });
 
   return conditions;

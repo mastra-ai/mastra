@@ -36,35 +36,17 @@ const semanticTokens = [
   'card',
   'popover',
   'dialog',
+  'nested',
+  'row',
   'field',
   'field-disabled',
   'muted',
   'foreground',
   'muted-foreground',
+  'subtle-foreground',
   'placeholder',
   'border',
   'border-focus',
-] as const;
-
-const deferredSemanticTokens = [
-  'card-foreground',
-  'popover-foreground',
-  'tertiary-foreground',
-  'disabled-foreground',
-  'contrast-foreground',
-  'secondary',
-  'secondary-foreground',
-  'accent',
-  'accent-foreground',
-  'input',
-  'sidebar-foreground',
-  'sidebar-accent',
-  'sidebar-accent-foreground',
-  'sidebar-border',
-  'sidebar-ring',
-  'sidebar-divider',
-  'selected',
-  'ring',
 ] as const;
 
 const semanticAliases = {
@@ -75,6 +57,7 @@ const semanticAliases = {
   muted: 'gray-1',
   foreground: 'gray-10',
   'muted-foreground': 'gray-8',
+  'subtle-foreground': 'gray-7',
   placeholder: 'gray-7',
 } as const;
 
@@ -192,23 +175,9 @@ describe('theme.css export', () => {
     expect(lightTheme).not.toMatch(/--color-brand-/);
   });
 
-  it('does not ship legacy colors', async () => {
-    expect(readFileSync(resolve(pkgRoot, 'theme.css'), 'utf8')).not.toContain('legacy-theme');
-    const { darkVariables, lightVariables } = getThemeVariables(themeCss);
-    for (const variables of [darkVariables, lightVariables]) {
-      for (const name of ['accent1', 'positive1', 'notice-success', 'brand-green-500', 'chart-1', 'span-type-agent']) {
-        expect(variables.has(name)).toBe(false);
-      }
-    }
+  it('generates the badge and status utilities', async () => {
     const compiler = await compileStylesheet("@import 'tailwindcss'; @import './theme.css';", pkgRoot);
-    const css = compiler.build([
-      'bg-accent1',
-      'text-positive1',
-      'bg-notice-success',
-      'text-badge-green-foreground',
-      'bg-success-subtle',
-    ]);
-    for (const name of ['bg-accent1', 'text-positive1', 'bg-notice-success']) expect(css).not.toContain(`.${name}`);
+    const css = compiler.build(['text-badge-green-foreground', 'bg-success-subtle']);
     for (const name of ['text-badge-green-foreground', 'bg-success-subtle']) expect(css).toContain(`.${name}`);
   });
 
@@ -235,23 +204,23 @@ describe('theme.css export', () => {
 
   it('exposes the background and gray foundation scales', () => {
     const darkColors = [
-      ['background-1', 'oklch(0.1382 0 0)'],
-      ['background-2', 'oklch(0.1591 0 0)'],
-      ['background-3', 'oklch(0.1913 0 0)'],
-      ['gray-1', 'oklch(0.2178 0 0)'],
-      ['gray-2', 'oklch(0.2435 0 0)'],
-      ['gray-3', 'oklch(0.2686 0 0)'],
-      ['gray-4', 'oklch(0.3092 0 0)'],
-      ['gray-5', 'oklch(0.3715 0 0)'],
-      ['gray-6', 'oklch(0.4495 0 0)'],
-      ['gray-7', 'oklch(0.5208 0 0)'],
-      ['gray-8', 'oklch(0.65 0 0)'],
-      ['gray-9', 'oklch(0.7699 0 0)'],
-      ['gray-10', 'oklch(0.9851 0 0)'],
+      ['background-1', 'oklch(0.173 0 0)'],
+      ['background-2', 'oklch(0.1913 0 0)'],
+      ['background-3', 'oklch(0.2393 0 0)'],
+      ['gray-1', 'oklch(0.2931 0 0)'],
+      ['gray-2', 'oklch(0.3211 0 0)'],
+      ['gray-3', 'oklch(0.3485 0 0)'],
+      ['gray-4', 'oklch(0.4 0 0)'],
+      ['gray-5', 'oklch(0.47 0 0)'],
+      ['gray-6', 'oklch(0.56 0 0)'],
+      ['gray-7', 'oklch(0.7187 0 0)'],
+      ['gray-8', 'oklch(0.7984 0 0)'],
+      ['gray-9', 'oklch(0.8545 0 0)'],
+      ['gray-10', 'oklch(0.9702 0 0)'],
     ];
     const lightColors = [
-      ['background-1', 'oklch(0.9642 0 0)'],
-      ['background-2', 'oklch(0.9851 0 0)'],
+      ['background-1', 'oklch(0.9521 0 0)'],
+      ['background-2', 'oklch(0.9821 0 0)'],
       ['background-3', 'oklch(1 0 0)'],
       ['gray-1', 'oklch(0.9431 0 0)'],
       ['gray-2', 'oklch(0.9189 0 0)'],
@@ -259,10 +228,10 @@ describe('theme.css export', () => {
       ['gray-4', 'oklch(0.8452 0 0)'],
       ['gray-5', 'oklch(0.7604 0 0)'],
       ['gray-6', 'oklch(0.6201 0 0)'],
-      ['gray-7', 'oklch(0.5486 0 0)'],
-      ['gray-8', 'oklch(0.4459 0 0)'],
-      ['gray-9', 'oklch(0.3092 0 0)'],
-      ['gray-10', 'oklch(0.1286 0 0)'],
+      ['gray-7', 'oklch(0.5521 0 0)'],
+      ['gray-8', 'oklch(0.4568 0 0)'],
+      ['gray-9', 'oklch(0.3867 0 0)'],
+      ['gray-10', 'oklch(0.2264 0 0)'],
     ];
 
     for (const [token, value] of darkColors) {
@@ -309,17 +278,19 @@ describe('theme.css export', () => {
     }
   });
 
-  it('declares one interaction ladder for both themes, flipped by the tint alone', () => {
+  it('declares one interaction ladder for both themes, drawn from the tint', () => {
     const ladder = ['fill-subtle', 'fill', 'fill-hover', 'fill-active', 'fill-strong'];
     const boundaries = ['border', 'border-strong', 'border-hover'];
 
     for (const token of [...ladder, ...boundaries]) {
       expect(darkTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
-      expect(lightTheme).not.toContain(`--${token}:`);
     }
+    // Fills take their own alphas in light, boundaries don't.
+    for (const token of ladder) expect(lightTheme).toContain(`--${token}: oklch(var(--fill-tint)`);
+    for (const token of boundaries) expect(lightTheme).not.toContain(`--${token}:`);
 
-    expect(darkTheme).toContain('--fill-tint: 100%');
-    expect(lightTheme).toContain('--fill-tint: 20.5%');
+    expect(darkTheme).toContain('--fill-tint: 97.02%');
+    expect(lightTheme).toContain('--fill-tint: 22.64%');
 
     // Focus is the one rung that may not follow the tint: it is pinned to a
     // contrast floor, and shade at dark's alpha falls under it (see below).
@@ -353,21 +324,24 @@ describe('theme.css export', () => {
   it('keeps display-lg a complete fixed-size role without changing display', () => {
     const variables = parseVariables(themeCss);
     expect(variables.get('text-display-lg')).toBe('1.75rem');
-    expect(variables.get('text-display-lg--line-height')).toBe('127%');
-    expect(variables.get('text-display-lg--font-weight')).toBe('500');
+    expect(variables.get('text-display-lg--line-height')).toBe('2.25rem');
+    expect(variables.get('text-display-lg--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
     expect(variables.get('text-display')).toBe('1.375rem');
-    expect(variables.get('text-display--line-height')).toBe('127%');
-    expect(variables.get('text-display--font-weight')).toBe('500');
+    expect(variables.get('text-display--line-height')).toBe('1.75rem');
+    expect(variables.get('text-display--font-weight')).toBe('var(--font-weight-medium)');
     expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
   });
 
-  it('generates the field and dialog fill utilities', async () => {
-    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
-    const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
-
-    for (const token of ['field', 'field-disabled', 'dialog']) {
-      expect(output).toContain(`.bg-${token} {`);
+  it('gives text roles two weights, regular 465 and strong 515', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('font-weight-normal')).toBe('465');
+    expect(variables.get('font-weight-medium')).toBe('515');
+    for (const role of ['body', 'body-sm', 'caption', 'lead', 'menu']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-normal)');
+    }
+    for (const role of ['label', 'column', 'eyebrow', 'meta', 'subheading', 'heading', 'title']) {
+      expect(variables.get(`text-${role}--font-weight`), role).toBe('var(--font-weight-medium)');
     }
   });
 
@@ -379,21 +353,19 @@ describe('theme.css export', () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['shadow-raised', 'shadow-overlay']);
 
-    for (const elevation of ['raised', 'overlay']) {
-      const rim = 'inset 0 0 0 1px var(--surface-rim)';
+    for (const [elevation, rimToken] of [
+      ['raised', 'surface-rim'],
+      ['overlay', 'overlay-rim'],
+    ]) {
+      const rim = `inset 0 0 0 1px var(--${rimToken})`;
       const tint = 'inset 0 0 0 9999px var(--surface-tint)';
-      expect(output).toContain(`box-shadow: var(--elevation-lip), ${rim}, ${tint}, var(--elevation-${elevation});`);
+      expect(output).toContain(`box-shadow: ${rim}, ${tint}, var(--elevation-${elevation});`);
       for (const theme of [darkTheme, lightTheme]) {
         expect(theme).toMatch(new RegExp(`--elevation-${elevation}:`));
       }
     }
 
-    // The rim sits below the divider in both themes: a boundary between two
-    // surfaces needs less than a line drawn inside one.
-    for (const theme of [darkTheme, lightTheme]) {
-      expect(theme).toMatch(/--surface-rim:/);
-      expect(theme).toMatch(/--elevation-lip:/);
-    }
+    for (const token of ['surface-rim', 'overlay-rim']) expect(darkTheme).toContain(`--${token}:`);
   });
 
   it('exports semantic tokens to TypeScript consumers', () => {
@@ -401,16 +373,6 @@ describe('theme.css export', () => {
 
     for (const token of semanticTokens) {
       expect(exportedColors[token]).toBe(`var(--${token})`);
-    }
-  });
-
-  it('keeps unproven semantic roles out of the contract', () => {
-    const exportedColors = { ...Colors, ...BorderColors };
-
-    for (const token of deferredSemanticTokens) {
-      expect(themeCss).not.toContain(`--${token}:`);
-      expect(themeCss).not.toContain(`--color-${token}:`);
-      expect(Object.hasOwn(exportedColors, token)).toBe(false);
     }
   });
 
@@ -449,6 +411,16 @@ describe('theme.css export', () => {
         expect(output).toMatch(new RegExp(`\\.${prefix}-${token} \\{\\s*${property}: var\\(--${token}\\)`));
       }
     }
+  });
+
+  it('floors typed text at 16px on touch screens only, over any role or variant on the field', async () => {
+    const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
+    const output = compiler.build(['zoom-safe-text']);
+
+    expect(output).toMatch(
+      /@media \(pointer: coarse\) \{\s*\.zoom-safe-text \{\s*font-size: 16px !important;\s*\}\s*\}/,
+    );
+    expect(output.match(/\.zoom-safe-text \{/g)).toHaveLength(1);
   });
 
   it('registers semantic utilities and their :root defaults in the shared bundle', async () => {
@@ -548,15 +520,8 @@ describe('theme.css export', () => {
     expect(references.size).toBeGreaterThan(100);
   });
 
-  // Two tiers, because the two tones do different jobs. Ink carries the content and is held
-  // to APCA's body-text level (Lc 60). Supporting text is a deliberate step back from ink —
-  // at Lc 60 it reads as a second ink and the hierarchy collapses — so it is gated at Lc 40:
-  // `--gray-8` measures Lc 45.0 on light and 43.7 on dark. That is under APCA's Lc 45 spot
-  // reading for 13px text and is accepted knowingly: it clears WCAG AA for normal text on
-  // every product surface, and it is the level Linear's own sidebar label sits at
-  // (`lch(37.78)` light, `oklch(0.647)` dark). Supporting text never carries a fact that is
-  // not also in the ink beside it.
-  const apcaFloor: Record<string, number> = { foreground: 60, 'muted-foreground': 40 };
+  // Both tones carry content at 12-13px, so both are held to APCA's body-text level (Lc 60).
+  const apcaFloor: Record<string, number> = { foreground: 60, 'muted-foreground': 60 };
 
   it('meets text contrast gates on every neutral product surface', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
@@ -681,9 +646,11 @@ describe('theme.css export', () => {
     const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
 
     expect(compiler.sources).toEqual([]);
-    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+    for (const utility of ['shadow-raised', 'prose', 'animate-in', 'bg-field']) {
       expect(output).toContain(`.${utility} {`);
     }
+    // Only states, no resting rule.
+    expect(output).toMatch(/\.state-layer:not\([^)]*\):hover/);
     expect(output).toContain('.dark\\:invert:is(.dark *)');
     expect(output).toContain('--syntax-string: var(--green-300)');
   });

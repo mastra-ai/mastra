@@ -20,6 +20,7 @@ const PERSISTED_SNAPSHOT_FIELDS = new Set([
   'name',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'integrationTools',
   'toolProviders',
@@ -46,29 +47,31 @@ const CODE_MODE_EXCLUDED_FIELDS = new Set(['model', 'name']);
 const OWNED_FIELDS_BY_GROUP = {
   instructions: ['instructions'],
   tools: ['tools', 'integrationTools', 'mcpClients'],
+  model: ['modelList'],
 } as const;
 
 function ownershipFromEditorConfig(editorConfig: unknown): {
   ownsInstructions: boolean;
   ownsTools: boolean;
+  ownsModel: boolean;
 } {
   if (editorConfig === false) {
-    return { ownsInstructions: false, ownsTools: false };
+    return { ownsInstructions: false, ownsTools: false, ownsModel: false };
   }
   if (editorConfig === undefined || editorConfig === null) {
-    // Code agents without explicit editor config behave as fully editable.
-    return { ownsInstructions: true, ownsTools: true };
+    // Code agents without explicit editor config behave as fully editable for legacy instruction and tool fields.
+    return { ownsInstructions: true, ownsTools: true, ownsModel: false };
   }
   if (typeof editorConfig !== 'object') {
-    return { ownsInstructions: false, ownsTools: false };
+    return { ownsInstructions: false, ownsTools: false, ownsModel: false };
   }
-  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const cfg = editorConfig as { instructions?: unknown; tools?: unknown; model?: unknown };
   const ownsInstructions = cfg.instructions === true;
   const toolsCfg = cfg.tools;
   const ownsTools =
     toolsCfg === true ||
     (typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true);
-  return { ownsInstructions, ownsTools };
+  return { ownsInstructions, ownsTools, ownsModel: cfg.model === true };
 }
 
 function stripUnusedFields<T extends Record<string, unknown>>(obj: T): T {
@@ -123,13 +126,16 @@ export class FilesystemAgentsStorage extends AgentsStorage {
       // user-created stored agents we keep the shared `agents.json` layout.
       shouldPersistToPerEntityFile: entity => isCodeAgent(entity.id),
       perEntitySnapshotFilter: (snapshot, entity) => {
-        const { ownsInstructions, ownsTools } = ownershipFromEditorConfig(editorConfigFor(entity.id));
+        const { ownsInstructions, ownsTools, ownsModel } = ownershipFromEditorConfig(editorConfigFor(entity.id));
         const excludedByOwnership = new Set<string>();
         if (!ownsInstructions) {
           for (const field of OWNED_FIELDS_BY_GROUP.instructions) excludedByOwnership.add(field);
         }
         if (!ownsTools) {
           for (const field of OWNED_FIELDS_BY_GROUP.tools) excludedByOwnership.add(field);
+        }
+        if (!ownsModel) {
+          for (const field of OWNED_FIELDS_BY_GROUP.model) excludedByOwnership.add(field);
         }
         const result: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(snapshot)) {

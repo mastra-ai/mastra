@@ -1,5 +1,5 @@
-import { Loader2, Square } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { IconStop } from '@/ds/icons/central/IconStop';
 
 export interface WorkflowCancelButtonProps {
   status?: string;
@@ -31,9 +31,10 @@ export function WorkflowCancelButton({
       size="icon-md"
       tooltip={label}
       onClick={onCancel}
-      disabled={disabled || !!cancelMessage || isCancelling}
+      disabled={disabled || !!cancelMessage}
+      loading={isCancelling}
     >
-      {isCancelling ? <Loader2 className="motion-safe:animate-spin" /> : <Square />}
+      <IconStop />
     </Button>
   );
 }
