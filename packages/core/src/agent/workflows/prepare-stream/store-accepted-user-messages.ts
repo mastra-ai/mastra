@@ -11,11 +11,17 @@ import type { RequestContext } from '../../../request-context';
 import type { MessageList } from '../../message-list';
 import { isUserAuthoredMessage } from '../../signals';
 
+/** How long a blocked turn waits for an early write still in flight before rolling back without it. */
+const UNDO_WAIT_MS = 2_000;
+
 export type StoreAcceptedUserMessages = (args: { messageList: MessageList; model: unknown }) => Promise<void>;
 
 export type AcceptedUserMessageStore = {
   store: StoreAcceptedUserMessages;
-  /** Removes the rows this run stored early. Used when an output processor blocks the turn, which stores nothing. */
+  /**
+   * Removes the rows this run created early, never rows stored before it. Used when the turn is
+   * blocked, which stores nothing; a write still in flight removes its own rows when it lands.
+   */
   undo: () => Promise<void>;
 };
 
@@ -74,12 +80,29 @@ export function createStoreAcceptedUserMessages({
     return undefined;
   }
 
-  const stored = new Set<string>();
-  const store: StoreAcceptedUserMessages = async ({ messageList, model }) => {
+  // `handled` holds every id this run already looked at; `inserted` only the rows it created, the
+  // only ones a blocked turn may remove. A row stored before the run stays.
+  const handled = new Set<string>();
+  const inserted = new Set<string>();
+  let inFlight: Promise<void> | undefined;
+  let undone = false;
+
+  const removeInserted = async () => {
+    if (inserted.size === 0) return;
+    try {
+      const ids = [...inserted];
+      await memory.deleteMessages(ids);
+      for (const id of ids) inserted.delete(id);
+    } catch (error) {
+      logger?.error('Could not remove a sent message stored before a blocked turn', { error, threadId });
+    }
+  };
+
+  const write = async (messageList: MessageList, model: unknown) => {
     const ids = new Set(
       messageList.get.input
         .db()
-        .filter(message => !stored.has(message.id) && isUserAuthoredMessage(message))
+        .filter(message => !handled.has(message.id) && isUserAuthoredMessage(message))
         .map(message => message.id),
     );
     if (ids.size === 0) return;
@@ -90,12 +113,19 @@ export function createStoreAcceptedUserMessages({
       const storage = await memory.storage.getStore('memory');
       if (!storage) return;
 
+      const { messages: existing } = await storage.listMessagesById({ messageIds: [...ids] });
+      const existingIds = new Set(existing.map(message => message.id));
       const persistenceList = messageList.cloneForPersistence();
       const rows = persistenceList.transformMessagesForTranscript(
         persistenceList.get.input.db().filter(message => ids.has(message.id)),
       );
       await new MessageHistory({ storage }).persistMessages({ messages: rows, threadId, resourceId });
-      for (const id of ids) stored.add(id);
+      for (const id of ids) {
+        handled.add(id);
+        if (!existingIds.has(id)) inserted.add(id);
+      }
+      // The turn was blocked while this write was in flight: take back what it just stored.
+      if (undone) await removeInserted();
     } catch (error) {
       logger?.warn('Could not store a sent message before the model request; the turn save will store it', {
         error,
@@ -103,14 +133,24 @@ export function createStoreAcceptedUserMessages({
       });
     }
   };
+
+  const store: StoreAcceptedUserMessages = async ({ messageList, model }) => {
+    if (undone) return;
+    const run = (inFlight ?? Promise.resolve()).then(() => write(messageList, model));
+    inFlight = run;
+    await run;
+  };
+
   const undo = async () => {
-    if (stored.size === 0) return;
-    try {
-      await memory.deleteMessages([...stored]);
-      stored.clear();
-    } catch (error) {
-      logger?.error('Could not remove a sent message stored before a blocked turn', { error, threadId });
+    undone = true;
+    // Wait briefly for a write still in flight so the blocked turn leaves no row behind; a write
+    // that outlasts the wait removes its own rows when it lands, so the caller is never held up long.
+    if (inFlight) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([inFlight, new Promise(resolve => (timer = setTimeout(resolve, UNDO_WAIT_MS)))]);
+      clearTimeout(timer);
     }
+    await removeInserted();
   };
   return { store, undo };
 }

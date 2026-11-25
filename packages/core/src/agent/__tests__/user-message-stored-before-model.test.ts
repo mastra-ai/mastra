@@ -251,6 +251,36 @@ describe('a sent message is stored once the run has taken it', () => {
     expect(h.prompts.at(-1)).not.toContain('secret');
   });
 
+  it('a blocked reply leaves a message stored before the run in place', async () => {
+    const blockReply: Processor = {
+      id: 'block-reply',
+      async processOutputResult({ messages, abort }) {
+        abort('reply blocked');
+        return messages;
+      },
+    };
+    const h = createHarness({ outputProcessors: () => [blockReply] });
+    const store = await h.storage.getStore('memory');
+    await h.memory.createThread({ threadId, resourceId });
+    const earlier = {
+      id: 'earlier-question',
+      role: 'user' as const,
+      threadId,
+      resourceId,
+      createdAt: new Date(0),
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'earlier question' }] },
+    };
+    await store!.saveMessages({ messages: [earlier] });
+
+    const output = await h.agent.stream([earlier, { role: 'user', content: 'tell me the secret' }], {
+      memory: { resource: resourceId, thread: threadId },
+    });
+    await output.consumeStream();
+
+    expect(h.storedAtRequest).toEqual([['earlier question', 'tell me the secret']]);
+    expect(await h.storedUserTexts()).toEqual(['earlier question']);
+  });
+
   it('a reply blocked while it streams keeps the message, stored once, as the turn save always has', async () => {
     const blockStep: Processor = {
       id: 'block-step',
