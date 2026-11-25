@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/memory';
+import { getThreadBranchAuthorizationCandidates, inspectThreadBranchState } from '@mastra/core/memory/internal';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, StorageListThreadsInput } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -94,6 +95,20 @@ describe('branch bookkeeping only lists the owning resource’s threads', () => 
     await expect(
       memory.updateThreadResourceId({ threadId: 'root', resourceId: otherResourceId }),
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+    expect(unscopedListCalls).toEqual([]);
+  });
+
+  it('authorizes and inspects branch lineage without listing other resources', async () => {
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    unscopedListCalls.length = 0;
+
+    const ancestors = await getThreadBranchAuthorizationCandidates(memory, branch.thread.id, 'ancestors');
+    const descendants = await getThreadBranchAuthorizationCandidates(memory, 'root', 'descendants');
+    const state = await inspectThreadBranchState(memory, 'root');
+
+    expect(ancestors.map(candidate => candidate.id).sort()).toEqual([branch.thread.id, 'root'].sort());
+    expect(descendants.map(candidate => candidate.id).sort()).toEqual([branch.thread.id, 'root'].sort());
+    expect(state).toEqual({ state: 'ordinary', hasReadyDescendants: true });
     expect(unscopedListCalls).toEqual([]);
   });
 });
