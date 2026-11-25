@@ -163,6 +163,14 @@ describe('E2BFactorySandbox', () => {
     expect((await fromSetting.resolveSpec()).ref).toBe(expected);
   });
 
+  it('builds a saved CPU count that is not offered with the configured default, as once Factory drops it', async () => {
+    const sandbox = new E2BFactorySandbox({ defaults: { cpuCount: 4 } });
+    const saved = await sandbox.template(context(), { cpuCount: 7 })!.resolveSpec();
+    const dropped = await sandbox.template(context(), {})!.resolveSpec();
+    expect(saved.ref).toBe(dropped.ref);
+    expect(dropped.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: SHA, cpuCount: 4 }));
+  });
+
   it('creates an E2BSandbox keyed by the session with the sandbox id and template', () => {
     const created = new E2BFactorySandbox({ apiKey: 'e2b_test', timeout: 1234 }).create(
       { ...context(), workingDirectory: '/home/user/repos' },

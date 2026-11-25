@@ -32,11 +32,12 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
 const CPU_COUNTS = [1, 2, 4, 6, 8];
 
 /**
- * `count` when it is offered, else the built-in default. A count saved before
- * the list existed, or passed as a default, may not be on it.
+ * The first of `counts` that is offered, else the built-in default. A count saved
+ * before the list existed, or passed as a default, may not be on it; a saved one
+ * falls back to the configured default, the same as once Factory drops it.
  */
-function offeredCpuCount(count: number | undefined): number {
-  return count !== undefined && CPU_COUNTS.includes(count) ? count : DEFAULT_SETTINGS.cpuCount;
+function offeredCpuCount(...counts: Array<number | undefined>): number {
+  return counts.find(count => count !== undefined && CPU_COUNTS.includes(count)) ?? DEFAULT_SETTINGS.cpuCount;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
@@ -187,7 +188,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...rest,
       ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
       ...(buildEnvRevision ? { buildEnvRevision } : {}),
-      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount),
+      cpuCount: offeredCpuCount(settings.cpuCount, defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });

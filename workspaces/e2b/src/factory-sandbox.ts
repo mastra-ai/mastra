@@ -37,11 +37,12 @@ const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } 
 const CPU_COUNTS = [1, ...Array.from({ length: 32 }, (_, index) => (index + 1) * 2)];
 
 /**
- * `count` when it is offered, else the built-in default. A count saved before
- * the list existed, or passed as a default, may not be on it.
+ * The first of `counts` that is offered, else the built-in default. A count saved
+ * before the list existed, or passed as a default, may not be on it; a saved one
+ * falls back to the configured default, the same as once Factory drops it.
  */
-function offeredCpuCount(count: number | undefined): number {
-  return count !== undefined && CPU_COUNTS.includes(count) ? count : DEFAULT_SETTINGS.cpuCount;
+function offeredCpuCount(...counts: Array<number | undefined>): number {
+  return counts.find(count => count !== undefined && CPU_COUNTS.includes(count)) ?? DEFAULT_SETTINGS.cpuCount;
 }
 
 const SETTINGS_SCHEMA = {
@@ -185,7 +186,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
     return {
       ...rest,
       ...(buildEnvRevision ? { buildEnvRevision, ...(buildEnv ? { buildEnv } : {}) } : {}),
-      cpuCount: offeredCpuCount(settings.cpuCount ?? defaults?.cpuCount),
+      cpuCount: offeredCpuCount(settings.cpuCount, defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };
   }

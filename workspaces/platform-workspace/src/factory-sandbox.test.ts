@@ -217,6 +217,17 @@ describe('PlatformFactorySandbox', () => {
     expect(fromDefault.definition).toEqual(explicit.definition);
   });
 
+  it('builds a saved CPU count that is not offered with the configured default, as once Factory drops it', async () => {
+    const ctx = listContext();
+    const sandbox = new PlatformFactorySandbox({ defaults: { cpuCount: 4 } });
+    const saved = await identity(sandbox.template(ctx, { cpuCount: 7 }));
+    const dropped = await identity(sandbox.template(ctx, {}));
+    expect(saved.definition).toEqual(dropped.definition);
+    expect(dropped.definition).toEqual(
+      (await identity(createRepoTemplate({ ...ctx, cpuCount: 4, memoryMB: 1024 }))).definition,
+    );
+  });
+
   it('adds a docker operation only when the docker setting is on', async () => {
     const sandbox = new PlatformFactorySandbox({});
     for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {
