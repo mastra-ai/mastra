@@ -7,6 +7,16 @@ import './disclosure-chevron.css';
 
 export type DisclosureChevronDirection = 'down' | 'up' | 'right';
 
+// Not `@property`: WebKit ends its running transitions when a stylesheet is added before the one declaring it,
+// which Base UI does when the first menu opens. Registering twice throws (HMR, a second copy of this package).
+if (typeof CSS !== 'undefined' && 'registerProperty' in CSS) {
+  try {
+    CSS.registerProperty({ name: '--disclosure-chevron-bend', syntax: '<number>', inherits: true, initialValue: '1' });
+  } catch {
+    // Already registered.
+  }
+}
+
 const stroke = { stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
 
 const arm = <path className="disclosure-chevron-arm" d="M12 12h9" {...stroke} />;
@@ -26,7 +36,7 @@ const BendingChevron = createCentralIcon('DisclosureChevron', () => (
 const bendTransition = 'transition-[--disclosure-chevron-bend] duration-normal ease-out-custom';
 
 const base = {
-  down: bendTransition,
+  down: `${bendTransition} [--disclosure-chevron-bend:1]`,
   up: `${bendTransition} [--disclosure-chevron-bend:-1]`,
   right: transitions.transform,
 } as const;

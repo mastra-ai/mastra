@@ -19,7 +19,7 @@ describe('DisclosureChevron', () => {
   it('points down and bends up while its trigger or details element is open by default', () => {
     const svg = renderChevron(<DisclosureChevron />);
 
-    expect(svg.classList.contains('[--disclosure-chevron-bend:-1]')).toBe(false);
+    expect(svg.classList.contains('[--disclosure-chevron-bend:1]')).toBe(true);
     expect(svg.classList.contains('in-aria-expanded:[--disclosure-chevron-bend:-1]')).toBe(true);
     expect(svg.classList.contains('in-[details[open]>summary]:[--disclosure-chevron-bend:-1]')).toBe(true);
   });
@@ -40,7 +40,7 @@ describe('DisclosureChevron', () => {
   });
 
   it.each([
-    { direction: 'down', closed: undefined, opened: '[--disclosure-chevron-bend:-1]' },
+    { direction: 'down', closed: '[--disclosure-chevron-bend:1]', opened: '[--disclosure-chevron-bend:-1]' },
     { direction: 'up', closed: '[--disclosure-chevron-bend:-1]', opened: '[--disclosure-chevron-bend:1]' },
   ] as const)(
     'follows an explicit open state instead of the trigger when pointing $direction',
@@ -48,7 +48,7 @@ describe('DisclosureChevron', () => {
       const bends = (ui: React.ReactElement) =>
         [...renderChevron(ui).classList].filter(name => name.includes('--disclosure-chevron-bend:'));
 
-      expect(bends(<DisclosureChevron direction={direction} open={false} />)).toEqual(closed ? [closed] : []);
+      expect(bends(<DisclosureChevron direction={direction} open={false} />)).toEqual([closed]);
       cleanup();
       expect(bends(<DisclosureChevron direction={direction} open />)).toEqual([opened]);
     },

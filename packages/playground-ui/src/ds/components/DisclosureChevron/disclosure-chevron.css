@@ -2,12 +2,6 @@
  * The down/up chevron as one number: 1 points down, -1 up, 0 is flat. Safari can't transition `d`, so each
  * half is a line that turns around the tip and trims its length to keep the ends in their columns.
  */
-@property --disclosure-chevron-bend {
-  syntax: '<number>';
-  inherits: true;
-  initial-value: 1;
-}
-
 .disclosure-chevron-arm {
   transform: translateY(calc(var(--disclosure-chevron-bend) * 3.5px))
     rotate(atan2(calc(var(--disclosure-chevron-bend) * -1), 1));
