@@ -52,13 +52,13 @@ export function ModelPackTimeline({
                 {index > 0 && (
                   <span
                     aria-hidden
-                    className="border-border-strong pointer-events-none absolute inset-s-0 top-0 h-1/2 w-2 rounded-es-md border-s border-b"
+                    className="border-border-strong inset-s-0 pointer-events-none absolute top-0 h-1/2 w-2 rounded-es-md border-s border-b"
                   />
                 )}
                 {index > 0 && index < entries.length - 1 && (
                   <span
                     aria-hidden
-                    className="bg-border-strong pointer-events-none absolute inset-y-0 inset-s-0 w-px"
+                    className="bg-border-strong inset-s-0 pointer-events-none absolute inset-y-0 w-px"
                   />
                 )}
                 {onChange ? (
