@@ -364,6 +364,8 @@ describe('ProviderList custom endpoints', () => {
     name: 'my-llm',
     url: 'https://api.example.com/v1',
     hasApiKey: true,
+    authScheme: 'bearer',
+    headers: [],
     models: ['model-a', 'model-b'],
     scope: 'user',
   };

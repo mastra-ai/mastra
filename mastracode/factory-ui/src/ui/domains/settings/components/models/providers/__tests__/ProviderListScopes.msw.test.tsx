@@ -262,6 +262,8 @@ describe('ProviderList credential scopes', () => {
         name,
         url: `https://${name.toLowerCase()}.example.com/v1`,
         hasApiKey: false,
+        authScheme: 'bearer',
+        headers: [],
         models: ['m'],
         scope,
       });

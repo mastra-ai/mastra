@@ -1,11 +1,23 @@
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
+import { listCustomProviderModels, testCustomProviderModel } from '@mastra/code-sdk/agents/custom-provider-check';
+import type {
+  CustomProviderCheckFailure,
+  CustomProviderCheckOptions,
+  CustomProviderConnection,
+  CustomProviderModelsResult,
+  CustomProviderModelTestResult,
+} from '@mastra/code-sdk/agents/custom-provider-check';
 import { MASTRACODE_GATEWAY_ID, MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
+import {
+  customProviderHeaderProblem,
+  isCustomProviderAuthScheme,
+} from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
-import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { CustomProviderAuthScheme } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { GOOGLE_VERTEX_GATEWAY_ID } from '@mastra/code-sdk/providers/google-vertex-gateway';
 import {
@@ -31,10 +43,18 @@ import type {
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
+import { resolveCustomProviderSettings } from '../storage/domains/custom-providers/base.js';
 import type {
+  CustomProviderCallSettings,
+  CustomProviderHeaderInput,
+  CustomProviderInput,
+  CustomProviderLastCheck,
   CustomProviderOwner,
   CustomProviderRecord,
+  CustomProviderSettingsDraft,
+  CustomProviderSettingsRefusal,
   CustomProvidersStorage,
+  CustomProviderWrite,
 } from '../storage/domains/custom-providers/base.js';
 import type {
   MemorySettingsPatch,
@@ -46,7 +66,7 @@ import { effectiveModelScope, factoryProjectSettingsUserId } from '../storage/do
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { customEndpointUrlProblem } from './custom-endpoint-url.js';
+import { customEndpointUrlProblem, hostedOnPlatform } from './custom-endpoint-url.js';
 import { customProviderOwner } from './custom-provider-source.js';
 import { createGatewayKey, getGatewayCredits, MASTRA_SIGN_IN_REQUIRED, MastraGatewayError } from './mastra-gateway.js';
 import {
@@ -361,17 +381,47 @@ export async function listProviders({
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
 }
 
+export type { CustomProviderCheckFailure, CustomProviderModelsResult, CustomProviderModelTestResult };
+export type { CustomProviderLastCheck };
+
+/** A saved custom header as the client sees it. */
+export interface CustomProviderHeaderInfo {
+  name: string;
+  secret: boolean;
+  /** Present only for headers that are not secret. */
+  value?: string;
+}
+
 /** A user-defined OpenAI-compatible provider, with key presence (never the key). */
 export interface CustomProviderInfo {
   id: string;
   name: string;
   url: string;
   hasApiKey: boolean;
+  authScheme: CustomProviderAuthScheme;
+  headers: CustomProviderHeaderInfo[];
   models: string[];
   /** Saved for the caller (`user`) or for their organization (`org`), like a provider key. */
   scope: StoredCredentialScope;
   /** Why this server refuses to call the endpoint. Its models are not offered until the URL is fixed. */
   urlProblem?: string;
+  /** The last connection test, cleared when the URL, key, auth scheme or headers change. */
+  lastCheck?: CustomProviderLastCheck;
+}
+
+/** The response of `POST /web/config/custom-providers/check`. A failing check is data here, not an HTTP error. */
+export interface CustomProviderCheckResponse {
+  ok: true;
+  check: { models: CustomProviderModelsResult; reply?: CustomProviderModelTestResult };
+  /** Present when a saved row was checked and its `lastCheck` was recorded. */
+  provider?: CustomProviderInfo;
+}
+
+/** The 422 body of a save with `check: true` whose connection test failed. Nothing is written. */
+export interface CustomProviderCheckFailedResponse {
+  error: 'custom_endpoint_check_failed';
+  message: string;
+  failure: CustomProviderCheckFailure;
 }
 
 /** A stored custom provider and the settings scope it is saved at. */
@@ -380,16 +430,23 @@ export interface ScopedCustomProvider {
   scope: StoredCredentialScope;
 }
 
-/** Redact a stored custom-provider row for the client (key presence only). */
+/** Redact a stored custom-provider row for the client: key presence only, and no secret header value. */
 function toCustomProviderInfo({ record, scope }: ScopedCustomProvider): CustomProviderInfo {
   return {
     id: record.providerId,
     name: record.name,
     url: record.url,
     hasApiKey: Boolean(record.apiKey),
+    authScheme: record.authScheme ?? 'bearer',
+    headers: record.headers.map(header =>
+      header.secret === false
+        ? { name: header.name, secret: false, value: header.value }
+        : { name: header.name, secret: true },
+    ),
     models: record.models,
     scope,
     urlProblem: customEndpointUrlProblem(record.url),
+    ...(record.lastCheck ? { lastCheck: record.lastCheck } : {}),
   };
 }
 
@@ -485,20 +542,17 @@ async function listCustomProvidersInEffect({
   return owner ? (await ctx.storage.list(owner)).filter(isCallable) : [];
 }
 
-/** A validated custom-provider save request. */
-interface CustomProviderSave extends CustomProviderSetting {
-  /** The id of the provider being edited. Absent when adding one. */
-  previousId?: string;
-  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
-  scope: StoredCredentialScope;
+/** A request body field that failed validation, as a 400 response body. */
+interface CustomProviderBodyError {
+  error: string;
+  message?: string;
 }
 
-/** Validate + coerce a request body into a custom-provider save. */
-function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: string } {
-  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b: Record<string, unknown> = { ...body };
-  const name = typeof b.name === 'string' ? b.name.trim() : '';
-  if (!name) return { error: 'Missing required field: name' };
+/** The fields that say where and how to call an endpoint, shared by the save and check bodies. */
+type CustomProviderConnectionFields = CustomProviderSettingsDraft;
+
+/** Read `url`, `apiKey`, `authScheme` and `headers` from a save or check body. */
+function parseConnectionFields(b: Record<string, unknown>): CustomProviderConnectionFields | CustomProviderBodyError {
   const url = typeof b.url === 'string' ? b.url.trim() : '';
   if (!url) return { error: 'Missing required field: url' };
   try {
@@ -510,11 +564,98 @@ function parseCustomProviderBody(body: unknown): CustomProviderSave | { error: s
     return { error: 'url must be a valid URL' };
   }
   const apiKey = typeof b.apiKey === 'string' && b.apiKey.trim() ? b.apiKey.trim() : undefined;
+  if (b.authScheme !== undefined && !isCustomProviderAuthScheme(b.authScheme)) {
+    return { error: 'authScheme must be "bearer" or "x-api-key"' };
+  }
+  const authScheme = isCustomProviderAuthScheme(b.authScheme) ? b.authScheme : undefined;
+  if (b.headers === undefined) return { url, apiKey, authScheme };
+  if (!Array.isArray(b.headers)) return { error: 'header_refused', message: 'Custom headers must be a list.' };
+  // Trimmed the way settings.json headers are, so both stores hold the same values.
+  const trimmed = b.headers.map((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return entry;
+    const { name, value } = entry as Record<string, unknown>;
+    return {
+      ...entry,
+      name: typeof name === 'string' ? name.trim() : name,
+      value: typeof value === 'string' ? value.trim() : value,
+    };
+  });
+  // The storage checks the final list again against the scheme it ends up with,
+  // since an edit may keep the saved scheme or saved headers.
+  const problem = customProviderHeaderProblem(trimmed as Array<{ name: unknown; value?: unknown }>, authScheme);
+  if (problem) return { error: 'header_refused', message: problem };
+  const headers = (trimmed as Array<{ name: string; value?: string; secret?: unknown }>).map(
+    ({ name, value, secret }): CustomProviderHeaderInput => ({
+      name,
+      ...(value === undefined ? {} : { value }),
+      ...(typeof secret === 'boolean' ? { secret } : {}),
+    }),
+  );
+  return { url, apiKey, authScheme, headers };
+}
+
+/** A validated custom-provider save request. */
+interface CustomProviderSave extends CustomProviderConnectionFields {
+  name: string;
+  models: string[];
+  /** The id of the provider being edited. Absent when adding one. */
+  previousId?: string;
+  /** Where to save it. Anything but `org` means the caller's own list, like provider keys. */
+  scope: StoredCredentialScope;
+  /** Run the connection test first and save only when it passes. */
+  check: boolean;
+}
+
+/** Validate + coerce a request body into a custom-provider save. */
+function parseCustomProviderBody(body: unknown): CustomProviderSave | CustomProviderBodyError {
+  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
+  const b: Record<string, unknown> = { ...body };
+  const name = typeof b.name === 'string' ? b.name.trim() : '';
+  if (!name) return { error: 'Missing required field: name' };
+  const connection = parseConnectionFields(b);
+  if ('error' in connection) return connection;
   const models = Array.isArray(b.models)
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
   const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
-  return { name, url, apiKey, models, previousId, scope: b.scope === 'org' ? 'org' : 'user' };
+  return {
+    ...connection,
+    name,
+    models,
+    previousId,
+    scope: b.scope === 'org' ? 'org' : 'user',
+    check: b.check === true,
+  };
+}
+
+/** A validated `POST /web/config/custom-providers/check` request. */
+interface CustomProviderCheckRequest {
+  /** The saved provider whose secrets a draft may reuse, or that is checked as stored when there is no draft. */
+  previousId?: string;
+  scope: StoredCredentialScope;
+  /** Settings to check without saving them. */
+  draft?: CustomProviderConnectionFields;
+  /** Also send the test message to this model. */
+  model?: string;
+}
+
+/**
+ * Validate a check request. Without `url` the saved row named by `previousId`
+ * is checked as stored, and the other connection fields are ignored.
+ */
+function parseCustomProviderCheckBody(body: unknown): CustomProviderCheckRequest | CustomProviderBodyError {
+  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
+  const b: Record<string, unknown> = { ...body };
+  const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
+  const model = typeof b.model === 'string' && b.model.trim() ? b.model.trim() : undefined;
+  const scope = b.scope === 'org' ? 'org' : 'user';
+  if (b.url === undefined) {
+    if (!previousId) return { error: 'Missing required field: url or previousId' };
+    return { previousId, scope, model };
+  }
+  const draft = parseConnectionFields(b);
+  if ('error' in draft) return draft;
+  return { previousId, scope, draft, model };
 }
 
 /** What each storage refusal tells the client. */
@@ -530,7 +671,47 @@ const CUSTOM_PROVIDER_REFUSALS = {
     error: 'api_key_required',
     message: 'Enter the API key again: the saved key is only kept while the URL stays on the same host.',
   },
+  header_value_required: {
+    status: 400,
+    error: 'header_value_required',
+    message:
+      'Enter the header value again: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL stays on the same host.',
+  },
+  header_refused: { status: 400, error: 'header_refused', message: 'These custom headers cannot be sent.' },
 } as const;
+
+/** The status and body for a refused write or check, with the header rule that failed when there is one. */
+function customProviderRefusal(refusal: Extract<CustomProviderWrite, { refused: string }>): {
+  status: 400 | 404 | 409;
+  body: { error: string; message: string };
+} {
+  const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[refusal.refused];
+  return { status, body: { error, message: 'problem' in refusal ? refusal.problem : message } };
+}
+
+/**
+ * The connection a check calls: `draft` combined with the saved row it edits,
+ * under the same rules a save applies (see `resolveCustomProviderSettings`).
+ * The saved secrets it resolves are passed on, so the SDK redacts them too.
+ */
+function customProviderConnection(
+  saved: CustomProviderCallSettings | null,
+  draft: CustomProviderSettingsDraft,
+): { connection: CustomProviderConnection } | CustomProviderSettingsRefusal {
+  const settings = resolveCustomProviderSettings(saved, draft);
+  if ('refused' in settings) return settings;
+  const { url, apiKey, authScheme, headers } = settings.resolved;
+  return { connection: { url, apiKey: apiKey ?? undefined, authScheme: authScheme ?? undefined, headers } };
+}
+
+/**
+ * Options for both SDK checks. A hosted Factory keeps only an upstream error
+ * message or page title, because the server may have reached an address the
+ * caller could not, and its raw body text is not theirs to read.
+ */
+function customProviderCheckOptions(): CustomProviderCheckOptions {
+  return { summaryDetailOnly: hostedOnPlatform() };
+}
 
 /**
  * Providers whose credentials can only come from the server process. Amazon
@@ -982,6 +1163,7 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `PUT    /web/config/session-model`           — run a live session on a pack or an exact model
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
+ *   - `POST   /web/config/custom-providers/check`  - test a draft or a saved custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
  *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
@@ -1406,16 +1588,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const parsed = parseCustomProviderBody(body);
-          if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+          if ('error' in parsed) return c.json(parsed, 400);
           const urlProblem = customEndpointUrlProblem(parsed.url);
           if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
           const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
           if ('response' in target) return target.response;
-          const input = {
+          const input: CustomProviderInput = {
             providerId: getCustomProviderId(parsed.name),
             name: parsed.name,
             url: parsed.url,
             apiKey: parsed.apiKey,
+            authScheme: parsed.authScheme,
+            headers: parsed.headers,
             models: parsed.models,
           };
           try {
@@ -1431,12 +1615,42 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 409,
               );
             }
+            let checked: CustomProviderRecord | undefined;
+            if (parsed.check) {
+              const saved = parsed.previousId
+                ? await ctx.storage.get({ owner: target.owner, providerId: parsed.previousId })
+                : null;
+              if (parsed.previousId && !saved) {
+                const { status, body: refusal } = customProviderRefusal({ refused: 'not_found' });
+                return c.json(refusal, status);
+              }
+              // The test sends what the write would store, saved secrets included,
+              // and the origin rules refuse a draft before anything is sent.
+              const resolved = customProviderConnection(saved, input);
+              if ('refused' in resolved) {
+                const { status, body: refusal } = customProviderRefusal(resolved);
+                return c.json(refusal, status);
+              }
+              const result = await listCustomProviderModels(resolved.connection, customProviderCheckOptions());
+              if (!result.ok) {
+                return c.json(
+                  {
+                    error: 'custom_endpoint_check_failed',
+                    message: 'The connection test failed, so the provider was not saved.',
+                    failure: result.failure,
+                  } satisfies CustomProviderCheckFailedResponse,
+                  422,
+                );
+              }
+              input.lastCheck = { at: new Date().toISOString(), ok: true };
+              checked = saved ?? undefined;
+            }
             const write = parsed.previousId
-              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input })
+              ? await ctx.storage.update({ owner: target.owner, providerId: parsed.previousId, input, checked })
               : await ctx.storage.create({ owner: target.owner, createdBy: ctx.userId, input });
             if ('refused' in write) {
-              const { status, error, message } = CUSTOM_PROVIDER_REFUSALS[write.refused];
-              return c.json({ error, message }, status);
+              const { status, body: refusal } = customProviderRefusal(write);
+              return c.json(refusal, status);
             }
             customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true, provider: toCustomProviderInfo({ record: write.saved, scope: target.scope }) });
@@ -1466,6 +1680,87 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             }
             customProvidersChanged(target.owner.orgId);
             return c.json({ ok: true });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      // Calls an endpoint the way a session would, without running one. Checks
+      // follow the write permission of the list they address, because a check
+      // sends that list's saved key and headers.
+      registerApiRoute('/web/config/custom-providers/check', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCustomProvidersContext({
+            c: loose(c),
+            auth,
+            customProviders: options.customProviders,
+          });
+          if ('response' in ctx) return ctx.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = parseCustomProviderCheckBody(body);
+          if ('error' in parsed) return c.json(parsed, 400);
+          const target = await resolveCustomProviderWrite(loose(c), ctx, parsed.scope);
+          if ('response' in target) return target.response;
+          try {
+            const saved = parsed.previousId
+              ? await ctx.storage.get({ owner: target.owner, providerId: parsed.previousId })
+              : null;
+            if (parsed.previousId && !saved) {
+              const { status, body: refusal } = customProviderRefusal({ refused: 'not_found' });
+              return c.json(refusal, status);
+            }
+            // Without a draft the saved row is checked as stored: its own URL
+            // keeps every saved setting. The parser requires one or the other.
+            const draft = parsed.draft ?? (saved ? { url: saved.url } : undefined);
+            if (!draft) return c.json({ error: 'Missing required field: url or previousId' }, 400);
+            const urlProblem = customEndpointUrlProblem(draft.url);
+            if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
+            const resolved = customProviderConnection(saved, draft);
+            if ('refused' in resolved) {
+              const { status, body: refusal } = customProviderRefusal(resolved);
+              return c.json(refusal, status);
+            }
+            const checkOptions = customProviderCheckOptions();
+            const [models, reply] = await Promise.all([
+              listCustomProviderModels(resolved.connection, checkOptions),
+              parsed.model
+                ? testCustomProviderModel(
+                    {
+                      providerId: saved?.providerId ?? 'custom-endpoint',
+                      connection: resolved.connection,
+                      modelId: parsed.model,
+                    },
+                    checkOptions,
+                  )
+                : undefined,
+            ]);
+            let provider: CustomProviderInfo | undefined;
+            if (!parsed.draft && saved) {
+              const recorded = await ctx.storage.recordCheck({
+                owner: target.owner,
+                providerId: saved.providerId,
+                checked: saved,
+                lastCheck: {
+                  at: new Date().toISOString(),
+                  ok: models.ok,
+                  ...(models.ok ? {} : { message: models.failure.message }),
+                },
+              });
+              if (recorded) provider = toCustomProviderInfo({ record: recorded, scope: target.scope });
+            }
+            return c.json({
+              ok: true,
+              check: { models, ...(reply ? { reply } : {}) },
+              ...(provider ? { provider } : {}),
+            } satisfies CustomProviderCheckResponse);
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
