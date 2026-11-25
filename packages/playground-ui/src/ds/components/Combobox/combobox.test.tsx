@@ -340,6 +340,19 @@ describe('Combobox', () => {
 
       expect(onValueChange).toHaveBeenLastCalledWith(['retired-model', 'google']);
     });
+
+    it('lists it checked in the popup and unpicks it there', async () => {
+      const onValueChange = vi.fn();
+      render(<MultipleField initial={['openai', 'retired-model']} onValueChange={onValueChange} />);
+      const user = await openField();
+
+      await user.keyboard('retired');
+      const option = await screen.findByRole('option', { name: 'retired-model' });
+      expect(option.getAttribute('aria-selected')).toBe('true');
+      await user.click(option);
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['openai']);
+    });
   });
 
   describe('when custom values are not allowed', () => {
@@ -619,6 +632,33 @@ describe('Combobox', () => {
       await user.click(await screen.findByRole('option', { name: 'Google' }));
 
       expect(onInputValueChange).toHaveBeenLastCalledWith('');
+    });
+
+    it('adds typed text to a multiple select from the popup search', async () => {
+      const onValueChange = vi.fn();
+      const onInputValueChange = vi.fn();
+      render(
+        <Combobox
+          multiple
+          allowCustomValue
+          options={providers}
+          value={[]}
+          onValueChange={onValueChange}
+          onInputValueChange={onInputValueChange}
+          searchPlaceholder="Search providers"
+        />,
+      );
+      const user = userEvent.setup();
+
+      await user.click(trigger());
+      const search = await screen.findByPlaceholderText('Search providers');
+      await waitFor(() => expect(document.activeElement).toBe(search));
+      await user.keyboard('mistral');
+      await user.click(await screen.findByRole('option', { name: 'Use “mistral”' }));
+
+      expect(onValueChange).toHaveBeenLastCalledWith(['mistral']);
+      // Base UI also reports '' when the popup opens; the pick clears the search after the typed text.
+      expect(onInputValueChange.mock.calls.slice(-2)).toEqual([['mistral'], ['']]);
     });
 
     it('shows "N selected" for a multiple select', () => {
