@@ -27,7 +27,7 @@ const LINK_REFERENCES = [
 const WRITE_FOR_PEOPLE = [
   'Write for the people in the thread, not for another agent. A teammate who knows the product and programming, but has not read this code or this session, should follow your message on first read.',
   'Lead with the answer or the outcome and anything you need from them, in plain sentences. Keep it short: a few sentences answer most questions, and when there is more, offer it rather than writing it all out. Say what code does rather than naming the function, file, field, error class or tool that does it; name one only when they need it to find the code. Use the project’s real terms, not invented analogies.',
-  'Leave out tool names, session and run ids, and agent shorthand such as checkpoint counts, RED → GREEN or STOPPED. When you pass on what a side session reported, say what it means for the people here in your own words; never paste its report.',
+  'Leave out tool names and session and run ids unless someone asks for them, and always leave out agent shorthand such as checkpoint counts, RED → GREEN or STOPPED. When you pass on what a side session reported, say what it means for the people here in your own words; never paste its report.',
 ].join(' ');
 
 /**

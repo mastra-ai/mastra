@@ -85,7 +85,8 @@ describe('FactoryChannelReplyProcessor', () => {
     ];
     for (const text of runs) {
       expect(text).toContain('Write for the people in the thread, not for another agent.');
-      expect(text).toContain('Leave out tool names, session and run ids');
+      expect(text).toContain('Leave out tool names and session and run ids unless someone asks for them');
+      expect(text).toContain('always leave out agent shorthand');
       expect(text).toContain('never paste its report');
     }
   });
