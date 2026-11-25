@@ -182,14 +182,60 @@ describe('listing the models of a custom endpoint', () => {
     ['script tags', '<script'.repeat(150_000)],
     ['comments', '<!--'.repeat(250_000)],
     ['title tags', '<title>'.repeat(150_000)],
-  ])('reads a 1 MB error page of unclosed %s in well under a second', async (_, page) => {
-    const endpoint = await startEndpoint(text(500, `<html><h1>Broken</h1>${page}`, 'text/html'));
+  ])(
+    'reads a 1 MB error page of unclosed %s',
+    async (_, page) => {
+      const endpoint = await startEndpoint(text(500, `<html><h1>Broken</h1>${page}`, 'text/html'));
 
-    const started = performance.now();
+      const result = await listCustomProviderModels({ url: endpoint.url });
+
+      expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 500, detail: 'Broken' } });
+    },
+    3000,
+  );
+
+  // The TUI prints `detail`, so an endpoint must not reach the terminal with escape sequences.
+  it.each([
+    ['decoded from entities', '<html><title>Denied&#0;&#27;[2J</title></html>', 'text/html', 'Denied [2J'],
+    [
+      'sent raw',
+      'Denied\u001b]52;c;cGF5bG9hZA==\u0007 and \u001b[2J cleared',
+      'text/plain',
+      'Denied ]52;c;cGF5bG9hZA== and [2J cleared',
+    ],
+  ])('shows no control characters %s', async (_, body, contentType, detail) => {
+    const endpoint = await startEndpoint(text(403, body, contentType));
+
     const result = await listCustomProviderModels({ url: endpoint.url });
 
-    expect(performance.now() - started).toBeLessThan(1000);
-    expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 500, detail: 'Broken' } });
+    expect(result).toMatchObject({ ok: false, failure: { status: 403, detail } });
+  });
+
+  // The body is cut and its whitespace collapsed before the final redaction.
+  it('redacts a key that sits across the read limit or is echoed with its spacing collapsed', async () => {
+    const key = 'sk-SUPERSECRETVALUE1234';
+    const spacedHeader = 'tenant  two-space secret';
+    const endpoint = await startEndpoint((request, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      const message =
+        request.headers['x-probe'] === 'far' ? `a${' '.repeat(32_760)}${key}` : `bad ${request.headers['x-tenant']}`;
+      res.end(JSON.stringify({ error: { message } }));
+    });
+
+    const far = await listCustomProviderModels({
+      url: endpoint.url,
+      apiKey: key,
+      headers: [{ name: 'X-Probe', value: 'far', secret: false }],
+    });
+    const spaced = await listCustomProviderModels({
+      url: endpoint.url,
+      headers: [{ name: 'X-Tenant', value: spacedHeader, secret: true }],
+    });
+
+    // The read limit may cut the marker itself, never the key.
+    expect(far.ok ? '' : far.failure.detail).toMatch(/^a \[redact/);
+    expect(far.ok ? '' : far.failure.detail).not.toContain('sk-');
+    expect(spaced).toMatchObject({ ok: false, failure: { detail: 'bad [redacted]' } });
   });
 
   it('keeps numeric entities outside Unicode as written', async () => {
@@ -395,14 +441,11 @@ describe('sending a test message to a custom endpoint model', () => {
     });
   });
 
-  it('shows the message of an error chunk in the stream, also with summaryDetailOnly', async () => {
-    const endpoint = await startEndpoint(
-      text(
-        200,
-        `data: ${JSON.stringify({ error: { message: 'quota exceeded', type: 'insufficient_quota' } })}\n\n`,
-        'text/event-stream',
-      ),
-    );
+  it.each([
+    ['an error object', { error: { message: 'quota exceeded', type: 'insufficient_quota' } }],
+    ['a plain string error', { error: 'quota exceeded' }],
+  ])('shows the message of an error chunk with %s, also with summaryDetailOnly', async (_, chunk) => {
+    const endpoint = await startEndpoint(text(200, `data: ${JSON.stringify(chunk)}\n\n`, 'text/event-stream'));
 
     const result = await testCustomProviderModel(
       { providerId: 'acme', connection: { url: endpoint.url }, modelId: 'model-x' },

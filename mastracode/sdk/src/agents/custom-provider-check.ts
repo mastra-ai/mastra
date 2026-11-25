@@ -127,16 +127,29 @@ function redact(text: string, secrets: string[]): string {
   return secrets.reduce((redacted, secret) => redacted.split(secret).join('[redacted]'), text);
 }
 
-/** Redact the failure text and cut `detail` to its limit. Redaction runs first so a cut never leaves part of a secret. */
+/**
+ * Redact the failure text and cut `detail` to its limit. Redaction runs first
+ * so a cut never leaves part of a secret. The detail builders also redact the
+ * raw upstream text, because their own cuts and collapses come earlier.
+ */
 function finishFailure(failure: CustomProviderCheckFailure, secrets: string[]): CustomProviderCheckFailure {
   const { detail: rawDetail, ...rest } = failure;
   const detail = rawDetail === undefined ? undefined : redact(rawDetail, secrets).slice(0, MAX_DETAIL_LENGTH);
   return { ...rest, message: redact(failure.message, secrets), ...(detail ? { detail } : {}) };
 }
 
-/** Collapse runs of whitespace, so a multi-line body reads as one paragraph. */
+/** C0 and C1 control characters, including the ESC that starts a terminal escape sequence. */
+// oxlint-disable-next-line no-control-regex -- matching control characters is the point.
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/**
+ * Collapse a text into one line. Control characters become spaces: the TUI
+ * prints `detail`, and an endpoint must not be able to send escape sequences
+ * to the user's terminal. Callers decode HTML entities first, so `&#27;` is
+ * caught too.
+ */
 function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
+  return text.replace(CONTROL_CHARACTERS, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** Narrow an unknown JSON value to an object. */
@@ -232,13 +245,20 @@ function htmlDetail(html: string, summaryOnly: boolean): string | undefined {
 }
 
 /**
- * Plain text from an upstream body for {@link CustomProviderCheckFailure.detail},
- * before redaction. A body that cannot be read gives no detail: a check
- * reports its failure, it never throws one.
+ * Plain text from an upstream body for {@link CustomProviderCheckFailure.detail}.
+ * A body that cannot be read gives no detail, so a check still returns its failure.
+ *
+ * Secrets are redacted in the raw body, before any cut or whitespace collapse
+ * could split one or change its spacing, and again on the final text.
  */
-function upstreamDetail(body: string, contentType: string | undefined, summaryOnly: boolean): string | undefined {
+function upstreamDetail(
+  body: string,
+  contentType: string | undefined,
+  summaryOnly: boolean,
+  secrets: string[],
+): string | undefined {
   try {
-    const trimmed = body.trim();
+    const trimmed = redact(body, secrets).trim();
     if (!trimmed) return undefined;
     let parsed: unknown;
     try {
@@ -269,13 +289,14 @@ function httpFailure(args: {
   body: string;
   contentType?: string;
   summaryOnly: boolean;
+  secrets: string[];
 }): CustomProviderCheckFailure {
   const statusText = STATUS_CODES[args.status] ?? '';
   return {
     kind: 'http',
     message: `HTTP ${args.status}${statusText ? ` ${statusText}` : ''} from ${args.url}`,
     status: args.status,
-    detail: upstreamDetail(args.body, args.contentType, args.summaryOnly),
+    detail: upstreamDetail(args.body, args.contentType, args.summaryOnly, args.secrets),
   };
 }
 
@@ -420,6 +441,7 @@ export async function listCustomProviderModels(
         body: body.text,
         contentType,
         summaryOnly,
+        secrets,
       }),
     );
   }
@@ -442,7 +464,7 @@ export async function listCustomProviderModels(
       kind: 'invalid_response',
       message: `The response from ${url} is not a model list`,
       status: response.status,
-      detail: upstreamDetail(body.text, contentType, summaryOnly),
+      detail: upstreamDetail(body.text, contentType, summaryOnly, secrets),
     });
   }
   return { ok: true, models, latencyMs: latencyMs() };
@@ -467,6 +489,7 @@ function modelTestFailure(args: {
   chatUrl: string;
   abort: AbortState;
   summaryOnly: boolean;
+  secrets: string[];
 }): CustomProviderCheckFailure {
   const error = RetryError.isInstance(args.error) ? args.error.lastError : args.error;
   if (APICallError.isInstance(error)) {
@@ -477,6 +500,7 @@ function modelTestFailure(args: {
         body: error.responseBody ?? '',
         contentType: headerValue(error.responseHeaders, 'content-type'),
         summaryOnly: args.summaryOnly,
+        secrets: args.secrets,
       });
     }
     return connectionFailure(error, error.url, args.abort);
@@ -487,7 +511,7 @@ function modelTestFailure(args: {
   return {
     kind: 'invalid_response',
     message: `The answer from ${args.chatUrl} is not an OpenAI-compatible stream`,
-    detail: streamErrorDetail(error, args.summaryOnly),
+    detail: streamErrorDetail(error, args.summaryOnly, args.secrets),
   };
 }
 
@@ -496,14 +520,20 @@ function modelTestFailure(args: {
  * upstream text in the messages of its parse errors, so that text only goes
  * in `detail`, and only without `summaryOnly`. An error chunk is the
  * endpoint's own error report, so its message is kept like a JSON error body.
- * The AI SDK turns an error chunk with a `message` into a
- * `StreamProviderError` and passes any other error chunk through as sent.
+ *
+ * The AI SDK turns an error chunk with an `error.message` into a
+ * `StreamProviderError`. A chunk whose `error` is a plain string fails the
+ * chunk schema and arrives as a `TypeValidationError` holding the parsed
+ * chunk in `value`, which is read the same way an HTTP error body is.
+ * Secrets are redacted before the text is cut or collapsed.
  */
-function streamErrorDetail(error: unknown, summaryOnly: boolean): string | undefined {
+function streamErrorDetail(error: unknown, summaryOnly: boolean, secrets: string[]): string | undefined {
+  const clean = (text: string) => oneLine(redact(text, secrets).slice(0, DETAIL_SCAN_CHARS)) || undefined;
   let reported: string | undefined;
   if (StreamProviderError.isInstance(error)) reported = error.message;
+  else if (TypeValidationError.isInstance(error)) reported = jsonErrorMessage(error.value);
   else if (!(error instanceof Error)) reported = jsonErrorMessage({ error });
-  if (reported !== undefined) return oneLine(reported.slice(0, DETAIL_SCAN_CHARS)) || undefined;
+  if (reported !== undefined) return clean(reported);
   if (summaryOnly) return undefined;
   let raw: string;
   try {
@@ -514,7 +544,7 @@ function streamErrorDetail(error: unknown, summaryOnly: boolean): string | undef
   } catch {
     return undefined;
   }
-  return oneLine(raw.slice(0, DETAIL_SCAN_CHARS)) || undefined;
+  return clean(raw);
 }
 
 /**
@@ -573,6 +603,7 @@ export async function testCustomProviderModel(
       chatUrl,
       abort: abortState(),
       summaryOnly: options.summaryDetailOnly ?? false,
+      secrets,
     });
     return { ok: false, failure: finishFailure(failure, secrets), latencyMs: latencyMs() };
   }
