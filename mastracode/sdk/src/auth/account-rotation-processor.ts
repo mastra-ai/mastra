@@ -31,7 +31,12 @@ import type {
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
-import { requestModelRoute, resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import {
+  advanceHostModelRoute,
+  requestModelRoute,
+  resolveModel,
+  resolveRequestThinkingLevel,
+} from '../agents/model.js';
 import {
   MODEL_FALLBACK_PART_TYPE,
   MODEL_FALLBACK_STATE_KEY,
@@ -876,6 +881,7 @@ export class AccountRotationProcessor implements Processor {
     }
     if (sticky) controller?.emitEvent?.({ type: 'info', message: modelFallbackNoticeText(data) });
     cascade.position++;
+    if (!sticky && args.requestContext) advanceHostModelRoute(args.requestContext);
   }
 
   /**

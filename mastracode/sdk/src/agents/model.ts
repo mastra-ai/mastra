@@ -494,8 +494,10 @@ export function resolveRequestThinkingLevel(
 }
 
 const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
+const HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY = 'mastracodeHostModelRoutePosition';
 
 export function setHostModelRoute(requestContext: RequestContext, route: readonly ModelFallback[] | undefined): void {
+  requestContext.delete(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY);
   if (!route) {
     requestContext.delete(HOST_MODEL_ROUTE_CONTEXT_KEY);
     return;
@@ -503,6 +505,24 @@ export function setHostModelRoute(requestContext: RequestContext, route: readonl
   const [primary, ...fallbacks] = route;
   const entries = primary ? [primary, ...modelFallbacksToTry(primary.modelId, fallbacks, requestContext)] : [];
   requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, entries.map(hostRouteEntry));
+}
+
+export function advanceHostModelRoute(requestContext: RequestContext): void {
+  requestContext.set(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY, hostModelRoutePosition(requestContext) + 1);
+}
+
+function hostModelRoutePosition(requestContext: RequestContextReader | undefined): number {
+  const position = requestContext?.get(HOST_MODEL_ROUTE_POSITION_CONTEXT_KEY);
+  return typeof position === 'number' ? position : 0;
+}
+
+export function requestRouteHasNextModel(
+  requestContext: RequestContextReader | undefined,
+  controller: Parameters<typeof requestModelRoute>[1],
+): boolean {
+  const route = requestModelRoute(requestContext, controller);
+  const position = route.host ? hostModelRoutePosition(requestContext) : 0;
+  return route.entries.length - 1 > position;
 }
 
 function modelFallbacksToTry(
