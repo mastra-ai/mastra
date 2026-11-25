@@ -4520,7 +4520,8 @@ export class Session<TState = unknown> {
 
   /** @internal Reset state fields whose durable source is the active thread. */
   resetThreadDerivedState(): void {
-    this.#releasePendingSaveWatch();
+    // A refresh of the same thread keeps watching; a switch or clear leaves nothing to watch.
+    if (this.#pendingSaveWatch?.threadId !== this.thread.getId()) this.#releasePendingSaveWatch();
     (this.state as SessionState<TState>).rebind(THREAD_DERIVED_STATE_KEYS);
   }
 

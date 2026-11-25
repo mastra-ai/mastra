@@ -319,6 +319,30 @@ describe('a sent message is pending until stored, then stored', () => {
     expect(await h.storedUserTexts()).toEqual([]);
   });
 
+  it('a metadata refresh of the same thread keeps dropping a pending message once it is stored', async () => {
+    const h = await createHarness('refresh');
+    const first = h.holdModelCall(1);
+    void h.session.sendMessage({ content: 'first message' }).catch(() => {});
+    await first.reached;
+    await h.session.followUp({ content: 'and then this' });
+    const watching = saveListeners.live;
+    expect(watching).toBeGreaterThan(0);
+
+    await h.session.thread.loadMetadata();
+    expect(saveListeners.live).toBe(watching);
+    expect(h.pending()).toEqual([{ content: 'and then this', kind: 'follow-up' }]);
+
+    const second = h.holdModelCall(2);
+    first.release();
+    await second.reached;
+    // Stored before the second model request, so it leaves the list while that run is still going.
+    await vi.waitFor(() => expect(h.pending()).toEqual([]));
+    expect(await h.storedUserTexts()).toEqual(['first message', 'and then this']);
+
+    second.release();
+    await h.runsEnded(2);
+  });
+
   it('no save listener outlives the pending messages it watches, even when nothing is saved', async () => {
     const h = await createHarness('listener', { blockText: 'forbidden' });
     const live = saveListeners.live;
