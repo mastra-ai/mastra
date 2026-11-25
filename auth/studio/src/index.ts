@@ -172,6 +172,11 @@ export class MastraAuthStudio
   private sharedApiUrl: string;
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
+
+  /** The organization this deployment is pinned to: only its members can sign in. */
+  get pinnedOrganizationId(): string | undefined {
+    return this.organizationId;
+  }
   private cookieDomain: string | undefined;
   /** Browser cookie name this provider issues. */
   private sessionCookieName: string;

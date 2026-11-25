@@ -311,6 +311,24 @@ describe('Board work-item activity', () => {
     );
   });
 
+  it('tells how long ago each event was as of when the timeline opens, not when the card was drawn', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-08-05T10:05:00.000Z'));
+      stubBoardEndpoints();
+      renderBoard('work');
+      const trigger = await screen.findByRole('button', { name: 'View activity by Ada Lovelace' });
+
+      vi.setSystemTime(new Date('2026-08-05T12:05:00.000Z'));
+      await userEvent.setup().hover(trigger);
+
+      const popup = await screen.findByLabelText('Work item activity');
+      expect(within(popup).getByText('2h', { selector: 'time[datetime="2026-08-05T10:00:00.000Z"]' })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('loads older audit pages so cards are not limited to the newest project events', async () => {
     stubBoardEndpoints();
     const requestedBefore: Array<string | null> = [];

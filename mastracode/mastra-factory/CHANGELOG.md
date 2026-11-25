@@ -1,5 +1,21 @@
 # create-factory
 
+## 0.5.2
+
+### Patch Changes
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`1b888c6`](https://github.com/mastra-ai/mastra/commit/1b888c6de558351b7e1762787bf0fc5550f2a6b0), [`cfa4ad9`](https://github.com/mastra-ai/mastra/commit/cfa4ad9008bed9e78396b9be19812236df66c6a6), [`cfa4ad9`](https://github.com/mastra-ai/mastra/commit/cfa4ad9008bed9e78396b9be19812236df66c6a6), [`8371f09`](https://github.com/mastra-ai/mastra/commit/8371f0927ed964cd0dfb73250cd9bb8dc9bd8ac5), [`a4c8a94`](https://github.com/mastra-ai/mastra/commit/a4c8a94f3b94fe21d016190fb7981bfad6997c3c), [`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`9ba253f`](https://github.com/mastra-ai/mastra/commit/9ba253f4279cdad5480981074c696f7f9b132354), [`855c40b`](https://github.com/mastra-ai/mastra/commit/855c40b55e00228ab0f556d060a1dd2490151dc2), [`90d9424`](https://github.com/mastra-ai/mastra/commit/90d9424563cf6bf8204b2633da54039dc1d73c3a), [`fd10e41`](https://github.com/mastra-ai/mastra/commit/fd10e4174de2ecd327def08f3e794b887b0ab106), [`e7e5f7e`](https://github.com/mastra-ai/mastra/commit/e7e5f7ecac4293ad21e67657a69fc913e5ff8b15), [`b6265ab`](https://github.com/mastra-ai/mastra/commit/b6265ab10fd0dbd3c21a414ff5a7833a110f58a8), [`5972780`](https://github.com/mastra-ai/mastra/commit/59727806f9f8dbbaecb31c38875106f4b93aec12), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`f48bad4`](https://github.com/mastra-ai/mastra/commit/f48bad4040b949b0497e3d0026e4845cbce52b7d), [`2f85a55`](https://github.com/mastra-ai/mastra/commit/2f85a551a9fe308179bd96da49032259275cd850), [`45b8470`](https://github.com/mastra-ai/mastra/commit/45b847050897411092b1c665cdbcbb59e2bec485), [`ef19996`](https://github.com/mastra-ai/mastra/commit/ef19996086ecf91da8df587c0368ca31f99474c1), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - mastra@1.40.2
+
+## 0.5.2-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`1b888c6`](https://github.com/mastra-ai/mastra/commit/1b888c6de558351b7e1762787bf0fc5550f2a6b0), [`cfa4ad9`](https://github.com/mastra-ai/mastra/commit/cfa4ad9008bed9e78396b9be19812236df66c6a6), [`cfa4ad9`](https://github.com/mastra-ai/mastra/commit/cfa4ad9008bed9e78396b9be19812236df66c6a6), [`fd10e41`](https://github.com/mastra-ai/mastra/commit/fd10e4174de2ecd327def08f3e794b887b0ab106)]:
+  - mastra@1.40.2-alpha.9
+
 ## 0.5.2-alpha.8
 
 ### Patch Changes

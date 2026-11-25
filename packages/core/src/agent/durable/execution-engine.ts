@@ -34,6 +34,7 @@ import {
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
+import { openStepsOfCrashedSegment } from './segment-spans';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
   DurableAgentActiveRun,
@@ -121,13 +122,35 @@ export class DefaultAgentExecutionEngine {
     const keepReplayEvent = createSupersededEventFilter(history);
     const attachedAtLogIndex = newestLogIndex(history);
     if (!offset) return { keepReplayEvent, attachedAtLogIndex };
-    const skipped = history.slice(0, offset);
-    if (skipped.length === offset) {
-      let floor: number | undefined;
-      for (const event of skipped) {
-        const generation = event.generation;
-        if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
-      }
+    // The floor is the highest generation among the events the client already
+    // consumed, i.e. everything below its offset. It is a blunt instrument:
+    // `keepReplayEvent` already drops exactly the ranges a later execution
+    // declared abandoned, so the floor only exists to stop a stale frame from
+    // a lost execution reaching a client that has moved past it.
+    //
+    // A floor read off the log can only be too low, never too high, and too
+    // low is covered by `keepReplayEvent`. So whenever the log holds anything
+    // below the offset, use it. Requiring the indices below the offset to be
+    // contiguous would be stricter but wrong: one hole from a failed append
+    // (possible on the non-atomic composed fallback) would fall through to the
+    // run's current generation and discard committed output from an earlier
+    // generation that was never superseded.
+    //
+    // Storage is consulted only when the log holds nothing below the offset,
+    // which is the case where there is genuinely no evidence. Indices are
+    // opaque cursors seeded per log (see MastraServerCache.listPushIndexed),
+    // so a log recreated after expiry numbers above an old offset and lands
+    // here rather than answering from the wrong segment.
+    let first: number | undefined;
+    let floor: number | undefined;
+    for (const event of history) {
+      const index = event.index;
+      if (typeof index !== 'number' || index >= offset) continue;
+      if (first === undefined || index < first) first = index;
+      const generation = event.generation;
+      if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
+    }
+    if (first !== undefined) {
       return { minGeneration: floor, keepReplayEvent, attachedAtLogIndex };
     }
     return { minGeneration: await readRunGeneration(this.mastra, runId), keepReplayEvent, attachedAtLogIndex };
@@ -183,7 +206,18 @@ export class DefaultAgentExecutionEngine {
     if (typeof historyPubsub.getHistory !== 'function') return 'latest';
     try {
       const history = await historyPubsub.getHistory(AGENT_STREAM_TOPIC(runId));
-      return Array.isArray(history) && history.length > 0 ? history.length : 'latest';
+      if (!Array.isArray(history) || history.length === 0) return 'latest';
+      // Indices are opaque cursors, not list positions: a log recreated after
+      // expiry is epoch-seeded (see MastraServerCache.listPushIndexed), so the
+      // boundary is one past the newest numbered frame. Using the history
+      // length here would sit below every seeded index and replay the prior
+      // segment — including its terminal event — into the resumed reader.
+      let newest = -1;
+      for (const event of history) {
+        const index = (event as { index?: unknown })?.index;
+        if (typeof index === 'number' && index > newest) newest = index;
+      }
+      return newest >= 0 ? newest + 1 : 'latest';
     } catch {
       return 'latest';
     }
@@ -823,6 +857,7 @@ export class DefaultAgentExecutionEngine {
     workflowInput: DurableAgenticWorkflowInput;
     finishPublishedBeforeCrash: boolean;
     originalSpansEnded: boolean;
+    openStepsOf: string[] | undefined;
   }> {
     const persisted = await this.loadPersistedRunSnapshot(workflowsStore, runId);
     if (!persisted) {
@@ -911,15 +946,18 @@ export class DefaultAgentExecutionEngine {
     }
 
     const finishPublishedBeforeCrash = snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
+    const results = Object.values(snapshot.context ?? {}) as Array<{ status?: string; resumedAt?: number } | undefined>;
+    // The default engine keeps the suspended result until the resumed step finishes.
+    const stepSuspended = results.some(result => result?.status === 'suspended');
     // Spans from a segment after resume lived only in the lost process.
-    const resumed = Object.values(snapshot.context ?? {}).some(
-      result => result && typeof result === 'object' && 'resumedAt' in result && result.resumedAt != null,
-    );
+    const resumed = stepSuspended || results.some(result => result?.resumedAt != null);
     return {
       snapshot,
       workflowInput,
       finishPublishedBeforeCrash,
       originalSpansEnded: finishPublishedBeforeCrash || resumed,
+      // The suspension ended the step it saved, so the crash left none open.
+      openStepsOf: stepSuspended ? [] : openStepsOfCrashedSegment(snapshot.requestContext, runId),
     };
   }
 

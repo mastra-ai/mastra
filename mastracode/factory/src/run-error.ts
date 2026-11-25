@@ -110,7 +110,7 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
     case 'timeout':
       return {
         title: 'Request timed out',
-        message: 'The request took too long to complete. Send a message to continue the run.',
+        message: 'The request took too long to complete. Click Continue or send a message to try again.',
         recoveries: ['continue'],
       };
     case 'rate_limited':
@@ -124,7 +124,7 @@ function explainRunError(error: RunErrorIdentity, memoryFailure: boolean): Omit<
     case 'unavailable':
       return {
         title: 'Model provider temporarily unavailable',
-        message: `The provider could not complete the request. Send a message to continue the run, or choose ${otherModel}.`,
+        message: `The provider could not complete the request. Click Continue or send a message to try again, or choose ${otherModel}.`,
         recoveries: ['continue', 'model'],
       };
     case 'unknown':
