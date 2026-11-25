@@ -2667,6 +2667,68 @@ describe('sent messages the server has not stored yet', () => {
     expect(reply?.kind === 'message' ? Object.keys(reply.runtimeTools ?? {}) : []).toEqual(['tool-1']);
   });
 
+  it("keeps the running reply's tools on that reply when the queued follow-up was sent from this page", () => {
+    const running = transcriptReducer(createInitialTranscript({ messages: [stored[0]] }), {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [],
+        },
+      },
+    });
+    const sent = transcriptReducer(running, { type: 'localUser', id: 'local-follow', text: 'follow up' });
+    const listed = transcriptReducer(sent, {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+    const withTool = transcriptReducer(listed, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+
+    expect(withTool.entries.map(entry => entry.id)).toEqual(['user-1', 'assistant-1', 'local-follow']);
+    const reply = withTool.entries[1];
+    expect(reply?.kind === 'message' ? Object.keys(reply.runtimeTools ?? {}) : []).toEqual(['tool-1']);
+  });
+
+  it("gives a queued follow-up's run its own reply when that run opens with a tool", () => {
+    const reloaded = transcriptReducer(createInitialTranscript({ messages: [stored[0]] }), {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+    const ended = transcriptReducer(reloaded, { type: 'event', event: { type: 'agent_end', reason: 'complete' } });
+    const started = transcriptReducer(ended, { type: 'event', event: { type: 'agent_start' } });
+    const withTool = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-2', toolName: 'view', args: { path: 'src/index.ts' } },
+    });
+
+    const ids = withTool.entries.map(entry => (entry.kind === 'message' ? entry.message.id : entry.kind));
+    expect(ids.slice(0, 3)).toEqual(['user-1', 'assistant-1', 'sig-2']);
+    expect(ids).toHaveLength(4);
+    const previous = withTool.entries[1];
+    expect(previous?.kind === 'message' ? Object.keys(previous.runtimeTools ?? {}) : []).toEqual([]);
+    const own = withTool.entries[3];
+    expect(own?.kind === 'message' ? Object.keys(own.runtimeTools ?? {}) : []).toEqual(['tool-2']);
+  });
+
   it('shows two pending messages with the same text when only one was sent from this page', () => {
     const sent = transcriptReducer(createInitialTranscript({ messages: stored }), {
       type: 'localUser',

@@ -230,7 +230,7 @@ function applyEvent(
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_start':
-      return { ...state, lastEntryBeforeRun: state.entries.at(-1)?.id };
+      return { ...startQueuedFollowUp(state), lastEntryBeforeRun: state.entries.at(-1)?.id };
 
     case 'agent_end':
       return { ...state, pending: false };
@@ -1226,6 +1226,7 @@ function showPendingUserMessages(
   const kept = state.entries.filter(entry => entry.kind !== 'message' || !entry.pendingSend || listed.has(entry.id));
   // Each optimistic copy stands in for one pending message only.
   const claimed = new Set<number>();
+  let marked = false;
   const beforeLive: TimelineEntry[] = [];
   const afterLive: TimelineEntry[] = [];
   for (const { id, content, kind } of pending) {
@@ -1240,6 +1241,11 @@ function showPendingUserMessages(
     const copy = kept.findIndex((entry, at) => !claimed.has(at) && isUnclaimedOptimisticCopy(entry, texts));
     if (copy !== -1) {
       claimed.add(copy);
+      const local = kept[copy];
+      if (kind === 'follow-up' && local.kind === 'message' && !local.queuedFollowUp) {
+        kept[copy] = { ...local, queuedFollowUp: true };
+        marked = true;
+      }
       continue;
     }
     const steer = kind === 'steer';
@@ -1251,11 +1257,22 @@ function showPendingUserMessages(
     else beforeLive.push(entry);
   }
   const shown =
-    beforeLive.length === 0 && kept.length === state.entries.length
+    beforeLive.length === 0 && !marked && kept.length === state.entries.length
       ? state
       : { ...state, entries: [...kept, ...beforeLive] };
   const live = followLive(shown);
   return afterLive.length === 0 ? live : { ...live, entries: [...live.entries, ...afterLive] };
+}
+
+// Queued follow-ups run in order, so a new run takes the oldest one: it now starts that run's turn.
+function startQueuedFollowUp(state: TranscriptState): TranscriptState {
+  const index = state.entries.findIndex(entry => entry.kind === 'message' && entry.queuedFollowUp);
+  const entry = state.entries[index];
+  if (entry?.kind !== 'message') return state;
+  const { queuedFollowUp: _, ...started } = entry;
+  const entries = [...state.entries];
+  entries[index] = started;
+  return { ...state, entries };
 }
 
 // The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
