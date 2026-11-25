@@ -5,7 +5,10 @@ import type {
   CustomProviderModelsResult,
   CustomProviderModelTestResult,
 } from '@mastra/code-sdk/agents/custom-provider-check';
-import { customProviderHeaderProblem } from '@mastra/code-sdk/onboarding/custom-provider-headers';
+import {
+  CONTROL_CHARACTER_PATTERN,
+  customProviderHeaderProblem,
+} from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import {
   removeCustomProviderFromSettings,
   upsertCustomProviderInSettings,
@@ -360,15 +363,15 @@ function savedConnection(provider: CustomProviderSetting): CustomProviderConnect
   return { url: provider.url, apiKey: provider.apiKey, authScheme: provider.authScheme, headers: provider.headers };
 }
 
+const CONTROL_CHARACTERS = new RegExp(`${CONTROL_CHARACTER_PATTERN.source}+`, 'g');
+
 /**
  * Text that came from an endpoint, made safe to print on one line. Escape
- * sequences in it would act on the terminal instead of being shown.
+ * sequences in it would act on the terminal instead of being shown, and line
+ * breaks would split one message across several rows.
  */
 function printableText(text: string): string {
-  return text
-    .replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return text.replace(CONTROL_CHARACTERS, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -397,7 +400,11 @@ const DONE_LABEL = 'Done';
 /** The longest model reply shown after a model test. */
 const MAX_SHOWN_REPLY_LENGTH = 200;
 
-/** A model reply made safe to print and cut to a length that fits one message. */
+/**
+ * A model reply as one short line. The SDK already redacts the reply and
+ * replaces its control characters, but keeps line breaks and up to 4,000
+ * characters, which is too long for one chat message.
+ */
 function shownReply(reply: string): string {
   const text = printableText(reply);
   return text.length > MAX_SHOWN_REPLY_LENGTH ? `${text.slice(0, MAX_SHOWN_REPLY_LENGTH)}...` : text;
