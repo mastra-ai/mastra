@@ -159,10 +159,22 @@ describe('run and generation span fields on a worker in another process', () => 
     throw new Error('tool output mapping failed');
   };
 
+  const pauseAfter = (id: string, ms: number) =>
+    createTool({
+      id,
+      description: 'Ask a person.',
+      inputSchema: z.object({}),
+      execute: async (_, context) => {
+        await setTimeout(ms);
+        return context.agent!.suspend({ why: 'ask' });
+      },
+    });
+
   /** The process that streams, and the worker process that executes the run. */
-  async function split(agentOptions: Record<string, unknown>, fga?: unknown) {
+  async function split(agentOptions: Record<string, unknown>, fga?: unknown, fenced = true) {
     const directory = await mkdtemp(join(tmpdir(), 'run-span-fields-'));
     const storage = new InMemoryStore();
+    vi.spyOn((await storage.getStore('workflows'))!, 'supportsRunFencing').mockReturnValue(fenced);
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` });
     const start = async (index: number) => {
       // A process has its own run registry.
@@ -265,23 +277,16 @@ describe('run and generation span fields on a worker in another process', () => 
   }, 15_000);
 
   it.each([
-    { order: 'before', deniedAfter: 150, suspendsAfter: 0 },
-    { order: 'after', deniedAfter: 0, suspendsAfter: 400 },
+    { order: 'before', deniedAfter: 150, suspendsAfter: 0, fenced: true },
+    { order: 'after', deniedAfter: 0, suspendsAfter: 400, fenced: true },
+    { order: 'after', deniedAfter: 0, suspendsAfter: 400, fenced: false },
   ])(
-    'ends every span once when a tool call suspends $order another is denied',
+    'ends every span once when a tool call suspends $order another is denied, with storage fencing $fenced',
     async times => {
       const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
       getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('lookup')] });
-      const pause = createTool({
-        id: 'pause',
-        description: 'Ask a person.',
-        inputSchema: z.object({}),
-        execute: async (_, context) => {
-          await setTimeout(times.suspendsAfter);
-          return context.agent!.suspend({ why: 'ask' });
-        },
-      });
-      const { api, worker, unbalanced } = await split(
+      const pause = pauseAfter('pause', times.suspendsAfter);
+      const { api, worker } = await split(
         { tools: { pause, lookup: lookup() } },
         {
           require: async (user: any, { resource, permission }: any) => {
@@ -290,6 +295,7 @@ describe('run and generation span fields on a worker in another process', () => 
             throw new FGADeniedError(user, resource, permission);
           },
         },
+        times.fenced,
       );
 
       const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
@@ -297,11 +303,29 @@ describe('run and generation span fields on a worker in another process', () => 
       for await (const _ of fullStream);
 
       await setTimeout(1_000);
-      expect(worker.ended()).toHaveLength(1);
-      expect(unbalanced()).toMatchObject({ endedTwice: [] });
+      for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+        expect([...worker.ended(type), ...api.ended(type)]).toHaveLength(1);
+      }
     },
     15_000,
   );
+
+  it('ends every span once when two tool calls suspend', async () => {
+    const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
+    getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('wait')] });
+    const { api, worker, unbalanced } = await split({
+      tools: { pause: pauseAfter('pause', 0), wait: pauseAfter('wait', 50) },
+    });
+
+    const { fullStream } = await api.agent.stream('Where is my order?');
+    let suspended = 0;
+    for await (const chunk of fullStream) if (chunk.type === 'tool-call-suspended' && ++suspended === 2) break;
+
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+      await expect.poll(() => worker.ended(type)).toMatchObject([{ outcome: 'suspend' }]);
+    }
+    expect(unbalanced()).toMatchObject({ endedTwice: [] });
+  }, 15_000);
 
   it('ends every span once when the run fails after an approval', async () => {
     getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });

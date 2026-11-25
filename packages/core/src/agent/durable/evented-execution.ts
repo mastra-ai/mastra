@@ -17,8 +17,9 @@ import {
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
-import { carrySegmentSpans, endFailedSegmentSpans, segmentEndedBySuspension, segmentSpanData } from './segment-spans';
+import { endFailedSegmentSpans, segmentSpanData } from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
+import { endSuspendedSpans } from './suspended-spans';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
 const PARTICIPANTS = createRunScopeKey<Map<string, Participant>>('durable-evented-execution-participants');
@@ -128,7 +129,6 @@ export async function participateInDurableExecution<T>(
     const fence = await participant.fence;
     if (!fence) return await execute();
     await fence.verify();
-    carryEndedSegment(event);
     let parentRunId = runId;
     for (const nestedRunId of nestedRunIds) {
       fence.coverNestedRun(parentRunId, nestedRunId);
@@ -189,20 +189,6 @@ export async function retrySettledDurableExecution(mastra: Mastra, event: Event)
   return true;
 }
 
-/**
- * A suspension beside the failed tool call ended the segment's spans. Only this event shows it, so tell the run's own
- * failure through the request context it inherits.
- */
-function carryEndedSegment(event: Event): void {
-  const { workflowId, stepResults, requestContext } = event.data ?? {};
-  const runId = stepResults?.input?.runId;
-  if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !runId) return;
-  const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
-  if (!segmentEndedBySuspension(segmentSpanData(context, runId, stepResults.input), stepResults)) return;
-  event.data.requestContext = { ...requestContext };
-  carrySegmentSpans(event.data.requestContext, runId, null);
-}
-
 function endFailedSpans(mastra: Mastra, event: Event): void {
   const { stepResults, prevResult, requestContext } = event.data ?? {};
   const runId = stepResults?.input?.runId;
@@ -221,12 +207,29 @@ function endFailedSpans(mastra: Mastra, event: Event): void {
   });
 }
 
+/** Tool calls that run side by side leave their suspension's spans to this. */
+function endSuspendedIteration(mastra: Mastra, event: Event): void {
+  const { stepResults, requestContext } = event.data ?? {};
+  const state = stepResults?.input;
+  const { output, payload } = stepResults?.[DurableStepIds.TOOL_CALL] ?? {};
+  const index = Array.isArray(output) ? output.findIndex(call => call?.status === 'suspended') : -1;
+  const call = payload?.[index];
+  if (!state?.runId || !call?.sideBySide) return;
+  const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
+  if (segmentSpanData(context, state.runId, state).carried) return;
+  const { type, toolCallId, toolName } = output[index].suspendPayload ?? {};
+  endSuspendedSpans({ mastra, requestContext: context, state, call, info: { toolCallId, toolName, reason: type } });
+}
+
+/** End the spans of an iteration that failed or suspended. Only the iteration's own event still carries them. */
+export function endIterationSpans(mastra: Mastra, event: Event): void {
+  if (event.data?.workflowId !== DurableStepIds.AGENTIC_EXECUTION) return;
+  if (event.type === 'workflow.fail') endFailedSpans(mastra, event);
+  if (event.type === 'workflow.suspend') endSuspendedIteration(mastra, event);
+}
+
 /** Called only after the root terminal handler has persisted and published its outcome. */
 export async function settleEventedDurableExecution(mastra: Mastra, event: Event): Promise<void> {
-  // Only the failed iteration's own event still carries its open MODEL_STEP.
-  if (event.type === 'workflow.fail' && event.data?.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
-    endFailedSpans(mastra, event);
-  }
   if (!isRootTerminal(event)) return;
   const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
   const claim = getExecutionClaim(context, event.runId);

@@ -144,10 +144,7 @@ export function stepFailure<T extends { error: Error }>(failure: T): T {
   return isMastraTimeoutError(failure.error) ? { ...failure, outcome: 'interrupted' as const } : failure;
 }
 
-/**
- * Whether a tool call that suspended beside the failed one already ended the spans of the segment. Only the failed
- * iteration's steps show it, so the settling engine takes it to the run's own failure as a carried `null` segment.
- */
+/** Whether a tool call that suspended beside the failed one already ended the spans of the segment. */
 export function segmentEndedBySuspension(
   segment: SegmentSpanData & { carried?: boolean },
   steps: Record<string, any>,
@@ -199,7 +196,9 @@ export function endFailedSegmentSpans({
       const stepSpanData = steps[DurableStepIds.LLM_EXECUTION]?.output?.stepSpanData;
       // The mapping step ends the step itself.
       if (!stepSpanData || steps[DurableStepIds.LLM_MAPPING]?.status === 'success') return;
-      if (!segmentOwnsStep(segment, stepSpanData) || segmentEndedBySuspension(segment, steps)) return;
+      if (!segmentOwnsStep(segment, stepSpanData)) return;
+      // On workers a call leaves the first pair's suspension to the end of its iteration.
+      if ((!firstPairOnly || segment.carried) && segmentEndedBySuspension(segment, steps)) return;
       (
         liveSegmentSpan<Span<SpanType.MODEL_STEP>>(stepSpanData, live?.openStepSpan) ??
         observability.rebuildSpan<SpanType.MODEL_STEP>(stepSpanData)

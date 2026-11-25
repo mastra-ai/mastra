@@ -13770,10 +13770,10 @@ export class Agent<
    */
   protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step). Behind a broker
-    // another worker may have ended the open step already, so the worker that settles the failure ends it.
-    const bus =
-      this.executionEngine.executionMode === 'background' ? (this.#mastra?.pubsub ?? this.getPubSub()) : undefined;
-    endRunSpansWithError(runId, error, { endStep: !bus || !reachesOtherProcesses(bus) });
+    // another worker may have ended the open step already, so the worker that handles its failure ends it.
+    const evented = this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
+    const bus = this.#mastra?.pubsub ?? this.getPubSub();
+    endRunSpansWithError(runId, error, { endStep: !evented || !bus || !reachesOtherProcesses(bus) });
     await runOutsideRunFenceScope(() =>
       emitErrorEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,

@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import { createDurableAgent } from './create-durable-agent';
 import { createEventedAgent } from './create-evented-agent';
@@ -346,15 +347,23 @@ describe('globalRunRegistry missing-key lookups', () => {
   });
 
   it.each([
-    { where: 'in one process', deliversAcrossProcesses: false, ends: 1 },
-    { where: 'behind a broker, where a worker may have ended it', deliversAcrossProcesses: true, ends: 0 },
-  ])('ends the open model step $ends times $where', async ({ deliversAcrossProcesses, ends }) => {
+    { where: 'in one process', deliversAcrossProcesses: false, concurrentUpdates: true, ends: 1 },
+    {
+      where: 'behind a broker, where a worker ends it',
+      deliversAcrossProcesses: true,
+      concurrentUpdates: true,
+      ends: 0,
+    },
+    { where: 'on the in-process fallback', deliversAcrossProcesses: true, concurrentUpdates: false, ends: 1 },
+  ])('ends the open model step $ends times $where', async ({ deliversAcrossProcesses, concurrentUpdates, ends }) => {
     const pubsub = new EventEmitterPubSub();
     vi.spyOn(pubsub, 'deliversAcrossProcesses', 'get').mockReturnValue(deliversAcrossProcesses);
+    const storage = new InMemoryStore();
+    vi.spyOn((await storage.getStore('workflows'))!, 'supportsConcurrentUpdates').mockReturnValue(concurrentUpdates);
     const agent = createEventedAgent({
       agent: new Agent({ id: 'evented', name: 'evented', instructions: '', model: 'openai/gpt-4o' }),
     });
-    new Mastra({ agents: { agent }, pubsub, logger: false });
+    new Mastra({ agents: { agent }, pubsub, storage, logger: false });
     const openStepSpan = { error: vi.fn() };
     globalRunRegistry.set('failed-run', makeEntry({ openStepSpan }));
 
