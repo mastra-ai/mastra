@@ -157,46 +157,100 @@ const HTML_ENTITIES: Record<string, string> = {
   nbsp: ' ',
 };
 
-/** Decode the entities error pages commonly carry. Others stay as written. */
+/**
+ * How much of an upstream body the detail is read from. Error pages put their
+ * title and message near the top and the detail keeps 1,000 characters, so a
+ * longer read adds nothing. The parsing is synchronous, which the timeout
+ * cannot interrupt, so it must stay cheap on any body an endpoint sends.
+ */
+const DETAIL_SCAN_CHARS = 32 * 1024;
+
+/** Elements whose content is not page text. */
+const NON_TEXT_ELEMENTS = new Set(['head', 'script', 'style', 'title']);
+
+/**
+ * Decode the entities error pages commonly carry. Others, and numeric ones
+ * outside Unicode, stay as written. The bounded lengths keep the scan linear.
+ */
 function decodeHtmlEntities(text: string): string {
-  return text.replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (entity, name: string) => {
-    if (name.startsWith('#x') || name.startsWith('#X')) return String.fromCodePoint(Number.parseInt(name.slice(2), 16));
-    if (name.startsWith('#')) return String.fromCodePoint(Number.parseInt(name.slice(1), 10));
-    return HTML_ENTITIES[name.toLowerCase()] ?? entity;
+  return text.replace(/&(#[0-9]{1,8}|#x[0-9a-f]{1,8}|[a-z]{1,10});/gi, (entity, name: string) => {
+    if (!name.startsWith('#')) return HTML_ENTITIES[name.toLowerCase()] ?? entity;
+    const codePoint = name[1] === 'x' || name[1] === 'X' ? Number.parseInt(name.slice(2), 16) : Number(name.slice(1));
+    return Number.isInteger(codePoint) && codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity;
   });
 }
 
-/** The `<title>` of an HTML page, then its text with tags removed. With `summaryOnly`, the title alone. */
+/**
+ * The `<title>` of an HTML page, then its text with tags removed. With
+ * `summaryOnly`, the title alone.
+ *
+ * Every search is an `indexOf` that either moves the cursor past what it read
+ * or ends the scan, so the work stays linear on tags that never close. An
+ * unclosed comment, tag or non-text element ends the text there.
+ */
 function htmlDetail(html: string, summaryOnly: boolean): string | undefined {
-  const title = oneLine(decodeHtmlEntities(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? ''));
+  // ASCII-only lower case keeps every index valid in `html`; `toLowerCase` can change the length.
+  const lower = html.replace(/[A-Z]/g, letter => letter.toLowerCase());
+  let title = '';
+  const titleStart = lower.indexOf('<title');
+  const titleOpenEnd = titleStart < 0 ? -1 : lower.indexOf('>', titleStart);
+  const titleClose = titleOpenEnd < 0 ? -1 : lower.indexOf('</title', titleOpenEnd);
+  if (titleClose >= 0) title = oneLine(decodeHtmlEntities(html.slice(titleOpenEnd + 1, titleClose)));
   if (summaryOnly) return title || undefined;
-  const text = oneLine(
-    decodeHtmlEntities(
-      html
-        .replace(/<(head|script|style|title)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-        .replace(/<!--[\s\S]*?-->/g, ' ')
-        .replace(/<[^>]*>/g, ' '),
-    ),
-  );
+
+  const parts: string[] = [];
+  const tagName = /[a-z][a-z0-9]*/y;
+  let cursor = 0;
+  while (cursor < html.length) {
+    const open = lower.indexOf('<', cursor);
+    if (open < 0) {
+      parts.push(html.slice(cursor));
+      break;
+    }
+    parts.push(html.slice(cursor, open), ' ');
+    let resume = -1;
+    if (lower.startsWith('<!--', open)) {
+      const close = lower.indexOf('-->', open + 4);
+      resume = close < 0 ? -1 : close + 3;
+    } else {
+      tagName.lastIndex = open + 1;
+      const name = tagName.exec(lower)?.[0];
+      const close = name && NON_TEXT_ELEMENTS.has(name) ? lower.indexOf(`</${name}`, open + 1) : open;
+      const end = close < 0 ? -1 : lower.indexOf('>', close);
+      resume = end < 0 ? -1 : end + 1;
+    }
+    if (resume < 0) break;
+    cursor = resume;
+  }
+  const text = oneLine(decodeHtmlEntities(parts.join('')));
   return [title, text].filter(Boolean).join(': ') || undefined;
 }
 
-/** Plain text from an upstream body for {@link CustomProviderCheckFailure.detail}, before redaction. */
+/**
+ * Plain text from an upstream body for {@link CustomProviderCheckFailure.detail},
+ * before redaction. A body that cannot be read gives no detail: a check
+ * reports its failure, it never throws one.
+ */
 function upstreamDetail(body: string, contentType: string | undefined, summaryOnly: boolean): string | undefined {
-  const trimmed = body.trim();
-  if (!trimmed) return undefined;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed);
+    const trimmed = body.trim();
+    if (!trimmed) return undefined;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      parsed = undefined;
+    }
+    const message = jsonErrorMessage(parsed);
+    if (message !== undefined) return oneLine(message.slice(0, DETAIL_SCAN_CHARS)) || undefined;
+    const head = trimmed.slice(0, DETAIL_SCAN_CHARS);
+    if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(head)) {
+      return htmlDetail(head, summaryOnly);
+    }
+    return summaryOnly ? undefined : oneLine(head);
   } catch {
-    parsed = undefined;
+    return undefined;
   }
-  const message = jsonErrorMessage(parsed);
-  if (message !== undefined) return oneLine(message) || undefined;
-  if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(trimmed)) {
-    return htmlDetail(trimmed, summaryOnly);
-  }
-  return summaryOnly ? undefined : oneLine(trimmed);
 }
 
 /** The failure for a response with an error status. Both checks map statuses through this. */

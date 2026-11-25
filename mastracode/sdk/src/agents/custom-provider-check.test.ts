@@ -175,6 +175,34 @@ describe('listing the models of a custom endpoint', () => {
     });
   });
 
+  // The page is parsed synchronously, where the timeout cannot stop it.
+  it.each([
+    ['script tags', '<script'.repeat(150_000)],
+    ['comments', '<!--'.repeat(250_000)],
+    ['title tags', '<title>'.repeat(150_000)],
+  ])('reads a 1 MB error page of unclosed %s in well under a second', async (_, page) => {
+    const endpoint = await startEndpoint(text(500, `<html><h1>Broken</h1>${page}`, 'text/html'));
+
+    const started = performance.now();
+    const result = await listCustomProviderModels({ url: endpoint.url });
+
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 500, detail: 'Broken' } });
+  });
+
+  it('keeps numeric entities outside Unicode as written', async () => {
+    const endpoint = await startEndpoint(
+      text(403, '<html><title>&#9999999999; &#x110000; &#65;</title></html>', 'text/html'),
+    );
+
+    const result = await listCustomProviderModels({ url: endpoint.url });
+
+    expect(result).toMatchObject({
+      ok: false,
+      failure: { kind: 'http', status: 403, detail: '&#9999999999; &#x110000; A' },
+    });
+  });
+
   it('shows the error message of a JSON error body', async () => {
     const endpoint = await startEndpoint(
       json(401, { error: { message: 'Incorrect API key provided.', type: 'invalid_request_error' } }),
