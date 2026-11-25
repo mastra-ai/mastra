@@ -439,10 +439,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     // Technical: the resumed run takes the request context the answer hands it. It must name
     // the phase session's owner, so the run keeps one identity from kickoff to finish and never
     // runs with no user ("the request has no authenticated user" on a Factory server).
-    it.each(backend === 'postgres' ? ['configured engine', 'native evented'] : ['configured engine'])(
+    it.each(backend === 'postgres' ? ['configured engine', 'evented opt-in'] : ['configured engine'])(
       "carries on as the phase session's owner, and records who approved (%s)",
       async engine => {
-        if (engine === 'native evented') vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+        if (engine === 'evented opt-in') vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
         const { answer, errors, audit } = await parkedPhaseSession();
         const requestsBefore = mock.getRequests().length;
         resolved = [];
