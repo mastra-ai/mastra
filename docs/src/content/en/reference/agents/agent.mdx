@@ -320,6 +320,8 @@ agent.sendMessage('Continue with the next step.', {
 
 Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the message: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the message is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `runId` is the authoritative id of the run that handled the message and is present only on `wake` and `deliver`. For `persist`/`discard` use `result.signal.id` to correlate the stored message. `accepted` resolves for routing (a generation error on a `wake` run surfaces through `output.consumeStream()`) and rejects only when the message couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
 
+For an evented agent on storage that keeps agent signals, a message sent to a running run is stored, and `deliver` can wait for that write, as described for [`sendSignal()`](#sendsignalsignal-options).
+
 ### `queueMessage(message, options)`
 
 Queues a user message for the next turn on a thread. If the thread is active, Mastra waits for the active run to finish, then starts a new run with the queued message. If the thread is idle, Mastra starts a run immediately.
@@ -361,11 +363,13 @@ Cancels pending input without aborting the active run. Supply exactly one select
 - `queueOwnerId` cancels only the calling Agent's `queueMessage()` and `queueSignal()` entries in that owner group. It doesn't cancel other Agents' input or signals in the other queues.
 
 ```typescript
-const { cancelledSignalIds } = agent.cancelQueuedMessages({
+const result = agent.cancelQueuedMessages({
   resourceId: 'user-123',
   threadId: 'thread-abc',
   signalIds: ['signal-123', 'signal-456'],
 })
+
+const { cancelledSignalIds } = (await result.settled) ?? result
 ```
 
 <PropertiesTable
@@ -394,7 +398,9 @@ const { cancelledSignalIds } = agent.cancelQueuedMessages({
 ]}
 />
 
-Returns `{ cancelledSignalIds: string[] }`, containing each ID actually cancelled by this call once. An empty array means none of the selected signals were still pending locally. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
+Returns `{ cancelledSignalIds: string[], settled?: Promise<{ cancelledSignalIds: string[] }> }`. `cancelledSignalIds` contains each ID this call cancelled before it returned, once. A signal waiting to acquire or transfer its lease remains cancellable. Once execution or forwarding starts, the local copy is no longer cancellable.
+
+`settled` is present for `signalIds` cancellation when the thread's active run in this process keeps its signals in [storage that keeps agent signals](/docs/server/pubsub#evented-workflows-and-agents), or, without such a run, when the calling Agent is an evented agent on that storage. It's present even when nothing is pending, and never for `queueOwnerId`. Signals pending in the run are then cancelled in storage, so `settled` resolves with every cancelled ID, including those in `cancelledSignalIds`, and rejects when the storage call fails. A signal the run already took into its context isn't cancelled. Without `settled`, an empty `cancelledSignalIds` means none of the selected signals were still pending locally. With it, `cancelledSignalIds` can be empty while `settled` still reports cancelled signals. `queueOwnerId` cancellation always completes synchronously, so `cancelledSignalIds` is its full result.
 
 For `signalIds`, Mastra publishes all requested IDs through PubSub, even when none are pending locally. Other processes subscribed to the thread cancel matching pending input, including signals waiting on a lease. Propagation is best-effort and asynchronous, without remote acknowledgements, so an empty local result doesn't mean the requested signals remain queued elsewhere. Owner-group cancellation remains local to the calling Agent. It leaves continuations from `continueWithMessages()`, saved messages, state updates, and notification records unchanged. Accepted acknowledgements remain settled.
 
@@ -504,6 +510,8 @@ Sends a signal to an active run or memory thread.
 />
 
 Returns `{ accepted: Promise<SendAgentSignalAccepted>, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `accepted` resolves at decision-time, once Mastra decides what to do with the signal: `{ action: 'wake', runId, output }` when this process runs the agent (it started or won the lease to start the run), `{ action: 'deliver', runId }` when the signal is forwarded onto an existing run (including when this process loses a cross-process wake race), or `{ action: 'persist' }` / `{ action: 'discard' }` when nothing ran. `action` mirrors the winning `behavior` from `ifActive`/`ifIdle`. `runId` is the authoritative id of the run that handled the signal and is present only on `wake` and `deliver`. For `persist`/`discard` use `result.signal.id` to correlate the stored signal. `accepted` resolves for routing (a generation error on a `wake` run surfaces through `output.consumeStream()`) and rejects only when the signal couldn't be routed or started at all (e.g. a misconfigured agent). `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory. On the `wake` action, `output` is the agent stream for in-process consumption.
+
+For an agent created with [`createEventedAgent()`](/docs/harness/durable-agents#fire-and-forget-with-createeventedagent) on [storage that keeps agent signals](/docs/server/pubsub#evented-workflows-and-agents), a signal sent to a running run is stored for the run, or for the thread's next turn if the run ended meanwhile. When this process stores it, `deliver` resolves after the signal is saved and `accepted` rejects when it can't be stored. A process that doesn't hold the run and hasn't seen the run announce that it stores its signals only forwards the signal, and the process holding the run stores it. With storage that shares agent signals across processes, the run reads the signal in whichever process executes its next step.
 
 In serverless handlers, await `accepted` and pass the `wake` output to your platform's `waitUntil` equivalent so the winning process can drain the stream after the HTTP response returns.
 

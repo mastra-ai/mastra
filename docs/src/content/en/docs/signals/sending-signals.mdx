@@ -60,6 +60,8 @@ await result.accepted
 
 Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes queued input without stopping the active run. Cancellation is best-effort across processes and doesn't revoke accepted input.
 
+An evented agent on [storage that keeps agent signals](/docs/server/pubsub#evented-workflows-and-agents) cancels input sent to its running run in storage. The cancelled IDs then arrive on the result's `settled` promise, as the [`cancelQueuedMessages()` reference](/reference/agents/agent#cancelqueuedmessagesoptions) shows.
+
 [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) queues typed context with the same behavior but keeps the signal's `type`, `tagName`, and attributes.
 
 ## Send context from a system
@@ -135,9 +137,11 @@ The `accepted` promise resolves with one of these actions:
 
 When the action is `wake`, the result carries the run's `output` stream. A run that fails after starting reports the error there. A routing failure rejects `accepted`. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
 
+Evented agents on [storage that keeps agent signals](/docs/server/pubsub#evented-workflows-and-agents) store input sent to a running run. When the sending process stores it, `deliver` resolves after the input is saved for the run, or for the thread's next turn if the run ended meanwhile, and `accepted` rejects when the input can't be stored. A process that doesn't hold the run and hasn't learned that the run stores its signals only forwards the input, and the process holding the run stores it. With storage that shares agent signals across processes, the run reads the input in whichever process executes its next step. A signal addressed only by `runId` to a run without a memory thread isn't stored.
+
 ## When the agent sees your input
 
-When input arrives during a model request, Mastra can cancel that request and retry it with the new input. The interruption window stays open while the model produces only reasoning or metadata, or waits for its first token. It closes when the model produces text, a tool call, or other content. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. It adds nothing to `maxSteps` and leaves `stepNumber` unchanged. There's no separate interruption limit, so repeated input can restart reasoning until the request completes, the run is cancelled, or its timeout expires.
+When input arrives during a model request, Mastra can cancel that request and retry it with the new input. For an evented agent whose request runs in another process, this needs [storage that shares agent signals across processes](/docs/server/pubsub#evented-workflows-and-agents). The interruption window stays open while the model produces only reasoning or metadata, or waits for its first token. It closes when the model produces text, a tool call, or other content. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. It adds nothing to `maxSteps` and leaves `stepNumber` unchanged. There's no separate interruption limit, so repeated input can restart reasoning until the request completes, the run is cancelled, or its timeout expires.
 
 The window closes once the request produces text, a tool call, or other content. Input then waits for the next loop boundary. Running tools aren't cancelled or repeated, and queued input never jumps ahead. If `maxSteps` is reached first, Mastra may save queued input without a response.
 

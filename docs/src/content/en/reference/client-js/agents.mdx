@@ -492,7 +492,7 @@ const { cancelledSignalIds } = await agent.cancelQueuedMessages({
 ]}
 />
 
-Returns `{ cancelledSignalIds: string[] }` with each ID cancelled on the receiving server process once. The response doesn't include remote acknowledgements. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
+Returns `{ cancelledSignalIds: string[] }` with each ID cancelled on the receiving server process once. For an evented agent on [storage that keeps agent signals](/docs/server/pubsub#evented-workflows-and-agents), the list also includes signals the server cancelled in storage, but the response still doesn't include remote acknowledgements. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
 
 The server publishes all requested IDs through its shared PubSub backend, even when none are pending on the receiving process. Other subscribed instances can then remove matching pending input, but this best-effort, asynchronous propagation doesn't confirm remote cancellation. Cancellation doesn't undo saved messages, state updates, notification records, or acceptance acknowledgements. It doesn't cancel continuations from `continueWithMessages()`.
 
