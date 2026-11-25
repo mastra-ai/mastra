@@ -59,7 +59,7 @@ export const supportAgent = new Agent({
 
 To checkpoint execution as well as publish run frames, set `durable.executionEngine` to `'default'` or `'evented'` on the agent, or inherit the setting from `Mastra`. Without an engine setting, `durable: true` only enables stream publication.
 
-To recover in-flight runs after a crash, use persistent workflow storage and set `recovery: { durableAgents: 'auto' }` on Mastra. For manual recovery on the default engine, configure `shouldPersistSnapshot` to include `running` snapshots and call `recoverActiveRuns()`. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for the persistence rules.
+To continue an in-flight run after a crash, configure [crash recovery](/docs/harness/durable-agents#crash-recovery) separately.
 
 Configure the wrapper's stream cache and transport through the factory's `cache`, `pubsub`, `shouldCache`, and `cleanupTimeoutMs` options.
 

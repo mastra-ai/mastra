@@ -75,10 +75,9 @@ Set `Mastra.durable.executionEngine` to provide a default for agents registered 
 | Method | Result |
 | - | - |
 | Native `stream()` and `resumeStream()` | `MastraModelOutput`. Durable runs also expose optional `abort()`, `cleanup()`, `threadId`, and `resourceId` through `AgentStreamOutput`. |
-| Native `observe()` | A handle with `.output` and `.detach()`. Pass `closeOnSuspend: true` to close the observation when the run suspends. The default is to keep watching. |
 | Wrapper `stream()` and `resume()` | `DurableAgentStreamResult`, with model output in `.output`. |
 
-Native `observe()` watches an existing run without advancing it. The native tool approval and decline helpers are also typed as `MastraModelOutput`. `getFullOutput()` returns `FullOutput` without lifecycle controls. The return shape of `generate()` is unchanged.
+Use [`observe()`](/docs/harness/durable-agents#resumable-streams) to reconnect to an existing run. The native tool approval and decline helpers are also typed as `MastraModelOutput`. `getFullOutput()` returns `FullOutput` without lifecycle controls. The return shape of `generate()` is unchanged.
 
 `durable: true` enables resumable-stream publication and inherits any Mastra execution default. `durable: false` opts out of both publication and inherited execution defaults. Without a Mastra execution default, neither boolean form enables checkpoint execution. Set `executionEngine` explicitly to select an execution backend.
 

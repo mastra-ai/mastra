@@ -68,50 +68,7 @@ for await (const text of output.textStream) {
 }
 ```
 
-The native `stream()` returns the model output directly. Use `output.runId` to [reconnect](#resumable-streams). The wrapper examples below instead return a handle with the model output in `.output`.
-
-### Use a wrapper
-
-If your code uses the wrapper API, wrap the agent with `createDurableAgent()` from `@mastra/core/agent/durable`:
-
-```typescript title="src/mastra/agents/researcher.ts"
-import { Agent } from '@mastra/core/agent'
-import { createDurableAgent } from '@mastra/core/agent/durable'
-
-const agent = new Agent({
-  id: 'researcher',
-  name: 'Researcher',
-  instructions: 'You research topics thoroughly.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-})
-
-export const durableResearcher = createDurableAgent({ agent })
-```
-
-Register the durable agent with Mastra and call `stream()`:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { durableResearcher } from './agents/researcher'
-
-const mastra = new Mastra({
-  agents: { durableResearcher },
-})
-
-const { output, runId, cleanup } = await durableResearcher.stream(
-  'Research quantum computing advances in 2025',
-)
-
-for await (const chunk of output.fullStream) {
-  // Process each chunk as it arrives
-}
-
-// Release PubSub subscriptions and clear the run from the registry.
-// If you skip this, an automatic cleanup timer fires after the stream ends.
-cleanup()
-```
-
-The returned `runId` identifies the execution. Pass it to `observe()` to reconnect from a different client. Visit the [DurableAgent reference](/reference/agents/durable-agent) for the full configuration and method API.
+The native `stream()` returns the model output directly. Use `output.runId` to [reconnect](#resumable-streams). With a wrapper, `stream()` returns a handle with the model output in `.output`. See the [wrapper example](/reference/agents/durable-agent#usage-example).
 
 ## How it works
 
@@ -141,20 +98,7 @@ Register a wrapper with `Mastra` the same way as a regular agent. The Core wrapp
 
 ### In-process with `createDurableAgent()`
 
-Wrap your agent and call `stream()`. You get a `DurableAgentStreamResult` back in the same process. No external infrastructure is required, so this is the fastest way to get started:
-
-```typescript title="src/mastra/agents/durable.ts"
-import { Agent } from '@mastra/core/agent'
-import { createDurableAgent } from '@mastra/core/agent/durable'
-
-const agent = new Agent({
-  id: 'helper',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-})
-
-export const durableHelper = createDurableAgent({ agent })
-```
+For wrapper setup, see [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions) in the API reference.
 
 ### Fire-and-forget with `createEventedAgent()`
 
@@ -217,10 +161,10 @@ Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) fo
 
 ## Resumable streams
 
-Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
+Durable agents support resumable streams through PubSub and an event cache. To reconnect after a disconnect, call `observe()` with the run ID. Native `observe()` returns a handle with `.output` and `.detach()` without advancing the run. It keeps watching if the run suspends unless you pass `closeOnSuspend: true`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output } = await durableResearcher.observe(runId)
+const { output } = await mastra.getAgent('researcher').observe(runId)
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
@@ -236,7 +180,7 @@ Replay isn't a permanent execution archive. Events remain available only until [
 Observing doesn't own the run. When the loop ends, or you leave it early with `break`, `return`, or an error, the observer unsubscribes and the run keeps going for anyone else watching it. To stop observing from outside the loop, for example when the client disconnects, call `detach()`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, detach } = await durableResearcher.observe(runId)
+const { output, detach } = await mastra.getAgent('researcher').observe(runId)
 
 request.signal.addEventListener('abort', detach, { once: true })
 
@@ -390,9 +334,7 @@ export const mastra = new Mastra({
 })
 ```
 
-On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
-
-If a stored agent isn't registered when boot recovery runs, Mastra skips it and doesn't retry when the agent loads later. To recover its runs, load the agent with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once the agent loads, call `mastra.recoverAllDurableAgents()`, which schedules a re-check when a skipped run returns `retryAt`. To recover only that agent, see [Manual recovery](#manual-recovery).
+At boot, Mastra recovers `running` runs for registered durable agents from their last persisted snapshots. If a stored agent loads after boot recovery, follow the [manual recovery](#manual-recovery) steps.
 
 Recovery processes up to five agents concurrently, with up to five run waits per agent. Each wait covers both `recover()` setup and settlement of the whole recovered workflow and lasts at most 30 seconds. If it expires, the attempt continues in the background and frees a slot for another run. These limits bound waiting, not the number of live executions. Discovery and overridden custom recovery methods aren't bounded by this budget.
 
@@ -423,9 +365,11 @@ for (const run of recovered) {
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
+To recover a stored agent that wasn't registered at boot, first load it with `await mastra.getEditor()?.agent.getById(agentId)` without a `versionId`. Once it loads, call `mastra.recoverAllDurableAgents()`.
+
 `recoverActiveRuns()` reports `success`, `failed`, or `skipped` for each run. A skipped result can include `retryAt`, for example when another process still owns the run, recovery times out, or recovery encounters a transient error. For an owned run, `retryAt` is when the claim expires unless the owner renews it. For a timeout, the result also includes `reason: 'recovery-timeout'`.
 
-If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules eligible re-checks for you. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
+If you call `recoverActiveRuns()` directly, use `retryAt` to schedule your own re-check. `mastra.recoverAllDurableAgents()` schedules a re-check when a skipped run returns `retryAt`. It counts a timed-out attempt only as `skipped`, even if that attempt settles later.
 
 Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 
