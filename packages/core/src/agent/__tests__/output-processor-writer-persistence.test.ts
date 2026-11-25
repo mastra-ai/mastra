@@ -273,8 +273,8 @@ describe('output processor writer.custom() parts survive a returned message arra
           );
           // A part written during the call comes back even if the copy deletes it (indistinguishable from
           // copying before the write), but each part is saved once.
-          expect(saved).toHaveLength(2);
-          expect(new Set(saved.map(p => JSON.stringify(p))).size).toBe(2);
+          const parts = ids.map((id, i) => ({ ...(id ? { id } : {}), data: { v: i } }));
+          expect(saved).toEqual(dropped === 0 ? [parts[1], parts[0]] : parts);
         });
       }
 

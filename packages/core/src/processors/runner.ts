@@ -106,8 +106,10 @@ function withDataPartsWrittenDuringCall(
   // Copy parts not yet accounted for, per key and content.
   const unclaimed = new Map<string, string[]>();
   for (const part of returned.content.parts) {
-    if (part.type.startsWith('data-'))
-      unclaimed.set(keyOf(part), [...(unclaimed.get(keyOf(part)) ?? []), contentOf(part)]);
+    if (!part.type.startsWith('data-')) continue;
+    const pool = unclaimed.get(keyOf(part)) ?? [];
+    pool.push(contentOf(part));
+    unclaimed.set(keyOf(part), pool);
   }
   const claim = (part: DBPart) => {
     const pool = unclaimed.get(keyOf(part));
