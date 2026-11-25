@@ -121,6 +121,47 @@ export function createActiveRunSignalQueues() {
       const restored = [...(signal ? [signal] : []), ...batchedLeftover, ...(pendingSignalsByThread.get(key) ?? [])];
       if (restored.length > 0) pendingSignalsByThread.set(key, restored);
     },
+
+    /**
+     * Removes matching signals from both of the thread's queues and returns
+     * their ids, pre-run first. Each queue is replaced by a new array, or
+     * dropped when nothing is left.
+     */
+    cancel(key: string, matches: (signal: CreatedAgentSignal) => boolean): string[] {
+      const cancelled: string[] = [];
+      for (const queues of [preRunSignalsByThread, pendingSignalsByThread]) {
+        const queue = queues.get(key);
+        if (!queue) continue;
+        const remaining = queue.filter(signal => {
+          if (!matches(signal)) return true;
+          cancelled.push(signal.id);
+          return false;
+        });
+        if (remaining.length) queues.set(key, remaining);
+        else queues.delete(key);
+      }
+      return cancelled;
+    },
+
+    /** Removes one pre-run signal in place, dropping the queue once it is empty. */
+    discardPreRunSignal(key: string, signalId: string): void {
+      const queue = preRunSignalsByThread.get(key);
+      if (!queue) return;
+      const index = queue.findIndex(signal => signal.id === signalId);
+      if (index === -1) return;
+      queue.splice(index, 1);
+      if (queue.length === 0) preRunSignalsByThread.delete(key);
+    },
+
+    /** Drops the thread's pre-run queue. */
+    discardPreRunQueue(key: string): void {
+      preRunSignalsByThread.delete(key);
+    },
+
+    clear(): void {
+      pendingSignalsByThread.clear();
+      preRunSignalsByThread.clear();
+    },
   };
 }
 

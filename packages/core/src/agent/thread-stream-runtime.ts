@@ -3437,7 +3437,7 @@ export class AgentThreadStreamRuntime {
           // Concurrent senders queued pre-run copies behind this reservation;
           // dropping them keeps a later local run from replaying input this
           // attempt never delivered.
-          state.signalQueues.preRunSignalsByThread.delete(key);
+          state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
         throw error;
@@ -3454,7 +3454,7 @@ export class AgentThreadStreamRuntime {
         // may be discarded — otherwise a later local run replays them.
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
-          state.signalQueues.preRunSignalsByThread.delete(key);
+          state.signalQueues.discardPreRunQueue(key);
         }
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
@@ -3670,12 +3670,7 @@ export class AgentThreadStreamRuntime {
    * acknowledged-or-rejected copy here so a later run cannot replay it.
    */
   #discardQueuedPreRunSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
-    const queue = state.signalQueues.preRunSignalsByThread.get(key);
-    if (!queue) return;
-    const index = queue.findIndex(signal => signal.id === signalId);
-    if (index === -1) return;
-    queue.splice(index, 1);
-    if (queue.length === 0) state.signalQueues.preRunSignalsByThread.delete(key);
+    state.signalQueues.discardPreRunSignal(key, signalId);
   }
 
   #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
@@ -4692,9 +4687,8 @@ export class AgentThreadStreamRuntime {
     state.approvalSuspendedRunIds.clear();
     state.suspendedRunIds.clear();
     state.suspensionMetadataByRunId.clear();
-    state.signalQueues.pendingSignalsByThread.clear();
+    state.signalQueues.clear();
     state.locallyQueuedSignalIdsByThread.clear();
-    state.signalQueues.preRunSignalsByThread.clear();
     state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.forwardedIdleSignalsByThread.clear();
@@ -5774,7 +5768,7 @@ export class AgentThreadStreamRuntime {
           state.threadKeysByRunId.delete(nextRunId);
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
-          state.signalQueues.preRunSignalsByThread.delete(key);
+          state.signalQueues.discardPreRunQueue(key);
           if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             const ownerRunId = threadLeaseRunId(owns.owner);
             // Forwarding is a handoff: the signal is no longer locally cancellable.
@@ -5927,7 +5921,7 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
         state.threadKeysByRunId.delete(pending.runId);
-        state.signalQueues.preRunSignalsByThread.delete(key);
+        state.signalQueues.discardPreRunQueue(key);
         const restored = state.pendingContinuationsByThread.get(key) ?? [];
         state.pendingContinuationsByThread.set(key, [pending, ...restored]);
         return false;
@@ -6119,7 +6113,7 @@ export class AgentThreadStreamRuntime {
       }
       state.drainingIdleSignalsByThread.delete(key);
       state.threadKeysByRunId.delete(pendingIdle.runId);
-      state.signalQueues.preRunSignalsByThread.delete(key);
+      state.signalQueues.discardPreRunQueue(key);
       if (isRetakeLeaseOwner(owns.owner)) {
         // Keep the accepted input for the next natural drain trigger, rather
         // than forwarding to a token that no run can consume.
@@ -7889,17 +7883,7 @@ export class AgentThreadStreamRuntime {
   ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
-    for (const queues of [state.signalQueues.preRunSignalsByThread, state.signalQueues.pendingSignalsByThread]) {
-      const queue = queues.get(key);
-      if (!queue) continue;
-      const remaining = queue.filter(signal => {
-        if (!matches(signal)) return true;
-        cancelled.add(signal.id);
-        return false;
-      });
-      if (remaining.length) queues.set(key, remaining);
-      else queues.delete(key);
-    }
+    for (const id of state.signalQueues.cancel(key, matches)) cancelled.add(id);
     const draining = state.drainingPendingSignalsByThread.get(key);
     if (
       draining &&
@@ -8572,7 +8556,7 @@ export class AgentThreadStreamRuntime {
           // Only discard the queue while this reservation still owns the slot —
           // a newer reservation's queued input must survive, and this attempt's
           // own senders discard their copies per signal when it settles.
-          state.signalQueues.preRunSignalsByThread.delete(reservedKey);
+          state.signalQueues.discardPreRunQueue(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
 
