@@ -6,7 +6,7 @@ import type { Mastra } from '../../mastra';
 import type { ObservabilityContext } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
-import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
+import { warnUnsharedAgentSignals, warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -1124,6 +1124,7 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
         .catch(() => undefined)
         .then(store => warnUnsupportedEventedSetup(mastra, store))
         .catch(() => {});
+      warnUnsharedAgentSignals(mastra);
     }
     const sharedExecution = sharedTransport && fence?.generation !== undefined;
     if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
