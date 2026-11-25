@@ -21,6 +21,7 @@ import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { backoffAfterDeadlock, isRetryableDeadlock } from './db/pg-errors';
 import { loadSchemaSnapshot } from './db/schema-snapshot';
+import { AgentSignalsPG } from './domains/agent-signals';
 import { AgentsPG } from './domains/agents';
 import { BackgroundTasksPG } from './domains/background-tasks';
 import { BlobsPG } from './domains/blobs';
@@ -120,6 +121,7 @@ const ALL_DOMAINS = [
   ChannelsPG,
   SchedulesPG,
   ThreadStatePG,
+  AgentSignalsPG,
 ] as const;
 
 /**
@@ -146,6 +148,7 @@ export function exportSchemas(schemaName?: string): string {
 export { pgKnowledgeTransactionClient };
 export type { TxClient as PgKnowledgeTransactionClient } from './client';
 export {
+  AgentSignalsPG,
   AgentsPG,
   BackgroundTasksPG,
   BlobsPG,
@@ -277,6 +280,7 @@ export class PostgresStore extends MastraCompositeStore {
         channels: new ChannelsPG(domainConfig),
         schedules: new SchedulesPG(domainConfig),
         threadState: new ThreadStatePG(domainConfig),
+        agentSignals: new AgentSignalsPG(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
