@@ -247,7 +247,8 @@ export class KnowledgePG extends KnowledgeStorage {
 
   /**
    * Run once after any restore that doesn't replay to the end: a logical dump (`pg_dump`/`pg_restore`),
-   * a point-in-time recovery, or an older base backup. Until it runs, logically restored activity
+   * a point-in-time recovery, or an older base backup, and after a failover to an asynchronous standby
+   * that hadn't received every transaction (the store can't detect that one). Until it runs, logically restored activity
    * stays hidden from oldest-first reads; afterwards, positions handed out before are refused and
    * readers restart from `since`. Not needed after `pg_upgrade` or a physical restore that replays
    * all of the WAL.

@@ -14,7 +14,7 @@ const { events } = await storage.listPageActivity({ read, since, order: 'asc', a
 
 A write that commits late, or comes from a server whose clock is behind, still comes after a position a reader already holds, so the order isn't always `createdAt` order. On PostgreSQL events come in transaction-id order (the order their transactions first wrote), and a read waits behind any transaction still open on the database server, so a long-open transaction delays new events until it ends.
 
-After a restore that doesn't replay to the end, call `rebaseActivityFeed()` on the store's Knowledge domain once. On PostgreSQL that is a `pg_dump` restore, a point-in-time recovery or an older base backup; on LibSQL it is restoring an older copy of the database file. Positions from before are then refused with a `RangeError`, and readers start again from `since`. A position ahead of the feed, or one held across `dangerouslyClearAll()` on LibSQL, is refused the same way.
+After a restore that doesn't replay to the end, call `rebaseActivityFeed()` on the store's Knowledge domain once. On PostgreSQL that is a `pg_dump` restore, a point-in-time recovery, an older base backup, or a failover to an asynchronous standby that hadn't received every transaction; on LibSQL it is restoring an older copy of the database file. The store can't detect a failover, so run it after one. Positions from before are then refused with a `RangeError`, and readers start again from `since`. A position ahead of the feed, or one held across `dangerouslyClearAll()` on LibSQL, is refused the same way.
 
 Stores that support this report `supportsActivityAscending`: the in-memory store, LibSQL and PostgreSQL. The default order is still newest first.
 

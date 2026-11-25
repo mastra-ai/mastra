@@ -147,7 +147,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   /**
-   * Run once after restoring an older copy of the database file. Oldest-first positions held from
+   * Run once after restoring an older copy of the database file, or after moving the app to a copy
+   * that was behind (the store can't detect that). Not needed when an embedded replica only lags its
+   * primary: it catches up on sync. Oldest-first positions held from
    * before are then refused and readers restart from `since`, instead of skipping the events that
    * reuse the numbers they passed.
    */

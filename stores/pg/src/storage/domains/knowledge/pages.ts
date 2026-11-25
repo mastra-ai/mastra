@@ -335,7 +335,7 @@ function checkActivityPosition(after: { incarnation: string }, feed: Row | undef
   }
   if (!feed?.inRange) {
     throw new RangeError(
-      'Knowledge activity position is ahead of this feed (the database was restored to an earlier point); run rebaseActivityFeed() once and restart from since',
+      'Knowledge activity position is ahead of this feed. On a read replica that is behind, retry later. If the database went back to an earlier point (a restore, or a failover to a standby that was behind), run rebaseActivityFeed() once and restart from since',
     );
   }
 }
@@ -1897,7 +1897,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   /**
    * Run once after any restore that doesn't replay to the end: a logical dump (`pg_dump`/`pg_restore`),
-   * a point-in-time recovery, or an older base backup. Oldest-first positions are built from
+   * a point-in-time recovery, or an older base backup. Run it too after a failover to an asynchronous
+   * standby that hadn't received every transaction: the store can't tell that from a normal restart,
+   * because the feed's incarnation id is a table row the standby already had. Oldest-first positions are built from
    * transaction ids. A logical restore keeps the old cluster's ids, which hide restored events from
    * oldest-first reads until this runs; an earlier-point restore hands out ids again that readers
    * already passed. This renumbers the events into this cluster, keeping their feed order, and gives

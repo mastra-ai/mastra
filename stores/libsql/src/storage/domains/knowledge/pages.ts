@@ -149,7 +149,7 @@ function checkActivityPosition(after: { incarnation: string; seq: number }, feed
   }
   if (after.seq > Number(feed.maxSeq)) {
     throw new RangeError(
-      'Knowledge activity position is ahead of this feed (an older copy of the database was restored); run rebaseActivityFeed() once and restart from since',
+      'Knowledge activity position is ahead of this feed. On an embedded replica that is behind, retry after it syncs. If an older copy of the database was restored, or the app moved to a copy that was behind, run rebaseActivityFeed() once and restart from since',
     );
   }
 }
