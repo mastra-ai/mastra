@@ -37,6 +37,7 @@ import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
 import { verifyRunLease } from '../run-lease-fence';
 import { isRetakeLeaseOwner } from '../thread-stream-runtime';
+import { agentThreadStreamTopic } from '../thread-stream-topic';
 
 // 'sends no retry when the lease is lost while a failed request waits to be retried'
 // takes the lease during the retry backoff, so it needs the real backoff rather
@@ -3213,6 +3214,159 @@ function threadLeaseLoss(engine: EngineVariant) {
     expect(modelCalls()).toBe(callsAtAbort);
     expect(shared.owner(key)).toBe('successor-run');
   }, 20_000);
+
+  /** A replica whose acquire of `key` waits for the test, and says when it was asked. */
+  class HeldAcquirePubSub extends ReplicaPubSub {
+    readonly requested = gate();
+    readonly release = gate();
+
+    constructor(
+      shared: SharedLeases,
+      events: EventEmitter,
+      private key: string,
+    ) {
+      super(shared, events);
+    }
+
+    override async acquireLease(leaseKey: string, owner: string, ttlMs: number) {
+      if (leaseKey === this.key) {
+        this.requested.release();
+        await this.release.promise;
+      }
+      return super.acquireLease(leaseKey, owner, ttlMs);
+    }
+  }
+
+  /** Resolves once the run holding `thread` took each of `signalIds` into its queue. */
+  async function admittedBy(pubsub: EventEmitterPubSub, thread: string, signalIds: () => string[]) {
+    const admitted = new Set<string>();
+    const all = gate();
+    await pubsub.subscribe(agentThreadStreamTopic(RESOURCE, thread), event => {
+      const data = event.data as { type?: string; signalId?: string } | undefined;
+      if (data?.type !== 'user-message-admitted' || !data.signalId) return;
+      admitted.add(data.signalId);
+      const ids = signalIds();
+      if (ids.length && ids.every(id => admitted.has(id))) all.release();
+    });
+    return all.promise;
+  }
+
+  /** Model requests of the run started with `prompt`, which every request of its thread repeats. */
+  const requestsOf = (prompt: string) =>
+    llm
+      .getRequests()
+      .map(request => JSON.stringify(request.body))
+      .filter(request => request.includes(prompt));
+
+  it('delivers input sent to a reservation that lost the lease to a known run once, through that run', async () => {
+    const thread = `lost-reservation-thread-${engine}`;
+    const key = [RESOURCE, thread].join('\u0000');
+    const runId = `lease-holding-run-${engine}`;
+    const prompt = `lost reservation owner ${engine}`;
+    const wake = `wake-to-lost-reservation-${engine}`;
+    const joined = `joined-to-lost-reservation-${engine}`;
+    llm.on(
+      { userMessage: prompt, sequenceIndex: 0 },
+      { toolCalls: [{ id: `call_lost_reservation_${engine}`, name: 'tick', arguments: {} }] },
+    );
+    llm.on({ userMessage: wake }, { content: 'owner took the wake' });
+    llm.on({ userMessage: joined }, { content: 'owner took the joined input' });
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    const ownerPubSub = new ReplicaPubSub(shared, events);
+    const ticking = gate();
+    const toolGate = gate();
+    const tick = createTool({
+      id: 'tick',
+      description: 'Hold the run while another replica sends',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticking.release();
+        await toolGate.promise;
+        return 'ticked';
+      },
+    });
+    const { drain } = await startStream(replica(shared, new MockMemory(), { tick }, ownerPubSub), prompt, {
+      runId,
+      maxSteps: 3,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain();
+    const target = { resourceId: RESOURCE, threadId: thread };
+    try {
+      await ticking.promise;
+      // The other replica never saw the run start, so it reserves the thread for a run of its own.
+      const senderPubSub = new HeldAcquirePubSub(shared, events, key);
+      const sender = replica(shared, new MockMemory(), {}, senderPubSub);
+      let ids: string[] = [];
+      const admitted = admittedBy(ownerPubSub, thread, () => ids);
+      const first = sender.sendSignal(
+        { type: 'user-message', contents: wake },
+        { ...target, ifIdle: { behavior: 'wake' } },
+      );
+      await senderPubSub.requested.promise;
+      const second = sender.sendSignal({ type: 'user-message', contents: joined }, target);
+      ids = [first.signal.id, second.signal.id];
+      senderPubSub.release.release();
+      await expect(first.accepted).resolves.toEqual({ action: 'deliver', runId });
+      await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId });
+      await admitted;
+    } finally {
+      toolGate.release();
+      await done;
+    }
+
+    const requests = requestsOf(prompt);
+    expect(requests).toHaveLength(2);
+    expect(requests[0]).not.toContain(wake);
+    expect(requests[1].split(wake)).toHaveLength(2);
+    expect(requests[1].split(joined)).toHaveLength(2);
+  }, 20_000);
+
+  it('tells a sender to a reservation that lost the lease to a retake what it is told without stored signals, and no later run gets its input', async () => {
+    const thread = `retake-reservation-thread-${engine}`;
+    const key = [RESOURCE, thread].join('\u0000');
+    const tokenRun = `retaking-run-${engine}`;
+    const token = `mastra:thread-lease:${JSON.stringify([tokenRun, 'retake', 'attempt'])}`;
+    const wake = `wake-to-retaken-thread-${engine}`;
+    const joined = `joined-to-retaken-thread-${engine}`;
+    const later = `later run on retaken thread ${engine}`;
+    llm.on({ userMessage: later }, { content: 'later run done' });
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    // A run elsewhere is taking the thread back, so the lease names no run that could take the input.
+    shared.leases.set(key, { owner: token, expiresAt: Date.now() + 60_000 });
+    const senderPubSub = new HeldAcquirePubSub(shared, events, key);
+    const sender = replica(shared, new MockMemory(), {}, senderPubSub);
+    const target = { resourceId: RESOURCE, threadId: thread };
+    const first = sender.sendSignal(
+      { type: 'user-message', contents: wake },
+      { ...target, ifIdle: { behavior: 'wake' } },
+    );
+    await senderPubSub.requested.promise;
+    const second = sender.sendSignal({ type: 'user-message', contents: joined }, target);
+    senderPubSub.release.release();
+    await expect(first.accepted).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: tokenRun });
+    await expect(second.accepted).resolves.toEqual({ action: 'blocked', reason: 'thread-blocked', runId: tokenRun });
+
+    // The retake ended without a run; the thread's next run starts with none of that input.
+    shared.drop(key);
+    const { output, drain } = await startStream(sender, later, { memory: { thread, resource: RESOURCE } });
+    await drain();
+    expect(await output.text).toBe('later run done');
+    const requests = requestsOf(later);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).not.toContain(wake);
+    expect(requests[0]).not.toContain(joined);
+    const signals = sender.getMastraInstance()?.getStorage()?.stores?.agentSignals;
+    if (signals) expect(await signals.listPending({ threadKey: key })).toEqual([]);
+  }, 20_000);
+}
+
+function gate() {
+  let release!: () => void;
+  const promise = new Promise<void>(resolve => (release = resolve));
+  return { promise, release };
 }
 
 // 'fs' only changes how the agent is assembled and then runs on the normal engine (see EngineVariant),

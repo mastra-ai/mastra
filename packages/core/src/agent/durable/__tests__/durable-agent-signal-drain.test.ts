@@ -560,7 +560,7 @@ describe('EventedAgent inter-iteration signal drain', () => {
       cleanup?.();
 
       expect(signals.sent).toBe(true);
-      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('inter-iter signal')).toHaveLength(2);
     } finally {
       await mastra.stopWorkers();
       await pubsub.close();

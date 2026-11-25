@@ -1169,7 +1169,6 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       queuedSignalId = queued.signal.id;
       await queued.accepted;
       await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
-      expect(entry.drainPendingSignals === undefined).toBe(engine !== 'durable');
       const drain = vi.fn(entry.drainPendingSignals);
       if (!storedSignals) entry.drainPendingSignals = drain;
       await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2500 });

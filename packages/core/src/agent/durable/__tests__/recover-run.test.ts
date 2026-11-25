@@ -27,6 +27,7 @@ import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import type { DurableAgent } from '../durable-agent';
 import { DefaultAgentExecutionEngine } from '../execution-engine';
 import {
@@ -355,6 +356,35 @@ describe('DurableAgent.recover(runId)', () => {
     expect(drainPendingSignals?.('pending')).toEqual([
       expect.objectContaining({ type: 'user', contents: 'after restart' }),
     ]);
+
+    await globalRunRegistry.get(runId)?.workflowExecution;
+    recovered.cleanup();
+  });
+
+  // A run started where its signals stay in memory, recovered by a process whose evented agent would store them.
+  it('keeps signals of a recovered run where the run started keeping them', async () => {
+    const evented = createEventedAgent({
+      agent: new Agent({ id: 'agent-E', name: 'agent-E', instructions: 'x', model: makeMockModel() }),
+      pubsub: new EventEmitterPubSub(),
+    });
+    const eventedStore = new InMemoryStore();
+    void new Mastra({ agents: { 'agent-E': evented as any }, storage: eventedStore, logger: false });
+    const runId = 'run-recovered-map-signal';
+    // The seeded run input carries no `signalsStored`, as a run that keeps its signals in memory.
+    await seed(eventedStore, runId, 'running', 'agent-E');
+    stubWorkflow(evented as unknown as DurableAgent, 'success');
+
+    const recovered = await evented.recover(runId);
+    const signalResult = evented.sendSignal(
+      { type: 'user-message', contents: 'after restart' },
+      { runId, resourceId: 'r', threadId: 't' },
+    );
+
+    await expect(signalResult.accepted).resolves.toEqual({ action: 'deliver', runId });
+    expect(globalRunRegistry.get(runId)?.drainPendingSignals?.('pending')).toEqual([
+      expect.objectContaining({ type: 'user', contents: 'after restart' }),
+    ]);
+    expect(await eventedStore.stores.agentSignals!.listPending({ threadKey: 'r\u0000t' })).toEqual([]);
 
     await globalRunRegistry.get(runId)?.workflowExecution;
     recovered.cleanup();
