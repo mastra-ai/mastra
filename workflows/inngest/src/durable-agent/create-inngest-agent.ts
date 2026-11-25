@@ -2074,6 +2074,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Steps and stream-side processors on this segment see the merged
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
+      existingEntry.requestContextRebuilt = false;
       // The resumed execution reports under its own span pair. The claim is held, so this resume is
       // the one the workers run; they end the pair where the run finishes or parks again.
       const resumeSegment = openResumeSegment(runId, suspendedSnapshot, callbackOptions.requestContext);

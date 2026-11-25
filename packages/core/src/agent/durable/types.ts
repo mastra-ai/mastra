@@ -845,6 +845,8 @@ export interface RunRegistryEntry {
   workspace?: Workspace;
   /** Request context for forwarding auth data, feature flags, etc. to tools */
   requestContext?: RequestContext;
+  /** The stored context was rebuilt from a workflow snapshot, not supplied by the active caller. */
+  requestContextRebuilt?: boolean;
   /** MCP protocol context for in-process tool execution (non-serializable). */
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */

@@ -4,7 +4,7 @@ import { evaluateGoal } from '../../../../loop/shared/steps/goal-core';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
-import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
@@ -64,7 +64,7 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      const liveRunContext = registryEntry?.requestContext;
+      const liveRunContext = getLiveRunRequestContext(registryEntry);
       const currentRequestContext = liveRunContext ?? params.requestContext;
       const requestContext = restoreRequestContext(
         initData.requestContextEntries,

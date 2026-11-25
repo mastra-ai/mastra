@@ -8,7 +8,7 @@ import type { DehydratedMessageListState, StoredMessageLoader } from '../../../m
 import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
 import { getRunMessageRefs, peekRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
-import { getRunRegistryEntry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../../run-registry';
 import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
 
@@ -259,7 +259,11 @@ async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMem
   if (entry?.memory || !params.mastra || !run.agentId) return entry?.memory;
   const agent = params.mastra.getAgentById(run.agentId);
   return agent.getMemory({
-    requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext, entry?.requestContext),
+    requestContext: restoreRequestContext(
+      run.requestContextEntries,
+      params.requestContext,
+      getLiveRunRequestContext(entry),
+    ),
   });
 }
 

@@ -108,8 +108,8 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
           MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000'
 
-      - name: Verify native evented live request context
-        run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts -t 'retains live request context in a native evented input-step processor' --reporter=verbose
+      - name: Verify native evented request context
+        run: pnpm exec vitest run src/agentic-loop-pubsub.test.ts -t 'retains live request context|uses resumed request context' --reporter=verbose
         working-directory: pubsub/redis-streams
 
       - name: Verify evented Factory title persistence

@@ -15565,9 +15565,11 @@ export class Agent<
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
     entry.requestContext = resumeRequestContext;
+    entry.requestContextRebuilt = false;
     const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
+      globalEntryForContext.requestContextRebuilt = false;
     }
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip

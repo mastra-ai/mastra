@@ -83,7 +83,7 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
 import {
   createStepStartChunk,
@@ -311,7 +311,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
       const requestContext =
-        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.requestContext ?? params.requestContext;
+        getLiveRunRequestContext(getRunRegistryEntry(runId, mastra as Mastra | undefined)) ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 

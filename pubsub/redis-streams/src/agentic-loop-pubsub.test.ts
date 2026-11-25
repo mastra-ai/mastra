@@ -10,6 +10,8 @@ import { createTool } from '@mastra/core/tools';
 import { PostgresStore } from '@mastra/pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { createResumeContextRuntime } from '../test-fixtures/evented-resume-context';
+import { killProcess, spawnFixture, waitFor, waitForLine } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
@@ -47,6 +49,100 @@ describe('AIMock loop scenario: evented + RedisStreamsPubSub', () => {
     await mock?.stop();
     mock = undefined;
     delete process.env.MASTRA_EVENTED_EXECUTION;
+  });
+
+  it('uses resumed request context in both LLM processors after a worker restart', async () => {
+    if (!mock) throw new Error('AIMock server is not running');
+    mock.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'lookup-one', name: 'lookup', arguments: {} }] },
+    );
+    mock.on(
+      {
+        endpoint: 'chat',
+        hasToolResult: true,
+        predicate: req => !JSON.stringify(req.messages).includes('approval-one'),
+      },
+      { toolCalls: [{ id: 'approval-one', name: 'approve', arguments: {} }] },
+    );
+    mock.on(
+      {
+        endpoint: 'chat',
+        hasToolResult: true,
+        predicate: req => JSON.stringify(req.messages).includes('approval-one'),
+      },
+      { content: 'Approved.' },
+    );
+    const schemaName = `resume_${randomUUID().slice(0, 8)}`;
+    const connectionString =
+      process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
+    const { agent, mastra, storage } = createResumeContextRuntime({
+      schemaName,
+      connectionString,
+      redisUrl: REDIS_URL,
+      modelUrl: mock.url,
+      worker: false,
+    });
+    const start = () =>
+      spawnFixture({
+        entry: 'test-fixtures/evented-resume-context.entry.ts',
+        env: {
+          MASTRA_WORKERS: 'orchestration',
+          RESUME_CONTEXT_SCHEMA: schemaName,
+          RESUME_CONTEXT_MODEL_URL: mock!.url,
+          POSTGRES_CONNECTION_STRING: connectionString,
+          REDIS_URL,
+        },
+      });
+    let worker: ReturnType<typeof start> | undefined;
+    const context = (marker: string) => {
+      const requestContext = new RequestContext();
+      requestContext.set('resume-marker', marker);
+      return requestContext;
+    };
+    const runId = randomUUID();
+    try {
+      await storage.init();
+      worker = start();
+      await waitForLine(worker, 'resume-context-worker-ready');
+      const output = await agent.stream('Ask for approval.', {
+        runId,
+        memory: { thread: runId, resource: 'resume-context' },
+        requestContext: context('initial'),
+      });
+      void output.consumeStream().catch(() => {});
+      const workflows = (await storage.getStore('workflows'))!;
+      await waitFor(async () => {
+        const snapshot = await workflows.loadWorkflowSnapshot({ workflowName: 'durable-agentic-loop', runId });
+        return snapshot?.status === 'suspended';
+      });
+      expect(worker.stdout).toContain('input-step:initial');
+      expect(worker.stdout).toContain('llm-request:initial');
+      await killProcess(worker);
+      worker = start();
+      await waitForLine(worker, 'resume-context-worker-ready');
+
+      const resumed = await agent.approveToolCall({
+        runId,
+        toolCallId: 'approval-one',
+        requestContext: context('resumed'),
+      });
+      await waitForLine(worker, /llm-request:(initial|resumed)/);
+      expect(worker.stdout.match(/(?:input-step|llm-request):\w+/g)).toEqual([
+        'input-step:resumed',
+        'llm-request:resumed',
+      ]);
+      expect(await resumed.text).toBe('Approved.');
+    } finally {
+      await killProcess(worker);
+      await mastra.shutdown();
+      const cleanup = new PostgresStore({ id: `${schemaName}_cleanup`, connectionString });
+      try {
+        await cleanup.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      } finally {
+        await cleanup.close();
+      }
+    }
   });
 
   it('retains live request context in a native evented input-step processor', async () => {

@@ -5,7 +5,7 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableAgentDefaults, DurableStepIds } from '../../constants';
-import { getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type { SerializableDurableOptions } from '../../types';
 import { restoreCustomContext, restoreRequestContext } from '../../utils/resolve-runtime';
@@ -78,8 +78,8 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           persisted: initData.options.isTaskComplete,
           requestContext: restoreRequestContext(
             initData.requestContextEntries,
-            undefined,
             registryEntry?.requestContext,
+            getLiveRunRequestContext(registryEntry),
           ),
           runId: state.runId,
           logger: mastra?.getLogger?.(),

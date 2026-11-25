@@ -35,7 +35,7 @@ import type { StructuredOutputOptions } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
-import { getRunRegistryEntry } from '../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { AgentFinishEventData, DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -189,7 +189,7 @@ export async function runDurableFinishSideEffects({
   const effectiveRequestContext = mergeRequestContextForFinalization(
     initData.requestContextEntries,
     requestContext,
-    registryEntry?.requestContext,
+    getLiveRunRequestContext(registryEntry),
   );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
@@ -644,7 +644,7 @@ export async function runDurableDeadlineOutputPass({
   const requestContext = mergeRequestContextForFinalization(
     initData.requestContextEntries,
     undefined,
-    entry.requestContext,
+    getLiveRunRequestContext(entry),
   );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {
