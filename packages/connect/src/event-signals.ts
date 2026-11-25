@@ -198,6 +198,7 @@ function defaultNotification(event: ConnectEvent): SendNotificationSignalInput {
     dedupeKey: `connect:${event.provider}:${event.sourceEventId ?? event.id}`,
     metadata: {
       connectionId: event.connectionId,
+      ...(event.resourceId ? { resourceId: event.resourceId } : {}),
       eventId: event.id,
       provider: event.provider,
       eventType: event.eventType,

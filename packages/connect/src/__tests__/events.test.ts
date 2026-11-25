@@ -1034,6 +1034,7 @@ describe('ConnectEvents', () => {
             integrationId: 'gitlab',
             eventType: 'merge_request.open',
             sourceEventId: 'delivery-1',
+            resourceId: 'user_42',
             payload: JSON.stringify({ object_kind: 'merge_request' }),
           }),
         );
@@ -1062,6 +1063,7 @@ describe('ConnectEvents', () => {
         provider: 'gitlab',
         eventType: 'merge_request.open',
         sourceEventId: 'delivery-1',
+        resourceId: 'user_42',
         payload: { object_kind: 'merge_request' },
         unverified: false,
       },

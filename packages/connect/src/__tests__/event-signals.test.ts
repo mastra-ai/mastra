@@ -43,6 +43,7 @@ interface Delivery {
   rawPayload?: string;
   connectionId?: string;
   sourceEventId?: string;
+  resourceId?: string;
   unverified?: boolean;
 }
 
@@ -53,6 +54,7 @@ function fields(delivery: Delivery): Record<string, string> {
     eventType: delivery.eventType,
     payload: delivery.rawPayload ?? JSON.stringify(delivery.payload ?? {}),
     ...(delivery.sourceEventId ? { sourceEventId: delivery.sourceEventId } : {}),
+    ...(delivery.resourceId ? { resourceId: delivery.resourceId } : {}),
     ...(delivery.unverified ? { unverified: 'true' } : {}),
   };
 }
@@ -223,6 +225,31 @@ describe('ConnectEventSignals', () => {
     expect(await notifications('linear:conn_acme')).toEqual([
       expect.objectContaining({ summary: 'linear Issue.create', kind: 'linear:Issue.create' }),
     ]);
+  });
+
+  it("routes an end user's connection's events to that user", async () => {
+    const service = await eventsService([
+      { provider: 'linear', eventType: 'Issue.create', payload: {}, connectionId: 'conn_ada', resourceId: 'user_ada' },
+      { provider: 'linear', eventType: 'Issue.create', payload: {}, connectionId: 'conn_team' },
+    ]);
+    const { notifications } = opsAgent(service.url, {
+      target: event => ({
+        threadId: `inbox:${event.resourceId ?? 'team'}`,
+        resourceId: event.resourceId ?? 'team-ops',
+        ifIdle: { behavior: 'persist' },
+      }),
+    });
+
+    await vi.waitFor(async () => expect(await notifications('inbox:team')).toHaveLength(1));
+    expect(await notifications('inbox:user_ada')).toEqual([
+      expect.objectContaining({
+        resourceId: 'user_ada',
+        metadata: expect.objectContaining({ connectionId: 'conn_ada', resourceId: 'user_ada' }),
+      }),
+    ]);
+    const [team] = await notifications('inbox:team');
+    expect(team).toMatchObject({ resourceId: 'team-ops' });
+    expect(team!.metadata).not.toHaveProperty('resourceId');
   });
 
   it('delivers unverified events, marked as such, only when asked to', async () => {

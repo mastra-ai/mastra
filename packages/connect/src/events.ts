@@ -125,6 +125,12 @@ export interface ConnectEventEnvelope {
   connectionId: string;
   /** The provider's delivery id, when the platform could identify one. */
   sourceEventId: string | null;
+  /**
+   * The end user the connection belongs to; absent for a project-wide
+   * connection. Act on the connection as that user, for example with
+   * `ConnectClient`'s `withResource(resourceId)`.
+   */
+  resourceId?: string;
 }
 
 /**
@@ -782,6 +788,7 @@ function toConnectEvent(event: TopicEvent): ConnectEvent {
     provider: fields.integrationId ?? '',
     eventType: fields.eventType ?? '',
     sourceEventId: fields.sourceEventId || null,
+    ...(fields.resourceId ? { resourceId: fields.resourceId } : {}),
     payload,
     ...(payloadParseError ? { payloadParseError: true as const } : {}),
     unverified: fields.unverified === 'true',
