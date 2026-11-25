@@ -89,6 +89,17 @@ const SIGNAL_MESSAGE_COLUMNS: Record<string, StorageColumn> = {
 const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
   signalRunId: { type: 'text', nullable: true },
 };
+/** A row with a signal status is a pending signal, not a message: every message read skips it. */
+const VISIBLE_MESSAGE = `"signalStatus" IS NULL`;
+
+/**
+ * Counts the visible rows matching `whereClause` as all matching rows minus those with a signal
+ * status. Counting with `VISIBLE_MESSAGE` in the clause would lose the index-only scan on
+ * `(thread_id, createdAt)`; the rows with a status are counted from the partial signal index.
+ */
+function visibleCountSql(tableName: string, whereClause: string): string {
+  return `(SELECT COUNT(*) FROM ${tableName} ${whereClause}) - (SELECT COUNT(*) FROM ${tableName} ${whereClause} AND "signalStatus" IS NOT NULL)`;
+}
 
 /**
  * Lock order of message rows. Every statement that locks several message rows
@@ -1315,7 +1326,7 @@ export class MemoryPG extends MemoryStorage {
       thread_id: string;
       createdAt: Date | string;
     }>(
-      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders})${targetResourceCondition}`,
+      `SELECT id, thread_id, "createdAt" FROM ${tableName} WHERE id IN (${idPlaceholders}) AND ${VISIBLE_MESSAGE}${targetResourceCondition}`,
       resourceId ? [...targetIds, resourceId] : targetIds,
     );
 
@@ -1353,7 +1364,7 @@ export class MemoryPG extends MemoryStorage {
         SELECT ${selectColumns}
         FROM ${tableName} m
         WHERE m.thread_id = ${p1}
-          AND m."createdAt" <= ${p2}${resourceCondition}
+          AND m."createdAt" <= ${p2} AND m.${VISIBLE_MESSAGE}${resourceCondition}
         ORDER BY m."createdAt" DESC, m.id DESC
         LIMIT ${p3}
       )`);
@@ -1369,7 +1380,7 @@ export class MemoryPG extends MemoryStorage {
           SELECT ${selectColumns}
           FROM ${tableName} m
           WHERE m.thread_id = ${p4}
-            AND m."createdAt" > ${p5}${resourceCondition}
+            AND m."createdAt" > ${p5} AND m.${VISIBLE_MESSAGE}${resourceCondition}
           ORDER BY m."createdAt" ASC, m.id ASC
           LIMIT ${p6}
         )`);
@@ -1430,7 +1441,7 @@ export class MemoryPG extends MemoryStorage {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const query = `
         ${selectStatement} FROM ${tableName}
-        WHERE id IN (${inPlaceholders(messageIds.length)})
+        WHERE id IN (${inPlaceholders(messageIds.length)}) AND ${VISIBLE_MESSAGE}
         ORDER BY "createdAt" DESC
       `;
       const resultRows = await this.#db.readClient.manyOrNone(query, messageIds);
@@ -1473,6 +1484,7 @@ export class MemoryPG extends MemoryStorage {
     selectStatement,
     tableName,
     whereClause,
+    countWhereClause,
     orderByStatement,
     queryParams,
     perPageInput,
@@ -1483,6 +1495,8 @@ export class MemoryPG extends MemoryStorage {
     selectStatement: string;
     tableName: string;
     whereClause: string;
+    /** `whereClause` without `VISIBLE_MESSAGE`, for `visibleCountSql`. */
+    countWhereClause: string;
     orderByStatement: string;
     queryParams: any[];
     perPageInput: number | false | undefined;
@@ -1529,7 +1543,7 @@ export class MemoryPG extends MemoryStorage {
     // Both WHERE clauses reference the same positional params, so `dataParams` is unchanged.
     const rows =
       (await this.#db.readClient.manyOrNone<MessageRowFromDB & { __total?: string | number }>(
-        `${selectStatement}, (SELECT COUNT(*) FROM ${tableName} ${whereClause}) AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
+        `${selectStatement}, (${visibleCountSql(tableName, countWhereClause)}) AS "__total" FROM ${tableName} ${whereClause} ${orderByStatement}${limitClause}`,
         dataParams,
       )) || [];
 
@@ -1539,7 +1553,10 @@ export class MemoryPG extends MemoryStorage {
     if (offset === 0) {
       return { total: 0, messages: [] };
     }
-    const countResult = await this.#db.readClient.one(`SELECT COUNT(*) FROM ${tableName} ${whereClause}`, queryParams);
+    const countResult = await this.#db.readClient.one(
+      `SELECT ${visibleCountSql(tableName, countWhereClause)} AS count`,
+      queryParams,
+    );
     return { total: parseInt(countResult.count, 10), messages: [] };
   }
 
@@ -1621,7 +1638,8 @@ export class MemoryPG extends MemoryStorage {
         queryParams.push(filter.dateRange.end);
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const countWhereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = `${countWhereClause} AND ${VISIBLE_MESSAGE}`;
 
       // When perPage is 0 with no includes, there's nothing to return.
       if (perPage === 0 && (!include || include.length === 0)) {
@@ -1676,6 +1694,7 @@ export class MemoryPG extends MemoryStorage {
           selectStatement,
           tableName,
           whereClause,
+          countWhereClause,
           orderByStatement,
           queryParams,
           perPageInput,
@@ -1832,7 +1851,8 @@ export class MemoryPG extends MemoryStorage {
         queryParams.push(filter.dateRange.end);
       }
 
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const countWhereClause = `WHERE ${conditions.join(' AND ')}`;
+      const whereClause = `${countWhereClause} AND ${VISIBLE_MESSAGE}`;
 
       // When perPage is 0 with no includes, there's nothing to return.
       if (perPage === 0 && (!include || include.length === 0)) {
@@ -1897,6 +1917,7 @@ export class MemoryPG extends MemoryStorage {
           selectStatement,
           tableName,
           whereClause,
+          countWhereClause,
           orderByStatement,
           queryParams,
           perPageInput,
@@ -2052,15 +2073,22 @@ export class MemoryPG extends MemoryStorage {
             })
             .join(', ');
 
+          // A row with a signal status becomes a message and takes the saved createdAt; any other row
+          // keeps its createdAt. Claimants are left as they are until the claiming run closes. A row
+          // with a status saved under another thread stays as it is.
           await t.none(
-            `INSERT INTO ${tableName} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
+            `INSERT INTO ${tableName} AS m (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ${valuePlaceholders}
              ON CONFLICT (id) DO UPDATE SET
               thread_id = EXCLUDED.thread_id,
               content = EXCLUDED.content,
               role = EXCLUDED.role,
               type = EXCLUDED.type,
-              "resourceId" = EXCLUDED."resourceId"`,
+              "resourceId" = EXCLUDED."resourceId",
+              "createdAt" = CASE WHEN m."signalStatus" IS NULL THEN m."createdAt" ELSE EXCLUDED."createdAt" END,
+              "createdAtZ" = CASE WHEN m."signalStatus" IS NULL THEN m."createdAtZ" ELSE EXCLUDED."createdAtZ" END,
+              "signalStatus" = NULL
+             WHERE m."signalStatus" IS NULL OR m.thread_id = EXCLUDED.thread_id`,
             values,
           );
         }
@@ -2130,7 +2158,7 @@ export class MemoryPG extends MemoryStorage {
 
     const messageIds = messages.map(m => m.id);
 
-    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
+    const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)}) AND ${VISIBLE_MESSAGE}`;
 
     const existingMessagesDb = await this.#db.client.manyOrNone(selectQuery, messageIds);
 
@@ -2514,7 +2542,7 @@ export class MemoryPG extends MemoryStorage {
         // metadata) are read here — content is copied inside the database via
         // INSERT … SELECT and never returned to the JS heap.
         let messageQuery = `SELECT id, "createdAt"
-                            FROM ${messageTableName} WHERE thread_id = $1`;
+                            FROM ${messageTableName} WHERE thread_id = $1 AND ${VISIBLE_MESSAGE}`;
         const messageParams: any[] = [sourceThreadId];
         let paramIndex = 2;
 
