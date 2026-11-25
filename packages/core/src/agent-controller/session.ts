@@ -5807,9 +5807,11 @@ export class Session<TState = unknown> {
     let previous: Promise<void> | undefined;
     if (scopes) {
       previous = this.#scopedSendTail;
-      this.#scopedSendTail = new Promise(resolve => {
+      const own = new Promise<void>(resolve => {
         admitted = resolve;
       });
+      // A send that fails early still releases its slot, but later sends keep waiting on the ones before it.
+      this.#scopedSendTail = previous.then(() => own);
     }
     let pending: PendingSend | undefined;
     try {

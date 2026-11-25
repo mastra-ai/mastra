@@ -319,14 +319,45 @@ describe('a sent message is pending until stored, then stored', () => {
     expect(await h.storedUserTexts()).toEqual([]);
   });
 
+  it('a scoped send that fails before its turn still holds later scoped sends behind earlier ones', async () => {
+    const h = await createHarness('scoped-order', { withThread: false });
+    const authorizing = deferred();
+    let authorizations = 0;
+    const machinery = h.session.machinery;
+    const authorize = machinery.authorizeExecute;
+    machinery.authorizeExecute = async requestContext => {
+      authorizations++;
+      if (authorizations === 1) await authorizing.promise;
+      if (authorizations === 2) throw new Error('not allowed');
+      return authorize?.(requestContext);
+    };
+
+    const first = h.session.sendMessage({ content: 'first task', scopes: ['request:r1'] });
+    const failed = h.session.sendMessage({ content: 'refused task', scopes: ['request:r2'] });
+    const third = h.session.sendMessage({ content: 'third task', scopes: ['request:r3'] });
+    await expect(failed).rejects.toThrow('not allowed');
+    await vi.waitFor(() => expect(authorizations).toBe(3));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(h.prompts).toEqual([]);
+
+    authorizing.resolve();
+    await Promise.all([first, third]);
+    await h.runsEnded(2);
+    expect(h.prompts).toHaveLength(2);
+    expect(h.prompts[0]).toContain('first task');
+    expect(h.prompts[0]).not.toContain('third task');
+    expect(h.prompts[1]).toContain('third task');
+  });
+
   it('a metadata refresh of the same thread keeps dropping a pending message once it is stored', async () => {
     const h = await createHarness('refresh');
     const first = h.holdModelCall(1);
     void h.session.sendMessage({ content: 'first message' }).catch(() => {});
     await first.reached;
     await h.session.followUp({ content: 'and then this' });
+    // The listener starts once the follow-up is handed to its run.
+    await vi.waitFor(() => expect(saveListeners.live).toBeGreaterThan(0));
     const watching = saveListeners.live;
-    expect(watching).toBeGreaterThan(0);
 
     await h.session.thread.loadMetadata();
     expect(saveListeners.live).toBe(watching);
