@@ -1290,7 +1290,7 @@ describe('Mastra — workflow scheduler integration', () => {
       const row = await schedulesStore.getSchedule('stored-agent-sched');
       expect(row).not.toBeNull();
       expect(row!.nextFireAt).toBeGreaterThan(past); // the fire was claimed & published
-      expect(editorGetById).toHaveBeenCalledWith('stored-a1');
+      expect(editorGetById).toHaveBeenCalledWith('stored-a1', undefined);
 
       await mastra.shutdown();
     });

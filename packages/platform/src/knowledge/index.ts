@@ -16,12 +16,14 @@ import {
   KnowledgePageKeyConflictError,
 } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
+import type { PlatformAccessToken } from '@mastra/platform-workspace';
 
 export interface PlatformKnowledgeOptions extends Omit<
   KnowledgeConfig,
   'storage' | 'vector' | 'embedder' | 'embedderOptions' | 'scopes'
 > {
-  accessToken?: string;
+  /** A token, or a function called before every request so long-lived clients never hold an expired one. */
+  accessToken?: PlatformAccessToken;
   projectId?: string;
   instanceId?: string;
   /**
@@ -110,7 +112,7 @@ type KnowledgeGraphStore = Parameters<typeof readKnowledgePageGraph>[0];
 class RemoteKnowledgeStorage extends KnowledgeStorage implements KnowledgeGraphStore {
   constructor(
     private readonly endpoint: string,
-    private readonly token: string,
+    private readonly token: PlatformAccessToken,
   ) {
     super({ storageIsolationKey: endpoint });
     return new Proxy(this, {
@@ -125,10 +127,11 @@ class RemoteKnowledgeStorage extends KnowledgeStorage implements KnowledgeGraphS
   }
 
   private async request<T = unknown>(operation: string, input?: unknown): Promise<T> {
+    const token = typeof this.token === 'function' ? await this.token() : this.token;
     const response = await fetch(`${this.endpoint}/operations/${operation}`, {
       method: 'POST',
       headers: {
-        authorization: `Bearer ${this.token}`,
+        authorization: `Bearer ${token}`,
         'content-type': 'application/json',
         // This client merges the instance's scope declarations (`getScopeDeclarations`) into its own, so
         // the service leaves its read views as they are rather than widening them for older clients.

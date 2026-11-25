@@ -1,5 +1,183 @@
 # @mastra/core
 
+## 1.86.0-alpha.9
+
+### Minor Changes
+
+- Added an `interrupted` thread run status. Thread subscribers no longer see a durable agent's run as `failed` when `mastra.shutdown()` stops it mid-run, for example during a rolling restart, and recovery then finishes the same run. `subscribeToThread({ withRunStatus: true })` now reports that run as `{ status: "interrupted" }`, which is not final, so the recovered output and its final status follow on the same subscription. If nothing recovers the run, for example because recovery is off, `interrupted` is the last status. A real failure still reports `failed`, and so does a regular agent's run that shutdown stops, because nothing recovers it. Fixes [#30480](https://github.com/mastra-ai/mastra/issues/30480). ([#31113](https://github.com/mastra-ai/mastra/pull/31113))
+
+  ```ts
+  for await (const chunk of subscription.stream) {
+    if (chunk.type === 'thread-run-status' && chunk.payload.status === 'interrupted') {
+      // Show "recovering" and keep listening for the final outcome.
+    }
+  }
+  ```
+
+  `useChat` from `@mastra/react` still treats `interrupted` as the end of the run.
+
+- Added the Knowledge importer contract (experimental), exported from `@mastra/core/knowledge`. It has the types, the manifest and the host interface, so hosts and importer authors can build against them. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  - `class X extends KnowledgeImporter({ id, label, settings, credentials }) { async import(ctx) {} }` defines an importer that writes a source into Knowledge as items keyed by the source's own IDs. The declaration is checked when the class is defined. Each instance is one configured source (a binding: `id`, `target`, `settings`, `credentials`), and its credentials are checked when it's constructed.
+  - `ctx.fetch` is bound to the run's `ctx.signal`. A `signal` the importer passes is combined with it, never replaces it: cancel and the run's deadline always abort the fetch, and the importer's own signal still aborts it too.
+  - `X.toManifest()` returns plain JSON for a UI: the settings form as draft-07 JSON Schema (the input side, so fields with defaults are optional) and the credential slots.
+  - `KnowledgeImporterHost` is the interface a runner flushes numbered batches through. It comes with `knowledgeImporterFlushDigest` (SHA-256 over RFC 8785 canonical JSON) and `normalizeKnowledgeImporterFinish` for replay checks.
+  - `KnowledgeImporterServiceHost` (from `createKnowledgeImporterHost`) adds what a hosted scheduler needs, including `readRun(runId)`: a run's status and, once it has ended, the receipt its finish stored, with the `chain` decision to act on.
+
+  ```ts
+  import { KnowledgeImporter } from '@mastra/core/knowledge';
+  import { z } from 'zod';
+
+  export class HelpSpotImporter extends KnowledgeImporter({
+    id: 'helpspot',
+    label: 'HelpSpot',
+    settings: z.object({ baseUrl: z.url() }),
+    credentials: { apiKey: { description: 'HelpSpot API token' } },
+  }) {
+    async import(ctx) {
+      await ctx.items.upsert({ sourceId: 'request:1', title: 'Refunds', body: 'Ask first.' });
+      await ctx.state.set('cursor', '1');
+    }
+  }
+  ```
+
+- Knowledge can now run importers against its own storage (experimental). Pass importer instances as `importers: [...]` to `new Knowledge()`, then call `knowledge.importers.run(bindingId)`. Each instance places one source at a target (`<scope>#<path>`); targets of different instances may overlap or nest. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  `createKnowledgeImporterHost(knowledge, { bindings })` returns a host for a service that applies flushes from importers running elsewhere: it runs no importer code, and `bindings` can be a function that's read at each run start, so a host that keeps bindings in its own config needn't be rebuilt when they change. `host.retireBinding(id)` forgets a deleted binding's tracking, cursor and runs, leaving its pages as ordinary pages and its target free for any binding. It also takes `author`, `flushBudgetMs`, `settleBudgetMs` and `staleRunAfterMs`.
+
+  With `leaseMs`, that host enforces a strict run lease judged by the store's clock (the database's on Postgres): a heartbeat renews it, and once the lease or the run's deadline passes, heartbeats, new flushes and finishes are refused with `run_not_active` (a flush already waiting is cut off where the lease ends, and an exact resend of a committed flush still gets its receipt). `host.expireRuns()` ends lapsed runs, marked as ended by the host, so a later finish from the importer is refused. `host.requestCancel(runId)` asks a run to stop: its next heartbeat answers `{ cancel: true }` without renewing the lease, and a finish that arrives after the cancel is stored as canceled. `startRun(bindingId, { generation, admit })` refuses a run for an older writer generation, and runs `admit(tx)` inside the start transaction, together with creating the target scope and the run, so a dispatch claim written there commits or rolls back with them.
+
+  Each flush is applied in one storage transaction with its importer bookkeeping: items land under their parents (even when the parent arrives later in the same flush), links between items resolve to page links, a removed item that still has children is kept as a stub, and a rerun with unchanged content writes nothing. Importers write where they're configured. A page already at a binding's target becomes its folder, body and children kept; folders are shared, so it stays another binding's folder or item if it was one, and an item page that is another binding's folder is kept as a stub when the item is removed. A page already at an item's path is taken over by that item, whoever wrote it: another binding that imported it stops tracking it. Unless the page was another importer's item, the body it had at that takeover is kept in a note on the page, replacing an earlier takeover's, and comes back when the item is removed; otherwise, or when that body was empty, removal leaves a stub. A declare keeps the page's body; an upsert supplies or replaces it. An imported page someone moved elsewhere in the same scope stays where they put it and keeps being updated; one moved into another scope is left there and the item is written again at the target. When the source removes an item, its page is deleted, wherever someone moved it, unless it has pages under it, is another binding's folder, or was taken over: then it's kept as a stub, and a taken-over page with a saved body gets that body back. When a removed item's page is deleted, the binding's pages that link to it drop the link on a later settle slice. An imported page someone deleted by hand is written again the next time the importer sends its item, and the binding's pages that link to it are updated to wherever it lands. When a binding moves a subtree that holds other bindings' pages, those bindings' links to them are repaired by their next run. A flush of only removals works even when the binding's folder is gone. A flush resent with the same sequence number returns its stored receipt instead of applying twice.
+
+  `runKnowledgeImport` is exported for hosts that supply their own `KnowledgeImporterHost`. `importerHostConformance(factory)` returns the protocol cases such a host must pass (sequencing, digests, replay, generations, finish, heartbeat, state) as plain `{ name, run }` objects to register with any test runner. Before it moves or stubs an imported page, the importer locks the pages under it (`KnowledgeStorage.lockSubtree`) so nothing joins or leaves that subtree until commit, and every page under it moves along, whoever wrote it. On Postgres these locks hold until the flush commits, and each flush transaction stops at a deadline (45 seconds, or the run's deadline if sooner) and is resent.
+
+  Items that arrive before their parent, or that link to an item not imported yet, are placed under the target and marked unsettled. Later flushes move them under their parent and write their links once the other item exists, a bounded slice at a time (at most 200 items looked at and 50 moves per flush). A flush receipt says `pending: true` while settle work is left; the runner then sends empty flushes until it's done or the run's budget runs out. A run that flushes nothing still sends one empty flush, so settle work an earlier run left gets finished even when the source has nothing new. Settling resumes where the last slice stopped. When another binding's flush moves or takes over pages this binding links to, the next slice starts from the beginning, so linking pages before the saved position are repaired too. A pass that reaches the end stops, so pages that can never settle (their parent never arrives) don't keep a run settling. A run's receipt says `chain: true` when a host should start another run: the importer reported backlog, or settling made progress and still has work. After three settle slices in a row time out, the run stops settling. State keys starting with `mastra:` are reserved for the host.
+
+  ```ts
+  const knowledge = new Knowledge({
+    storage,
+    scopes: { 'docs:$orgId': {} },
+    importers: [
+      new HelpSpotImporter({
+        id: 'helpspot-main',
+        target: 'docs:acme#helpspot',
+        settings: { baseUrl: 'https://help.example.com' },
+        credentials: { apiKey: process.env.HELPSPOT_API_KEY! },
+      }),
+    ],
+  });
+
+  const result = await knowledge.importers!.run('helpspot-main');
+  ```
+
+- Added importer bookkeeping storage to Knowledge stores (experimental). `KnowledgeStorage.importers` keeps importer bindings, the source-to-page node map (with an `unsettled` flag and `listNodes({ unsettled: true })`, and each node's links indexed by target for `listLinkingNodes()`), cursor state, runs, flush receipts, per-run changes and a writer guard in the same database and namespace as the pages. On a `knowledge.transaction()` view, it writes in the same transaction as the page writes. In-memory, PostgreSQL and LibSQL stores provide it. Create the tables with `await knowledge.importers.init()`, or from `KnowledgePG.getImportersExportDDL()` / `KnowledgeLibSQL.getImportersExportDDL()` when storage init is disabled; the exported statements include the writer-guard row, so a store provisioned from them can run imports. `retireBinding(id)` deletes a binding with its nodes, cursor state, runs, flush receipts and changes, and leaves its pages alone. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  `dangerouslyReset()` now also empties the importer tables in the same namespace, in the same transaction as the pages, and moves the writer generation forward. Stop importer runs before calling it. A store whose importer tables were never created is reset without creating them.
+
+- `Knowledge.removePage` takes an optional `expected: { id, version }`, the page as you read it, the same as `upsertPage`. With it, the call deletes the page at `scope#path` only if it is still that page at that version. If someone edited or removed it, or a new page replaced it at that path, before or during the call, it throws `KnowledgeConflictError` and deletes nothing. A sync that checks a page and deletes it later no longer deletes someone else's write. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  ```ts
+  await knowledge.removePage({ scope: 'docs:acme', path: 'faq', expected: { id: page.id, version: page.version } });
+  ```
+
+- Added an optional deadline to Knowledge storage transactions. `knowledge.storage.transaction(operation, { deadlineAt })` rolls back and throws `KnowledgeTransactionDeadlineError` once the deadline passes. On Postgres (`enforcesTransactionDeadline: true`), the wait for a connection, every statement and every lock wait count against the deadline, and no new work starts once it has passed. BEGIN, ROLLBACK and a COMMIT already sent aren't bounded, so leave a margin. Adapters without the capability ignore the option. ([#31101](https://github.com/mastra-ai/mastra/pull/31101))
+
+  ```ts
+  await storage.transaction(
+    async tx => {
+      // writes
+    },
+    { deadlineAt: Date.now() + 10_000 },
+  );
+  ```
+
+### Patch Changes
+
+- Added `MessageList.markForResave(message)`, which marks a message already in the list so the next save writes it again through the normal whole-message save. Marked messages are not reported as new input, response or source messages, survive a failed save's restore, and are picked up by the memory message-history save. Observational Memory uses it to save token counts it adds to stored history. A marked message is saved again on each later turn of the same run, as an upsert of the same message, so a count is not written exactly once. ([#31114](https://github.com/mastra-ai/mastra/pull/31114))
+
+- Fixed durable agent runs hanging when a step runs on a process that never registered the agent. Rebuilding a run now looks the agent up in the editor's stored agents too, so a separate worker process can run steps for editor-stored agents. If no source knows the agent, the step now fails with a `DurableAgentNotFoundError` that names the agent and run, instead of running without tools or memory and leaving the stream waiting. ([#31334](https://github.com/mastra-ai/mastra/pull/31334))
+
+- Include `stepResult.warnings: []` in durable agents' `step-finish` events when the provider rejects the request before streaming, matching regular agents. Mid-stream failures are unchanged. ([#31357](https://github.com/mastra-ai/mastra/pull/31357))
+
+- Fixed background tasks whose worker crashed being re-run by every server that started, without using a retry. A crash now counts against `maxRetries`, so the task fails with `Worker process terminated before task completed` once its retries are used, instead of staying `running` and taking down each new worker. A graceful shutdown, such as a deploy, still hands the task to the next server without using a retry. Fixes #30977. ([#31323](https://github.com/mastra-ai/mastra/pull/31323))
+
+- Improved prompt conversion for tool-heavy conversations by recovering stored tool inputs in one pass per conversion, while preserving duplicate-ID and legacy-history behavior. ([#31289](https://github.com/mastra-ai/mastra/pull/31289))
+
+- Fixed background-eligible tools running inline when an evented agent run executes on a dedicated worker (for example an API with `MASTRA_WORKERS=false` plus worker processes). The worker now dispatches them as background tasks, as a single process does, and still respects `disableBackgroundTasks` and `backgroundTaskPolicy` on the run. Fixes #31090. ([#31327](https://github.com/mastra-ai/mastra/pull/31327))
+
+- Default thread-title generation now asks the model to write titles in the language of the user's messages. ([#26847](https://github.com/mastra-ai/mastra/pull/26847))
+
+- Studio's Knowledge graph and explorer now show grants and scope labels from store-supplied declarations (e.g. Platform Knowledge) on the first request, not only after another call loaded them. Adds `Knowledge.resolveScopeDeclarations()`. ([#30663](https://github.com/mastra-ai/mastra/pull/30663))
+
+  The synchronous readers `scopeGrants()`, `scopeDeclaration()` and `scopeLabel()` use the declarations as last read, so resolve them first:
+
+  ```ts
+  const knowledge = mastra.getKnowledge('default');
+  await knowledge.resolveScopeDeclarations();
+  knowledge.scopeLabel('org:acme');
+  ```
+
+- Allow native durable agents to configure journal `storageVersion` and `maxSteps`. Warn when inherited durable execution cannot carry request context values or call options across processes. Keep late observer response messages complete when replay is disabled, and report output processor rewrites in final response messages and on the correct steps after feedback continuation. ([#31245](https://github.com/mastra-ai/mastra/pull/31245))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  const agent = new Agent({
+    id: 'support',
+    name: 'Support',
+    instructions: 'Help customers with their orders.',
+    model: 'openai/gpt-5-mini',
+    durable: { executionEngine: 'default', storageVersion: 2, maxSteps: 8 },
+  });
+  ```
+
+- Fixed Knowledge agents being told to use tools they don't have. When an agent gets Knowledge read tools without write tools, its instructions, its pinned-context guidance and the `knowledge_read` tool (its description and its hint for long pages) no longer mention editing pages or `knowledge_page`. When an agent has no read tools (write-only or pinned-only), its pinned-context guidance, its pinned entries (cut-off pages, cut-off listings and the line naming pins that didn't fit) and the `knowledge_page` and `knowledge_pin` tools no longer mention `knowledge_read`, `knowledge_search` or `knowledge_list`. `getPinnedContext()` takes the same `read` option as `createTools()`, so hosts that hand out no read tools get pinned entries that name none. Agents with both read and write tools get exactly the same text as before. ([#30909](https://github.com/mastra-ai/mastra/pull/30909))
+
+- Added `KnowledgeInvalidCursorError`, thrown when a Knowledge list call gets a malformed cursor. The in-memory store now throws it instead of a `RangeError`. Catch it by name, since adapters bundle their own copy: ([#30522](https://github.com/mastra-ai/mastra/pull/30522))
+
+  ```ts
+  if (error instanceof Error && error.name === 'KnowledgeInvalidCursorError') {
+    // the cursor can't be used; restart the listing without it
+  }
+  ```
+
+- Fixed durable thread streams replaying a queued or steered user message as still "sending" after a reconnect. On retaining transports such as Redis Streams and Valkey Streams, the pending announcement now leaves the thread stream when the run it waited on ends: right away for a successful run of an agent with memory, and 30 seconds later for a run without memory or one that fails, is canceled, or aborts. Later `subscribeToThread()` calls no longer show it. A message whose run died before delivering it can still replay as pending. Refs #30792. ([#31112](https://github.com/mastra-ai/mastra/pull/31112))
+
+  On multi-process deployments, the process that owns a run now also records each forwarded user message it admits in a separate event that the run's trim keeps, so a forwarding process that reads the thread after that run ended still sees the admission and does not run the message a second time.
+
+- Fixed `classifyProviderError` for two provider wordings. OpenAI's "You have no credits remaining" is now `quota` even when the error code is missing, and a quota error that says when to retry (Gemini's free tier: "Please retry in 45.06s") is now `rate_limited`, since it clears on its own. ([#31223](https://github.com/mastra-ai/mastra/pull/31223))
+
+- Fixed a stored message that gained an Observational Memory marker (`data-om-*` parts such as the observation end marker or status) being treated as a new message when it was loaded back into the live message list on the next turn. The message was added a second time, duplicating its content in the prompt and re-sending provider reasoning items. A stored copy that differs from the live message only by these markers is now recognized as the same message. ([#31314](https://github.com/mastra-ai/mastra/pull/31314))
+
+- Fixed read-only filesystems mounted into a natively isolated `LocalSandbox` being writable from shell commands. Commands can now read a `readOnly: true` `LocalFilesystem` mount but can't write to it under `seatbelt` or `bwrap` isolation. Mounting a read-only filesystem whose source doesn't exist now fails instead of leaving the mount writable. ([#25146](https://github.com/mastra-ai/mastra/pull/25146))
+
+  Added `nativeSandbox.denyWritePaths` to block writes to specific paths, including paths inside the workspace or a `readWritePaths` entry:
+
+  ```ts
+  const sandbox = new LocalSandbox({
+    workingDirectory: '/path/to/workspace',
+    isolation: 'seatbelt',
+    nativeSandbox: { denyWritePaths: ['/path/to/workspace/config'] },
+  });
+  ```
+
+  A custom `seatbeltProfilePath` file or `bwrapArgs` replaces the generated policy and must deny these writes itself.
+
+- Fixed aborting an agent run not cancelling an Observational Memory observation when Observational Memory is listed after another input processor that runs its input step. Each processor after the first in a processor workflow now receives the abort signal the run gave the workflow, on both the default and evented workflow engines, so the observer's model call stops when the run is aborted. ([#30900](https://github.com/mastra-ai/mastra/pull/30900))
+
+- Fixed agent signal and message routes accepting a `runId` for a run that belongs to another user. `POST /agents/:agentId/signals`, `/send-message`, `/queue-message` and `/queue-signal` now return 403 when the caller's resource (set by `mapUserToResourceId`) doesn't own the run, so one user can no longer send input into another user's live run. Added `agent.getThreadRunTarget(runId)`, which returns the resource and thread a run is on. ([#30902](https://github.com/mastra-ai/mastra/pull/30902))
+
+  `agent.sendSignal`, `sendMessage`, `queueSignal` and `queueMessage` now throw when a target names both a `runId` and a `resourceId` that doesn't own that run. This is a consistency check, not authorization: Core doesn't know who is calling, and it trusts a target with only a `runId`. If you accept `runId` values from untrusted input, authenticate the caller and check that the run belongs to them before sending:
+
+  ```ts
+  const target = agent.getThreadRunTarget(runId);
+  // callerResourceId must come from your authenticated user, not from the request body.
+  if (!callerResourceId || !target?.resourceId || target.resourceId !== callerResourceId) {
+    throw new Error('Run not found');
+  }
+  await agent.sendSignal(signal, { runId });
+  ```
+
 ## 1.86.0-alpha.8
 
 ### Minor Changes
