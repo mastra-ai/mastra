@@ -70,6 +70,7 @@ import {
   runFenceCte,
   runFencedStatement,
   runFenceParams,
+  serializeFenced,
 } from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { toPgJson } from '../../db/sanitize-json';
@@ -1370,12 +1371,18 @@ export class WorkflowsPG extends WorkflowsStorage {
           threadId: args.threadId,
           header: args.header,
         };
-        const values = [
-          ...this.#headerParams(run, entries.length, write),
-          startStateSeq ?? null,
-          toPgJson(entries),
-          ...(expected ? [expected] : []),
-        ];
+        const values = await serializeFenced(
+          this.#db.client,
+          this.#runOwnersTable(),
+          fence,
+          'appendWorkflowRunEntries',
+          () => [
+            ...this.#headerParams(run, entries.length, write),
+            startStateSeq ?? null,
+            toPgJson(entries),
+            ...(expected ? [expected] : []),
+          ],
+        );
         // When `expectedStatus` or the fence rejects the write, `h` has no row, so neither has the insert.
         const ctes = `h AS (${this.#upsertHeaderSql(false, expected ? '$19' : undefined, !!fence)}),
              ${appendEntriesSql(this.#entriesTable(), '$7', '$18')}`;
@@ -1530,7 +1537,7 @@ export class WorkflowsPG extends WorkflowsStorage {
    * columns. The row lock orders concurrent appends. Null when the run isn't stored, or when its
    * status isn't one of `expected`. With `fence`, the fence check runs in the same statement.
    */
-  #appendWithoutHeader(
+  async #appendWithoutHeader(
     q: Queryable,
     {
       workflowName,
@@ -1553,7 +1560,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     },
   ): Promise<AppendedRow | null> {
     const now = new Date();
-    const values = [
+    const values = await serializeFenced(q, this.#runOwnersTable(), fence, 'appendWorkflowRunEntries', () => [
       workflowName,
       runId,
       entries.length,
@@ -1564,7 +1571,7 @@ export class WorkflowsPG extends WorkflowsStorage {
       now,
       toPgJson(entries),
       expected ?? null,
-    ];
+    ]);
     // `||` is a shallow merge, like spreading; a requestContext that isn't an object counts as `{}`.
     const ctes = `h AS (
          UPDATE ${this.#runsTable()} AS r
@@ -1715,7 +1722,6 @@ export class WorkflowsPG extends WorkflowsStorage {
         : { on: args.on.draft ? { seq: args.on.seq, draft: true } : { seq: args.on.seq }, ops: args.ops };
     let row: { seq: number } | null;
     const fence = resolveRunFence(this, undefined, runId);
-    const values = [workflowName, runId, toPgJson(payload)];
     const update = `h AS (
                UPDATE ${this.#runsTable()} SET "lastSeq" = "lastSeq" + 1, "stateShared" = true
                WHERE workflow_name = $1 AND run_id = $2${fence ? ' AND EXISTS (SELECT 1 FROM claim)' : ''}
@@ -1725,6 +1731,13 @@ export class WorkflowsPG extends WorkflowsStorage {
              SELECT $1, $2, h."lastSeq", 'state-draft', NULL, $3::jsonb FROM h
              RETURNING seq`;
     try {
+      const values = await serializeFenced(
+        this.#db.client,
+        this.#runOwnersTable(),
+        fence,
+        'appendWorkflowRunStateDraft',
+        () => [workflowName, runId, toPgJson(payload)],
+      );
       row = fence
         ? await runFencedStatement<{ seq: number }>(
             this.#db.client,

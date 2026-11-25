@@ -86,6 +86,27 @@ export async function runFencedStatement<T>(
 }
 
 /**
+ * `serialize()` for a single-statement fenced write, whose values are
+ * serialized before the statement checks the fence. When serializing throws
+ * and `fence` is not the run's current claim, throws
+ * {@link RunFenceConflictError} instead, as when the fence was checked first.
+ */
+export async function serializeFenced<T>(
+  q: Queryable,
+  claimsTable: string,
+  fence: RunFence | undefined,
+  operation: string,
+  serialize: () => T,
+): Promise<T> {
+  try {
+    return serialize();
+  } catch (error) {
+    if (fence) await assertRunFence(q, claimsTable, fence, operation);
+    throw error;
+  }
+}
+
+/**
  * Runs `write` directly when it carries no fence, or in a transaction behind
  * the fence check when it does.
  */

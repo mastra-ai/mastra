@@ -76,6 +76,7 @@ import {
   runFenceArgs,
   runFenceCondition,
   runFencedBatch,
+  serializeFenced,
   withRunFence,
 } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
@@ -1459,20 +1460,25 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const check = this.#runFenceCheck(undefined, runId, 'appendWorkflowRunStateDraft');
     const gate = check ? ` AND ${runFenceCondition(check)}` : '';
     const gateArgs = check ? runFenceArgs(check) : [];
-    const statements = [
-      {
-        sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET lastSeq = lastSeq + 1, stateShared = 1
+    try {
+      const statements = [
+        {
+          sql: `UPDATE ${TABLE_WORKFLOW_RUNS} SET lastSeq = lastSeq + 1, stateShared = 1
                   WHERE workflow_name = ? AND run_id = ?${gate} RETURNING lastSeq`,
-        args: [workflowName, runId, ...gateArgs],
-      },
-      {
-        sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_ENTRIES} (workflow_name, run_id, seq, kind, step_id, payload)
+          args: [workflowName, runId, ...gateArgs],
+        },
+        {
+          sql: `INSERT INTO ${TABLE_WORKFLOW_RUN_ENTRIES} (workflow_name, run_id, seq, kind, step_id, payload)
                   SELECT workflow_name, run_id, lastSeq, 'state-draft', NULL, jsonb(?)
                   FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?${gate}`,
-        args: [safeStringify(payload), workflowName, runId, ...gateArgs],
-      },
-    ];
-    try {
+          args: [
+            await serializeFenced(this.#client, check, () => safeStringify(payload)),
+            workflowName,
+            runId,
+            ...gateArgs,
+          ],
+        },
+      ];
       const [header] = await this.executeWithRetry(
         () =>
           check
@@ -2011,7 +2017,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
           ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
           : ' WHERE 0';
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
-    const row = [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue];
+    const row = await serializeFenced(this.#client, check, () => [
+      workflowName,
+      runId,
+      resourceId ?? null,
+      safeStringify(snapshot),
+      createdAtValue,
+      updatedAtValue,
+    ]);
     // `INSERT ... SELECT` needs its WHERE before `ON CONFLICT`, which the fence gate supplies.
     const upsert = (
       rows: string,

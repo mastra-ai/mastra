@@ -91,6 +91,25 @@ export function gateOnRunFence(statement: SqliteStatement, check: RunFenceCheck)
 }
 
 /**
+ * `serialize()` for a fenced batch write, whose values are serialized before
+ * the batch checks the fence. When serializing throws and `check`'s fence is
+ * not the run's current claim, throws {@link RunFenceConflictError} instead,
+ * as when the fence was checked first.
+ */
+export async function serializeFenced<T>(
+  client: SqliteClient,
+  check: RunFenceCheck | undefined,
+  serialize: () => T,
+): Promise<T> {
+  try {
+    return serialize();
+  } catch (error) {
+    if (check) await assertRunFence(client, check);
+    throw error;
+  }
+}
+
+/**
  * Runs `statements` as one batch behind the client's write lock, after a
  * statement that reads whether `check`'s fence is the run's current claim.
  * Every statement must be gated on that claim ({@link gateOnRunFence}), so a

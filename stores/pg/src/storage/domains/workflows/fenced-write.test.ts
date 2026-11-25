@@ -1,5 +1,7 @@
-import { isRunFenceConflictError, TABLE_WORKFLOW_RUN_OWNERS } from '@mastra/core/storage';
-import type { RunFence, WorkflowRunHeader, WorkflowsStorage } from '@mastra/core/storage';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { MastraError } from '@mastra/core/error';
+import { isRunFenceConflictError, setRunFenceContext, TABLE_WORKFLOW_RUN_OWNERS } from '@mastra/core/storage';
+import type { RunFence, RunFenceScope, WorkflowRunHeader, WorkflowsStorage } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -187,4 +189,36 @@ describe('Postgres single-statement fenced writes', () => {
     expect(landed).toBeGreaterThan(0);
     expect(refused).toBeGreaterThan(0);
   }, 60_000);
+
+  // A writer that lost the run must learn so even when its value can't be serialized, as when the
+  // fence was checked before serializing. A current writer gets the store's own error.
+  it('a draft that cannot be serialized reports a stale fence first, and writes nothing', async () => {
+    const runId = `run-${crypto.randomUUID()}`;
+    await claimer.appendWorkflowRunEntries({ workflowName, runId, header: header(runId), steps: {} });
+    const stale = await claim(runId, 'owner-a');
+    const current = await claim(runId, 'owner-b');
+    const stored = await claimer.loadWorkflowRunHeader({ workflowName, runId });
+    const scopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+    const context = setRunFenceContext({ current: () => scopes.getStore(), run: (s, f) => scopes.run(s, f) });
+    const draft = (fence: RunFence) =>
+      context.run({ fenceFor: () => fence }, () =>
+        claimer.appendWorkflowRunStateDraft({
+          workflowName,
+          runId,
+          state: {
+            value: {
+              toJSON() {
+                throw new Error('cannot serialize');
+              },
+            },
+          },
+        }),
+      );
+
+    await expect(draft(stale)).rejects.toSatisfy(isRunFenceConflictError);
+    await expect(draft(current)).rejects.toSatisfy(
+      error => error instanceof MastraError && !isRunFenceConflictError(error),
+    );
+    expect((await claimer.loadWorkflowRunHeader({ workflowName, runId }))!.lastSeq).toBe(stored!.lastSeq);
+  });
 });
