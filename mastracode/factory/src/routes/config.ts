@@ -13,6 +13,7 @@ import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
 import {
   customProviderHeaderProblem,
   isCustomProviderAuthScheme,
+  MAX_CUSTOM_PROVIDER_HEADERS,
 } from '@mastra/code-sdk/onboarding/custom-provider-headers';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
@@ -548,11 +549,8 @@ interface CustomProviderBodyError {
   message?: string;
 }
 
-/** The fields that say where and how to call an endpoint, shared by the save and check bodies. */
-type CustomProviderConnectionFields = CustomProviderSettingsDraft;
-
 /** Read `url`, `apiKey`, `authScheme` and `headers` from a save or check body. */
-function parseConnectionFields(b: Record<string, unknown>): CustomProviderConnectionFields | CustomProviderBodyError {
+function parseConnectionFields(b: Record<string, unknown>): CustomProviderSettingsDraft | CustomProviderBodyError {
   const url = typeof b.url === 'string' ? b.url.trim() : '';
   if (!url) return { error: 'Missing required field: url' };
   try {
@@ -570,6 +568,13 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderConnec
   const authScheme = isCustomProviderAuthScheme(b.authScheme) ? b.authScheme : undefined;
   if (b.headers === undefined) return { url, apiKey, authScheme };
   if (!Array.isArray(b.headers)) return { error: 'header_refused', message: 'Custom headers must be a list.' };
+  // Counted before anything walks the list, so an oversized body is refused cheaply.
+  if (b.headers.length > MAX_CUSTOM_PROVIDER_HEADERS) {
+    return {
+      error: 'header_refused',
+      message: `A provider can send at most ${MAX_CUSTOM_PROVIDER_HEADERS} custom headers.`,
+    };
+  }
   // Trimmed the way settings.json headers are, so both stores hold the same values.
   const trimmed = b.headers.map((entry: unknown) => {
     if (typeof entry !== 'object' || entry === null) return entry;
@@ -584,7 +589,14 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderConnec
   // since an edit may keep the saved scheme or saved headers.
   const problem = customProviderHeaderProblem(trimmed as Array<{ name: unknown; value?: unknown }>, authScheme);
   if (problem) return { error: 'header_refused', message: problem };
-  const headers = (trimmed as Array<{ name: string; value?: string; secret?: unknown }>).map(
+  const entries = trimmed as Array<{ name: string; value?: string; secret?: unknown }>;
+  // Reading a malformed flag as "omitted" would make the header secret or keep
+  // the saved flag, which is not what the client asked for.
+  const malformed = entries.find(({ secret }) => secret !== undefined && typeof secret !== 'boolean');
+  if (malformed) {
+    return { error: 'header_refused', message: `The ${malformed.name} header secret flag must be true or false.` };
+  }
+  const headers = entries.map(
     ({ name, value, secret }): CustomProviderHeaderInput => ({
       name,
       ...(value === undefined ? {} : { value }),
@@ -595,7 +607,7 @@ function parseConnectionFields(b: Record<string, unknown>): CustomProviderConnec
 }
 
 /** A validated custom-provider save request. */
-interface CustomProviderSave extends CustomProviderConnectionFields {
+interface CustomProviderSave extends CustomProviderSettingsDraft {
   name: string;
   models: string[];
   /** The id of the provider being edited. Absent when adding one. */
@@ -618,6 +630,8 @@ function parseCustomProviderBody(body: unknown): CustomProviderSave | CustomProv
     ? b.models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0).map(m => m.trim())
     : [];
   const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
+  // Reading a malformed flag as false would save the provider untested.
+  if (b.check !== undefined && typeof b.check !== 'boolean') return { error: 'check must be true or false' };
   return {
     ...connection,
     name,
@@ -628,16 +642,19 @@ function parseCustomProviderBody(body: unknown): CustomProviderSave | CustomProv
   };
 }
 
-/** A validated `POST /web/config/custom-providers/check` request. */
-interface CustomProviderCheckRequest {
-  /** The saved provider whose secrets a draft may reuse, or that is checked as stored when there is no draft. */
-  previousId?: string;
+/**
+ * A validated `POST /web/config/custom-providers/check` request: a draft to
+ * check without saving it, which may reuse the secrets of the saved row named
+ * by `previousId`, or a saved row to check as stored.
+ */
+type CustomProviderCheckRequest = {
   scope: StoredCredentialScope;
-  /** Settings to check without saving them. */
-  draft?: CustomProviderConnectionFields;
   /** Also send the test message to this model. */
   model?: string;
-}
+} & (
+  | { kind: 'draft'; draft: CustomProviderSettingsDraft; previousId?: string }
+  | { kind: 'saved'; previousId: string }
+);
 
 /**
  * Validate a check request. Without `url` the saved row named by `previousId`
@@ -647,15 +664,16 @@ function parseCustomProviderCheckBody(body: unknown): CustomProviderCheckRequest
   if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
   const b: Record<string, unknown> = { ...body };
   const previousId = typeof b.previousId === 'string' && b.previousId ? b.previousId : undefined;
-  const model = typeof b.model === 'string' && b.model.trim() ? b.model.trim() : undefined;
+  if (b.model !== undefined && typeof b.model !== 'string') return { error: 'model must be a string' };
+  const model = b.model?.trim() || undefined;
   const scope = b.scope === 'org' ? 'org' : 'user';
   if (b.url === undefined) {
     if (!previousId) return { error: 'Missing required field: url or previousId' };
-    return { previousId, scope, model };
+    return { kind: 'saved', previousId, scope, model };
   }
   const draft = parseConnectionFields(b);
   if ('error' in draft) return draft;
-  return { previousId, scope, draft, model };
+  return { kind: 'draft', previousId, scope, draft, model };
 }
 
 /** What each storage refusal tells the client. */
@@ -675,7 +693,7 @@ const CUSTOM_PROVIDER_REFUSALS = {
     status: 400,
     error: 'header_value_required',
     message:
-      'Enter the header value again: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL stays on the same host.',
+      'Enter a value for each header: a saved value is only kept for a header of the same name, and a secret one only while it stays secret and the URL stays on the same host.',
   },
   header_refused: { status: 400, error: 'header_refused', message: 'These custom headers cannot be sent.' },
 } as const;
@@ -1617,6 +1635,15 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             }
             let checked: CustomProviderRecord | undefined;
             if (parsed.check) {
+              // Refuse a name already in use before the test calls the endpoint.
+              // The unique index still settles a create or rename racing this one.
+              if (
+                input.providerId !== parsed.previousId &&
+                (await ctx.storage.get({ owner: target.owner, providerId: input.providerId }))
+              ) {
+                const { status, body: refusal } = customProviderRefusal({ refused: 'name_taken' });
+                return c.json(refusal, status);
+              }
               const saved = parsed.previousId
                 ? await ctx.storage.get({ owner: target.owner, providerId: parsed.previousId })
                 : null;
@@ -1718,9 +1745,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               return c.json(refusal, status);
             }
             // Without a draft the saved row is checked as stored: its own URL
-            // keeps every saved setting. The parser requires one or the other.
-            const draft = parsed.draft ?? (saved ? { url: saved.url } : undefined);
-            if (!draft) return c.json({ error: 'Missing required field: url or previousId' }, 400);
+            // keeps every saved setting. Such a request always names a row,
+            // and a missing one was answered with a 404 above.
+            const draft = parsed.kind === 'draft' ? parsed.draft : { url: saved!.url };
             const urlProblem = customEndpointUrlProblem(draft.url);
             if (urlProblem) return c.json({ error: 'custom_endpoint_url_refused', message: urlProblem }, 400);
             const resolved = customProviderConnection(saved, draft);
@@ -1743,7 +1770,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 : undefined,
             ]);
             let provider: CustomProviderInfo | undefined;
-            if (!parsed.draft && saved) {
+            if (parsed.kind === 'saved' && saved) {
               const recorded = await ctx.storage.recordCheck({
                 owner: target.owner,
                 providerId: saved.providerId,

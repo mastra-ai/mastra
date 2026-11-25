@@ -2820,6 +2820,50 @@ describe('custom provider routes', () => {
       expect(await ownList(userA)).toEqual([]);
     });
 
+    // A malformed `check` read as false would save the provider untested, and a
+    // malformed `secret` read as omitted would pick a flag the client never sent.
+    it('refuses malformed check, model and secret fields without calling the endpoint or saving', async () => {
+      const endpoint = await startEndpoint(openAiCompatible(['m1']));
+      const app = buildApp(userA);
+      const draft = savedConnection(endpoint.url);
+      const secretFlag = (secret: unknown) => ({ ...draft, headers: [{ name: 'X-Tenant', value: 'v1', secret }] });
+
+      const responses = [
+        ['save', await postProvider(app, { ...draft, check: 'true' })],
+        ['save', await postProvider(app, { ...draft, check: 1 })],
+        ['save', await postProvider(app, secretFlag('false'))],
+        ['check', await postCheck(app, { ...draft, model: 5 })],
+        ['check', await postCheck(app, secretFlag(1))],
+      ] as const;
+
+      for (const [, res] of responses) expect(res.status).toBe(400);
+      expect(await Promise.all(responses.map(async ([route, res]) => [route, (await res.json()).error]))).toEqual([
+        ['save', 'check must be true or false'],
+        ['save', 'check must be true or false'],
+        ['save', 'header_refused'],
+        ['check', 'model must be a string'],
+        ['check', 'header_refused'],
+      ]);
+      expect(endpoint.requests).toEqual([]);
+      expect(await ownList(userA)).toEqual([]);
+    });
+
+    // The unique index still settles a race, but a name already in use is
+    // known before any call goes out.
+    it('refuses a taken name on a save with check: true before calling the endpoint', async () => {
+      const endpoint = await startEndpoint(openAiCompatible(['m1']));
+      const app = buildApp(userA);
+      expect((await postProvider(app, savedConnection('https://llm.example.com/v1'))).status).toBe(200);
+
+      const taken = await postProvider(app, { ...savedConnection(endpoint.url), check: true });
+      const reserved = await postProvider(app, { ...savedConnection(endpoint.url), name: 'Anthropic', check: true });
+
+      expect([taken.status, reserved.status]).toEqual([409, 409]);
+      expect((await taken.json()).error).toBe('provider_name_taken');
+      expect(endpoint.requests).toEqual([]);
+      expect(await ownList(userA)).toMatchObject([{ url: 'https://llm.example.com/v1' }]);
+    });
+
     it('returns a failing check as data, with the status and the upstream detail', async () => {
       const endpoint = await startEndpoint((_, res) => {
         res.writeHead(403, { 'content-type': 'application/json' });
