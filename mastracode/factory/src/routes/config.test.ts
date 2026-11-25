@@ -775,16 +775,17 @@ describe('Mastra Gateway routes with a tenant', () => {
     return { requests, fetchPlatformAsUser };
   }
 
-  function buildApp(platform?: FakePlatform) {
+  function buildApp(platform?: FakePlatform, { orgAdmin = true }: { orgAdmin?: boolean } = {}) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, user as never);
       await next();
     });
+    const auth = fakeRouteAuth({ isOrganizationAdmin: async () => orgAdmin });
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: platform ? { ...fakeRouteAuth(), fetchPlatformAsUser: platform.fetchPlatformAsUser } : fakeRouteAuth(),
+        auth: platform ? { ...auth, fetchPlatformAsUser: platform.fetchPlatformAsUser } : auth,
         controller,
         modelCredentials: seed.credentials,
         memorySettings: seed.memorySettings,
@@ -793,11 +794,11 @@ describe('Mastra Gateway routes with a tenant', () => {
     return app;
   }
 
-  const connect = (app: Hono, scope: 'user' | 'org') =>
+  const connect = (app: Hono, scope: 'user' | 'org', { ownAccount }: { ownAccount?: boolean } = {}) =>
     app.request('/web/config/providers/mastra/connect', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scope }),
+      body: JSON.stringify({ scope, ...(ownAccount === undefined ? {} : { ownAccount }) }),
     });
 
   // Whether the server has its own gateway key decides these routes. Pin it, so a key in the
@@ -912,6 +913,67 @@ describe('Mastra Gateway routes with a tenant', () => {
       expect(res.status).toBe(200);
       expect(platform.requests).toEqual([]);
       expect(await seed.credentials.listCredentials('org1', 'user-a')).toEqual([]);
+    });
+
+    it.each([
+      { scope: 'user' as const, tenant: { orgId: 'org1', userId: 'user-a' }, source: 'stored-user' },
+      { scope: 'org' as const, tenant: { orgId: 'org1' }, source: 'stored-org' },
+    ])('creates a $scope key when someone chooses to connect their own account', async ({ scope, tenant, source }) => {
+      const platform = fakePlatform({
+        [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_own' }, { status: 201 }),
+      });
+      const app = buildApp(platform);
+
+      const res = await connect(app, scope, { ownAccount: true });
+
+      expect(res.status).toBe(200);
+      expect(platform.requests.filter(r => r.path === KEYS)).toHaveLength(1);
+      expect(await seed.credentials.getCredential(tenant, 'mastra-gateway')).toEqual({
+        type: 'api_key',
+        key: 'msk_own',
+      });
+      // The own key now bills this scope, and the server key still serves the other.
+      expect(await gatewayRow(app)).toMatchObject({ provider: 'mastra', source, serverKey: true });
+    });
+
+    it("refuses a member's own-account connect for the whole organization", async () => {
+      const platform = fakePlatform({
+        [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_own' }, { status: 201 }),
+      });
+
+      const res = await connect(buildApp(platform, { orgAdmin: false }), 'org', { ownAccount: true });
+
+      expect(res.status).toBe(403);
+      expect(platform.requests).toEqual([]);
+      expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+    });
+
+    it('lets a member connect their own account for their own sessions', async () => {
+      const platform = fakePlatform(
+        { [`POST ${KEYS}`]: () => Response.json({ apiKey: 'msk_own' }, { status: 201 }) },
+        { role: 'member' },
+      );
+
+      const res = await connect(buildApp(platform, { orgAdmin: false }), 'user', { ownAccount: true });
+
+      expect(res.status).toBe(200);
+      expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
+        type: 'api_key',
+        key: 'msk_own',
+      });
+    });
+
+    it('keeps the key the scope already has when someone connects their own account again', async () => {
+      await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_old' });
+      const platform = fakePlatform();
+
+      const res = await connect(buildApp(platform), 'org', { ownAccount: true });
+
+      expect(res.status).toBe(200);
+      expect(platform.requests).toEqual([]);
+      expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
+        key: 'msk_old',
+      });
     });
   });
 
