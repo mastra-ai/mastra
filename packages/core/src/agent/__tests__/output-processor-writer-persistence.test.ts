@@ -180,6 +180,41 @@ describe('output processor writer.custom() parts survive a returned message arra
   const lastAssistant = (copies: MastraDBMessage[]) => copies.findLast(m => m.role === 'assistant')!;
 
   for (const phase of ['processOutputResult', 'processOutputStep'] as const) {
+    it(`${phase}: a write and a deletion of an earlier part in one call keep the write only`, async () => {
+      const first = {
+        id: 'early',
+        [phase]: async ({ messageList, writer }: any) => {
+          await writer?.custom({ type: 'data-old', data: { v: 'old' } });
+          return messageList;
+        },
+      } as OutputProcessor;
+      const second = {
+        id: 'swap',
+        [phase]: async ({ messages, writer }: any) => {
+          await writer?.custom({ type: 'data-new', data: { v: 'new' } });
+          return (structuredClone(messages) as MastraDBMessage[]).map(m => ({
+            ...m,
+            content: { ...m.content, parts: m.content.parts.filter(p => p.type !== 'data-old') },
+          }));
+        },
+      } as OutputProcessor;
+      const memory = new MockMemory();
+      const agent = new Agent({
+        id: 'swap',
+        name: 'swap',
+        instructions: 'x',
+        model: model(),
+        memory,
+        outputProcessors: [first, second],
+      });
+      const stream = await agent.stream('hi', { memory: { thread: `swap-${phase}`, resource: 'r' } });
+      await stream.consumeStream();
+      const { messages } = await memory.recall({ threadId: `swap-${phase}`, resourceId: 'r' });
+      const types = messages.filter(m => m.role === 'assistant').flatMap(m => m.content.parts.map(p => p.type));
+      expect(types).toContain('data-new');
+      expect(types).not.toContain('data-old');
+    });
+
     it(`${phase}: write, copy, edit the written part in the copy saves only the edited part`, async () => {
       const saved = await savedData(phase, `edit-${phase}`, async ({ messages, writer }) => {
         await writer?.custom({ type: 'data-e', data: { v: 1 } });
@@ -219,6 +254,29 @@ describe('output processor writer.custom() parts survive a returned message arra
           { ...(ids[1] ? { id: ids[1] } : {}), data: { v: 'edited' } },
         ]);
       });
+
+      for (const dropped of [0, 1]) {
+        it(`${phase}: two writes of one type ${label}, write ${dropped + 1} deleted from the copy, saves no duplicate`, async () => {
+          const saved = await savedData(
+            phase,
+            `two-del-${dropped}-${phase}-${withIds}`,
+            async ({ messages, writer }) => {
+              for (const [i, id] of ids.entries()) {
+                await writer?.custom({ type: 'data-e', ...(id ? { id } : {}), data: { v: i } } as Part);
+              }
+              const copies = structuredClone(messages);
+              const message = lastAssistant(copies);
+              const target = dataParts(message).filter(p => p.type === 'data-e')[dropped];
+              message.content.parts = message.content.parts.filter(p => p !== target);
+              return copies;
+            },
+          );
+          // A part written during the call comes back even if the copy deletes it (indistinguishable from
+          // copying before the write), but each part is saved once.
+          expect(saved).toHaveLength(2);
+          expect(new Set(saved.map(p => JSON.stringify(p))).size).toBe(2);
+        });
+      }
 
       it(`${phase}: copy taken between two writes ${label} keeps both`, async () => {
         const saved = await savedData(phase, `between-${phase}-${withIds}`, async ({ messages, writer }) => {

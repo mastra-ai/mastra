@@ -2,7 +2,7 @@ import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/
 import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
-import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { CacheKeyGenerator, MessageList, messagesAreEqual } from '../agent/message-list';
 import type { AgentStateSignalInput } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
@@ -81,38 +81,53 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   }
 }
 
+type DBPart = MastraDBMessage['content']['parts'][number];
+
 /**
  * The message a processor returned, plus the `data-*` parts the live message gained while the processor ran
  * (`writer.custom()` merges its part into the list during the call) that the returned copy does not have.
- * A copy keeps a part's type and id but not its object identity or (if the processor edited it) its data, so a
- * written part counts as present when the copy holds more parts of that type and id than the message held
- * before the call. Parts the message held before the call follow the processor's result, so it can still remove them.
+ * A copy keeps a part's type and id but not its object identity, and an edit changes its data. So per type and id:
+ * copy parts with unchanged content account for the matching parts first, and each copy part left over beyond
+ * the unmatched parts held before the call accounts for one more written part, earliest first (a copy is a
+ * snapshot, so the writes it saw came first). Parts the message held before the call follow the processor's
+ * result, so it can still remove them.
  */
 function withDataPartsWrittenDuringCall(
   returned: MastraDBMessage,
   current: MastraDBMessage | undefined,
-  dataPartsBefore: Map<string, Set<MastraDBMessage['content']['parts'][number]>> | undefined,
+  dataPartsBefore: Map<string, Set<DBPart>> | undefined,
 ): MastraDBMessage {
   if (!current || !dataPartsBefore || returned.role !== 'assistant') return returned;
   const before = dataPartsBefore.get(returned.id) ?? new Set();
   const written = current.content.parts.filter(part => part.type.startsWith('data-') && !before.has(part));
   if (!written.length) return returned;
-  const keyOf = (part: MastraDBMessage['content']['parts'][number]) =>
-    `${part.type}|${'id' in part ? JSON.stringify(part.id) : ''}`;
-  const count = (parts: Iterable<MastraDBMessage['content']['parts'][number]>) => {
-    const counts = new Map<string, number>();
-    for (const part of parts) counts.set(keyOf(part), (counts.get(keyOf(part)) ?? 0) + 1);
-    return counts;
+  const keyOf = (part: DBPart) => `${part.type}|${JSON.stringify('id' in part ? (part.id ?? null) : null)}`;
+  const contentOf = (part: DBPart) => CacheKeyGenerator.fromDBParts([part]);
+  // Copy parts not yet accounted for, per key and content.
+  const unclaimed = new Map<string, string[]>();
+  for (const part of returned.content.parts) {
+    if (part.type.startsWith('data-'))
+      unclaimed.set(keyOf(part), [...(unclaimed.get(keyOf(part)) ?? []), contentOf(part)]);
+  }
+  const claim = (part: DBPart) => {
+    const pool = unclaimed.get(keyOf(part));
+    const at = pool?.indexOf(contentOf(part)) ?? -1;
+    if (at === -1) return false;
+    pool!.splice(at, 1);
+    return true;
   };
-  const inCopy = count(returned.content.parts);
-  const heldBefore = count(before);
-  const writtenSoFar = new Map<string, number>();
-  const missing = written.filter(part => {
+  const beforeUnmatched = new Map<string, number>();
+  for (const part of before) {
+    if (!claim(part)) beforeUnmatched.set(keyOf(part), (beforeUnmatched.get(keyOf(part)) ?? 0) + 1);
+  }
+  const unmatchedWrites = written.filter(part => !claim(part));
+  const covered = new Map<string, number>();
+  const missing = unmatchedWrites.filter(part => {
     const key = keyOf(part);
-    const index = (writtenSoFar.get(key) ?? 0) + 1;
-    writtenSoFar.set(key, index);
-    // The copy holds the first (copy count - count before) writes of this key; later writes came after the copy.
-    return index > (inCopy.get(key) ?? 0) - (heldBefore.get(key) ?? 0);
+    const index = (covered.get(key) ?? 0) + 1;
+    covered.set(key, index);
+    // Edited copies of written parts: copy parts left over after the edited parts held before the call.
+    return index > (unclaimed.get(key)?.length ?? 0) - (beforeUnmatched.get(key) ?? 0);
   });
   if (!missing.length) return returned;
   const parts = [...returned.content.parts, ...missing];
