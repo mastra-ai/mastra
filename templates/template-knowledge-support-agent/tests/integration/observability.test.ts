@@ -34,6 +34,7 @@ test('Knowledge tools persist matching trace and metric outcomes without payload
     await instance.flush();
     const { rows } = await client.execute(`
       SELECT name, outcome, json(error) AS error, json(output) AS output,
+             json(attributes) AS attributes, json(metadata) AS metadata,
              json_extract(attributes, '$.success') AS success,
              json_extract(metadata, '$.labels.operation') AS operation,
              json_extract(metadata, '$.labels.status') AS status,
