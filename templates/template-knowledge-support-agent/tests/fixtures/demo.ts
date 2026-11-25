@@ -198,11 +198,15 @@ export async function demoFixture(example: 'retail-pos' | 'software-integration'
           );
           return { tool: { name: 'knowledge_read', arguments: { page: reuse } } };
         }
-        const page = parsedTool(tools.at(-1)).page;
+        const page = parsedTool(tools[1]).page;
         assert.deepEqual(
           page.body.split('\n').filter((line: string) => line.startsWith('Public source:')),
           [`Public source: [[${publicSource.ref}]] (v${publicSource.version})`],
         );
+        if (tools.length === 2) return { tool: { name: 'knowledge_read', arguments: { page: guide } } };
+        const source = parsedTool(tools[2]).page;
+        assert.equal(source.ref, guide);
+        assert.ok(source.body.includes(publicUrl));
         return {
           content: `Use only when the observed conditions match. Reviewed finding [${page.ref}] cites public source [${guide}] (${publicUrl}).`,
         };
@@ -474,11 +478,26 @@ export async function snapshot(f: Fixture) {
 export function providerInput(f: Fixture, start: number) {
   return JSON.stringify(f.model.requests.slice(start).map(request => request.messages));
 }
-export async function assertCitations(f: Fixture, text: string, owner = f.owner) {
+export async function assertCitations(f: Fixture, text: string, start: number, owner = f.owner) {
+  const requests = f.model.requests.slice(start);
+  assert.ok(requests.length, 'Expected at least one model request for the turn');
+  const shown = new Set(history(requests[0]!).records.map(record => record.ref));
+  for (const request of requests) {
+    for (const tool of latest(request).tools) {
+      if (!tool.content.startsWith('{')) continue;
+      const result = parsedTool(tool);
+      if (result.error) continue;
+      if (typeof result.page?.ref === 'string') shown.add(result.page.ref);
+      if (Array.isArray(result.results)) {
+        for (const match of result.results) if (typeof match.page?.ref === 'string') shown.add(match.page.ref);
+      }
+    }
+  }
   const refs = [...text.matchAll(/\[((?:docs|tenant|customer):[^\]\s]+)\]/gu)].map(match => match[1]!);
   assert.ok(refs.length, 'Scored answer must cite visible evidence');
   const evidence = new Map<string, string>();
   for (const ref of new Set(refs)) {
+    assert.ok(shown.has(ref), `Citation was absent from this turn's evidence: ${ref}`);
     const { page } = await read(f, ref, owner);
     const source = /^Source: [^\n]* \((https:\/\/[^\s)]+)\)/mu.exec(page?.body ?? '');
     if (source) evidence.set(ref, source[1]!);

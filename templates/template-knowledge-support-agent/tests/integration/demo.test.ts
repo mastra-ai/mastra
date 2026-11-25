@@ -107,14 +107,22 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.equal(history(f.model.requests[start]!).status, 'empty');
     assert.match(cold.text, /No customer history yet/u);
     assert.match(cold.text, /indicator.*pending/u);
-    await assertCitations(f, cold.text);
+    await assertCitations(f, cold.text, start);
     await assert.rejects(
-      () => assertCitations(f, cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[2])),
+      () => assertCitations(f, `${cold.text} [docs:retailops#guides/payments]`, start),
+      /Citation was absent from this turn's evidence/u,
+    );
+    await assert.rejects(
+      () => assertCitations(f, cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[2]), start),
       /Public source URL does not match evidence/u,
     );
     await assert.rejects(
       () =>
-        assertCitations(f, cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[0].replace('https:', 'http:'))),
+        assertCitations(
+          f,
+          cold.text.replace(demoCorpus.sources[0], demoCorpus.sources[0].replace('https:', 'http:')),
+          start,
+        ),
       /Unsupported URL/u,
     );
     assert.match(providerInput(f, start), /knowledge_search/u);
@@ -178,7 +186,7 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     const reuseThread = await thread(f, f.otherCustomer!);
     start = f.model.requests.length;
     const reused = await turn(f, reuseThread, 'F5:reuse network', f.otherCustomer!);
-    await assertCitations(f, reused.text, f.otherCustomer!);
+    await assertCitations(f, reused.text, start, f.otherCustomer!);
     assert.ok(reused.text.includes(lifecycle.sharedRef));
     assert.equal(history(f.model.requests[start]!).status, 'empty');
     const reusedInput = providerInput(f, start);
@@ -216,7 +224,7 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     assert.ok(prepared.records.some(record => record.state === 'open'));
     assert.ok(prepared.records.every(record => record.ref.startsWith('customer:retailops:store-42#')));
     assert.match(populated.text, /open issue has no verified repair/u);
-    await assertCitations(f, populated.text);
+    await assertCitations(f, populated.text, start);
     const store73 = 'customer:retailops:store-73#cases/hub-cable';
     const field = 'customer:fieldretail:store-42#cases/wifi-selection';
     const own73 = JSON.stringify(await read(f, store73, f.otherCustomer!));
@@ -251,8 +259,9 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
         providerInput(f, start),
         /RETAILOPS_STORE73_(?:SILVER|NOTE)|FIELDRETAIL_STORE42_(?:TEAL|NOTE)/u,
       );
+      start = f.model.requests.length;
       const allowed = await turn(f, await thread(f, owner), `F5:notes READ=${ref}`, owner);
-      await assertCitations(f, allowed.text, owner);
+      await assertCitations(f, allowed.text, start, owner);
     }
     for (const owner of [f.otherCustomer!, f.colleague, f.otherTenant!]) {
       assert.equal((await f.request(`/memory/threads/${id}/messages?agentId=support`, owner)).status, 403);
@@ -295,7 +304,7 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     const conflict = await turn(f, await thread(f), 'F5:conflict conflict-check');
     assert.equal(history(f.model.requests[start]!).records.length, 2);
     assert.match(conflict.text, /findings conflict.*cannot choose a repair/u);
-    await assertCitations(f, conflict.text);
+    await assertCitations(f, conflict.text, start);
     start = f.model.requests.length;
     const insufficient = await turn(f, await thread(f), 'F5:insufficient fluxcapacitor');
     assert.equal(history(f.model.requests[start]!).status, 'no-relevant-records');
@@ -334,11 +343,12 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
     const answer = await turn(alternate, id, 'HTTP integration returned 401, what should I inspect?');
     assert.equal(history(alternate.model.requests[start]!).status, 'ready');
     assert.match(answer.text, /401 alone does not prove/u);
-    await assertCitations(alternate, answer.text);
+    await assertCitations(alternate, answer.text, start);
     const protectedAnswer = await turn(alternate, id, 'F5:policy should I log credential values?');
     assert.match(protectedAnswer.text, /\[tenant:software#policies\/safe-changes\]/u);
     const source = await confirm(alternate, id);
     const lifecycle = await approveLifecycle(alternate, source);
+    const reuseStart = alternate.model.requests.length;
     const reused = await turn(
       alternate,
       await thread(alternate, alternate.colleague),
@@ -346,7 +356,7 @@ test('studio_demo_and_alternate_profile_use_the_same_lifecycle', { timeout: 3600
       alternate.colleague,
     );
     assert.ok(reused.text.includes(lifecycle.sharedRef));
-    await assertCitations(alternate, reused.text, alternate.colleague);
+    await assertCitations(alternate, reused.text, reuseStart, alternate.colleague);
     assert.equal(source.sourceActorId, 'morgan');
     assert.equal(alternate.credentials[alternate.reviewer]!.profile.actorId, 'jamie');
     t.diagnostic(
@@ -583,11 +593,15 @@ test('persisted_telemetry_tracks_lifecycle_without_private_payloads', { timeout:
         ['reviewed backlink', backlinkStart, backlinkEnd, 1],
         ['reviewed backlink and notes', combinedStart, combinedEnd, 1],
       ] as const) {
-        const reads = rows.filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end));
+        const reads = rows
+          .filter(row => row.name === 'knowledge-read' && row.endedAt && inTurn(row, start, end))
+          .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
         const [read] = reads;
         const counts = reuse.filter(row => row.traceId === read?.traceId);
+        // The shared finding is read first, followed by the public source separately.
+        const expectedReads = label === 'shared finding' ? 2 : 1;
         if (
-          reads.length !== 1 ||
+          reads.length !== expectedReads ||
           counts.length !== expected ||
           counts.some(
             row =>
