@@ -184,7 +184,8 @@ Each event carries these fields. For a provider with [typed payloads](#typed-pay
   {
     name: 'payloadParseError',
     type: 'true',
-    description: 'Set when the body was not valid JSON.',
+    description:
+      'Set when the body was missing or not valid JSON. `payload` is then the raw string, or `null` when missing.',
     isOptional: true,
   },
   {
@@ -201,7 +202,7 @@ Each event carries these fields. For a provider with [typed payloads](#typed-pay
 `ConnectEvents`, [`ConnectEventSignals`](/reference/connect/event-signals) and [`ConnectEventWorker`](/reference/connect/event-worker) handlers choose events the same way:
 
 - **Unverified events** are skipped unless `includeUnverified` is set. Their payloads aren't typed, so check `event.unverified` before using one.
-- **A listed event type** is received when its payload is JSON. For a provider with typed payloads, an event type the provider doesn't send is a compile error.
+- **A listed event type** is received when its payload is JSON. An event with no payload counts as one that isn't JSON. For a provider with typed payloads, an event type the provider doesn't send is a compile error.
 - **`true`, or no `events` at all**, receives every event of a provider without typed payloads. For a provider with typed payloads, it receives only the event types in [Typed payloads](#typed-payloads), with JSON payloads. Every event it delivers has a typed payload. To receive another event type of such a provider, type it and list it.
 
 Payloads aren't validated at runtime. The types describe what the provider documents it sends, so a provider can still send a field the types don't list, or omit one.
@@ -242,7 +243,7 @@ import type { GithubWebhookPayloads } from '@mastra/connect'
 type PullRequestOpened = GithubWebhookPayloads['pull_request.opened']
 ```
 
-To type events of another provider, extend `ConnectEventPayloads`. To type more events of a typed provider, extend its map, then list the event type in `events`:
+To type events of another provider, extend `ConnectEventPayloads`, then list its event types in `events`: `true` still delivers all of that provider's events, untyped. To type more events of a typed provider, extend its map, then list the event type in `events`:
 
 ```typescript title="src/connect-events.d.ts"
 import type { SlackEventCallback } from '@mastra/connect'
