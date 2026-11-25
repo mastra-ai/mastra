@@ -11,3 +11,13 @@ Added endpoint checks, custom headers and an auth scheme choice to `/custom-prov
 - **Auth scheme** sends the API key as `Authorization: Bearer <key>` or as `x-api-key: <key>`.
 
 When an edit moves a provider's base URL to another origin, its secret headers are removed so their values are never sent to the new address. Add them again under **Headers**.
+
+The choices are saved on the provider in `settings.json`:
+
+```json
+{
+  "name": "Acme Gateway",
+  "authScheme": "x-api-key",
+  "headers": [{ "name": "X-Org-Id", "value": "org-123", "secret": false }]
+}
+```
