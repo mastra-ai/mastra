@@ -29,6 +29,9 @@ export interface E2BFactorySandboxSettings extends Record<string, unknown> {
 /** Applied when neither the environment setting nor a host default is set. */
 const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
 
+/** vCPU counts a sandbox can be created with: one, or an even number. An odd count above one fails at creation. */
+const CPU_COUNTS = [1, 2, 4, 6, 8];
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -37,8 +40,7 @@ const SETTINGS_SCHEMA = {
       title: 'CPU',
       description: 'vCPUs for the sandbox template',
       default: DEFAULT_SETTINGS.cpuCount,
-      minimum: 1,
-      maximum: 8,
+      oneOf: CPU_COUNTS.map(count => ({ const: count })),
     },
     memoryMb: {
       type: 'integer',
