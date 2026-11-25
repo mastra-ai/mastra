@@ -1570,6 +1570,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // would wedge the session — the agent could never get a shell to fix
         // the problem. Clone and checkout above still ran, so the tree is
         // real; the agent (or an edited setup command) takes it from here.
+        // The same goes for a command the environment build already ran and
+        // saw fail: running it again here would fail the same way.
+        if (gate.failedInBuild) {
+          console.warn('[Mastra Factory] Skipping setup command that failed in the environment build', {
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            projectRepositoryId: session.projectRepositoryId,
+          });
+          return;
+        }
         if (hasFailedSetupCommand(session.id, projectRepository.setupCommand)) {
           console.warn('[Mastra Factory] Skipping setup command that already failed this session', {
             orgId: session.orgId,
@@ -1673,7 +1683,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             await runSessionSetup(target, primaryDir, entry.gate);
             state.branch = session.branch;
-            if (repo.setupCommand && hasFailedSetupCommand(session.id, repo.setupCommand)) {
+            if (
+              repo.setupCommand &&
+              (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, repo.setupCommand))
+            ) {
               state.setupStatus = 'failed';
               repeated.add(repo.slug);
             }
@@ -1737,7 +1750,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
         for (const { repo, entry, state, synced } of secondaries) {
           if (!synced || !repo.setupCommand || entry.gate.setupDone) continue;
-          if (hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
+          if (entry.gate.failedInBuild || hasFailedSetupCommand(session.id, `${repo.slug}:${repo.setupCommand}`)) {
             state.setupStatus = 'failed';
             repeated.add(repo.slug);
             continue;
