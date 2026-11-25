@@ -1567,6 +1567,21 @@ describe('evented agents whose signals stay in the process that runs them', () =
     expect(pendingSignals).not.toHaveBeenCalled();
   });
 
+  it('announces a cancel before cancelQueuedMessages returns, as for any agent whose signals stay in memory', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { agent, scope } = setup({ memoryStore: new NoPendingSignalsMemory(), pubsub });
+    const publish = vi.spyOn(pubsub, 'publish');
+    const cancelling = agent.cancelQueuedMessages({ ...scope, signalIds: ['never-sent'] });
+    expect(publish).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        type: 'signals-cancelled',
+        data: expect.objectContaining({ signalIds: ['never-sent'] }),
+      }),
+    );
+    await expect(cancelling).resolves.toEqual({ cancelledSignalIds: [] });
+  });
+
   it('stays quiet with a pubsub inside the process', () => {
     const mastra = new Mastra({ storage: new InMemoryStore(), pubsub: new EventEmitterPubSub(), logger: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
