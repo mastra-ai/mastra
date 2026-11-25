@@ -1,7 +1,7 @@
-import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { createClient } from '../shared/create-client';
 import { gateIfLocalFile } from '../shared/file-transaction-gate';
 import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';

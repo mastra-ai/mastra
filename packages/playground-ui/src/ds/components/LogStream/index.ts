@@ -19,5 +19,8 @@ export type { LogStreamRootProps } from './log-stream-root';
 export type { LogStreamFrameProps } from './log-stream-frame';
 export type { LogStreamRowProps, LogStreamRowButtonProps } from './log-stream-row';
 export type { LogStreamLineProps } from './log-stream-line';
+export type { LogStreamIcon } from './log-stream-icon';
+export type { LogStreamTimeProps } from './log-stream-time';
+export { hasAnsi, parseAnsi, stripAnsi, type AnsiSegment } from './ansi';
 export { logLevelDotClass, logLevelTextClass } from './log-level-styles';
 export type { LogLevel } from './log-level-styles';

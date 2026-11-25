@@ -316,7 +316,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
       // A12 copy: the pinned account is reported, not the whole pool.
       await runtime.waitForScreenText(/Pinned Kimi account unavailable \(pool exhausted\)/i, terminal, 30_000);
       await runtime.waitForScreenText(
-        new RegExp(`Switched model pack: ${PACK_NAME} → Anthropic \\(pool exhausted\\)`, 'i'),
+        new RegExp(`${PACK_NAME} is rate-limited, switched to Anthropic`, 'i'),
         terminal,
         30_000,
       );
@@ -376,7 +376,7 @@ export const accountRoutingTargetedScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Switched to:/i, terminal, 10_000);
     await runtime.waitForScreenText(/Pinned Kimi account unavailable \(pool exhausted\)/i, terminal, 30_000);
     await runtime.waitForScreenText(
-      new RegExp(`Switched model pack: ${PACK_NAME} → Anthropic \\(pool exhausted\\)`, 'i'),
+      new RegExp(`${PACK_NAME} is rate-limited, switched to Anthropic`, 'i'),
       terminal,
       30_000,
     );

@@ -1,4 +1,5 @@
 import { generateTypes } from '@internal/types-builder';
+import { assertLatin1Dist } from '@internal/types-builder/check-ascii-output';
 import esbuildCompileZod from '@internal/types-builder/compile-zod';
 import { defineConfig } from 'tsdown';
 
@@ -61,7 +62,14 @@ export default defineConfig({
   inputOptions: {
     plugins: [adaptEsbuildOnLoadPlugin(esbuildCompileZod())],
   },
+  // Escape non-ASCII in strings, templates, regex literals and identifiers. V8 stores a script at
+  // one byte per character only when every character is Latin-1, so one wider character doubles the
+  // memory a Cloudflare Worker spends holding its own source. `assertLatin1Dist` enforces it in `onSuccess`.
+  outputOptions: {
+    charset: 'ascii',
+  },
   onSuccess: async () => {
+    assertLatin1Dist(`${process.cwd()}/dist`);
     await generateTypes(process.cwd());
   },
 });

@@ -206,6 +206,7 @@ export function createFactorySessionTools(
       'Use it when the person asks for a side session, and for work no card stage does: investigations and research, experiments, pushing fixes to an existing pull request or taking one over, or work that should leave the board alone.',
       "When someone asks for a card's own stage work without saying where, run it on the card instead, as the board's buttons do: \"review this pull request\" moves the pull request's card to its review stage or reruns it there, so the review is recorded on the card and posted on the pull request, and new work that should land as a pull request goes on its issue's card, or a card filed for it and started.",
       'Find cards with factory_list_work_items (a pasted link works) and move them, or rerun their stage, with factory_transition_work_item.',
+      'Once a person in this conversation asks for a side session, or says not to use cards or the board, that holds for the rest of the conversation: run their later requests in side sessions too until they ask for a card. Work that follows from a side session, such as acting on what it found or fixing its pull request, goes back to that side session with factory_signal_session, unless they ask for a card for it.',
     ].join(' '),
     inputSchema: z
       .object({

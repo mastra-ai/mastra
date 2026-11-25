@@ -74,4 +74,15 @@ describe('ValkeyServerCache', () => {
 
     expect(command.mock.calls.map(call => (call[0] as string[]).at(-1))).toEqual(['86400', '300']);
   });
+
+  it('listPushIndexed applies an explicitly requested TTL even when the default expiry is disabled', async () => {
+    const noExpiry = new ValkeyServerCache({ client }, { ttlSeconds: 0 });
+    command.mockResolvedValue(1);
+
+    await noExpiry.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 60_000);
+
+    // The caller stated a retention bound for this log; "no default expiry"
+    // must not override it (stream keys used to be written with no TTL at all).
+    expect((command.mock.calls[0]?.[0] as string[]).at(-1)).toBe('60');
+  });
 });

@@ -115,6 +115,7 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
   );
   app.get('/web/config/om', c => c.json({ reached: true }));
   app.post('/web/config/om/:role/model', async c => c.json({ reached: true, body: await adapterBody(c) }));
+  app.put('/web/config/session-model', c => c.json({ reached: true }));
   return app;
 }
 
@@ -197,6 +198,20 @@ describe('createSessionAccessGuard', () => {
     expect((await post(owner, sessionPath(SHARED_ID, 'model'), switchModel)).status).toBe(200);
     expect((await put(owner, sessionPath(SHARED_ID, 'state'), { state: { thinkingLevel: 'high' } })).status).toBe(200);
     expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
+  });
+
+  it("403s a teammate choosing a shared session's pack or model, and 404s a stranger", async () => {
+    const choice = {
+      resourceId: FACTORY_ID,
+      sessionId: SHARED_ID,
+      threadId: SHARED_ID,
+      selection: { kind: 'pack', packId: 'review' },
+    };
+    const refused = await put(teammate, '/web/config/session-model', choice);
+    expect(refused.status).toBe(403);
+    await expect(refused.json()).resolves.toEqual({ error: 'Only the session’s owner can change its model' });
+    expect((await put(outsider, '/web/config/session-model', choice)).status).toBe(404);
+    expect((await put(owner, '/web/config/session-model', choice)).status).toBe(200);
   });
 
   it('passes through a session on its own id that no Factory session row claims', async () => {

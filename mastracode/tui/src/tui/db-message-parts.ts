@@ -1,10 +1,7 @@
-import {
-  ACCOUNT_SWITCH_PART_TYPE,
-  isAccountSwitchReason,
-  isModelFallbackReason,
-  MODEL_FALLBACK_PART_TYPE,
-} from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { AccountSwitchPartData, ModelFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { ACCOUNT_SWITCH_PART_TYPE, isAccountSwitchReason } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_PART_TYPE, parseModelFallbackPart } from '@mastra/code-sdk/model-fallback';
+import type { ModelFallbackPartData } from '@mastra/code-sdk/model-fallback';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import type { CreatedAgentSignal } from '@mastra/core/signals';
@@ -89,27 +86,6 @@ const OM_EVENT_BY_TYPE: Record<string, OmRenderPart['event']> = {
   'data-om-observation-failed': 'failed',
   'data-om-thread-update': 'thread-title',
 };
-
-function packFallbackRenderPart(data: unknown): PackFallbackRenderPart | null {
-  if (!data || typeof data !== 'object') return null;
-  const record = data as Record<string, unknown>;
-  const endpoint = (value: unknown): { entryId: string; label: string } | null => {
-    if (!value || typeof value !== 'object') return null;
-    const entry = value as Record<string, unknown>;
-    if (typeof entry.entryId !== 'string' || typeof entry.label !== 'string') return null;
-    return { entryId: entry.entryId, label: entry.label };
-  };
-  const from = endpoint(record.from);
-  const to = endpoint(record.to);
-  if (!from || !to || !isModelFallbackReason(record.reason)) return null;
-  return {
-    kind: 'pack-fallback',
-    from,
-    to,
-    reason: record.reason,
-    at: typeof record.at === 'string' ? record.at : '',
-  };
-}
 
 function accountSwitchRenderPart(data: unknown): AccountSwitchRenderPart | null {
   if (!data || typeof data !== 'object') return null;
@@ -275,8 +251,8 @@ export function getAssistantRenderParts(message: MastraDBMessage): AssistantRend
           break;
         }
         if (partType === MODEL_FALLBACK_PART_TYPE) {
-          const hopPart = packFallbackRenderPart((part as { data?: unknown }).data);
-          if (hopPart) out.push(hopPart);
+          const hop = parseModelFallbackPart((part as { data?: unknown }).data);
+          if (hop) out.push({ kind: 'pack-fallback', ...hop });
           break;
         }
         const event = OM_EVENT_BY_TYPE[part.type];

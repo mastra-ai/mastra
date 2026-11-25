@@ -5,7 +5,7 @@
  * the system behaves appropriately when cached events are no longer available.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -153,8 +153,10 @@ describe('Cache TTL Expiry Behavior', () => {
         data: { chunk: 'New event' },
       });
 
-      // Should only receive new event (old one expired)
-      expect(receivedEvents).toHaveLength(1);
+      // Should only receive new event (old one expired). The first live frame
+      // after attach reconciles against the log asynchronously (the cursor
+      // sits below the epoch-seeded index), so wait for delivery.
+      await vi.waitFor(() => expect(receivedEvents).toHaveLength(1));
       expect(receivedEvents[0].data).toEqual({ chunk: 'New event' });
     });
 

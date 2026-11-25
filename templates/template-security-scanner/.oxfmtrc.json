@@ -1,0 +1,24 @@
+{
+  "endOfLine": "lf",
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "printWidth": 120,
+  "arrowParens": "avoid",
+  "sortPackageJson": false,
+  "sortTailwindcss": true,
+  "ignorePatterns": [
+    "references/**",
+    "node_modules/**",
+    ".mastra/**",
+    "dist/**",
+    "coverage/**",
+    "test-results/**",
+    "playwright-report/**",
+    "data/**",
+    "package-lock.json"
+  ]
+}

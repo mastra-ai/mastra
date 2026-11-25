@@ -41,21 +41,51 @@ export abstract class MastraServerCache extends MastraBase {
 
   /**
    * Atomically allocate the next index from `counterKey` and append `value`
-   * (with `index` set to the 0-based allocated index) to the list at `listKey`.
+   * (with `index` set to the allocated index) to the list at `listKey`.
    * Returns the assigned index.
    *
-   * The list and its counter must expire together: a counter that outlives its
-   * list restarts at 0 while subscribers still expect the old numbering, and a
-   * counter that expires first would start reusing indices already in the list.
-   * Every append refreshes both keys to the same deadline.
+   * Indices are opaque cursors — not list positions, and not dense. Within
+   * one log's life they strictly increase and consecutive appends get
+   * consecutive indices; readers resume from `index + 1`, not from a frame
+   * count. A log recreated after its predecessor expired or was evicted
+   * should avoid reissuing an index a subscriber may still hold — but no
+   * implementation makes that absolute, so readers must not depend on it.
+   *
+   * How an implementation approaches it is up to it. The built-in Redis,
+   * Valkey and in-memory caches seed a counter they create from the clock in
+   * epoch MICROseconds — microseconds because a hot log appends faster than
+   * the millisecond clock advances, and an index must not outrun the next
+   * seed. Epoch microseconds stay well inside Number.MAX_SAFE_INTEGER (2^53
+   * ≈ year 2255). `ConvexServerCache` instead allocates `max(counter, list
+   * length)` inside one transaction. It and the generic fallback restart
+   * numbering from 0 when both list and counter are gone.
+   * A clock seed is only as monotonic as the clock: recreating a log
+   * within the seed's resolution, or after the clock moves backwards, can
+   * still repeat an index. The subscriber's fallback detection only
+   * recognises a log that restarts at 0 (the dense case); a log reseeded
+   * below a subscriber's cursor without reaching 0 goes unnoticed until that
+   * reader reattaches.
+   *
+   * The list and its counter must expire together: a counter that expires
+   * before its list would reuse indices already in the list. Every append
+   * refreshes both keys to the same deadline.
    *
    * @param ttlMs - Minimum lifetime for both keys, in milliseconds. A cache
-   *   whose own TTL is longer, or that never expires, keeps that instead. When
-   *   omitted, the cache's default TTL applies.
+   *   whose own TTL is longer keeps that instead. An explicit `ttlMs` applies
+   *   even when the cache's default expiry is disabled: the caller is stating
+   *   a retention bound for this log, and a log that never expires is never
+   *   reclaimed. When omitted, the cache's default TTL applies.
    *
-   * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. Overrides
-   * should perform both steps in one server-side operation.
+   * The default implementation preserves the original zero-based numbering
+   * and composes `increment()` + `listPush()`. It is NOT atomic and ignores
+   * `ttlMs`. Concurrent appends can land out of index order, causing attached
+   * readers and offset replays to miss frames; an old offset can also skip
+   * a recreated log whose numbering restarted below it.
+   *
+   * Do not seed this fallback with `set()`: it can overwrite concurrent
+   * allocations, and a stored numeric value need not be an incrementable
+   * counter (Convex stores them as different types). Overrides should
+   * initialize the counter, allocate and append in one server-side operation.
    */
   async listPushIndexed(
     listKey: string,

@@ -1,0 +1,12 @@
+{
+  "fixtures": [
+    {
+      "match": { "model": "gpt-4o", "userMessage": "Say hello from the mock endpoint.", "endpoint": "chat" },
+      "response": { "content": "Hello from the mock endpoint." }
+    },
+    {
+      "match": { "model": "acme-large", "endpoint": "chat" },
+      "response": { "content": "listed so the endpoint offers it, never called" }
+    }
+  ]
+}

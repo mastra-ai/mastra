@@ -8,7 +8,7 @@ import { sessionDefaultsAnchor } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
 import type { FactoryProject } from '../../workspaces/services/github';
 import type { ChatSessionContextApi } from '../context/ChatSessionContext';
-import { newChatCatalogTarget, routedDefaultModelId } from '../context/chatDefaultModel';
+import { newChatCatalogTarget, routedDefaultModelId, routedModelDefaults } from '../context/chatDefaultModel';
 
 export interface MissingCredentialGuard {
   modelId: string;
@@ -36,10 +36,9 @@ export function useDraftModelGuards(
   const storedScope = projectQuery.data?.modelScope;
   const draftScope = storedScope === 'hybrid' ? kind : storedScope;
   const routedToFactory = draftScope === 'factory';
-  const chosenModelId = routedDefaultModelId(draftScope, {
-    factory: projectQuery.data?.defaultModelId,
-    personal: personalDefaultQuery.data?.modelId,
-  });
+  const chosenModelId = routedDefaultModelId(
+    routedModelDefaults(draftScope, projectQuery.data, personalDefaultQuery.data),
+  );
   const fallbackModelQuery = useFallbackModelQuery({
     ...newChatCatalogTarget(routedToFactory ? 'factory' : 'user', activeFactory?.id),
     enabled: projectQuery.isSuccess,

@@ -20,6 +20,7 @@ import { jiraStatusQueryOptions } from '../hooks/useJiraData';
 import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { activePlatformConnectionQueryOptions } from '../hooks/usePlatformConnections';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
+import { serverStatusQueryOptions } from '../hooks/useServerStatus';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import {
   boardPhasesQueryOptions,
@@ -109,11 +110,13 @@ export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
   });
 };
 
-export const prefetchSidebar: Prefetch = (services, { params, request }) => {
+export const prefetchAppLayout: Prefetch = (services, { params, request }) => {
   const { factoryId } = params;
-  const { pathname } = new URL(request.url);
-  if (!factoryId || isSettingsPath(pathname)) return;
+  if (!factoryId) return;
   const { queryClient, api } = services;
+  void queryClient.query(serverStatusQueryOptions(api.client)).catch(noop);
+  const { pathname } = new URL(request.url);
+  if (isSettingsPath(pathname)) return;
   void queryClient.query(serverFeaturesQueryOptions(api.client)).catch(noop);
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.

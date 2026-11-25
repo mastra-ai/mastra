@@ -8,6 +8,7 @@ import { Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui'
 import type { Focusable, SelectItem, Component, TUI, Input } from '@earendil-works/pi-tui';
 import { theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import type { AskQuestionSelectionMode } from './ask-question-inline.js';
+import { MaskedInput } from './masked-input.js';
 import type { MenuChrome, MenuHint } from './menu-chrome.js';
 import { MenuList } from './menu-list.js';
 import { MultilineInput } from './multiline-input.js';
@@ -26,6 +27,8 @@ export interface AskQuestionDialogOptions {
    * Defaults to false. Enable for prompts that legitimately want paragraph-length replies.
    */
   multiline?: boolean;
+  /** Show typed text as asterisks, for secrets. Applies to single-line input only. */
+  masked?: boolean;
   allowEmptyInput?: boolean;
   defaultValue?: string;
   allowCustomResponse?: boolean;
@@ -45,9 +48,10 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
 
   private selectList?: MenuList | WrappingSelectList;
   private readonly title: string;
-  private input?: Input | MultilineInput;
+  private input?: Input | MaskedInput | MultilineInput;
   private tui?: TUI;
   private multiline = false;
+  private masked = false;
   private multiSelect = false;
   private allowEmptyInput = false;
   private defaultValue?: string;
@@ -77,6 +81,7 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
     this.onCancel = options.onCancel;
     this.tui = options.tui;
     this.multiline = Boolean(options.multiline);
+    this.masked = Boolean(options.masked);
     this.multiSelect = options.selectionMode === 'multi_select';
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
     this.defaultValue = options.defaultValue;
@@ -179,6 +184,7 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
     return this.multiline && Boolean(this.tui);
   }
 
+  /** Add the text input, its hint and the default value. A masked prompt uses `MaskedInput`. */
   private buildInputMode(): void {
     if (this.useMultiline()) {
       const multilineInput = new MultilineInput(this.tui!, getEditorTheme());
@@ -195,7 +201,7 @@ export class AskQuestionDialogComponent extends Container implements Focusable, 
       };
       this.input = multilineInput;
     } else {
-      this.input = new TextInput();
+      this.input = this.masked ? new MaskedInput() : new TextInput();
       this.input.onSubmit = (value: string) => {
         const trimmed = value.trim();
         if (trimmed || this.allowEmptyInput) {

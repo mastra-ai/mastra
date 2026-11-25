@@ -36,22 +36,10 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "minimax-m3.1-flash": [
+    "gpt-6-sol": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "kimi-k3": [
@@ -60,7 +48,25 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "gpt-5.6-terra": [
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
@@ -71,10 +77,10 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4-pro-0813": [
+    "qwen3.8-max": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash-1017": [
@@ -83,31 +89,31 @@
         "values": ["low", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.5": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gpt-6.1-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "gpt-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.6-terra": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
@@ -119,22 +125,16 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-5.6-sol": [
+    "gpt-5.5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-6.1-sol": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

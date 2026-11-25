@@ -5,6 +5,16 @@ import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
+export const ONBOARDING_CHOICE_ROW = 'flex min-w-0 items-start gap-3 rounded-lg p-3';
+
+export function OnboardingChoiceIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-muted-foreground [&_svg]:size-icon-md flex size-5 shrink-0 items-center justify-center">
+      {children}
+    </span>
+  );
+}
+
 /**
  * One row of an onboarding radio group. The radio stays for keyboard and screen readers but is visually
  * hidden: the lifted card and a trailing check mark the choice, and the row shows the radio's focus ring.
@@ -32,7 +42,8 @@ export function OnboardingChoiceRow({
   return (
     <label
       className={cn(
-        'flex min-w-0 items-start gap-3 rounded-lg p-3 has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
+        ONBOARDING_CHOICE_ROW,
+        'has-[[role=radio]:focus-visible]:outline-1 has-[[role=radio]:focus-visible]:-outline-offset-1 has-[[role=radio]:focus-visible]:outline-solid has-[[role=radio]:focus-visible]:outline-border-focus',
         selected && 'onboarding-card bg-card',
         !selected && !disabled && 'hover:bg-fill-subtle',
         disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
@@ -45,9 +56,7 @@ export function OnboardingChoiceRow({
         aria-describedby={meta ? metaId : undefined}
         className="sr-only"
       />
-      <span className="text-muted-foreground [&_svg]:size-icon-md flex size-5 shrink-0 items-center justify-center">
-        {icon}
-      </span>
+      <OnboardingChoiceIcon>{icon}</OnboardingChoiceIcon>
       <span className="flex min-w-0 flex-1 flex-col">
         <Txt as="span" id={titleId} variant="label" className="flex min-h-5 items-center">
           {title}

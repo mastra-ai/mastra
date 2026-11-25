@@ -83,7 +83,7 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
 import {
   createStepStartChunk,
@@ -97,6 +97,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
+import { reportedCost } from '../shared/reported-cost';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
@@ -300,7 +301,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: withStepLifetime(async (params: LLMExecutionParams, stepLifetime) => {
-      const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
+      const { inputData, mastra, tracingContext, abortSignal } = params;
       const ownership = getExecutionOwnershipGuard(params);
 
       // Access pubsub via symbol
@@ -309,6 +310,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const typedInput = inputData as DurableAgenticWorkflowInput & z.infer<typeof durableLLMInputSchema>;
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
+      const requestContext =
+        getLiveRunRequestContext(getRunRegistryEntry(runId, mastra as Mastra | undefined)) ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
@@ -379,7 +382,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
+          // The deadline belongs to this execution segment, not the cached run context.
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(params.requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
@@ -388,6 +392,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           });
         }
       }
+
+      // The previous iteration's step has ended, maybe on another worker.
+      const runEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      if (runEntry) runEntry.openStepSpan = undefined;
 
       let request: any = {};
 
@@ -3025,6 +3033,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Don't end the spans yet - they will be ended after tool execution
             const stepSpanData =
               hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.exportCurrentStep() : undefined;
+            if (registryEntry && stepSpanData) registryEntry.openStepSpan = observability?.rebuildSpan(stepSpanData);
             const stepFinishPayload =
               hasToolCalls && !processOutputStepTripwire ? modelSpanTracker?.getPendingStepFinishPayload() : undefined;
 
@@ -3064,6 +3073,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       deferredStepFinishChunk.payload?.metadata?.providerMetadata,
                       deferredStepFinishChunk.payload?.metadata?.modelId,
                     ),
+                    // After a fallback or a prepareStep change this is not the run's first model.
+                    // A cached response replays without a model call, so no model served it.
+                    ...(cachedResponse
+                      ? {}
+                      : { servedBy: { provider: currentModel.provider, modelId: currentModel.modelId } }),
+                    reportedCost: reportedCost(deferredStepFinishChunk.payload?.metadata?.providerMetadata),
                   }
                 : undefined,
               state: typedInput.state,
@@ -3086,6 +3101,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // If there are tool calls, step span will be ended after tool execution
             // NOTE: We NEVER close the model span here - it stays open for the entire agent run
             // and is closed in map-final-output after the agentic loop completes
+            // The deferred step-finish skips the processors, and the step's tool results can run on another
+            // worker, so the processor spans under this step end with its model stream.
+            if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+              getToolResultRunner().endStreamProcessorSpans(registryEntry.processorStates, { stepScopedOnly: true });
+            }
             if (!hasToolCalls || processOutputStepTripwire) {
               // Close the step span with usage/finish info
               const pendingPayload = modelSpanTracker?.getPendingStepFinishPayload() as any;

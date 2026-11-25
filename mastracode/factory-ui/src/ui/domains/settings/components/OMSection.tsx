@@ -9,9 +9,9 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -99,6 +99,34 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   );
 }
 
+function OMSkeleton() {
+  const field = <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />;
+  return (
+    <div role="status" aria-label="Loading observational-memory settings" className="@container flex flex-col gap-3">
+      <ol aria-hidden className="flex flex-col">
+        <OMRow as="li" rail="node" label="Messages" />
+        <OMRow as="li" rail="edge" label="Observe after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Observer" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="edge" label="Reflect after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Reflector" controlNamesItself>
+          {field}
+        </OMRow>
+      </ol>
+      <div aria-hidden>
+        <OMRow rail="none" label="Attachments" controlNamesItself>
+          <Skeleton className="h-control-sm w-36 rounded-full motion-reduce:before:animate-none" />
+        </OMRow>
+      </div>
+    </div>
+  );
+}
+
 export function OMSection({
   sessionId,
   factoryId,
@@ -137,9 +165,7 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) {
-    return <SettingsSkeleton label="Loading observational-memory settings" rows={5} />;
-  }
+  if (omQuery.isPending) return <OMSkeleton />;
 
   if (omQuery.data === undefined) {
     return (

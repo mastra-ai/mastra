@@ -385,11 +385,25 @@ function createOwnerHandle(
       // As with plain runs, a later publisher's record prevents old cleanup.
       if (record) {
         const current = await readAgentRunRecord(record.cache, record.agentId, runId, record.key);
-        if (current && current.publisherId !== publisherId) return false;
+        if (current && current.publisherId !== publisherId) {
+          // Expected when the run id was resumed or reused: the newer
+          // publisher's own lifecycle bounds the topics, so skipping here
+          // never leaks them.
+          logger?.info?.(
+            `[AgentStream:${runId}] skipping stream cleanup: the run record belongs to publisher ` +
+              `${current.publisherId}, not ${publisherId}`,
+          );
+          return false;
+        }
       }
       return true;
-    } catch {
+    } catch (error) {
       // Leave state to its TTL when ownership cannot be verified.
+      logger?.warn?.(
+        `[AgentStream:${runId}] skipping stream cleanup: ownership could not be verified; ` +
+          `the run's stream state is left to expire with its retention TTL`,
+        { error },
+      );
       return false;
     }
   };
@@ -406,9 +420,14 @@ function createOwnerHandle(
     if (runningRetryTimer) clearTimeout(runningRetryTimer);
     runningRetryTimer = undefined;
     for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
-      void pubsub.clearTopic(topic).catch(() => {});
+      void pubsub.clearTopic(topic).catch(error => {
+        logger?.warn?.(`[AgentStream:${runId}] failed to clear stream topic ${topic}`, { error });
+      });
     }
-    if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId, record.key).catch(() => {});
+    if (record)
+      void deleteAgentRunRecord(record.cache, record.agentId, runId, record.key).catch(error => {
+        logger?.warn?.(`[AgentStream:${runId}] failed to delete the run record`, { error });
+      });
   };
 
   const scheduleCleanup = () => {

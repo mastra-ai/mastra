@@ -18,7 +18,7 @@ import { EventedExecutionEngine } from '../../workflows/evented/execution-engine
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
 import {
@@ -134,6 +134,63 @@ it('settles a failed evented setup after claiming the thread lease without start
       await cleanup();
     }
   } finally {
+    createRun.mockRestore();
+    await mastra.shutdown();
+  }
+});
+
+it('leaves the thread available when another execution takes over during the thread lease claim', async () => {
+  const pubsub = sharedPubSub();
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const { model } = deliveryModel('must not run');
+  const memory = new MockMemory({ storage });
+  const agent = createEventedAgent({
+    agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+    pubsub,
+  });
+  const mastra = new Mastra({ agents: { agent }, storage, pubsub, workers: false, logger: false });
+  const runId = 'taken-over-during-thread-claim';
+  const threadKey = 'resource\u0000thread';
+  const claiming = Promise.withResolvers<void>();
+  const resumeClaim = Promise.withResolvers<void>();
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease.bind(agentThreadStreamRuntime);
+  const lease = vi.spyOn(agentThreadStreamRuntime, 'claimDurableThreadLease').mockImplementation(async (...args) => {
+    claiming.resolve();
+    await resumeClaim.promise;
+    return claim(...args);
+  });
+  const createRun = vi.spyOn(agent.getWorkflow(), 'createRun').mockRejectedValue(new Error('stale workflow started'));
+  try {
+    const streaming = agent.stream('Answer.', { runId, memory: { resource: 'resource', thread: 'thread' } });
+    void streaming.catch(() => {});
+    try {
+      await claiming.promise;
+      await streaming;
+      const execution = getRunRegistryEntry(runId, mastra)!.workflowExecution!;
+      const owner = await pubsub.getLeaseOwner(threadKey);
+      expect(owner).toContain(runId);
+      const current = (await workflows.getRunOwnership({ runId }))!;
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 60_000,
+        force: true,
+        expectedGeneration: current.generation,
+      });
+      expect(successor.acquired).toBe(true);
+      resumeClaim.resolve();
+      await execution;
+
+      expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      expect(createRun).not.toHaveBeenCalled();
+      expect(await workflows.getRunOwnership({ runId })).toMatchObject({ ownerId: 'successor', live: true });
+    } finally {
+      resumeClaim.resolve();
+      await (await streaming).cleanup();
+    }
+  } finally {
+    lease.mockRestore();
     createRun.mockRestore();
     await mastra.shutdown();
   }
@@ -1845,6 +1902,49 @@ it.each(['expired', 'foreign'] as const)(
     });
   },
 );
+
+const threadOwner = (runId: string, generation: number) =>
+  `mastra:thread-lease:${JSON.stringify([runId, 'generation', generation])}`;
+
+it('waits for a settling execution to release the thread lease before claiming it', async () => {
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  setTimeout(
+    () => void agentThreadStreamRuntime.releaseDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1),
+    300,
+  );
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('second', 1));
+});
+
+it('reports a thread lease conflict once the previous execution holds it past the wait', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  let settled = false;
+  const claim = agentThreadStreamRuntime
+    .claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1)
+    .finally(() => (settled = true));
+  claim.catch(() => {});
+  await vi.advanceTimersByTimeAsync(4_800);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(400);
+  await expect(claim).rejects.toBeInstanceOf(AgentThreadLeaseConflictError);
+  expect(await pubsub.getLeaseOwner('resource\u0000thread')).toBe(threadOwner('first', 1));
+});
+
+it('stops waiting for the thread lease when another execution takes it over', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const pubsub = sharedPubSub();
+  const key = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'first', 'thread', 'resource', 1);
+  const claim = agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'second', 'thread', 'resource', 1);
+  claim.catch(() => {});
+  await pubsub.transferLease(key, threadOwner('first', 1), threadOwner('third', 1), EXECUTION_LEASE_TTL_MS);
+  await vi.advanceTimersByTimeAsync(300);
+  await expect(claim).rejects.toThrow(threadOwner('third', 1));
+  expect(await pubsub.getLeaseOwner(key)).toBe(threadOwner('third', 1));
+});
 
 it('stops admitting work after losing the captured thread lease', async () => {
   vi.useFakeTimers();
