@@ -21,12 +21,11 @@ import {
 } from '@earendil-works/pi-tui';
 import type { Component, Container, Focusable, OverlayHandle } from '@earendil-works/pi-tui';
 
-import { stripControls } from './components/ansi.js';
 import type { ListWindow } from './components/list-window.js';
 import { findFilterTarget, findMenuWindow, lowerFirst } from './components/menu-chrome.js';
 import type { Filterable, MenuChrome, MenuHint } from './components/menu-chrome.js';
 import { fadePanel, keyHint } from './components/surface.js';
-import { PASTE_END, PASTE_START } from './components/text-input.js';
+import { PASTE_END, PASTE_START, stripControls } from './components/text-input.js';
 import { locate } from './mouse/hit-test.js';
 import type { MouseAware, MousePoint, MouseTarget } from './mouse/hit-test.js';
 import { tuiInternals } from './mouse/pi-tui-internals.js';

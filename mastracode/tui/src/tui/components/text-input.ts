@@ -5,13 +5,19 @@
 import { Input } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
-import { stripControls } from './ansi.js';
 
 /** pi-tui's Input draws a plain "> " (two columns); the "›" takes its place at the same width. */
 const INPUT_PROMPT = '> ';
 
 export const PASTE_START = '\x1b[200~';
 export const PASTE_END = '\x1b[201~';
+
+/** Text from outside (a paste) without escape codes and other control characters, which would break the row it is drawn in. */
+export function stripControls(text: string): string {
+  return text
+    .replace(/\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07\x1b]*(?:\x07|\x1b\\)?|[PX^_][^\x1b]*(?:\x1b\\)?)/g, '')
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '');
+}
 
 export class TextInput extends Input {
   override handleInput(data: string): void {
