@@ -1,15 +1,14 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Trash2 } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsNoticeRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { EnvironmentSection } from './EnvironmentSection';
+import { EnvironmentSection, EnvironmentSkeleton } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 export function FactoryManagementSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -23,10 +22,10 @@ export function FactoryManagementSection() {
   if (factoryQuery.isError && !factory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
-  if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;
+  if (!factory) return <EnvironmentSkeleton label="Loading Factory settings" />;
 
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <EnvironmentSection factoryId={factory.id} />
       <SettingsSubsection scope="factory" title="Danger zone">
         <SettingsContainer>
@@ -37,10 +36,10 @@ export function FactoryManagementSection() {
                   <Button
                     size="sm"
                     variant="destructive-ghost"
-                    disabled={deleteMutation.isPending}
+                    icon={<TrashIcon />}
+                    loading={deleteMutation.isPending}
                     aria-label={`Delete ${factory.name}`}
                   >
-                    <Trash2 size={14} />
                     Delete
                   </Button>
                 }
@@ -60,14 +59,14 @@ export function FactoryManagementSection() {
             </AlertDialog>
           </SettingsRow>
           {deleteMutation.isError && (
-            <div className="p-4">
+            <SettingsNoticeRow>
               <Notice variant="destructive">
                 {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
               </Notice>
-            </div>
+            </SettingsNoticeRow>
           )}
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

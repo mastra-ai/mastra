@@ -28,6 +28,7 @@ import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
@@ -40,6 +41,7 @@ import {
   THREAD_OWNER_ID_CONTEXT_KEY,
   isReservedThreadMetadataKey,
   migratePersistedModelSelection,
+  readPermissionRules,
   runModelPersistenceOperation,
 } from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
@@ -286,9 +288,13 @@ export class AgentController<TState = {}> {
       this.#channels.__setController(this);
     }
     // Gateway manager merges configured gateways with the router defaults
-    // (custom takes precedence). Shared by listAvailableModels,
-    // getCurrentModelAuthStatus, and the OM model resolver.
-    this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // (custom takes precedence) unless the host opts out of the defaults.
+    // Shared by listAvailableModels, getCurrentModelAuthStatus, and the OM
+    // model resolver.
+    this.#gatewayManager = new GatewayManager([
+      ...(config.gateways ?? []),
+      ...(config.includeDefaultGateways === false ? [] : defaultGateways),
+    ]);
     // The router defaults list the same models whatever the credentials (and
     // models.dev and Netlify download them), so they refresh in the background
     // on a slower schedule.
@@ -462,7 +468,7 @@ export class AgentController<TState = {}> {
             AGENTIC_EXECUTION_WORKFLOW_ID,
             DurableStepIds.AGENTIC_LOOP,
             DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 })),
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -476,7 +482,7 @@ export class AgentController<TState = {}> {
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
-      resolveModeActiveTools: modeId => this.resolveModeActiveTools(session, modeId),
+      resolveModeActiveTools: (modeId, requestContext) => this.resolveModeActiveTools(session, modeId, requestContext),
       onSessionDeleted: listener =>
         this.onSessionDeleted(deleted => {
           if (deleted === session) listener();
@@ -777,12 +783,18 @@ export class AgentController<TState = {}> {
 
     let workspaceToConnect = overrides?.workspace ?? this.workspace;
     if (typeof workspaceToConnect === 'function') {
-      workspaceToConnect = await workspaceToConnect({ requestContext, mastra: this.getMastra() });
+      workspaceToConnect = await resolveDynamicArgument(workspaceToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     let browserToConnect = overrides?.browser ?? this.browser;
     if (typeof browserToConnect === 'function') {
-      browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+      browserToConnect = await resolveDynamicArgument(browserToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     const session = this.#wireSession(
@@ -846,6 +858,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    session.setParkedApprovalsRequestContext(requestContext);
     await this.#notifySessionCreated(session);
     // A run may have parked on approval before this process (or a session-created
     // hook) installed the rule that allows or denies it.
@@ -1056,7 +1069,9 @@ export class AgentController<TState = {}> {
     if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
+    return (
+      (await resolveDynamicArgument(this.workspace, { requestContext: ctx, mastra: this.getMastra() })) ?? undefined
+    );
   }
 
   /**
@@ -1705,9 +1720,10 @@ export class AgentController<TState = {}> {
     }
 
     // Register the agent on the resolved Mastra (the parent when registered,
-    // otherwise the internal one). Re-bind when the agent currently has no
-    // Mastra OR is bound to a different instance — e.g. an agent that built its
-    // own internal Mastra before this AgentController was registered on a parent.
+    // otherwise the internal one); with `registerAgents: false` only attach it.
+    // Re-bind when the agent currently has no Mastra OR is bound to a different
+    // instance — e.g. an agent that built its own internal Mastra before this
+    // AgentController was registered on a parent.
     // Done before workspace/browser propagation so that addAgent — which may
     // resolve agent.getWorkspace() — does not prematurely invoke a workspace
     // factory before the per-session request context is available.
@@ -1718,7 +1734,10 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      if (!mastra.listAgents()[agent.id]) {
+      if (this.config.registerAgents === false) {
+        agent.__registerPrimitives({ logger: mastra.getLogger(), storage: mastra.getStorage() });
+        agent.__registerMastra(mastra);
+      } else if (!mastra.listAgents()[agent.id]) {
         mastra.addAgent(agent);
       }
     }
@@ -2164,8 +2183,15 @@ export class AgentController<TState = {}> {
    * The returned list uses the same exposed tool names the execution pipeline
    * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
    * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   *
+   * Pass the run's `requestContext` to filter with the rules of the run's own
+   * thread rather than the thread the session currently holds.
    */
-  private resolveModeActiveTools(session: Session<TState>, modeId?: string): string[] | undefined {
+  private resolveModeActiveTools(
+    session: Session<TState>,
+    modeId?: string,
+    requestContext?: RequestContext,
+  ): string[] | undefined {
     // An unknown explicit mode throws rather than falling back to the live mode's tools.
     const currentMode = modeId ? session.mode.resolveId(modeId) : session.mode.resolve();
     const availableTools = currentMode?.availableTools;
@@ -2176,7 +2202,7 @@ export class AgentController<TState = {}> {
       return [];
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     const deniedTools = new Set(
       Object.entries(permissionRules.tools)
         .filter(([, policy]) => policy === 'deny')
@@ -2314,7 +2340,7 @@ export class AgentController<TState = {}> {
     // the execution pipeline already enforces at tool-call time.  Only set
     // when the helper returns a concrete list so modes without
     // `availableTools` keep unrestricted behaviour.
-    const activeTools = this.resolveModeActiveTools(session);
+    const activeTools = this.resolveModeActiveTools(session, undefined, requestContext);
     if (activeTools !== undefined) {
       streamOptions.activeTools = activeTools;
     }
@@ -2351,13 +2377,25 @@ export class AgentController<TState = {}> {
     const shared: SharedRunOptions = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo && !channelAutoApprove,
+      // Evaluated per call, so a tool the session already allows runs without
+      // pausing for an approval the session would answer itself. `deny` still
+      // reaches the approval gate, where the run engine declines it.
+      requireToolApproval:
+        isYolo || channelAutoApprove
+          ? false
+          : ({ toolName }: { toolName: string }) => session.resolveToolApproval(toolName, requestContext) !== 'allow',
+      // Only the tools a step actually calls decide whether it runs sequentially,
+      // so calls that need no approval and cannot suspend run in parallel.
+      toolCallConcurrency: { strategy: 'called' },
       onStepFinish: this.createUsageRecorder(context?.threadId ?? session.thread.getId()),
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
+    const fableFallback =
+      this.config.modelFallbacks === false
+        ? undefined
+        : buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }
@@ -2496,8 +2534,7 @@ export class AgentController<TState = {}> {
     // Resolve user-configured controller tools (needed for both the controller toolset and subagent allowedControllerTools)
     let resolvedControllerTools: ToolsInput | undefined = undefined;
     if (this.config.tools) {
-      const tools =
-        typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
+      const tools = await resolveDynamicArgument(this.config.tools, { requestContext });
       if (tools) {
         resolvedControllerTools = { ...tools };
       }
@@ -2569,7 +2606,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -2745,7 +2782,7 @@ export class AgentController<TState = {}> {
       return mem;
     }
     const requestContext = await this.buildRequestContext(session, callerContext);
-    const resolved = await Promise.resolve(mem({ requestContext }));
+    const resolved = await resolveDynamicArgument(mem, { requestContext, mastra: this.getMastra() });
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
     }

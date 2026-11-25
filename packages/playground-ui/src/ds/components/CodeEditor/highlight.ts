@@ -2,6 +2,9 @@ import type { StreamParser } from '@codemirror/language';
 import { TreeFragment } from '@lezer/common';
 import type { Parser, Tree } from '@lezer/common';
 import { highlightTree, tagHighlighter, tags as t } from '@lezer/highlight';
+import type { Tag } from '@lezer/highlight';
+
+type SyntaxTagStyle = { tag: Tag | readonly Tag[]; class: string };
 
 export interface HighlightToken {
   content: string;
@@ -104,7 +107,7 @@ function getParser(lang: Lang): Promise<Parser> {
  * read-only `<Code>` viewer and every CodeMirror editor (`useCodemirrorTheme`)
  * use it, so they share one palette (`--syntax-*`).
  */
-export const syntaxHighlighter = tagHighlighter([
+export const syntaxTagStyles: readonly SyntaxTagStyle[] = [
   { tag: [t.comment, t.bracket], class: 'syntax-comment' },
   { tag: [t.string, t.meta, t.regexp, t.name, t.quote, t.standard(t.tagName)], class: 'syntax-string' },
   { tag: [t.atom, t.bool, t.special(t.variableName)], class: 'syntax-literal' },
@@ -120,7 +123,9 @@ export const syntaxHighlighter = tagHighlighter([
   { tag: t.strong, class: 'syntax-strong' },
   { tag: t.strikethrough, class: 'syntax-strike' },
   { tag: t.invalid, class: 'syntax-invalid' },
-]);
+];
+
+export const syntaxHighlighter = tagHighlighter(syntaxTagStyles);
 
 /** Lets Lezer reuse the previous tree when `code` only appends to it, as a streaming fence does. */
 function reusableFragments(code: string, previous: HighlightResult | undefined) {
@@ -130,6 +135,8 @@ function reusableFragments(code: string, previous: HighlightResult | undefined) 
     { fromA: end, toA: end, fromB: end, toB: code.length },
   ]);
 }
+
+export const MAX_HIGHLIGHT_LENGTH = 50_000;
 
 /**
  * Tokenizes `code` into lines of tokens. Joining every token's content with
@@ -142,7 +149,7 @@ export async function highlight(
   previous?: HighlightResult,
 ): Promise<HighlightResult | null> {
   const lang = langAliases[language?.toLowerCase()];
-  if (!lang) return null;
+  if (!lang || code.length > MAX_HIGHLIGHT_LENGTH) return null;
 
   const parser = await getParser(lang);
   const tree = parser.parse(code, reusableFragments(code, previous));

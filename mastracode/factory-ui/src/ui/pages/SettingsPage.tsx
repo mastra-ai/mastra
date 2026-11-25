@@ -1,5 +1,5 @@
-import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useEffect, useId } from 'react';
 import type { ReactNode } from 'react';
@@ -35,7 +35,7 @@ export function SettingsPage() {
   }
 
   if (!isSettingsSection(section)) {
-    return <Navigate to="../preferences" replace state={location.state} />;
+    return <Navigate to="../account" replace state={location.state} />;
   }
   return (
     <SettingsPageLayout
@@ -78,7 +78,7 @@ export function SettingsPageLayout({
   });
 
   return (
-    <PageLayout variant="narrow" header={header} {...slots}>
+    <PageLayout variant="settings" {...slots} header={header}>
       {children}
     </PageLayout>
   );

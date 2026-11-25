@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { ApiError } from '../api/client';
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 
@@ -21,9 +22,8 @@ export interface ServerStatus {
  * Problems that stop the whole Factory from working. Re-read when the tab
  * regains focus, so a redeploy with a bad key shows up without a reload.
  */
-export function useServerStatus() {
-  const { client } = useApiConfig();
-  return useQuery({
+export function serverStatusQueryOptions(client: ApiClient) {
+  return queryOptions({
     queryKey: queryKeys.serverStatus(),
     queryFn: () =>
       client.get<ServerStatus>('/web/status').catch((error: unknown): ServerStatus => {
@@ -33,7 +33,11 @@ export function useServerStatus() {
       }),
     // A blip on the one read must not hide a real problem until the next reload.
     retry: 3,
-    refetchOnWindowFocus: true,
-    staleTime: 0,
+    refetchOnWindowFocus: 'always',
   });
+}
+
+export function useServerStatus() {
+  const { client } = useApiConfig();
+  return useQuery(serverStatusQueryOptions(client));
 }

@@ -1,4 +1,4 @@
-import { compileStoredBoard } from '@mastra/factory/boards/stored-board';
+import { compileStoredBoard, storedBoardInputSchema } from '@mastra/factory/boards/stored-board';
 import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -123,10 +123,10 @@ describe('Creating a board', () => {
     expect(form.getByRole('button', { name: 'Create board' })).toBeDisabled();
     await user.type(form.getByLabelText('Board name'), 'Bug Triage');
     expect(form.getByLabelText('Board key')).toHaveValue('bug-triage');
-    // Cards only reach a new board through an intake route, which has its own settings.
-    expect(form.getByRole('link', { name: 'Intake routes' })).toHaveAttribute(
+    // Cards only reach a new board through its rules, checked in the project's intake order.
+    expect(form.getByRole('link', { name: 'intake order' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/intake#new-cards`,
+      `/factories/${FACTORY_ID}/work/intake#intake-order`,
     );
     await user.click(form.getByRole('button', { name: 'Create board' }));
 
@@ -179,7 +179,6 @@ describe('Creating a board', () => {
   });
 
   it.each([
-    ['reserved_board', 'review', 'Board "review" is reserved for the retired Review board.'],
     ['code_board', 'release', 'Board "release" is defined in code; it cannot be created here.'],
     ['board_exists', 'bugs', 'Board "bugs" already exists in this project.'],
   ])('shows a %s refusal on the key and keeps the form', async (error, typed, message) => {
@@ -399,25 +398,167 @@ describe("Editing a board's phases", () => {
     expect(await screen.findByText('Fix Building to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
+});
 
-  it('keeps JSON typed into a rule while moving between phases, and holds the save until it parses', async () => {
-    serveProject();
+describe("Editing a phase's outcomes", () => {
+  const fixing = {
+    key: 'fixing',
+    name: 'Fixing',
+    kind: 'working' as const,
+    runner: { context: 'work' },
+    nextPhases: ['reported', 'fixed'],
+  };
+
+  it('shows one outcome per move until customized, then saves the outcomes a person wrote', async () => {
+    const { saved } = serveProject({
+      stored: [
+        storedBoard('bugs', 'Bugs', {
+          phases: [
+            { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+            fixing,
+            { key: 'fixed', name: 'Fixed', kind: 'terminal', nextPhases: [] },
+          ],
+        }),
+      ],
+    });
     const user = userEvent.setup();
-    renderAt(`/factories/${FACTORY_ID}/work/config/planning`);
+    const { client } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config/fixing`);
 
-    await user.click(await screen.findByRole('switch', { name: 'Planning: start on its own' }));
-    await user.click(screen.getByRole('button', { name: 'Edit as JSON' }));
-    await user.click(screen.getByLabelText('Planning: start only when JSON'));
-    await user.paste('{"operator":"AND",');
-    expect(await screen.findByText('Fix Planning to save.')).toBeInTheDocument();
+    const defaults = within(await screen.findByRole('list', { name: 'Fixing outcomes' }));
+    expect(defaults.getAllByRole('listitem').map(item => item.textContent)).toEqual([
+      'reported moves the card to Reported',
+      'fixed moves the card to Fixed',
+    ]);
+    await user.click(screen.getByRole('button', { name: 'Customize outcomes' }));
+    // One header names the columns and says what each means, however many outcomes there are.
+    expect(screen.getAllByRole('button', { name: 'About Key' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'About Description' })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'About Moves the card to' })).toHaveLength(1);
 
-    await user.click(configNav().getByRole('link', { name: 'Triage' }));
-    expect(await screen.findByRole('textbox', { name: 'Phase name' })).toHaveValue('Triage');
-    expect(screen.getByText('Fix Planning to save.')).toBeInTheDocument();
+    const key = await screen.findByRole('textbox', { name: 'Fixing outcome 2 key' });
+    await user.clear(key);
+    await user.type(key, 'ship');
+    const label = screen.getByRole('textbox', { name: 'Fixing outcome 2 label' });
+    await user.clear(label);
+    await user.type(label, 'Fix shipped');
+    // Point the first outcome at Fixed instead, then back, through the target picker.
+    await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
+    await user.click(await screen.findByRole('option', { name: 'Fixed' }));
+    expect(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' })).toHaveTextContent('Fixed');
+    await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
+    await user.click(await screen.findByRole('option', { name: 'Reported' }));
+    // Every move already has an outcome, so a new one reuses the first under a free key; it goes again.
+    await user.click(screen.getByRole('button', { name: 'Add outcome' }));
+    expect(screen.getByRole('textbox', { name: 'Fixing outcome 3 key' })).toHaveValue('reported-2');
+    await user.click(screen.getByRole('button', { name: 'Remove outcome reported-2' }));
+    expect(screen.queryByRole('textbox', { name: 'Fixing outcome 3 key' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitForMutationsIdle(client);
+    const body = saved.mock.calls[0]?.[1];
+    expect(body?.phases.find(phase => phase.key === 'fixing')?.outcomes).toEqual([
+      { key: 'reported', label: 'Reported', to: 'reported' },
+      { key: 'ship', label: 'Fix shipped', to: 'fixed' },
+    ]);
+    // The board compiles the way the server will compile it.
+    expect(() =>
+      compileStoredBoard(storedBoardInputSchema.parse({ key: 'bugs', name: 'Bugs', phases: body?.phases })),
+    ).not.toThrow();
+  });
+
+  it('drops an outcome with its move, holds back a duplicate key, and goes back to one per move', async () => {
+    const { saved } = serveProject({
+      stored: [
+        storedBoard('bugs', 'Bugs', {
+          phases: [
+            { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+            {
+              ...fixing,
+              outcomes: [
+                { key: 'ship', label: 'Fix shipped', to: 'fixed' },
+                { key: 'unclear', label: 'Needs a person', to: 'reported' },
+              ],
+            },
+            { key: 'fixed', name: 'Fixed', kind: 'terminal', nextPhases: [] },
+          ],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config/fixing`);
+
+    expect(await screen.findByRole('textbox', { name: 'Fixing outcome 2 key' })).toHaveValue('unclear');
+    await user.click(screen.getByRole('button', { name: 'Add outcome' }));
+    const moves = within(screen.getByRole('list', { name: 'Allowed moves from Fixing' }));
+    await user.click(moves.getByRole('button', { name: 'Reported', pressed: true }));
+    // Both outcomes going to Reported went with the move.
+    expect(screen.getByRole('textbox', { name: 'Fixing outcome 1 key' })).toHaveValue('ship');
+    expect(screen.queryByRole('textbox', { name: 'Fixing outcome 2 key' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Add outcome' }));
+    const key = screen.getByRole('textbox', { name: 'Fixing outcome 2 key' });
+    await user.clear(key);
+    await user.type(key, 'ship');
+    expect(screen.getAllByText('This key is already in use.')).toHaveLength(2);
+    expect(await screen.findByText('Fix Fixing to save.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 
-    await user.click(configNav().getByRole('link', { name: 'Planning' }));
-    expect(await screen.findByLabelText('Planning: start only when JSON')).toHaveValue('{"operator":"AND",');
+    await user.click(screen.getByRole('button', { name: 'Use one per move' }));
+    expect(screen.getByRole('button', { name: 'Customize outcomes' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitForMutationsIdle(client);
+    expect(saved.mock.calls[0]?.[1].phases.find(phase => phase.key === 'fixing')).toEqual({
+      ...fixing,
+      nextPhases: ['fixed'],
+      outcomes: null,
+    });
+  });
+
+  it("says which outcome the exit tool's success reports, warns when none is picked, and customizes at most 20", async () => {
+    const extra = Array.from({ length: 21 }, (_, index) => ({
+      key: `step-${index + 1}`,
+      name: `Step ${index + 1}`,
+      kind: 'working' as const,
+      runner: { context: 'work' },
+      nextPhases: ['fixed'],
+    }));
+    const { saved } = serveProject({
+      stored: [
+        storedBoard('bugs', 'Bugs', {
+          phases: [
+            { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+            {
+              ...fixing,
+              nextPhases: ['reported', 'fixed', ...extra.map(phase => phase.key)],
+              exitTool: { id: 'submit_plan' },
+            },
+            ...extra,
+            { key: 'fixed', name: 'Fixed', kind: 'terminal', nextPhases: [] },
+          ],
+        }),
+      ],
+    });
+    const user = userEvent.setup();
+    const { client } = renderAt(`/factories/${FACTORY_ID}/boards/bugs/config/fixing`);
+
+    // 21 moves into working phases, so the defaults pick no outcome for the exit tool.
+    expect(await screen.findByText(/no outcome is picked, so the card waits for the agent/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Customize outcomes' }));
+    expect(screen.getByRole('textbox', { name: 'Fixing outcome 20 key' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Fixing outcome 21 key' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add outcome' })).not.toBeInTheDocument();
+
+    const key = screen.getByRole('textbox', { name: 'Fixing outcome 3 key' });
+    await user.clear(key);
+    await user.type(key, 'advance');
+    expect(screen.queryByText(/no outcome is picked/)).not.toBeInTheDocument();
+    expect(screen.getByText(/When/)).toHaveTextContent(
+      'When submit_plan succeeds, it reports advance, moving the card to Step 1.',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitForMutationsIdle(client);
+    expect(saved.mock.calls[0]?.[1].phases.find(phase => phase.key === 'fixing')?.outcomes).toHaveLength(20);
   });
 });
 

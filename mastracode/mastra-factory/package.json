@@ -1,6 +1,6 @@
 {
   "name": "create-factory",
-  "version": "0.4.3-alpha.10",
+  "version": "0.5.3-alpha.0",
   "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
@@ -8,7 +8,8 @@
     "create-factory": "./dist/index.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "scripts": {
     "build": "tsdown --silent --config tsdown.config.ts",

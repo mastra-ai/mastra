@@ -3,31 +3,25 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
-import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
+import { INTAKE_ROUTE_METADATA_KEY, projectIntakeEvaluator, resolveIntake } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
-import { intakeTarget } from '../boards/semantics.js';
-import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { CreateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { CARD_NUMBER_METADATA_KEY } from './card-number.js';
 
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
 
-type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition']>>;
+type TransitionResult = Awaited<ReturnType<FactoryBoardEngine['requestMove']>>;
 
 /** Attempts at each step after the upsert before a card that keeps changing under its creator is left as is. */
 const STEP_ATTEMPTS = 3;
-
-/**
- * Board metadata key holding the `#number` of a card filed without an issue
- * behind it. Kept apart from `number`, which integrations read as the source
- * issue's number.
- */
-export const CARD_NUMBER_METADATA_KEY = 'cardNumber';
 
 /** One past the highest number given to a manually filed card in the project. */
 async function nextCardNumber(workItems: WorkItemsStorage, orgId: string, factoryProjectId: string): Promise<number> {
@@ -46,7 +40,12 @@ export type CreateFactoryWorkItemResult =
   | { status: 'reused'; item: Card }
   | {
       status: 'refused';
-      code: 'invalid_board' | 'governed_transition_required' | 'factory_transitions_unavailable';
+      code:
+        | 'invalid_board'
+        | 'governed_transition_required'
+        | 'factory_transitions_unavailable'
+        /** No board's intake rules take the card; the person names the board. */
+        | 'intake_board_required';
       message: string;
     }
   /** The first phase's entry rules (or the move to an intake route's phase) refused the card; it was removed again unless a concurrent create had already reused it. */
@@ -55,7 +54,7 @@ export type CreateFactoryWorkItemResult =
 export interface CreateFactoryWorkItemArgs {
   workItems: WorkItemsStorage;
   boards: BoardRegistry;
-  transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
+  boardEngine: Pick<FactoryBoardEngine, 'requestMove'> | undefined;
   audit: FactoryAuditEmit;
   orgId: string;
   /** Who files the card; becomes its `created_by` and the human actor of its first phase entry. */
@@ -64,6 +63,8 @@ export interface CreateFactoryWorkItemArgs {
   input: CreateWorkItemInput;
   /** The project's intake routes; they place a card filed without a board or stages. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Forces the evaluator that places a card filed without a board; else the project's setting. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Where a browser request came from; a session's tool call carries none. */
   origin?: Pick<FactoryTransitionRequest, 'actorProfile' | 'context'>;
 }
@@ -76,31 +77,69 @@ export interface CreateFactoryWorkItemArgs {
 export async function createFactoryWorkItem({
   workItems,
   boards,
-  transitionService,
+  boardEngine,
   audit,
   orgId,
   userId,
   factoryProjectId,
   input,
   intakeRoutes,
+  intakeEvaluator,
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
-  // A card filed without a board or stages goes where the project's intake routes say; one
-  // that names either went where the person chose.
-  const placement =
-    intakeRoutes && input.board === undefined && input.stages === undefined
-      ? resolveIntakePlacement(
-          await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }),
-          cardRuleFacts({
-            title: input.title,
-            metadata: input.metadata ?? null,
-            externalSource: input.externalSource ?? null,
-          }),
-          boards,
-        )
-      : undefined;
-  // No route took it: Work, else the project's first board (a project with only an app's boards).
-  const boardId = placement?.board ?? input.board ?? intakeTarget(boards)?.board ?? DEFAULT_BOARD_ID;
+  // A card filed without a board goes where intake says; one that names a board went where the
+  // person chose. Under the old evaluator a card naming its stages skips the rules too.
+  let boardId = input.board;
+  let placement: { phase: string; routeId: string } | undefined;
+  const unavailable = {
+    status: 'refused',
+    code: 'intake_board_required',
+    message: 'Intake rules are unavailable right now. Pick the board to file it on.',
+  } as const;
+  // Without the project's setting nothing says it may use the route list's first-board fallback.
+  if (boardId === undefined && !intakeRoutes && intakeEvaluator !== 'route-list') return unavailable;
+  if (boardId === undefined) {
+    const scope = { orgId, factoryProjectId };
+    let evaluator: IntakeEvaluator;
+    try {
+      evaluator = intakeRoutes ? await projectIntakeEvaluator(intakeEvaluator, intakeRoutes, scope) : 'route-list';
+    } catch {
+      return unavailable;
+    }
+    const routed = intakeRoutes && (evaluator === 'intake-order' || input.stages === undefined);
+    const [routes, order] = routed
+      ? await Promise.all([
+          intakeRoutes.listIntakeRoutes(scope),
+          evaluator === 'intake-order'
+            ? intakeRoutes.readIntakeOrder(scope, { boards: [...boards.keys()] })
+            : undefined,
+        ])
+      : [[], undefined];
+    const resolution = resolveIntake({
+      evaluator,
+      routes,
+      order: order?.boardKeys ?? [],
+      facts: cardRuleFacts({
+        title: input.title,
+        metadata: input.metadata ?? null,
+        externalSource: input.externalSource ?? null,
+      }),
+      registry: boards,
+    });
+    // No board's rules take it: the person picks the board.
+    if (resolution.outcome === 'not_routed') {
+      return {
+        status: 'refused',
+        code: 'intake_board_required',
+        message: `${resolution.reason} Pick the board to file it on.`,
+      };
+    }
+    boardId = resolution.board;
+    // Named stages keep the card in the board's first phase; the rule only picked the board.
+    if (resolution.routeId !== null && input.stages === undefined) {
+      placement = { phase: resolution.phase, routeId: resolution.routeId };
+    }
+  }
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];
@@ -175,7 +214,7 @@ export async function createFactoryWorkItem({
     }
     if (revision === undefined) return notFound;
   }
-  if (!transitionService) {
+  if (!boardEngine) {
     await rollBack();
     return {
       status: 'refused',
@@ -187,7 +226,7 @@ export async function createFactoryWorkItem({
     request: Omit<FactoryTransitionRequest, 'expectedRevision'>,
   ): Promise<TransitionResult | undefined> => {
     for (let attempt = 1; revision !== undefined; attempt++) {
-      const transitioned = await transitionService.transition({ ...request, expectedRevision: revision });
+      const transitioned = await boardEngine.requestMove({ ...request, expectedRevision: revision });
       // The result carries no timestamp, so `updatedAt` stays at the last write this call saw; the
       // commit has moved the card past it, so a later rollback keeps the card instead of guessing.
       if (transitioned.status === 'accepted') revision = transitioned.revision;
@@ -227,6 +266,8 @@ export async function createFactoryWorkItem({
       actor: { type: 'system', id: 'factory-intake-route' },
       ingress: { type: 'rule', identity: `work-item:${id}:intake-route` },
       cause: 'work_item_created',
+      // The route's target is admin-authored, so the first phase's next phases don't restrict it.
+      routeFiling: true,
     });
     if (!moved) return notFound;
     if (moved.status === 'rejected') {

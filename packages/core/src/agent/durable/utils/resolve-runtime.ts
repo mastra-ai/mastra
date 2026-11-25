@@ -4,6 +4,7 @@ import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
+import { resolveAgentById } from '../../../mastra/resolve-agent';
 import type { MastraMemory } from '../../../memory/memory';
 import type {
   ProcessorState,
@@ -12,14 +13,14 @@ import type {
   LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
+import { liveRequestEntries, restoreRequestContext } from '../../request-context-snapshot';
 import { SaveQueueManager } from '../../save-queue';
-import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
@@ -104,37 +105,22 @@ export interface ResolveRuntimeOptions {
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
+export { restoreRequestContext };
+
 /**
- * Restore a RequestContext from the JSON-safe `requestContextEntries`
- * snapshot serialized onto the workflow input (see preparation.ts).
- *
- * `entries` is absent on a step input even when the run itself has a context:
- * the snapshot is propagated at the run level, not copied onto every step.
- * `runLevel` is that run-level context, which the execution engine has already
- * rebuilt in the step's scope — falling back to it is what keeps request-scoped
- * resolution (tenant/user, workspace, dynamic model/memory) working for tools
- * rebuilt on a cross-process worker, including a delegated subagent's.
+ * The run's `requestContextEntries` as handed to scorers (`customContext`), with
+ * the signed-in user taken from the live run-level context rather than the
+ * snapshot. The bearer token is never included.
  */
-export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
-  if (entries) {
-    // Drop any persisted token from legacy snapshots written before the token
-    // was excluded from persistence — a stale bearer token must never be restored.
-    const restored: RequestContext = new RequestContext<unknown>(
-      Object.entries(entries).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
-    );
-    // The framework-managed bearer token is deliberately never persisted into
-    // `requestContextEntries` (see preparation.ts), so carry the *live* token
-    // over from the run-level context when one exists. Without this, tools
-    // that forward auth (e.g. same-auth MCP servers) would lose the token on
-    // any path where the snapshot takes precedence during an authenticated run.
-    const liveToken = runLevel?.getRaw?.(MASTRA_AUTH_TOKEN_KEY);
-    if (liveToken !== undefined) {
-      restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
-    }
-    restoreRunAgentScopes(restored);
-    return restored;
-  }
-  return runLevel ?? new RequestContext();
+export function restoreCustomContext(
+  entries?: Record<string, unknown>,
+  runLevel?: RequestContext,
+): Record<string, unknown> | undefined {
+  if (!entries) return undefined;
+  return Object.fromEntries([
+    ...Object.entries(withoutLiveRequestKeys(entries)),
+    ...liveRequestEntries(runLevel).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
+  ]);
 }
 
 /**
@@ -150,6 +136,49 @@ export class DurableProcessorRebuildError extends Error {
     );
     this.name = 'DurableProcessorRebuildError';
     this.cause = cause;
+  }
+}
+
+/**
+ * The process running a step could not find the run's agent in its registry
+ * or editor. Running on would execute the step with no tools, memory or
+ * processors, so the step fails instead.
+ */
+export class DurableAgentNotFoundError extends Error {
+  constructor(agentId: string, runId: string, cause?: unknown) {
+    super(
+      `[DurableAgent:${agentId}] Agent "${agentId}" is not registered and the editor could not load it, so run ${runId} cannot run here${cause ? `: ${cause instanceof Error ? cause.message : String(cause)}` : ''}`,
+    );
+    this.name = 'DurableAgentNotFoundError';
+    this.cause = cause;
+  }
+}
+
+async function resolveRunAgent(
+  mastra: Mastra,
+  agentId: string,
+  runId: string,
+  agentVersionId?: string,
+): Promise<Agent<any, any, any, any>> {
+  const version = agentVersionId ? { versionId: agentVersionId } : undefined;
+  const result = await resolveAgentById(mastra, agentId, version);
+  if (result.status !== 'found') {
+    throw new DurableAgentNotFoundError(agentId, runId, result.status === 'error' ? result.error : undefined);
+  }
+
+  const { agent } = result;
+  if (!version || agent.toRawConfig()?.resolvedVersionId === agentVersionId) return agent;
+
+  try {
+    // A stored definition replaces the previous one; code-backed versions instead overlay the code agent.
+    const pinned =
+      agent.source === 'stored'
+        ? await mastra.getEditor()?.agent.getById(agentId, version)
+        : await mastra.resolveVersionedAgent(agent, version);
+    if (pinned && pinned.toRawConfig()?.resolvedVersionId === version.versionId) return pinned;
+    throw new Error(`Agent version "${agentVersionId}" was not found`);
+  } catch (error) {
+    throw new DurableAgentNotFoundError(agentId, runId, error);
   }
 }
 
@@ -213,6 +242,29 @@ function assertToolsetToolsAvailable(
       details: { agentId, runId, missingTools: missingToolsetTools.join(',') },
     });
   }
+}
+
+/**
+ * The background-task manager and agent config a run dispatches with, resolved
+ * the same way as in preparation.ts. Only the process that started the run has
+ * them on its registry entry, so a worker rebuilding the run restores them here;
+ * without them every background-eligible tool runs inline (#31090).
+ *
+ * Dispatch stays off when the run's options are unknown: the entry keeps the
+ * first manager a rebuild restores, so restoring one ungated could dispatch for
+ * a run that disabled background tasks.
+ */
+function resolveBackgroundTasks(
+  mastra: Mastra,
+  agent: { getBackgroundTasksConfig?: () => RunRegistryEntry['backgroundTasksConfig'] },
+  execOptions: SerializableDurableOptions | undefined,
+): Pick<RunRegistryEntry, 'backgroundTaskManager' | 'backgroundTasksConfig'> {
+  const dispatchDisabled =
+    !execOptions || execOptions.disableBackgroundTasks || execOptions.backgroundTaskPolicy?.allowToolDispatch === false;
+  return {
+    backgroundTaskManager: dispatchDisabled ? undefined : mastra.backgroundTaskManager,
+    backgroundTasksConfig: agent.getBackgroundTasksConfig?.(),
+  };
 }
 
 /**
@@ -281,6 +333,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
   let rebuiltAgent: Agent<any, any, any, any> | undefined;
+  let backgroundTasks: ReturnType<typeof resolveBackgroundTasks> | undefined;
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -289,7 +342,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
-      const agent = mastra.getAgentById(agentId);
+      const agent = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
       rebuiltAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
 
       // Restore the caller's request context from the JSON-safe snapshot on
@@ -297,6 +350,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // request-scoped tools / workspace / memory / processors resolve with
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries, options.requestContext);
+      backgroundTasks = resolveBackgroundTasks(mastra, agent, input.options);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -306,6 +360,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
         clientTools: input.options?.clientTools as ToolsInput | undefined,
+        backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
+        backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
       });
       assertToolsetToolsAvailable(tools, input.options?.toolsetToolNames, agentId, runId);
 
@@ -348,7 +404,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       rehydratedFromMastra = true;
     } catch (error) {
-      if (error instanceof DurableProcessorRebuildError) throw error;
+      if (error instanceof DurableProcessorRebuildError || error instanceof DurableAgentNotFoundError) throw error;
       if ((input.options?.toolsetToolNames?.length ?? 0) > 0) throw error;
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
@@ -388,6 +444,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       errorProcessors,
       processorStates,
       agent: rebuiltAgent,
+      ...backgroundTasks,
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -469,6 +526,7 @@ export async function rebuildRunToolsFromMastra(options: {
   mastra?: Mastra;
   runId: string;
   agentId: string;
+  agentVersionId?: string;
   state: SerializableDurableState;
   options?: SerializableDurableOptions;
   /** JSON-safe request-context snapshot from the workflow input (see preparation.ts). */
@@ -496,12 +554,13 @@ export async function rebuildRunToolsFromMastra(options: {
 
   let agentResolved = false;
   try {
-    const agent = mastra.getAgentById(agentId);
+    const agent = await resolveRunAgent(mastra, agentId, runId, options.agentVersionId);
     agentResolved = true;
     const processorAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
+    const backgroundTasks = resolveBackgroundTasks(mastra, agent, execOptions);
 
     const tools = await agent.getToolsForExecution({
       runId,
@@ -511,6 +570,8 @@ export async function rebuildRunToolsFromMastra(options: {
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
+      backgroundTaskEnabled: Boolean(backgroundTasks.backgroundTaskManager),
+      backgroundTaskPolicy: execOptions?.backgroundTaskPolicy,
     });
 
     // A hydrated entry means the caller's process still holds the toolset tools
@@ -551,18 +612,16 @@ export async function rebuildRunToolsFromMastra(options: {
       memory,
       saveQueueManager,
       agent: processorAgent,
+      ...backgroundTasks,
       ...rebuiltProcessors,
-      ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
+      ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext, requestContextRebuilt: true } : {}),
     };
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
     existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
-      const needsProcessorPipeline = !existing.outputProcessors || !existing.processorStates;
-      if (
-        options.rehydrateProcessors &&
-        ((existing.isPlaceholder && needsProcessorPipeline) || !existing.requestContext)
-      ) {
+      if (options.rehydrateProcessors && !existing.requestContext) {
         existing.requestContext = resolveRequestContext;
+        existing.requestContextRebuilt = true;
       }
       const registryModel = existing.model as { __metadataOnly?: boolean } | undefined;
       const hasAuthoritativeToolSnapshot =
@@ -580,6 +639,8 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
       existing.agent ??= processorAgent;
+      existing.backgroundTaskManager ??= backgroundTasks.backgroundTaskManager;
+      existing.backgroundTasksConfig ??= backgroundTasks.backgroundTasksConfig;
     } else {
       existing = patch as RunRegistryEntry;
       setRunRegistryEntry(runId, existing, mastra as Mastra | undefined);

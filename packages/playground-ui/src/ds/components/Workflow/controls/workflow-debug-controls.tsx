@@ -1,8 +1,10 @@
-import { Loader2, Pause, PlayIcon, StepForwardIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconStepForwards } from '@/ds/icons/central/IconStepForwards';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;
@@ -33,7 +35,7 @@ export function WorkflowDebugControls({
           <Txt as="span" variant="meta" tone="muted">
             Next step
           </Txt>
-          <Badge size="sm" icon={<Pause />} emphasis="subtle">
+          <Badge size="sm" icon={<IconPause />} emphasis="subtle">
             Step by step
           </Badge>
         </div>
@@ -49,9 +51,10 @@ export function WorkflowDebugControls({
           aria-label="Run next step"
           onClick={onRunNextStep}
           disabled={actionsDisabled}
-          icon={isStreaming ? <Loader2 className="motion-safe:animate-spin" /> : <StepForwardIcon />}
+          icon={<IconStepForwards />}
+          loading={isStreaming}
         >
-          {isStreaming ? 'Running step…' : 'Run next step'}
+          Run next step
         </Button>
 
         <Button
@@ -62,7 +65,7 @@ export function WorkflowDebugControls({
           onClick={onContinueRun}
           disabled={actionsDisabled}
         >
-          <PlayIcon />
+          <IconPlay />
         </Button>
         {children}
       </div>

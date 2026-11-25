@@ -1,5 +1,7 @@
+import { unstartedCards } from '@mastra/factory/routes/work-item-selection';
+
+import { storedCard } from '../../../../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
-import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
@@ -17,16 +19,14 @@ export const factoryProjects: FactoryProjectPayload[] = [
 
 export const factoryRepositories = {
   [ACTIVE_FACTORY_ID]: [
-    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/workspaces/mastra' }),
+    listedRepository(FIRST_REPOSITORY_ID, 'mastra-ai/mastra', { branch: 'main' }),
     listedRepository(SECOND_REPOSITORY_ID, 'mastra-ai/docs', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/mastra-docs',
     }),
   ],
   [OTHER_FACTORY_ID]: [
     listedRepository(OTHER_REPOSITORY_ID, 'other-org/other-repo', {
       branch: 'main',
-      sandboxWorkdir: '/workspaces/other',
     }),
   ],
 };
@@ -139,6 +139,16 @@ export const workItems: WorkItem[] = [
     stageHistory: [],
     sessions: {},
     metadata: { number: 4242 },
+    workItem: {
+      provider: 'github',
+      key: null,
+      url: 'https://github.com/mastra-ai/mastra/pull/4242',
+      title: 'Bump the command palette dependencies',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { number: 4242 },
+    },
     triageType: null,
     acceptedAt: null,
     description: null,
@@ -169,44 +179,6 @@ export const workItems: WorkItem[] = [
   },
 ];
 
-/** Live GitHub intake for `FIRST_REPOSITORY_ID`: what the board's Intake column offers. */
-export const intakePullRequests: GithubPullRequest[] = [
-  {
-    number: 20454,
-    title: 'Harden the review board drop target',
-    url: 'https://github.com/mastra-ai/mastra/pull/20454',
-    author: 'ana',
-    baseBranch: 'main',
-    headBranch: 'fix/review-drop-target',
-    createdAt: '2026-07-30T09:00:00.000Z',
-    updatedAt: '2026-07-30T09:05:00.000Z',
-  },
-  {
-    // Already filed as `work-item-review`; the live feed still lists it, search must not double it.
-    number: 900,
-    title: 'Review command palette PR',
-    url: 'https://github.com/mastra-ai/mastra/pull/900',
-    author: 'ben',
-    baseBranch: 'main',
-    headBranch: 'feat/command-palette',
-    createdAt: '2026-07-29T13:00:00.000Z',
-    updatedAt: '2026-07-29T13:10:00.000Z',
-  },
-];
-
-export const intakeIssues: GithubIssue[] = [
-  {
-    number: 20455,
-    title: 'Rail scopes overflow on narrow viewports',
-    url: 'https://github.com/mastra-ai/mastra/issues/20455',
-    author: 'cleo',
-    labels: [],
-    comments: 0,
-    createdAt: '2026-07-30T08:00:00.000Z',
-    updatedAt: '2026-07-30T08:10:00.000Z',
-  },
-];
-
 function toExternalSource(source: WorkItem['source'], sourceKey: string | null, url: string | null) {
   if (source === 'manual' || !sourceKey) return null;
 
@@ -233,4 +205,39 @@ export function toWireWorkItem(item: WorkItem) {
     factoryProjectId: githubProjectId,
     externalSource: toExternalSource(source, sourceKey, url),
   };
+}
+
+/**
+ * The list route's answer for a query, by the server's rules: the whole board, or the part the
+ * query narrows it to. `null` is a query the server refuses.
+ */
+export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams) {
+  const sessionIds = query.getAll('sessionId');
+  const sources = query.getAll('source');
+  const ids = query.getAll('workItemId');
+  const scope = query.get('scope');
+  const holdsSession = (card: WorkItem) => Object.keys(card.sessions).length > 0;
+  let listed = cards;
+  let total: number | undefined;
+  if (scope !== null && scope !== 'sessions') return null;
+  if (query.get('started') === 'false') {
+    // The server's own search, over the cards as the server stores them.
+    const byId = new Map(cards.map(card => [card.id, card]));
+    const found = unstartedCards(
+      cards.map(card => storedCard(toWireWorkItem(card))),
+      query.get('q') ?? '',
+      Number(query.get('limit') ?? 20),
+    );
+    listed = found.cards.map(card => byId.get(card.id)!);
+    total = found.total;
+  } else if (scope === 'sessions') {
+    listed = cards.filter(holdsSession);
+  } else if (sessionIds.length > 0) {
+    listed = cards.filter(card => Object.values(card.sessions).some(ref => sessionIds.includes(ref.sessionId)));
+  } else if (sources.length > 0) {
+    listed = cards.filter(card => [card.sourceKey, card.url].some(key => key !== null && sources.includes(key)));
+  } else if (ids.length > 0) {
+    listed = cards.filter(card => ids.includes(card.id));
+  }
+  return { workItems: listed.map(toWireWorkItem), ...(total === undefined ? {} : { total }) };
 }

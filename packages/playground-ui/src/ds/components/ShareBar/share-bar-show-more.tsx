@@ -1,4 +1,5 @@
-import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
+import { IconChevronDownMedium } from '@/ds/icons/central/IconChevronDownMedium';
+import { IconChevronTopMedium } from '@/ds/icons/central/IconChevronTopMedium';
 
 /** The list's last row: pages more rows in, or collapses back to the top rows. */
 export function ShowMore({
@@ -25,18 +26,18 @@ export function ShowMore({
     <li className="-mx-2 flex items-center gap-1">
       {left > 0 && (
         <button type="button" onClick={onMore} className={button}>
-          <ChevronDownIcon className="size-3.5 shrink-0" />
+          <IconChevronDownMedium className="size-icon-sm shrink-0" />
           Show {Math.min(left, pageSize)} more
         </button>
       )}
       {shown > limit && (
         <button type="button" onClick={onLess} className={button}>
-          <ChevronUpIcon className="size-3.5 shrink-0" />
+          <IconChevronTopMedium className="size-icon-sm shrink-0" />
           Show top {limit}
         </button>
       )}
       {left > 0 && (
-        <span className="ml-auto pr-2 text-body-sm text-placeholder tabular-nums">
+        <span className="ml-auto pr-2 text-body-sm text-subtle-foreground tabular-nums">
           {n.format(shown)} of {n.format(total)}
         </span>
       )}

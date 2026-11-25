@@ -1,11 +1,11 @@
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import { useServerVersions } from '../../../../hooks/useServerVersions';
 import type { ServerVersions } from '../../../../hooks/useServerVersions';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
 
@@ -31,7 +31,7 @@ export function DebugSection() {
       title="Running versions"
       description="The Mastra packages this Factory server was built with. Include them when you report an issue."
       action={
-        query.data && (
+        query.data ? (
           <CopyButton
             content={formatVersions(query.data)}
             tooltip="Copy versions"
@@ -39,12 +39,24 @@ export function DebugSection() {
             size="icon-sm"
             showToast={false}
           />
+        ) : (
+          query.isPending && <Skeleton className="size-control-sm rounded-full motion-reduce:before:animate-none" />
         )
       }
     >
       {query.isPending ? (
         <SettingsContainer>
-          <SettingsRowsSkeleton label="Loading versions" />
+          <SettingsSkeleton
+            label="Loading versions"
+            placeholder={
+              <SettingsItem
+                aria-hidden
+                title={<SkeletonText line="text-label" className="w-40 motion-reduce:before:animate-none" />}
+              >
+                <SkeletonText line="text-caption" className="w-12 motion-reduce:before:animate-none" />
+              </SettingsItem>
+            }
+          />
         </SettingsContainer>
       ) : query.isError ? (
         <SettingsContainer>
@@ -60,13 +72,13 @@ export function DebugSection() {
           )}
           <SettingsContainer>
             {query.data.packages.map(({ name, version }) => (
-              <SettingsRow key={name} label={name}>
+              <SettingsItem key={name} title={name}>
                 <VersionValue>{version}</VersionValue>
-              </SettingsRow>
+              </SettingsItem>
             ))}
-            <SettingsRow label="Node.js">
+            <SettingsItem title="Node.js">
               <VersionValue>{query.data.nodeVersion}</VersionValue>
-            </SettingsRow>
+            </SettingsItem>
           </SettingsContainer>
         </>
       )}

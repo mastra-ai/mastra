@@ -11,5 +11,14 @@
   "arrowParens": "avoid",
   "sortPackageJson": false,
   "sortTailwindcss": true,
-  "ignorePatterns": ["**/*.mdx", ".turbo/**", ".docusaurus/**", "build/**", "node_modules/**", "static/**", "styles/**"]
+  "ignorePatterns": [
+    "**/*.mdx",
+    ".turbo/**",
+    ".docusaurus/**",
+    "build/**",
+    "node_modules/**",
+    "static/**",
+    "styles/**",
+    "scripts/gateway-api/openapi.snapshot.json"
+  ]
 }

@@ -2,21 +2,12 @@
  * Evented engine workflow tests.
  *
  * This file contains:
- * 1. The shared test suite bootstrap (via createWorkflowTestSuite)
+ * 1. The shared test suite bootstrap (via createEventedEngineTestSuite)
  * 2. Evented-engine-specific tests that cannot be shared across engines
  */
 
 import { EventEmitter } from 'node:events';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { createWorkflowTestSuite } from '@internal/workflow-test-utils';
-import type {
-  WorkflowResult,
-  ResumeWorkflowOptions,
-  TimeTravelWorkflowOptions,
-  StreamWorkflowResult,
-  StreamEvent,
-  WorkflowRegistry,
-} from '@internal/workflow-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../agent';
@@ -24,12 +15,16 @@ import type { FGACheckParams } from '../../auth/ee';
 import { MastraNonRetryableError } from '../../error';
 import type { Event } from '../../events';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { noopLogger } from '../../logger/noop-logger';
 import { Mastra } from '../../mastra';
 import type { Processor } from '../../processors';
+import { PROCESSOR_ABORT_SIGNAL } from '../../processors/abort-signal-scope';
+import { ProcessorRunner } from '../../processors/runner';
 import { ProcessorStepSchema } from '../../processors/step-schema';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
-import { createTool } from '../../tools/tool';
+import { ChunkFrom } from '../../stream/types';
+import { createEventedEngineTestSuite } from '../test-utils/evented-engine-suite';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 import { createStep, createWorkflow } from '.';
 
@@ -37,295 +32,7 @@ import { createStep, createWorkflow } from '.';
 // Shared Test Suite (Evented Engine)
 // ============================================================================
 
-// Shared storage instance
-const sharedStorage = new MockStore();
-
-// Long-lived Mastra instance with every test workflow registered + workers running.
-// Most tests use their own per-run Mastra (created in the helpers below), but a few
-// shared tests call `workflow.createRun()` directly and therefore need the workflow to
-// be bound to a Mastra whose event workers are running. After each test we re-bind all
-// registry workflows back to this instance (the per-test Mastras re-bind them to
-// short-lived, stopped instances).
-let registeredMastra: Mastra | undefined;
-let registeredRegistry: WorkflowRegistry | undefined;
-
-const rebindRegistryWorkflows = () => {
-  if (!registeredMastra || !registeredRegistry) {
-    return;
-  }
-  for (const entry of Object.values(registeredRegistry)) {
-    (entry.workflow as any).__registerMastra?.(registeredMastra);
-  }
-};
-
-// @ts-expect-error - TS2589: EventedWorkflow types cause excessively deep type instantiation
-createWorkflowTestSuite({
-  name: 'Workflow (Evented Engine)',
-
-  getWorkflowFactory: () => ({
-    createWorkflow: createWorkflow as any,
-    createStep,
-    createTool,
-    Agent,
-    Mastra,
-  }),
-
-  skip: {
-    // All domains should work on Evented Engine
-    restart: false, // Evented engine supports restart
-  },
-
-  // Provide access to storage for tests that need to spy on storage operations
-  getStorage: () => sharedStorage,
-
-  // The evented processor deletes snapshot rows for non-paused terminal
-  // statuses the workflow declined to persist (#22209).
-  deletesDeclinedTerminalSnapshots: true,
-
-  // Register every test workflow with a single long-lived Mastra (with its event
-  // workers running) so tests that call `workflow.createRun()` directly work.
-  registerWorkflows: async registry => {
-    registeredRegistry = registry;
-    const workflows: Record<string, any> = {};
-    const agents: Record<string, any> = {};
-    const tools: Record<string, any> = {};
-    for (const [id, entry] of Object.entries(registry)) {
-      workflows[id] = entry.workflow;
-      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
-      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
-    }
-    registeredMastra = new Mastra({
-      logger: false,
-      storage: sharedStorage,
-      workflows,
-      agents: Object.keys(agents).length ? agents : undefined,
-      tools: Object.keys(tools).length ? tools : undefined,
-      pubsub: new EventEmitterPubSub(),
-    });
-    await registeredMastra.startWorkers();
-  },
-
-  beforeAll: async () => {
-    vi.spyOn(globalThis.crypto, 'randomUUID').mockRestore();
-  },
-
-  afterAll: async () => {
-    await registeredMastra?.stopWorkers();
-  },
-
-  beforeEach: async () => {
-    // Don't reset mocks - they're created at describe time and need to persist
-    // vi.resetAllMocks();
-    const workflowsStore = await sharedStorage.getStore('workflows');
-    await workflowsStore?.dangerouslyClearAll();
-  },
-
-  afterEach: async () => {
-    // Per-test helpers create their own Mastra (which re-binds the workflow it runs to
-    // that short-lived, now-stopped instance). Re-bind everything to the long-lived
-    // Mastra so the next test still has a running engine if it uses createRun() directly.
-    rebindRegistryWorkflows();
-  },
-
-  skipTests: {
-    // Enable all tests - Default Engine is the reference implementation
-    // Enable opt-in tests that require storage
-    errorStorageRoundtrip: false,
-    //persistWorkflowSnapshot error-handling tests are skipped because it's not used in evented-engine
-    errorPersistWithoutStack: true,
-    errorPersistMastraError: true,
-    // Evented streamLegacy emits a different event sequence for agent steps: no stepCallId
-    // on step-start/step-finish, step-result carries payload/startedAt, and agent chunks
-    // arrive as step-output events instead of tool-call-streaming-* events.
-    streamingAgentDetailedEventsLegacy: true,
-  },
-
-  executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
-    // Create a fresh Mastra instance for each test execution
-    // This ensures proper isolation between tests.
-    // Carry through any mastraAgents/mastraTools declared for this workflow in the
-    // shared harness registry so declarative `.agent('id')` / `.tool('id')` builder
-    // calls can resolve their string references at execution time.
-    const registryEntry = registeredRegistry?.[workflow.id];
-    const mastra = new Mastra({
-      workflows: { [workflow.id]: workflow },
-      agents: registryEntry?.mastraAgents,
-      tools: registryEntry?.mastraTools,
-      storage: sharedStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-
-    try {
-      // Start the event engine
-      await mastra.startWorkers();
-
-      // Create the run and execute using streaming API
-      const run = await workflow.createRun({ runId: options.runId, resourceId: options.resourceId });
-      const streamResult = run.stream({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-        outputOptions: options.outputOptions,
-      });
-
-      // Consume the stream to ensure it completes
-      for await (const _event of streamResult.fullStream) {
-        // Discard events - we only care about the result
-      }
-
-      const result = await streamResult.result;
-
-      return result as WorkflowResult;
-    } finally {
-      // Always stop the event engine
-      await mastra.stopWorkers();
-    }
-  },
-
-  resumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<WorkflowResult> => {
-    // Create a fresh Mastra instance with the same storage
-    // This allows us to resume workflows from persisted state
-    const mastra = new Mastra({
-      workflows: { [workflow.id]: workflow },
-      storage: sharedStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-
-    try {
-      // Start the event engine
-      await mastra.startWorkers();
-
-      // Get the workflow run by ID
-      const run = await workflow.createRun({ runId: options.runId });
-
-      // Resume with the provided options
-      const result = await run.resume({
-        resumeData: options.resumeData,
-        step: options.step,
-        label: options.label,
-        forEachIndex: options.forEachIndex,
-      } as any);
-
-      return result as WorkflowResult;
-    } finally {
-      // Always stop the event engine
-      await mastra.stopWorkers();
-    }
-  },
-
-  timetravelWorkflow: async (workflow, options: TimeTravelWorkflowOptions): Promise<WorkflowResult> => {
-    // Create a fresh Mastra instance with the same storage
-    const mastra = new Mastra({
-      workflows: { [workflow.id]: workflow },
-      storage: sharedStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-
-    try {
-      // Start the event engine
-      await mastra.startWorkers();
-
-      // Create a run and use timeTravel API
-      const run = await workflow.createRun({ runId: options.runId });
-
-      const result = await run.timeTravel({
-        step: options.step as any,
-        context: options.context as any,
-        perStep: options.perStep,
-        inputData: options.inputData as any,
-        nestedStepsContext: options.nestedStepsContext as any,
-        resumeData: options.resumeData as any,
-      });
-
-      return result as WorkflowResult;
-    } finally {
-      // Always stop the event engine
-      await mastra.stopWorkers();
-    }
-  },
-
-  streamWorkflow: async (workflow, inputData, options = {}, api = 'stream'): Promise<StreamWorkflowResult> => {
-    const mastra = new Mastra({
-      workflows: { [workflow.id]: workflow },
-      storage: sharedStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-
-    try {
-      await mastra.startWorkers();
-
-      const run = await workflow.createRun({
-        runId: options.runId,
-        resourceId: options.resourceId,
-      });
-
-      const events: StreamEvent[] = [];
-
-      if (api === 'streamLegacy') {
-        const { stream, getWorkflowState } = run.streamLegacy({
-          inputData,
-          initialState: options.initialState as any,
-          perStep: options.perStep,
-          requestContext: options.requestContext as any,
-        } as any);
-
-        for await (const event of stream) {
-          events.push(JSON.parse(JSON.stringify(event)));
-        }
-
-        const result = await getWorkflowState();
-        return { events, result: result as WorkflowResult };
-      }
-      const streamResult = run.stream({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-        closeOnSuspend: options.closeOnSuspend,
-      });
-
-      for await (const event of streamResult.fullStream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
-    } finally {
-      await mastra.stopWorkers();
-    }
-  },
-
-  streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {
-    const mastra = new Mastra({
-      workflows: { [workflow.id]: workflow },
-      storage: sharedStorage,
-      pubsub: new EventEmitterPubSub(),
-    });
-
-    try {
-      await mastra.startWorkers();
-
-      const run = await workflow.createRun({ runId: options.runId });
-
-      const events: StreamEvent[] = [];
-      const streamResult = run.resumeStream({
-        resumeData: options.resumeData,
-        step: options.step,
-        label: options.label,
-      } as any);
-
-      for await (const event of streamResult.fullStream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
-    } finally {
-      await mastra.stopWorkers();
-    }
-  },
-});
+createEventedEngineTestSuite({ name: 'Workflow (Evented Engine)', storage: new MockStore() });
 
 // ============================================================================
 // Evented Engine-Specific Tests
@@ -335,7 +42,7 @@ const testStorage = new MockStore();
 
 describe('Workflow (Evented Engine Specific)', () => {
   beforeEach(async () => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
     const workflowsStore = await testStorage.getStore('workflows');
     await workflowsStore?.dangerouslyClearAll();
   });
@@ -812,6 +519,144 @@ describe('Workflow (Evented Engine Specific)', () => {
     } finally {
       await mastra.stopWorkers();
     }
+  });
+
+  describe('processor chain abort signal (#29208)', () => {
+    // Real brokers JSON round-trip events, which turns an AbortSignal into `{}`.
+    // The outputStream phase is used because a MessageList does not survive that round trip either.
+    class SerializingPubSub extends EventEmitterPubSub {
+      async publish(topic: string, event: any) {
+        return super.publish(topic, JSON.parse(JSON.stringify(event)));
+      }
+    }
+
+    const setup = (
+      id: string,
+      onSecond?: () => Promise<void>,
+      pubsub: EventEmitterPubSub = new SerializingPubSub(),
+    ) => {
+      const received: Array<AbortSignal | undefined> = [];
+      const recorder = (stepId: string, wait?: () => Promise<void>): Processor => ({
+        id: stepId,
+        processOutputStream: async ({ part, abortSignal }) => {
+          received.push(abortSignal);
+          await wait?.();
+          return part;
+        },
+      });
+      const workflow = createWorkflow({
+        id,
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(recorder('first')))
+        .then(createStep(recorder('second', onSecond)))
+        .commit();
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub,
+      });
+      return { received, workflow, mastra };
+    };
+    const inputData = (signal?: AbortSignal) =>
+      ({
+        phase: 'outputStream',
+        part: { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+        streamParts: [],
+        abortSignal: signal,
+      }) as any;
+
+    it("passes the caller's live signal to every processor run by the processor runner", async () => {
+      // The runner's payload also carries a processorStates Map, which a serializing pubsub
+      // breaks before any processor runs, so this covers the runner wiring in-process.
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-chain',
+        undefined,
+        new EventEmitterPubSub(),
+      );
+      await mastra.startWorkers();
+      try {
+        const controller = new AbortController();
+        const runner = new ProcessorRunner({ logger: noopLogger, agentName: 'agent', outputProcessors: [workflow] });
+        const result = await runner.processPart(
+          { type: 'text-delta', runId: 'run', from: ChunkFrom.AGENT, payload: { id: '1', text: 'hi' } },
+          new Map(),
+          undefined,
+          undefined,
+          undefined,
+          0,
+          undefined,
+          controller.signal,
+        );
+
+        expect(result.blocked).toBe(false);
+        expect(received).toHaveLength(2);
+        expect(received.map(s => s?.aborted)).toEqual([false, false]);
+        controller.abort();
+        expect(received.map(s => s?.aborted)).toEqual([true, true]);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('aborts the processor signal when the run is cancelled while a caller signal is set', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup(
+        'evented-processor-abort-signal-caller-and-cancel',
+        async () => {
+          secondSignal = received[1];
+          secondStarted();
+          await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+        },
+        new EventEmitterPubSub(),
+      );
+      await mastra.startWorkers();
+      try {
+        const caller = new AbortController();
+        const run = await workflow.createRun();
+        mastra.__createRunScope(run.runId).set(PROCESSOR_ABORT_SIGNAL, caller.signal);
+        const result = run.start({ inputData: inputData(caller.signal) });
+        await started;
+
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        expect(caller.signal.aborted).toBe(false);
+        await result;
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('gives the next processor a signal that aborts when the run is cancelled', async () => {
+      let secondStarted!: () => void;
+      const started = new Promise<void>(resolve => (secondStarted = resolve));
+      let secondSignal: AbortSignal | undefined;
+      const { received, workflow, mastra } = setup('evented-processor-abort-signal-cancel', async () => {
+        secondSignal = received[1];
+        secondStarted();
+        await new Promise<void>(resolve => secondSignal!.addEventListener('abort', () => resolve(), { once: true }));
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = run.start({ inputData: inputData(new AbortController().signal) });
+        await started;
+
+        expect(secondSignal).toBeInstanceOf(AbortSignal);
+        expect(secondSignal!.aborted).toBe(false);
+        await run.cancel();
+        expect(secondSignal!.aborted).toBe(true);
+        await result;
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
   });
 
   // Note: Streaming Legacy tests removed - they duplicated Streaming tests.
@@ -1296,6 +1141,98 @@ describe('Workflow (Evented Engine Specific)', () => {
         // Iteration 0 already succeeded and must not run a second time.
         expect(executions).toEqual([1, 2]);
         expect(result.status).toBe('success');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
+  // Runs whose concurrent foreach suspended on an earlier version stored the suspended record without
+  // `__workflow_meta.foreachOutput`. A resumed item must still get its own suspend payload: for an
+  // agent tool call, missing suspend data makes the call look fresh and can run a declined tool.
+  describe('foreach suspended before per-item records were kept in the suspended record', () => {
+    const approve = createStep({
+      id: 'upgrade-approve',
+      inputSchema: z.object({ item: z.number() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      outputSchema: z.object({ item: z.number() }),
+      execute: async ({ inputData, suspendData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({ item: inputData.item });
+        }
+        seen.push({ item: inputData.item, suspendData });
+        return { item: inputData.item };
+      },
+    });
+    let seen: { item: number; suspendData: unknown }[] = [];
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-upgrade',
+      inputSchema: z.array(z.object({ item: z.number() })),
+      outputSchema: z.array(z.object({ item: z.number() })),
+    });
+    workflow.foreach(approve, { concurrency: 3 }).commit();
+
+    const own = (...items: number[]) => items.map(item => ({ item, suspendData: { item } }));
+    const cases: {
+      name: string;
+      items: number[];
+      forEachIndex?: number;
+      clearSlot?: number;
+      expected: { item: number; suspendData: unknown }[];
+    }[] = [
+      { name: 'gives the only item its own suspend data', items: [0], forEachIndex: 0, expected: own(0) },
+      { name: 'gives item 1 of three its own suspend data', items: [0, 1, 2], forEachIndex: 1, expected: own(1) },
+      {
+        name: 'gives every item of three its own suspend data',
+        items: [0, 1, 2],
+        forEachIndex: undefined,
+        expected: own(0, 1, 2),
+      },
+      // With no record of its own, an item must not fall back to another item's payload.
+      {
+        name: 'gives an item with no stored record no suspend data',
+        items: [0, 1, 2],
+        forEachIndex: 1,
+        clearSlot: 1,
+        expected: [{ item: 1, suspendData: undefined }],
+      },
+    ];
+    it.each(cases.map(c => [c.name, c] as const))('%s on resume', async (_name, c) => {
+      const { items, forEachIndex, clearSlot, expected } = c;
+      seen = [];
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-upgrade': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const started = await run.start({ inputData: items.map(item => ({ item })) });
+        expect(started.status).toBe('suspended');
+
+        const workflowsStore = (await testStorage.getStore('workflows'))!;
+        const snapshot = (await workflowsStore.loadWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+        }))!;
+        const record = snapshot.context['upgrade-approve'] as any;
+        const meta = record.suspendPayload.__workflow_meta;
+        expect(meta.foreachOutput).toHaveLength(items.length);
+        delete meta.foreachOutput;
+        if (clearSlot !== undefined) record.output[clearSlot] = null;
+        await workflowsStore.persistWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+          snapshot,
+        });
+
+        await run.resume({ step: 'upgrade-approve', forEachIndex, resumeData: { approved: true } });
+
+        expect(seen.sort((a, b) => a.item - b.item)).toEqual(expected);
       } finally {
         await mastra.stopWorkers();
       }

@@ -46,7 +46,12 @@ function AskUserAnswerControls({ options }: { options: AskUserOption[] }) {
     <>
       <AskUserOptions>
         {options.map(option => (
-          <AskUserOptionItem key={option.label} value={option.label} description={option.description}>
+          <AskUserOptionItem
+            key={option.label}
+            value={option.label}
+            description={option.description}
+            recommended={option.recommended}
+          >
             {option.label}
           </AskUserOptionItem>
         ))}

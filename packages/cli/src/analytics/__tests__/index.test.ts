@@ -101,7 +101,9 @@ describe('PosthogAnalytics feature flags', () => {
         apiKey: 'test-key',
         host: 'https://posthog.test',
       });
-      (analytics as unknown as { client: { evaluateFlags: typeof evaluateFlags } }).client = { evaluateFlags };
+      // Keep flush: the exit handler registered by the constructor calls it on the swapped-in client.
+      const client = (analytics as unknown as { client: Record<string, unknown> }).client;
+      client.evaluateFlags = evaluateFlags;
       evaluation = analytics.isFeatureEnabled('platform-workers', {
         distinctId: 'user_123',
         groups: { organization: 'org-1' },

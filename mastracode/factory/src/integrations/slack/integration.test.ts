@@ -1,4 +1,4 @@
-import { AgentControllerChannels } from '@mastra/core/channels';
+import { AgentChannels, AgentControllerChannels } from '@mastra/core/channels';
 import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -73,7 +73,6 @@ describe('SlackIntegration transport configuration', () => {
       }),
     );
   });
-
 });
 
 describe('SlackIntegration.channels', () => {
@@ -108,14 +107,20 @@ describe('SlackIntegration.channels', () => {
     expect(typingStatus({ type: 'text-delta' } as any, context())).toBeUndefined();
     // ...but the reply tool's text, which streams into the thread, does.
     expect(
-      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'reply_in_thread' } } as any, context()),
+      typingStatus(
+        { type: 'tool-call-input-streaming-start', payload: { toolName: 'reply_in_thread' } } as any,
+        context(),
+      ),
     ).toBe('is typing...');
     expect(
       typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'search' } } as any, context()),
     ).toBeUndefined();
     // When the reply's args finish it is still typing, not "working".
     expect(
-      typingStatus({ type: 'tool-call', payload: { toolName: 'reply_in_thread', args: { text: 'hi' } } } as any, context()),
+      typingStatus(
+        { type: 'tool-call', payload: { toolName: 'reply_in_thread', args: { text: 'hi' } } } as any,
+        context(),
+      ),
     ).toBe('is typing...');
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
       'is working...',
@@ -306,6 +311,7 @@ describe('SlackIntegration.channels', () => {
         getId: () => 'us-1',
         getById: vi.fn(async () => ({ metadata: {} })),
         getSetting: vi.fn(async () => null),
+        getSettingOn: vi.fn(async () => null),
         setSetting: vi.fn(async () => {}),
         setSettingOn: vi.fn(async () => {}),
       },
@@ -343,9 +349,13 @@ describe('SlackIntegration.postToolObserver', () => {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
     const channels = {
-      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform }, render: { chatThread: { id: `${platform}:C1:171.1` } } } : null)),
+      buildChannelContextForThread: vi.fn(async () =>
+        platform ? { channel: { platform }, render: { chatThread: { id: `${platform}:C1:171.1` } } } : null,
+      ),
       buildRenderContextForThread: vi.fn(async () =>
-        platform ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } } : null,
+        platform
+          ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } }
+          : null,
       ),
     };
     const integration = new SlackIntegration({ signingSecret: 'secret' });
@@ -367,7 +377,9 @@ describe('SlackIntegration.postToolObserver', () => {
     await integration.postToolObserver({ toolContext: prTool, requestContext });
 
     await vi.waitFor(() => expect(post).toHaveBeenCalled());
-    expect(post).toHaveBeenCalledWith({ markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123' });
+    expect(post).toHaveBeenCalledWith({
+      markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123',
+    });
     // Opening a pull request does not close the thread out; its merge does.
     expect(addReaction).not.toHaveBeenCalled();
   });
@@ -383,5 +395,52 @@ describe('SlackIntegration.postToolObserver', () => {
       requestContext: linked.requestContext,
     });
     expect(linked.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('SlackIntegration early typing status', () => {
+  // Factory pins "is thinking..." before dispatching a run (acknowledgeReceipt
+  // in slack.ts). Drive core's real typing wrapper with Factory's real Slack
+  // adapter config to prove the run end clears it, including runs whose
+  // stream maps to no status under Factory's typingStatus (text only, empty).
+  async function statusesAfterRun(chunkTypes: string[]): Promise<string[]> {
+    const adapterConfig = new SlackIntegration({ signingSecret: 'secret' }).channels(ctxWith()).adapters.slack;
+    const statuses: string[] = [];
+    const thread = {
+      id: 'slack:C1:1.0',
+      startTyping: async (status: string) => {
+        statuses.push(status);
+      },
+    };
+    await thread.startTyping('is thinking...');
+    async function* stream() {
+      for (const type of chunkTypes) yield { type, payload: { text: 'x' } };
+    }
+    const withTypingStatus = (AgentChannels.prototype as any).withTypingStatus as (
+      ...args: unknown[]
+    ) => AsyncIterable<unknown>;
+    const fakeChannels = { log() {}, channelToolNames: new Set<string>() };
+    for await (const _ of withTypingStatus.call(fakeChannels, stream(), thread, 'slack', adapterConfig, {
+      active: false,
+    })) {
+      // drain
+    }
+    return statuses;
+  }
+
+  it('clears the early status when the run streams only text', async () => {
+    expect(await statusesAfterRun(['start', 'text-delta', 'finish'])).toEqual(['is thinking...', '']);
+  });
+
+  it('clears the early status when the run streams nothing', async () => {
+    expect(await statusesAfterRun(['start', 'finish'])).toEqual(['is thinking...', '']);
+  });
+
+  it('clears the early status after a run that set its own status', async () => {
+    expect(await statusesAfterRun(['start', 'reasoning-delta', 'text-delta', 'finish'])).toEqual([
+      'is thinking...',
+      'is thinking...',
+      '',
+    ]);
   });
 });

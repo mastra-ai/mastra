@@ -1,12 +1,13 @@
 {
   "name": "@mastra/voice-openai-realtime",
-  "version": "0.14.9-alpha.1",
+  "version": "0.14.10",
   "description": "Mastra OpenAI Realtime API integration",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {
@@ -33,7 +34,7 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "openai-realtime-api": "^1.0.8",
-    "ws": "^8.22.0"
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

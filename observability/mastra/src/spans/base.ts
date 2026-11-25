@@ -1,4 +1,5 @@
 import { SpanType, InternalSpans } from '@mastra/core/observability';
+import * as coreObservability from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -262,6 +263,30 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public tags?: string[];
   public links?: SpanLink[];
   public traceState?: TraceState;
+  private localErrorCount: number | undefined = typeof coreObservability.claimSpanError === 'function' ? 0 : undefined;
+  private errorOccurrenceIds?: Set<string>;
+
+  public recordError(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void {
+    if (this.isEvent || this.endTime) return;
+    if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+      this.localErrorCount = undefined;
+      return;
+    }
+    const id = coreObservability.claimSpanError?.(error, this.traceId, this.id, options);
+    // Preserve excluded origins so visible ancestors never claim their failures.
+    if (this.isExcluded || id === undefined || this.errorOccurrenceIds?.has(id)) return;
+    (this.errorOccurrenceIds ??= new Set()).add(id);
+    if (this.localErrorCount !== undefined) this.localErrorCount++;
+  }
+
+  public restoreErrorCount(cached: SpanSnapshot<TType>): void {
+    // A scalar without occurrence history cannot safely resume positive accounting.
+    this.localErrorCount =
+      typeof coreObservability.claimSpanError !== 'function' || (cached.errorCount && !cached.errorOccurrenceIds)
+        ? undefined
+        : cached.errorCount;
+    this.errorOccurrenceIds = cached.errorOccurrenceIds?.length ? new Set(cached.errorOccurrenceIds) : undefined;
+  }
   /** Entity type that created the span (e.g., agent, workflow) */
   public entityType?: EntityType;
   /** Entity ID that created the span */
@@ -290,7 +315,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    *
    * Note: metadata is still attached and deepCleaned because it is read in
    * process by getCorrelationContext() and by getLoggerContext() /
-   * getMetricsContext() (which structuredClone it).
+   * getMetricsContext() (which hand it to a context that snapshots it).
    */
   public isExcluded: boolean;
   /** Cached canonical correlation context for this live span */
@@ -342,8 +367,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
     // Metadata is always attached and deepCleaned: it is read in-process
     // by getCorrelationContext() and by getLoggerContext() /
-    // getMetricsContext() (which structuredClone it), and non-filtered
-    // child spans inherit it via options.parent?.metadata.
+    // getMetricsContext() (which hand it to a context that snapshots it), and
+    // non-filtered child spans inherit it via options.parent?.metadata.
     this.metadata = deepClean(
       this.prepareSpanMetadata(mergeSpanMetadata(options.parent?.metadata, options.metadata)),
       this.deepCleanOptions,
@@ -791,6 +816,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       output: hideOutput ? undefined : this.output,
       // An error's message, stack header and details often quote the data the flags hide.
       errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo, this.errorStackMessage) : this.errorInfo,
+      ...(this.localErrorCount !== undefined ? { errorCount: this.localErrorCount } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
@@ -815,9 +841,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
+    const { tags } = this.getCorrelationContext();
     return {
       ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
+      // An export has tags on the root only. A rebuilt child needs them for its metrics.
+      ...(tags ? { tags } : {}),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
+      ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };
   }

@@ -33,10 +33,19 @@ import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { createChatLogger } from './chat-logger';
+import { createChannelToolScope } from './chat-tools';
+import type { ChannelToolScope, ChannelToolsSettings } from './chat-tools';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
-import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
+import {
+  CONTINUE_RUN_ACTION_ID,
+  CONTINUE_RUN_MESSAGE,
+  formatArgsSummary,
+  formatToolApproved,
+  formatToolDenied,
+  stripToolPrefix,
+} from './formatting';
 import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
   buildInlineMediaCheck,
@@ -798,10 +807,54 @@ export class AgentChannels {
 
       if (onAction !== false) {
         chat.onAction(event => {
-          const { handlerContext } = beginMessage();
+          const { defaultHandler: handleMessage, handlerContext } = beginMessage();
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
+            if (actionId === CONTINUE_RUN_ACTION_ID) {
+              // A continue button on an error card: the clicker asks the agent to continue,
+              // as if they had replied in the thread, so the reply route's gates still apply.
+              const clickedThread = event.thread as Thread | null;
+              if (!clickedThread || onSubscribedMessage === false) return;
+              // A card posted at the top level of a conversation reports itself as the thread.
+              const threadId = this.resolveExternalThreadId({
+                platform: event.adapter.name,
+                chatThread: clickedThread,
+                messageId: event.messageId,
+              });
+              const text = CONTINUE_RUN_MESSAGE;
+              const message = new ChatMessage({
+                attachments: [],
+                author: event.user,
+                formatted: {
+                  type: 'root',
+                  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+                },
+                id: event.triggerId ?? crypto.randomUUID(),
+                isMention: true,
+                metadata: { dateSent: new Date(), edited: false },
+                raw: event.raw,
+                text,
+                threadId,
+              });
+              const chatThread =
+                threadId === clickedThread.id
+                  ? clickedThread
+                  : new ThreadImpl({
+                      adapter: event.adapter,
+                      channelId: clickedThread.channelId,
+                      channelVisibility: clickedThread.channelVisibility,
+                      currentMessage: message,
+                      id: threadId,
+                      isDM: clickedThread.isDM,
+                      stateAdapter: this.stateAdapter,
+                    });
+              // The click's own scope, so context a custom onAction set reaches the run.
+              if (typeof onSubscribedMessage === 'function') {
+                return onSubscribedMessage(chatThread, message, handleMessage, handlerContext);
+              }
+              return handleMessage(chatThread, message);
+            }
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
             const platform = event.adapter.name;
             const messageId = event.messageId;
@@ -1338,6 +1391,20 @@ export class AgentChannels {
     return this.makeChannelTools();
   }
 
+  /**
+   * The conversation a channel tool call runs in, for `createChannelTools`.
+   * @internal
+   */
+  async __resolveToolScope(
+    context: { requestContext?: RequestContext; agent?: { threadId?: string } } | undefined,
+    settings: ChannelToolsSettings,
+  ): Promise<ChannelToolScope> {
+    const { adapter, threadId } = await this.getAdapterFromContext(context ?? {});
+    if (!this.chat) throw new Error('Channels are not initialized yet.');
+    const platform = Object.keys(this.adapters).find(key => this.adapters[key] === adapter) ?? adapter.name;
+    return createChannelToolScope({ chat: this.chat, adapter, platform, threadId, settings });
+  }
+
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------
@@ -1633,6 +1700,10 @@ export class AgentChannels {
       messageId: message.id,
       actor: message.author,
     });
+    // `eventType` stays 'mention' for subscribed-thread messages too, so mark
+    // the ones that actually tag the bot; the prompt tells the model to always
+    // answer those.
+    if (!chatThread.isDM && batch.some(m => m.isMention)) attributes.mentioned = 'true';
 
     // NOTE: `requestContext` is constructed per message at the handler boundary
     // (see `beginMessage` in initialize) so a custom handler can contribute to
@@ -2421,7 +2492,8 @@ export class AgentChannels {
    * normally in cards/hidden modes.
    *
    * When the run's stream ends, an empty status is sent to clear any status
-   * this run set, so runs that end without posting a message (e.g. terminated
+   * left on the thread — set by this run or by a channel handler before it
+   * dispatched — so runs that end without posting a message (e.g. terminated
    * by `stopWhen` on a tool call, or aborted) don't leave a stale status
    * pinned to the thread.
    */
@@ -2441,7 +2513,6 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
-    let statusSent = false;
 
     try {
       for await (const chunk of stream) {
@@ -2465,7 +2536,6 @@ export class AgentChannels {
           }
           if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
             currentTypingStatus = result;
-            statusSent = true;
             chatThread.startTyping(result).catch(e => {
               this.log('debug', 'Typing indicator failed (best-effort)', {
                 platform,
@@ -2487,12 +2557,15 @@ export class AgentChannels {
       // End of the run's stream (the session queue closed on the terminal
       // step-finish / error / abort, or the driver stopped consuming). Slack's
       // `assistant.threads.setStatus` only auto-clears on `chat.postMessage`,
-      // so a run that set a status but never posted a message would leave it
+      // so a status left by a run that never posted a message would stay
       // pinned on the thread indefinitely. Send an empty status to clear it —
-      // a no-op when a post already cleared it. Skip the clear while the
-      // streaming gate is active: the in-flight streaming post clears the
-      // status when it completes.
-      if (statusSent && !typingGate.active) {
+      // a no-op when a post already cleared it. Clear even when this run's
+      // stream set no status itself: a channel handler may have set one before
+      // dispatching (e.g. an early "is thinking..." acknowledgement), and a
+      // custom `typingStatus` that ignores every chunk of the run would never
+      // replace it. Skip the clear while the streaming gate is active: the
+      // in-flight streaming post clears the status when it completes.
+      if (typingStatusFn && !typingGate.active) {
         chatThread.startTyping('').catch(e => {
           this.log('debug', 'Typing clear failed (best-effort)', { platform, threadId: chatThread.id, error: e });
         });

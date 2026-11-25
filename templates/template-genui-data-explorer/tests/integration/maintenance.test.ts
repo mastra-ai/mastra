@@ -93,10 +93,10 @@ it("benchmark CLI passes strict options to the runner without making paid model 
     BENCHMARK_INPUT_USD_PER_MILLION: "0.4",
     BENCHMARK_OUTPUT_USD_PER_MILLION: "1.6",
     BENCHMARK_PRICING_VERSION: "synthetic-pricing",
-    BENCHMARK_PRICING_MODEL: "gpt-4.1-mini",
+    BENCHMARK_PRICING_MODEL: "gpt-6-luna",
     BENCHMARK_PRICING_VERIFIED_AT: new Date().toISOString().slice(0, 10),
     BENCHMARK_PRICING_REFERENCE: "https://openai.com/api/pricing/",
-    ANALYSIS_MODEL: "gpt-4.1-mini",
+    ANALYSIS_MODEL: "gpt-6-luna",
   }))
     vi.stubEnv(key, value);
   const actual = await import("../../scripts/quality/benchmark.ts");

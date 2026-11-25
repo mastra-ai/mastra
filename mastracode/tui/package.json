@@ -1,10 +1,11 @@
 {
   "name": "mastracode",
-  "version": "0.50.0-alpha.10",
+  "version": "0.50.4-alpha.0",
   "description": "",
   "type": "module",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",
@@ -70,6 +71,12 @@
       "require": {
         "types": "./dist/plugin.d.ts",
         "default": "./dist/plugin.cjs"
+      }
+    },
+    "./run-tui": {
+      "import": {
+        "types": "./dist/run-tui.d.ts",
+        "default": "./dist/run-tui.js"
       }
     },
     "./package.json": "./package.json"

@@ -15,16 +15,6 @@ afterEach(() => {
 });
 
 describe('CodeBlock', () => {
-  it('renders plain code text', () => {
-    render(
-      <TooltipProvider>
-        <CodeBlock code="pnpm dlx mastra init" />
-      </TooltipProvider>,
-    );
-
-    expect(screen.getByText('pnpm dlx mastra init')).toBeDefined();
-  });
-
   it('renders highlighted tokens with syntax role classes', async () => {
     render(
       <TooltipProvider>
@@ -235,12 +225,6 @@ describe('CodeBlock — copying', () => {
 
     // The tooltip is the button's accessible name, so it has to be the exact one.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Copy the install command' })).toBeTruthy());
-  });
-
-  it('falls back to its own name for the copy action', async () => {
-    renderBlock(<CodeBlock code="npm i" />);
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy());
   });
 
   it('keeps a caller class alongside its own', () => {

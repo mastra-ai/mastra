@@ -48,9 +48,39 @@ const text = await output.text
 cleanup()
 ```
 
-### Plain Agent stream configuration
+### Native agent execution
 
-The `durable` option on a plain `Agent` controls resumable streams only. It never wraps the agent or enables checkpoints. Use `createDurableAgent({ agent })` explicitly for durable execution, and pass execution options such as `maxSteps` and `shouldPersistSnapshot` to that factory.
+Set `durable.executionEngine` on an `Agent` to enable checkpointed execution without wrapping it:
+
+```typescript
+import { Agent, type AgentStreamOutput } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'support',
+  name: 'Support agent',
+  instructions: 'Help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  durable: { executionEngine: 'default', maxSteps: 8, storageVersion: 2 },
+})
+
+const output: AgentStreamOutput = await agent.stream('Where is my order?')
+console.log(await output.text)
+output.cleanup?.()
+```
+
+Both engines can checkpoint execution, but they differ in [when they persist snapshots](/docs/harness/durable-agents#snapshot-persistence). Use `'default'` to run on the default in-process engine, `'evented'` to run on workers over pubsub, or `false` for the plain agent loop, which doesn't checkpoint. Evented execution falls back to in-process durable execution when the agent has no Mastra host, or when the host's workflows store doesn't support concurrent updates. A host with no workflows store keeps evented execution.
+
+Set `Mastra.durable.executionEngine` to provide a default for agents registered through `agents` or `addAgent()`. An agent's explicit setting takes precedence. The native engine selection is fixed for the lifetime of the agent instance once it registers or first executes. Editor forks keep that selection. A wrapper factory chooses the engine for calls made through the wrapper without changing the underlying agent's selection.
+
+Native `stream()` and `resumeStream()` return `MastraModelOutput`. When durable execution is selected, the output also carries `abort()`, `cleanup()`, `threadId`, and `resourceId`. Use `AgentStreamOutput` to access those optional fields. The public signatures for `stream()`, `resumeStream()`, and the tool approval and decline helpers remain typed as `MastraModelOutput`. `getFullOutput()` returns the usual `FullOutput`, without those lifecycle controls. `generate()` keeps its usual result shape. The wrapper factories keep returning `DurableAgentStreamResult`, whose model output is in `.output`.
+
+`durable: true` enables resumable-stream publication and inherits any Mastra execution default. `durable: false` opts out of both publication and inherited execution defaults. Without a Mastra execution default, neither boolean form enables checkpoint execution. Set `executionEngine` explicitly to select an execution backend.
+
+- `durable.maxSteps` sets the agent's durable step limit. A call's `maxSteps` takes precedence over `defaultOptions.maxSteps`, which takes precedence over `durable.maxSteps`. If none is set, the limit is five steps.
+- `durable.storageVersion` is experimental and defaults to `1`, which saves a full snapshot. Version `2` saves only what changed using the run journal. On a workflow store without journal support, Mastra logs a warning and starts new runs on version `1`. Existing runs keep the version they started with.
+- `durable.shouldPersistSnapshot` controls [which checkpoints are saved](/docs/harness/durable-agents#snapshot-persistence). Set `recovery.durableAgents: 'auto'` on `Mastra` to save running checkpoints under the default policy and recover orphaned runs on restart.
+
+Before switching engines, stop accepting new runs and let existing runs finish on their original engine. Resolve suspended runs there too. Don't rely on the new engine to resume or recover runs started by the old one.
 
 ## `createDurableAgent(options)`
 
@@ -123,12 +153,22 @@ Returns: `DurableAgent`
     description:
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`. Pass a predicate that includes `running` to keep crash-recovery checkpoints for manual `listActiveRuns()` / `recoverActiveRuns()` without enabling automatic recovery. Mastra logs a warning when a predicate excludes `suspended` or `paused`, or excludes `running` while `recovery.durableAgents` is `'auto'`.",
   },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
+  },
 ]}
 />
 
 ## `createEventedAgent(options)`
 
 Wraps an `Agent` with fire-and-forget durable execution on the built-in evented workflow engine. Like `createDurableAgent`, it returns a result you stream from, but the run is started without being awaited: events on the Mastra instance's PubSub drive execution independently of the caller. Register the agent on a `Mastra` instance with storage to get evented execution; without one, the agent falls back to the default in-process engine and logs a warning. It doesn't accept `id` or `name` overrides.
+
+An evented agent runs in one process on any PubSub backend. Running its steps on several processes needs a backend that redelivers unacknowledged events and a storage adapter with workflow step guards. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).
 
 ```typescript
 import { createEventedAgent } from '@mastra/core/agent/durable'
@@ -182,6 +222,14 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     isOptional: true,
     description:
       'Accepted for API symmetry with `createDurableAgent`, but ignored: the evented engine requires the full snapshot set (`pending`, `paused`, `suspended`, `running`) because the initial `running` write creates the base row that suspend-merges and multi-worker coordination build on. A warning is logged if set.',
+  },
+  {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description:
+      'Experimental. How new runs of this agent are stored. `1` rewrites the whole run on every save. `2` saves only what changed at each step, which cuts storage writes for long runs. Version 2 needs a storage adapter that supports it: in-memory, `@mastra/pg`, or `@mastra/libsql`. On another adapter, the agent logs a warning and stores new runs as version 1. A run keeps the version it was stored with, so a run resumed after changing this option continues in that version.',
+    defaultValue: '1',
   },
 ]}
 />
@@ -248,6 +296,13 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
       "Predicate controlling which workflow snapshots the durable run persists. The default always persists `pending`, `paused`, and `suspended` (required for human-in-the-loop resume) and persists `running` checkpoints only when the Mastra instance is configured with `recovery.durableAgents: 'auto'`.",
   },
   {
+    name: 'storageVersion',
+    type: '1 | 2',
+    isOptional: true,
+    description: 'Experimental. How new runs of this agent are stored. See `storageVersion` on `createDurableAgent`.',
+    defaultValue: '1',
+  },
+  {
     name: 'cleanupTimeoutMs',
     type: 'number',
     isOptional: true,
@@ -311,13 +366,13 @@ const { output } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The `offset` option is an inclusive, zero-based PubSub event index. It counts every cached event published to the run topic, including lifecycle events, rather than counting chunks. A chunk read from the run log carries the index of its event as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass `index + 1` of the last chunk that has an index, or omit `offset` if nothing arrived. Lifecycle events take an index but produce no chunk, so indexes have gaps and a chunk count isn't a valid offset.
+The `offset` option is an inclusive PubSub event index. Indexes are opaque, strictly increasing cursors assigned per cached event on the run topic, including lifecycle events. They aren't positions or counts, and a fresh run log starts at a clock-derived value rather than zero. A chunk read from the run log carries the index of its event as `chunk.index`, on `stream()`, `observe()`, and the HTTP `/stream` and `/observe` endpoints. To resume after a dropped connection, pass `index + 1` of the last chunk that has an index, or omit `offset` if nothing arrived. Lifecycle events take an index but produce no chunk, so indexes have gaps and a chunk count isn't a valid offset.
 
 Some chunks carry no `index`. The client builds `object` chunks itself rather than reading them from the log. An `abort` chunk is sent beside the `finish` of the same run-log entry, and only the `finish` carries the index, so a client that reconnects between the two gets the `abort` again.
 
 A run that used a structuring model publishes its `object-result` to the run log, so that chunk carries an `index` and replays like any other. A core `observe()` caller holding the schema can also rebuild structured output from replayed text, but gets `object-result` only when it replays the text that produced it. HTTP `/observe` replays the log and doesn't rebuild it. To rebuild it after a reconnect, observe without an `offset` and skip chunks whose `index` you already processed. That replay also rebuilds `object` chunks you already received, and they have no `index` to skip by. Each `object` chunk is a snapshot of the object so far, so keep the latest one. Indexes come from the replay cache, so a chunk whose cache write failed, or any chunk when caching is off, has no `index`, so no offset can resume at it. Omitting `offset` replays whatever the transport itself retains, such as a Redis stream, and can repeat chunks you already received. The paragraphs below cover offsets past the end and transports without numeric offsets.
 
-`index` is additive and `offset` keeps its meaning, so code that already passes a log position, or replays from `0`, needs no change. Code that passed a count of chunks received should switch to the last `index + 1`.
+Code that already passes a real `index + 1` from a received chunk, or replays from `0` to mean "everything available", needs no change. Code that passed a count of chunks received, or any other computed position, must switch to the last `index + 1`: computed positions sit far below a clock-seeded log's real indexes and replay the whole history.
 
 The following example records the resume offset while streaming and passes it to `observe()` after a reconnect:
 
@@ -349,7 +404,7 @@ A failed cache write loses only that event from the cache. It has no `index`, an
 
 An evented agent (`createEventedAgent()`) on a cross-process PubSub, such as Redis Streams, can use the default in-memory server cache when its steps run in the process that started the run. That process numbers the events. Use a shared cache such as `RedisServerCache` on the `Mastra` instance when steps run in another process, such as a dedicated worker started with `workers: true`. That process can't share the in-memory counter, so its events aren't numbered and an offset can't skip them. Mastra logs a warning in the worker when this happens. Also use a shared cache when an observer reconnects through another process, such as a different server replica, because it can't replay from the starting process's in-memory cache.
 
-By default `observe()` waits indefinitely for events. If the process running the run stops unexpectedly, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
+By default `observe()` waits indefinitely for events. If the process running the run dies, the run stops producing events but never emits a completion event, so the observed stream would wait forever. Pass `idleTimeoutMs` to end the stream after a bounded period of silence. Before timing out, `observe()` can consult an optional `isAlive` check. Return `true` while work continues, such as during a long-running tool call or a pause for human input. A `false` result ends the stream with an error, as does omitting `isAlive`. A transient throw from `isAlive` is treated as "still alive", so a momentary check failure never ends a live stream.
 
 ```typescript
 const { output } = await durableAgent.observe(runId, {
@@ -359,6 +414,24 @@ const { output } = await durableAgent.observe(runId, {
 ```
 
 Ending a run on idle timeout runs the same cleanup as a run that errors (see the warning below), so its cached state is released rather than retained. Both options are opt-in. Omit them for the previous wait-indefinitely behavior.
+
+By default the observed stream stays open when the run suspends, for example at a tool-approval gate, so a later resume can continue on the same reader. Pass `closeOnSuspend: true` to end the observed stream at the suspension boundary so `fullStream`, `text`, and `getFullOutput()` resolve instead of hanging, matching `stream()` with the same option. Closing is scoped to this observer: the run's registry entry and cached events are kept, and you resume it with `resume()` or `resumeStream()`, which return a fresh stream.
+
+Closing needs the observer to receive that run's `SUSPENDED` event, so an observer that attaches after the run suspended depends on replay: omit `offset`, or start before the suspension, and use a transport that retains events. An observer that starts past the suspension, or on a transport that doesn't replay events, never sees the event and stays open until it's detached or ends on `idleTimeoutMs`. In that case read the run's state instead of waiting on the stream. A replayed suspension the run has already been resumed past is still delivered and fires `onSuspended`, but doesn't end the stream, so replaying a run from its start doesn't stop at an approval that was given long ago.
+
+```typescript
+const { output } = await durableAgent.observe(runId, {
+  closeOnSuspend: true,
+})
+
+let pendingToolCallId: string | undefined
+for await (const chunk of output.fullStream) {
+  if (chunk.type === 'tool-call-approval') pendingToolCallId = chunk.payload.toolCallId
+  send(chunk)
+}
+// Stream ended at the suspension boundary; approve and resume when ready:
+await durableAgent.resume(runId, { approved: true }, { toolCallId: pendingToolCallId })
+```
 
 Returns: `Promise<DurableAgentStreamResult>`
 
@@ -417,7 +490,7 @@ Returns: `boolean`. `true` when this process aborted the run locally or can see 
 
 #### `abortThreadStream({ threadId, resourceId?, expectedRunId? })`
 
-Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. The run is resolved from this process's thread runtime, so it must have been started here or observed through `subscribeToThread()` on this process. The server route `POST /agents/:agentId/threads/abort` uses this method.
+Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. When this process runs the thread's active run, the abort applies here. When this process has observed the run through `subscribeToThread()`, the abort request is published to the process executing the run, and nothing stops in this process. When the process never saw the run, it looks the run up in the background through the thread's lease and asks the process executing it to stop, publishing the request over the shared PubSub. That lookup runs asynchronously. The method returns before the lookup finishes. The server route [`POST /agents/:agentId/threads/abort`](/reference/server/routes#thread-cancellation-routes) awaits the lookup when the abort wasn't resolved in this process, which is how it reports whether a run on another process was asked to stop.
 
 Pass `expectedRunId` when the request must only stop a specific run. If another queued run becomes active before the request is handled, the method returns `false` without aborting the successor. Omit `expectedRunId` to abort whichever run is active when the request is handled.
 
@@ -429,7 +502,7 @@ const aborted = durableAgent.abortThreadStream({
 })
 ```
 
-Returns: `boolean`. `false` when this process has no active run recorded for the thread or the active run doesn't match `expectedRunId`. No abort request is sent in either case.
+Returns: `boolean`. `true` when this process aborted the run, or when the abort request was published to the process executing it. A published request doesn't confirm that the other process stopped the run. `false` is this process's own result: it had no run of the thread's to stop, the active run didn't match `expectedRunId`, or `localOnly: true` kept the abort local and left a run owned by another process alone. An `expectedRunId` mismatch and `localOnly: true` leave the run running by design. Otherwise `false` doesn't rule out a forwarded abort: the background lookup still publishes an abort request to the process holding the lease when it finishes, or finds nothing to publish. A failed lookup or publish is logged as a warning through the Mastra logger. Use the thread-abort route above when you need the forwarded outcome reported.
 
 ### Recovery
 
@@ -592,7 +665,7 @@ await output.text
 cleanup()
 ```
 
-Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Enabling persistence after a crash can't reconstruct a missing checkpoint.
+Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that returns `true` for `workflowStatus: 'running'`, including when `stepResults` is `{}`. On a plain `DurableAgent`, a custom `shouldPersistSnapshot` policy replaces the default, so its `'running'` result decides whether running checkpoints are saved, including when `recovery: { durableAgents: 'auto' }` is enabled. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Before a run with memory saves the user's message, it calls the policy with `{ workflowStatus: 'running', stepResults: {} }`. If that call returns `true`, the run saves a restartable checkpoint first, so a crash after the message is saved can be recovered. Enabling persistence after a crash can't reconstruct a missing checkpoint.
 
 Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
 
@@ -884,6 +957,8 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
   runId: string
   threadId?: string
   resourceId?: string
+  traceId?: string
+  spanId?: string
   cleanup: () => void
   abort: () => void
 }
@@ -917,6 +992,19 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
     type: 'string',
     isOptional: true,
     description: 'Resource ID when using memory.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Trace ID of the run when the run is traced. Use it to link a score, feedback, or a log line to the trace.',
+  },
+  {
+    name: 'spanId',
+    type: 'string',
+    isOptional: true,
+    description: 'ID of the agent run span when the run is traced.',
   },
   {
     name: 'cleanup',

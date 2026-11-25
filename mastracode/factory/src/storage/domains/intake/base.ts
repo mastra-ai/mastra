@@ -10,6 +10,8 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { ensureLegacyCollections } from '../../legacy-collections.js';
+
 export class FactoryProjectNotFoundError extends Error {
   constructor() {
     super('Factory project not found for this organization.');
@@ -46,7 +48,10 @@ export const INTAKE_ORG_SETTINGS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'intake_org_settings_org_unique', columns: ['org_id'] }],
 };
 
-/** Collection evolution is additive, so the per-member unique index cannot be narrowed: rows stay and are folded at boot. */
+/**
+ * Collection evolution is additive, so the per-member unique index cannot be narrowed: rows stay and
+ * are folded at boot. Registered only on a database an earlier release already created it in.
+ */
 export const LEGACY_INTAKE_USER_SETTINGS_SCHEMA: CollectionSchema = {
   name: 'intake_settings',
   columns: {
@@ -87,8 +92,9 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
  *
  * Frozen: its unique index allows one binding per source, and indexes cannot be
  * narrowed, so bindings moved to {@link INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA}. Rows
- * are copied once at boot and never written again; the collection stays
- * registered so an earlier build that is rolled back to still finds them.
+ * are copied once at boot and never written again. Registered only on a database
+ * an earlier release already created it in, so a build rolled back to still
+ * finds the rows there.
  */
 export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
   name: 'intake_source_bindings',
@@ -98,8 +104,6 @@ export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
     integration_id: { type: 'text' },
     source_id: { type: 'text' },
     factory_project_id: { type: 'text' },
-    /** Retired: intake routes decide where a source's cards land. Nothing reads or writes it. */
-    board: { type: 'text', nullable: true },
     created_by_user_id: { type: 'text', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
@@ -127,8 +131,6 @@ export const INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
     integration_id: { type: 'text' },
     source_id: { type: 'text' },
     factory_project_id: { type: 'text' },
-    /** Retired: intake routes decide where a source's cards land. Nothing reads or writes it. */
-    board: { type: 'text', nullable: true },
     /** Labels whose issues this binding takes, as the user typed them; `null` takes every unclaimed issue. */
     labels: { type: 'json', nullable: true },
     created_by_user_id: { type: 'text', nullable: true },
@@ -228,34 +230,6 @@ export function normalizeBindingLabels(labels: readonly string[]): string[] {
   return kept;
 }
 
-/**
- * Retired: label routes sent labelled items to a board. Intake routes replaced them; the collection
- * stays registered so an earlier build that is rolled back to still finds it, but nothing reads or
- * writes it.
- */
-export const INTAKE_LABEL_ROUTES_SCHEMA: CollectionSchema = {
-  name: 'intake_label_routes',
-  columns: {
-    id: { type: 'uuid-pk' },
-    org_id: { type: 'text' },
-    factory_project_id: { type: 'text' },
-    integration_id: { type: 'text' },
-    /** Label as the provider reports it; matched case-insensitively. */
-    label: { type: 'text' },
-    board: { type: 'text' },
-    created_by_user_id: { type: 'text', nullable: true },
-    created_at: { type: 'timestamp' },
-    updated_at: { type: 'timestamp' },
-  },
-  indexes: [{ name: 'intake_label_routes_project_idx', columns: ['org_id', 'factory_project_id'] }],
-  uniqueIndexes: [
-    {
-      name: 'intake_label_routes_org_project_integration_label_unique',
-      columns: ['org_id', 'factory_project_id', 'integration_id', 'label'],
-    },
-  ],
-};
-
 /** Labels are matched the way GitHub treats them: case-insensitively. */
 export function normalizeIntakeLabel(label: string): string {
   return label.trim().toLowerCase();
@@ -317,7 +291,36 @@ async function upsertBinding(
   });
 }
 
+async function readConfig(ops: FactoryStorageOps, orgId: string): Promise<IntakeConfig> {
+  const row = await ops.findOne<{ config: IntakeConfig }>('intake_org_settings', { org_id: orgId });
+  return structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
+}
+
+async function writeConfig(ops: FactoryStorageOps, orgId: string, config: IntakeConfig): Promise<void> {
+  const now = new Date();
+  const updated = await ops.updateMany('intake_org_settings', { org_id: orgId }, { config, updated_at: now });
+  if (updated > 0) return;
+  await ops.insertOne('intake_org_settings', { org_id: orgId, config, created_at: now, updated_at: now });
+}
+
+async function addSourcesIn(
+  ops: FactoryStorageOps,
+  { orgId, integrationId, sourceIds }: { orgId: string; integrationId: string; sourceIds: readonly string[] },
+): Promise<void> {
+  const config = await readConfig(ops, orgId);
+  const current = config[integrationId];
+  const selected = current?.enabled ? (current.sourceIds ?? []) : [];
+  const merged = [...new Set([...selected, ...sourceIds])];
+  await writeConfig(ops, orgId, {
+    ...config,
+    [integrationId]: { enabled: merged.length > 0, sourceIds: merged.length ? merged : null },
+  });
+}
+
 export class IntakeStorage extends FactoryStorageDomain {
+  /** The legacy collections this database has, so only those are read, migrated, or cleared. */
+  #legacy = { userSettings: false, bindings: false };
+
   constructor() {
     super('intake');
   }
@@ -325,14 +328,15 @@ export class IntakeStorage extends FactoryStorageDomain {
   async init(): Promise<void> {
     await this.ensureCollections([
       INTAKE_ORG_SETTINGS_SCHEMA,
-      LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
-      INTAKE_SOURCE_BINDINGS_SCHEMA,
       INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
       INTAKE_DATA_MIGRATIONS_SCHEMA,
-      INTAKE_LABEL_ROUTES_SCHEMA,
     ]);
-    await this.#foldLegacyUserSelections();
-    await this.#copyLegacyBindings();
+    this.#legacy = {
+      userSettings: await ensureLegacyCollections(this.storage, [LEGACY_INTAKE_USER_SETTINGS_SCHEMA]),
+      bindings: await ensureLegacyCollections(this.storage, [INTAKE_SOURCE_BINDINGS_SCHEMA]),
+    };
+    if (this.#legacy.userSettings) await this.#foldLegacyUserSelections();
+    if (this.#legacy.bindings) await this.#copyLegacyBindings();
   }
 
   /**
@@ -394,11 +398,10 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('intake_org_settings', {});
-    await this.ops.deleteMany('intake_settings', {});
-    await this.ops.deleteMany('intake_source_bindings', {});
-    await this.ops.deleteMany('intake_source_subscriptions', {});
+    if (this.#legacy.userSettings) await this.ops.deleteMany('intake_settings', {});
+    if (this.#legacy.bindings) await this.ops.deleteMany('intake_source_bindings', {});
     await this.ops.deleteMany('intake_data_migrations', {});
-    await this.ops.deleteMany('intake_label_routes', {});
+    await this.ops.deleteMany('intake_source_subscriptions', {});
   }
 
   get #db(): FactoryStorageOps {
@@ -412,7 +415,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     orgId: string;
     /**
      * When provided, the result contains exactly these integration ids, with
-     * unset integrations defaulting to `{ enabled: true, sourceIds: null }`.
+     * unset integrations defaulting to `{ enabled: false, sourceIds: null }`.
      */
     integrationIds?: string[];
   }): Promise<IntakeConfig> {
@@ -420,7 +423,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     const saved = structuredClone(row?.config ?? DEFAULT_INTAKE_CONFIG);
     if (!integrationIds) return saved;
     return Object.fromEntries(
-      integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: true, sourceIds: null }]),
+      integrationIds.map(integrationId => [integrationId, saved[integrationId] ?? { enabled: false, sourceIds: null }]),
     );
   }
 
@@ -435,9 +438,56 @@ export class IntakeStorage extends FactoryStorageDomain {
 
   /** Overlay `config` onto the stored selections; integrations it omits keep their stored value. */
   async mergeConfig({ orgId, config }: { orgId: string; config: IntakeConfig }): Promise<IntakeConfig> {
-    const merged: IntakeConfig = Object.assign(Object.create(null), await this.getConfig({ orgId }), config);
-    await this.saveConfig({ orgId, config: merged });
-    return merged;
+    return this.storage.withTransaction(
+      async ops => {
+        const merged: IntakeConfig = Object.assign(Object.create(null), await readConfig(ops, orgId), config);
+        await writeConfig(ops, orgId, merged);
+        return merged;
+      },
+      { isolationLevel: 'serializable' },
+    );
+  }
+
+  /** Every org's stored selections. */
+  async listConfigs(): Promise<Array<{ orgId: string; config: IntakeConfig }>> {
+    const rows = await this.#db.findMany<{ org_id: string; config: IntakeConfig }>('intake_org_settings', {});
+    return rows.map(row => ({ orgId: row.org_id, config: row.config }));
+  }
+
+  /** Select `sourceIds` for `integrationId` on top of what the org already selected. */
+  async addSources(input: { orgId: string; integrationId: string; sourceIds: readonly string[] }): Promise<void> {
+    await this.storage.withTransaction(ops => addSourcesIn(ops, input), { isolationLevel: 'serializable' });
+  }
+
+  /**
+   * Run {@link addSources} for every org once per `migration`, so a later removal by a user sticks.
+   * The marker and the selections commit together, so a boot racing another cannot reselect a
+   * source removed after the first boot finished.
+   */
+  async addSourcesOnce({
+    migration,
+    integrationId,
+    sourcesByOrg,
+  }: {
+    migration: string;
+    integrationId: string;
+    sourcesByOrg: () => Promise<ReadonlyMap<string, readonly string[]>>;
+  }): Promise<void> {
+    if (await this.#db.findOne('intake_data_migrations', { name: migration })) return;
+    const sources = await sourcesByOrg();
+    try {
+      await this.storage.withTransaction(
+        async ops => {
+          if (await ops.findOne('intake_data_migrations', { name: migration })) return;
+          for (const [orgId, sourceIds] of sources) await addSourcesIn(ops, { orgId, integrationId, sourceIds });
+          await ops.insertOne('intake_data_migrations', { name: migration, completed_at: new Date() });
+        },
+        { isolationLevel: 'serializable' },
+      );
+    } catch (error) {
+      // Postgres can report the boot that lost the race as a unique violation instead of a serialization failure.
+      if (!(error instanceof UniqueViolationError)) throw error;
+    }
   }
 
   async #insertConfigIfAbsent(orgId: string, config: IntakeConfig): Promise<boolean> {
@@ -697,7 +747,7 @@ export class IntakeStorage extends FactoryStorageDomain {
           ) {
             const config = structuredClone(configRow.config);
             config[integrationId] = {
-              ...(config[integrationId] ?? { enabled: true }),
+              ...(config[integrationId] ?? { enabled: false }),
               sourceIds: nextSelected.length > 0 ? nextSelected : null,
             };
             await ops.updateMany('intake_org_settings', { org_id: orgId }, { config, updated_at: now });

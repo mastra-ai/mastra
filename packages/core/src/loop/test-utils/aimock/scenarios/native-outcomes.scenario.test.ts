@@ -5,8 +5,10 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createScorer } from '../../../../evals';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
+import { MockMemory } from '../../../../memory/mock';
 import { SCENARIO_MODEL_ID } from '../types';
 import { SamplingStrategyType, SpanType, TracingEventType } from '../../../../observability';
+import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { captureOutcomeEvents as capture } from '../outcome-test-utils';
@@ -285,6 +287,291 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
       expect(ended(type).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
     }
+  });
+
+  // The durable engines keep the caller's deadline running until the run ends, so it reports the
+  // timeout and the run must end as it. The plain loop has already finished its stream by then.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the run is finishing as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'quick answer' }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
+
+  // A caller abort stops the caller's deadline, so a deadline passing later while the aborted run
+  // finishes must not turn the abort into a timeout.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'keeps a caller abort when the deadline passes while the aborted run finishes',
+    async () => {
+      const { observability, ended } = capture();
+      const controller = new AbortController();
+      const slowFinish: Processor = {
+        id: 'slow-finish',
+        processOutputResult: async ({ messages }) => {
+          await new Promise(resolve => setTimeout(resolve, 2500));
+          return messages;
+        },
+      };
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Look up the order',
+        abortSignal: controller.signal,
+        maxSteps: 3,
+        errorProcessors: [],
+        maxRetries: 0,
+        outputProcessors: [slowFinish],
+        modelSettings: { timeout: { totalMs: 1500 } },
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order',
+            inputSchema: z.object({}),
+            execute: async () => {
+              controller.abort();
+              throw new DOMException('Tool canceled', 'AbortError');
+            },
+          }),
+        },
+        fixtures: llm =>
+          llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+      });
+      expect(ended().at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+    },
+  );
+
+  // emitEvent holds the end of the run until the title is generated, so a slow title model
+  // runs the run past its deadline after the finish side effects are done.
+  it.skipIf(engine === 'normal' || engine === 'fs')(
+    'reports a deadline that expires while the thread title is generated as a limit',
+    async () => {
+      const { observability, ended } = capture();
+      const llm = getMock();
+      // The title model answers only after the deadline has passed. The test waits for its
+      // request to finish so it cannot reach the shared aimock server during a later test.
+      const titleCalls: Promise<unknown>[] = [];
+      const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
+      const slowTitleModel: typeof titleModel = {
+        ...titleModel,
+        specificationVersion: titleModel.specificationVersion,
+        provider: titleModel.provider,
+        modelId: titleModel.modelId,
+        supportedUrls: titleModel.supportedUrls,
+        doGenerate: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doGenerate(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
+        },
+        doStream: options => {
+          const call = new Promise(resolve => setTimeout(resolve, 2500)).then(() => titleModel.doStream(options));
+          titleCalls.push(call.catch(() => {}));
+          return call;
+        },
+      };
+      const memory = new MockMemory({ options: { generateTitle: { model: slowTitleModel, emitEvent: true } } });
+      await runLoopScenario({
+        engine,
+        llm,
+        observability,
+        memory,
+        threadId: 'deadline-title',
+        resourceId: 'user-1',
+        afterStream: async () => {
+          await expect.poll(() => ended().length, { timeout: 8000 }).toBeGreaterThan(0);
+        },
+        prompt: 'Quick answer',
+        errorProcessors: [],
+        maxRetries: 0,
+        modelSettings: { timeout: { totalMs: 1500 } },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', predicate: (request: any) => request?.model === 'title-model' },
+            { content: 'Slow Title' },
+          );
+          llm.on({ endpoint: 'chat' }, { content: 'quick answer' });
+        },
+      });
+      await expect.poll(() => titleCalls.length, { timeout: 8000 }).toBeGreaterThan(0);
+      await Promise.all(titleCalls);
+      expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    },
+  );
+
+  it('reports a deadline hit during a tool call as a limit', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: 1500 } },
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          execute: async (_input, context) => {
+            await new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 4000);
+              context?.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'shipped' };
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    await expect.poll(() => ended(SpanType.MODEL_STEP).length).toBeGreaterThan(0);
+    // On Inngest the returned tool call still reaches the step that ends the model step.
+    if (engine !== 'inngest') {
+      expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
+    }
+  });
+
+  it('ends the spans of a run whose deadline passes before it starts', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      modelSettings: { timeout: { totalMs: 1 } },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'late answer' }, { streamingProfile: { ttft: 2000 } }),
+    });
+    await expect.poll(() => ended()).toMatchObject([{ outcome: 'limit', stopReason: 'timeout' }]);
+  });
+
+  it('ends every span once when the run fails after a tool call', async () => {
+    const { observability, events, ended } = capture();
+    const tool = (id: string, options = {}) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({}),
+        execute: async () => ({ status: 'ok' }),
+        ...options,
+      });
+    const call = (name: string) => ({ toolCalls: [{ id: `${name}-1`, name, arguments: {} }] });
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      tools: {
+        lookup: tool('lookup'),
+        refund: tool('refund', {
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        }),
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, call('lookup'));
+        llm.on({ endpoint: 'chat', hasToolResult: true }, call('refund'));
+      },
+    });
+    const failed = { outcome: 'error', endTime: expect.any(Date) };
+    await expect.poll(() => ended()).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION)).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_STEP)).toMatchObject([{ outcome: 'success' }, failed]);
+    const spansOf = (eventType: TracingEventType) =>
+      events
+        .filter(event => event.type === eventType && !event.exportedSpan.isEvent)
+        .map(event => event.exportedSpan.id)
+        .sort();
+    expect(spansOf(TracingEventType.SPAN_ENDED)).toEqual(spansOf(TracingEventType.SPAN_STARTED));
+  });
+
+  it('reports a deadline hit during a tool call whose toModelOutput throws as a limit', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: 1500 } },
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up an order',
+          inputSchema: z.object({}),
+          // Resolves as the deadline stops it, then its output mapping fails.
+          execute: async (_input, context) => {
+            await new Promise<void>(resolve => {
+              const timer = setTimeout(resolve, 4000);
+              context?.abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+            return { status: 'shipped' };
+          },
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        }),
+      },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] }),
+    });
+    expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
   });
 
   it.each([401, 403])('reports a provider access denial (%s) as blocked', async status => {
@@ -603,10 +890,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
   }
 
-  // OBS-754: Inngest still reuses the pre-suspension identity. Separate resume
-  // spans are deferred until their identity can travel to the executing worker.
-  const itSeparateResume = engine === 'inngest' ? it.fails : it;
-  itSeparateResume('preserves suspension when approval creates a new successful execution', async () => {
+  it('preserves suspension when approval creates a new successful execution', async () => {
     const { observability, ended } = capture();
     const { output, approvals } = await runApprovalScenario({
       engine,
@@ -642,6 +926,129 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       { outcome: 'suspend', stopReason: 'approval_required' },
       { outcome: 'success' },
     ]);
+  });
+
+  // The spans of the resumed part must carry the same context as the run's first part, so a
+  // filter by thread or resource finds the whole run and the approved tool shows under a span
+  // that is still open.
+  const approvedLookup = {
+    tools: {
+      lookup: createTool({
+        id: 'lookup',
+        description: 'Look up an order',
+        inputSchema: z.object({}),
+        execute: async () => ({ shipped: true }),
+      }),
+    },
+    fixtures: (llm: ReturnType<typeof getMock>) => {
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'shipped' });
+    },
+  };
+
+  it('keeps the thread and resource on the spans of the resumed part', async () => {
+    const { observability, ended } = capture();
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      memory: new MockMemory(),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      prompt: 'Look up the order',
+      decision: () => true,
+      ...approvedLookup,
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    expect(resumedRun!.name).toContain('(resumed)');
+    expect(resumedRun!.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(resumedRun!.attributes).toMatchObject({ conversationId: 'thread-1' });
+    const resumedGeneration = ended(SpanType.MODEL_GENERATION).find(span => span.parentSpanId === resumedRun!.id);
+    expect(resumedGeneration?.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const [toolCall] = ended(SpanType.TOOL_CALL);
+    expect(toolCall?.metadata).toMatchObject({ threadId: 'thread-1', resourceId: 'resource-1' });
+    expect(toolCall?.parentSpanId).toBe(resumedGeneration!.id);
+  });
+
+  // Inngest resume options carry no tracingOptions.
+  it.skipIf(engine === 'inngest')("records the resume input and applies the resume call's tracingOptions", async () => {
+    const { observability, ended } = capture();
+    const { output } = await runApprovalScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      decision: () => true,
+      resumeOptions: { tracingOptions: { metadata: { userId: 'user-1' }, tags: ['resume-tag'] } },
+      ...approvedLookup,
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    expect(resumedRun!.input).toMatchObject({ approved: true, toolCallId: 'lookup-1', toolName: 'lookup' });
+    expect(resumedRun!.tags).toEqual(['resume-tag']);
+    expect(resumedRun!.metadata).toMatchObject({ userId: 'user-1' });
+    expect(ended(SpanType.TOOL_CALL)[0]?.metadata).toMatchObject({ userId: 'user-1' });
+  });
+
+  // The regular Agent does not keep the first call's hide flags on a resume.
+  it.skipIf(engine === 'normal' || engine === 'fs').each([{}, { untilIdle: true }])(
+    "keeps the first call's hideInput on the resumed part over the agent's default (resume options: %o)",
+    async resumeOptions => {
+      const { observability, ended } = capture();
+      const { output } = await runApprovalScenario({
+        engine,
+        llm: getMock(),
+        observability,
+        prompt: 'Look up the order',
+        decision: () => true,
+        defaultOptions: { tracingOptions: { hideInput: false } },
+        tracingOptions: { hideInput: true },
+        resumeOptions,
+        ...approvedLookup,
+      });
+      expect(await output.text).toBe('shipped');
+      await expect.poll(() => ended().length).toBe(2);
+      expect(ended()[1]!.input).toBeUndefined();
+      expect(ended(SpanType.TOOL_CALL)[0]?.input).toBeUndefined();
+    },
+  );
+
+  it('parents the thread title generated after a resume under the resumed run', async () => {
+    const { observability, ended } = capture();
+    const llm = getMock();
+    const titleModel = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` }).chat('title-model');
+    const { output } = await runApprovalScenario({
+      engine,
+      llm,
+      observability,
+      memory: new MockMemory({ options: { generateTitle: { model: titleModel } } }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      prompt: 'Look up the order',
+      decision: () => true,
+      tools: approvedLookup.tools,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', predicate: (request: any) => request?.model === 'title-model' },
+          { content: 'Order lookup' },
+        );
+        approvedLookup.fixtures(llm);
+      },
+    });
+    expect(await output.text).toBe('shipped');
+    await expect.poll(() => ended().length).toBe(2);
+    const [, resumedRun] = ended();
+    await expect
+      .poll(() => ended(SpanType.MODEL_GENERATION).find(span => span.attributes?.model === 'title-model'))
+      .toBeDefined();
+    const titleGeneration = ended(SpanType.MODEL_GENERATION).find(span => span.attributes?.model === 'title-model');
+    expect(titleGeneration!.parentSpanId).toBe(resumedRun!.id);
   });
 
   it('keeps a generation ongoing while a provider attempt is retried', async () => {
@@ -832,6 +1239,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
     expect(ended(SpanType.MODEL_INFERENCE).at(-1)).toMatchObject({ outcome: 'error', stopReason: 'model_error' });
+    expect(ended().at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_GENERATION).at(-1)?.errorCount).toBe(0);
+    expect(ended(SpanType.MODEL_INFERENCE).at(-1)?.errorCount).toBe(1);
   });
 
   it('records a real tool error after requesting suspension', async () => {

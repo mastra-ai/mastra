@@ -1,12 +1,11 @@
 import type { PlanResume } from '@mastra/client-js';
 import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
 import type { AskUserAnswer, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
-import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
+import type { SubagentEntry, SuspensionPrompt } from '../services/transcript';
 import { AskUserPromptAnswers } from './AskUserPromptAnswers';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
@@ -29,26 +28,7 @@ function stringProperty(value: unknown, key: string): string | undefined {
   return typeof value[key] === 'string' ? value[key] : undefined;
 }
 
-export function ApprovalCard({
-  prompt,
-  isSubmitting,
-  onApprove,
-}: {
-  prompt: ApprovalPrompt;
-  isSubmitting: boolean;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-}) {
-  return (
-    <ToolApproval
-      toolName={prompt.toolName}
-      args={prompt.args}
-      autoFocus
-      disabled={isSubmitting}
-      onApprove={() => onApprove(prompt.toolCallId, true, prompt.id)}
-      onDecline={() => onApprove(prompt.toolCallId, false, prompt.id)}
-    />
-  );
-}
+export { ApprovalCard } from '@mastra/playground-ui/domains/chat/transcript';
 
 interface SuspendPayloadShape {
   question?: string;
@@ -76,7 +56,8 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
     ? optionsValue.flatMap(option => {
         const label = stringProperty(option, 'label');
         if (!label) return [];
-        return [{ label, description: stringProperty(option, 'description') }];
+        const recommended = hasProperty(option, 'recommended') && option.recommended === true;
+        return [{ label, description: stringProperty(option, 'description'), ...(recommended ? { recommended } : {}) }];
       })
     : undefined;
 

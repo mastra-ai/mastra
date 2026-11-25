@@ -8,9 +8,67 @@
  * (`claude-opus-4-8`) instead of refusing. The AgentController injects this option for
  * fable-5 only, so other models are unaffected.
  */
-import { describe, it, expect } from 'vitest';
-import { buildFableFallbackProviderOptions } from '../agent-controller';
+import { describe, it, expect, vi } from 'vitest';
+import { Agent } from '../../agent';
+import { InMemoryStore } from '../../storage';
+import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
+import { AgentController, buildFableFallbackProviderOptions } from '../agent-controller';
 import { describeServerSideFallback } from '../stream-content';
+import { createMockWorkspace } from '../test-utils';
+
+/** Sends one fable-5 turn and returns the provider options the agent received. */
+async function runFableTurn(modelFallbacks?: boolean) {
+  const agent = new Agent({
+    id: 'fallback-agent',
+    name: 'Fallback Agent',
+    instructions: 'You are a helpful assistant.',
+    model: new MastraLanguageModelV2Mock({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'text-1' });
+            controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'Done.' });
+            controller.enqueue({ type: 'text-end', id: 'text-1' });
+            controller.enqueue({
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            });
+            controller.close();
+          },
+        }),
+      }),
+    }),
+  });
+  const controller = new AgentController({
+    workspace: createMockWorkspace(),
+    id: 'fallback-controller',
+    storage: new InMemoryStore(),
+    modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    ...(modelFallbacks === undefined ? {} : { modelFallbacks }),
+  });
+  await controller.init();
+  const stream = vi.spyOn(agent, 'stream');
+  const session = await controller.createSession({ id: 'fallback-session', ownerId: 'owner' });
+  await session.thread.create();
+  await session.model.switch('anthropic/claude-fable-5');
+  await session.sendMessage({ content: 'Hello' });
+  return stream.mock.calls[0]![1]?.providerOptions;
+}
+
+describe('AgentController modelFallbacks', () => {
+  it('adds the fable-5 fallback by default', async () => {
+    await expect(runFableTurn()).resolves.toMatchObject({
+      anthropic: { fallbacks: [{ model: 'claude-opus-4-8' }] },
+    });
+  });
+
+  it('adds no fallback model when modelFallbacks is false', async () => {
+    const providerOptions = await runFableTurn(false);
+    expect(providerOptions?.anthropic).toBeUndefined();
+  });
+});
 
 describe('buildFableFallbackProviderOptions', () => {
   it('enables an opus-4-8 fallback for the provider-prefixed fable-5 id', () => {

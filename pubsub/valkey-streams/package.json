@@ -1,13 +1,14 @@
 {
   "name": "@mastra/valkey-streams",
-  "version": "0.6.1",
+  "version": "0.6.5-alpha.0",
   "description": "Mastra Valkey Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "exports": {
     ".": {
@@ -32,7 +33,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@valkey/valkey-glide": "2.5.1"
+    "@valkey/valkey-glide": "2.5.2"
   },
   "devDependencies": {
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.139",
@@ -53,7 +54,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.86.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

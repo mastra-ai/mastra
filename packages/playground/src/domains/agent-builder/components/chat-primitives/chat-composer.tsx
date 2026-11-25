@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUpIcon, Loader2 } from 'lucide-react';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
@@ -72,8 +72,9 @@ export const ChatComposer = ({
             tooltip={isRunning ? 'Generating…' : 'Send'}
             disabled={!canSubmit}
             data-testid={submitTestId}
+            loading={isRunning}
           >
-            {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
+            <IconArrowUp />
           </Button>
         </div>
       </div>

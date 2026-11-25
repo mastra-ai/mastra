@@ -1253,6 +1253,79 @@ describe('createStep with Processor', () => {
   });
 });
 
+describe('Processor workflow with ProcessorStepOutputSchema', () => {
+  it('passes providerMetadata to processOutputStep in the outputStep phase', async () => {
+    let receivedProviderMetadata: Record<string, unknown> | undefined;
+    const processor: Processor = {
+      id: 'provider-metadata-reader',
+      processOutputStep: async ({ messages, providerMetadata }) => {
+        receivedProviderMetadata = providerMetadata;
+        return messages;
+      },
+    };
+
+    const workflow = createWorkflow({
+      id: 'processor-output-schema-workflow',
+      inputSchema: ProcessorStepOutputSchema,
+      outputSchema: ProcessorStepOutputSchema,
+    })
+      .then(createStep(processor))
+      .commit();
+
+    const providerMetadata = { bedrock: { trace: { guardrail: { action: 'BLOCKED' } } } };
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'outputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        providerMetadata,
+      },
+    });
+
+    expect(result.status).toBe('success');
+    expect(receivedProviderMetadata).toEqual(providerMetadata);
+  });
+});
+
+describe('Processor Step in Workflow - abort signal', () => {
+  it('passes the abort signal to every processor in a chain (#29208)', async () => {
+    const received: Array<AbortSignal | undefined> = [];
+    const recorder = (id: string): Processor => ({
+      id,
+      processInputStep: async ({ messageList, abortSignal }) => {
+        received.push(abortSignal);
+        return messageList;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'processor-abort-signal-chain',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepOutputSchema,
+      options: { validateInputs: false },
+    })
+      .then(createStep(recorder('first')))
+      .then(createStep(recorder('second')))
+      .commit();
+
+    const controller = new AbortController();
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'inputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        abortSignal: controller.signal,
+      } as any,
+    });
+
+    expect(result.status).toBe('success');
+    expect(received).toEqual([controller.signal, controller.signal]);
+  });
+});
+
 describe('Processor Step in Workflow - TripWire handling', () => {
   it('should return tripwire status when processor in workflow calls abort', async () => {
     const tripwireProcessor: Processor = {

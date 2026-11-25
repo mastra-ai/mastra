@@ -6,15 +6,16 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChip } from '@mastra/playground-ui/icons/central/IconChip';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
 import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
-import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { getEditorOwnership } from '../../utils/editor-ownership';
 import { InstructionBlocksPage } from '../agent-cms-pages/instruction-blocks-page';
@@ -167,7 +168,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
     if (oldStr === newStr) {
       return (
-        <div className="relative rounded-md border border-border bg-background p-3">
+        <div className="relative rounded-md bg-nested p-3">
           {block && (
             <div className="absolute top-2 right-2">
               <BlockCopyButton block={block} />
@@ -200,7 +201,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
               line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
             )}
           >
-            <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+            <span className="mr-2 inline-block w-4 shrink-0 text-subtle-foreground select-none">
               {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
             </span>
             {line.text || '\u00A0'}
@@ -251,7 +252,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
 
         if (oldStr === newStr) {
           return (
-            <div key={idx} className="relative rounded-md border border-border bg-background p-3">
+            <div key={idx} className="relative rounded-md bg-nested p-3">
               {prevBlock && (
                 <div className="absolute top-2 right-2">
                   <BlockCopyButton block={prevBlock} />
@@ -284,7 +285,7 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
                   line.type === 'added' && 'bg-success-subtle text-success-subtle-foreground',
                 )}
               >
-                <span className="mr-2 inline-block w-4 shrink-0 text-muted-foreground/50 select-none">
+                <span className="mr-2 inline-block w-4 shrink-0 text-subtle-foreground select-none">
                   {line.type === 'removed' ? '−' : line.type === 'added' ? '+' : ' '}
                 </span>
                 {line.text || '\u00A0'}
@@ -313,7 +314,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
 
   const content = promptBlock?.content ?? '';
   return (
-    <div className="relative rounded-md border border-border bg-background p-3">
+    <div className="relative rounded-md bg-nested p-3">
       {content && (
         <div className="absolute top-2 right-2">
           <CopyButton content={content} tooltip="Copy prompt block text" />
@@ -352,7 +353,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
 
         const content = typeof block.content === 'string' ? block.content : '';
         return (
-          <div key={(block.id as string) ?? idx} className="relative rounded-md border border-border bg-background p-3">
+          <div key={(block.id as string) ?? idx} className="relative rounded-md bg-nested p-3">
             {content && (
               <div className="absolute top-2 right-2">
                 <CopyButton content={content} tooltip="Copy prompt text" />
@@ -442,7 +443,7 @@ function ReadOnlyTools({ tools }: { tools: Record<string, unknown> | undefined }
   return (
     <div className="flex flex-col gap-1.5">
       {entries.map(([id, config]) => (
-        <div key={id} className="rounded-md border border-border bg-background px-3 py-1.5">
+        <div key={id} className="rounded-md bg-nested px-3 py-1.5">
           <Txt variant="caption" tone="ink" font="mono">
             {id}
           </Txt>
@@ -542,7 +543,7 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
   return (
     <div className="flex flex-col gap-1.5">
       {entries.map(([name, schema]) => (
-        <div key={name} className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5">
+        <div key={name} className="flex items-center gap-2 rounded-md bg-nested px-3 py-1.5">
           <Txt variant="caption" tone="ink" font="mono">
             {`{{${name}}}`}
           </Txt>
@@ -625,13 +626,13 @@ function ReadOnlyConfigWithDiff({
     <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
       <TabList variant="pill-ghost" className="shrink-0">
         <Tab value="variables">
-          <ConfigTabLabel title="Variables" icon={<Braces />} badge={variablesBadge} />
+          <ConfigTabLabel title="Variables" icon={<IconCodeBrackets />} badge={variablesBadge} />
         </Tab>
         <Tab value="instructions">
-          <ConfigTabLabel title="System Prompt" icon={<Cpu />} badge={instructionsBadge} />
+          <ConfigTabLabel title="System Prompt" icon={<IconChip />} badge={instructionsBadge} />
         </Tab>
         <Tab value="tools">
-          <ConfigTabLabel title="Tools" icon={<Wrench />} badge={toolsBadge} />
+          <ConfigTabLabel title="Tools" icon={<IconMaintenance />} badge={toolsBadge} />
         </Tab>
       </TabList>
 
@@ -708,15 +709,15 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
           <Tabs<AgentConfigTab> defaultTab="variables" className="flex min-h-full flex-col overflow-visible">
             <TabList variant="pill-ghost" className="shrink-0">
               <Tab value="variables">
-                <ConfigTabLabel title="Variables" icon={<Braces />} />
+                <ConfigTabLabel title="Variables" icon={<IconCodeBrackets />} />
               </Tab>
               <Tab value="instructions">
-                <ConfigTabLabel title="System Prompt" icon={<Cpu />} />
+                <ConfigTabLabel title="System Prompt" icon={<IconChip />} />
               </Tab>
               <Tab value="tools">
                 <ConfigTabLabel
                   title="Tools"
-                  icon={<Wrench />}
+                  icon={<IconMaintenance />}
                   badge={toolCount > 0 ? <Badge size="sm">{`${toolCount}`}</Badge> : undefined}
                 />
               </Tab>

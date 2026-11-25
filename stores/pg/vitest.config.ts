@@ -6,7 +6,13 @@ const exclude = ['src/**/*.performance.test.ts', 'src/**/performance-indexes/*.t
 // (src/storage/domains/observability/v-next/polling.ts), which is cluster-wide:
 // an open transaction in any database on the server holds it back. Per-worker
 // databases can't isolate these files, so they run alone after the parallel group.
-const clusterWideFiles = ['src/storage/domains/observability/v-next/integration.test.ts'];
+// Oldest-first Knowledge activity uses the same horizon (src/storage/domains/knowledge/pages.ts),
+// and these files assert events right after writing them.
+const clusterWideFiles = [
+  'src/storage/domains/observability/v-next/integration.test.ts',
+  'src/storage/domains/knowledge/index.test.ts',
+  'src/storage/domains/knowledge/activity-commit-order.test.ts',
+];
 
 export default defineConfig({
   test: {

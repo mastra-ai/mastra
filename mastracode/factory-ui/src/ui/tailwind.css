@@ -3,13 +3,11 @@
 @import '@mastra/playground-ui/sources.css';
 @import '@mastra/playground-ui/fonts.css';
 
-/* The board card's corner. It is not a free number: a card is a rounded box with
- * a capsule pill sitting in its bottom corner, and the two only look concentric
- * while the card's radius is the pill's plus the padding between them —
- * `1.375rem = 0.875rem (h-control-sm capsule) + 0.5rem (p-2)`. Move one, move all
- * three. */
-@theme {
-  --radius-card: 1.375rem;
+/* The session panel's one animated value: registered to interpolate, not inherited so animating it never restyles the transcript. */
+@property --panel-reveal {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
 }
 
 /* Keyframes must live inside @theme so Tailwind emits them alongside the

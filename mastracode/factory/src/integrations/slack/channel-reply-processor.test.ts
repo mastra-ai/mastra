@@ -43,7 +43,7 @@ describe('FactoryChannelReplyProcessor', () => {
   it('points a run with the reply tool at the tool, and says staying quiet means not calling it', () => {
     const text = instruction(channelContext(), { reply_in_thread: {} });
     expect(text).toContain('Only messages you send with `reply_in_thread` reach this thread');
-    expect(text).toContain("When a message needs nothing from you, don't call it.");
+    expect(text).toContain("When a message that doesn't mention you needs nothing from you, don't call it.");
     expect(text).not.toMatch(/reply first with one short line/);
   });
 
@@ -74,6 +74,20 @@ describe('FactoryChannelReplyProcessor', () => {
       expect(text).toContain("Don't guess a URL");
       expect(text).toContain('the repositories listed in your environment');
       expect(text).toContain('workspace URL pattern in the `linear_get_issue` tool description');
+    }
+  });
+
+  it('tells every channel run to write for the people in the thread, not another agent', () => {
+    const runs = [
+      instruction(channelContext()),
+      instruction(channelContext(), { reply_in_thread: {} }),
+      instruction(new RequestContext(), { reply_in_thread: {} }),
+    ];
+    for (const text of runs) {
+      expect(text).toContain('Write for the people in the thread, not for another agent.');
+      expect(text).toContain('Leave out tool names and session and run ids unless someone asks for them');
+      expect(text).toContain('always leave out agent shorthand');
+      expect(text).toContain('never paste its report');
     }
   });
 

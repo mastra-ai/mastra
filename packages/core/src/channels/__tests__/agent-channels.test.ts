@@ -602,6 +602,83 @@ describe('AgentChannels', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
+    async function continueChannels(adapter: any, handlers: Record<string, unknown>) {
+      const channels = new AgentChannels({ adapters: { [adapter.name]: adapter }, handlers });
+      channels.__setAgent(mockAgent);
+      channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+      await channels.initialize(makeMastra());
+      return channels;
+    }
+
+    it('sends Continue. from the clicker through onSubscribedMessage on a run_continue click', async () => {
+      const adapter = createMockAdapter('discord');
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const channels = await continueChannels(adapter, { onSubscribedMessage });
+
+      await (channels.sdk as any).processAction(makeActionEvent(adapter, 'run_continue'));
+
+      expect(onSubscribedMessage).toHaveBeenCalledTimes(1);
+      const [thread, message, defaultHandler, ctx] = onSubscribedMessage.mock.calls[0]!;
+      expect(thread.id).toBe('channel-1:thread-1');
+      expect(message.text).toBe('Continue.');
+      expect(message.isMention).toBe(true);
+      expect(message.author.userId).toBe('clicker-1');
+      expect(message.threadId).toBe('channel-1:thread-1');
+      expect(defaultHandler).toEqual(expect.any(Function));
+      expect(ctx.requestContext).toBeInstanceOf(RequestContext);
+    });
+
+    it('continues the top-level conversation when the clicked card was posted outside a thread', async () => {
+      const adapter = createMockAdapter('slack');
+      adapter.decodeThreadId = vi.fn((id: string) => {
+        const [, channel, threadTs] = id.split(':');
+        return { channel, threadTs };
+      });
+      adapter.encodeThreadId = vi.fn(({ channel, threadTs }: any) => `slack:${channel}:${threadTs}`);
+      adapter.isDM = vi.fn(() => true);
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const channels = await continueChannels(adapter, { onSubscribedMessage });
+
+      // Slack reports a top-level card's own ts as its thread.
+      await (channels.sdk as any).processAction({
+        ...makeActionEvent(adapter, 'run_continue'),
+        messageId: '1700.1',
+        threadId: 'slack:D1:1700.1',
+      });
+
+      const [thread, message] = onSubscribedMessage.mock.calls[0]!;
+      expect(thread.id).toBe('slack:D1:');
+      expect(thread.isDM).toBe(true);
+      expect(message.threadId).toBe('slack:D1:');
+    });
+
+    it('keeps the context a custom onAction set before continuing', async () => {
+      const adapter = createMockAdapter('discord');
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const onAction = vi.fn(async (_event: any, defaultHandler: () => Promise<void>, ctx: any) => {
+        ctx.requestContext.set('tenantId', 'tenant-42');
+        ctx.signalMetadata.source = 'button';
+        await defaultHandler();
+      });
+      const channels = await continueChannels(adapter, { onAction, onSubscribedMessage });
+
+      await (channels.sdk as any).processAction(makeActionEvent(adapter, 'run_continue'));
+
+      const ctx = onSubscribedMessage.mock.calls[0]![3];
+      expect(ctx.requestContext.get('tenantId')).toBe('tenant-42');
+      expect(ctx.signalMetadata.source).toBe('button');
+    });
+
+    it('ignores a run_continue click outside a thread', async () => {
+      const adapter = createMockAdapter('discord');
+      const onSubscribedMessage = vi.fn().mockResolvedValue(undefined);
+      const channels = await continueChannels(adapter, { onSubscribedMessage });
+
+      await (channels.sdk as any).processAction({ ...makeActionEvent(adapter, 'run_continue'), threadId: '' });
+
+      expect(onSubscribedMessage).not.toHaveBeenCalled();
+    });
+
     it('passes action events to a custom handler with defaultHandler and context', async () => {
       const chatMod = await getChatModule();
       let registeredHandler: ((event: any) => Promise<void>) | undefined;
@@ -1172,6 +1249,40 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+
+    it('marks a message that mentions the bot so the model knows to answer it', async () => {
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => new InMemoryMemory({ db: new InMemoryDB() }) }),
+        getServer: () => null,
+        getLogger: () => noopLogger,
+      } as any;
+      await agentChannels.initialize(mockMastra);
+
+      const send = async (id: string, isMention: boolean) => {
+        const chatThread = {
+          id: `channel-1:${id}`,
+          channelId: 'channel-1',
+          isDM: false,
+          adapter: agentChannels.adapters.discord,
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id,
+          text: 'found a bug, brb with details',
+          isMention,
+          author: { userId: 'user-1', userName: 'paul' },
+          attachments: [],
+        } as any;
+        await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        return mockAgent.sendMessage.mock.calls.at(-1)![0].attributes;
+      };
+
+      expect(await send('mentioned', true)).toMatchObject({ mentioned: 'true' });
+      expect(await send('not-mentioned', false)).not.toHaveProperty('mentioned');
     });
 
     describe('bot display name (#25603)', () => {

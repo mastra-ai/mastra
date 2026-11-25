@@ -1,10 +1,11 @@
 {
   "name": "@mastra/voice-deepgram",
-  "version": "0.13.4-alpha.0",
+  "version": "0.13.5",
   "description": "Mastra Deepgram voice integration",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

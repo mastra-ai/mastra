@@ -38,7 +38,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 // ---------------------------------------------------------------------------
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
-  const iconClass = cn('size-3.5 shrink-0 text-placeholder', className);
+  const iconClass = cn('size-3.5 shrink-0 text-subtle-foreground', className);
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {

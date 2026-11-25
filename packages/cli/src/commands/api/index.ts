@@ -599,10 +599,6 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
-  addAction(factoryProject, 'apply-default-model', FACTORY_API_ROUTE_CATALOG.projectApplyDefaultModel, {
-    description: 'Apply the project default model to running sessions',
-    routePlacement: 'origin',
-  });
   addAction(factoryProject, 'delete', FACTORY_API_ROUTE_CATALOG.projectDelete, {
     description: 'Delete a Factory project',
     routePlacement: 'origin',
@@ -687,6 +683,32 @@ export function registerApiCommand(program: CommanderCommand): void {
   const factoryWorkItem = factory.command('work-item').description('Manage Factory work items');
   addAction(factoryWorkItem, 'list', FACTORY_API_ROUTE_CATALOG.workItemList, {
     description: 'List Factory work items and running sessions',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Find work items nobody has started by title, key, number or source id',
+        command: `mastra api factory work-item list <project-id> '{"started":"false","q":"login flow","limit":10}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'starters', FACTORY_API_ROUTE_CATALOG.workItemStarters, {
+    description: 'Count the cards behind each new-session starter',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items were created and completed since an instant',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Activity since the start of June',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-06-01T00:00:00.000Z"}'`,
+      },
+    ],
+  });
+  addAction(factoryWorkItem, 'filter-options', FACTORY_API_ROUTE_CATALOG.workItemFilterOptions, {
+    description: 'List the labels and people a Factory board can be filtered by',
     routePlacement: 'origin',
   });
   addAction(factoryWorkItem, 'create', FACTORY_API_ROUTE_CATALOG.workItemCreate, {
@@ -720,6 +742,21 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'session-repository', FACTORY_API_ROUTE_CATALOG.workItemSessionRepository, {
+    description: "Show which repository a card's session starts in, or why none can",
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'working-pull-request', FACTORY_API_ROUTE_CATALOG.workItemWorkingPullRequest, {
+    description: "Make one of a card's linked pull requests the one its sessions work on",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Work on pull request 42',
+        command: `mastra api factory work-item working-pull-request <project-id> <work-item-id> '{"pullRequest":42,"expectedRevision":3}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'start', FACTORY_API_ROUTE_CATALOG.workItemStart, {
     description: 'Explicitly start a Factory work-item run',
     input: 'required',
@@ -737,6 +774,23 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
+  const factorySession = factory.command('session').description("Inspect a Factory project's sessions");
+  addAction(factorySession, 'rows', FACTORY_API_ROUTE_CATALOG.sessionRows, {
+    description: "List the sidebar's session rows of a view, grouped and in order, with how many match",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'My sessions grouped by board, listing 25 rows of the Work board',
+        command: `mastra api factory session rows <project-id> '{"owner":"mine","groupBy":"board","window":["board:work:25"]}'`,
+      },
+    ],
+  });
+  addAction(factorySession, 'activity', FACTORY_API_ROUTE_CATALOG.sessionActivity, {
+    description: "List which of a project's sessions are running, waiting on a person or coming up",
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'boards', FACTORY_API_ROUTE_CATALOG.boardCatalog, {
     description: 'List the boards installed on a Factory project with their phases and transitions',
     routePlacement: 'origin',
@@ -748,6 +802,17 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
     description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'phases', FACTORY_API_ROUTE_CATALOG.boardPhases, {
+    description: 'List the first cards under each phase of a Factory board, with how many each phase holds',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'The ten latest bugs under each phase of the Work board, with the card bodies',
+        command: `mastra api factory board phases <project-id> work '{"label":["bug"],"limit":10,"cards":"true"}'`,
+      },
+    ],
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
     description: 'Create a board on a Factory project',
@@ -804,9 +869,21 @@ export function registerApiCommand(program: CommanderCommand): void {
 
   const factorySkill = factory
     .command('skill')
-    .description("Edit a Factory project's skills; organization admins only");
+    .description("Create and edit a Factory project's skills; organization admins only");
+  addAction(factorySkill, 'create', FACTORY_API_ROUTE_CATALOG.skillCreate, {
+    description: 'Create a skill for one Factory project; the frontmatter name must match the skill name',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a release-notes skill for one project',
+        command: `mastra api factory skill create <project-id> '{"name":"release-notes","content":"---\\nname: release-notes\\ndescription: Write release notes for a merged change\\n---\\n\\n# Release notes\\n"}'`,
+      },
+    ],
+  });
   addAction(factorySkill, 'update', FACTORY_API_ROUTE_CATALOG.skillOverrideSave, {
-    description: 'Save an edited SKILL.md for one Factory project; the frontmatter name must match the skill name',
+    description:
+      'Save a SKILL.md for one Factory project: an edit of an app skill, or a skill the project created; the frontmatter name must match the skill name',
     input: 'required',
     routePlacement: 'origin',
     examples: [
@@ -817,7 +894,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
   addAction(factorySkill, 'revert', FACTORY_API_ROUTE_CATALOG.skillOverrideRevert, {
-    description: "Revert a Factory project's edit so the skill uses its original SKILL.md",
+    description:
+      "Revert a Factory project's edit so the skill uses its original SKILL.md, or delete a skill the project created",
     routePlacement: 'origin',
   });
 
@@ -825,7 +903,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('intake-route')
     .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
   addAction(factoryIntakeRoute, 'list', FACTORY_API_ROUTE_CATALOG.intakeRouteList, {
-    description: "List a project's intake routes in order, and what applies when none matches",
+    description: "List a project's intake routes in order, or one board's with boardKey",
+    input: 'optional',
     routePlacement: 'origin',
   });
   addAction(factoryIntakeRoute, 'get', FACTORY_API_ROUTE_CATALOG.intakeRouteGet, {
@@ -858,6 +937,80 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
+  addAction(factoryIntakeRoute, 'reroute-preview', FACTORY_API_ROUTE_CATALOG.intakeRouteReroutePreview, {
+    description: "List untouched cards the project's intake routes would now file on a different board",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'reroute', FACTORY_API_ROUTE_CATALOG.intakeRouteRerouteApply, {
+    description: 'Move untouched cards to the board the intake routes now file them on',
+    routePlacement: 'origin',
+    defaultTimeoutMs: 120_000,
+  });
+  const factoryIntakeOrder = factory
+    .command('intake-order')
+    .description("Read or set the order in which a Factory project's boards are asked to take a new item");
+  addAction(factoryIntakeOrder, 'get', FACTORY_API_ROUTE_CATALOG.intakeOrderGet, {
+    description:
+      'Get the intake order, the evaluator in use and where it came from, and how the old and new evaluators compare',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeOrder, 'set', FACTORY_API_ROUTE_CATALOG.intakeOrderUpdate, {
+    description: "Set the intake order, naming every board once, or switch the project's evaluator",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Ask the docs board before Work',
+        command: `mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'`,
+      },
+      {
+        description: 'Switch an older project to intake order',
+        command: `mastra api factory intake-order set <project-id> '{"evaluator":"intake-order"}'`,
+      },
+    ],
+  });
+  const factoryNotRouted = factory
+    .command('not-routed')
+    .description("List and route again the items no board's intake rules took");
+  addAction(factoryNotRouted, 'list', FACTORY_API_ROUTE_CATALOG.intakeNotRoutedList, {
+    description: 'List items no board took, oldest first; pass nextCursor back as cursor for more',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryNotRouted, 'route-again', FACTORY_API_ROUTE_CATALOG.intakeRouteAgain, {
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    routePlacement: 'origin',
+  });
+  const factoryIntake = factory
+    .command('intake')
+    .description("Check a Factory project's intake rules against real items without filing anything");
+  addAction(factoryIntake, 'dry-run', FACTORY_API_ROUTE_CATALOG.intakeDryRun, {
+    description: 'Run the saved, or unsaved, intake rules and order over the newest 200 items',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Preview asking the docs board before Work',
+        command: `mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'`,
+      },
+    ],
+  });
+  addAction(factoryIntake, 'skipped', FACTORY_API_ROUTE_CATALOG.intakeSkippedList, {
+    description:
+      "How often each card-move rule was skipped in the last 30 days because its target couldn't take the card, with the newest skip",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntake, 'test', FACTORY_API_ROUTE_CATALOG.intakeTest, {
+    description: 'Show where intake would file one item, by URL or item id, and what every rule answered',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Test an issue from a linked repository',
+        command: `mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'`,
+      },
+    ],
+  });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
@@ -875,6 +1028,10 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryDecision, 'list', FACTORY_API_ROUTE_CATALOG.decisionList, {
     description: 'List Factory decisions',
     input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryDecision, 'queue', FACTORY_API_ROUTE_CATALOG.runQueue, {
+    description: 'List automated runs waiting for a run slot and the runs holding one',
     routePlacement: 'origin',
   });
   addAction(factoryDecision, 'approve', FACTORY_API_ROUTE_CATALOG.decisionApprove, {

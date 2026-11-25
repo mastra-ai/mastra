@@ -1,21 +1,27 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
+import type { MastraModelConfig } from '../../../../llm/model/shared.types';
 import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
+import type { ExperimentResult } from '../../../../storage/types';
 import { createTool } from '../../../../tools';
 import { runExperiment } from '../../index';
-import type { ItemToolMock } from '../../tool-mocks';
-import type { ExperimentSummary, ItemWithScores } from '../../types';
+import type { ItemToolMock, UnmockedToolPolicy } from '../../tool-mocks';
+import type { ExperimentSummary } from '../../types';
 
 /**
  * A single scripted model turn: the content the model returns when asked.
  *
  * - `toolCalls` makes the model issue tool calls (which the loop will run, or
  *   which item tool-mocks may intercept).
- * - `text` makes the model emit a final assistant message and stop.
+ * - `text` makes the model emit a final assistant message and stop, after `delayMs` if set.
+ * - `throws` makes the model call fail with that message (a provider error).
  */
-export type ScriptedTurn = { toolCalls: { id: string; toolName: string; args: unknown }[] } | { text: string };
+export type ScriptedTurn =
+  | { toolCalls: { id: string; toolName: string; args: unknown }[] }
+  | { text: string; delayMs?: number }
+  | { throws: string };
 
 /**
  * Build a {@link MockLanguageModelV2} that plays the given turns in order, one
@@ -38,9 +44,15 @@ export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
     return turn;
   };
 
+  const playTurn = async (turn: ScriptedTurn) => {
+    if ('throws' in turn) throw new Error(turn.throws);
+    if ('delayMs' in turn && turn.delayMs) await new Promise(resolve => setTimeout(resolve, turn.delayMs));
+    return turn;
+  };
+
   return new MockLanguageModelV2({
     doGenerate: async () => {
-      const turn = nextTurn();
+      const turn = await playTurn(nextTurn());
       if ('text' in turn) {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -65,7 +77,7 @@ export function scriptedModel(turns: ScriptedTurn[]): MockLanguageModelV2 {
       };
     },
     doStream: async () => {
-      const turn = nextTurn();
+      const turn = await playTurn(nextTurn());
       if ('text' in turn) {
         return {
           stream: convertArrayToReadableStream([
@@ -125,21 +137,40 @@ export interface RunToolMockScenarioOptions {
   prompt?: string;
   /** Max retries for the experiment run (default 0). Used by retry-skip scenarios. */
   maxRetries?: number;
+  /** Per-item timeout in milliseconds. */
+  itemTimeout?: number;
+  /** Run-level handling of tool calls the item doesn't mock. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
+  /** Item-level handling of tool calls the item doesn't mock (wins over the run level). */
+  itemUnmockedToolPolicy?: UnmockedToolPolicy;
+  /** Per-call model override for the agent. */
+  agentModel?: MastraModelConfig;
+  /** How the experiment runs. Defaults to `runExperiment`. */
+  path?: ExperimentPath;
 }
+
+/**
+ * The ways an experiment item can run. Scenarios run on every path so a run option
+ * supported by one path can't silently be ignored by another.
+ * - `runExperiment`: Mastra owns the loop, in process.
+ * - `runExperimentItem`: the caller owns the loop and asks Mastra to run each item.
+ */
+export const EXPERIMENT_PATHS = ['runExperiment', 'runExperimentItem'] as const;
+export type ExperimentPath = (typeof EXPERIMENT_PATHS)[number];
 
 /**
  * Result of a single-item scenario run: the full {@link ExperimentSummary} plus
  * the single {@link ItemWithScores} result for convenient per-item assertions.
  */
 export interface ToolMockScenarioResult {
-  /** The full experiment summary (status, succeededCount, failedCount, ...). */
-  summary: ExperimentSummary;
-  /** The single item result (output, error, toolMockReport, ...). */
-  item: ItemWithScores;
+  /** The finished experiment (status, succeededCount, failedCount, ...). */
+  summary: Pick<ExperimentSummary, 'status' | 'succeededCount' | 'failedCount'>;
+  /** The single item result as persisted (output, error, toolMockReport, retryCount, ...). */
+  item: ExperimentResult;
 }
 
 /**
- * Run one dataset item through the REAL {@link runExperiment} orchestration
+ * Run one dataset item through a REAL experiment path (see {@link EXPERIMENT_PATHS})
  * against a REAL agent whose only fake is the scripted model.
  *
  * The dataset item (carrying the tool mocks under test) is persisted to a real
@@ -148,7 +179,7 @@ export interface ToolMockScenarioResult {
  * persisted `DatasetItemRow` rather than passed inline. Retry-skip and report
  * persistence therefore exercise the same code paths as production.
  *
- * Returns the full {@link ExperimentSummary} and the single item result.
+ * Returns the finished experiment and the single item result read back from storage.
  */
 export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ToolMockScenarioResult> {
   const agentId = `tool-mock-scenario-agent-${++counter}`;
@@ -168,23 +199,49 @@ export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Pro
 
   const datasetsStore = (await storage.getStore('datasets'))!;
   const dataset = await datasetsStore.createDataset({ name: `Tool Mock Scenario DS ${counter}` });
-  await datasetsStore.addItem({
+  const datasetItem = await datasetsStore.addItem({
     datasetId: dataset.id,
     input: opts.prompt ?? 'run the scenario',
     toolMocks: opts.toolMocks,
+    unmockedToolPolicy: opts.itemUnmockedToolPolicy,
   });
 
-  const summary = await runExperiment(mastra, {
-    targetType: 'agent',
-    targetId: agentId,
-    datasetId: dataset.id,
-    scorers: [],
-    maxConcurrency: 1,
+  const runOptions = {
     maxRetries: opts.maxRetries ?? 0,
-  });
+    itemTimeout: opts.itemTimeout,
+    unmockedToolPolicy: opts.unmockedToolPolicy,
+    agentModel: opts.agentModel,
+  };
+  const path = opts.path ?? 'runExperiment';
 
-  const item = summary.results[0]!;
-  return { summary, item };
+  if (path === 'runExperiment') {
+    const summary = await runExperiment(mastra, {
+      targetType: 'agent',
+      targetId: agentId,
+      datasetId: dataset.id,
+      scorers: [],
+      maxConcurrency: 1,
+      ...runOptions,
+    });
+    return { summary, item: await persistedResult(mastra, summary.experimentId) };
+  }
+
+  // Caller-driven: the caller owns the loop and Mastra runs each item.
+  const ds = await mastra.datasets.get({ id: dataset.id });
+  const { experimentId } = await ds.createExperiment({ targetType: 'agent', targetId: agentId, scorers: [] });
+  await ds.runExperimentItem({ experimentId, itemId: datasetItem.id, ...runOptions });
+  const summary = await ds.finalizeExperiment({ experimentId });
+  return { summary, item: await persistedResult(mastra, experimentId) };
+}
+
+async function persistedResult(mastra: Mastra, experimentId: string): Promise<ExperimentResult> {
+  const experimentsStore = (await mastra.getStorage()!.getStore('experiments'))!;
+  const { results } = await experimentsStore.listExperimentResults({
+    experimentId,
+    pagination: { page: 0, perPage: 10 },
+  });
+  if (results.length !== 1) throw new Error(`expected one persisted result, got ${results.length}`);
+  return results[0]!;
 }
 
 let counter = 0;

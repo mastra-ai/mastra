@@ -1,5 +1,57 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.10
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Raised the minimum `ws` version to 8.23.0, which limits pending automatic pongs and terminates the connection when that limit is exceeded. ([#30840](https://github.com/mastra-ai/mastra/pull/30840))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/schema-compat@1.4.1
+
+## 0.14.10-alpha.1
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+- Updated dependencies [[`16c6902`](https://github.com/mastra-ai/mastra/commit/16c6902f8b971c4950fea55e13a8038022bde8bb), [`e3ed577`](https://github.com/mastra-ai/mastra/commit/e3ed57715f9668d9da55e7636ebefa10b141ebc4)]:
+  - @mastra/schema-compat@1.4.1-alpha.0
+
+## 0.14.10-alpha.0
+
+### Patch Changes
+
+- Raised the minimum `ws` version to 8.23.0, which limits pending automatic pongs and terminates the connection when that limit is exceeded. ([#30840](https://github.com/mastra-ai/mastra/pull/30840))
+
+## 0.14.9
+
+### Patch Changes
+
+- Use gpt-realtime-2.1-mini by default for OpenAI Realtime voice connections instead of the retired gpt-4o-mini-realtime-preview-2024-12-17 model. ([#30183](https://github.com/mastra-ai/mastra/pull/30183))
+
+- Updated dependencies [[`e1a2036`](https://github.com/mastra-ai/mastra/commit/e1a20364af31f433d0f91cb3f5ce8e49eb45b615), [`056d35d`](https://github.com/mastra-ai/mastra/commit/056d35d943316bdf657e4a504b2082cb6c14c075), [`04803ea`](https://github.com/mastra-ai/mastra/commit/04803ea00e168759ed3e28ce8a65977df7355df9)]:
+  - @mastra/schema-compat@1.4.0
+
+## 0.14.9-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`e1a2036`](https://github.com/mastra-ai/mastra/commit/e1a20364af31f433d0f91cb3f5ce8e49eb45b615)]:
+  - @mastra/schema-compat@1.4.0-alpha.2
+
+## 0.14.9-alpha.2
+
+### Patch Changes
+
+- Use gpt-realtime-2.1-mini by default for OpenAI Realtime voice connections instead of the retired gpt-4o-mini-realtime-preview-2024-12-17 model. ([#30183](https://github.com/mastra-ai/mastra/pull/30183))
+
 ## 0.14.9-alpha.1
 
 ### Patch Changes

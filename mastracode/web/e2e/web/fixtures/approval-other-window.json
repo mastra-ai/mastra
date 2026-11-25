@@ -1,0 +1,104 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Write approved.txt",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_write_ok",
+            "name": "mastra_workspace_write_file",
+            "arguments": { "path": "approved.txt", "content": "yes" }
+          }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "toolCallId": "call_write_ok", "hasToolResult": true },
+      "response": { "content": "Wrote approved.txt." }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Write declined.txt",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_write_no",
+            "name": "mastra_workspace_write_file",
+            "arguments": { "path": "declined.txt", "content": "no" }
+          }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "toolCallId": "call_write_no", "hasToolResult": true },
+      "response": { "content": "Skipped declined.txt." }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Plan to be approved",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          { "id": "call_plan_ok", "name": "submit_plan", "arguments": { "path": ".mastracode/plans/ok.md" } }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "toolCallId": "call_plan_ok", "hasToolResult": true },
+      "response": { "content": "Building the approved plan." }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Plan to be rejected",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          { "id": "call_plan_no", "name": "submit_plan", "arguments": { "path": ".mastracode/plans/no.md" } }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "toolCallId": "call_plan_no", "hasToolResult": true },
+      "response": { "content": "Revising the rejected plan." }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Ask me which environment",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_env",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Which environment?",
+              "options": [{ "label": "Staging" }, { "label": "Production" }]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": { "model": "gpt-5.4-mini", "endpoint": "chat", "toolCallId": "call_ask_env", "hasToolResult": true },
+      "response": { "content": "Deploying to Staging." }
+    }
+  ]
+}

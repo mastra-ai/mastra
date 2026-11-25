@@ -1,8 +1,11 @@
+import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { http, HttpResponse } from 'msw';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import type { WorkItemStarters } from '../../../../api/types';
+import type { SessionModelTarget } from '../../../../hooks/useSessionModel';
 import type { FactoryUserSession } from '../../../domains/workspaces/services/user-sessions';
 
 export const FACTORY_ID = 'factory-draft-handoff';
@@ -43,13 +46,57 @@ interface DraftRouteOptions {
   createGate?: Promise<void>;
   /** Answers this many session creates with a server error before accepting one. */
   failedCreates?: number;
-  /** Holds each session model switch response until it settles. */
+  /** Holds each session model selection response until it settles. */
   modelSwitchGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
-  /** The Factory's cards, in the wire shape the work-items route answers with. */
-  workItems?: unknown[];
+  /** What the server counts on the default board for the starter buttons; nothing waits unless stated. */
+  starters?: Partial<WorkItemStarters>;
+  /** The Factory's cards, as the instants the activity band reads. */
+  cards?: CardTimes[];
+}
+
+interface CardTimes {
+  createdAt: string;
+  /** When the card entered its board's completed phase, if it sits there now. */
+  doneAt?: string;
+}
+
+/** Answers the starters read as the server does for a board where only `counted` waits. */
+export function stubStarters(counted: Partial<WorkItemStarters> = {}) {
+  const starters: WorkItemStarters = {
+    failed: 0,
+    changesRequested: 0,
+    review: { count: 0 },
+    undecided: 0,
+    untriaged: 0,
+    unplannedBugs: 0,
+    stale: 0,
+    ...counted,
+  };
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/starters`, () =>
+      HttpResponse.json(starters),
+    ),
+  );
+}
+
+/** Answers the activity read as the server does: every card counted, only instants from `since` on listed. */
+function stubActivity(cards: CardTimes[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/activity`, ({ request }) => {
+      const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+      if (Number.isNaN(since)) return HttpResponse.json({ error: 'invalid_activity_since' }, { status: 400 });
+      const fromSince = (instants: Array<string | undefined>) =>
+        instants.filter(at => at !== undefined && Date.parse(at) >= since);
+      return HttpResponse.json({
+        total: cards.length,
+        createdAt: fromSince(cards.map(card => card.createdAt)),
+        doneAt: fromSince(cards.map(card => card.doneAt)),
+      });
+    }),
+  );
 }
 
 function readSentMessage(body: unknown): string {
@@ -64,7 +111,8 @@ export function stubDraftRoute({
   modelSwitchGate,
   defaultModelId = null,
   persistedMessages = [],
-  workItems = [],
+  starters,
+  cards = [],
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   // The server creates the session's thread only once the controller session
@@ -99,9 +147,7 @@ export function stubDraftRoute({
           {
             id: FACTORY_ID,
             name: 'Acme Factory',
-            repositories: [
-              listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
-            ],
+            repositories: [listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main' })],
           },
         ],
       }),
@@ -115,16 +161,26 @@ export function stubDraftRoute({
           modelScope: 'hybrid',
           defaultModelId: 'openai/gpt-4o-mini',
           defaultThinkingLevel: 'medium',
+          modelPacks: [
+            { id: 'factory', name: 'Factory', models: [{ modelId: 'openai/gpt-4o-mini', thinkingLevel: 'medium' }] },
+          ],
+          defaultModelPackId: 'factory',
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
       await modelDefaultsGate;
-      return HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null });
+      return HttpResponse.json({
+        modelId: defaultModelId,
+        thinkingLevel: null,
+        modelPacks: defaultModelId
+          ? [{ id: 'personal', name: 'Personal', models: [{ modelId: defaultModelId, thinkingLevel: 'medium' }] }]
+          : [],
+        defaultModelPackId: defaultModelId ? 'personal' : null,
+      });
     }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
@@ -182,15 +238,22 @@ export function stubDraftRoute({
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
-      const body = await request.json();
-      const thinkingLevel = readBody(body, 'thinkingLevel');
-      const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
-      route.modelSwitchRequests += 1;
-      await modelSwitchGate;
-      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
-      return HttpResponse.json({ ok: true });
-    }),
+    http.put<never, SessionModelTarget & { selection: ModelSelectionRequest }>(
+      `${TEST_BASE_URL}/web/config/session-model`,
+      async ({ request }) => {
+        const { selection } = await request.json();
+        route.modelSwitchRequests += 1;
+        await modelSwitchGate;
+        if (selection.kind === 'model') {
+          const thinkingSuffix = selection.thinkingLevel ? ` thinking:${selection.thinkingLevel}` : '';
+          route.bindings.push(`model:${selection.modelId}${thinkingSuffix}`);
+          return HttpResponse.json({ modelSelection: { kind: 'model' } });
+        }
+        const packId = selection.kind === 'pack' ? selection.packId : 'personal';
+        route.bindings.push(selection.kind === 'pack' ? `pack:${packId}` : 'default');
+        return HttpResponse.json({ modelSelection: { kind: 'pack', packId } });
+      },
+    ),
     http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
       route.bindingsBeforePrompt = [...route.bindings];
       route.posted.push(readSentMessage(await request.json()));
@@ -207,5 +270,7 @@ export function stubDraftRoute({
     ),
   );
 
+  stubStarters(starters);
+  stubActivity(cards);
   return route;
 }

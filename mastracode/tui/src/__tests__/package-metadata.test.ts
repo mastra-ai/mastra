@@ -43,7 +43,12 @@ describe('mastracode package metadata', () => {
         import: { types: './dist/acp.d.ts', default: './dist/acp.js' },
         require: { types: './dist/acp.d.ts', default: './dist/acp.cjs' },
       },
+
       './package.json': './package.json',
+    });
+    // ESM only: @mastra/code-sdk's subpaths, which the boot imports, have no require condition.
+    expect(pkg.exports?.['./run-tui']).toEqual({
+      import: { types: './dist/run-tui.d.ts', default: './dist/run-tui.js' },
     });
     expect(pkg.engines?.node).toBe('>=22.19.0');
   });

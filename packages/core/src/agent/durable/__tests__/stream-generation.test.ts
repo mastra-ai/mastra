@@ -30,10 +30,11 @@ import {
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
+  emitIterationStartEvent,
   emitOwnershipClaimedEvent,
   emitSuspendedEvent,
 } from '../stream-adapter';
-import type { DurableAgentStreamResult } from '../stream-adapter';
+import type { DurableStreamAdapterResult } from '../stream-adapter';
 
 const IDLE = 60;
 
@@ -81,7 +82,7 @@ describe('durable run stream claim generations', () => {
       messageId: `msg-${runId}`,
       model: { modelId: 'test', provider: 'test', version: 'v3' },
       ...extra,
-    }) as DurableAgentStreamResult<any>;
+    }) as DurableStreamAdapterResult<any>;
 
   it('snapshots private request metadata before callbacks and queued chunks, without publishing it', async () => {
     const pubsub = new EventEmitterPubSub();
@@ -244,6 +245,64 @@ describe('durable run stream claim generations', () => {
     await pubsub.close();
   });
 
+  // Technical: on a run fenced by a pubsub lease, events carry no generation, so a late
+  // step-finish of the execution that lost the run is delivered. Its whole list (`from: 0`) is
+  // that execution's older list, and it replaced the reader's, dropping the final answer from
+  // onFinish and output messages. It now only reports that execution's own step.
+  it("keeps the successor's response messages when the execution that lost the run sends a late whole list", async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'late-whole-list';
+    const call = { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: { order: 'A-1' } };
+    const lookup = [
+      { role: 'assistant', content: [call] },
+      {
+        role: 'tool',
+        content: [{ ...call, type: 'tool-result', input: undefined, output: { type: 'json', value: 'shipped' } }],
+      },
+    ];
+    const answered = [...lookup, { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] }];
+    const publishStep = (producer: string, seq: number, list: unknown[]) =>
+      emitChunkEvent(pubsub, runId, {
+        type: 'step-finish',
+        runId,
+        from: 'AGENT',
+        payload: {
+          stepResult: { reason: 'stop' },
+          output: { usage: {} },
+          metadata: {},
+          _durableResponseMessagesDiff: { ...diffResponseMessages({ producer }, list as any).diff, seq },
+        },
+      } as any);
+    const finished = Promise.withResolvers<unknown>();
+    const { output, cleanup, ready } = makeStream(pubsub, runId, {
+      onFinish: event => finished.resolve(event.messages),
+    });
+    await ready;
+
+    await publishStep('lost', 0, lookup);
+    // The successor took the run over and finished it.
+    await publishStep('successor', 0, answered);
+    // The execution that lost the run hadn't noticed yet.
+    await publishStep('lost', 1, lookup);
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const expected = [
+      { role: 'assistant', content: [{ type: 'tool-call', toolName: 'lookup' }] },
+      { role: 'tool', content: [{ type: 'tool-result', toolName: 'lookup' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'Order A-1 has shipped.' }] },
+    ];
+    expect(await finished.promise).toMatchObject(expected);
+    const full = await output.getFullOutput();
+    const outputTexts = full.messages.flatMap(message =>
+      message.content.parts.flatMap(part => (part.type === 'text' ? part.text : [])),
+    );
+    expect(outputTexts).toEqual(['Order A-1 has shipped.']);
+    // The late step still reports what that execution sent.
+    expect(full.steps.map(step => step.response.messages)).toEqual([lookup, answered, lookup]);
+    cleanup();
+    await pubsub.close();
+  });
+
   it('does not count stale events as signs of life', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'stale-idle';
@@ -296,6 +355,356 @@ async function takeOver(workflows: Awaited<ReturnType<typeof observedAgent>>['wo
 }
 
 describe('observe() from an offset', () => {
+  // Technical: step-finish events carry only the response messages that changed, so a reader at
+  // an offset rebuilds the earlier part from the history before it. When that read failed, no
+  // later diff could be placed and onFinish and output messages kept no answer. FINISH carries
+  // the run's whole response list, which the reader now takes.
+  it.each(['readable', 'unreadable'] as const)(
+    'reports the final answer to an observer reconnecting mid-run (%s history)',
+    async history => {
+      const { durable, pubsub, transport } = await observedAgent();
+      const runId = `offset-final-answer-${history}`;
+      const assistant = (text: string) => ({ role: 'assistant' as const, content: [{ type: 'text' as const, text }] });
+      const tool = (id: string) => ({
+        role: 'tool' as const,
+        content: [
+          { type: 'tool-result' as const, toolCallId: id, toolName: 'lookup', output: { type: 'text', value: id } },
+        ],
+      });
+      const call = (id: string) => ({
+        role: 'assistant' as const,
+        content: [{ type: 'tool-call' as const, toolCallId: id, toolName: 'lookup', input: {} }],
+      });
+      // A long first message, so the later step-finish events carry diffs instead of whole lists.
+      const opening = [assistant(`a1 ${'x'.repeat(400)}`), call('t1'), tool('t1')];
+      const lists = [opening, [...opening, assistant('a2'), call('t2'), tool('t2')]];
+      lists.push([...lists[1]!, assistant('a3')]);
+      let cursor: ResponseMessagesCursor | { producer: string } = { producer: 'execution-1' };
+      const stepFinishIndexes: number[] = [];
+      for (const [step, list] of lists.entries()) {
+        const { diff, cursor: next } = diffResponseMessages(cursor, list as any);
+        cursor = next;
+        expect(diff.from > 0).toBe(step > 0);
+        await emitChunkEvent(pubsub, runId, {
+          type: 'step-finish',
+          runId,
+          from: 'AGENT',
+          payload: {
+            stepResult: { reason: 'stop' },
+            output: { usage: {} },
+            metadata: {},
+            _durableResponseMessagesDiff: diff,
+          },
+        } as any);
+        stepFinishIndexes.push((await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length - 1);
+      }
+      await emitFinishEvent(pubsub, runId, {
+        ...finishData,
+        messages: { all: lists[2] as any, user: [], nonUser: lists[2] as any },
+      });
+      if (history === 'unreadable') {
+        vi.spyOn(pubsub, 'getHistory').mockRejectedValue(new Error('cache unavailable'));
+      }
+
+      const finished = Promise.withResolvers<unknown>();
+      // Reconnects after the first step.
+      const observed = await durable.observe(runId, {
+        offset: stepFinishIndexes[0]! + 1,
+        onFinish: event => finished.resolve(event.messages),
+      });
+      const full = await observed.output.getFullOutput();
+      const outputTexts = full.messages.flatMap(message =>
+        message.content.parts.flatMap(part => (part.type === 'text' ? part.text.slice(0, 2) : [])),
+      );
+      expect(outputTexts).toEqual(['a1', 'a2', 'a3']);
+      expect(JSON.stringify(await finished.promise)).toContain('"a3"');
+      observed.cleanup();
+      await transport.close();
+    },
+  );
+
+  it.each([undefined, 1])(
+    'does not replay abandoned output when a takeover lands during attachment (offset %s)',
+    async skip => {
+      const { durable, pubsub, transport, workflows } = await observedAgent();
+      const runId = `public-replay-takeover-${skip ?? 'start'}`;
+      const { stale, current } = await takeOver(workflows, runId);
+      await runInRunFenceScope(scopeAt(runId, stale), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('committed 0'));
+        await emitChunkEvent(pubsub, runId, textChunk('committed 1'));
+        await emitIterationStartEvent(pubsub, runId, 1);
+        await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+      });
+      // Log indices are opaque cursors seeded from the clock, so the offset
+      // and the takeover marker's floor derive from the log's real indices.
+      const base = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0))[0]!.index!;
+      const offset = skip === undefined ? undefined : base + skip;
+      const subscribe =
+        offset === undefined ? pubsub.subscribeWithReplay.bind(pubsub) : pubsub.subscribeFromOffset.bind(pubsub);
+      const intercept = async (topic: string, cb: Parameters<typeof pubsub.subscribeWithReplay>[1], from?: number) => {
+        let announced = false;
+        const replay: typeof cb = async (event, ack, nack) => {
+          await cb(event, ack, nack);
+          if (!announced && event.index === (offset ?? base)) {
+            announced = true;
+            await emitOwnershipClaimedEvent(pubsub, runId, current, base + 2);
+            await runInRunFenceScope(scopeAt(runId, current), async () => {
+              await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+              await emitFinishEvent(pubsub, runId, finishData);
+            });
+          }
+        };
+        return offset === undefined
+          ? (subscribe as typeof pubsub.subscribeWithReplay)(topic, replay)
+          : (subscribe as typeof pubsub.subscribeFromOffset)(topic, from!, replay);
+      };
+      if (offset === undefined)
+        vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementationOnce((topic, cb) => intercept(topic, cb));
+      else
+        vi.spyOn(pubsub, 'subscribeFromOffset').mockImplementationOnce((topic, from, cb) => intercept(topic, cb, from));
+
+      const observed = await durable.observe(runId, { offset });
+      const reader = readFullStream(observed.fullStream as ReadableStream<any>);
+      await reader.done;
+      expect(texts(reader.chunks)).toEqual(
+        offset === undefined ? ['committed 0', 'committed 1', 'replayed'] : ['committed 1', 'replayed'],
+      );
+      observed.cleanup();
+      await transport.close();
+    },
+  );
+
+  it('replays checkpointed steps but omits a superseded uncheckpointed step', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'replayed-tail';
+    const first = await workflows.claimRunOwnership({ runId, ownerId: 'first', leaseMs: 30_000 });
+    const second = await workflows.claimRunOwnership({ runId, ownerId: 'second', leaseMs: 30_000, force: true });
+    const third = await workflows.claimRunOwnership({ runId, ownerId: 'third', leaseMs: 30_000, force: true });
+    const committed = first.record!.generation;
+    const lost = second.record!.generation;
+    const recovered = third.record!.generation;
+    const publishStep = async (generation: number, stepIndex: number, text: string) => {
+      await runInRunFenceScope(scopeAt(runId, generation), async () => {
+        await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.STEP_START,
+          runId,
+          data: { type: 'step-start', payload: { messageId: 'same-message' } },
+          stepIndex,
+          generation,
+          producedAt: Date.now(),
+        });
+        await emitChunkEvent(pubsub, runId, textChunk(text));
+      });
+    };
+    await publishStep(committed, 0, 'committed');
+    await emitOwnershipClaimedEvent(pubsub, runId, lost);
+    // The next index the log will assign; indices are clock-seeded cursors,
+    // not list positions.
+    const from = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
+    await runInRunFenceScope(scopeAt(runId, lost), async () => {
+      await emitIterationStartEvent(pubsub, runId, 1);
+      await emitChunkEvent(pubsub, runId, textChunk('abandoned before step-start'));
+    });
+    await publishStep(lost, 1, 'abandoned');
+    await emitOwnershipClaimedEvent(pubsub, runId, recovered, from);
+    await runInRunFenceScope(scopeAt(runId, recovered), async () => {
+      await publishStep(recovered, 1, 'replayed');
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed', 'replayed']);
+    expect(chunks.filter(event => event.type === 'step-start')).toHaveLength(2);
+    await unsubscribe();
+
+    const offsetChunks: any[] = [];
+    const unsubscribeOffset = await durable.__subscribeToRunStream(runId, { offset: from + 1 }, event =>
+      offsetChunks.push(event),
+    );
+    expect(texts(offsetChunks.map(event => event.data))).toEqual(['replayed']);
+    await unsubscribeOffset();
+    await transport.close();
+  });
+
+  it('keeps committed output from an earlier generation when the log has a hole below the offset', async () => {
+    // The replay floor is a blunt backstop: `keepReplayEvent` already drops
+    // exactly the ranges a takeover declared abandoned. So the floor must not
+    // be raised to the run's current generation just because the log is not
+    // contiguous below the offset — a single index allocated by a failed
+    // append (possible on the non-atomic composed fallback) would otherwise
+    // discard committed output the takeover never superseded.
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'floor-hole';
+    const { stale: committed, current: recovered } = await takeOver(workflows, runId);
+
+    await runInRunFenceScope(scopeAt(runId, committed), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('committed 0'));
+    });
+
+    // Allocate an index without appending an entry: the counter advances and
+    // the log keeps a permanent gap, exactly as a failed push leaves it.
+    const cache = (pubsub as any).getCache();
+    await cache.increment(`pubsub:${AGENT_STREAM_TOPIC(runId)}:counter`);
+
+    await runInRunFenceScope(scopeAt(runId, committed), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('committed 1'));
+    });
+    const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+    const indices = history.map(event => event.index!);
+    // The hole is real: the span is wider than the number of entries.
+    expect(indices.at(-1)! - indices[0]!).toBeGreaterThan(indices.length - 1);
+    const offset = indices.at(-1)!;
+
+    // The takeover supersedes only what comes after the committed output.
+    await emitOwnershipClaimedEvent(pubsub, runId, recovered, offset + 1);
+    await runInRunFenceScope(scopeAt(runId, recovered), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed 1', 'replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it('includes a takeover announced between replay-floor reading and subscription', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'claim-during-attachment';
+    const first = await workflows.claimRunOwnership({ runId, ownerId: 'first', leaseMs: 30_000 });
+    const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000, force: true });
+    const recovered = await workflows.claimRunOwnership({ runId, ownerId: 'recovered', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, first.record!.generation), () =>
+      emitChunkEvent(pubsub, runId, textChunk('committed')),
+    );
+    await emitOwnershipClaimedEvent(pubsub, runId, lost.record!.generation);
+    const from = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
+    await runInRunFenceScope(scopeAt(runId, lost.record!.generation), async () => {
+      await emitIterationStartEvent(pubsub, runId, 1);
+      await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+    });
+
+    const subscribe = pubsub.subscribeWithReplay.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementationOnce(async (topic, cb) => {
+      await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, from);
+      await runInRunFenceScope(scopeAt(runId, recovered.record!.generation), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      return subscribe(topic, cb);
+    });
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed', 'replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it('filters a takeover appended while cached events are replaying', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'claim-during-cache-replay';
+    const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    const recovered = await workflows.claimRunOwnership({ runId, ownerId: 'recovered', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, lost.record!.generation), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('committed'));
+      await emitIterationStartEvent(pubsub, runId, 1);
+      await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+    });
+    const base = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0))[0]!.index!;
+    const subscribe = pubsub.subscribeWithReplay.bind(pubsub);
+    const ackReplay = vi.fn(async () => {});
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementationOnce((topic, cb) =>
+      subscribe(topic, async (event, ack, nack) => {
+        await cb(event, event.index === base ? ackReplay : ack, nack);
+        if (event.index === base) {
+          expect(ackReplay).not.toHaveBeenCalled();
+          await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, base + 1);
+          await cb({ ...event, index: undefined, data: textChunk('unindexed') }, ack, nack);
+        }
+      }),
+    );
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => chunks.push(event));
+    expect(ackReplay).toHaveBeenCalledOnce();
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed', 'unindexed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it('unsubscribes if buffered replay delivery throws', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = 'replay-delivery-error';
+    await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
+    const onEvent = vi.fn(() => {
+      throw new Error('consumer failed');
+    });
+
+    await expect(durable.__subscribeToRunStream(runId, {}, onEvent)).rejects.toThrow('consumer failed');
+    expect(unsubscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+    await emitChunkEvent(pubsub, runId, textChunk('later'));
+    expect(onEvent).toHaveBeenCalledOnce();
+    await transport.close();
+  });
+
+  it('filters a takeover that lands after an empty replay history read', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'empty-history-claim';
+    const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    const recovered = await workflows.claimRunOwnership({ runId, ownerId: 'recovered', leaseMs: 30_000, force: true });
+    const subscribe = pubsub.subscribeWithReplay.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribeWithReplay').mockImplementationOnce(async (topic, cb) => {
+      await runInRunFenceScope(scopeAt(runId, lost.record!.generation), async () => {
+        await emitIterationStartEvent(pubsub, runId, 0);
+        await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+      });
+      await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, 0);
+      await runInRunFenceScope(scopeAt(runId, recovered.record!.generation), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      return subscribe(topic, cb);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it('filters a superseded tail when an offset observer attaches as a takeover is announced', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'offset-claim-during-attachment';
+    const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    const recovered = await workflows.claimRunOwnership({ runId, ownerId: 'recovered', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, lost.record!.generation), () =>
+      emitChunkEvent(pubsub, runId, textChunk('before offset')),
+    );
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+    const subscribe = pubsub.subscribeFromOffset.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribeFromOffset').mockImplementationOnce(async (topic, from, cb) => {
+      await runInRunFenceScope(scopeAt(runId, lost.record!.generation), async () => {
+        await emitIterationStartEvent(pubsub, runId, 0);
+        await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+      });
+      await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, offset);
+      await runInRunFenceScope(scopeAt(runId, recovered.record!.generation), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      return subscribe(topic, from, cb);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
   it("follows the run's current claim when the takeover marker lies before the offset", async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
@@ -307,7 +716,8 @@ describe('observe() from an offset', () => {
     await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
 
     // The observer reconnects after everything above, so it never sees the marker.
-    const observed = await durable.observe(runId, { offset: 3 });
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
+    const observed = await durable.observe(runId, { offset });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
 
     await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
@@ -345,8 +755,9 @@ describe('observe() from an offset', () => {
     expect(resumedGeneration).toBeGreaterThan(firstGeneration);
     await runInRunFenceScope(scopeAt(runId, resumedGeneration), () => emitChunkEvent(pubsub, runId, textChunk('c ')));
 
-    // The observer reconnects inside the first segment.
-    const observed = await durable.observe(runId, { offset: 1 });
+    // The observer reconnects inside the first segment, at the index of 'b '.
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0))[1]!.index!;
+    const observed = await durable.observe(runId, { offset });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
     await runInRunFenceScope(scopeAt(runId, resumedGeneration), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('d'));
@@ -369,7 +780,9 @@ describe('observe() from an offset', () => {
     );
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
 
-    const observed = await durable.observe(runId, { offset: 1 });
+    // Skip everything already in the log.
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
+    const observed = await durable.observe(runId, { offset });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
     await runInRunFenceScope(scopeAt(runId, record!.generation), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('after'));
@@ -394,7 +807,8 @@ describe('observe() from an offset', () => {
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
 
     // The offset skips the marker and the first claim read fails.
-    const observed = await durable.observe(runId, { offset: 3 });
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
+    const observed = await durable.observe(runId, { offset });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
 
     await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
@@ -805,8 +1219,10 @@ describe('__subscribeToRunStream()', () => {
     await emitOwnershipClaimedEvent(pubsub, runId, current);
     await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
 
+    // Skip everything already in the log, marker included.
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
     const events: any[] = [];
-    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => events.push(event));
     await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
     await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
@@ -831,8 +1247,10 @@ describe('__subscribeToRunStream()', () => {
     await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
 
+    // Skip everything already in the log, marker included.
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).at(-1)!.index! + 1;
     const events: any[] = [];
-    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => events.push(event));
     await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
     await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
@@ -873,12 +1291,18 @@ describe('__subscribeToRunStream()', () => {
     const events: any[] = [];
     const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => events.push(event));
     await emitChunkEvent(pubsub, runId, textChunk('live'));
+    // The first live frame after an attach below the log's seeded floor can
+    // arrive through an async backfill.
+    await vi.waitFor(() => expect(events).toHaveLength(2));
 
     expect(summarize(events)).toEqual([
       [AgentStreamEventTypes.CHUNK, 'replayed', undefined],
       [AgentStreamEventTypes.CHUNK, 'live', undefined],
     ]);
-    expect(events.map(event => event.index)).toEqual([0, 1]);
+    // Indices are opaque log cursors: consecutive, but seeded from the clock.
+    const base = events[0].index;
+    expect(typeof base).toBe('number');
+    expect(events.map(event => event.index)).toEqual([base, base + 1]);
     await unsubscribe();
     await transport.close();
   });

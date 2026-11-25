@@ -1,12 +1,13 @@
 {
   "name": "@mastra/connect",
-  "version": "1.4.0-alpha.4",
+  "version": "1.6.0-alpha.0",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
+    "!dist/**/*.d.*ts.map",
     "NOTICE.md",
     "LICENSE-ELv2.txt"
   ],
@@ -29,6 +30,8 @@
     "build:watch": "pnpm build:lib --watch",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "generate-provider": "tsx scripts/generate-provider.ts",
+    "generate:event-payloads": "tsx scripts/generate-event-payloads.ts",
+    "generate:event-types": "tsx scripts/generate-event-types.ts",
     "generate:provider-docs": "tsx scripts/generate-provider-docs.ts",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix .",
@@ -37,7 +40,7 @@
     "smoke-test": "tsx scripts/smoke-test/index.ts",
     "smoke-test:channels": "tsx scripts/smoke-test/channels/index.ts",
     "sync-templates": "tsx scripts/sync-templates.ts",
-    "test": "vitest run && tsc --noEmit"
+    "test": "vitest run && tsc --noEmit && tsc --noEmit -p type-tests/augmented"
   },
   "keywords": [
     "mastra",
@@ -60,7 +63,7 @@
     "node": ">=22.13.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.82.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.86.0-0 <2.0.0-0",
     "zod": ">=3.0.0 || >=4.0.0"
   },
   "devDependencies": {
@@ -75,6 +78,7 @@
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
+    "yaml": "^2.9.1",
     "zod": "catalog:"
   },
   "dependencies": {

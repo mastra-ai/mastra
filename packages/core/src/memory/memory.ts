@@ -18,6 +18,7 @@ import type {
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import type { WorkingMemoryInstructionArgs } from '../processors/memory';
 import { assertEmbeddingDimension } from '../processors/memory/embedding-dimension';
 import type { RequestContext } from '../request-context';
 import type {
@@ -54,6 +55,9 @@ import type {
   SerializedMemoryConfig,
   SerializedObservationalMemoryConfig,
   ObservationalMemoryOptions,
+  ObservationalMemorySettings,
+  GetObservationalMemoryRecordsInput,
+  ObservationalMemoryRecords,
 } from './types';
 import { isObservationalMemoryEnabled } from './types';
 
@@ -140,6 +144,12 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
+  #agentName?: string;
+  /**
+   * Set once more than one agent has resolved this memory. A shared memory has no
+   * single owner, so its missing-storage diagnostic omits the agent name.
+   */
+  #agentNameShared = false;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -254,6 +264,21 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
   }
 
   /**
+   * Internal method used by an Agent to record that it resolved this memory, so
+   * missing-storage diagnostics can name the agent when the memory has no
+   * attached Mastra instance. When several agents share one memory the name is
+   * left out, since the failing access cannot be attributed to a single agent.
+   * @internal
+   */
+  __registerAgent(agentName: string): void {
+    if (this.#agentName === undefined) {
+      this.#agentName = agentName;
+    } else if (this.#agentName !== agentName) {
+      this.#agentNameShared = true;
+    }
+  }
+
+  /**
    * Delete a thread's live event stream from the registered Mastra pubsub.
    * Call after the thread itself is deleted: nothing else ever clears an
    * open-ended thread topic, so without this it lingers until the pubsub's
@@ -275,8 +300,10 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
 
   get storage() {
     if (!this._storage) {
+      const agentLabel =
+        !this.#mastra && this.#agentName !== undefined && !this.#agentNameShared ? `[Agent:${this.#agentName}] ` : '';
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+        `${agentLabel}Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
           this.#mastra
             ? ''
             : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'
@@ -753,6 +780,14 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
+  /**
+   * Renders the working memory instruction that the `WorkingMemory` input processor adds to an agent's
+   * system prompt. Return `undefined` to use the processor's built-in instruction, or an empty string to add none.
+   */
+  getWorkingMemoryInstruction(_args: WorkingMemoryInstructionArgs): string | undefined {
+    return undefined;
+  }
+
   abstract updateWorkingMemory({
     threadId,
     resourceId,
@@ -899,6 +934,7 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            instructionProvider: this,
             readOnly: effectiveConfig.readOnly,
             agentManaged:
               typeof effectiveConfig.workingMemory === 'object'
@@ -1191,6 +1227,36 @@ https://mastra.ai/en/docs/memory/overview`,
    * @returns Promise resolving to the cloned thread and copied messages
    */
   abstract cloneThread(args: StorageCloneThreadInput): Promise<StorageCloneThreadOutput>;
+
+  /**
+   * Observational Memory settings for memory implementations that run Observational Memory
+   * themselves rather than through an `observational-memory` processor (for example a hosted
+   * backend). Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryConfig(_args: {
+    requestContext?: RequestContext;
+  }): Promise<ObservationalMemorySettings | undefined> {
+    return undefined;
+  }
+
+  /**
+   * Reads the current Observational Memory record and its history for memory implementations
+   * that report settings through `getObservationalMemoryConfig`. Callers must check thread
+   * access first. Returns `undefined` when this memory does not provide them.
+   */
+  async getObservationalMemoryRecords(
+    _args: GetObservationalMemoryRecordsInput,
+  ): Promise<ObservationalMemoryRecords | undefined> {
+    return undefined;
+  }
+
+  /** Waits for hosted buffering after thread access has been checked. Undefined means unsupported. */
+  async waitForObservationalMemoryBuffering(_args: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<Pick<ObservationalMemoryRecords, 'record'> | undefined> {
+    return undefined;
+  }
 
   /**
    * Copies a thread and its messages to a new thread without returning the message

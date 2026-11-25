@@ -22,7 +22,7 @@ import { InMemoryServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { DefaultStorage } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -70,6 +70,20 @@ describe('createInngestAgent factory function', () => {
     baseUrl: `http://localhost:${INNGEST_PORT}`,
   });
 
+  it('advertises detached streams when the wrapped Agent has streams disabled', () => {
+    const agent = new Agent({
+      id: 'detached-streams',
+      name: 'Detached streams',
+      instructions: 'Test',
+      model: createMockModel() as any,
+      durable: false,
+    });
+    const durableAgent = createInngestAgent({ agent, inngest });
+
+    expect(agent.hasResumableStreams()).toBe(false);
+    expect(durableAgent.hasResumableStreams()).toBe(true);
+  });
+
   it('should create an InngestAgent from a regular Agent', () => {
     const agent = new Agent({
       id: 'factory-test',
@@ -89,6 +103,60 @@ describe('createInngestAgent factory function', () => {
     expect(typeof durableAgent.prepare).toBe('function');
     expect(typeof durableAgent.getDurableWorkflows).toBe('function');
   });
+
+  it.each(
+    (['default', 'evented'] as const).flatMap(executionEngine =>
+      [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
+    ),
+  )(
+    'isolates inner policy at structural registration: $executionEngine / registered=$registerFirst',
+    async ({ executionEngine, registerFirst }) => {
+      const threadBus = new EventEmitterPubSub();
+      const workflowBus = new EventEmitterPubSub();
+      const agent = new Agent({
+        id: 'policy-inner',
+        name: 'Policy inner',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+      });
+      const host = new Mastra({ logger: false, durable: { executionEngine, cleanupTimeoutMs: 0 } });
+      if (registerFirst) host.addAgent(agent);
+      const wrapped = createInngestAgent({ agent, inngest, pubsub: workflowBus });
+      const registered = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: threadBus,
+        agents: { wrapped },
+        durable: { executionEngine },
+      });
+      expect(registered.getAgent('wrapped')).toBe(wrapped);
+      expect(wrapped.agent).toBe(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(registerFirst ? executionEngine : false);
+      expect(agent.getPubSub()).toBe(registered.pubsub);
+      expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
+      expect(wrapped.pubsub).not.toBe(registered.pubsub);
+      // Inngest's Proxy must remain on the legacy compatibility path.
+      expect(isDurableAgentLike(wrapped)).toBe(true);
+      host.addAgent(agent);
+      expect(agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      await expect(registered.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+      });
+      const fork = wrapped.__fork();
+      expect(isInngestAgent(fork)).toBe(true);
+      const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
+      expect(forkHost.getAgent('fork')).toBe(fork);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.agent.durable).toEqual(agent.durable);
+      forkHost.addAgent(fork.agent);
+      expect(fork.agent.__getExecutionEnginePolicy()).toBe(executionEngine);
+      expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    },
+  );
 
   it('should be detected by isInngestAgent type guard', () => {
     const agent = new Agent({
@@ -1120,6 +1188,56 @@ describe('InngestAgent parity surface', () => {
       }
     });
 
+    it("does not resolve resume() defaultOptions or dispatch with the starting run's user", async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDynamicDefaults(
+        'default-callbacks-resume-user',
+        ({ user, requestContext }) => ({
+          onFinish: () => {
+            fired.push(`onFinish:${user?.id ?? 'anon'}:${requestContext.get('tenant')}`);
+          },
+        }),
+      );
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({
+          getStore: async () => ({
+            loadWorkflowSnapshot: vi.fn().mockResolvedValue({
+              value: {},
+              context: {},
+              status: 'suspended',
+              suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+              requestContext: {
+                tenant: 'acme',
+                [MASTRA_NORMALIZED_USER_KEY]: { id: 'alice', role: 'admin' },
+                mastra__user: { sub: 'alice' },
+                mastra__userRoles: ['admin'],
+                mastra__userPermissions: ['admin:*'],
+              },
+            }),
+          }),
+        }),
+      });
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-user-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['onFinish:anon:acme']));
+        const resumeEvent = sendSpy.mock.calls.map(([event]) => event as any).find(event => event.data?.resume);
+        // No user, roles or permissions from the starting run. The only other key is the
+        // framework's segment-span carrier (#30812); this resume opened no spans, so it is null.
+        expect(resumeEvent.data.requestContext).toEqual({
+          tenant: 'acme',
+          mastra__durableSegments: { [runId]: null },
+        });
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
     it('resolves resume() defaultOptions against the snapshot once it is persisted', async () => {
       const fired: string[] = [];
       const durableAgent = makeAgentWithDynamicDefaults(
@@ -1582,6 +1700,8 @@ describe('InngestAgent parity surface', () => {
               userId: 'user-1',
               organizationId: 'org-2',
               requestId: 'request-1',
+              // The segment-span carrier every resume adds (#30812); no spans opened here.
+              mastra__durableSegments: { [runId]: null },
             },
             tracingOptions: {
               traceId: 'trace-1',

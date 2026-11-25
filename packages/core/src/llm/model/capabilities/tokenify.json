@@ -1,0 +1,54 @@
+{
+  "attachment": ["deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3-flash"],
+  "temperature": [
+    "deepseek/deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro",
+    "deepseek/deepseek-v4.1-flash",
+    "z-ai/glm-5.2",
+    "z-ai/glm-5.3-flash"
+  ],
+  "reasoning": {
+    "deepseek/deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

@@ -5,7 +5,7 @@ import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../metrics/
 import type { ApiInterval } from '../../metrics/lib/metrics-buckets';
 import { bucketTraceAggregateRows } from '../../metrics/lib/trace-aggregate';
 import type { TraceAggregateRow } from '../../metrics/lib/trace-aggregate';
-import { measureOf, rowsOf, seriesOf, valueOf } from './answers';
+import { emptyMeasure, measureOf, rowsOf, seriesOf, valueOf } from './answers';
 import type { DashboardAnswer } from './requests';
 import {
   colorSchema,
@@ -14,16 +14,18 @@ import {
   formatSchema,
   matchesGroups,
   queryRefSchema,
+  SERIES_COLORS,
   unknownQueryIssues,
   valueExprSchema,
 } from './values';
-import type { LabelledValue, ValueExpr, ValueRef } from './values';
+import type { ChartColorName, LabelledValue, ValueExpr, ValueRef } from './values';
 
 export const timeseriesSeriesSchema = z
   .object({
     dataKey: z.string().min(1),
     label: z.string().min(1),
-    color: colorSchema,
+    /** Left out, the series takes one by its position among the view's series. */
+    color: colorSchema.optional(),
     emphasis: z.boolean().optional(),
     /** The series' value per bucket. */
     value: valueExprSchema,
@@ -81,8 +83,8 @@ export type ChartBucket = BucketLabels & Record<string, number | string | undefi
 
 export type ShapedTimeseries = {
   data: ChartBucket[];
-  /** The series shown, each with its range total when it has one. */
-  series: (Omit<TimeseriesSeries, 'rangeTotal'> & { rangeTotal?: number })[];
+  /** The series shown, each with its color (its own or its position's) and its range total when it has one. */
+  series: (Omit<TimeseriesSeries, 'rangeTotal' | 'color'> & { color: ChartColorName; rangeTotal?: number })[];
   /** Hours per bucket, for a clicked bucket's window. */
   stepHours: number;
   /** The card's total, from `options.total`. */
@@ -93,18 +95,29 @@ export type ShapedTimeseries = {
   empty: boolean;
 };
 
-/** A ref's value in one trace aggregate row set (ungrouped: one row). */
-function fromRows(rows: TraceAggregateRow[], ref: ValueRef) {
+/** A trace aggregate row's group, named as a metrics series is: its `groupBy` values joined by `|`. */
+const groupName = (row: TraceAggregateRow, groupBy: readonly string[]) =>
+  groupBy.map(d => row.dimensions?.[d] ?? '').join('|');
+
+/** A ref's value in one trace aggregate row set: the rows of the groups it reads, added up. */
+function fromRows(rows: TraceAggregateRow[], ref: ValueRef, groupBy: readonly string[]) {
   const { measure } = ref;
   if (!measure) return undefined;
-  const values = rows.flatMap(r => measureOf(r.measures, measure) ?? []);
+  const values = rows.flatMap(r =>
+    matchesGroups(ref, groupName(r, groupBy)) ? (measureOf(r.measures, measure) ?? []) : [],
+  );
   return values.length ? values.reduce((a, b) => a + b, 0) : undefined;
 }
 
 /** A ref's value over the whole range, from a totals query or the sum of its buckets. */
-function rangeValue(answer: DashboardAnswer | undefined, ref: ValueRef, perBucket: (number | undefined)[] | undefined) {
+function rangeValue(
+  answer: DashboardAnswer | undefined,
+  ref: ValueRef,
+  groupBy: readonly string[],
+  perBucket: (number | undefined)[] | undefined,
+) {
   const aggregate = rowsOf(answer);
-  if (aggregate && !aggregate.rows.some(r => r.bucket)) return fromRows(aggregate.rows, ref) ?? 0;
+  if (aggregate && !aggregate.rows.some(r => r.bucket)) return fromRows(aggregate.rows, ref, groupBy) ?? 0;
   const value = valueOf(answer);
   if (value) return (ref.field === 'estimatedCost' ? value.estimatedCost : value.value) ?? undefined;
   return perBucket?.reduce<number>((sum, v) => sum + (v ?? 0), 0);
@@ -117,15 +130,20 @@ function rangeValue(answer: DashboardAnswer | undefined, ref: ValueRef, perBucke
 export function shapeTimeseries({
   options,
   responses,
+  queries,
   window,
-  hasTraceQueries,
 }: {
   options: TimeseriesOptions;
   /** Each query's answer, by query id. */
   responses: ReadonlyMap<string, DashboardAnswer | undefined>;
+  queries: readonly DashboardQuery[];
   window: Window;
-  hasTraceQueries: boolean;
 }): ShapedTimeseries {
+  const hasTraceQueries = queries.some(isTraceQuery);
+  const groupByOf = (id: string) => {
+    const query = queries.find(q => q.id === id);
+    return query && isTraceQuery(query) ? (query.groupBy ?? []) : [];
+  };
   const plan = bucketPlan(window.start, window.end);
   const merged = !hasTraceQueries && (options.buckets ?? 'chart') === 'chart';
   const stepHours = merged ? plan.stepHours : intervalHours(plan.interval);
@@ -142,8 +160,9 @@ export function shapeTimeseries({
     const answer = responses.get(ref.query);
     const aggregate = rowsOf(answer);
     if (aggregate) {
+      const empty = ref.measure ? emptyMeasure(ref.measure) : 0;
       bucketTraceAggregateRows(aggregate.rows, window).forEach((b, i) => {
-        values[i] = fromRows(b.rows, ref) ?? 0;
+        values[i] = fromRows(b.rows, ref, groupByOf(ref.query)) ?? empty;
       });
     }
     for (const s of seriesOf(answer) ?? []) {
@@ -161,16 +180,22 @@ export function shapeTimeseries({
     return values;
   };
   const rangeOf = (ref: ValueRef) =>
-    rangeValue(responses.get(ref.query), ref, totals.has(ref.query) ? undefined : bucketed(ref)) ?? 0;
+    rangeValue(
+      responses.get(ref.query),
+      ref,
+      groupByOf(ref.query),
+      totals.has(ref.query) ? undefined : bucketed(ref),
+    ) ?? 0;
   const overRange = (expr: ValueExpr) => evaluate(expr, rangeOf) ?? 0;
 
-  const perSeries = options.series.map(s => {
+  const perSeries = options.series.map((s, index) => {
     const values = grid.map((_, i) => {
       const v = evaluate(s.value, ref => bucketed(ref)[i]);
       return v === undefined ? undefined : s.round ? Math.round(v) : v;
     });
     const sum = values.reduce<number>((a, v) => a + (v ?? 0), 0);
-    return { s, values, rangeTotal: s.rangeTotal ? overRange(s.rangeTotal) : undefined, sum };
+    const color = s.color ?? SERIES_COLORS[index % SERIES_COLORS.length] ?? 'neutral';
+    return { s, color, values, rangeTotal: s.rangeTotal ? overRange(s.rangeTotal) : undefined, sum };
   });
 
   const shown = perSeries.filter(p => !options.hideEmpty || (p.rangeTotal ?? p.sum) > 0);
@@ -196,6 +221,7 @@ export function shapeTimeseries({
     data,
     series: shown.map((p, i) => ({
       ...p.s,
+      color: p.color,
       emphasis: options.emphasizeFirst ? i === 0 : p.s.emphasis,
       rangeTotal: p.rangeTotal,
     })),
@@ -208,6 +234,14 @@ export function shapeTimeseries({
 
 /** Aggregations whose values for several groups add up to the value for all of them. */
 const ADDITIVE = new Set<string>(['sum', 'count']);
+
+type TraceQuery = Extract<DashboardQuery, { source: 'traceAggregate' | 'spanAggregate' }>;
+const isTraceQuery = (query: DashboardQuery): query is TraceQuery =>
+  query.source === 'traceAggregate' || query.source === 'spanAggregate';
+
+/** Trace and span measures whose values for several groups add up: counts and sums. */
+const isAdditiveMeasure = (measure: string) =>
+  measure === 'count' || measure === 'errorCount' || measure.endsWith('.sum') || measure.endsWith('.count');
 
 /**
  * The numbers an alert could watch: each series over the range (its `rangeTotal`, else its value),
@@ -268,9 +302,10 @@ export function timeseriesIssues(options: TimeseriesOptions, queries: readonly D
   const mixedGroups = refs
     .filter(r => {
       const query = byId.get(r.query);
+      if (r.groups?.length === 1 || query === undefined) return false;
+      if (isTraceQuery(query))
+        return (query.groupBy?.length ?? 0) > 0 && r.measure !== undefined && !isAdditiveMeasure(r.measure);
       return (
-        r.groups?.length !== 1 &&
-        query !== undefined &&
         'request' in query &&
         query.request === 'timeSeries' &&
         (query.groupBy?.length ?? 0) > 0 &&

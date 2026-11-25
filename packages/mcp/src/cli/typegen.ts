@@ -1,4 +1,4 @@
-import { compile } from 'json-schema-to-typescript';
+import { compile } from 'json-schema-to-typescript-lite';
 import type { SerializableMCPToolCatalog } from '../client/types';
 import {
   countJsonValues,
@@ -234,6 +234,19 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
         output[key] = entry;
       }
     }
+    // The converter types the index signature from `additionalProperties` alone, and a named
+    // property outside that type fails to compile (TS2411). Keep the subschema for references.
+    if (
+      object(output.properties) &&
+      Object.keys(output.properties).length &&
+      object(output.additionalProperties) &&
+      output.additionalProperties.tsType !== 'unknown'
+    ) {
+      warnings.push(
+        `Additional properties alongside named properties at ${nodePosition}; index signature widened to unknown`,
+      );
+      output.additionalProperties = { ...output.additionalProperties, tsType: 'unknown' };
+    }
     if (reasons.length) {
       const reason = reasons.join('; ');
       warnings.push(`${reason.charAt(0).toUpperCase()}${reason.slice(1)} at ${nodePosition}; widened to unknown`);
@@ -277,7 +290,22 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
     complete.add(path);
   }
   for (const path of locations.keys()) checkCycle(path);
-  return result;
+  // The converter cannot compile a root that is only a `$ref` to a recursive definition, so
+  // inline the root's reference chain; root keywords win over the target's, as with `$ref` siblings.
+  let inlined = result;
+  while (object(inlined) && typeof inlined.$ref === 'string' && inlined.$ref.startsWith('#/')) {
+    let target: unknown = result;
+    for (const part of decodeURIComponent(inlined.$ref.slice(2)).split('/')) {
+      target =
+        object(target) || Array.isArray(target)
+          ? Reflect.get(target, part.replace(/~1/g, '/').replace(/~0/g, '~'))
+          : undefined;
+    }
+    const siblings = { ...inlined };
+    delete siblings.$ref;
+    inlined = object(target) ? { ...target, ...siblings } : target !== false;
+  }
+  return inlined;
 }
 
 function identifier(name: string): string {
@@ -334,14 +362,17 @@ export async function generateToolTypes(
       try {
         declarations.push(
           await compile({ ...schema, title: name }, name, {
-            bannerComment: '',
             unknownAny: true,
             enableConstEnums: false,
             $refOptions: { resolve: { external: false, file: false, http: false } },
             customName: value => {
               if (value.title === name) return name;
-              if (!names.has(value)) names.set(value, `${name}Value${++nested}`);
-              return names.get(value);
+              let nestedName = names.get(value);
+              if (nestedName === undefined) {
+                nestedName = `${name}Value${++nested}`;
+                names.set(value, nestedName);
+              }
+              return nestedName;
             },
           }),
         );

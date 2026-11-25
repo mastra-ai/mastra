@@ -1,10 +1,11 @@
-import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent, getRunRegistryEntry } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType } from '@mastra/core/observability';
+import * as coreObservability from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
 import type { RunFence, WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
@@ -26,7 +27,13 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { workflowTermination } from './observability-compat';
+import {
+  endFailedSegmentSpans,
+  segmentEndedBySuspension,
+  segmentSpanData,
+  workflowResumeTracingContext,
+  workflowTermination,
+} from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -411,6 +418,33 @@ export class InngestWorkflow<
     return run;
   }
 
+  /**
+   * Records a run Inngest gave up on as failed. Only a row still marked live is
+   * rewritten: a run that failed in its own code already wrote a richer terminal
+   * snapshot in finalize, and a suspended row stays resumable.
+   */
+  async #markRunFailed(runId: string, error: unknown) {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return;
+    const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: this.id });
+    const snapshot = typeof run?.snapshot === 'string' ? undefined : run?.snapshot;
+    if (!snapshot || !['running', 'pending', 'waiting'].includes(snapshot.status)) return;
+    await workflowsStore.persistWorkflowSnapshot({
+      workflowName: this.id,
+      runId,
+      resourceId: run?.resourceId,
+      expectedStatus: ['running', 'pending', 'waiting'],
+      snapshot: {
+        ...snapshot,
+        status: 'failed',
+        activePaths: [],
+        activeStepsPath: {},
+        error: getErrorFromUnknown(error, { fallbackMessage: 'Inngest run failed' }),
+        timestamp: Date.now(),
+      },
+    });
+  }
+
   //createCronFunction is only called if cronConfig.cron is defined.
   private createCronFunction() {
     if (this.cronFunction) {
@@ -467,6 +501,17 @@ export class InngestWorkflow<
         // Every event that triggers this function carries `data.runId`, and
         // `Run.cancel()` sends the same field.
         cancelOn: [{ event: `cancel.workflow.${this.id}`, match: 'data.runId' }],
+        // Inngest calls this once it gives up on a run. The handler's finalize step is
+        // what records a terminal snapshot, so a run that dies before reaching it
+        // (worker crash, retries exhausted on a failed request) would otherwise stay
+        // `running` in storage forever.
+        // A resumed InngestAgent segment carries a resume claim; the resume-claim release function
+        // ends those under the claim, so a stale segment cannot fail a run a later resume took over.
+        onFailure: async ({ event, error }) => {
+          const original = event.data?.event?.data;
+          if (typeof original?.runId !== 'string' || original.resume?.claim) return;
+          await this.#markRunFailed(original.runId, error);
+        },
         triggers: { event: `workflow.${this.id}` },
         // Spread flow control configuration
         ...this.flowControlConfig,
@@ -489,6 +534,7 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          parentSampled,
           actor,
           parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
@@ -561,13 +607,23 @@ export class InngestWorkflow<
         // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
         // On replay, returns memoized ExportedSpan data without re-creating the span
         const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
-          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-          if (!observability) return undefined;
+          if (!mastra?.observability?.getSelectedInstance({ requestContext })) return undefined;
 
-          const span = observability.startSpan({
+          // A resume continues the suspended run's trace: same sampling decision, nested under its span.
+          const suspendedTracingContext = resume
+            ? (
+                await (
+                  await mastra.getStorage()?.getStore('workflows')
+                )?.loadWorkflowSnapshot({
+                  workflowName: this.id,
+                  runId,
+                })
+              )?.tracingContext
+            : undefined;
+          const span = getOrCreateSpan({
             type: SpanType.WORKFLOW_RUN,
             outcome: null,
-            name: `workflow run: '${this.id}'`,
+            name: resume ? `workflow run: '${this.id}' (resumed)` : `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
             entityName: this.id,
@@ -575,10 +631,15 @@ export class InngestWorkflow<
             metadata: {
               resourceId,
               runId,
+              ...(resume ? { resumed: true, resumedFromSpanId: suspendedTracingContext?.spanId } : {}),
             },
             tracingPolicy,
             tracingOptions,
             requestContext,
+            resumeFrom: suspendedTracingContext,
+            // A nested run repeats the decision of the run that invoked it.
+            samplingDecision: parentSampled,
+            mastra,
           });
 
           return span?.snapshot?.() ?? span?.exportSpan();
@@ -591,6 +652,7 @@ export class InngestWorkflow<
           this.options,
           parentStream,
           inngestRunId,
+          workflowSpanData,
         );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
@@ -619,6 +681,7 @@ export class InngestWorkflow<
               ? {
                   traceId: workflowSpanData.traceId,
                   workflowSpanId: workflowSpanData.id,
+                  sampled: workflowResumeTracingContext(workflowSpanData)?.sampled,
                 }
               : undefined,
             outputOptions,
@@ -709,11 +772,16 @@ export class InngestWorkflow<
                 const workflowSpan = observability.rebuildSpan(workflowSpanData);
 
                 if (result.status === 'failed') {
+                  const failure = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
+                  const origin = coreObservability.getSpanErrorOrigin?.(result.error);
+                  if (origin) coreObservability.setSpanErrorOrigin?.(failure, origin);
                   workflowSpan.error({
                     ...workflowTermination(result),
-                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
+                    error: failure,
                     attributes: { status: 'failed' },
                   });
+                  const recordedOrigin = coreObservability.getSpanErrorOrigin?.(failure);
+                  if (recordedOrigin) coreObservability.setSpanErrorOrigin?.(result.error, recordedOrigin);
                 } else {
                   workflowSpan.end({
                     ...workflowTermination(result),
@@ -762,12 +830,7 @@ export class InngestWorkflow<
                   result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                   error: result.status === 'failed' ? result.error : undefined,
                   requestContext: requestContext.toJSON(),
-                  tracingContext: workflowSpanData
-                    ? {
-                        traceId: workflowSpanData.traceId,
-                        spanId: workflowSpanData.id,
-                      }
-                    : undefined,
+                  tracingContext: workflowResumeTracingContext(workflowSpanData),
                   timestamp: Date.now(),
                 };
 
@@ -805,10 +868,37 @@ export class InngestWorkflow<
               this.logger.debug?.('Failed to publish workflow-finish event:', publishError);
             }
 
+            // Last, so an Inngest retry of this step cannot end the run's spans twice. Only the first iteration's
+            // state keeps the workflow kind.
+            const agentState =
+              durableAgentInput ??
+              [inputData, resume?.stepResults?.input].find(input => input?.iterationCount !== undefined && input.runId);
+            let segmentEnded = false;
+            if (result.status === 'failed' && agentState && !engine.segmentEnded) {
+              const steps = result.steps as Record<string, any>;
+              segmentEnded = segmentEndedBySuspension(
+                segmentSpanData(requestContext, agentState.runId, agentState),
+                steps,
+              );
+              endFailedSegmentSpans({
+                mastra,
+                requestContext,
+                runId: agentState.runId,
+                state: agentState,
+                steps,
+                error: durableAgentWorkflowError(result.error).error,
+                live: getRunRegistryEntry(agentState.runId, mastra),
+              });
+            }
+
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
+                cause: {
+                  ...(shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result),
+                  __mastraSpanErrorOrigin: coreObservability.getSpanErrorOrigin?.(result.error),
+                  ...(segmentEnded ? { __mastraSegmentEnded: true } : {}),
+                },
               });
             }
 

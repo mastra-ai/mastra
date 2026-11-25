@@ -1,4 +1,3 @@
-import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
@@ -7,6 +6,11 @@ import type { BadgeVariant } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowSplitUp } from '@/ds/icons/central/IconArrowSplitUp';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
@@ -30,11 +34,14 @@ export interface TracesDataListNameCellProps {
 
 export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }: TracesDataListNameCellProps) {
   const isRoot = parentSpanId == null;
-  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
+  const Icon = isRoot ? IconCodeTree : IconArrowCornerDownRight;
   const label = isRoot ? 'Trace' : 'Subtrace';
   const icon = (
     <span aria-label={label} className="inline-flex shrink-0">
-      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-placeholder')} aria-hidden />
+      <Icon
+        className={cn('size-4 shrink-0', isRoot ? 'text-muted-foreground' : 'text-subtle-foreground')}
+        aria-hidden
+      />
     </span>
   );
   return (
@@ -99,7 +106,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   workflow_step: { label: 'Step', Icon: WorkflowIcon },
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
-  classifier: { label: 'Classifier', Icon: SplitIcon },
+  classifier: { label: 'Classifier', Icon: IconArrowSplitUp },
   memory: { label: 'Memory', Icon: MemoryIcon },
   mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },
@@ -107,8 +114,8 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   output_processor: { label: 'Processor', Icon: ProcessorIcon },
   output_step_processor: { label: 'Processor', Icon: ProcessorIcon },
   tool_result_processor: { label: 'Processor', Icon: ProcessorIcon },
-  rag_ingestion: { label: 'RAG', Icon: DatabaseIcon },
-  trajectory: { label: 'Trajectory', Icon: RouteIcon },
+  rag_ingestion: { label: 'RAG', Icon: IconServer1 },
+  trajectory: { label: 'Trajectory', Icon: IconDirection1 },
 };
 
 export interface TracesDataListTypeCellProps {
@@ -122,7 +129,7 @@ export function TracesDataListTypeCell({ entityType }: TracesDataListTypeCellPro
     <DataListCell className="flex min-w-0 items-center gap-2">
       {display ? (
         <>
-          <display.Icon className="size-3.5 shrink-0 text-placeholder" aria-hidden />
+          <display.Icon className="size-3.5 shrink-0 text-subtle-foreground" aria-hidden />
           <Txt as="span" variant="body-sm" className="min-w-0 truncate">
             {display.label}
           </Txt>

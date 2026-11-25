@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA } from '../storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_SESSIONS_MAX_AGE_MS, FactorySessionsStateProcessor } from './sessions-state-processor.js';
 
@@ -32,9 +34,6 @@ async function setup() {
     orgId: 'org-1',
     connectionId: connection.id,
     repositoryId: repository.id,
-    createdByUserId: 'owner',
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/sandbox/mastra',
   });
   const createSession = (
     sessionId: string,
@@ -129,8 +128,10 @@ async function setup() {
   type Signal = Awaited<ReturnType<FactorySessionsStateProcessor['computeStateSignal']>>;
   let last: Signal;
   /** One model step; `fresh` drops the prior snapshot, like a new context window. */
-  const step = async (options: { sessionId?: string; threadId?: string; fresh?: boolean } = {}) => {
-    const base = !options.fresh && last ? last : undefined;
+  const step = async (
+    options: { sessionId?: string; threadId?: string; fresh?: boolean; previousKey?: string } = {},
+  ) => {
+    const base = options.previousKey ? { cacheKey: options.previousKey } : !options.fresh && last ? last : undefined;
     const signal = await processor.computeStateSignal({
       requestContext: context(options.sessionId, options.threadId),
       threadId: options.threadId ?? 'parent-thread',
@@ -195,6 +196,60 @@ describe('FactorySessionsStateProcessor', () => {
     expect(signal!.contents).toMatch(
       /- #7 "Item 7": execute; work session worker-7 idle; last report progress at \d{4}-/,
     );
+  });
+
+  it('tells a session with side sessions to check their claims, and a session that only follows items nothing', async () => {
+    const followsOnly = await setup();
+    await followsOnly.follow((await followsOnly.fileItem(7)).id);
+    expect((await followsOnly.step())!.contents).not.toContain("A side session's report");
+
+    const env = await setup();
+    await env.createSession('side-1', {
+      title: 'Review #7',
+      origin: { sessionId: 'parent', threadId: 'parent-thread' },
+    });
+    const contents = (await env.step())!.contents;
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+    expect(contents).toContain('check that claim against the pull request or branch yourself');
+  });
+
+  it('keeps the side-session caution when the row cap hides every side session', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    for (let n = 1; n <= 20; n += 1) {
+      const item = await env.fileItem(n);
+      await env.follow(item.id);
+      await env.bind(item.id, `worker-${n}`);
+      env.running.add(`worker-${n}`);
+    }
+
+    const contents = (await env.step())!.contents;
+    expect(contents).not.toContain('session side-1');
+    expect(contents).toContain('+1 more');
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+  });
+
+  it('keeps the side-session caution after every side session ages out', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    expect((await env.step())!.contents).toContain('session side-1');
+
+    env.advance(DAY + 1000);
+    const contents = (await env.step())!.contents;
+    expect(contents).not.toContain('session side-1');
+    expect(contents).toContain('reports from earlier ones stay in notification_inbox');
+    expect(contents).toContain("A side session's report is its own account and can be wrong.");
+  });
+
+  it('replaces a snapshot keyed on the state alone, so new guidance reaches an unchanged session', async () => {
+    const env = await setup();
+    await env.createSession('side-1', { origin: { sessionId: 'parent', threadId: 'parent-thread' } });
+    const first = (await env.step())!;
+    const stateOnlyKey = `sessions:${createHash('sha256').update(JSON.stringify(first.value.sessions)).digest('hex').slice(0, 16)}`;
+
+    const next = await env.step({ previousKey: stateOnlyKey });
+    expect(next?.contents).toBe(first.contents);
+    await expect(env.step()).resolves.toBeUndefined();
   });
 
   it("shows whether a followed item's session is running, idle or waiting", async () => {
@@ -402,6 +457,20 @@ describe('FactorySessionsStateProcessor', () => {
     const item = await env.fileItem(7);
     await env.bind(item.id, 'worker-7');
     await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+  });
+
+  it('does not read the work item card when nobody follows the worker item', async () => {
+    const env = await setup();
+    await env.createSession('worker-7');
+    const item = await env.fileItem(7);
+    await env.bind(item.id, 'worker-7');
+    const findOne = vi.spyOn(env.seed.storage.ops, 'findOne');
+    const findMany = vi.spyOn(env.seed.storage.ops, 'findMany');
+
+    await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+
+    const collections = [...findOne.mock.calls, ...findMany.mock.calls].map(([collection]) => collection);
+    expect(collections).not.toContain(FACTORY_BOARD_ITEMS_SCHEMA.name);
   });
 
   it('tells an item worker which item and role it works on and who follows it', async () => {

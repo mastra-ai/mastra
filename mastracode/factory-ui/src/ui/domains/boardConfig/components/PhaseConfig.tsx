@@ -1,129 +1,37 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
-import {
-  InputNumber,
-  InputNumberDecrement,
-  InputNumberGroup,
-  InputNumberIncrement,
-  InputNumberInput,
-} from '@mastra/playground-ui/components/InputNumber';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
-
-import { BookOpen, Bot, FileText, Flag, Pencil, Play, Route, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import type { ReactNode } from 'react';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { PhaseField, PhaseRunFields } from '@mastra/playground-ui/domains/factory';
+import { Link } from 'react-router';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
-import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
+import { boardSkillPath } from '../boardConfigPaths';
 import { RuleEditor } from '../../settings/components/RuleEditor';
 import { SettingsSubsection } from '../../settings/components/SettingsSubsection';
-import {
-  MAX_GOAL_RUNS,
-  MAX_INSTRUCTIONS,
-  MAX_OBJECTIVE,
-  PHASE_TOOLS,
-  goalRunsValid,
-  nextPhasesOf,
-} from '../boardDraft';
+import { DEFAULT_SESSION, PHASE_TOOLS, nextPhasesOf, withAutoStart, withNextPhases } from '../boardDraft';
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
+import { PhaseOutcomes } from './PhaseOutcomes';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
+import { SkillBadges } from './skills/SkillBadges';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
 const FIELD_WIDTH = 'sm:max-w-xs';
-/** A counter only shows once its limit is near. */
-const countNear = (length: number, max: number) => (length >= max - 200 ? ` ${length}/${max}` : '');
-
-/** Runner context a phase gets when it names none. */
-const DEFAULT_SESSION = 'work';
-
-/** A skill's status, with the same badges as the Skills page. */
-function SkillBadges({ skill, missing }: { skill?: FactorySkillInfo; missing: boolean }) {
-  return (
-    <>
-      {missing && <Badge variant="destructive">Not found</Badge>}
-      {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
-      {skill?.builtIn && skill.origin !== undefined && skill.origin !== 'bundled' && <Badge>Overridden by app</Badge>}
-      {skill?.edited && <Badge>Edited</Badge>}
-    </>
-  );
-}
-
-/**
- * A setting whose heading and help sit above its control, so the control stands alone as the place to type.
- * `after` follows the field in the same section, for a setting that tunes this one (a goal's run limit).
- */
-function PhaseField({
-  title,
-  description,
-  error,
-  disabled,
-  children,
-  after,
-}: {
-  title: string;
-  description: string;
-  error?: string;
-  disabled?: boolean;
-  children: ReactNode;
-  after?: ReactNode;
-}) {
-  return (
-    <SettingsGroup>
-      <Field invalid={Boolean(error)} disabled={disabled}>
-        <SettingsTitle>{title}</SettingsTitle>
-        <FieldDescription>{description}</FieldDescription>
-        {children}
-        {error && <FieldError>{error}</FieldError>}
-      </Field>
-      {after}
-    </SettingsGroup>
-  );
-}
-
-/** Markdown written straight into a card, with room to click into while empty. */
-function MarkdownCard({
-  label,
-  value,
-  placeholder,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  placeholder: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <SettingsContainer>
-      <div className="px-4 py-3">
-        <CodeEditor
-          aria-label={label}
-          value={value}
-          placeholder={placeholder}
-          editable={!disabled}
-          onChange={onChange}
-          language="markdown"
-          font="body"
-          variant="inline"
-          lineNumbers={false}
-          showCopyButton={false}
-        />
-      </div>
-    </SettingsContainer>
-  );
-}
-
 /** One phase's settings, in the order a card meets them: how it starts, what the agent runs, how it ends and where it goes. */
 export function PhaseConfig({
   phase,
@@ -160,17 +68,16 @@ export function PhaseConfig({
   /** Unset when the phase can't be removed. */
   onRemove?: () => void;
 }) {
+  const sources = useSourceSuggestions(factoryId);
   const working = phase.kind === 'working';
   const next = nextPhasesOf(phase, phases);
   const instructions = phase.runner?.instructions ?? '';
   const goal = phase.runner?.goal;
-  const objective = goal?.objective ?? '';
   const tools = phase.tools ?? [];
   const exitToolId = phase.exitTool?.id ?? '';
   const skillName = phase.runner?.skill;
   const skill = skillName ? skills?.find(candidate => candidate.name === skillName) : undefined;
   const skillMissing = skillName !== undefined && skills !== undefined && skill === undefined;
-  const [openSkill, setOpenSkill] = useState<FactorySkillInfo>();
 
   const setRunner = (runner: Partial<NonNullable<StoredPhaseInfo['runner']>>) => {
     const merged = { ...phase.runner, ...runner };
@@ -190,12 +97,12 @@ export function PhaseConfig({
       required={new Set(requiredNextPhases)}
       boardId={boardId}
       disabled={disabled}
-      onChange={nextPhases => onChange({ ...phase, nextPhases })}
+      onChange={nextPhases => onChange(withNextPhases(phase, nextPhases))}
     />
   );
   const remove = onRemove && (
     <div>
-      <Button variant="ghost" icon={<Trash2 />} onClick={onRemove}>
+      <Button variant="ghost" icon={<TrashIcon />} onClick={onRemove}>
         Remove {phase.name}
       </Button>
     </div>
@@ -213,7 +120,7 @@ export function PhaseConfig({
   return (
     <div className="flex flex-col gap-8">
       <PhaseSteps label={`How ${phase.name} runs`}>
-        <PhaseStep icon={<Play />} title="Starts">
+        <PhaseStep icon={<IconPlay />} title="Starts">
           <SettingsContainer>
             <SettingsRow label="Start on its own" disabled={disabled}>
               <Switch
@@ -221,7 +128,7 @@ export function PhaseConfig({
                 checked={phase.autoStart ?? false}
                 disabled={disabled}
                 onCheckedChange={checked => {
-                  onChange({ ...phase, autoStart: checked, autoStartWhen: checked ? phase.autoStartWhen : null });
+                  onChange(withAutoStart(phase, checked));
                   if (!checked) onRawRule('autoStartWhen', undefined);
                 }}
               />
@@ -233,6 +140,7 @@ export function PhaseConfig({
                   description="Leave empty to start every card on its own."
                   rule={phase.autoStartWhen}
                   schema={cardRuleGroupSchema}
+                  options={{ 'source.repository': sources }}
                   disabled={disabled}
                   json={json('autoStartWhen')}
                   onUnfinished={unfinished => onUnfinished('autoStartWhen', unfinished)}
@@ -243,73 +151,15 @@ export function PhaseConfig({
           </SettingsContainer>
         </PhaseStep>
 
-        <PhaseStep icon={<Bot />} title="Agent runs">
-          <PhaseField
-            title="Instructions"
-            description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
-            error={instructions.length > MAX_INSTRUCTIONS ? 'Too long to save.' : undefined}
+        <PhaseStep icon={<IconRobot />} title="Agent runs">
+          <PhaseRunFields
+            phaseName={phase.name}
+            instructions={instructions}
+            goal={goal}
             disabled={disabled}
-          >
-            <MarkdownCard
-              label={`${phase.name} instructions`}
-              value={instructions}
-              placeholder="Tell the agent what to do, in Markdown"
-              disabled={disabled}
-              onChange={text => setRunner({ instructions: text })}
-            />
-          </PhaseField>
-
-          <PhaseField
-            title="Goal"
-            description={`The agent keeps working until a judge finds this objective met. Leave empty for a single run.${countNear(objective.length, MAX_OBJECTIVE)}`}
-            error={objective.length > MAX_OBJECTIVE ? 'Too long to save.' : undefined}
-            disabled={disabled}
-            after={
-              goal && (
-                <Field invalid={!goalRunsValid(goal.maxRuns)} disabled={disabled}>
-                  <div className="flex items-center gap-3">
-                    <FieldLabel
-                      info={`After this many runs without meeting the goal, the card waits for a person. From 1 to ${MAX_GOAL_RUNS}; leave empty for Factory's default.`}
-                    >
-                      Pause goal after
-                    </FieldLabel>
-                    <InputNumber
-                      className="w-36"
-                      min={1}
-                      max={MAX_GOAL_RUNS}
-                      allowOutOfRange
-                      value={goal.maxRuns ?? null}
-                      disabled={disabled}
-                      onValueChange={runs => {
-                        const { maxRuns: _maxRuns, ...rest } = goal;
-                        setRunner({ goal: runs === null ? rest : { ...rest, maxRuns: runs } });
-                      }}
-                    >
-                      <InputNumberGroup size="sm">
-                        <InputNumberInput placeholder="Default" />
-                        <InputGroupAddon align="inline-end" variant="flush">
-                          <InputGroupText className="mr-1">runs</InputGroupText>
-                          <InputNumberDecrement />
-                          <InputNumberIncrement />
-                        </InputGroupAddon>
-                      </InputNumberGroup>
-                    </InputNumber>
-                  </div>
-                  {!goalRunsValid(goal.maxRuns) && (
-                    <FieldError>Use a whole number from 1 to {MAX_GOAL_RUNS}.</FieldError>
-                  )}
-                </Field>
-              )
-            }
-          >
-            <MarkdownCard
-              label={`${phase.name} goal`}
-              value={objective}
-              placeholder="Describe what done looks like"
-              disabled={disabled}
-              onChange={text => setRunner({ goal: text.trim() ? { ...goal, objective: text } : undefined })}
-            />
-          </PhaseField>
+            onInstructionsChange={text => setRunner({ instructions: text })}
+            onGoalChange={next => setRunner({ goal: next })}
+          />
 
           <PhaseField
             title="Session"
@@ -337,7 +187,7 @@ export function PhaseConfig({
                   >
                     <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
                       <span className="flex min-w-0 items-center gap-2">
-                        <BookOpen aria-hidden className="text-muted-foreground size-4 shrink-0" />
+                        <IconBook aria-hidden className="text-muted-foreground size-icon-md shrink-0" />
                         <span className="truncate">{skillName ?? 'No skill'}</span>
                       </span>
                     </SelectTrigger>
@@ -350,15 +200,17 @@ export function PhaseConfig({
                       ))}
                     </SelectContent>
                   </Select>
-                  <SkillBadges skill={skill} missing={skillMissing} />
+                  {skillMissing && <Badge variant="destructive">Not found</Badge>}
+                  {skill?.error && <Badge variant="destructive">Failed to load</Badge>}
+                  {skill && <SkillBadges skill={skill} />}
                   {skill && (
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon={skillsEditable ? <Pencil /> : <FileText />}
+                      icon={skillsEditable ? <IconPencil /> : <IconFileText />}
                       aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
                       className="ml-auto"
-                      onClick={() => setOpenSkill(skill)}
+                      render={<Link to={boardSkillPath(factoryId, boardId, skill.name)} />}
                     >
                       {skillsEditable ? 'Edit' : 'View'}
                     </Button>
@@ -407,7 +259,7 @@ export function PhaseConfig({
           </SettingsSubsection>
         </PhaseStep>
 
-        <PhaseStep icon={<Flag />} title="Ends">
+        <PhaseStep icon={<IconFlag2 />} title="Ends">
           <PhaseField
             title="Exit tool"
             description="Ends the phase when it succeeds. Leave empty for none."
@@ -453,6 +305,7 @@ export function PhaseConfig({
                     description="Leave empty to approve for every card."
                     rule={phase.exitTool.autoApproveWhen}
                     schema={cardRuleGroupSchema}
+                    options={{ 'source.repository': sources }}
                     disabled={disabled}
                     json={json('autoApproveWhen')}
                     onUnfinished={unfinished => onUnfinished('autoApproveWhen', unfinished)}
@@ -474,21 +327,23 @@ export function PhaseConfig({
           )}
         </PhaseStep>
 
-        <PhaseStep icon={<Route />} title="Allowed moves">
+        <PhaseStep icon={<IconDirection1 />} title="Allowed moves">
           {moves}
+          <SettingsSubsection
+            title="Outcomes"
+            description="The ways this phase can end. The agent reports one by its key when its work is done, and Factory moves the card to that outcome's phase once the run ends. People can still make any allowed move."
+          >
+            <PhaseOutcomes
+              phase={phase}
+              phases={phases}
+              disabled={disabled}
+              onChange={outcomes => onChange({ ...phase, outcomes })}
+            />
+          </SettingsSubsection>
         </PhaseStep>
       </PhaseSteps>
 
       {remove}
-
-      {openSkill && (
-        <FactorySkillEditorDialog
-          skill={openSkill}
-          factoryId={factoryId}
-          canEdit={skillsEditable}
-          onClose={() => setOpenSkill(undefined)}
-        />
-      )}
     </div>
   );
 }

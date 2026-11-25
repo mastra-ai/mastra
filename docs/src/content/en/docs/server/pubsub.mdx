@@ -4,6 +4,7 @@ description: "Configure Mastra PubSub event delivery for components, resumable s
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
+  - "@mastra/valkey-streams"
   - "@mastra/google-cloud-pubsub"
 ---
 
@@ -51,18 +52,19 @@ Because it runs in process, events aren't persisted and don't reach other proces
 
 Set the `pubsub` option on the `Mastra` instance to choose a backend. Each backend implements the same [`PubSub`](/reference/pubsub/base) contract, so the rest of your application doesn't change.
 
-The deciding question is where the subscriber runs.
+The deciding questions are where the subscriber runs and whether [evented workflows and agents](#evented-workflows-and-agents) run on more than one process.
 
-| Backend | Scope | Mode | Package |
-| - | - | - | - |
-| [`EventEmitterPubSub`](/reference/pubsub/event-emitter) | Single process | Pull and push | `@mastra/core` |
-| [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) | Multiple processes, one host | Push | `@mastra/core` |
-| [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) | Distributed, multiple hosts | Pull | `@mastra/redis-streams` |
-| [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) | Distributed, multiple hosts | Pull | `@mastra/google-cloud-pubsub` |
+| Backend | Scope | Evented runs on several processes | Mode | Package |
+| - | - | - | - | - |
+| [`EventEmitterPubSub`](/reference/pubsub/event-emitter) | Single process | No | Pull and push | `@mastra/core` |
+| [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) | Multiple processes, one host | No | Push | `@mastra/core` |
+| [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) | Distributed, multiple hosts | Yes | Pull | `@mastra/redis-streams` |
+| [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams) | Distributed, multiple hosts | Yes | Pull | `@mastra/valkey-streams` |
+| [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) | Distributed, multiple hosts | Yes | Pull | `@mastra/google-cloud-pubsub` |
 
 ### Multiple processes on one host
 
-Use [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) when several processes on the same machine need to share a stream. It delivers events over a Unix domain socket and elects one process as a broker. If the broker exits, the remaining processes elect a new one.
+Use [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) when several processes on the same machine need to share streams and signals. It delivers events over a Unix domain socket and elects one process as a broker. If the broker exits, the remaining processes elect a new one. It doesn't redeliver the events a stopped process held, so it isn't a backend for evented workflows or agents that run on several processes.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -108,6 +110,48 @@ export const mastra = new Mastra({
   }),
 })
 ```
+
+## Evented workflows and agents
+
+Workflows on the [evented execution engine](/docs/workflows/scheduled-workflows#execution-engine) and agents using [evented durable execution](/docs/harness/durable-agents#execution-variants) advance a run one event at a time. Any worker can take the next event, which lets several processes share one run. That only holds when the deployment has both of the following:
+
+- **A PubSub backend that redelivers unacknowledged events**: When a worker stops in the middle of a step, the backend gives the step's event to another worker.
+- **A storage adapter with workflow step guards**: The backend can deliver the same event more than once, and the step guard keeps a later delivery from saving the step's result a second time. A step can still run more than once, so [make steps with side effects idempotent](/docs/workflows/overview#restarting-active-workflow-runs).
+
+The backends that redeliver are marked **Yes** in the [Choosing a backend](#choosing-a-backend) table. A backend's reference page says whether redelivery can be turned off. The storage adapters with workflow step guards are `@mastra/pg` and `@mastra/libsql`. With `@mastra/libsql`, see [evented agent worker takeover](/reference/pubsub/redis-streams#evented-agent-worker-takeover) for the database setups that work across machines.
+
+[`EventEmitterPubSub`](/reference/pubsub/event-emitter) and [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) don't redeliver an event that a stopped process received and never acknowledged. On the default `EventEmitterPubSub`, evented workflows and agents run in one process, which is how you try the evented engine locally and run it in tests. Don't use either backend to run evented workflows or agents on several processes:
+
+- `EventEmitterPubSub` delivers inside one process. An event never reaches another instance, and each instance that boots restarts the active evented workflow runs of the others.
+- `UnixSocketPubSub` reaches the other processes on the host, but no other process picks up the step of a process that stopped, and each process that boots restarts the active evented workflow runs of the others.
+
+### Warning for unsupported setups
+
+Mastra logs a warning the first time an evented run is created in a setup that can't support several processes:
+
+- The PubSub backend delivers to other processes and doesn't redeliver unacknowledged events.
+- The PubSub backend redelivers unacknowledged events and the storage adapter has no workflow step guards.
+
+The default `EventEmitterPubSub` doesn't trigger the warning, because its events never leave the process. `UnixSocketPubSub` triggers it even when one process uses the socket, because Mastra can't tell how many processes share it.
+
+If you see the warning with your own [`PubSub`](/reference/pubsub/base) implementation, override the properties that describe its transport. Mastra reads them instead of checking which class the backend is:
+
+```typescript title="src/mastra/pubsub.ts"
+import { PubSub } from '@mastra/core/events'
+
+export class MyBrokerPubSub extends PubSub {
+  // The broker hands an unacknowledged event to another consumer in the group.
+  override get redeliversUnacked(): boolean {
+    return true
+  }
+
+  // publish(), subscribe(), unsubscribe(), flush()
+}
+```
+
+Return `true` from `redeliversUnacked` only when the broker redelivers an abandoned event to another consumer of the same group, and only after 30 seconds or more. If your implementation delivers only inside the publishing process, return `false` from `deliversAcrossProcesses` instead. See the [`PubSub` properties](/reference/pubsub/base#properties).
+
+To disable the warning for a setup that one process uses, set the `MASTRA_DISABLE_EVENTED_SETUP_WARNING` environment variable to `true`.
 
 ## Resumable streams
 

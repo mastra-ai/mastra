@@ -29,7 +29,7 @@ export {
 } from './iteration-state';
 export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
-export { readAccumulatedSteps, storeAccumulatedSteps } from './accumulated-steps';
+export { loadAccumulatedSteps, readAccumulatedSteps, storeAccumulatedSteps } from './accumulated-steps';
 
 export {
   buildDeferredStepFinishChunk,
@@ -39,14 +39,14 @@ export {
 } from '@internal/core/durable';
 
 export {
+  dehydrateMessageListState,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
   loadRunStoredMessages,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
-  seedMessageListState,
   storeMessageListState,
 } from './message-list-state';
 
-export { resolveDurableToolCallConcurrency } from './tool-call-concurrency';
+export { resolveDurableToolCallConcurrency, toolCallsRunSideBySide } from './tool-call-concurrency';

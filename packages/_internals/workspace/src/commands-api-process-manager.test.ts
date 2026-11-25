@@ -33,6 +33,8 @@ class HostCommands implements CommandsApi {
   >();
   readonly calls: string[] = [];
   readonly connectTimeouts: Array<number | undefined> = [];
+  /** The `user` each `run` was given, `undefined` when it set none. */
+  readonly runUsers: Array<string | undefined> = [];
   /**
    * Hold `run`/`connect` back until the first output has been delivered, the
    * way the SDK does when output arrives with the start event: its handle
@@ -40,8 +42,12 @@ class HostCommands implements CommandsApi {
    */
   outputBeforeStart = false;
 
-  async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
+  async run(
+    command: string,
+    opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string>; user?: string },
+  ) {
     this.calls.push('run');
+    this.runUsers.push(opts.user);
     // Own process group, so kill() takes down what `sh -c` forked too. Killing
     // only `sh` leaves e.g. dash's forked `sleep` holding the pipes open, and
     // `close` (which `done` waits on) never fires.
@@ -162,8 +168,11 @@ function killGroup(pid: number): boolean {
 class HostProcessManager extends CommandsApiProcessManager {
   readonly operations: CommandsApiOperation[] = [];
 
-  constructor(readonly commands: HostCommands) {
-    super({ defaultTimeout: 5_000 });
+  constructor(
+    readonly commands: HostCommands,
+    options: { user?: string } = {},
+  ) {
+    super({ defaultTimeout: 5_000, user: options.user });
   }
 
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
@@ -187,9 +196,9 @@ class TestSandbox extends MastraSandbox {
 
 let commands: HostCommands;
 
-function setup() {
+function setup(user?: string) {
   commands = new HostCommands();
-  const processes = new HostProcessManager(commands);
+  const processes = new HostProcessManager(commands, { user });
   new TestSandbox(processes);
   return processes;
 }
@@ -253,6 +262,25 @@ describe('CommandsApiProcessManager', () => {
     expect((await handle.wait()).exitCode).toBe(137);
     expect(isAlive(neighbor.pid)).toBe(true);
     expect(neighbor.exitCode).toBeUndefined();
+  });
+
+  it('runs commands as the configured user, and the kill script as that same user', async () => {
+    const processes = setup('agent');
+    const handle = await processes.spawn('sleep 30');
+    expect(commands.runUsers).toEqual(['agent']);
+
+    // The kill script has to run as the user that started the tree: another
+    // user cannot signal those processes, and they would outlive the kill.
+    await handle.kill();
+    expect(commands.runUsers).toEqual(['agent', 'agent']);
+  });
+
+  it('leaves the user to the provider when no user is configured', async () => {
+    const processes = setup();
+    const handle = await processes.spawn('true');
+
+    await handle.wait();
+    expect(commands.runUsers).toEqual([undefined]);
   });
 
   it('writes stdin through runCommands, and refuses when stdin was detached', async () => {

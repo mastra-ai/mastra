@@ -39,6 +39,10 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
 } {
+  if (route.method === 'GET' && route.path === '/auth/sso/callback') {
+    return { query: { code: 'test-authorization-code', error: undefined } };
+  }
+
   if (route.path === '/observability/feedback/:feedbackId' && route.method === 'PUT') {
     return {
       body: {
@@ -65,6 +69,11 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
 
   if (route.path === '/schedules' && route.method === 'POST') {
     return { body: { cron: '* * * * *' } };
+  }
+
+  // Without a thread, working memory is read for a resource, so one must be named.
+  if (route.path === '/memory/working-memory' && route.method === 'GET') {
+    return { query: { resourceId: 'test-resource' } };
   }
 
   // `data` must match the payloadSchema of the 'ticket.created' event on test-server-1.

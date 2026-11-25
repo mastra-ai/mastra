@@ -7,7 +7,7 @@ import { PageLoader } from './PageSuspense';
 export function AppPageLoader() {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout variant="fit" {...slots}>
+    <PageLayout variant="page" {...slots}>
       <PageLoader />
     </PageLayout>
   );

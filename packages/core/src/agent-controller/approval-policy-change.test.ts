@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../agent';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { createTool } from '../tools';
 import { AgentController } from './agent-controller';
@@ -60,12 +61,17 @@ function setup(callIds?: string[]) {
   // One model for every controller: a reopened run continues the same
   // conversation instead of replaying the first step's tool calls.
   const model = makeModel(callIds);
+  // The `user` each model step resolves with: hosts gate model credentials on it.
+  const modelUsers: unknown[] = [];
   const makeController = async (storage: InMemoryStore) => {
     const agent = new Agent({
       id: 'a',
       name: 'a',
       instructions: 'test',
-      model,
+      model: ({ requestContext }) => {
+        modelUsers.push(requestContext.get('user'));
+        return model;
+      },
       tools: { transition },
     });
     const controller = new AgentController({
@@ -77,7 +83,7 @@ function setup(callIds?: string[]) {
     await controller.init();
     return controller;
   };
-  return { counter, makeController };
+  return { counter, makeController, modelUsers };
 }
 
 async function until(check: () => boolean, ms = 3_000) {
@@ -258,4 +264,41 @@ describe('tool approval follows policy changes', () => {
     await new Promise(r => setTimeout(r, 200));
     expect(counter.executed).toBe(2);
   });
+
+  it.each(['on session create', 'after the session opened'] as const)(
+    'resumes a call released %s with the reopening request context',
+    async when => {
+      const { counter, makeController, modelUsers } = setup();
+      const storage = new InMemoryStore();
+      const first = await makeController(storage);
+      const session = await first.createSession({ id: 's', ownerId: 'o' });
+      const threadId = session.thread.getId();
+      const rec = recordEvents(session);
+      void session.sendMessage({ content: 'go' });
+      expect(await until(rec.approvalRequired)).toBe(true);
+      await first.destroy();
+
+      const second = await makeController(storage);
+      if (when === 'on session create') {
+        second.onSessionCreated(
+          async reopened => {
+            await reopened.permissions.setForTool({ toolName: 'transition', policy: 'allow' });
+          },
+          { blocking: true },
+        );
+      }
+      const user = { workosId: 'owner-user', organizationId: 'org-1' };
+      const requestContext = new RequestContext([['user', user]]);
+      const reopened = await second.createSession({ id: 's', ownerId: 'o', threadId, requestContext } as never);
+      if (when === 'after the session opened') {
+        await reopened.permissions.setForTool({ toolName: 'transition', policy: 'allow' });
+      }
+
+      expect(await until(() => counter.executed === 1)).toBe(true);
+      expect(await until(() => modelUsers.length >= 2)).toBe(true);
+      // The first step ran under the opening request; the resumed step must
+      // carry the reopening request's user, or host credential gates refuse it.
+      expect(modelUsers.at(-1)).toEqual(user);
+    },
+  );
 });

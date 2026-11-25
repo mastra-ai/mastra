@@ -1,10 +1,11 @@
 {
   "name": "@mastra/auth",
-  "version": "1.1.5",
+  "version": "1.2.1",
   "description": "",
   "type": "module",
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,6 +44,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "jose": "^6.2.12",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

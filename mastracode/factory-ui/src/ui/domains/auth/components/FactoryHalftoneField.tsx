@@ -65,7 +65,7 @@ function densityAt(lane: number, laneProgress: number, verticalProgress: number,
  * lanes (Intake → Build → Review → Ship).
  *
  * - `panel` (default): the full sign-in visual — a bordered side panel with
- *   stage labels, a hover spotlight and the "move across the factory" hint.
+ *   stage labels and a hover spotlight.
  * - `backdrop`: the same animated field with the chrome stripped, sized to fill
  *   its positioned parent and faded toward the center so foreground content
  *   stays legible. Used behind the Factory onboarding flow.
@@ -278,14 +278,6 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         </Txt>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
-      <Txt
-        as="span"
-        variant="meta"
-        tone="faint"
-        className="factory-visual-hint pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex"
-      >
-        Move across the factory
-      </Txt>
     </div>
   );
 }

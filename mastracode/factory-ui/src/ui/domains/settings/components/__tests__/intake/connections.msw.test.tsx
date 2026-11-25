@@ -74,8 +74,6 @@ function platformAccounts(provider: PlatformConnectProviderId, initial: Platform
   return minted;
 }
 
-const addSource = () => screen.getByRole('region', { name: 'Add a source' });
-
 describe('IntakeSection connections', () => {
   beforeEach(() => {
     authCalls.length = 0;
@@ -91,7 +89,7 @@ describe('IntakeSection connections', () => {
     { provider: 'gitlab', name: 'GitLab' },
     { provider: 'jira', name: 'Jira' },
   ] as const)(
-    'reconnects the expired $name account from its card and connects another from Add a source',
+    'reconnects the expired $name account and adds another, both from its card',
     async ({ provider, name }) => {
       const minted = platformAccounts(provider, [
         { id: 'healthy', integrationId: provider, status: 'active', accountLabel: 'Healthy account' },
@@ -109,7 +107,7 @@ describe('IntakeSection connections', () => {
         expect(within(card).queryByRole('button', { name: `Reconnect ${name}` })).not.toBeInTheDocument(),
       );
 
-      await userEvent.click(within(addSource()).getByRole('button', { name: `Connect another ${name} account` }));
+      await userEvent.click(within(card).getByRole('button', { name: `Add account to ${name}` }));
       await waitFor(() =>
         expect(minted).toEqual([
           { kind: 'reconnect', id: 'expired' },
@@ -123,26 +121,24 @@ describe('IntakeSection connections', () => {
     },
   );
 
-  it('connects incident.io with an API key from Add a source and lists the new account in place', async () => {
+  it('connects incident.io with an API key and lists the new account on its card, Add account before Manage', async () => {
     platformAccounts('incident-io', []);
     renderIntakeSection();
 
-    await userEvent.click(
-      within(await screen.findByRole('region', { name: 'Add a source' })).getByRole('button', {
-        name: 'Connect incident.io',
-      }),
-    );
+    const connect = await screen.findByRole('button', { name: 'Connect incident.io' });
+    expect(screen.getByRole('region', { name: 'Sources' })).toContainElement(connect);
+    await userEvent.click(connect);
     const dialog = await screen.findByRole('dialog');
     await userEvent.type(within(dialog).getByLabelText('incident.io API key'), 'incident-secret');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Connect' }));
 
     const card = await screen.findByRole('region', { name: 'incident.io' });
     expect(await within(card).findByText('New account')).toBeInTheDocument();
-    expect(within(card).getByRole('link', { name: 'Manage incident.io connection' })).toHaveAttribute(
-      'href',
-      'https://projects.mastra.ai',
-    );
-    expect(within(addSource()).getByRole('button', { name: 'Connect another incident.io account' })).toBeEnabled();
+    const manage = within(card).getByRole('link', { name: 'Manage incident.io connection' });
+    expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
+    const addAccount = within(card).getByRole('button', { name: 'Add account to incident.io' });
+    expect(addAccount).toBeEnabled();
+    expect(addAccount.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
     expect(authCalls).toEqual([
       { integrationId: 'incident-io', options: { credentials: { apiKey: 'incident-secret' } } },

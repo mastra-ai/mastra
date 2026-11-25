@@ -747,6 +747,13 @@ const result = await agent.generate('message for agent')
             ],
           },
           {
+            name: 'disableBackgroundTasks',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              'Disables background-task dispatch for this run. Background-eligible tools run inline instead. See [BackgroundTaskWorker](/reference/workers/overview#backgroundtaskworker).',
+          },
+          {
             name: 'tracingOptions',
             type: 'TracingOptions',
             isOptional: true,

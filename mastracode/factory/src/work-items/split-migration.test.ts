@@ -17,7 +17,11 @@ import type {
   WorkItemDbRecord,
   WorkItemSourceDbRecord,
 } from '../storage/domains/work-items/work-item-schema.js';
-import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import {
+  createFactoryStorageForTests,
+  createIsolatedFactoryPostgresForTests,
+  createLegacyCardTablesForTests,
+} from '../storage/test-utils.js';
 import {
   copyLegacyRows,
   migrateWorkItemSplit,
@@ -289,6 +293,8 @@ async function createStorage(backend: string): Promise<{ storage: FactoryStorage
     backend === 'postgres'
       ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
       : new LibSQLFactoryStorage({ id: 'split-test', url: ':memory:' });
+  // A database an older Factory wrote cards to.
+  await createLegacyCardTablesForTests(storage);
   const { workItems } = await createFactoryStorageForTests(storage);
   // The Postgres database is shared between runs; start every test from empty tables.
   await storage.ops.deleteMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});
@@ -320,6 +326,7 @@ async function seedLegacy(storage: FactoryStorage) {
   for (const card of cards) {
     delete card.work_item;
     delete card.work_item_sources;
+    delete card.changed_at;
     await storage.ops.upsertOne('work_items', ['id'], card);
   }
   await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
@@ -528,6 +535,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     const createdRow = await new Cards(storage.ops).findOne({ id: created.item.id });
     delete createdRow!.work_item;
     delete createdRow!.work_item_sources;
+    delete createdRow!.changed_at;
     await storage.ops.insertOne('work_items', createdRow!);
     const createdBoard = (await readSplit(storage)).boardItems.get(created.item.id)!;
     await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: created.item.id });

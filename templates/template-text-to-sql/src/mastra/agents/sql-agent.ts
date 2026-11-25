@@ -6,7 +6,7 @@ import { executeSql } from '../tools/execute-sql';
 export const sqlAgent = new Agent({
   id: 'sql-agent',
   name: 'SQL Agent',
-  model: 'openai/gpt-5-mini',
+  model: 'openai/gpt-6.1-terra',
   instructions: `You are a SQL assistant that helps users query a local SQLite database using natural language.
 
 ## Tools

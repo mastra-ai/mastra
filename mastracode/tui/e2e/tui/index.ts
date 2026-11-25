@@ -20,6 +20,7 @@ import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
+import { askUserRecommendedOptionScenario } from './ask-user-recommended-option.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -51,6 +52,7 @@ import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.j
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
+import { codexFastModelPickerScenario } from './codex-fast-model-picker.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { connectCommandScenario } from './connect-command.js';
 import { controllerApiConfigScenario } from './controller-api-config.js';
@@ -121,6 +123,7 @@ import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
+import { missingEmbedderHeadlessScenario, missingEmbedderTuiScenario } from './missing-embedder.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modeSwitchAppliesPackModelScenario } from './mode-switch-applies-pack-model.js';
 import { modelSearchScenario } from './model-search.js';
@@ -177,8 +180,10 @@ import {
   pluginsGithubPollUpdateScenario,
   pluginsGithubProviderSwapScenario,
   pluginsLocalHotReloadScenario,
+  pluginsLocalReloadFailureScenario,
   pluginsLocalToolScenario,
   pluginsScaffoldInstallToolScenario,
+  pluginsSignalProviderStartFailureScenario,
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
 import { previewLinesSettingsScenario } from './preview-lines-settings.js';
@@ -188,6 +193,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
+import { providerSafetyRejectionScenario } from './provider-safety-rejection.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -285,6 +291,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
+  'ask-user-recommended-option': askUserRecommendedOptionScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
@@ -314,6 +321,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'clipboard-image-paste': clipboardImagePasteScenario,
   'connect-command': connectCommandScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
+  'codex-fast-model-picker': codexFastModelPickerScenario,
   'custom-config-dir': customConfigDirScenario,
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
   'custom-pack-import-rename': customPackImportRenameScenario,
@@ -394,6 +402,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
   'knowledge-settings': knowledgeSettingsScenario,
+  'missing-embedder-headless': missingEmbedderHeadlessScenario,
+  'missing-embedder-tui': missingEmbedderTuiScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
   'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,
@@ -418,6 +428,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'permission-request-hook': permissionRequestHookScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
+  'plugins-local-reload-failure': pluginsLocalReloadFailureScenario,
+  'plugins-signal-provider-start-failure': pluginsSignalProviderStartFailureScenario,
   'plugins-github-install-gh-cli-pnpm-10': pluginsGithubInstallPnpm10Scenario,
   'plugins-github-install-gh-cli-pnpm-11': pluginsGithubInstallPnpm11Scenario,
   'plugins-github-install-gh-cli-pnpm-12': pluginsGithubInstallPnpm12Scenario,
@@ -433,6 +445,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
+  'provider-safety-rejection': providerSafetyRejectionScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'profile-command': profileCommandScenario,

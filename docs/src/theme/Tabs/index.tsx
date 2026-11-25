@@ -8,17 +8,14 @@
 import React, { type ReactNode } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
-import {
-  useScrollPositionBlocker,
-  useTabs,
-  useTabsContextValue,
-  sanitizeTabsChildren,
-  TabsProvider,
-} from '@docusaurus/theme-common/internal'
+// docusaurus-theme-openapi-docs replaces @theme/TabItem with one that reads the tabs context from its own
+// copy of these utilities, so Tabs has to provide that context for TabItem to render.
+import { useScrollPositionBlocker } from '@theme/utils/scrollUtils'
+import { useTabs, useTabsContextValue, sanitizeTabsChildren, TabsProvider } from '@theme/utils/tabsUtils'
 import type { Props } from '@theme/Tabs'
 import styles from './styles.module.css'
 
-function TabList({ className }: Props) {
+function TabList({ className }: Pick<Props, 'className'>) {
   const { selectedValue, selectValue, tabValues, block } = useTabs()
   const tabRefs: (HTMLLIElement | null)[] = []
   const { blockElementScrollPositionUntilNextRender } = useScrollPositionBlocker()

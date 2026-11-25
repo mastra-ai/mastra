@@ -47,7 +47,7 @@ type Viewer = { orgId?: string; userId: string };
 
 const FACTORY_PROJECT_ID = new RegExp(UUID_PATTERN);
 
-const SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)/;
+export const SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/([^/]+)/;
 const CREATE_SESSION_PATH = /\/agent-controller\/[^/]+\/sessions\/?$/;
 const SET_RESOURCE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/resource\/?$/;
 const OM_CONFIG_PATH = /^\/web\/config\/om(\/|$)/;
@@ -55,6 +55,7 @@ const MEMORY_PATH = /^\/api\/memory(\/|$)/;
 const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
 const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
+const SESSION_MODEL_PATH = /^\/web\/config\/session-model\/?$/;
 
 /** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
 function parseFormField(value: string): unknown {
@@ -91,6 +92,7 @@ async function bodyField(c: Context, field: string): Promise<string | undefined>
 async function switchesModel(c: Context): Promise<boolean> {
   const { method, path } = c.req;
   if (method === 'POST' && SWITCH_MODEL_PATH.test(path)) return true;
+  if (method === 'PUT' && SESSION_MODEL_PATH.test(path)) return true;
   if (method !== 'PUT' || !SET_STATE_PATH.test(path)) return false;
   const state = await bodyValue(c, 'state');
   return typeof state === 'object' && state !== null && 'thinkingLevel' in state;
@@ -123,7 +125,7 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
     const target = method === 'POST' && SET_RESOURCE_PATH.test(path) ? await bodyField(c, 'newResourceId') : undefined;
     return { sessionIds: [sessionId], resourceIds: target ? [target] : [] };
   }
-  if (method === 'POST' && CREATE_SESSION_PATH.test(path)) {
+  if ((method === 'POST' && CREATE_SESSION_PATH.test(path)) || (method === 'PUT' && SESSION_MODEL_PATH.test(path))) {
     // Get-or-create: without a `sessionId` the session is addressed by its resourceId.
     const [sessionId, resourceId] = await Promise.all([bodyField(c, 'sessionId'), bodyField(c, 'resourceId')]);
     const id = sessionId ?? resourceId;

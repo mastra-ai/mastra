@@ -1,4 +1,3 @@
-import { Pause, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
@@ -6,6 +5,8 @@ import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './s
 import type { ThemeSnapshot } from './types';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
@@ -131,7 +132,7 @@ export function SnapshotTimeline({
             onClick={() => onPlayingChange(!isPlaying)}
             size="sm"
             type="button"
-            icon={isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            icon={isPlaying ? <IconPause aria-hidden="true" /> : <IconPlay aria-hidden="true" />}
           >
             {isPlaying ? 'Pause' : 'Play'}
           </Button>

@@ -186,6 +186,11 @@ const sidebars = {
           id: 'code-sdk/mount-agent-controller',
           label: 'mountAgentControllerOnMastra()',
         },
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-restricted-agent-controller',
+          label: 'mountRestrictedAgentControllerOnMastra()',
+        },
       ],
     },
     {
@@ -506,6 +511,7 @@ const sidebars = {
               label: 'Automatic Metrics',
             },
             { type: 'doc', id: 'observability/metrics/queries', label: 'Metric queries' },
+            { type: 'doc', id: 'observability/metrics/metrics-context', label: 'MetricsContext' },
           ],
         },
         {
@@ -698,7 +704,9 @@ const sidebars = {
       label: 'Server',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'server/builtin-mcp-tools', label: 'Built-in MCP tools' },
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
+        { type: 'doc', id: 'server/dispatch-route', label: 'dispatchRoute()' },
         { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },

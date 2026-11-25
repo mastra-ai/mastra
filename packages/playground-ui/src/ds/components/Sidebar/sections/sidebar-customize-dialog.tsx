@@ -68,7 +68,7 @@ export function SidebarCustomizeDialog({
                 <ul className="divide-y divide-border rounded-lg border border-border">
                   {links.map(link => (
                     <li key={getSidebarLinkKey(link)} className="flex min-h-11 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-                      <span aria-hidden="true" className="flex shrink-0 text-muted-foreground [&_svg]:size-4">
+                      <span aria-hidden="true" className="flex shrink-0 text-muted-foreground [&_svg]:size-icon-md">
                         {link.icon}
                       </span>
                       <Txt as="span" variant="body-sm" className="min-w-0 flex-1 truncate">

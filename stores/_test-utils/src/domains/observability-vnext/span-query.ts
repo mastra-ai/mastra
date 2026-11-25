@@ -136,6 +136,60 @@ export function createSpanQueryTests(
       expect(zero.spans[0]).toMatchObject({ spanId: 'zero', durationMs: 0 });
     });
 
+    it.each(['model', 'provider'] as const)('paginates filtered %s strings with missing values last', async field => {
+      await getStorage().batchCreateSpans({
+        records: [
+          span('empty', { ...scope, [field]: '' }),
+          span('upper', { ...scope, [field]: 'Alpha' }),
+          span('lower-b', { ...scope, [field]: 'alpha' }),
+          span('lower-a', { ...scope, [field]: 'alpha' }),
+          span('accent', { ...scope, [field]: 'é' }),
+          span('bmp', { ...scope, [field]: '\uE000' }),
+          span('astral', { ...scope, [field]: '\u{10400}' }),
+          span('missing-b', scope),
+          span('missing-a', { ...scope, attributes: { [field]: 'Legacy display' } }),
+          span('excluded', { ...scope, name: 'excluded', [field]: 'AAA' }),
+          span('foreign', { ...scope, organizationId: 'org-b', [field]: 'AAA' }),
+          span('outside', {
+            ...scope,
+            startedAt: new Date(timeRange.to),
+            endedAt: new Date(Date.parse(timeRange.to) + 1),
+            [field]: 'AAA',
+          }),
+        ],
+      });
+      expect(getStorage().getFeatures()).toContain('span-query-model-provider-sort');
+      for (const direction of ['asc', 'desc'] as const) {
+        for (const limit of [1, 2, 3]) {
+          const ids: string[] = [];
+          let after: string | undefined;
+          do {
+            const page = await getStorage().querySpans(
+              planSpanQuery(
+                {
+                  timeRange,
+                  where: { op: 'ne', left: { path: 'name' }, right: { literal: 'excluded' } },
+                  orderBy: [{ field, direction }],
+                  page: { limit, after },
+                },
+                { scope, allowSpanModelProviderOrdering: true },
+              ),
+            );
+            ids.push(...page.spans.map(row => row.spanId));
+            after = page.page.next ?? undefined;
+            expect(ids.length).toBeLessThanOrEqual(9);
+          } while (after);
+          expect(ids).toEqual([
+            ...(direction === 'asc'
+              ? ['empty', 'upper', 'lower-a', 'lower-b', 'accent', 'bmp', 'astral']
+              : ['astral', 'bmp', 'accent', 'lower-a', 'lower-b', 'upper', 'empty']),
+            'missing-a',
+            'missing-b',
+          ]);
+        }
+      }
+    });
+
     it('hydrates the maximum supported page without losing its continuation', async () => {
       await getStorage().batchCreateSpans({
         records: Array.from({ length: 1001 }, (_, index) => span(`s${String(index).padStart(4, '0')}`, scope)),

@@ -26,9 +26,8 @@ const FILTER_NAMES: Record<string, string> = {
 export function TableTabs({ page, blocked, ...props }: Props & { page: DashboardPageContext; blocked: BlockedFields }) {
   const { views, state, discovered, onStateChange } = props;
   // Picking a tab starts it on its own default sort.
-  const menu = viewMenu(props.widget, views, openTab(views, blocked, state, discovered), i =>
-    onStateChange({ view: i }),
-  );
+  const choose = (i: number) => onStateChange({ view: i });
+  const menu = viewMenu(props.widget, views, openTab(views, blocked, state, discovered), choose);
   const { view, index } = menu;
   const unsupported = blocked(view.queries);
   const alert = alertAction(

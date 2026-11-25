@@ -1,4 +1,4 @@
-import { closeReason } from '../../boards/board-events.js';
+import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
 import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
@@ -10,6 +10,9 @@ import {
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   intakeTarget,
+  isPullRequestCard,
+  sourceExternalId,
+  trustedPullRequestSource,
   rulePhaseField,
   withBoardClosure,
   withBoardFlow,
@@ -17,7 +20,17 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import {
+  cardUpdateDecision,
+  deploymentOwnsEvent,
+  hasExplicitRuleOverride,
+  routeEventDecision,
+  selectEventRule,
+  withoutRouteEvent,
+  withPullRequestTrust,
+} from '../../rules/event-rules.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
+import { authorTrusted } from '../../rules/types.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -35,7 +48,10 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
+import {
+  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  WorkItemUpdateConflictError,
+} from '../../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
@@ -45,8 +61,29 @@ import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUS
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 const RULE_TIMEOUT_MS = 5_000;
+const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
 type IngressStatus = 'ignored' | 'committed' | 'replayed' | 'missing';
+
+export interface GitLabIngressResult {
+  status: IngressStatus;
+  /**
+   * Every Factory this delivery reaches has handled it for good: ingesting the same
+   * delivery again would only replay. Sweeps use it to skip what they already listed.
+   */
+  settled?: boolean;
+}
+
+function settled(result: GitLabIngressResult): boolean {
+  return result.settled ?? (result.status === 'committed' || result.status === 'replayed');
+}
+
+function combined(results: GitLabIngressResult[]): GitLabIngressResult {
+  const all = results.length > 0 && results.every(settled);
+  if (results.some(result => result.status === 'committed')) return { status: 'committed', settled: all };
+  if (results.some(result => result.status === 'replayed')) return { status: 'replayed', settled: all };
+  return { status: results[0]?.status ?? 'ignored', settled: all };
+}
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -140,7 +177,7 @@ export function activitySignalFor(
 export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
-      return { type: 'work_item.created' };
+      return { type: 'work_item.opened' };
     case 'issueReopened':
       return { type: 'work_item.reopened' };
     case 'issueClosed':
@@ -148,6 +185,25 @@ export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>):
     default:
       return undefined;
   }
+}
+
+/**
+ * The label or assignee change an issue or merge request update reports, from the hook's
+ * `changes`: `work_item.updated` for an issue, `pull_request.updated` for a merge request, on its
+ * own card or the issue card it is attached to. Other edits report nothing.
+ */
+export function updateEventFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item'>,
+  changes: Record<string, unknown> | undefined,
+): BoardEventFacts | undefined {
+  if (!context.item || (context.event !== 'issueUpdated' && context.event !== 'mergeRequestUpdated')) return undefined;
+  const type = context.event === 'mergeRequestUpdated' ? 'pull_request.updated' : 'work_item.updated';
+  const labels = object(changes?.labels);
+  const assignees = object(changes?.assignees);
+  return updateEventFacts(type, {
+    ...(labels ? { labels: listChange(labelNames(labels.previous), labelNames(labels.current)) } : {}),
+    ...(assignees ? { assignees: listChange(usernames(assignees.previous), usernames(assignees.current)) } : {}),
+  });
 }
 
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
@@ -211,7 +267,7 @@ function carriesAttachedMergeRequest(item: Card, mergeRequestKey: string): boole
   );
 }
 
-function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
+export function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
@@ -241,6 +297,8 @@ export interface GitLabRulesIntegration {
     kind: 'issue' | 'merge_request',
     iid: number,
   ): Promise<string | undefined>;
+  /** The user the connection acts as on GitLab: Factory's own identity there. */
+  getCurrentUsername?(connectionId: string): Promise<string | undefined>;
 }
 
 interface GitLabRulesOptions {
@@ -252,11 +310,35 @@ interface GitLabRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /**
+   * Tells which items intake turned away (Not routed). A label or assignee change to one of them
+   * runs intake again; without it, a change to an issue with no card does nothing.
+   */
+  notRouted?: NotRoutedLookup;
 }
 
 interface ProjectTarget {
   target: ExternalRepositoryProjectTarget;
   connectionIds: string[];
+}
+
+
+/**
+ * Whether the delivery's merge request comes from someone with write access, or from Factory: its
+ * own card's stamp, the stamp recorded when it joined the card, else its author's access now.
+ */
+export function gitlabMergeRequestTrusted(context: Pick<FactoryGitLabRuleContext, 'mergeRequest' | 'item'>): boolean {
+  const { mergeRequest, item } = context;
+  if (!mergeRequest) return false;
+  if (mergeRequest.factoryAuthored) return true;
+  if (item && isPullRequestCard(item)) return authorTrusted(item.metadata);
+  const attached = item
+    ? pullRequestSources(item).find(
+        source => source.integrationId === 'gitlab' && sourceExternalId(source) === mergeRequest.sourceKey,
+      )
+    : undefined;
+  if (item && attached) return trustedPullRequestSource(item, attached);
+  return mergeRequest.authorTrusted === true;
 }
 
 export class GitLabRules {
@@ -272,7 +354,7 @@ export class GitLabRules {
     return toBoardSource(this.options.boards).forProject(scope);
   }
 
-  async ingest(parsed: ParsedGitLabWebhook): Promise<{ status: IngressStatus }> {
+  async ingest(parsed: ParsedGitLabWebhook): Promise<GitLabIngressResult> {
     const event = eventName(parsed);
     const project = object(parsed.payload.project);
     const projectId = number(project?.id);
@@ -283,14 +365,12 @@ export class GitLabRules {
 
     const targets = await this.#targets(String(projectId), host);
     if (targets.length === 0) return { status: 'ignored' };
-    const results: Array<{ status: IngressStatus }> = [];
+    const results: GitLabIngressResult[] = [];
     for (const target of targets) {
       await this.loadBoards(target.target);
       results.push(await this.#ingestProject(parsed, event, projectId, projectPath, host, username, target));
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    return combined(results);
   }
 
   async #targets(repositoryExternalId: string, host: string): Promise<ProjectTarget[]> {
@@ -332,7 +412,7 @@ export class GitLabRules {
     host: string,
     username: string,
     target: ProjectTarget,
-  ): Promise<{ status: IngressStatus }> {
+  ): Promise<GitLabIngressResult> {
     const factoryProject = await this.options.projects.get({
       orgId: target.target.orgId,
       id: target.target.factoryProjectId,
@@ -394,6 +474,30 @@ export class GitLabRules {
           ),
         )
       : undefined;
+    // An issue intake turned away (Not routed) changed labels or assignees: run intake again.
+    const changes = object(parsed.payload.changes);
+    if (
+      event === 'issueUpdated' &&
+      !issueItem &&
+      issueSourceKey &&
+      // A closed issue's Not routed record stays until it's filed; a label on it never files it.
+      string(issue?.state) === 'opened' &&
+      (changes?.labels !== undefined || changes?.assignees !== undefined) &&
+      (await this.options.notRouted?.isNotRouted(
+        { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
+        issueSourceKey,
+      ))
+    ) {
+      return this.#ingestProject(
+        { ...parsed, deliveryId: `${parsed.deliveryId}:intake` },
+        'issueOpened',
+        projectId,
+        projectPath,
+        host,
+        username,
+        target,
+      );
+    }
     const reviewItem = mergeRequestKey
       ? own(
           items.find(
@@ -407,13 +511,39 @@ export class GitLabRules {
       mergeRequestKey && !reviewItem
         ? own(items.find(item => carriesAttachedMergeRequest(item, mergeRequestKey)))
         : undefined;
+    // A merge request intake turned away (Not routed) changed labels or assignees: run intake again.
+    if (
+      event === 'mergeRequestUpdated' &&
+      !reviewItem &&
+      !attachedItem &&
+      mergeRequestKey &&
+      string(mergeRequest?.state) === 'opened' &&
+      (changes?.labels !== undefined || changes?.assignees !== undefined) &&
+      (await this.options.notRouted?.isNotRouted(
+        { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
+        mergeRequestKey,
+      ))
+    ) {
+      return this.#ingestProject(
+        { ...parsed, deliveryId: `${parsed.deliveryId}:intake` },
+        'mergeRequestOpened',
+        projectId,
+        projectPath,
+        host,
+        username,
+        target,
+      );
+    }
     const headBranch = string(mergeRequest?.source_branch) ?? '';
+    // A branch name alone is not proof: a fork can reuse it. Factory pushes to this project only.
+    const sourceProjectId = number(mergeRequest?.source_project_id);
+    const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
     // A card whose session builds on the merge request's branch, in this project.
     const buildsOnBranch = (item: Card) =>
       item.externalSource?.type !== 'pull-request' &&
       !cardInOtherGitLabProject(item, host, projectId) &&
       Object.values(item.sessions).some(session => session.branch === headBranch);
-    const authoringItem = headBranch ? own(items.find(buildsOnBranch)) : undefined;
+    const authoringItem = headBranch && fromThisProject ? own(items.find(buildsOnBranch)) : undefined;
     const actorTrusted = await this.#trusted(connectionIds, String(projectId), username);
     const eventUserId = number(object(parsed.payload.user)?.id) ?? number(parsed.payload.user_id);
     const resolveAuthor = async (
@@ -456,12 +586,12 @@ export class GitLabRules {
       type: 'gitlab',
       username,
       trusted: actorTrusted,
-      factoryAuthored: false,
+      factoryAuthored: await this.#isFactoryUser(connectionIds, username),
     };
     // A merge request seen for the first time is filed on the card whose branch it comes from,
-    // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
-    // its description says it closes, and the project's intake routes decide, when it is filed,
-    // whether it joins that card. An untrusted author's merge request never lands on another card.
+    // when its board reviews merge requests. Otherwise, whoever opened it, it links to the card of
+    // the issue its description says it closes. Linking runs nothing: an outsider's merge request
+    // is recorded as untrusted there.
     // A card with no source of its own (a manual card) never takes one: the merge request would
     // become its only source and turn it into a merge request card. A GitHub card keeps only
     // GitHub pull requests, so a merge request on its session's branch gets its own card.
@@ -471,40 +601,37 @@ export class GitLabRules {
       card.externalSource.type !== 'pull-request' &&
       !isTerminalWorkItem(this.#boards(card), card);
     let home: { card: Card; reason: FactoryPullRequestHome['reason'] } | undefined;
+    let closed: Card[] = [];
     if (event === 'mergeRequestOpened' && mergeRequestKey && !reviewItem && !attachedItem) {
-      // A branch name alone is not proof: a fork can reuse it. The Factory's own merge requests come
-      // from this project under a trusted account.
-      const sourceProjectId = number(mergeRequest?.source_project_id);
-      const fromThisProject = sourceProjectId === undefined || sourceProjectId === projectId;
+      closed = closingIssueNumbers(string(mergeRequest?.description), {
+        provider: 'gitlab',
+        repository: projectPath,
+      }).flatMap(iid => {
+        const key = encodeIssueReference({ host, projectId: String(projectId), issueIid: iid });
+        const card = items.find(
+          item =>
+            item.externalSource?.integrationId === 'gitlab' &&
+            item.externalSource.externalId === key &&
+            eligibleHome(item),
+        );
+        return card ? [card] : [];
+      });
+      // The Factory's own merge requests come under a trusted account.
       if (
         authoringItem &&
-        fromThisProject &&
         (actorTrusted || mergeRequestAuthorTrusted) &&
         eligibleHome(authoringItem) &&
         cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined
       ) {
         home = { card: authoringItem, reason: 'authored' };
-      } else if (mergeRequestAuthorTrusted) {
-        for (const iid of closingIssueNumbers(string(mergeRequest?.description), {
-          provider: 'gitlab',
-          repository: projectPath,
-        })) {
-          const key = encodeIssueReference({ host, projectId: String(projectId), issueIid: iid });
-          const card = items.find(
-            item =>
-              item.externalSource?.integrationId === 'gitlab' &&
-              item.externalSource.externalId === key &&
-              eligibleHome(item),
-          );
-          if (card) {
-            home = { card, reason: 'closes' };
-            break;
-          }
-        }
+      } else if (closed[0]) {
+        // It is held by the first issue it closes; the others link to it.
+        home = { card: closed[0], reason: 'closes' };
       }
     }
+    const alsoCloses = home ? [...new Set(closed.map(card => card.id))].filter(id => id !== home.card.id) : [];
     const pullRequestHome: FactoryPullRequestHome | undefined = home
-      ? { workItemId: home.card.id, reason: home.reason }
+      ? { workItemId: home.card.id, reason: home.reason, ...(alsoCloses.length > 0 ? { alsoCloses } : {}) }
       : undefined;
     // An attached merge request's state lives on its own source, never the issue's.
     if ((event === 'mergeRequestMerged' || event === 'mergeRequestClosed') && attachedItem && mergeRequestKey) {
@@ -516,6 +643,26 @@ export class GitLabRules {
         externalId: `pull-request:${mergeRequestKey}`,
         patch: { state: merged ? 'merged' : 'closed', metadata: { state: 'closed', merged } },
       });
+    }
+    // The sweep settles a closed merge request on its own card and never checks that card again, so a reopen opens it here.
+    if (event === 'mergeRequestOpened' && string(attributes?.action)?.toLowerCase() === 'reopen' && reviewItem) {
+      const metadata = { ...reviewItem.workItem.metadata, ...reviewItem.metadata };
+      if (metadata.state === 'closed') {
+        await this.options.storage.syncCard({
+          orgId: reviewItem.orgId,
+          id: reviewItem.id,
+          userId: CARD_SYNC_USER_ID,
+          patch: {
+            metadata: {
+              state: 'open',
+              merged: false,
+              ...(metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === undefined
+                ? {}
+                : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null }),
+            },
+          },
+        });
+      }
     }
 
     // A push moves the head a recorded review verdict was given on. Recording
@@ -544,7 +691,7 @@ export class GitLabRules {
         headAt,
         ownedPullRequestNumber: mergeRequestIid,
       });
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
@@ -567,7 +714,7 @@ export class GitLabRules {
         });
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     const ownItem = reviewItem ?? attachedItem;
     const openedItem = (home?.reason === 'authored' ? home.card : undefined) ?? authoringItem;
@@ -609,6 +756,7 @@ export class GitLabRules {
           item,
           ...(pullRequestHome ? { pullRequestHome } : {}),
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
+          ownsMergeRequest: item !== undefined && item.id === ownItem?.id,
           // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second
@@ -640,9 +788,10 @@ export class GitLabRules {
         ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    const result = combined(results);
+    const headWithoutCard =
+      parsed.deliveryId.startsWith('poll:merge-request-head:') && !reviewItem && !attachedItem;
+    return headWithoutCard ? { ...result, settled: false } : result;
   }
 
   /**
@@ -699,7 +848,7 @@ export class GitLabRules {
         await this.options.storage.update({
           orgId: item.orgId,
           id: item.id,
-          userId: 'factory-rule-dispatcher',
+          userId: CARD_SYNC_USER_ID,
           expectedRevision: item.revision,
           patch: { metadata: patch },
         });
@@ -708,6 +857,20 @@ export class GitLabRules {
         if (!(error instanceof WorkItemUpdateConflictError)) throw error;
       }
     }
+  }
+
+  /** Whether the event's user is the one Factory's connection acts as, so Factory made the change. */
+  async #isFactoryUser(connectionIds: string[], username: string): Promise<boolean> {
+    const normalized = username.trim().toLowerCase();
+    for (const connectionId of connectionIds) {
+      try {
+        const factoryUser = await this.options.gitlab.getCurrentUsername?.(connectionId);
+        if (factoryUser?.trim().toLowerCase() === normalized) return true;
+      } catch {
+        // Try the other active credentials; otherwise the change counts as a person's.
+      }
+    }
+    return false;
   }
 
   async #trusted(connectionIds: string[], projectId: string, username: string): Promise<boolean> {
@@ -749,6 +912,11 @@ export class GitLabRules {
       pullRequestHome?: FactoryPullRequestHome;
       ingressIdentity: string;
       mergeRequestOpenedScope?: 'intake' | 'board';
+      /**
+       * Whether `item` is the merge request's own card or the card it is attached to. A card that
+       * only shares the merge request's branch never hears of its label or assignee changes.
+       */
+      ownsMergeRequest?: boolean;
     },
     attempt = 1,
   ): Promise<{ status: IngressStatus }> {
@@ -920,19 +1088,45 @@ export class GitLabRules {
         });
       if (routed) decisions = [{ ...routed }];
     }
+    // A label or assignee change goes to the card's routes whatever else the delivery decided.
+    const update =
+      !ownedByDeployment &&
+      outcome.status === 'accepted' &&
+      (input.event !== 'mergeRequestUpdated' || input.ownsMergeRequest)
+        ? updateEventFor(context, object(input.parsed.payload.changes))
+        : undefined;
+    if (update) {
+      decisions = [
+        ...decisions,
+        { ...cardUpdateDecision(input.ingressIdentity, update, input.actor.type === 'gitlab' && input.actor.factoryAuthored) },
+      ];
+    }
+    if (context.mergeRequest) {
+      const trusted = gitlabMergeRequestTrusted(context);
+      // An unknown actor — a polled or system delivery — vouches for nothing. Factory's own
+      // account counts by authorship, whatever its membership lookup says.
+      const actorTrusted = context.actor.type === 'gitlab' && (context.actor.trusted || context.actor.factoryAuthored);
+      decisions = decisions.map(entry => withPullRequestTrust(entry, trusted, actorTrusted));
+    }
 
+    // The item's current labels and assignees go on its own card in the same write as the update,
+    // so routes reading `item.labels` or `item.assignees` see them; a redelivery writes nothing.
+    const lists =
+      update && input.item && (update.type === 'work_item.updated' || context.item?.source === 'gitlab-pr')
+        ? currentLists(input.item, input.parsed.payload)
+        : undefined;
     const committed = await this.options.storage.commitRuleEvaluation({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
       workItemId: input.item?.id ?? null,
-      ingress: { identity: input.ingressIdentity, triggerType: `gitlab.${input.event}` },
-      configVersion: this.options.configVersion,
+      ingress: { identity: input.ingressIdentity },
       expectedRevision: input.item?.revision ?? null,
       actor: { ...input.actor },
       outcome,
       decisions,
       causalChain: [],
       now: new Date(),
+      ...(lists ? { cardMetadata: { userId: 'factory-rule-dispatcher', metadata: lists } } : {}),
     });
     if (committed.status === 'stale') {
       // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
@@ -947,10 +1141,34 @@ export class GitLabRules {
   }
 }
 
+/**
+ * The labels and assignees a hook reports as current, with when GitLab changed them. A list from a
+ * hook older than the one that last wrote it is left out, so a late hook can't roll it back.
+ */
+function currentLists(item: Card, payload: Record<string, unknown>): Record<string, unknown> | undefined {
+  const changes = object(payload.changes);
+  const updatedAt = string(object(payload.object_attributes)?.updated_at);
+  const at = updatedAt === undefined ? Number.NaN : Date.parse(updatedAt);
+  const metadata: Record<string, unknown> = {};
+  for (const [list, names, key] of [
+    ['labels', labelNames, 'gitlabLabelsUpdatedAt'],
+    ['assignees', usernames, 'gitlabAssigneesUpdatedAt'],
+  ] as const) {
+    const change = object(changes?.[list]);
+    if (!change) continue;
+    const stored = item.metadata?.[key] ?? item.workItem.metadata?.[key];
+    const storedAt = typeof stored === 'string' ? Date.parse(stored) : Number.NaN;
+    if (!Number.isNaN(at) && !Number.isNaN(storedAt) && at < storedAt) continue;
+    metadata[list] = names(change.current);
+    if (!Number.isNaN(at)) metadata[key] = updatedAt;
+  }
+  return Object.keys(metadata).length > 0 ? metadata : undefined;
+}
+
 export function attachGitLabRules(
   gitlab: GitLabRulesIntegration,
   context: IntegrationContext,
-): ((event: ParsedGitLabWebhook) => Promise<unknown>) | undefined {
+): ((event: ParsedGitLabWebhook) => Promise<GitLabIngressResult>) | undefined {
   if (!context.runtime) return undefined;
   const rules = new GitLabRules({
     gitlab,
@@ -960,6 +1178,7 @@ export function attachGitLabRules(
     intake: context.storage.intake,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.notRouted ? { notRouted: context.runtime.notRouted } : {}),
   });
   return event => rules.ingest(event);
 }

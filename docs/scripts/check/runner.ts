@@ -1,4 +1,5 @@
 import path from 'path'
+import { externalDocsCheck } from './checks/external-docs'
 import { formatCheck } from './checks/format'
 import { frontmatterCheck } from './checks/frontmatter'
 import { mdxCheck } from './checks/mdx'
@@ -21,7 +22,15 @@ import {
   type SkippedCheck,
 } from './types'
 
-export const CHECKS: Check[] = [frontmatterCheck, sidebarCheck, mdxCheck, valeCheck, formatCheck, redirectsCheck]
+export const CHECKS: Check[] = [
+  frontmatterCheck,
+  sidebarCheck,
+  mdxCheck,
+  externalDocsCheck,
+  valeCheck,
+  formatCheck,
+  redirectsCheck,
+]
 
 export interface RunOptions {
   rootDir: string
@@ -139,7 +148,9 @@ export async function runChecks(options: RunOptions): Promise<CheckReport> {
     fixed += result.fixed ?? 0
     skipped.push(...(result.skipped ?? []))
     for (const item of result.findings) {
-      if (!categories.includes(item.category) || !ruleSelected(item.ruleId)) continue
+      // Vale only runs when a filter can select a Vale rule, and when it can't start, none of those rules were checked.
+      const selected = item.ruleId === 'mastra/vale-unavailable' || ruleSelected(item.ruleId)
+      if (!categories.includes(item.category) || !selected) continue
       if (suppressed(item.ruleId, item.file, item.line)) continue
       findings.push(item)
     }

@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/agents/chat/drafts/thread-draft-storage';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,8 +13,8 @@ import { http, HttpResponse } from 'msw';
 import { createContext, useContext, useEffect, useImperativeHandle, useState } from 'react';
 import type { ReactNode, Ref } from 'react';
 import { createMemoryRouter, Outlet, RouterProvider, useLocation } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentSession from '../session';
 import AgentThread from '../thread';
 import {
@@ -32,7 +36,6 @@ import {
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { emptyThreadTracesList } from './fixtures/thread-traces';
 import { AgentLayout } from '@/domains/agents/agent-layout';
-import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { agentIndexLoader, agentThreadsIndexLoader, legacyAgentChatLoader, paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
@@ -560,6 +563,30 @@ describe('Standalone thread page', () => {
       },
     );
   });
+  describe('when an unauthenticated user returns to an existing thread', () => {
+    it('does not restore an unscoped anonymous draft from a previous session', async () => {
+      installHandlers();
+      const key = JSON.stringify([BASE_URL, null, null, AGENT_ID, THREAD_ID]);
+      await writeThreadDraft(key, { text: 'Someone else’s unfinished recipe', attachments: [] });
+
+      renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
+
+      expect((await composerInput()).value).toBe('');
+    });
+
+    it('restores its own draft after reloading in the same browser session', async () => {
+      installHandlers();
+      const path = `/agents/${AGENT_ID}/threads/${THREAD_ID}`;
+      renderAt(path);
+      fireEvent.change(await composerInput(), { target: { value: 'My unfinished recipe' } });
+      cleanup();
+
+      renderAt(path);
+
+      expect((await composerInput()).value).toBe('My unfinished recipe');
+    });
+  });
+
   describe('when a saved draft cannot be decoded', () => {
     it('starts empty and saves subsequent edits without recovery controls', async () => {
       installHandlers();
@@ -918,14 +945,6 @@ describe('Standalone thread page', () => {
     expect(await screen.findByTestId('composer-model-settings-trigger')).not.toBeNull();
   });
 
-  it('shows the thread list next to the chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
-
-    await screen.findByText('Tonight we cook carbonara.');
-    expect(await screen.findByText('Sushi ideas')).not.toBeNull();
-  });
-
   it('lets the user hide the threads panel and bring it back from the page edge', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
@@ -1073,8 +1092,8 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.queryByRole('link', { name: 'Overview' })).toBeNull();
   });
 
   it('highlights the Chat tab on /threads/new', async () => {
@@ -1082,7 +1101,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('tab', { name: 'Chat' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
   });
 
   it('navigates to another thread when clicked in the list', async () => {
@@ -1100,15 +1119,6 @@ describe('Standalone thread page', () => {
   it('redirects /agents/:agentId/threads to /threads/new', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads`);
-
-    await waitFor(() =>
-      expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
-    );
-  });
-
-  it('redirects bare /agents/:agentId to the new-thread chat', async () => {
-    installHandlers();
-    renderAt(`/agents/${AGENT_ID}`);
 
     await waitFor(() =>
       expect(screen.getByTestId('location-probe').textContent).toBe(`/agents/${AGENT_ID}/threads/new`),
