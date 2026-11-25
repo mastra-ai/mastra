@@ -1,5 +1,5 @@
 import type { Ref } from 'react';
-import type { LogViewLine } from '../types';
+import type { LogRecord, LogViewLine } from '../types';
 import { LogViewRows } from './log-view/log-view-rows';
 import { LogViewSkeleton } from './log-view/log-view-skeleton';
 import type { FractionDigits } from '@/utils/date-format';
@@ -10,7 +10,7 @@ export interface LogViewListHandle {
   scrollToLog: (logId: string) => void;
 }
 
-export interface LogViewListProps<T extends LogViewLine> {
+export interface LogViewListProps<T extends LogViewLine = LogRecord> {
   logs: T[];
   isLoading?: boolean;
   isFetchingNextPage?: boolean;

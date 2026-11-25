@@ -7,7 +7,9 @@ export interface AnsiSegment {
 type AnsiStyle = Omit<AnsiSegment, 'text'>;
 
 const ANSI_SGR_RE = new RegExp(String.raw`${String.fromCharCode(27)}\[([0-9;]*)m`, 'g');
-const ANSI_ANY_RE = new RegExp(String.raw`${String.fromCharCode(27)}\[[0-9;?]*[A-Za-z]`, 'g');
+const ESC = String.fromCharCode(27);
+const BEL = String.fromCharCode(7);
+const ANSI_ANY_RE = new RegExp(String.raw`${ESC}(?:\[[0-9;?]*[A-Za-z]|\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\))`, 'g');
 
 const BASE_COLORS = [
   'text-subtle-foreground',
@@ -62,11 +64,13 @@ function applyCodes(style: AnsiStyle, codes: number[]): AnsiStyle {
     else if (code === 39) next = { bold: next.bold };
     else if (code >= 30 && code <= 37) next = { ...next, color: BASE_COLORS[code - 30] };
     else if (code >= 90 && code <= 97) next = { ...next, color: BRIGHT_COLORS[code - 90] };
-    else if (code === 38 && codes[i + 1] === 5) {
-      next = { ...next, color: indexedColor(codes[i + 2]) ?? next.color };
+    else if ((code === 38 || code === 48) && codes[i + 1] === 5) {
+      if (code === 38) next = { ...next, color: indexedColor(codes[i + 2]) ?? next.color };
       i += 2;
-    } else if (code === 38 && codes[i + 1] === 2) {
-      next = { ...next, color: rgbColor(codes[i + 2] ?? -1, codes[i + 3] ?? -1, codes[i + 4] ?? -1) ?? next.color };
+    } else if ((code === 38 || code === 48) && codes[i + 1] === 2) {
+      if (code === 38) {
+        next = { ...next, color: rgbColor(codes[i + 2] ?? -1, codes[i + 3] ?? -1, codes[i + 4] ?? -1) ?? next.color };
+      }
       i += 4;
     }
   }
@@ -74,7 +78,7 @@ function applyCodes(style: AnsiStyle, codes: number[]): AnsiStyle {
 }
 
 export function hasAnsi(text: string): boolean {
-  return text.includes(String.fromCharCode(27));
+  return text.includes(ESC);
 }
 
 export function stripAnsi(text: string): string {

@@ -23,6 +23,23 @@ describe('parseAnsi', () => {
     expect(parseAnsi(`${ESC}[2Kdone`)).toEqual([{ text: 'done', bold: false }]);
   });
 
+  it('keeps terminal links as their visible text', () => {
+    const BEL = String.fromCharCode(7);
+    expect(stripAnsi(`${ESC}]8;;https://example.test${BEL}docs${ESC}]8;;${BEL}`)).toBe('docs');
+    expect(parseAnsi(`see ${ESC}]8;;https://example.test${ESC}\\docs${ESC}]8;;${ESC}\\`)).toEqual([
+      { text: 'see docs', bold: false },
+    ]);
+  });
+
+  it('ignores background colors without losing the text color', () => {
+    expect(parseAnsi(`${ESC}[31m${ESC}[48;2;0;0;0merror`)).toEqual([
+      { text: 'error', bold: false, color: 'text-badge-red-indicator' },
+    ]);
+    expect(parseAnsi(`${ESC}[1;31;48;5;0mfail`)).toEqual([
+      { text: 'fail', bold: true, color: 'text-badge-red-indicator' },
+    ]);
+  });
+
   it('only reports ANSI when an escape character is present', () => {
     expect(hasAnsi('plain')).toBe(false);
     expect(hasAnsi(`${ESC}[0m`)).toBe(true);
