@@ -220,7 +220,10 @@ function setup({
   inputProcessors,
   pubsub = new EventEmitterPubSub(),
   createMemory = storage => new MockMemory({ storage }),
+  storage = new InMemoryStore(),
 }: {
+  /** Storage another setup uses, as a second process of one deployment shares it. */
+  storage?: InMemoryStore;
   memoryStore?: InMemoryMemory;
   /** Give the agent no memory at all. */
   withMemory?: boolean;
@@ -305,7 +308,6 @@ function setup({
     requireApproval: true,
     execute: async () => 'confirmed',
   });
-  const storage = new InMemoryStore();
   storage.stores.memory = memoryStore;
   const memory = createMemory(storage);
   const agent = createEventedAgent({
@@ -371,6 +373,7 @@ function setup({
     prompts,
     promptsReached,
     toolGate,
+    toolReached,
     begin,
     start,
     afterFollowUps,
@@ -1252,6 +1255,47 @@ describe('a parked run that is aborted', () => {
 
     expect(occurrences(prompts[1], 'PENDING_ON_THE_ABORTED_RUN')).toBe(0);
     expect(occurrences(prompts[2], 'PENDING_ON_THE_ABORTED_RUN')).toBe(1);
+  });
+});
+
+describe('a parked run resumed in another process', () => {
+  it('receives a signal sent after its first resolution of the memory storage failed, and is closed', async () => {
+    const memoryStore = new ObservedMemory();
+    // The memory storage keeps pending signals except while the test says it is unavailable.
+    let unavailable = false;
+    Object.defineProperty(memoryStore, 'supportsPendingSignals', { get: () => !unavailable, configurable: true });
+    const parked = setup({ memoryStore, park: true });
+    const suspended = gate();
+    let runId: string | undefined;
+    await parked.mastra.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.suspend' && event.runId === runId) suspended.release();
+    });
+    const { stream } = await parked.start();
+    runId = stream.runId;
+    parked.toolGate.release();
+    await stream.output.suspendPayload;
+    await suspended.promise;
+
+    // A second process on the same storage, with its own pubsub, resumes the run while the store can't be resolved.
+    const resuming = setup({ memoryStore, storage: parked.storage });
+    unavailable = true;
+    const resumed = await resuming.agent.approveToolCall({ runId, toolCallId: 'call-confirm' });
+    const resumedDone = (async () => {
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+    })();
+    // The resumed run's first model request asks for the tool that waits for the test.
+    await resuming.toolReached.promise;
+    unavailable = false;
+    const sent = resuming.agent.sendSignal({ type: 'user', contents: 'AFTER_THE_RESUME' }, parked.scope);
+    await expect(sent.accepted).resolves.toEqual({ action: 'deliver', runId });
+    resuming.toolGate.release();
+    await resumedDone;
+
+    expect(occurrences(resuming.prompts[1], 'AFTER_THE_RESUME')).toBe(1);
+    expect(memoryStore.calls).toContainEqual({ op: 'close', runId, consumedIds: [sent.signal.id] });
+    expect(await memoryStore.getSignalRun({ threadId: parked.scope.threadId })).toBeNull();
   });
 });
 
