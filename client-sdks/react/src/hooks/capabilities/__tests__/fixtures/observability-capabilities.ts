@@ -32,6 +32,21 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     spanQuery: true,
     spanQueryContextFields: true,
     feedback: true,
+    // Capabilities added since this fixture was written, off as when they were missing from it.
+    traceQueryAggregatedRoots: false,
+    traceQueryTokenSearch: false,
+    spanQueryTokenSearch: false,
+    traceAggregateTokenSearch: false,
+    spanAggregateTokenSearch: false,
+    traceQueryContextFields: false,
+    spanQueryDurationSort: false,
+    spanQueryModelProviderSort: false,
+    spanQueryModelFields: false,
+    spanAggregateModelDimensions: false,
+    aggregateTimeToFirstMeasures: false,
+    spanQueryOutcomeFields: false,
+    traceQueryOutcomeFields: false,
+    feedbackReplacement: false,
   },
 };
 

@@ -4,6 +4,7 @@ import type {
   GetObservationalMemoryResponse,
   ListMemoryThreadMessagesResponse,
 } from '@mastra/client-js';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -42,6 +43,8 @@ const threadMessagesResponse: ListMemoryThreadMessagesResponse = {
   ],
   uiMessages: null,
 };
+// Read as stored messages: the generated route type keeps them opaque.
+const storedMessages: MastraDBMessage[] = threadMessagesResponse.messages;
 
 const observationalMemoryResponse: GetObservationalMemoryResponse = {
   record: null,
@@ -140,7 +143,7 @@ describe('useMemoryThreadMessages', () => {
           requestedAgents.push(agentId);
           return HttpResponse.json({
             ...threadMessagesResponse,
-            messages: threadMessagesResponse.messages.map(message => ({ ...message, id: `message-for-${agentId}` })),
+            messages: storedMessages.map(message => ({ ...message, id: `message-for-${agentId}` })),
           } satisfies ListMemoryThreadMessagesResponse);
         }),
       );
