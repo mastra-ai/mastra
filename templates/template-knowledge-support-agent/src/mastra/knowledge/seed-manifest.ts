@@ -52,6 +52,7 @@ export interface PreparedPage {
   description: string;
   body: string;
   marker: string;
+  requiredPolicyFile?: string;
   links: Map<string, number>;
   notes: PreparedNote[];
 }
@@ -384,7 +385,6 @@ export async function prepareDataset(
     mandatoryPolicyKeys.add(mapping.pageKey);
   }
   const byRef = new Map([...aliases.values()].map(page => [page.ref, page]));
-  const approved = await readApprovedPolicyRevisions(policyApprovalFile);
   let remaining = MAX_RENDERED_DATASET_LENGTH;
   function retain(length: number) {
     if (length > remaining)
@@ -394,7 +394,6 @@ export async function prepareDataset(
     remaining -= length;
   }
   const pages: PreparedPage[] = [];
-  const policyIssues: string[] = [];
   for (const [alias, page] of aliases) {
     const lookup = (ref: string) => {
       const target = aliases.get(ref) ?? byRef.get(ref);
@@ -466,10 +465,10 @@ export async function prepareDataset(
     // Materialize the output so a short trimmed body cannot retain the raw file's backing string.
     const body = [prefix, renderedBody.text, '\n'].join('');
     retain(body.length);
-    if (mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)) {
-      const issue = requiredPolicyContentIssue(body, page.ref, approved);
-      if (issue) policyIssues.push(`Invalid required policy ${page.ref} in ${page.file}. ${issue}.`);
-    }
+    const requiredPolicyFile =
+      mandatoryPolicyKeys.has(alias) || page.ref === requiredPolicyReference(page.placement.profile)
+        ? page.file
+        : undefined;
     const noteKeys = new Set<string>();
     const notes = (page.input.notes === undefined ? [] : array(page.input.notes, 'notes', 100)).map(value => {
       const obj = object(value, ['key', 'text', 'date', 'author'], 'note');
@@ -502,10 +501,27 @@ export async function prepareDataset(
       description: page.description ?? '',
       body,
       marker,
+      requiredPolicyFile,
       links,
       notes,
     });
   }
-  if (policyIssues.length) throw new Error(policyIssues.join('\n'));
-  return { id: config.id, version, pages };
+  const dataset = { id: config.id, version, pages };
+  await validatePreparedPolicies(dataset, policyApprovalFile);
+  return dataset;
+}
+
+export async function validatePreparedPolicies(
+  dataset: PreparedDataset,
+  policyApprovalFile = process.env.SUPPORT_POLICY_APPROVAL_FILE,
+) {
+  const approved = await readApprovedPolicyRevisions(policyApprovalFile);
+  const issues: string[] = [];
+  for (const page of dataset.pages) {
+    if (!page.requiredPolicyFile) continue;
+    const ref = `${page.scope}#${page.path}`;
+    const issue = requiredPolicyContentIssue(page.body, ref, approved);
+    if (issue) issues.push(`Invalid required policy ${ref} in ${page.requiredPolicyFile}. ${issue}.`);
+  }
+  if (issues.length) throw new Error(issues.join('\n'));
 }

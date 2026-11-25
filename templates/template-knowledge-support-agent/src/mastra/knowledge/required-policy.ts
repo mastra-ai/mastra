@@ -1,16 +1,34 @@
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { gfmAutolinkLiteralFromMarkdown } from 'mdast-util-gfm-autolink-literal';
 import { gfmAutolinkLiteral } from 'micromark-extension-gfm-autolink-literal';
 import { z } from 'zod';
 import { bundledPolicyRevisions } from '../../examples/approved-policies.ts';
+import { withWriterLock } from './writer-lock.ts';
 
 const revisionsSchema = z.record(z.string(), z.array(z.string().regex(/^[a-f0-9]{64}$/u)));
 type ApprovedRevisions = z.infer<typeof revisionsSchema>;
 
 export async function readApprovedPolicyRevisions(file?: string): Promise<ApprovedRevisions> {
   return file ? revisionsSchema.parse(JSON.parse(await readFile(file, 'utf8'))) : {};
+}
+
+export async function replaceApprovedPolicyRevisions(
+  source: string,
+  destination = process.env.SUPPORT_POLICY_APPROVAL_FILE,
+) {
+  if (!destination) throw new Error('Set SUPPORT_POLICY_APPROVAL_FILE before replacing policy approvals');
+  const approved = await readApprovedPolicyRevisions(source);
+  await withWriterLock(async () => {
+    const temporary = `${destination}.${randomUUID()}.tmp`;
+    await writeFile(temporary, JSON.stringify(approved, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    try {
+      await rename(temporary, destination);
+    } finally {
+      await rm(temporary, { force: true });
+    }
+  });
 }
 
 type MarkdownNode = { type: string; value?: string; children?: MarkdownNode[] };

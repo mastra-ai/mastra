@@ -16,6 +16,7 @@ import { withWriterLock, type WriterContext } from './writer-lock.ts';
 import { upsertPageAtRevision } from './versioned-page.ts';
 import {
   prepareDataset,
+  validatePreparedPolicies,
   type DatasetConfiguration,
   type PreparedDataset,
   type PreparedNote,
@@ -234,6 +235,7 @@ export async function seedDataset(config: DatasetConfiguration, options: SeedOpt
     return report;
   }
   return withWriterLock(async context => {
+    await validatePreparedPolicies(dataset, options.policyApprovalFile);
     const { libsql, postgres } = context;
     if (postgres) {
       await writeDataset(

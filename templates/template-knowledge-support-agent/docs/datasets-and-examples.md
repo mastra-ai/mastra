@@ -15,7 +15,7 @@ Run `npm run knowledge:seed` to load the guides and policy for the example selec
 1. Use `## Before changes`, `## Prohibited actions`, and `## When uncertain` once each. Keep the rendered policy within 800 characters, including source attribution and links, so the agent receives it in full.
 2. Review the Markdown and manifest entry, then run `npm run knowledge:seed -- --dry-run`. For each unapproved revision, the output gives the Knowledge reference and the SHA-256 digest to approve.
 3. Put each reference and its approved digests in a JSON file, for example `{"tenant:example#policies/safe-changes": ["<64-character SHA-256>"]}`. Set `SUPPORT_POLICY_APPROVAL_FILE` to that file for both the seed and Studio. Allow only authorized operators to edit it.
-4. Run the dry run again, then run `npm run knowledge:seed` to apply the change. If Studio is running, replace the approval file atomically and keep the previous digest approved until the new seed succeeds.
+4. Save approval changes to a separate file and run `npm run knowledge:seed -- --replace-policy-approvals next-approvals.json` to replace the configured approvals under the database writer lock. Keep the previous digest approved until the new seed succeeds. Run the dry run again, then run `npm run knowledge:seed` to apply the change.
 
 To restore an older policy, restore its Markdown and manifest entry, check its approval with a dry run, then run the seed again.
 
