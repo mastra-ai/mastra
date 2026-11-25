@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioConfigProvider } from '../studio-config-context';
-import { useStudioConfig } from '../studio-config-state';
+import { useStudioConfig, useStudioConnection } from '../studio-config-state';
 import { authDisabledCapabilities } from './fixtures/capabilities';
 import { server } from '@/test/msw-server';
 
@@ -13,7 +13,8 @@ const LOCAL_STORAGE_KEY = 'mastra-studio-config';
 
 const ConfigProbe = () => {
   const config = useStudioConfig();
-  return <pre data-testid="config">{JSON.stringify(config)}</pre>;
+  const { connection } = useStudioConnection();
+  return <pre data-testid="config">{JSON.stringify({ ...config, connection: connection.status })}</pre>;
 };
 
 const renderProvider = (defaultApiPrefix?: string) => {
@@ -63,7 +64,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
   it('uses URL Authorization in memory but does not persist it over stored config', async () => {
     const statusRequest = vi.fn<(header: string | null) => void>();
     server.use(
-      http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
+      http.get('http://stored.example/stored-api/auth/capabilities', ({ request }) => {
         statusRequest(request.headers.get('Authorization'));
         return HttpResponse.json(authDisabledCapabilities);
       }),
@@ -110,27 +111,7 @@ describe('StudioConfigProvider instance status probe', () => {
     renderProvider('/api/mastra');
 
     await waitFor(() => expect(readConfig().isLoading).toBe(false));
-    expect(readConfig()).toMatchObject({ baseUrl: BASE_URL, apiPrefix: '/api/mastra' });
-  });
-
-  it('shows the configuration form when the prefixed API is unreachable', async () => {
-    server.use(http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => new HttpResponse(null, { status: 401 })));
-
-    renderProvider('/api/mastra');
-
-    await waitFor(() => expect(readConfig().isLoading).toBe(false));
-    expect(readConfig().baseUrl).toBe('');
-  });
-
-  it('shows the configuration form when the prefixed route answers with a non-capabilities page', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.html('<!doctype html><html></html>')),
-    );
-
-    renderProvider('/api/mastra');
-
-    await waitFor(() => expect(readConfig().isLoading).toBe(false));
-    expect(readConfig().baseUrl).toBe('');
+    expect(readConfig()).toMatchObject({ baseUrl: BASE_URL, apiPrefix: '/api/mastra', connection: 'connected' });
   });
 
   it('normalizes a trailing slash in the API prefix', async () => {
@@ -138,7 +119,7 @@ describe('StudioConfigProvider instance status probe', () => {
 
     renderProvider('/api/mastra/');
 
-    await waitFor(() => expect(readConfig().isLoading).toBe(false));
+    await waitFor(() => expect(readConfig().connection).toBe('connected'));
     expect(readConfig().baseUrl).toBe(BASE_URL);
   });
 
@@ -147,7 +128,7 @@ describe('StudioConfigProvider instance status probe', () => {
 
     renderProvider('');
 
-    await waitFor(() => expect(readConfig().isLoading).toBe(false));
+    await waitFor(() => expect(readConfig().connection).toBe('connected'));
     expect(readConfig().baseUrl).toBe(BASE_URL);
   });
 });
@@ -163,7 +144,7 @@ describe('StudioConfigProvider server restart', () => {
         }),
       );
       renderProvider();
-      await waitFor(() => expect(readConfig().baseUrl).toBe(BASE_URL));
+      await waitFor(() => expect(readConfig().connection).toBe('connected'));
       server.use(
         http.get(`${BASE_URL}/api/auth/capabilities`, () => {
           onProbe();
@@ -174,7 +155,7 @@ describe('StudioConfigProvider server restart', () => {
       fireEvent(window, new Event('visibilitychange'));
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(readConfig().baseUrl).toBe(BASE_URL);
+      expect(readConfig().connection).toBe('connected');
       expect(onProbe).toHaveBeenCalledOnce();
     });
   });

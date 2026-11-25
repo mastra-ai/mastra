@@ -100,7 +100,7 @@ import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersona
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
 
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
-import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { useStudioConfig, useStudioConnection } from '@/domains/configuration/context/studio-config-state';
 import { StudioKnowledgeLinks } from '@/domains/knowledge/studio-knowledge-links';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
 import { ObservabilityLayout } from '@/domains/observability/observability-layout';
@@ -524,6 +524,7 @@ export const routes: RouteObject[] = [
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
+  const { connection } = useStudioConnection();
 
   // Create a stable fetch function that auto-refreshes on 401
   const customFetch = useMemo(
@@ -534,13 +535,11 @@ function App() {
   const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
 
   if (isLoading) {
-    // Config is loaded from localStorage. However, there might be a race condition
-    // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
-    // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
+    // The instance probe can be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
     return <BrandLoader fill="screen" />;
   }
 
-  if (!baseUrl) {
+  if (connection.status !== 'connected') {
     return <PlaygroundConfigGuard />;
   }
 

@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
+import type { MastraInstanceStatus } from '../hooks/use-mastra-instance-status';
 import { useMastraInstanceStatus } from '../hooks/use-mastra-instance-status';
 import type { StudioConfig } from '../types';
-import { StudioConfigContext } from './studio-config-state';
+import type { StudioConnection } from './studio-config-state';
+import { StudioConfigContext, StudioConnectionContext } from './studio-config-state';
 
 export interface StudioConfigProviderProps {
   children: React.ReactNode;
@@ -36,6 +38,36 @@ const getPersistentConfig = (config: StudioConfig): StudioConfig => {
   return { ...config, headers };
 };
 
+const readStoredConfig = (defaultConfig: StudioConfig): StudioConfig | undefined => {
+  const storedConfig = localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
+  if (!storedConfig) return undefined;
+
+  const parsedConfig = JSON.parse(storedConfig);
+  if (typeof parsedConfig !== 'object' || parsedConfig === null) return undefined;
+
+  return {
+    baseUrl: parsedConfig.baseUrl || defaultConfig.baseUrl,
+    headers: { ...(parsedConfig.headers ?? {}), ...defaultConfig.headers },
+    // Use stored apiPrefix if set, otherwise fall back to CLI default for back-compat
+    apiPrefix: parsedConfig.apiPrefix ?? defaultConfig.apiPrefix,
+  };
+};
+
+const storeConfig = (config: StudioConfig) =>
+  localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(config));
+
+interface ConnectionQuery {
+  data: MastraInstanceStatus | undefined;
+  isPlaceholderData: boolean;
+}
+
+const getConnection = ({ data, isPlaceholderData }: ConnectionQuery): StudioConnection => {
+  if (data?.status === 'active') return { status: 'connected' };
+  // The last answer is about the connection before the one being checked.
+  if (!data || isPlaceholderData) return { status: 'connecting' };
+  return data;
+};
+
 export const StudioConfigProvider = ({
   children,
   endpoint = 'http://localhost:4111',
@@ -43,75 +75,51 @@ export const StudioConfigProvider = ({
 }: StudioConfigProviderProps) => {
   const [urlHeaders] = useState<Record<string, string>>(readUrlAuthHeader);
   const hasUrlHeaders = Object.keys(urlHeaders).length > 0;
-  const {
-    data: instanceStatus,
-    isLoading: isStatusLoading,
-    error,
-  } = useMastraInstanceStatus(endpoint, defaultApiPrefix, urlHeaders);
-  const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
-    baseUrl: '',
-    headers: urlHeaders,
-    apiPrefix: undefined,
-    isLoading: true,
-  });
+  const defaultConfig: StudioConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
+
+  const [{ config, revision }, setSaved] = useState(() => ({
+    config: readStoredConfig(defaultConfig) ?? defaultConfig,
+    revision: 0,
+  }));
+  const [isEditing, setIsEditing] = useState(false);
+
+  const statusQuery = useMastraInstanceStatus(config, { revision, paused: isEditing });
+  const connection = getConnection(statusQuery);
+  const isConnected = connection.status === 'connected';
 
   useEffect(() => {
     removeUrlAuthHeader();
   }, []);
 
-  useLayoutEffect(() => {
-    // Handle error case - stop loading but don't configure
-    if (error && !isStatusLoading) {
-      return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
-    }
+  useEffect(() => {
+    if (isConnected && hasUrlHeaders) storeConfig(getPersistentConfig(config));
+  }, [isConnected, hasUrlHeaders, config]);
 
-    // Don't run the effect during the fetch request
-    if (!instanceStatus?.status) return;
-
-    const storedConfig = localStorage.getItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
-    if (storedConfig) {
-      const parsedConfig = JSON.parse(storedConfig);
-
-      if (typeof parsedConfig === 'object' && parsedConfig !== null) {
-        // Use stored apiPrefix if set, otherwise fall back to CLI default for back-compat
-        const normalizedConfig = {
-          ...parsedConfig,
-          headers: { ...(parsedConfig.headers ?? {}), ...urlHeaders },
-          apiPrefix: parsedConfig.apiPrefix ?? defaultApiPrefix,
-        };
-        if (hasUrlHeaders) {
-          localStorage.setItem(
-            MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY,
-            JSON.stringify(getPersistentConfig(normalizedConfig)),
-          );
-        }
-        return setConfig({ ...normalizedConfig, isLoading: false });
-      }
-    }
-
-    if (instanceStatus.status === 'active') {
-      const nextConfig = { baseUrl: endpoint, headers: urlHeaders, apiPrefix: defaultApiPrefix };
-      if (hasUrlHeaders) {
-        localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(getPersistentConfig(nextConfig)));
-      }
-      return setConfig({ ...nextConfig, isLoading: false });
-    }
-
-    return setConfig({ baseUrl: '', headers: urlHeaders, apiPrefix: undefined, isLoading: false });
-  }, [instanceStatus, endpoint, defaultApiPrefix, isStatusLoading, error, urlHeaders, hasUrlHeaders]);
-
-  const doSetConfig = (partialNewConfig: Partial<StudioConfig>) => {
-    setConfig(prev => {
-      const nextConfig = { ...prev, ...partialNewConfig };
-      const persistentConfig = hasUrlHeaders ? getPersistentConfig(nextConfig) : nextConfig;
-      localStorage.setItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY, JSON.stringify(persistentConfig));
-      return nextConfig;
-    });
+  const connectTo = (nextConfig: StudioConfig) => {
+    setSaved({ config: nextConfig, revision: revision + 1 });
+    setIsEditing(false);
   };
 
+  const setConfig = (partialNewConfig: Partial<StudioConfig>) => {
+    const nextConfig = { ...config, ...partialNewConfig };
+    storeConfig(hasUrlHeaders ? getPersistentConfig(nextConfig) : nextConfig);
+    connectTo(nextConfig);
+  };
+
+  const resetConfig = () => {
+    localStorage.removeItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
+    connectTo(defaultConfig);
+  };
+
+  const isDefault = config.baseUrl === endpoint && config.apiPrefix === defaultApiPrefix;
+
   return (
-    <StudioConfigContext.Provider value={{ ...config, setConfig: doSetConfig }}>
-      {children}
+    <StudioConfigContext.Provider value={{ ...config, isLoading: statusQuery.isPending, setConfig }}>
+      <StudioConnectionContext.Provider
+        value={{ connection, isEditing, setIsEditing, resetConfig: isDefault ? undefined : resetConfig }}
+      >
+        {children}
+      </StudioConnectionContext.Provider>
     </StudioConfigContext.Provider>
   );
 };

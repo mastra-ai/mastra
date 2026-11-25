@@ -37,7 +37,7 @@ Run the `mastra studio` command:
 mastra studio
 ```
 
-Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it connects to a Mastra server at `http://localhost:4111`; when no server is available, the UI displays a form for entering your Mastra instance URL and API prefix.
+Open [localhost:3000](http://localhost:3000) in your browser to see the Studio UI. By default, it connects to a Mastra server at `http://localhost:4111`. While that server isn't running, Studio waits for it and connects once it's up. Select **Edit connection** to enter a different Mastra instance URL, API prefix, or headers. When the server rejects the connection, Studio opens the same form with the reason.
 
 The command uses Node's built-in `http` module and [`serve-handler`](https://www.npmjs.com/package/serve-handler) to serve the static files.
 

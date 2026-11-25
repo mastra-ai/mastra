@@ -1,8 +1,25 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import type { Query } from '@tanstack/react-query';
+import type { StudioConfig } from '../types';
 
-export type UseMastraInstanceStatusResponse = {
-  status: 'active' | 'inactive';
-};
+/** Why a connection can't work as configured: retrying won't help, changing the connection or the server will. */
+export type ConnectionFailure =
+  | { reason: 'invalid-url' }
+  /** The server answers, but not to this origin (CORS). */
+  | { reason: 'blocked' }
+  | { reason: 'not-mastra' }
+  | { reason: 'http'; httpStatus: number };
+
+export type MastraInstanceStatus =
+  | { status: 'active' }
+  /** Nothing answers yet, or only an error a starting server can give. */
+  | { status: 'waiting'; httpStatus?: number }
+  | { status: 'failed'; failure: ConnectionFailure };
+
+const DEFAULT_API_PREFIX = '/api';
+const MAX_RETRY_DELAY = 5000;
+// Client errors a server can stop giving on its own.
+const TEMPORARY_CLIENT_ERRORS = [408, 425, 429];
 
 const normalizeApiPrefix = (apiPrefix: string): string => {
   const normalized = apiPrefix.trim().replace(/\/+/g, '/').replace(/\/$/, '');
@@ -12,37 +29,97 @@ const normalizeApiPrefix = (apiPrefix: string): string => {
 
 // Probe a public route under the API prefix rather than the server root: when Mastra is
 // mounted in a host app via a server adapter, the root belongs to the host app.
-const getInstanceStatusUrl = (endpoint: string, apiPrefix: string): string =>
-  `${endpoint.replace(/\/+$/, '')}${normalizeApiPrefix(apiPrefix)}/auth/capabilities`;
+const getInstanceStatusUrl = (baseUrl: string, apiPrefix: string): string =>
+  `${baseUrl.replace(/\/+$/, '')}${normalizeApiPrefix(apiPrefix)}/auth/capabilities`;
 
-const getMastraInstanceStatus = async (
-  endpoint: string,
-  apiPrefix: string,
-  headers?: Record<string, string>,
-): Promise<UseMastraInstanceStatusResponse> => {
+const parseUrl = (url: string): URL | undefined => {
   try {
-    const response = await fetch(getInstanceStatusUrl(endpoint, apiPrefix), { headers });
-    if (!response.ok) return { status: 'inactive' };
-
-    // A host app can answer unknown routes with a 200 fallback page, so require a capabilities body.
-    const body: unknown = await response.json();
-    const isCapabilities =
-      typeof body === 'object' && body !== null && typeof (body as { enabled?: unknown }).enabled === 'boolean';
-
-    return { status: isCapabilities ? 'active' : 'inactive' };
+    return new URL(url, window.location.href);
   } catch {
-    return { status: 'inactive' };
+    return undefined;
   }
 };
 
-export const useMastraInstanceStatus = (
-  endpoint: string = 'http://localhost:4111',
-  apiPrefix: string = '/api',
-  headers?: Record<string, string>,
-) => {
-  return useQuery({
-    queryKey: ['mastra-instance-status', endpoint, apiPrefix, headers],
-    queryFn: () => getMastraInstanceStatus(endpoint, apiPrefix, headers),
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+// A host app can answer unknown routes with a 200 fallback page, so require a capabilities body.
+const isCapabilities = (body: unknown): boolean =>
+  typeof body === 'object' && body !== null && 'enabled' in body && typeof body.enabled === 'boolean';
+
+/** Throws when the server can't be reached. Sent like the requests Studio makes next, so CORS treats them the same. */
+const requestStatus = async (url: string, headers: Record<string, string>): Promise<MastraInstanceStatus> => {
+  const response = await fetch(url, { headers, credentials: 'include' });
+  const { status: httpStatus } = response;
+
+  if (httpStatus >= 500 || TEMPORARY_CLIENT_ERRORS.includes(httpStatus)) return { status: 'waiting', httpStatus };
+  if (!response.ok) return { status: 'failed', failure: { reason: 'http', httpStatus } };
+  if (isCapabilities(parseJson(await response.text()))) return { status: 'active' };
+  return { status: 'failed', failure: { reason: 'not-mastra' } };
+};
+
+// The browser reports a refused connection and a CORS block as the same error, but lets a `no-cors` request through.
+const answersWithoutCors = (url: string): Promise<boolean> =>
+  fetch(url, { mode: 'no-cors', credentials: 'omit' }).then(
+    () => true,
+    () => false,
+  );
+
+const getMastraInstanceStatus = async ({
+  baseUrl,
+  apiPrefix = DEFAULT_API_PREFIX,
+  headers,
+}: StudioConfig): Promise<MastraInstanceStatus> => {
+  const url = getInstanceStatusUrl(baseUrl, apiPrefix);
+  const target = parseUrl(url);
+  if (!target || !/^https?:$/.test(target.protocol)) return { status: 'failed', failure: { reason: 'invalid-url' } };
+
+  try {
+    return await requestStatus(url, headers);
+  } catch {
+    const sameOrigin = target.origin === window.location.origin;
+    if (sameOrigin || !(await answersWithoutCors(url))) return { status: 'waiting' };
+  }
+
+  // Reachable: asked again, in case the server came up between the two requests.
+  return requestStatus(url, headers).catch(() => ({ status: 'failed', failure: { reason: 'blocked' } }));
+};
+
+type StatusQuery = Query<MastraInstanceStatus>;
+
+const isWaiting = (query: StatusQuery) => query.state.data?.status === 'waiting';
+
+// 1s, 2s, 4s, then every 5s. React Query pauses it while the tab is hidden and checks again on focus.
+const retryDelay = (query: StatusQuery) => Math.min(1000 * 2 ** (query.state.dataUpdateCount - 1), MAX_RETRY_DELAY);
+
+export interface UseMastraInstanceStatusOptions {
+  /** Changes with every saved connection. Stands in for the headers, which must stay out of query keys. */
+  revision: number;
+  /** Stops checking on its own. */
+  paused: boolean;
+}
+
+/**
+ * Whether Studio can use the connection. Keeps checking while the server isn't up yet, and stops for good once it
+ * answered: a server that restarts later must not take Studio down with it.
+ */
+export const useMastraInstanceStatus = (config: StudioConfig, { revision, paused }: UseMastraInstanceStatusOptions) => {
+  const checksAgain = (query: StatusQuery) => !paused && isWaiting(query);
+
+  return useQuery<MastraInstanceStatus>({
+    queryKey: ['mastra-instance-status', config.baseUrl, config.apiPrefix, revision],
+    queryFn: () => getMastraInstanceStatus(config),
     retry: false,
+    // A connection saved while Studio is connected is checked behind the page that saved it.
+    placeholderData: keepPreviousData,
+    staleTime: query => (query.state.data?.status === 'active' ? Infinity : 0),
+    refetchInterval: query => (checksAgain(query) ? retryDelay(query) : false),
+    refetchOnWindowFocus: checksAgain,
+    refetchOnReconnect: checksAgain,
   });
 };

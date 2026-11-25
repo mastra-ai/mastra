@@ -4,7 +4,6 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
-import { toast } from '@mastra/playground-ui/utils/toast';
 import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
@@ -14,9 +13,11 @@ import { HeaderListForm } from './header-list-form';
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
   onSave?: () => void;
+  onCancel?: () => void;
+  onReset?: () => void;
 }
 
-export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
+export const StudioConfigForm = ({ initialConfig, onSave, onCancel, onReset }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
   // Rows keep an id so removing one doesn't hand its inputs to the next.
   const nextHeaderId = useRef(0);
@@ -30,7 +31,7 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
-    const url = readFormText(formData, 'url');
+    const url = readFormText(formData, 'url').trim();
     const rawApiPrefix = readFormText(formData, 'apiPrefix').trim();
     const apiPrefix = rawApiPrefix.length ? rawApiPrefix : undefined;
 
@@ -43,7 +44,6 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
 
     setConfig({ headers: formHeaders, baseUrl: url, apiPrefix });
     onSave?.();
-    toast.success('Configuration saved');
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
@@ -82,9 +82,21 @@ export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProp
         ))}
         <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-        <Button type="submit" className="mt-4 ml-auto" icon={<IconFloppyDisk1 />}>
-          Save configuration
-        </Button>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          {onReset && (
+            <Button type="button" variant="ghost" onClick={onReset}>
+              Reset to default
+            </Button>
+          )}
+          {onCancel && (
+            <Button type="button" variant="ghost" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" icon={<IconFloppyDisk1 />}>
+            Save configuration
+          </Button>
+        </div>
       </Form>
     </TooltipProvider>
   );

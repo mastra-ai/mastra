@@ -4,8 +4,8 @@ import { resetStorage } from '../__utils__/reset-storage';
 
 /**
  * The whole app is wrapped in `RoutePermissionsGate`, which blocks the router
- * (including the Settings page) until `/api/auth/capabilities` resolves, and
- * shows a "Failed to load studio" screen if that request fails.
+ * (including the Settings page) until `/api/auth/capabilities` resolves. Studio
+ * asks it first, and waits for the server when it doesn't answer.
  *
  * After saving a custom API prefix / instance URL and reloading, the capabilities
  * request is re-issued against the newly-configured prefix/URL. The kitchen-sink
@@ -87,7 +87,7 @@ test.describe('Settings API prefix persistence', () => {
   });
 });
 
-test.describe('Settings invalid API error state', () => {
+test.describe('Settings unreachable instance URL', () => {
   test.beforeEach(async () => {
     await resetStorage();
   });
@@ -97,7 +97,7 @@ test.describe('Settings invalid API error state', () => {
   });
 
   test.describe('when the configured API is unreachable after saving', () => {
-    test('shows the failed-to-load error screen', async ({ page }) => {
+    test('waits for the saved server and offers to go back to the default one', async ({ page }) => {
       // Stub capabilities ONLY for the initial load so we can reach the Settings form
       // to enter a bad URL. Once a bad instance URL is saved, the post-reload
       // capabilities request targets that dead origin and is not stubbed.
@@ -120,12 +120,13 @@ test.describe('Settings invalid API error state', () => {
       await page.getByRole('button', { name: 'Save changes' }).click();
 
       // Drop the stub so the post-reload capabilities request really hits the dead
-      // origin and fails, tripping the gate's error screen.
+      // origin and fails.
       await page.unroute('**/auth/capabilities');
       await page.reload();
 
-      await expect(page.getByText('Failed to load studio')).toBeVisible({ timeout: 10000 });
-      await expect(page.getByRole('button', { name: 'Reset Studio configuration' })).toBeVisible();
+      await expect(page.getByText('Waiting for your Mastra server')).toBeVisible({ timeout: 10000 });
+      await page.getByRole('button', { name: 'Reset to default' }).click();
+      await expect(page.locator('input[name="url"]')).toBeVisible();
     });
   });
 });
