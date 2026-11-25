@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import {
+  carryEndedSegment,
   endFailedIteration,
   participateInDurableExecution,
   retrySettledDurableExecution,
@@ -5283,6 +5284,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handleDelivery(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
     if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) {
+      await carryEndedSegment(this.mastra, event);
       const result = await this.#handleDelivery(event);
       if (result.ok) endFailedIteration(this.mastra, event);
       return result;

@@ -159,14 +159,14 @@ describe('run and generation span fields on a worker in another process', () => 
     throw new Error('tool output mapping failed');
   };
 
-  const pauseAfter = (id: string, ms: number) =>
+  const pauseAfter = (ms: number, options?: { requireToolApproval: boolean }) =>
     createTool({
-      id,
+      id: 'pause',
       description: 'Ask a person.',
       inputSchema: z.object({}),
       execute: async (_, context) => {
         await setTimeout(ms);
-        return context.agent!.suspend({ why: 'ask' });
+        return context.agent!.suspend({ why: 'ask' }, options);
       },
     });
 
@@ -244,18 +244,26 @@ describe('run and generation span fields on a worker in another process', () => 
     expect(worker.ended(SpanType.MODEL_GENERATION)).toEqual([]);
   }, 15_000);
 
-  it('ends every span once when the run fails', async () => {
-    getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
-    const { api, worker, unbalanced } = await split({ tools: { lookup: lookup({ toModelOutput }) } });
+  it.each([true, false])(
+    'ends every span once when the run fails, with storage fencing %s',
+    async fenced => {
+      getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
+      const { api, worker, unbalanced } = await split(
+        { tools: { lookup: lookup({ toModelOutput }) } },
+        undefined,
+        fenced,
+      );
 
-    const { fullStream } = await api.agent.stream('Where is my order?');
-    for await (const _ of fullStream);
+      const { fullStream } = await api.agent.stream('Where is my order?');
+      for await (const _ of fullStream);
 
-    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
-      await expect.poll(() => worker.ended(type)).toMatchObject([{ outcome: 'error' }]);
-    }
-    expect(unbalanced()).toEqual({ open: [], endedTwice: [] });
-  }, 15_000);
+      for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+        await expect.poll(() => [...worker.ended(type), ...api.ended(type)]).toMatchObject([{ outcome: 'error' }]);
+      }
+      expect(unbalanced()).toEqual({ open: [], endedTwice: [] });
+    },
+    15_000,
+  );
 
   it('ends every span once when the cleanup of a failed run is retried', async () => {
     getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
@@ -277,17 +285,17 @@ describe('run and generation span fields on a worker in another process', () => 
   }, 15_000);
 
   it.each([
-    { order: 'before', deniedAfter: 150, suspendsAfter: 0, fenced: true },
-    { order: 'after', deniedAfter: 0, suspendsAfter: 400, fenced: true },
-    { order: 'after', deniedAfter: 0, suspendsAfter: 400, fenced: false },
+    { pause: 'before', deniedAfter: 150, pausedAfter: 0 },
+    { pause: 'with', deniedAfter: 0, pausedAfter: 0 },
+    { pause: 'after', deniedAfter: 0, pausedAfter: 400 },
+    { pause: 'for an approval after', deniedAfter: 0, pausedAfter: 400, options: { requireToolApproval: true } },
   ])(
-    'ends every span once when a tool call suspends $order another is denied, with storage fencing $fenced',
+    'ends spans once when a tool call pauses $pause a denied one',
     async times => {
       const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
       getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('lookup')] });
-      const pause = pauseAfter('pause', times.suspendsAfter);
       const { api, worker } = await split(
-        { tools: { pause, lookup: lookup() } },
+        { tools: { pause: pauseAfter(times.pausedAfter, times.options), lookup: lookup() } },
         {
           require: async (user: any, { resource, permission }: any) => {
             if (!resource.id.includes('lookup')) return;
@@ -295,7 +303,6 @@ describe('run and generation span fields on a worker in another process', () => 
             throw new FGADeniedError(user, resource, permission);
           },
         },
-        times.fenced,
       );
 
       const requestContext = new RequestContext([['user', { id: 'user-1' }]]);

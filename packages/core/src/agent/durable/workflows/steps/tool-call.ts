@@ -93,7 +93,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
-import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
+import { claimSegmentEnd, liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -523,6 +523,7 @@ export function createDurableToolCallStep() {
         generationReportedUsage?: AccumulatedUsage;
         generationReportedSteps?: number;
         reportedCosts?: BaseIterationState['reportedCosts'];
+        iterationCount?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -531,7 +532,7 @@ export function createDurableToolCallStep() {
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
       // pausing — stores persist only span-end events, so an un-ended root is dropped if
       // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
-      const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
+      const endSpansAsSuspended = async (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
         try {
           const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
           if (!obs) return;
@@ -545,6 +546,18 @@ export function createDurableToolCallStep() {
           // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const segment = segmentSpanData(requestContext, runId, initData, reg);
+          if (
+            typedInput.sideBySide &&
+            !segment.carried &&
+            !(await claimSegmentEnd({
+              mastra: mastra as Mastra,
+              requestContext,
+              runId,
+              iterationCount: initData.iterationCount,
+              outcome: 'suspend',
+            }))
+          )
+            return;
           const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
@@ -1374,7 +1387,7 @@ export function createDurableToolCallStep() {
         }
 
         // End the trace's open spans as suspended before pausing.
-        endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
+        await endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
 
         // Suspend and wait for approval
         return suspend(
@@ -1795,7 +1808,7 @@ export function createDurableToolCallStep() {
             );
           }
 
-          endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
+          await endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
           return suspend(
             {
@@ -1858,14 +1871,7 @@ export function createDurableToolCallStep() {
           await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
         }
 
-        // A call that runs beside this one can have failed the run already, which ended its spans.
-        const runFailed =
-          typedInput.sideBySide &&
-          (await assertOwned().then(
-            () => false,
-            error => isExecutionFenceError(error),
-          ));
-        if (!runFailed) endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+        await endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
         return suspend(
           {

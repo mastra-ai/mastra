@@ -17,7 +17,7 @@ import {
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
-import { carrySegmentSpans, endFailedSegmentSpans, segmentEndedBySuspension, segmentSpanData } from './segment-spans';
+import { carrySegmentSpans, claimSegmentEnd, endFailedSegmentSpans, segmentSpanData } from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -128,7 +128,7 @@ export async function participateInDurableExecution<T>(
     const fence = await participant.fence;
     if (!fence) return await execute();
     await fence.verify();
-    carryEndedSegment(event);
+    await carryEndedSegment(mastra, event);
     let parentRunId = runId;
     for (const nestedRunId of nestedRunIds) {
       fence.coverNestedRun(parentRunId, nestedRunId);
@@ -190,15 +190,19 @@ export async function retrySettledDurableExecution(mastra: Mastra, event: Event)
 }
 
 /**
- * A suspension beside the failed tool call ended the segment's spans. Only this event shows it, so tell the run's own
- * failure through the request context it inherits.
+ * When a suspension beside the failed tool call ends the segment's spans, tell this failure and the run's own, through
+ * the request context they inherit. Called before the delivery passes that context on.
  */
-function carryEndedSegment(event: Event): void {
+export async function carryEndedSegment(mastra: Mastra, event: Event): Promise<void> {
   const { workflowId, stepResults, requestContext } = event.data ?? {};
-  const runId = stepResults?.input?.runId;
-  if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !runId) return;
+  const state = stepResults?.input;
+  const calls = stepResults?.[DurableStepIds.TOOL_CALL];
+  if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !state?.runId) return;
+  if (calls?.status !== 'failed' || (Array.isArray(calls.payload) && !calls.payload[0]?.sideBySide)) return;
   const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
-  if (!segmentEndedBySuspension(segmentSpanData(context, runId, stepResults.input), stepResults)) return;
+  if (segmentSpanData(context, state.runId, state).carried) return;
+  const { runId, iterationCount } = state;
+  if (await claimSegmentEnd({ mastra, requestContext: context, runId, iterationCount, outcome: 'fail' })) return;
   event.data.requestContext = { ...requestContext };
   carrySegmentSpans(event.data.requestContext, runId, null);
 }

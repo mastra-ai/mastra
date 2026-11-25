@@ -7,6 +7,8 @@
  * carries it on the request context, which every engine hands to every step and persists with the
  * run, so the worker that finishes a segment ends that segment's spans wherever it runs.
  */
+import { NoopLeaseProvider } from '../../events/pubsub';
+import { reachesOtherProcesses } from '../../events/reach';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import { isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
@@ -15,6 +17,7 @@ import type { AIModelGenerationSpan, ExportedSpan, Span, SpanType } from '../../
 import type { RequestContext } from '../../request-context';
 import { MASTRA_DURABLE_SEGMENTS_KEY } from '../request-context-snapshot';
 import { DurableStepIds, MAP_FINAL_OUTPUT_STEP_ID } from './constants';
+import { getExecutionClaim, resolveLeaseProvider } from './execution-fence';
 import type { RunRegistryEntry } from './types';
 
 export interface SegmentSpanData {
@@ -137,6 +140,42 @@ export function segmentOwnsStep(segment: SegmentSpanData & { carried?: boolean }
     return parent !== undefined && [segment.stepParentId, ...segment.openStepsOf].includes(parent);
   if (segment.adoptsOpenSteps) return segment.endedStepsOf === undefined || parent !== segment.endedStepsOf;
   return parent === segment.stepParentId;
+}
+
+/** Longer than any pause between the calls of one step; a key is only written when they run side by side. */
+const SEGMENT_END_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether `outcome` ends the spans of the run's first segment. Behind a broker, a tool call that suspends and one
+ * beside it that fails the run are in different processes, and both end the same spans, so the first one to claim
+ * them does. Without an answer only the suspension ends them.
+ */
+export async function claimSegmentEnd({
+  mastra,
+  requestContext,
+  runId,
+  iterationCount,
+  outcome,
+}: {
+  mastra: Mastra | undefined;
+  requestContext: RequestContext<any>;
+  runId: string;
+  iterationCount: number | undefined;
+  outcome: 'suspend' | 'fail';
+}): Promise<boolean> {
+  const withoutAnswer = outcome === 'suspend';
+  try {
+    const claim = getExecutionClaim(requestContext, runId);
+    // Only workers behind a broker end the spans of a failure, and only of a storage-fenced run.
+    if (claim?.generation === undefined || !mastra || !reachesOtherProcesses(mastra.pubsub)) return withoutAnswer;
+    const leases = resolveLeaseProvider(mastra.pubsub);
+    if (leases === NoopLeaseProvider) return withoutAnswer;
+    const key = `mastra:durable-segment-end:v1:${JSON.stringify([runId, claim.executionId, iterationCount])}`;
+    const { acquired, owner } = await leases.acquireLease(key, outcome, SEGMENT_END_TTL_MS);
+    return acquired || (withoutAnswer && owner !== 'fail');
+  } catch {
+    return withoutAnswer;
+  }
 }
 
 /** A MODEL_STEP the run's deadline stopped is interrupted, as on the regular agent; the run itself hit a limit. */
