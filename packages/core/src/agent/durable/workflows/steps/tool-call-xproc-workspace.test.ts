@@ -70,6 +70,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-skill', toolName: 'skill', args: { name: 'greeting' } },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -104,6 +105,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-approve', toolName: 'request_approval', args: {} },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -125,6 +127,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-global', toolName: 'global_tool', args: {} },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -147,6 +150,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-missing', toolName: 'not_a_real_tool', args: {} },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -174,6 +178,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-inproc', toolName: 'skill', args: { name: 'greeting' } },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -211,6 +216,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
       const step = createDurableToolCallStep();
       const result = await (step as any).execute({
+        getState: async () => ({}),
         inputData: { toolCallId: 'call-removed', toolName: 'removed', args: {} },
         mastra: { getLogger: () => undefined, listTools },
         suspend: vi.fn(),
@@ -246,6 +252,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-result', toolName: 'skill', args: { name: 'greeting' } },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),
@@ -279,6 +286,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
 
     const step = createDurableToolCallStep();
     const result = await (step as any).execute({
+      getState: async () => ({}),
       inputData: { toolCallId: 'call-error', toolName: 'skill', args: { name: 'greeting' } },
       mastra: { getLogger: () => undefined, listTools: () => ({}) },
       suspend: vi.fn(),

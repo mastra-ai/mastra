@@ -2,9 +2,9 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarState } from '@mastra/playground-ui/components/Sidebar';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraPackages } from '@mastra/react/hooks/configuration';
-import { Package } from 'lucide-react';
 import { useState } from 'react';
 import { usePackageUpdates } from '../hooks/use-package-updates';
 import { MastraPackagesPanel } from './mastra-packages-panel';
@@ -41,7 +41,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
         render={
           <PopoverTrigger render={<button type="button" />}>
             <span className="relative inline-flex">
-              <Package />
+              <IconPackage />
               {isCollapsed && needsUpdate && (
                 <span
                   aria-hidden

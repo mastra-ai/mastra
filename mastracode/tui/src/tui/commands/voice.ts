@@ -184,7 +184,7 @@ async function runMenu(ctx: SlashCommandContext): Promise<void> {
       return;
     case 'Status':
       await showStatus(ctx);
-      return;
+      break;
   }
 }
 

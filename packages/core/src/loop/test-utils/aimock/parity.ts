@@ -108,15 +108,17 @@
  * once here, under the same rule.
  */
 import { isDeepStrictEqual } from 'node:util';
-import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2Content } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { Agent } from '../../../agent/agent';
 import type { AgentExecutionOptions } from '../../../agent/agent.types';
 import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../agent/durable/create-evented-agent';
-import type { DurableAgent, DurableAgentStreamOptions } from '../../../agent/durable/durable-agent';
+import type { DurableAgent } from '../../../agent/durable/durable-agent';
+import type { DurableAgentStreamOptions } from '../../../agent/durable/types';
 import type { MessageListInput } from '../../../agent/message-list/types';
 import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
+import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
 import type { MastraCompositeStore } from '../../../storage/base';
@@ -297,10 +299,12 @@ export function normalizeChunkPayload(type: string, payload: unknown): unknown {
   const normalized = normalizePayload(payload);
   if (normalized === null || typeof normalized !== 'object') return normalized;
 
-  // Only the plain loop puts the suspended step's usage on these chunks yet (#27440).
-  // suspended-step-usage.scenario.test.ts tracks that gap per engine.
+  // Engines differ on which of these chunks carry the suspended step's usage
+  // (suspended-step-usage.scenario.test.ts tracks it per engine). Only the plain loop
+  // adds the step's provider metadata, which its MODEL_GENERATION cost reads.
   if (type === 'tool-call-approval' || type === 'tool-call-suspended') {
     delete (normalized as Record<string, unknown>).usage;
+    delete (normalized as Record<string, unknown>).providerMetadata;
     return normalized;
   }
   if (type !== 'tool-error') return normalized;
@@ -607,14 +611,13 @@ function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModel
     .filter(part => part.type === 'text-delta')
     .map(part => String(part.delta ?? ''))
     .join('');
-  const toolCalls = tape
-    .filter(part => part.type === 'tool-call')
-    .map(part => ({
-      type: 'tool-call' as const,
-      toolCallId: String(part.toolCallId),
-      toolName: String(part.toolName),
-      input: String(part.input ?? '{}'),
-    }));
+  // A streamed `tool-call` part has the same shape as a `doGenerate` tool-call
+  // content part. Passing it through whole keeps fields such as
+  // `providerExecuted`, so `generate()` and `stream()` replay the same
+  // assistant message on the next request.
+  const toolCalls = tape.filter(part => part.type === 'tool-call') as Array<
+    Extract<LanguageModelV2Content, { type: 'tool-call' }>
+  >;
   const finish = tape.find(part => part.type === 'finish');
 
   return {
@@ -744,8 +747,14 @@ export function toolCallTape(
 // expectEngineParity — the main entry point for parity tests
 // ---------------------------------------------------------------------------
 
-export type ParityEngine = 'plain' | 'durable' | 'evented';
-export const PARITY_ENGINES: readonly ParityEngine[] = ['plain', 'durable', 'evented'];
+export type ParityEngine = 'plain' | 'durable' | 'evented' | 'native-default' | 'native-evented';
+export const PARITY_ENGINES: readonly ParityEngine[] = [
+  'plain',
+  'durable',
+  'evented',
+  'native-default',
+  'native-evented',
+];
 
 /**
  * Stream options every engine types identically. `onStepFinish` and
@@ -774,21 +783,6 @@ export interface EngineDifference {
   /** This engine's expected observation, derived from plain's. */
   expect?: (plain: EngineObservation) => EngineObservation;
 }
-
-export const FAILED_STEP_WARNINGS_DIFFERENCE: EngineDifference = {
-  reason: "COR-1390: wrapped engines omit the failed step's warnings from the step-finish payload.",
-  expect: plain => {
-    const expected = structuredClone(plain);
-    for (const turn of expected.turns) {
-      turn.chunkTypes.forEach((type, index) => {
-        if (type !== 'step-finish') return;
-        const payload = turn.chunkPayloads[index] as { stepResult?: { reason?: unknown; warnings?: unknown } };
-        if (payload.stepResult?.reason === 'error') delete payload.stepResult.warnings;
-      });
-    }
-    return expected;
-  },
-};
 
 export interface EngineHandle {
   engine: ParityEngine;
@@ -846,7 +840,7 @@ export interface EngineParityScenario {
    * to a foreground run, so the scenario would pass without ever dispatching
    * anything.
    */
-  host?: { backgroundTasks?: BackgroundTaskManagerConfig };
+  host?: { backgroundTasks?: BackgroundTaskManagerConfig; pubsub?: PubSub };
 }
 
 export interface EngineRunResult extends EngineObservation {
@@ -938,6 +932,23 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
 }
 
 /**
+ * Waits for the host's dispatched background tasks to settle before shutdown.
+ * A dispatch still in flight on the bus when the workers stop is left unacked
+ * for redelivery and never runs, so on a bus with real delivery latency the
+ * turn would end before its own background task executed.
+ */
+async function settleBackgroundTasks(host: Mastra, timeoutMs = 5_000): Promise<void> {
+  const manager = host.backgroundTaskManager;
+  if (!manager) return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const { total } = await manager.listTasks({ status: ['pending', 'running'] });
+    if (total === 0) return;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
+/**
  * Runs the scenario on one engine and returns what it observed, without
  * comparing it to anything. For scenarios whose assertion is per engine (e.g.
  * "every engine sends the merged settings") rather than engine-vs-plain.
@@ -957,11 +968,13 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
   // only resumable when the run's snapshot reached storage, and a deferred
   // background task is only dispatched when the host manages them and its
   // workers are running. Both need the host the engines actually share.
+  const executionEngine = engine === 'native-default' ? 'default' : engine === 'native-evented' ? 'evented' : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
     ...scenario.host,
+    ...(executionEngine ? { durable: { executionEngine } } : {}),
   });
   // Workers are a host concern, not an agent one: the run only sees a bound
   // manager once they are up.
@@ -1063,13 +1076,12 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
 
   let scenarioFailed = false;
   try {
-    if (wrapper && engine === 'evented') {
-      // Without atomic storage the evented agent silently runs on the default
-      // engine, which would make "evented == plain" a durable-vs-plain check.
+    if (engine === 'evented' || engine === 'native-evented') {
+      // Without atomic storage, both evented variants can fall back to the default engine.
       // Checked inside the try so a failed check still shuts the host down.
-      const engineType = (wrapper.getWorkflow() as { engineType?: string }).engineType;
+      const engineType = (wrapper ? wrapper.getWorkflow() : agent['getWorkflow']()).engineType;
       if (engineType !== 'evented') {
-        throw new Error(`expectEngineParity: evented agent resolved to the '${engineType}' engine, not 'evented'`);
+        throw new Error(`expectEngineParity: ${engine} agent resolved to the '${engineType}' engine, not 'evented'`);
       }
     }
     if (scenario.run) await scenario.run(handle);
@@ -1090,6 +1102,11 @@ export async function runOnEngine(engine: ParityEngine, scenario: EngineParitySc
     // Stop the host so many scenarios in one file don't pile up, including the
     // workers a background-task scenario started. Done last, after the runs'
     // own cleanups.
+    try {
+      await settleBackgroundTasks(host);
+    } catch (error) {
+      errors.push(error);
+    }
     try {
       await host.shutdown();
     } catch (error) {

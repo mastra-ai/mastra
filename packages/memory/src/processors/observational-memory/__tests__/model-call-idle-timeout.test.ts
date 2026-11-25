@@ -30,12 +30,23 @@ type Reply = { kind: 'hang' } | { kind: 'stream'; text: string; chunks: number; 
 
 function createTimedModel(replies: Reply[]) {
   const calls: { signal?: AbortSignal }[] = [];
+  const waiters: { count: number; resolve: () => void }[] = [];
+  /** Resolves once the provider has been asked `count` times, without moving the fake clock. */
+  const untilCalls = (count: number) =>
+    new Promise<void>(resolve => {
+      if (calls.length >= count) resolve();
+      else waiters.push({ count, resolve });
+    });
   const model = new MockLanguageModelV2({
     provider: 'mock',
     modelId: 'slow-model',
     doStream: async ({ abortSignal }: any) => {
       const reply = replies[Math.min(calls.length, replies.length - 1)]!;
       calls.push({ signal: abortSignal });
+      for (const waiter of waiters.filter(w => w.count <= calls.length)) {
+        waiters.splice(waiters.indexOf(waiter), 1);
+        waiter.resolve();
+      }
       if (reply.kind === 'hang') {
         return new Promise<never>((_, reject) => {
           abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
@@ -76,7 +87,7 @@ function createTimedModel(replies: Reply[]) {
       };
     },
   });
-  return { model, calls };
+  return { model, calls, untilCalls };
 }
 
 function createMessage(text: string, role: 'user' | 'assistant', threadId = 'thread-1'): MastraDBMessage {
@@ -135,12 +146,6 @@ async function advance(ms: number, step = 1_000) {
   }
 }
 
-/** Wait (real time) until the provider has been asked `count` times, without moving the fake clock. */
-async function untilCalls(calls: unknown[], count: number) {
-  for (let i = 0; i < 500 && calls.length < count; i++) await new Promise(resolve => setImmediate(resolve));
-  expect(calls).toHaveLength(count);
-}
-
 /** Settle-state probe, so a stalled call fails an assertion instead of hanging the test. */
 function track<T>(promise: Promise<T>) {
   const state: { status: 'pending' | 'resolved' | 'rejected'; value?: T; error?: unknown } = { status: 'pending' };
@@ -184,11 +189,11 @@ describe('OM model call idle timeout', () => {
 
   describe('a healthy reply that streams for longer than any whole-call cap completes', () => {
     it('observer', async () => {
-      const { model, calls } = createTimedModel([SLOW_REPLY(REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([SLOW_REPLY(REPLY)]);
       const runner = createObserverRunner(model);
 
       const state = track(runner.call(undefined, [createMessage('Add the pile plan.', 'user')]));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(11 * MINUTE);
 
       expect(state.status).toBe('resolved');
@@ -198,7 +203,7 @@ describe('OM model call idle timeout', () => {
     });
 
     it('multi-thread observer', async () => {
-      const { model, calls } = createTimedModel([SLOW_REPLY(MULTI_THREAD_REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([SLOW_REPLY(MULTI_THREAD_REPLY)]);
       const runner = createObserverRunner(model);
 
       const state = track(
@@ -206,7 +211,7 @@ describe('OM model call idle timeout', () => {
           'thread-1',
         ]),
       );
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(11 * MINUTE);
 
       expect(state.status).toBe('resolved');
@@ -215,11 +220,11 @@ describe('OM model call idle timeout', () => {
     });
 
     it('reflector', async () => {
-      const { model, calls } = createTimedModel([SLOW_REPLY(REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([SLOW_REPLY(REPLY)]);
       const runner = createReflectorRunner(model);
 
       const state = track(runner.call(OBSERVATIONS_TO_REFLECT));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(11 * MINUTE);
 
       expect(state.status).toBe('resolved');
@@ -230,13 +235,13 @@ describe('OM model call idle timeout', () => {
 
     it('structured extraction', async () => {
       const extraction = JSON.stringify({ mood: { mood: 'calm' } });
-      const { model, calls } = createTimedModel([FAST_REPLY(REPLY), SLOW_REPLY(extraction)]);
+      const { model, calls, untilCalls } = createTimedModel([FAST_REPLY(REPLY), SLOW_REPLY(extraction)]);
       const runner = createObserverRunner(model, [moodExtractor()]);
 
       const state = track(runner.call(undefined, [createMessage('Add the pile plan.', 'user')]));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(1_000);
-      await untilCalls(calls, 2);
+      await untilCalls(2);
       await advance(11 * MINUTE);
 
       expect(state.status).toBe('resolved');
@@ -249,11 +254,11 @@ describe('OM model call idle timeout', () => {
     const idle = () => RETRY_CONFIG.modelCallIdleTimeoutMs;
 
     it('observer', async () => {
-      const { model, calls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(REPLY)]);
       const runner = createObserverRunner(model);
 
       const state = track(runner.call(undefined, [createMessage('Add the pile plan.', 'user')]));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(idle() - 1_000);
       expect(state.status).toBe('pending');
       expect(calls).toHaveLength(1);
@@ -266,7 +271,7 @@ describe('OM model call idle timeout', () => {
     });
 
     it('multi-thread observer', async () => {
-      const { model, calls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(MULTI_THREAD_REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(MULTI_THREAD_REPLY)]);
       const runner = createObserverRunner(model);
 
       const state = track(
@@ -274,7 +279,7 @@ describe('OM model call idle timeout', () => {
           'thread-1',
         ]),
       );
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(idle() + 1_000);
 
       expect(state.status).toBe('resolved');
@@ -283,11 +288,11 @@ describe('OM model call idle timeout', () => {
     });
 
     it('reflector', async () => {
-      const { model, calls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(REPLY)]);
+      const { model, calls, untilCalls } = createTimedModel([{ kind: 'hang' }, FAST_REPLY(REPLY)]);
       const runner = createReflectorRunner(model);
 
       const state = track(runner.call(OBSERVATIONS_TO_REFLECT));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(idle() - 1_000);
       expect(state.status).toBe('pending');
 
@@ -300,13 +305,17 @@ describe('OM model call idle timeout', () => {
 
     it('structured extraction', async () => {
       const extraction = JSON.stringify({ mood: { mood: 'calm' } });
-      const { model, calls } = createTimedModel([FAST_REPLY(REPLY), { kind: 'hang' }, FAST_REPLY(extraction)]);
+      const { model, calls, untilCalls } = createTimedModel([
+        FAST_REPLY(REPLY),
+        { kind: 'hang' },
+        FAST_REPLY(extraction),
+      ]);
       const runner = createObserverRunner(model, [moodExtractor()]);
 
       const state = track(runner.call(undefined, [createMessage('Add the pile plan.', 'user')]));
-      await untilCalls(calls, 1);
+      await untilCalls(1);
       await advance(1_000);
-      await untilCalls(calls, 2);
+      await untilCalls(2);
       await advance(idle() + 1_000);
 
       expect(state.status).toBe('resolved');

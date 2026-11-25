@@ -1,6 +1,38 @@
+import { isUsageIncomplete } from '../../../../observability/usage';
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput } from '../../types';
+import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
+
+interface SpanClocks {
+  completionStartTime?: Date | string;
+  timeToFirstTokenMs?: number;
+}
+
+/**
+ * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
+ * resumed segment keeps them on the run registry beside its fresh spans; the
+ * originals keep them in the loop state. Undefined when none was captured yet,
+ * and for a carried segment this process holds no live spans of: the loop
+ * state's clocks belong to the run's first pair.
+ */
+export function carriedSpanClocks(
+  registry:
+    | Pick<RunRegistryEntry, 'resumeModelSpan' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
+    | undefined,
+  state: SpanClocks,
+  carried = false,
+): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
+  const clocks: SpanClocks = registry?.resumeModelSpan
+    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
+    : carried
+      ? {}
+      : state;
+  const attributes = {
+    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
+    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
+  };
+  return Object.keys(attributes).length ? attributes : undefined;
+}
 
 /**
  * Input for creating iteration state update
@@ -73,11 +105,45 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults,
+    // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
+    toolResults: executionOutput.toolResults?.map(
+      ({
+        stepSpanData: _stepSpanData,
+        tracingDelegationFailure: _tracingDelegationFailure,
+        response: _response,
+        ...result
+      }) => result,
+    ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
   };
+}
+
+/**
+ * An output processor can hold a tool result past its tool-call step and emit
+ * it when a later stream ends. The tool-call step recorded it as hidden; now
+ * that it was emitted, callbacks report it again.
+ */
+function withReleasedToolResults<T extends StepRecord>(steps: T[], released?: string[]): T[] {
+  if (!released?.length) return steps;
+  const ids = new Set(released);
+  return steps.map(step => {
+    if (!step.toolResults?.some(result => isHeldResult(result, ids))) return step;
+    return {
+      ...step,
+      toolResults: step.toolResults.map(result => {
+        if (!isHeldResult(result, ids)) return result;
+        const { resultHidden: _resultHidden, ...rest } = result as { resultHidden?: boolean };
+        return rest;
+      }),
+    };
+  });
+}
+
+function isHeldResult(result: unknown, ids: Set<string>): boolean {
+  const record = result as { toolCallId?: string; resultHidden?: boolean } | undefined;
+  return !!record?.resultHidden && !!record.toolCallId && ids.has(record.toolCallId);
 }
 
 /**
@@ -105,14 +171,17 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
  * };
  * ```
  */
-export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
+export function createBaseIterationStateUpdate(
+  input: IterationStateUpdateInput,
+): BaseIterationState & Required<Pick<BaseIterationState, 'accumulatedSteps'>> {
   const { currentState, executionOutput } = input;
+  const previousSteps = currentState.accumulatedSteps ?? [];
 
   // Legacy states with completed steps cannot prove whether their numeric totals
   // include every provider measurement. Preserve the zero identity only for a
   // pre-first-step state; otherwise migrate the accumulator to unknown.
   const currentUsage =
-    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+    currentState.usageAggregationVersion === 1 || previousSteps.length === 0
       ? currentState.accumulatedUsage
       : {
           ...currentState.accumulatedUsage,
@@ -144,24 +213,59 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
-      ? currentState.accumulatedSteps
-      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
+      ? previousSteps
+      : [
+          ...withReleasedToolResults(previousSteps, executionOutput.releasedToolResultIds),
+          buildStepRecord(executionOutput),
+        ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
+    // The suspension that ended this step reported the run total so far on its MODEL_GENERATION,
+    // unless the provider left part of that total unknown: then it reported nothing.
+    ...(currentState.generationReportedUsage && executionOutput.suspensionReportedUsage && !isUsageIncomplete(newUsage)
+      ? { generationReportedUsage: newUsage, generationReportedSteps: previousSteps.length + 1 }
+      : {
+          generationReportedUsage: currentState.generationReportedUsage,
+          generationReportedSteps: currentState.generationReportedSteps,
+        }),
     lastStepResult,
     deferredStepFinishChunk: executionOutput.deferredStepFinishChunk,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,
+    deadlineTimeout: executionOutput.deadlineTimeout ?? currentState.deadlineTimeout,
+    runAborted: executionOutput.runAborted ?? currentState.runAborted,
     // Preserve the two-phase stop flag set by the dowhile predicate's
     // onIterationComplete handler.  The predicate mutates state on the
     // *output* of the previous iteration; createBaseIterationStateUpdate
     // rebuilds the state for the next iteration, so we must carry the
     // flag forward explicitly.
     pendingFeedbackStop: currentState.pendingFeedbackStop,
+    // Set by the predicate after it publishes a step-finish, like pendingFeedbackStop.
+    responseMessagesCursor: currentState.responseMessagesCursor,
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
-    // First inference wins; later iterations never overwrite it.
-    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
+    // First inference wins; later iterations never overwrite it. Both values travel
+    // together, so state saved with only the clock never gains a later step's number.
+    ...(currentState.completionStartTime
+      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
+      : {
+          completionStartTime: executionOutput.completionStartTime,
+          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
+        }),
+    // The latest iteration's response, even when it has none, as in the main loop: a run
+    // whose final step is aborted or rejected mid-stream ends with no response on the span.
+    lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
+    // A run that started before this field keeps a blank for each earlier step, so a later cost is
+    // never taken for the whole run.
+    reportedCosts: signalPreempted
+      ? currentState.reportedCosts
+      : [
+          ...previousSteps.map((_, index) => currentState.reportedCosts?.[index] ?? null),
+          executionOutput.response?.reportedCost ?? null,
+        ],
+    // Both belong to the iteration whose lastStepResult the final step classifies.
+    tracingTermination: executionOutput.tracingTermination,
+    tracingDelegationFailure: executionOutput.tracingDelegationFailure,
   };
 }

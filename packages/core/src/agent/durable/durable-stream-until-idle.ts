@@ -15,7 +15,8 @@ import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import { runIdleLoop } from '../../loop/shared/stream-until-idle-helpers';
 import type { MessageListInput } from '../message-list';
 
-import type { DurableAgent, DurableAgentStreamOptions, DurableAgentStreamResult } from './durable-agent';
+import type { DurableAgent } from './durable-agent';
+import type { DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
 
 export interface DurableStreamUntilIdleDeps {
   activeStreams: Map<string, () => void>;
@@ -62,6 +63,8 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
         runId: first.runId,
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
+        traceId: first.traceId,
+        spanId: first.spanId,
         cleanup: ctx.forceClose,
         abort: async (reason?: unknown) => {
           // Fan the abort out to every inner DurableAgent.stream() that has been
@@ -128,7 +131,8 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
 
   return runIdleLoop<typeof agent, DurableAgentStreamResult<OUTPUT>, DurableAgentStreamResult<OUTPUT>>(
     agent,
-    streamOptions,
+    // The wrapper takes the resumed run's slot up front so it supersedes the run's parked wrapper.
+    { ...streamOptions, runId },
     deps,
     opts => (agent as any).resume(runId, resumeData, opts) as Promise<DurableAgentStreamResult<OUTPUT>>,
     opts => (agent as any).stream([], opts) as Promise<{ fullStream: ReadableStream<any> }>,
@@ -149,6 +153,8 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
         runId: first.runId,
         threadId: ctx.threadId,
         resourceId: ctx.resourceId,
+        traceId: first.traceId,
+        spanId: first.spanId,
         cleanup: ctx.forceClose,
         abort: async (reason?: unknown) => {
           await Promise.all(

@@ -1,18 +1,79 @@
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
+import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
-import type { Mastra } from '../../../mastra';
+import { isFrameworkCondition } from '../../framework-condition';
+import type { RunStorage } from '../../run-storage';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
-import { resolveCurrentState, withoutAuthToken } from '../helpers';
+import {
+  isNonRedeliverable,
+  markNonRedeliverable,
+  resolveCurrentState,
+  RunFailure,
+  withoutAuthToken,
+} from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
+import { currentStorageVersion } from './storage-scope';
 import type { ProcessorArgs } from '.';
 
 const FOREACH_QUEUED = '__mastra_foreach_queued__';
 
 export function isQueuedForeachIteration(value: unknown): value is { [FOREACH_QUEUED]: true; nestedRunId?: string } {
   return Boolean(value && typeof value === 'object' && FOREACH_QUEUED in value);
+}
+
+export async function evaluateLoopCondition(
+  args: Omit<ProcessorArgs, 'workflow'>,
+  step: Extract<StepFlowEntry, { type: 'loop' }>,
+  stepExecutor: StepExecutor,
+  stepResult: StepResult<any, any, any, any>,
+) {
+  const evaluation = stepExecutor.evaluateCondition({
+    workflowId: args.workflowId,
+    condition: step.condition,
+    runId: args.runId,
+    // The body's latest result only arrives as stepResult, so expose it to the condition's
+    // getStepResult(body) the way the default engine does (handlers/control-flow.ts).
+    stepResults: { ...args.stepResults, [getEntryId(step.step)]: stepResult },
+    state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
+    requestContext: new RequestContext(Object.entries(args.requestContext ?? {}) as any),
+    actor: args.actor,
+    inputData: stepResult.status === 'success' ? stepResult.output : undefined,
+    resumeData: args.resumeData,
+    abortController: new AbortController(),
+    retryCount: args.retryCount ?? 0,
+    iterationCount: (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1,
+  });
+  return evaluation.catch(error => {
+    if (isFrameworkCondition(step.condition)) throw error;
+    // Redelivery would run the user condition again, and a step body before it.
+    throw userCallbackError(error);
+  });
+}
+
+/** A user callback's error, marked so its delivery is not retried. */
+function userCallbackError(error: unknown): Error {
+  // A frozen error cannot take the marker, so wrap it.
+  const markable =
+    typeof error === 'object' && error !== null && !Object.isExtensible(error)
+      ? new Error(String((error as { message?: unknown }).message ?? error), { cause: error })
+      : error;
+  return markNonRedeliverable(getErrorFromUnknown(markable, { serializeStack: false }));
+}
+
+/** The loop step's result when its condition throws. */
+export function failedLoopStep(result: StepResult<any, any, any, any>, error: Error): StepResult<any, any, any, any> {
+  return {
+    status: 'failed',
+    error,
+    payload: result.payload,
+    startedAt: result.startedAt ?? Date.now(),
+    endedAt: Date.now(),
+    nonRetryable: true,
+    metadata: result.metadata,
+  };
 }
 
 export async function processWorkflowLoop(
@@ -35,40 +96,82 @@ export async function processWorkflowLoop(
   }: ProcessorArgs,
   {
     pubsub,
+    runStorage,
     stepExecutor,
     step,
     stepResult,
+    savedCondition,
+    replayedIterationCount,
   }: {
     pubsub: PubSub;
+    runStorage: RunStorage;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
+    savedCondition?: boolean;
+    /**
+     * The count already stored for this completion by an earlier delivery's `loopAgain`. A replay
+     * must report the same count instead of advancing it a second time.
+     */
+    replayedIterationCount?: number;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
   const currentState = resolveCurrentState({ stepResult, stepResults, state });
 
-  // Create a proper RequestContext from the plain object passed in ProcessorArgs
-  const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
-
-  // Get iteration count from step results metadata (same pattern as control-flow.ts)
   const prevIterationCount = stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0;
-  const iterationCount = prevIterationCount + 1;
+  const iterationCount = replayedIterationCount ?? prevIterationCount + 1;
+  const loopCondition =
+    savedCondition ??
+    (await evaluateLoopCondition(
+      {
+        workflowId,
+        runId,
+        executionPath,
+        stepResults,
+        activeStepsPath,
+        resumeSteps,
+        resumeData,
+        requestContext,
+        actor,
+        retryCount,
+        state: currentState,
+        prevResult,
+      },
+      step,
+      stepExecutor,
+      stepResult,
+    ));
 
-  const loopCondition = await stepExecutor.evaluateCondition({
-    workflowId,
-    condition: step.condition,
-    runId,
-    stepResults,
-    state: currentState,
-    requestContext: reqContext,
-    actor,
-    inputData: prevResult?.status === 'success' ? prevResult.output : undefined,
-    resumeData,
-    abortController: new AbortController(),
-    retryCount,
-    iterationCount,
-  });
+  const countedBody = {
+    ...stepResults[getEntryId(step.step)],
+    metadata: { ...stepResults[getEntryId(step.step)]?.metadata, ...stepResult.metadata, iterationCount },
+  };
+  const loopAgain = async () => {
+    // On storage v2 the body's dispatch loads step results from the stored run, not this message.
+    // (Before the body's first result is stored this is only the count, as on the v1 message.)
+    if (currentStorageVersion() === 2) {
+      await runStorage.writeStepResult({
+        stepId: getEntryId(step.step),
+        // Unguarded stores have no committed body result here; record the next iteration as
+        // started with its input, so a restart re-runs it instead of a body with no input.
+        result:
+          savedCondition === undefined
+            ? {
+                status: 'running',
+                payload: stepResult.status === 'success' ? stepResult.output : undefined,
+                startedAt: Date.now(),
+                metadata: countedBody.metadata,
+              }
+            : (countedBody as StepResult<any, any, any, any>),
+        requestContext: withoutAuthToken(requestContext),
+        // The body's state as of this iteration, next to its next input: a restart then resumes
+        // from the state its input belongs to instead of the previous iteration's.
+        state: currentState,
+      });
+    }
+    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+  };
 
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
   // resume metadata. Otherwise the body would keep receiving the same resumeData on every
@@ -86,19 +189,14 @@ export async function processWorkflowLoop(
     // condition is always evaluated with iterationCount === 1 (an infinite loop when
     // termination depends on the count). Mirrors the default engine, which stamps
     // metadata.iterationCount onto the step result. See handlers/step.ts.
-    stepResults: {
-      ...stepResults,
-      [getEntryId(step.step)]: {
-        ...stepResults[getEntryId(step.step)],
-        metadata: { ...stepResults[getEntryId(step.step)]?.metadata, iterationCount },
-      },
-    },
+    stepResults: { ...stepResults, [getEntryId(step.step)]: countedBody },
     prevResult: stepResult,
     resumeData: undefined,
     activeStepsPath,
     requestContext,
     actor,
-    retryCount,
+    // Each iteration gets the body's full retry budget, as on the default engine.
+    retryCount: 0,
     perStep,
     state: currentState,
     outputOptions,
@@ -124,18 +222,56 @@ export async function processWorkflowLoop(
     if (loopCondition) {
       await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
+      await loopAgain();
     }
+  } else if (loopCondition) {
+    await loopAgain();
   } else {
-    if (loopCondition) {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
-    } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
-    }
+    await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
   }
 }
 
 export async function processWorkflowForEach(
+  args: ProcessorArgs,
+  deps: {
+    pubsub: PubSub;
+    runStorage: RunStorage;
+    step: Extract<StepFlowEntry, { type: 'foreach' }>;
+  },
+) {
+  try {
+    return await advanceForEach(args, deps);
+  } catch (error) {
+    if (!isNonRedeliverable(error)) throw error;
+    // The concurrency function threw. Fail the run at the foreach step, so the failed step
+    // is recorded and streamed.
+    const stepId = getEntryId(deps.step.step);
+    const failed: StepResult<any, any, any, any> = {
+      status: 'failed',
+      error: error as Error,
+      payload: (args.prevResult as any)?.output,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+    const { workflow: _workflow, ...run } = args;
+    const failRun = {
+      ...run,
+      executionPath: [args.executionPath[0]!],
+      stepResults: { ...args.stepResults, [stepId]: failed },
+      prevResult: failed,
+      state: resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
+    };
+    try {
+      await deps.pubsub.publish('workflows', { type: 'workflow.fail', runId: args.runId, data: failRun });
+    } catch {
+      // A plain throw here would be redelivered and call the concurrency function again.
+      throw markNonRedeliverable(new RunFailure(error as Error, failRun));
+    }
+  }
+}
+
+async function advanceForEach(
   {
     workflowId,
     prevResult,
@@ -157,11 +293,11 @@ export async function processWorkflowForEach(
   }: ProcessorArgs,
   {
     pubsub,
-    mastra,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
-    mastra: Mastra;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
@@ -170,6 +306,16 @@ export async function processWorkflowForEach(
 
   // Get current state from stepResults or passed state
   const currentState = resolveCurrentState({ stepResults, state });
+  const resolveConcurrency = () => {
+    try {
+      return resolveForeachConcurrency(step.opts, {
+        inputData: (prevResult as any)?.output,
+        getInitData: () => (stepResults as any)?.input,
+      });
+    } catch (error) {
+      throw userCallbackError(error);
+    }
+  };
   const currentResult: Extract<StepResult<any, any, any, any>, { status: 'success' }> = stepResults[
     getEntryId(step.step)
   ] as any;
@@ -201,12 +347,22 @@ export async function processWorkflowForEach(
       suspendMeta.resumeLabels = collectedResumeLabels;
     }
 
+    // Concurrent per-item writes can drop each other's entries from the stored foreachOutput, so
+    // each suspended item's record comes from the merged output, where every item has its own slot.
+    const foreachOutput = [...(currentResult?.suspendPayload?.__workflow_meta?.foreachOutput ?? [])];
+    currentResult.output.forEach((iterResult: any, i: number) => {
+      if (iterResult?.status !== 'suspended') return;
+      const { payload: _payload, ...iterationRecord } = iterResult;
+      foreachOutput[i] = iterationRecord;
+    });
+
     const aggregatedSuspendPayload = {
       ...firstSuspendedIterationPayload,
       __workflow_meta: {
         ...currentResult?.suspendPayload?.__workflow_meta,
         ...(firstSuspendedIterationPayload?.__workflow_meta as Record<string, unknown> | undefined),
         ...suspendMeta,
+        foreachOutput,
       },
     };
 
@@ -341,10 +497,7 @@ export async function processWorkflowForEach(
 
     if (suspendedIndices.length > 0) {
       // Limit resumption to concurrency value (like initial execution)
-      const concurrency = resolveForeachConcurrency(step.opts, {
-        inputData: (prevResult as any)?.output,
-        getInitData: () => (stepResults as any)?.input,
-      });
+      const concurrency = resolveConcurrency();
       const indicesToResume = suspendedIndices.slice(0, concurrency);
 
       // Reset suspended iterations to "pending" state before re-running them.
@@ -358,15 +511,12 @@ export async function processWorkflowForEach(
       // PendingMarker ({ __mastra_pending__: true }) tells the storage layer
       // "force this to null, don't preserve the existing suspended result."
       // See inmemory.ts updateWorkflowResults for the merge logic.
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const updatedOutput = [...currentResult.output];
       for (const suspIdx of indicesToResume) {
         updatedOutput[suspIdx] = createPendingMarker() as any;
       }
 
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result: {
           ...currentResult,
@@ -418,8 +568,6 @@ export async function processWorkflowForEach(
       return;
     }
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const stepId = getEntryId(step.step);
   const preservedForeachOutput = currentResult?.suspendPayload?.__workflow_meta?.foreachOutput;
 
@@ -448,9 +596,7 @@ export async function processWorkflowForEach(
       },
     };
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId,
       result: currentResult,
       requestContext: withoutAuthToken(requestContext),
@@ -477,9 +623,7 @@ export async function processWorkflowForEach(
       return { [FOREACH_QUEUED]: true, ...(nestedRunId ? { nestedRunId } : {}) };
     });
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId,
       result: currentResult,
       requestContext: withoutAuthToken(requestContext),
@@ -491,10 +635,7 @@ export async function processWorkflowForEach(
     ? currentResult.output.flatMap((result: any, index: number) => (isQueuedForeachIteration(result) ? [index] : []))
     : [];
   if (queuedIndices.length > 0) {
-    const concurrency = resolveForeachConcurrency(step.opts, {
-      inputData: (prevResult as any)?.output,
-      getInitData: () => (stepResults as any)?.input,
-    });
+    const concurrency = resolveConcurrency();
     const runningCount = currentResult.output.filter((result: any) => result === null).length;
     const suspendedIndices = currentResult.output.flatMap((result: any, index: number) =>
       result?.status === 'suspended' ? [index] : [],
@@ -510,9 +651,7 @@ export async function processWorkflowForEach(
       for (const index of indicesToRun) {
         updatedOutput[index] = createPendingMarker() as any;
       }
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
         requestContext: withoutAuthToken(requestContext),
@@ -563,13 +702,7 @@ export async function processWorkflowForEach(
     return;
   }
 
-  const concurrency =
-    idx === 0
-      ? undefined
-      : resolveForeachConcurrency(step.opts, {
-          inputData: (prevResult as any)?.output,
-          getInitData: () => (stepResults as any)?.input,
-        });
+  const concurrency = idx === 0 ? undefined : resolveConcurrency();
   const runningIterations = currentResult?.output?.filter((result: any) => result === null).length ?? 0;
   const suspendedIndices =
     currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
@@ -602,9 +735,7 @@ export async function processWorkflowForEach(
         endedAt: Date.now(),
         payload: (prevResult as any)?.output,
       };
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result,
         requestContext: withoutAuthToken(requestContext),
@@ -619,14 +750,12 @@ export async function processWorkflowForEach(
         startedAt: currentResult.startedAt ?? Date.now(),
         endedAt: Date.now(),
       };
-      const merged = await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      const merged = await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result,
         requestContext: withoutAuthToken(requestContext),
       });
-      stepResults[getEntryId(step.step)] = (merged?.[getEntryId(step.step)] ?? result) as StepResult<
+      stepResults[getEntryId(step.step)] = (merged?.results[getEntryId(step.step)] ?? result) as StepResult<
         any,
         any,
         any,
@@ -666,16 +795,10 @@ export async function processWorkflowForEach(
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
-    const resolvedConcurrency = resolveForeachConcurrency(step.opts, {
-      inputData: (prevResult as any)?.output,
-      getInitData: () => (stepResults as any)?.input,
-    });
-    const concurrency = Math.min(resolvedConcurrency, targetLen);
+    const concurrency = Math.min(resolveConcurrency(), targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId: getEntryId(step.step),
       result: {
         // Iterations are still running; the completion branch above writes success.
@@ -730,9 +853,7 @@ export async function processWorkflowForEach(
   }
 
   (currentResult as any).output.push(null);
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.mergeStepResult({
     stepId: getEntryId(step.step),
     result: {
       status: 'running',

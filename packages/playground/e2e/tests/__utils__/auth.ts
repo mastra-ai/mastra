@@ -303,13 +303,6 @@ export async function setupUnauthenticated(page: Page): Promise<void> {
 }
 
 /**
- * Set up mock auth for user with no permissions (_default role).
- */
-export async function setupNoPermissions(page: Page): Promise<void> {
-  await setupMockAuth(page, { role: '_default' });
-}
-
-/**
  * Clear mock auth routes and headers (useful for testing login/logout flows).
  */
 export async function clearMockAuth(page: Page): Promise<void> {

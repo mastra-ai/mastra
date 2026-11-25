@@ -63,30 +63,58 @@ interface ProjectConnectionPayload {
   }>;
 }
 
-/** List the org's Factory projects with their linked repositories. */
+interface ProjectListRepositoryPayload {
+  projectRepositoryId: string;
+  slug: string | null;
+  defaultBranch: string | null;
+  branch: string | null;
+}
+
+interface ProjectListPayload {
+  projects: Array<{ id: string; name: string; repositories?: ProjectListRepositoryPayload[] }>;
+}
+
+function toFactoryRepository(projectName: string, repository: ProjectListRepositoryPayload): FactoryRepository {
+  return {
+    projectRepositoryId: repository.projectRepositoryId,
+    slug: repository.slug ?? projectName,
+    branch: repository.branch ?? repository.defaultBranch ?? undefined,
+  };
+}
+
+/**
+ * List the org's Factory projects with their linked repositories. Current servers return the repositories with the
+ * project list; an older server, which does not, is asked once per project.
+ */
 export async function listFactoryProjects(address: FactoryAddress): Promise<FactoryProject[]> {
-  const { projects } = await factoryFetch<{ projects: Array<{ id: string; name: string }> }>(
-    address,
-    '/web/factory/projects',
-  );
+  const { projects } = await factoryFetch<ProjectListPayload>(address, '/web/factory/projects');
   return Promise.all(
     projects.map(async project => {
-      const { connections } = await factoryFetch<{ connections: ProjectConnectionPayload[] }>(
-        address,
-        `/web/factory/projects/${encodeURIComponent(project.id)}/source-control-connections`,
-      );
+      const repositories = project.repositories ?? (await listProjectRepositories(address, project.id));
       return {
         id: project.id,
         name: project.name,
-        repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => ({
-            projectRepositoryId: link.id,
-            slug: link.repository?.slug ?? project.name,
-            branch: link.branch ?? link.repository?.defaultBranch,
-          })),
-        ),
+        repositories: repositories.map(repository => toFactoryRepository(project.name, repository)),
       };
     }),
+  );
+}
+
+async function listProjectRepositories(
+  address: FactoryAddress,
+  projectId: string,
+): Promise<ProjectListRepositoryPayload[]> {
+  const { connections } = await factoryFetch<{ connections: ProjectConnectionPayload[] }>(
+    address,
+    `/web/factory/projects/${encodeURIComponent(projectId)}/source-control-connections`,
+  );
+  return connections.flatMap(connection =>
+    connection.repositories.map(link => ({
+      projectRepositoryId: link.id,
+      slug: link.repository?.slug ?? null,
+      defaultBranch: link.repository?.defaultBranch ?? null,
+      branch: link.branch,
+    })),
   );
 }
 

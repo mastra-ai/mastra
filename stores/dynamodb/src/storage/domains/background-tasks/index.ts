@@ -45,6 +45,8 @@ function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
     completedAtIso: task.completedAt?.toISOString(),
     ownerId: task.ownerId ?? undefined,
     leaseExpiresAtIso: task.leaseExpiresAt?.toISOString(),
+    expiresAtIso: task.expiresAt?.toISOString(),
+    metadata: serializeJson(task.metadata),
   };
 }
 
@@ -83,10 +85,13 @@ function fromElectroRecord(data: Record<string, any>): BackgroundTask {
     completedAt: asDate(data.completedAtIso),
     ownerId: data.ownerId != null && data.ownerId !== '' ? String(data.ownerId) : undefined,
     leaseExpiresAt: asDate(data.leaseExpiresAtIso),
+    expiresAt: asDate(data.expiresAtIso),
+    metadata: parseJson(data.metadata),
   };
 }
 
 export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
+  override readonly supportsTaskExpiry = true;
   private service: Service<Record<string, any>>;
 
   constructor(config: DynamoDBDomainConfig) {
@@ -188,6 +193,20 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
           setFields.leaseExpiresAtIso = update.leaseExpiresAt.toISOString();
         }
       }
+      if ('expiresAt' in update) {
+        if (update.expiresAt === undefined || update.expiresAt === null) {
+          removeFields.push('expiresAtIso');
+        } else {
+          setFields.expiresAtIso = update.expiresAt.toISOString();
+        }
+      }
+      if ('metadata' in update) {
+        if (update.metadata === undefined || update.metadata === null) {
+          removeFields.push('metadata');
+        } else {
+          setFields.metadata = serializeJson(update.metadata);
+        }
+      }
 
       if (Object.keys(setFields).length === 0 && removeFields.length === 0) return false;
 
@@ -213,12 +232,21 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
             : eq(leaseExpiresAtIso, expectedLeaseExpiresAt.toISOString()),
         );
       }
+      if (options?.expectedSuspendedAt !== undefined) {
+        const expectedSuspendedAt = options.expectedSuspendedAt;
+        op = op.where(({ suspendedAtIso }: any, { eq, notExists }: any) =>
+          expectedSuspendedAt === null
+            ? notExists(suspendedAtIso)
+            : eq(suspendedAtIso, expectedSuspendedAt.toISOString()),
+        );
+      }
       await op.go();
     } catch (error: any) {
       const hadExpectedCondition =
         options?.expectedStatus !== undefined ||
         options?.expectedOwnerId !== undefined ||
-        options?.expectedLeaseExpiresAt !== undefined;
+        options?.expectedLeaseExpiresAt !== undefined ||
+        options?.expectedSuspendedAt !== undefined;
       if (hadExpectedCondition && error?.cause?.name === 'ConditionalCheckFailedException') return false;
       throw new MastraError(
         {
@@ -289,6 +317,9 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
       if (filter.toolName) tasks = tasks.filter(t => t.toolName === filter.toolName);
       if (filter.toolCallId) tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
       if (filter.runId) tasks = tasks.filter(t => t.runId === filter.runId);
+      if (filter.hasExpiresAt !== undefined) {
+        tasks = tasks.filter(t => (t.expiresAt != null) === filter.hasExpiresAt);
+      }
 
       const dateCol = filter.dateFilterBy ?? 'createdAt';
       if (filter.fromDate) {

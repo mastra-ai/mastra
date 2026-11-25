@@ -2,6 +2,7 @@ import { createAzure } from '@ai-sdk/azure';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
+import { prepareAzureStrictToolSchemas } from '../aisdk/v5/model.js';
 import { createOpenAIWebSocketFetch } from '../openai-websocket-fetch.js';
 import type { OpenAITransport, ResponsesWebSocketOptions } from '../provider-options.js';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT, MastraModelGateway } from './base.js';
@@ -142,22 +143,28 @@ function withAzureResponsesInputCompatibility(model: LanguageModelV2): LanguageM
   return new Proxy(model, {
     get(target, property, receiver) {
       // Audit this wrapper when AI SDK adds new prompt-taking LanguageModelV2 methods.
+      // Tool schemas are prepared here too because `azure.strictJsonSchema` only becomes the
+      // `openai` flag the model reads after mirroring.
       if (property === 'doGenerate') {
         return (options: AzureLanguageModelCallOptions) =>
-          target.doGenerate({
-            ...options,
-            providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
-            prompt: mirrorAzureResponseProviderOptions(options.prompt),
-          });
+          target.doGenerate(
+            prepareAzureStrictToolSchemas({
+              ...options,
+              providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
+              prompt: mirrorAzureResponseProviderOptions(options.prompt),
+            }),
+          );
       }
 
       if (property === 'doStream') {
         return (options: Parameters<LanguageModelV2['doStream']>[0]) =>
-          target.doStream({
-            ...options,
-            providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
-            prompt: mirrorAzureResponseProviderOptions(options.prompt),
-          });
+          target.doStream(
+            prepareAzureStrictToolSchemas({
+              ...options,
+              providerOptions: mirrorAzureProviderOptionsForOpenAI(options.providerOptions),
+              prompt: mirrorAzureResponseProviderOptions(options.prompt),
+            }),
+          );
       }
 
       return Reflect.get(target, property, receiver);

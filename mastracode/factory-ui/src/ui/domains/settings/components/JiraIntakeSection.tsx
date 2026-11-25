@@ -1,0 +1,98 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useJiraProjectsQuery } from '../../../../hooks/useJiraData';
+import { isJiraAuthError } from '../../factory/services/jira';
+import type { JiraStatus } from '../../factory/services/jira';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
+import type { IntakeSectionProps } from './IntakeProviderCard';
+import { groupJiraProjectsBySite } from './intakeSourceGroups';
+import { JiraRoutedSourcePicker } from './jira/JiraRoutedSourcePicker';
+import {
+  AddPlatformAccountButton,
+  PlatformConnectButton,
+  PlatformConnectionActions,
+} from './PlatformProviderConnections';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+
+export function JiraIntakeSection({
+  config,
+  listed,
+  statusQuery,
+}: IntakeSectionProps & { statusQuery: UseQueryResult<JiraStatus> }) {
+  const selection = useIntakeSelection('jira');
+  const factories = useFactoriesQuery().data ?? [];
+  const status = statusQuery.data;
+  const configured = Boolean(status?.enabled && status.configured);
+  const projectsQuery = useJiraProjectsQuery(configured);
+  const projects = projectsQuery.data ?? [];
+  const authError = isJiraAuthError(projectsQuery.error);
+  const reauthRequired = status?.connections?.some(connection => connection.status === 'needs_reauth');
+  const platformManaged = status?.mode === 'platform' || status?.connections !== undefined;
+  const sites = status?.sites ?? (status?.site ? [status.site] : []);
+  const account = sites.join(', ') || (configured && platformManaged ? 'Connected through Mastra Platform' : undefined);
+  const description = connectionDescription();
+  function connectionDescription() {
+    if (statusQuery.isError) return "Couldn't load Jira status.";
+    if (reauthRequired) return 'A connected Jira account needs to be reconnected.';
+    if (authError)
+      return platformManaged
+        ? 'Jira rejected a connected account. Reauthorize it from Manage to resume syncing.'
+        : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.';
+    if (!configured)
+      return platformManaged
+        ? 'Connect a Jira account to sync issues from this organization.'
+        : 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.';
+    return undefined;
+  }
+  return (
+    <IntakeProviderCard
+      name="Jira"
+      icon={<SettingsIntegrationIcon provider="jira" />}
+      account={account}
+      listed={listed}
+      connection={
+        platformManaged &&
+        (listed ? (
+          <>
+            {(status?.connections?.length ?? 0) > 0 && <AddPlatformAccountButton provider="jira" />}
+            <PlatformConnectionActions provider="jira" connections={status?.connections ?? []} />
+          </>
+        ) : (
+          <PlatformConnectButton provider="jira" />
+        ))
+      }
+      description={description}
+      action={
+        statusQuery.isError && (
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
+            Retry
+          </Button>
+        )
+      }
+    >
+      {configured && !authError && (
+        <JiraRoutedSourcePicker
+          factories={factories}
+          label="Jira projects"
+          addLabel="Add project"
+          itemIcon={<SettingsIntegrationIcon provider="jira" />}
+          groups={groupJiraProjectsBySite(projects)}
+          selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
+          saving={selection.saving}
+          loading={projectsQuery.isPending}
+          error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
+          onRetry={() => void projectsQuery.refetch()}
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
+        />
+      )}
+    </IntakeProviderCard>
+  );
+}

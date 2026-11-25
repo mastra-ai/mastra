@@ -34,6 +34,8 @@ Or import the tools directly. `taskWriteTool`, `taskUpdateTool`, `taskCompleteTo
 
 ```typescript title="src/mastra/agents/index.ts"
 import { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool } from '@mastra/core/tools'
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
 
 const agent = new Agent({
   id: 'coder',

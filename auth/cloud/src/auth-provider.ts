@@ -12,6 +12,7 @@ import type {
   ISSOProvider,
   ISessionProvider,
   MastraAuthRequest,
+  MastraUser,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
@@ -19,7 +20,7 @@ import type {
 import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
 import type { MastraAuthProviderOptions } from '@internal/auth/provider';
-import { MastraAuthProvider } from '@internal/auth/provider';
+import { MastraAuthProvider, normalizeMastraUser } from '@internal/auth/provider';
 
 import { MastraCloudAuth } from './client';
 import { parseSessionCookie } from './session/cookie';
@@ -150,6 +151,18 @@ export class MastraCloudAuthProvider
    */
   authorizeUser(user: CloudUser): boolean {
     return !!user?.id;
+  }
+
+  /**
+   * Normalize the Cloud user; the default normalization cannot see the
+   * `avatar` field (it expects `avatarUrl`/`picture`).
+   */
+  override toMastraUser(user: CloudUser): MastraUser {
+    const normalized = normalizeMastraUser(user);
+    if (!normalized.avatarUrl && user.avatar) {
+      normalized.avatarUrl = user.avatar;
+    }
+    return normalized;
   }
 
   // ============================================================================

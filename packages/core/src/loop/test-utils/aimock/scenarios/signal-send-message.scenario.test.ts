@@ -1,5 +1,6 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
+import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { PubSub } from '../../../../events/pubsub';
 import { EventCallback } from '../../../../events/types';
@@ -90,6 +91,46 @@ async function readNextRun(iterator: AsyncIterator<any>) {
 
 describeForAllEngines('AIMock scenario: signal sendMessage integration', engine => {
   const getMock = useLoopScenarioAimock();
+
+  it.each([
+    { name: 'valid JSON', content: '{"summary":"hello"}', valid: true },
+    { name: 'invalid plain text', content: 'This is plain text, not JSON.', valid: false },
+  ])('delivers structured $name before the idle-wake terminal boundary', async ({ content, valid }) => {
+    const { agent } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Initial prompt',
+      pubsub: new InMemoryPubSub(),
+      errorProcessors: [],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content });
+      },
+    });
+    const target = { resourceId: 'structured-resource', threadId: 'structured-thread' };
+    const subscription = await agent.subscribeToThread(target);
+    try {
+      const received = readNextRun(subscription.stream[Symbol.asyncIterator]());
+      const result = await agent.sendMessage('hi', {
+        ...target,
+        ifIdle: {
+          streamOptions: {
+            structuredOutput: { schema: z.object({ summary: z.string() }), jsonPromptInjection: true },
+          },
+        },
+      });
+      await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
+      const { parts } = await received;
+      if (valid) {
+        expect(parts).toContainEqual(expect.objectContaining({ type: 'object-result', object: { summary: 'hello' } }));
+        expect(parts.at(-1)?.type).toBe('finish');
+      } else {
+        expect(parts.at(-1)?.type).toBe('error');
+        expect(parts.at(-1)?.payload.error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+      }
+    } finally {
+      await subscription.unsubscribe();
+    }
+  });
 
   it('subscribes to thread and receives sendMessage response', async () => {
     const pubsub = new InMemoryPubSub();

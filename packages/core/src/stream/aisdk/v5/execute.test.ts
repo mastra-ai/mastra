@@ -2,8 +2,9 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
+import { hasFreeFormObject } from '../../../llm/model/free-form-object';
 import { ModelRouterLanguageModel } from '../../../llm/model/router';
-import { execute, hasFreeFormObject, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
+import { execute, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
@@ -733,6 +734,58 @@ describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
   it('decides model-router models by provider id', () => {
     expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('anthropic/claude-sonnet-4-5'))).toBe(false);
     expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('openai/gpt-4o'))).toBe(true);
+  });
+
+  it('prepares the schema for Azure OpenAI models opted into strict mode without changing the flag (#28593)', async () => {
+    const { model, captured } = makeCapturingModel('azure.responses');
+    await run(model, { providerOptions: { openai: { strictJsonSchema: true } } });
+    expectPreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toEqual({ openai: { strictJsonSchema: true } });
+  });
+
+  it('leaves the Azure OpenAI default request untouched', async () => {
+    const { model, captured } = makeCapturingModel('azure.responses');
+    await run(model);
+    expectUnpreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions).toBeUndefined();
+  });
+
+  // Preparing would turn the record into an object with no keys, so the model could only return {}.
+  it('does not empty record fields for Azure OpenAI models in strict mode', async () => {
+    const { model, captured } = makeCapturingModel('azure.responses');
+    await run(model, {
+      providerOptions: { openai: { strictJsonSchema: true } },
+      schema: z.object({ labels: z.record(z.string(), z.string()) }),
+    });
+    expect(captured.options.responseFormat.schema.properties.labels.additionalProperties).toEqual({ type: 'string' });
+  });
+
+  // Mirrors where @ai-sdk/azure reads `strictJsonSchema` and its default, so the schema is prepared
+  // exactly when the request goes out strict (#28593).
+  it.each([
+    // AzureOpenAIGateway router models resolve to AI SDK 5 and mirror `azure` over `openai`.
+    ['azure-openai', 'v2', undefined, false],
+    ['azure-openai', 'v2', { azure: { strictJsonSchema: true } }, true],
+    ['azure-openai', 'v2', { openai: { strictJsonSchema: true } }, true],
+    ['azure-openai', 'v2', { azure: { strictJsonSchema: false }, openai: { strictJsonSchema: true } }, false],
+    // AI SDK 5 models read `openai` only.
+    ['azure.responses', 'v2', undefined, false],
+    ['azure.responses', 'v2', { openai: { strictJsonSchema: true } }, true],
+    ['azure.responses', 'v2', { azure: { strictJsonSchema: true } }, false],
+    ['azure.chat', 'v2', { openai: { strictJsonSchema: true } }, true],
+    // AI SDK 6+ Responses reads `azure`, falling back to `openai` only when `azure` is absent.
+    ['azure.responses', 'v3', undefined, true],
+    ['azure.responses', 'v3', { azure: { strictJsonSchema: false } }, false],
+    ['azure.responses', 'v3', { openai: { strictJsonSchema: false } }, false],
+    ['azure.responses', 'v4', { azure: { parallelToolCalls: false }, openai: { strictJsonSchema: false } }, true],
+    // AI SDK 6+ Chat reads `openai` only.
+    ['azure.chat', 'v3', undefined, true],
+    ['azure.chat', 'v3', { azure: { strictJsonSchema: false } }, true],
+    ['azure.chat', 'v3', { openai: { strictJsonSchema: false } }, false],
+    // Non-OpenAI models served by @ai-sdk/azure keep their own handling.
+    ['azure.deepseek', 'v3', undefined, false],
+  ])('%s (%s) with %j sends strict json_schema: %s', (provider, specificationVersion, providerOptions, expected) => {
+    expect(usesOpenAIStrictJsonSchema({ provider, specificationVersion }, providerOptions as any)).toBe(expected);
   });
 });
 

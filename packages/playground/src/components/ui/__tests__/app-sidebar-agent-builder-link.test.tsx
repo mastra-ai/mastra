@@ -249,13 +249,4 @@ describe('AppSidebar — RBAC link gating while permission data loads', () => {
     const agentsLink = await screen.findByRole('link', { name: /agents/i });
     expect(agentsLink.getAttribute('href')).toBe('/agents');
   });
-
-  it('shows permission-gated links the user is allowed once permissions are loaded', async () => {
-    server.use(authHandler(wildcardCapabilities), builderHandler(builderDisabled), systemPackagesHandler());
-
-    renderSidebar();
-
-    const agentsLink = await screen.findByRole('link', { name: /agents/i });
-    expect(agentsLink.getAttribute('href')).toBe('/agents');
-  });
 });

@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsItem } from '@mastra/playground-ui/new/settings';
 import type { SchemaField } from '../../utils/get-schema-fields';
 import { RequiredMark } from '../required-mark';
 import { ToolSchemaFieldDescription } from './tool-schema-field-description';
@@ -13,18 +13,25 @@ export function ToolSchemaFieldRow({ field }: ToolSchemaFieldRowProps) {
   const hasDescription = Boolean(field.description) || field.defaultValue !== undefined;
 
   return (
-    <SettingsRow
-      label={
+    <SettingsItem
+      title={
         <Txt as="span" variant="body-sm" font="mono" tone="ink">
           {field.name}
           {field.required && <RequiredMark />}
         </Txt>
       }
-      description={hasDescription && <ToolSchemaFieldDescription field={field} />}
+      // The description can run to a second line (the default value), so it wraps instead of truncating.
+      description={
+        hasDescription ? (
+          <span className="whitespace-normal">
+            <ToolSchemaFieldDescription field={field} />
+          </span>
+        ) : undefined
+      }
     >
       <Txt as="span" variant="caption" font="mono" tone="muted">
         {field.type}
       </Txt>
-    </SettingsRow>
+    </SettingsItem>
   );
 }

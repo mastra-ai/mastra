@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { ensureFactorySourceSession } from '../../../session/factory-session.js';
 import { workItemBranch } from '../../../work-item-branch.js';
@@ -18,10 +23,7 @@ const repositoryInput = {
 };
 
 const projectRepositoryInput = {
-  createdByUserId: 'user-1',
   branch: null,
-  sandboxProvider: 'local',
-  sandboxWorkdir: '/workspace/mastra',
 };
 
 describe('SourceControlStorage', () => {
@@ -221,7 +223,6 @@ describe('SourceControlStorage', () => {
       repositoryId: repository.id,
       ...projectRepositoryInput,
       branch: 'develop',
-      sandboxProvider: 'railway',
     });
 
     expect(firstLink).toMatchObject({
@@ -238,7 +239,7 @@ describe('SourceControlStorage', () => {
     expect(await github.projectRepositories.get({ orgId: 'org-1', id: firstLink.id })).toMatchObject({
       teardownCommand: 'docker compose down --remove-orphans',
     });
-    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop', sandboxProvider: 'railway' });
+    expect(secondLink).toMatchObject({ repositoryId: repository.id, branch: 'develop' });
     expect(firstLink.id).not.toBe(secondLink.id);
   });
 
@@ -317,6 +318,67 @@ describe('SourceControlStorage', () => {
       }),
     ).rejects.toThrow(/does not belong to the connection installation/);
   });
+
+  it.each<[string, () => SourceControlStorageHandle]>([
+    ['LibSQL', () => github],
+    ['the in-memory handle', () => new SourceControlStorageInMemory('github')],
+  ])(
+    'lists the requested Factories with their linked repositories on %s, without uninstalled apps or other orgs',
+    async (_backend, handleFor) => {
+      const handle = handleFor();
+      const installation = await createInstallation(handle);
+      const uninstalled = await createInstallation(handle, { externalId: 'uninstalled' });
+      const [platform, docs, unrequested] = [
+        await createProject({ name: 'Platform' }),
+        await createProject({ name: 'Docs' }),
+        await createProject({ name: 'Unrequested' }),
+      ];
+      const connect = (factoryProjectId: string, installationId = installation.id) =>
+        handle.connections.create({ orgId: 'org-1', factoryProjectId, installationId, createdByUserId: 'user-1' });
+      const link = async (connectionId: string, slug: string) => {
+        const repository = await handle.repositories.upsert({
+          orgId: 'org-1',
+          input: { ...repositoryInput, installationId: installation.id, externalId: slug, slug },
+        });
+        return handle.projectRepositories.link({
+          orgId: 'org-1',
+          connectionId,
+          repositoryId: repository.id,
+          ...projectRepositoryInput,
+        });
+      };
+      const platformConnection = await connect(platform.id);
+      await link(platformConnection.id, 'acme/api');
+      await link(platformConnection.id, 'acme/web');
+      await link((await connect(docs.id)).id, 'acme/docs');
+      await link((await connect(unrequested.id)).id, 'acme/unrequested');
+      await connect(platform.id, uninstalled.id);
+      await handle.installations.delete({ orgId: 'org-1', id: uninstalled.id });
+
+      const listed = await handle.connections.listWithRepositories({
+        orgId: 'org-1',
+        factoryProjectIds: [platform.id, docs.id, platform.id],
+      });
+      expect(
+        Object.fromEntries(
+          listed.map(connection => [
+            connection.factoryProjectId,
+            {
+              installation: connection.installation.externalId,
+              slugs: connection.repositories.map(({ repository }) => repository?.slug).sort(),
+            },
+          ]),
+        ),
+      ).toEqual({
+        [platform.id]: { installation: installation.externalId, slugs: ['acme/api', 'acme/web'] },
+        [docs.id]: { installation: installation.externalId, slugs: ['acme/docs'] },
+      });
+      expect(listed).toHaveLength(2);
+      expect(
+        await handle.connections.listWithRepositories({ orgId: 'org-2', factoryProjectIds: [platform.id] }),
+      ).toEqual([]);
+    },
+  );
 
   it('round-trips nullable session titles', async () => {
     const project = await createProject();
@@ -707,6 +769,69 @@ describe('SourceControlStorage', () => {
     await github.sessions.markMaterialized({ id: session.id });
     const again = await github.sessions.getBySessionId(session.sessionId);
     expect(again?.materializedAt?.getTime()).toBe(marked!.materializedAt!.getTime());
+  });
+
+  it('stamps materialized_at once when two replicas materialize the same session together', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'factory-source-control-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    const replica = async () => {
+      const storage = new LibSQLFactoryStorage({
+        id: `source-control-${randomUUID()}`,
+        url: `file:${join(dir, 'f.db')}`,
+      });
+      const replicaProjects = storage.registerDomain(new FactoryProjectsStorage());
+      const sourceControl = storage.registerDomain(new SourceControlStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      const announced: string[] = [];
+      sourceControl.projectSessions.onAnnounced(scope => announced.push(scope.factoryProjectId));
+      return { projects: replicaProjects, github: sourceControl.forIntegration('github'), announced };
+    };
+    const first = await replica();
+    const second = await replica();
+    const project = await first.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Race' } });
+    const installation = await first.github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'race-installation',
+    });
+    const repository = await first.github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, ...repositoryInput },
+    });
+    const connection = await first.github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await first.github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+    });
+
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const sessionId = randomUUID();
+      const session = await first.github.sessions.create({
+        sessionId,
+        projectRepositoryId: link.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+      });
+      first.announced.length = 0;
+      second.announced.length = 0;
+
+      await Promise.all([
+        first.github.sessions.markMaterialized({ id: session.id }),
+        second.github.sessions.markMaterialized({ id: session.id }),
+      ]);
+
+      expect([...first.announced, ...second.announced]).toEqual([project.id]);
+    }
   });
 
   it('clears every owned source-control collection', async () => {
@@ -1258,7 +1383,6 @@ describe('SourceControlStorage', () => {
       slug: string;
       createdAt: Date;
       handle?: SourceControlStorageHandle;
-      sandboxWorkdir?: string;
     }): Promise<ProjectRepository> {
       const handle = args.handle ?? github;
       const installation = await createInstallation(handle, { externalId: `installation-${args.externalId}` });
@@ -1277,7 +1401,6 @@ describe('SourceControlStorage', () => {
         connectionId: connection.id,
         repositoryId: repository.id,
         ...projectRepositoryInput,
-        sandboxWorkdir: args.sandboxWorkdir ?? projectRepositoryInput.sandboxWorkdir,
       });
       await backend.ops.updateMany('factory_project_repositories', { id: link.id }, { created_at: args.createdAt });
       return link;
@@ -1309,7 +1432,6 @@ describe('SourceControlStorage', () => {
         externalId: 'r1',
         slug: 'mastra-ai/mastra',
         createdAt: at(1),
-        sandboxWorkdir: '/workspace/oldest',
       });
       const second = await linkUnderOwnInstallation({
         factoryProjectId: project.id,
@@ -1385,7 +1507,6 @@ describe('SourceControlStorage', () => {
         externalId: 'r1',
         slug: 'mastra-ai/mastra',
         createdAt: at(1),
-        sandboxWorkdir: '/workspace/linked',
       });
 
       await domain.init();
@@ -1522,16 +1643,14 @@ describe('SourceControlStorage', () => {
       });
       expect(updated).toMatchObject({ position: 7, inEnvironment: false, lastBuildStatus: 'unbuilt' });
 
-      const builtAt = at(10);
       expect(
         await github.projectRepositories.setBuildStatus({
           orgId: 'org-1',
           id: link.id,
           status: 'failed',
           error: 'pnpm install exited 1',
-          builtAt,
         }),
-      ).toMatchObject({ lastBuildStatus: 'failed', lastBuildError: 'pnpm install exited 1', lastBuiltAt: builtAt });
+      ).toMatchObject({ lastBuildStatus: 'failed', lastBuildError: 'pnpm install exited 1' });
       expect(
         await github.projectRepositories.setBuildStatus({ orgId: 'other-org', id: link.id, status: 'configured' }),
       ).toBeNull();
@@ -1580,9 +1699,8 @@ describe('SourceControlStorage', () => {
           orgId: 'org-1',
           id: other.id,
           status: 'configured',
-          builtAt: at(1),
         }),
-      ).toMatchObject({ lastBuildStatus: 'configured', lastBuildError: null, lastBuiltAt: at(1) });
+      ).toMatchObject({ lastBuildStatus: 'configured', lastBuildError: null });
     });
   });
 });
@@ -1609,9 +1727,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaaa',
@@ -1654,9 +1769,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000bbbb',
@@ -1696,9 +1808,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
     });
     const session = await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaab',
@@ -1725,9 +1834,6 @@ describe('SourceControlStorageInMemory sessions', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: otherRepository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/docs',
     });
     await store.sessions.create({
       sessionId: '00000000-0000-4000-8000-00000000aaad',

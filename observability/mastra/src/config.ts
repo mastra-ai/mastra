@@ -72,6 +72,17 @@ export interface ObservabilityInstanceConfig {
   sampling?: SamplingStrategy;
   /** Custom exporters */
   exporters?: ObservabilityExporter[];
+  /**
+   * Keep configured MastraStorageExporter instances on Mastra Platform deployments.
+   * Defaults to false: when MASTRA_DEPLOYMENT_ID is set, MastraStorageExporter
+   * and the deprecated DefaultExporter are skipped. Set to true to persist to
+   * your own storage alongside Platform observability. Applies to this instance,
+   * including exporters registered later; does not add an exporter automatically.
+   * Storage domains reporting local persistence remain disabled on Platform,
+   * with a warning during exporter initialization, even when this is true.
+   * The deprecated DefaultExporter remains disabled on Platform.
+   */
+  retainStorageExporterOnPlatform?: boolean;
   /** Observability bridge (e.g., OpenTelemetry bridge for context extraction) */
   bridge?: ObservabilityBridge;
   /** Custom span output processors */
@@ -232,6 +243,7 @@ const observabilityInstanceConfigFields = {
   serviceName: z.string().min(1, 'Service name is required'),
   sampling: samplingStrategySchema.optional(),
   exporters: z.array(z.any()).optional(),
+  retainStorageExporterOnPlatform: z.boolean().optional(),
   bridge: z.any().optional(),
   spanOutputProcessors: z.array(z.any()).optional(),
   includeInternalSpans: z.boolean().optional(),

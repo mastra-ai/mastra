@@ -11,6 +11,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import { latestProcessedModelOutput } from '../loop/shared/steps/tool-result-commit-core';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
@@ -27,8 +28,10 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
+import { PROCESSOR_ABORT_SIGNAL } from './abort-signal-scope';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
 import type { ProcessorLateSignalSink } from './send-signal';
@@ -714,10 +717,14 @@ export class ProcessorRunner {
           }
         : undefined,
     );
-    // Workflow schemas strip unknown fields. Keep the live callback off
-    // step payloads so chained processors can recover it from their run.
-    const scope = this.lateSignalSink ? workflow.mastra?.__createRunScope(run.runId) : undefined;
+    // Workflow schemas strip unknown fields and serializing pubsubs drop live objects, so
+    // evented steps read these from the run scope, not step data. The default engine still
+    // reads `abortSignal` from step data. Evented steps abort on this signal or a cancel of the
+    // processor run. The scope only exists in the caller's process; an evented step on another
+    // worker falls back to that worker's run-cancel signal.
+    const scope = this.lateSignalSink || abortSignal ? workflow.mastra?.__createRunScope(run.runId) : undefined;
     if (this.lateSignalSink) scope?.set(PROCESSOR_LATE_SIGNAL_SINK, this.lateSignalSink);
+    if (abortSignal) scope?.set(PROCESSOR_ABORT_SIGNAL, abortSignal);
     const result = await (async () => {
       try {
         return await run.start({ inputData, ...observabilityContext, requestContext, outputWriter });
@@ -746,23 +753,41 @@ export class ProcessorRunner {
     if (result.status !== 'success') {
       // Collect error details from the workflow result and failed steps
       const details: string[] = [];
+      // A storage v2 result's `steps` is a loader; it holds the failed results without reading storage.
+      const steps = residentStepResults(result.steps) ?? result.steps;
       if (result.status === 'failed') {
         if (result.error) {
           details.push(result.error.message || JSON.stringify(result.error));
         }
-        for (const [stepId, step] of Object.entries(result.steps)) {
+        for (const [stepId, step] of Object.entries(steps)) {
           if (step.status === 'failed' && step.error?.message) {
             details.push(`step ${stepId}: ${step.error.message}`);
           }
         }
       }
       const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
-      throw new MastraError({
-        category: 'USER',
-        domain: 'AGENT',
-        id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
-      });
+      // Keep the underlying failure reachable: without it callers only see the
+      // flattened status text and lose the original error, stack and type.
+      let failedStepError: Error | undefined;
+      if (result.status === 'failed') {
+        for (const step of Object.values(steps)) {
+          if (step.status === 'failed' && step.error) {
+            failedStepError = step.error;
+            break;
+          }
+        }
+      }
+      throw new MastraError(
+        {
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_WORKFLOW_FAILED',
+          text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
+        },
+        // The step's error is the live object; `result.error` is the engine's
+        // serialized copy and has no stack or original class.
+        result.status === 'failed' ? (failedStepError ?? result.error) : undefined,
+      );
     }
 
     // Extract and validate the output from the workflow result
@@ -897,19 +922,17 @@ export class ProcessorRunner {
           if (mutations.length > 0) {
             processableMessages = getProcessableResponseMessages(processResult);
           }
-        } else {
-          if (processResult) {
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            processableMessages = processResult || [];
-            for (const message of processResult) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response', { merge: false });
-            }
+        } else if (processResult) {
+          const deletedIds = idsBeforeProcessing.filter(
+            (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
+          );
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+          processableMessages = processResult || [];
+          for (const message of processResult) {
+            messageList.removeByIds([message.id]);
+            messageList.add(message, check.getSource(message) || 'response', { merge: false });
           }
         }
 
@@ -2610,6 +2633,7 @@ export class ProcessorRunner {
       toolCallId: string;
       toolArgs: unknown;
       result: unknown;
+      modelOutput?: unknown;
       providerExecuted?: boolean;
       requestContext?: RequestContext;
       retryCount?: number;
@@ -2625,6 +2649,7 @@ export class ProcessorRunner {
       toolCallId,
       toolArgs,
       result,
+      modelOutput,
       providerExecuted,
       requestContext,
       retryCount = 0,
@@ -2635,6 +2660,8 @@ export class ProcessorRunner {
 
     // Run through all output processors that have processToolResult
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      // Each processor sees the mapping an earlier processor committed, not the original.
+      const currentModelOutput = latestProcessedModelOutput(messageList, toolCallId, modelOutput);
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
@@ -2655,6 +2682,7 @@ export class ProcessorRunner {
             // Carry the tool return value via toolResultValue to avoid colliding
             // with the OutputResult `result` field used by outputResult phase.
             toolResultValue: result,
+            modelOutput: currentModelOutput,
             providerExecuted,
             systemMessages: currentSystemMessages,
             steps,
@@ -2718,6 +2746,7 @@ export class ProcessorRunner {
           toolCallId,
           args: toolArgs,
           result,
+          modelOutput: currentModelOutput,
           providerExecuted,
           systemMessages: currentSystemMessages,
           steps,
@@ -2845,7 +2874,11 @@ export class ProcessorRunner {
       const messageIdBefore = args.messageId;
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      // The failed call's MODEL_STEP is still open here, so the span sits under it
+      // like the step's other processor spans, not flat under the agent run.
+      const parentSpan =
+        findOwnModelStepSpan(currentSpan) ??
+        (currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan);
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
         name: resolveProcessorSpanName(processor, 'requestError', `request error processor: ${processor.id}`),

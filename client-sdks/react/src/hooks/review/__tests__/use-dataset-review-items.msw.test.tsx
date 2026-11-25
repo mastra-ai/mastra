@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
-import type { UpdateExperimentResultParams } from '@mastra/client-js';
+import type { DatasetExperimentResult, UpdateExperimentResultParams } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, renderHook, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
 import { useDatasetMutations } from '../../datasets';
-import { useReviewItems } from '../use-dataset-review-items';
+import { useInfiniteCompletedItems, useInfiniteReviewItems, useReviewItems } from '../use-dataset-review-items';
 import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
@@ -17,6 +17,7 @@ import {
   RESULT_ID,
   experimentsResponse,
   experiment,
+  manyResults,
   resultsResponse,
   updatedResultResponse,
 } from './fixtures/dataset-review-items';
@@ -32,7 +33,34 @@ const makeWrapper = () => {
   );
 };
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+const servePagedResults = (
+  resultsByExperiment: Record<string, DatasetExperimentResult[]>,
+  { honorStatus = true }: { honorStatus?: boolean } = {},
+) => {
+  const requests: string[] = [];
+  server.use(
+    http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/:experimentId/results`, ({ params, request }) => {
+      const query = new URL(request.url).searchParams;
+      requests.push(`${String(params.experimentId)}?${query.toString()}`);
+      const status = honorStatus ? query.get('status') : null;
+      const results = (resultsByExperiment[String(params.experimentId)] ?? []).filter(
+        r => !status || r.status === status,
+      );
+      const page = Number(query.get('page') ?? 0);
+      const perPage = Number(query.get('perPage') ?? 10);
+      return HttpResponse.json({
+        results: results.slice(page * perPage, (page + 1) * perPage),
+        pagination: { total: results.length, page, perPage, hasMore: (page + 1) * perPage < results.length },
+      });
+    }),
+  );
+  return requests;
+};
 
 const OTHER_EXPERIMENT_ID = 'exp-2';
 const projectExperimentsResponse = {
@@ -197,6 +225,191 @@ describe('useReviewItems', () => {
 
       await waitFor(() => expect(result.current.data).toHaveLength(2));
       expect(resultRequests.sort()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID].sort());
+    });
+  });
+
+  describe('when the review queue loads page by page', () => {
+    const flaggedIndexes = Array.from({ length: 150 }, (_, index) => index);
+    const otherExperiment = { ...experiment, id: OTHER_EXPERIMENT_ID };
+
+    it('shows the first page of every experiment, then the next page when asked', async () => {
+      const requests = servePagedResults({
+        [EXPERIMENT_ID]: manyResults(300, flaggedIndexes),
+        [OTHER_EXPERIMENT_ID]: manyResults(20, [0, 1, 2], OTHER_EXPERIMENT_ID),
+      });
+
+      const { result } = renderHook(() => useInfiniteReviewItems({ experiments: [experiment, otherExperiment] }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toHaveLength(103);
+      expect(result.current.hasNextPage).toBe(true);
+      expect(requests.sort()).toEqual([
+        `${EXPERIMENT_ID}?page=0&perPage=100&status=needs-review`,
+        `${OTHER_EXPERIMENT_ID}?page=0&perPage=100&status=needs-review`,
+      ]);
+
+      requests.length = 0;
+      await act(() => result.current.fetchNextPage());
+
+      await waitFor(() => expect(result.current.data).toHaveLength(153));
+      expect(result.current.data?.at(-1)?.id).toBe('exp-1-result-149');
+      expect(result.current.hasNextPage).toBe(false);
+      expect(requests).toEqual([`${EXPERIMENT_ID}?page=1&perPage=100&status=needs-review`]);
+    });
+
+    it('finds flagged results past the first page when the server ignores the status filter', async () => {
+      servePagedResults({ [EXPERIMENT_ID]: manyResults(150, [120]) }, { honorStatus: false });
+
+      const { result } = renderHook(() => useInfiniteReviewItems({ experiments: [experiment] }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data?.map(item => item.id)).toEqual(['exp-1-result-120']);
+      expect(result.current.hasNextPage).toBe(false);
+    });
+
+    it('stops loading hidden review pages when the sentinel is detached', async () => {
+      let observer: IntersectionObserverCallback | undefined;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(callback: IntersectionObserverCallback) {
+            observer = callback;
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+      const requests: number[] = [];
+      let finishNextPage: (() => void) | undefined;
+      server.use(
+        http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, async ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          requests.push(page);
+          if (page === 1) await new Promise<void>(resolve => (finishNextPage = resolve));
+          const results = manyResults(
+            1000,
+            Array.from({ length: 1000 }, (_, index) => index),
+          );
+          return HttpResponse.json({
+            results: results.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: results.length, page, perPage, hasMore: (page + 1) * perPage < results.length },
+          });
+        }),
+      );
+
+      const { result } = renderHook(() => useInfiniteReviewItems({ experiments: [experiment] }), {
+        wrapper: makeWrapper(),
+      });
+      await waitFor(() => expect(result.current.data).toHaveLength(100));
+      const sentinel = document.createElement('div');
+      act(() => result.current.setEndOfListElement(sentinel));
+      const bounds = sentinel.getBoundingClientRect();
+      act(() =>
+        observer?.(
+          [
+            {
+              isIntersecting: true,
+              target: sentinel,
+              boundingClientRect: bounds,
+              intersectionRect: bounds,
+              intersectionRatio: 1,
+              rootBounds: null,
+              time: 0,
+            },
+          ],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(requests).toEqual([0, 1]));
+
+      act(() => result.current.setEndOfListElement(null));
+      await act(async () => finishNextPage?.());
+      await waitFor(() => expect(result.current.data).toHaveLength(200));
+      expect(requests).toEqual([0, 1]);
+    });
+
+    it('keeps every pending result when a review is completed while the next page loads', async () => {
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(private readonly callback: IntersectionObserverCallback) {}
+          observe(target: Element) {
+            this.callback([{ isIntersecting: true, target } as IntersectionObserverEntry], this as never);
+          }
+          disconnect() {}
+        },
+      );
+      let stored = manyResults(250, flaggedIndexes.concat(Array.from({ length: 100 }, (_, index) => 150 + index)));
+      let nextPageStarted = false;
+      server.use(
+        http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, async ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          const page = Number(query.get('page'));
+          const perPage = Number(query.get('perPage'));
+          if (page > 0) nextPageStarted = true;
+          await delay(page > 0 || nextPageStarted ? 100 : 0);
+          const list = stored.filter(r => r.status === query.get('status'));
+          return HttpResponse.json({
+            results: list.slice(page * perPage, (page + 1) * perPage),
+            pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+          });
+        }),
+        http.patch(
+          `${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results/:resultId`,
+          ({ params }) => {
+            stored = stored.map(r => (r.id === params.resultId ? { ...r, status: 'complete' } : r));
+            return HttpResponse.json(stored.find(r => r.id === params.resultId));
+          },
+        ),
+      );
+
+      const { result } = renderHook(
+        () => ({
+          queue: useInfiniteReviewItems({ experiments: [experiment] }),
+          mutations: useDatasetMutations(),
+        }),
+        { wrapper: makeWrapper() },
+      );
+      await waitFor(() => expect(result.current.queue.data).toHaveLength(100));
+      act(() => result.current.queue.setEndOfListElement(document.createElement('div')));
+      await waitFor(() => expect(nextPageStarted).toBe(true));
+
+      await act(() =>
+        result.current.mutations.updateExperimentResult.mutateAsync({
+          datasetId: DATASET_ID,
+          experimentId: EXPERIMENT_ID,
+          resultId: 'exp-1-result-0',
+          status: 'complete',
+        }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.queue.hasNextPage).toBe(false);
+        expect(result.current.queue.isFetching).toBe(false);
+      });
+      const ids = result.current.queue.data?.map(item => item.id) ?? [];
+      expect(ids).not.toContain('exp-1-result-0');
+      expect(ids).toContain('exp-1-result-100');
+      expect(ids).toHaveLength(249);
+    });
+
+    it('loads completed results the same way', async () => {
+      servePagedResults({ [EXPERIMENT_ID]: manyResults(150, [5]) });
+
+      const { result } = renderHook(() => useInfiniteCompletedItems({ experiments: [experiment] }), {
+        wrapper: makeWrapper(),
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toHaveLength(100);
+      expect(result.current.data?.every(item => item.status === 'complete')).toBe(true);
+      expect(result.current.hasNextPage).toBe(true);
     });
   });
 

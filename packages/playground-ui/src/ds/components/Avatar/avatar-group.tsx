@@ -12,8 +12,8 @@ export type AvatarGroupProps = ComponentProps<'div'> & {
 // Small avatars get a thinner gap around the avatar on top, so it doesn't
 // swallow the avatar behind.
 const groupSizeClasses: Record<AvatarSize, string> = {
-  xs: '[--avatar-group-size:var(--spacing-icon-xs)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
-  inline: '[--avatar-group-size:var(--spacing-icon-md)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
+  xs: '[--avatar-group-size:var(--spacing-avatar-xs)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
+  inline: '[--avatar-group-size:var(--spacing-avatar-inline)] [--avatar-group-gap:1px] [--avatar-group-edge:0.5px]',
   sm: '[--avatar-group-size:var(--spacing-avatar-sm)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
   md: '[--avatar-group-size:var(--spacing-avatar-md)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',
   lg: '[--avatar-group-size:var(--spacing-avatar-lg)] [--avatar-group-gap:--spacing(0.5)] [--avatar-group-edge:1px]',

@@ -14,15 +14,9 @@
  *   - `adopt`: the harness variant where the tool itself calls `context.background.adopt()`.
  *     That process-local handle API is not exposed in-tree yet, so there is nothing to port.
  *   - `evented-redeliver`: owned by the redelivery ticket, not this one.
- *   - `durable-recover`: rerun for this ticket and **red** — not ported. `DurableAgent.recover()`
- *     validates the outer `durable-agentic-loop` snapshot and refuses with
- *     `DURABLE_AGENT_RECOVER_INVALID_SNAPSHOT` because, while a step is in flight, that row is
- *     still `pending` with no `context.input.__workflowKind` (the durable-agent input is stamped
- *     on the `durable-agentic-execution` row instead, and the loop row is deleted once the run
- *     settles). That held for the whole in-flight window, sampled to an 8s deadline, so the
- *     interruption the harness simulates — process death mid-step — leaves nothing restartable
- *     either. Tracked as COR-1493, which owns the fix and adds this cell back once `recover()`
- *     can restart a run that is mid-step.
+ *   - `durable-recover`: covered without provider recordings in
+ *     `durable-agent-recover-aimock.scenario.test.ts` (COR-1493), including recovery with
+ *     running checkpoints enabled and the specific refusal when no checkpoint is available.
  *
  * Like T78, this lives in `packages/memory/integration-tests` because the harness setup needs
  * a real `@mastra/memory` `Memory` over `@mastra/libsql`. Replay is the default: the committed
@@ -190,24 +184,20 @@ describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider,
               expect(recorder.requests[i]!.responseText).toMatch(/does not support assistant message prefill/);
             }
             expect(repairs.repaired.length).toBe(repairs.ended.length);
-            // Background dispositions re-enter the model after the tool result, which is the request
-            // shape that trips Anthropic's prefill guard; the foreground path never produces it, so
-            // there is nothing to reject there.
-            if (variant === 'foreground') {
-              expect(rejected).toEqual([]);
-            } else {
-              expect(rejected.length).toBeGreaterThan(0);
-            }
+            // Only the untilIdle follow-up request ends on an assistant turn, the shape that trips
+            // Anthropic's prefill guard. A foreground or awaited call hands its result to the model
+            // inside the run, so no follow-up is sent (#29679). A deferred task gets one when it
+            // finished after the run's last model request, as it does in these recordings except on
+            // evented, so those cells keep the repair check from passing with nothing to repair.
+            if (variant === 'deferred' && engine !== 'evented') expect(rejected.length).toBeGreaterThan(0);
+            if (variant !== 'deferred') expect(rejected).toEqual([]);
           } else {
             expect(repairs.ended).toEqual([]);
             expect(recorder.requests.every(request => request.status === 200)).toBe(true);
-            // The control must see the contrast: an OpenAI request ending on an assistant turn is
-            // accepted as-is (200) and is not pre-repaired.
-            if (variant === 'foreground') {
-              expect(endedByProvider.accepted).toEqual([]);
-            } else {
-              expect(endedByProvider.accepted.length).toBeGreaterThan(0);
-            }
+            // The control: an OpenAI request ending on an assistant turn is accepted as-is (200) and
+            // is not pre-repaired. As above, only a deferred task produces one.
+            if (variant === 'deferred') expect(endedByProvider.accepted.length).toBeGreaterThan(0);
+            if (variant !== 'deferred') expect(endedByProvider.accepted).toEqual([]);
             for (const { i } of endedByProvider.accepted) {
               expect(recorder.requests[i]!.status).toBe(200);
               expect(bodies[i]!).not.toContain(PREFILL_REPAIR_MARKER);

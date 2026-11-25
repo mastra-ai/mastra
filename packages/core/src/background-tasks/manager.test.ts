@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
+import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
-import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -734,6 +734,55 @@ describe('BackgroundTaskManager', () => {
       expect(result?.status).toBe('timed_out');
       expect(result?.error?.message).toContain('timed out');
     });
+
+    it('never times out a task with timeoutMs 0', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const executeFn = vi.fn(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise((resolve, reject) => {
+            opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
+            void gate.then(() => resolve('done'));
+          }),
+      );
+
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const { task } = await manager.enqueue(
+          { toolName: 'long-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
+          ctx(executeFn),
+        );
+        await vi.waitFor(() => expect(executeFn).toHaveBeenCalled());
+
+        // Well past both this manager's default (5s) and the global one (300s).
+        await vi.advanceTimersByTimeAsync(600_000);
+        release();
+
+        await vi.waitFor(async () =>
+          expect(await manager.getTask(task.id)).toMatchObject({ status: 'completed', result: 'done' }),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('reports a tool abort error as a failure, not a timeout', async () => {
+      const executeFn = vi.fn(async () => {
+        throw new DOMException('Upstream request aborted', 'AbortError');
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 'fetch-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
+        ctx(executeFn),
+      );
+
+      await vi.waitFor(async () =>
+        expect(await manager.getTask(task.id)).toMatchObject({
+          status: 'failed',
+          error: { message: 'Upstream request aborted' },
+        }),
+      );
+    });
   });
 
   describe('retry', () => {
@@ -1221,6 +1270,36 @@ describe('BackgroundTaskManager', () => {
       expect(executeFn).toHaveBeenCalledTimes(2);
     });
 
+    it('refuses a resume fenced on a suspension the task has moved past', async () => {
+      const executeFn = vi.fn(async (_args, opts: any) => {
+        if (!opts.resumeData) {
+          await opts.suspend({ awaiting: 'approval' });
+          return undefined;
+        }
+        return { approved: true };
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 't', toolCallId: 'cfence1', args: {}, agentId: 'a1', runId: 'r-fence' },
+        ctx(executeFn),
+      );
+      await tick(200);
+      const suspended = await manager.getTask(task.id);
+      expect(suspended?.status).toBe('suspended');
+
+      const stale = new Date(suspended!.suspendedAt!.getTime() - 1000);
+      await expect(manager.resume(task.id, { approved: true }, { suspendedAt: stale })).rejects.toThrow(
+        /suspension has changed/,
+      );
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('suspended');
+      expect(executeFn).toHaveBeenCalledTimes(1);
+
+      await manager.resume(task.id, { approved: true }, { suspendedAt: suspended!.suspendedAt! });
+      await tick(200);
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+    });
+
     it('drops a model-authored suspendedToolRunId so the framework-persisted id wins on resume', async () => {
       // A queued model payload cannot establish delegated identity. The arbitrary
       // ID must be dropped from the fresh call and replaced by the framework ID
@@ -1493,6 +1572,145 @@ describe('BackgroundTaskManager', () => {
         const completed = await mgr.getTask('stale-1');
         expect(completed?.status).toBe('completed');
         expect(completed?.result).toBe('recovered');
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    // A task that takes its worker down (OOM, native crash) used to be re-pended
+    // by every server that started, without spending a retry, so it crashed each
+    // one in turn. Stale-running recovery must consume a retry like a lapsed pin
+    // does, and fail the task once retries are used up. (#30977)
+    it('spends a retry when it recovers a task whose worker crashed', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'crashed-once',
+        status: 'running',
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 30_000),
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      local.backgroundTaskManager!.registerTaskContext(
+        'crashed-once',
+        ctx(async () => 'recovered'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-once');
+        expect(task?.status).toBe('completed');
+        expect(task?.result).toBe('recovered');
+        expect(task?.retryCount).toBe(1);
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('fails a task whose worker crashed once it has used its retries, instead of running it again (#30977)', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'crashed-twice',
+        status: 'running',
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 30_000),
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 1,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      const execute = vi.fn(async () => 'ran again');
+      local.backgroundTaskManager!.registerTaskContext('crashed-twice', ctx(execute));
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-twice');
+        expect(task?.status).toBe('failed');
+        expect(task?.error?.message).toBe('Worker process terminated before task completed');
+        expect(task?.retryCount).toBe(1);
+        expect(execute).not.toHaveBeenCalled();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('does not spend a retry when a graceful shutdown handed the task back', async () => {
+      // Shutdown releases the lease of a retryable running task and leaves it
+      // `running` for the next process. A deploy is not the task's fault, so
+      // even a task with no retries left resumes without spending one.
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'handed-back',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 1,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+      });
+
+      local.backgroundTaskManager!.registerTaskContext(
+        'handed-back',
+        ctx(async () => 'resumed'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('handed-back');
+        expect(task?.status).toBe('completed');
+        expect(task?.result).toBe('resumed');
+        expect(task?.retryCount).toBe(1);
       } finally {
         await local.backgroundTaskManager?.shutdown();
         await local.stopWorkers();
@@ -1911,6 +2129,106 @@ describe('BackgroundTaskManager', () => {
       } finally {
         release();
         await local.cleanup();
+      }
+    });
+
+    it.each([
+      ['rejects when aborted', true],
+      ['ignores the abort and returns', false],
+    ])('aborts a run cancelled from another manager on shared storage (executor %s)', async (_label, rejectOnAbort) => {
+      const config = {
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      };
+      const onTaskComplete = vi.fn();
+      const onTaskFailed = vi.fn();
+      // Separate Mastra + pubsub per manager: B's `task.cancel` event cannot
+      // reach A, as with two processes on the default in-process pubsub.
+      const workerA = await makeLocalManager({ ...config, onTaskComplete, onTaskFailed });
+      const workerB = await makeLocalManager(config);
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+      let executorReturned = false;
+      const onChunk = vi.fn();
+      const onResult = vi.fn();
+      const onComplete = vi.fn();
+      const onFailed = vi.fn();
+      const published: string[] = [];
+      const onPublished = (event: { type: string }) => {
+        published.push(event.type);
+      };
+      await workerA.isolatedPubsub.subscribe('background-tasks-result', onPublished);
+
+      try {
+        const { task } = await workerA.mgr.enqueue(
+          { toolName: 't', toolCallId: 'remote-cancel', args: {}, agentId: 'a1', runId: 'r-remote-cancel' },
+          {
+            executor: {
+              execute: async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+                executorSignal = opts.abortSignal;
+                if (rejectOnAbort) {
+                  await new Promise((_resolve, reject) => {
+                    opts.abortSignal!.addEventListener('abort', () => reject(opts.abortSignal!.reason));
+                  });
+                }
+                await gate;
+                executorReturned = true;
+                return 'late result';
+              },
+            },
+            onChunk,
+            onResult,
+            onComplete,
+            onFailed,
+          },
+        );
+        await vi.waitFor(async () => expect((await workerA.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+        expect(executorSignal!.aborted).toBe(false);
+
+        await workerB.mgr.cancel(task.id);
+        const cancelled = await workerB.mgr.getTask(task.id);
+        expect(cancelled!.status).toBe('cancelled');
+        expect(cancelled!.ownerId).toBeUndefined();
+        expect(cancelled!.completedAt).toBeInstanceOf(Date);
+
+        // A's next heartbeat (1s with a 3s lease) is rejected and finds the
+        // row cancelled, so the local run is aborted as a cancellation.
+        await vi.waitFor(() => expect(executorSignal!.aborted).toBe(true), { timeout: 5_000, interval: 50 });
+        expect((executorSignal!.reason as Error).message).toBe('Task cancelled');
+
+        release();
+        if (!rejectOnAbort) await vi.waitFor(() => expect(executorReturned).toBe(true));
+        // Let A's workflow settle the attempt.
+        await tick(300);
+
+        const after = await workerA.mgr.getTask(task.id);
+        expect(after!.status).toBe('cancelled');
+        expect(after!.result).toBeUndefined();
+        expect(after!.error).toBeUndefined();
+        expect(after!.completedAt!.getTime()).toBe(cancelled!.completedAt!.getTime());
+
+        // The observer is live (it saw the claim), so these negatives are real.
+        expect(published).toContain('task.running');
+        expect(published).not.toContain('task.completed');
+        expect(published).not.toContain('task.failed');
+        expect(onChunk).not.toHaveBeenCalled();
+        expect(onResult).not.toHaveBeenCalled();
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(onFailed).not.toHaveBeenCalled();
+        expect(onTaskComplete).not.toHaveBeenCalled();
+        expect(onTaskFailed).not.toHaveBeenCalled();
+      } finally {
+        release();
+        await workerA.isolatedPubsub.unsubscribe('background-tasks-result', onPublished);
+        await workerA.cleanup();
+        await workerB.cleanup();
       }
     });
   });

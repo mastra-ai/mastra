@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -40,21 +41,15 @@ function useFactoryFixtures(sessions: () => FactoryUserSession[]) {
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
+            id: 'fp-1',
+            name: 'Mastra',
             repositories: [
-              {
-                id: projectRepositoryId,
+              listedRepository(projectRepositoryId, 'octo/hello', {
                 branch: 'main',
-                sandboxWorkdir: '/workspace/hello',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
+              }),
             ],
           },
         ],
@@ -200,7 +195,7 @@ describe('User session visibility', () => {
     await user.click(await screen.findByRole('button', { name: `Private session: ${name}` }));
     const share = await screen.findByRole('button', { name: 'Share with organization' });
     await user.click(share);
-    expect(share).toBeDisabled();
+    expect(share).toHaveAttribute('aria-busy', 'true');
     await user.keyboard('{Escape}');
     await openActions(user, name, entry);
     const pending = await screen.findByRole('menuitem', { name: 'Share with organization' });

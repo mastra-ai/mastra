@@ -126,7 +126,7 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('max', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
       effort: 'xhigh',
     });
-    expect((await requestBody(resolve('high', 'openrouter', 'bytedance-seed/seed-1.6-flash'))).reasoning).toEqual({
+    expect((await requestBody(resolve('high', 'openrouter', 'moonshotai/kimi-k2.6'))).reasoning).toEqual({
       enabled: true,
     });
   });

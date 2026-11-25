@@ -1,8 +1,8 @@
-import { Eye } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { WorkflowCodeContent } from '@/ds/components/Workflow';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 export interface WorkflowMapConfigDialogProps {
   stepName: string;
@@ -14,7 +14,7 @@ export function WorkflowMapConfigDialog({ stepName, mapConfig }: WorkflowMapConf
 
   return (
     <>
-      <Button icon={<Eye />} type="button" size="sm" onClick={() => setOpen(true)}>
+      <Button icon={<IconEyeOpen />} type="button" size="sm" onClick={() => setOpen(true)}>
         Map config
       </Button>
 

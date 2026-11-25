@@ -65,6 +65,7 @@ export class ObservationStep {
    * builds system message, filters observed.
    */
   async prepare(): Promise<StepContext> {
+    this.turn.abortSignal?.throwIfAborted();
     if (this._prepared) throw new Error(`Step ${this.stepNumber} already prepared`);
 
     const { threadId, resourceId, messageList } = this.turn;
@@ -84,8 +85,8 @@ export class ObservationStep {
     // new head (storage resolves the head and carries chunks across the rollover).
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
-      this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
       const activation = await om.activate({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         checkThreshold: true,
@@ -106,6 +107,7 @@ export class ObservationStep {
           threadId,
           resourceId,
           recordId: activation.record.id,
+          abortSignal: this.turn.abortSignal,
         });
         await this.turn.refreshRecord();
       }
@@ -117,6 +119,7 @@ export class ObservationStep {
       const preReflectGeneration = record.generationCount;
       const obsTokens = record.observationTokenCount ?? 0;
       await om.reflector.maybeReflect({
+        abortSignal: this.turn.abortSignal,
         record,
         observationTokens: obsTokens,
         threadId,
@@ -204,6 +207,7 @@ export class ObservationStep {
       // records the boundary and this interval doesn't re-trigger every step.
       const deferred = candidates.length > 0 && safeCandidates.length === 0;
       if (safeCandidates.length > 0) {
+        this.turn.abortSignal?.throwIfAborted();
         om.sealMessagesForBuffering(safeCandidates);
 
         try {
@@ -214,6 +218,7 @@ export class ObservationStep {
           );
         }
 
+        this.turn.abortSignal?.throwIfAborted();
         if (this.turn.memory) {
           await this.turn.memory.persistMessages(safeCandidates);
         }
@@ -226,9 +231,7 @@ export class ObservationStep {
         const inputIds = new Set(messageList.get.input.db().map(msg => msg.id));
         const sealedOutput = safeCandidates.filter(msg => !inputIds.has(msg.id));
         messageList.removeByIds(sealedOutput.map(msg => msg.id));
-        for (const msg of sealedOutput) {
-          messageList.add(msg, 'memory');
-        }
+        if (sealedOutput.length) messageList.add(sealedOutput, 'memory');
       }
 
       if (!deferred) {
@@ -299,11 +302,9 @@ export class ObservationStep {
             return !seen || keys.some(key => !seen.has(key));
           })
           .map(msg => msg.id);
-        inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
+        inFlightIds = [...new Set(unreadIds)];
         if (messagesToSave.length > 0) {
-          for (const msg of messagesToSave) {
-            messageList.add(msg, 'memory');
-          }
+          messageList.add(messagesToSave, 'memory');
           try {
             await om.persistMessages(messagesToSave, threadId, resourceId);
           } catch (error) {
@@ -365,11 +366,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation. The just-observed messages include the request the
-          // model is working on and the output it has not read yet — preserve the in-flight
-          // messages by identity (the token-based retention floor resolves to 0 for sync-only,
-          // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
-          // relied on to keep them).
+          // Cleanup after observation. The just-observed messages can include input and output the
+          // model has not read yet — preserve those by identity (the token-based retention floor
+          // resolves to 0 for sync-only, resource-scope, and explicit `bufferActivation: 1` configs,
+          // so it cannot be relied on to keep them). Once the model has answered, the observed request
+          // itself is not kept: the observations stand in for it, even mid-task.
           const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -393,6 +394,7 @@ export class ObservationStep {
               resourceId,
               recordId: obsResult.record.id,
               activatedMessageIds: obsResult.activatedMessageIds,
+              abortSignal: this.turn.abortSignal,
             });
           }
 
@@ -433,7 +435,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()]
           .map(msg => msg.id)
-          .concat(inFlightIds ?? [], this.turn.inputMessageIds, this.changedSinceDrain(messageList))
+          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList))
           .filter(Boolean),
       );
 
@@ -499,7 +501,7 @@ export class ObservationStep {
     // chunk — skip the wait so an in-flight buffer op (Observer call, indexing) or
     // reflection buffer op doesn't block the activation swap.
     if (!inAsyncObservationBand) {
-      await om.waitForBuffering(threadId, resourceId);
+      await om.waitForBuffering(threadId, resourceId, undefined, this.turn.abortSignal);
     }
     await this.turn.refreshRecord();
 
@@ -531,6 +533,7 @@ export class ObservationStep {
     let activated = false;
     while (status.shouldObserve && status.canActivate) {
       const activation = await om.activate({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         record: this.turn.record,
@@ -581,6 +584,7 @@ export class ObservationStep {
       // running a redundant sync reflection from scratch.
       const preReflectionRecord = this.turn.record;
       await om.reflector.maybeReflect({
+        abortSignal: this.turn.abortSignal,
         record: preReflectionRecord,
         observationTokens: preReflectionRecord.observationTokenCount ?? 0,
         threadId,
@@ -626,6 +630,7 @@ export class ObservationStep {
     let obsResult;
     try {
       obsResult = await om.observe({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         messages: pendingMessages,
@@ -679,6 +684,7 @@ export class ObservationStep {
         messageToSeal = undefined;
       }
       const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      this.turn.abortSignal?.throwIfAborted();
       om.sealMessagesForBuffering(messagesToSeal);
 
       // Suppress the response-id rotation when this step seeded the response message:

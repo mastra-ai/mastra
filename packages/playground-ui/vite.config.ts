@@ -116,15 +116,19 @@ const typeDeclarations = (): Plugin => {
     configResolved(config) {
       if (config.build.lib) entries = config.build.lib.entry as Record<string, string>;
     },
-    // Rolldown runs buildStart once per output format but closeBundle once, so start tsc only once.
+    // Rolldown runs buildStart once per output format, so start tsc only once.
     buildStart() {
       tsc ??= rm(dtsTempDir, { recursive: true, force: true }).then(() =>
         runTsc(['-p', 'tsconfig.build.json', '--declarationDir', dtsTempDir]),
       );
     },
     async closeBundle() {
-      const exitCode = await tsc;
+      // Rolldown calls closeBundle once per output format. Claim the tsc promise
+      // on the first call so the second format does not treat a finished emit as a failure.
+      const pending = tsc;
+      if (!pending) return;
       tsc = undefined;
+      const exitCode = await pending;
       if (exitCode !== 0) throw new Error('tsc found type errors; see log above.');
 
       await rm(dtsSrcDir, { recursive: true, force: true });
@@ -179,6 +183,15 @@ const skipUnchangedWrites = (): Plugin => ({
   },
 });
 
+// Tells the playground dev server (see its vite.config.ts) that `dist` is complete again after scripts/prune-dist.mjs.
+// Any finished build qualifies, so a full build also clears a marker left by an interrupted watch.
+const clearWatchPending = (): Plugin => ({
+  name: 'clear-watch-pending',
+  async closeBundle() {
+    await rm(resolve(__dirname, 'node_modules/.cache/dev-watch-pending'), { force: true });
+  },
+});
+
 const appPlugins = [react(), tailwindcss()];
 
 const baseConfig: UserConfig = {
@@ -199,6 +212,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     libInjectCss(),
     nodeExternals(),
     !isProduction && skipUnchangedWrites(),
+    clearWatchPending(),
   ],
   build: {
     emptyOutDir: isProduction,
@@ -214,7 +228,6 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/lib/resize', 'resize'),
         ...fileEntries('src/lib/keyboard', 'keyboard'),
         ...fileEntries('src/lib/sort', 'sort'),
-        ...fileEntries('src/components', 'components'),
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
         ...fileEntries('src/lib/form', 'lib/form'),

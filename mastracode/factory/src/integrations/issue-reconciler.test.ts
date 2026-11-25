@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { createTestBoard } from '../boards/test-utils.js';
+import { autoStartingBoards, createTestBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { Intake, IntakeIssueDetail } from '../capabilities/intake.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -54,10 +54,15 @@ async function githubSetup(
     rules?: GithubRuleOverrides;
     board?: string;
     boards?: BoardRegistry;
+    githubSources?: string[];
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+  await seeded.intake.saveConfig({
+    orgId: project.orgId,
+    config: { github: { enabled: true, sourceIds: input.githubSources ?? [repository.fullName] } },
+  });
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const installation = await sourceControl.installations.upsert({
     orgId: project.orgId,
@@ -83,9 +88,6 @@ async function githubSetup(
     orgId: project.orgId,
     connectionId: connection.id,
     repositoryId: storedRepository.id,
-    createdByUserId: project.createdBy,
-    sandboxProvider: 'local',
-    sandboxWorkdir: '/workspace',
   });
   const workItem = (
     await seeded.workItems.upsert({
@@ -115,8 +117,9 @@ async function githubSetup(
       integrationStorage: seeded.integrations.forIntegration('github'),
       projects: seeded.projects,
       storage: seeded.workItems,
+      intake: seeded.intake,
       configVersion: 'factory-config-v1',
-      boards: input.boards ?? createBoardRegistry(),
+      boards: input.boards ?? createTriageWorkRegistry(),
     },
     input.fetchIssue ?? vi.fn(),
     input.listOpenIssues,
@@ -217,7 +220,7 @@ describe('issue reconcilers', () => {
 
     await expect(reconcile()).resolves.toMatchObject({ missing: 1, failed: 0 });
     const marked = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
-    expect(marked?.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
+    expect(marked?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
     await expect(reconcile()).resolves.toMatchObject({ missing: 1 });
     expect(getIssue).toHaveBeenCalledTimes(1);
     expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.revision).toBe(marked?.revision);
@@ -226,12 +229,12 @@ describe('issue reconcilers', () => {
     await reconcile();
     expect(getIssue).toHaveBeenCalledTimes(2);
     const refreshed = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
-    expect(refreshed?.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
+    expect(refreshed?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY]).toBe(currentTime.toISOString());
 
     getIssue.mockResolvedValue(issue());
     currentTime = new Date(currentTime.getTime() + 24 * 60 * 60_000 + 1);
     await expect(reconcile()).resolves.toMatchObject({ updated: 1, missing: 0 });
-    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata).not.toHaveProperty(
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata ?? {}).not.toHaveProperty(
       EXTERNAL_SOURCE_MISSING_KEY,
     );
 
@@ -245,7 +248,7 @@ describe('issue reconcilers', () => {
     await expect(reconcile()).resolves.toMatchObject({ missing: 1 });
     expect(getIssue).toHaveBeenCalledTimes(4);
     expect(
-      (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata?.[EXTERNAL_SOURCE_MISSING_KEY],
+      (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY],
     ).toBe(currentTime.toISOString());
   });
 
@@ -286,13 +289,13 @@ describe('issue reconcilers', () => {
     await expect(reconcile()).resolves.toMatchObject({ failed: 1, missing: 0 });
     await expect(reconcile()).resolves.toMatchObject({ failed: 1 });
     expect(getIssue).toHaveBeenCalledTimes(2);
-    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata).not.toHaveProperty(
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata ?? {}).not.toHaveProperty(
       EXTERNAL_SOURCE_MISSING_KEY,
     );
 
     intake.resolveIntakeDispatch = vi.fn().mockResolvedValue(null);
     await expect(reconcile()).resolves.toMatchObject({ missing: 1, failed: 0 });
-    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.metadata).toHaveProperty(
+    expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata).toHaveProperty(
       EXTERNAL_SOURCE_MISSING_KEY,
     );
   });
@@ -309,7 +312,7 @@ describe('issue reconcilers', () => {
     });
     expect(fetchIssue).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 42 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug'] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {author: 'octocat', assignees: ['hubot', 'monalisa'], labels: ['bug']} } });
   });
 
   it('backfills author trust on issue cards created before the stamp existed', async () => {
@@ -415,6 +418,40 @@ describe('issue reconcilers', () => {
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(1);
   });
 
+  it('does not look for missed issues on a linked repository that is not selected for intake', async () => {
+    const listOpenIssues = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          ...githubState({ url: 'https://github.com/acme/repo/issues/39' }),
+          number: 39,
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ labels: [] })),
+      listOpenIssues,
+      metadata: { labels: [] },
+      githubSources: ['acme/other'],
+    });
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ created: 0, failed: 0 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+    expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toEqual([]);
+  });
+
+  it('still reconciles the cards already filed when the intake selection cannot be read', async () => {
+    const listOpenIssues = vi.fn().mockResolvedValue([]);
+    const setup = await githubSetup({
+      fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
+      listOpenIssues,
+    });
+    vi.spyOn(setup.intake, 'getConfig').mockRejectedValue(new Error('intake down'));
+
+    await expect(setup.reconciler([repository])).resolves.toMatchObject({ checked: 1, closed: 1, failed: 1 });
+    expect(listOpenIssues).not.toHaveBeenCalled();
+  });
+
   it('replays a stable GitHub close through rules ingress without a direct metadata write', async () => {
     const setup = await githubSetup({
       fetchIssue: vi.fn().mockResolvedValue(githubState({ state: 'closed', stateReason: 'not_planned' })),
@@ -443,7 +480,7 @@ describe('issue reconcilers', () => {
     expect(await setup.workItems.listDeferredDecisions('org-1', setup.project.id)).toHaveLength(0);
     expect(await setup.workItems.get({ orgId: 'org-1', id: setup.workItem.id })).toMatchObject({
       stages: ['planning'],
-      metadata: { labels: ['bug'] },
+      workItem: expect.objectContaining({ metadata: expect.objectContaining({labels: ['bug']}) }),
     });
   });
 
@@ -478,22 +515,21 @@ describe('issue reconcilers', () => {
     ]);
     // The sync still refreshes the card's own label facts.
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ labels: ['bug', AUTO_TRIAGED_LABEL] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {labels: ['bug', AUTO_TRIAGED_LABEL]} } });
     expect(updated?.stages).toEqual(['intake']);
 
     // Dispatch the committed decision and the existing card is relocated onto
     // Planning — the same landing an arrival gets, with no phase rule run for it.
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -531,17 +567,16 @@ describe('issue reconcilers', () => {
       { type: 'upsertLinkedWorkItem', board: 'work', stage: 'triage', skipRules: true },
     ]);
 
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
@@ -657,17 +692,16 @@ describe('issue reconcilers', () => {
       fetchIssue: fetched,
       rules: { issueOpened },
     });
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: setup.workItems,
-      boards,
+      boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({
         storage: setup.workItems,
         boards,
         configVersion: 'factory-config-v1',
       }),
-      isAutoRunEnabled: async () => true,
       ownerId: 'reconcile-worker',
     });
     const sweep = async (labels: string[], version: string, tick: string) => {
@@ -723,7 +757,7 @@ describe('issue reconcilers', () => {
     });
     await expect(setup.reconciler([repository])).resolves.toMatchObject({ updated: 1, failed: 0 });
     const [updated] = await setup.workItems.list({ orgId: 'org-1', factoryProjectId: setup.project.id });
-    expect(updated?.metadata).toMatchObject({ author: 'stored author', labels: ['stored'], assignees: ['new'] });
+    expect((updated)).toMatchObject({ workItem: { metadata: {author: 'stored author', labels: ['stored'], assignees: ['new']} } });
   });
 
   it('reads terminal from the installed board, so a custom final phase is skipped and an undeclared one is not', async () => {
@@ -779,10 +813,12 @@ describe('issue reconcilers', () => {
           rules: resolveLinearRules(
             mode === 'default' ? undefined : { issueClosed: mode === 'disabled' ? null : replacement },
           ),
+          loadConnection: async () => null,
+          getFreshAccessToken: async () => 'token',
         },
         {
-          storage: { projects: seeded.projects },
-          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+          storage: { projects: seeded.projects, intake: seeded.intake },
+          runtime: { configVersion: 'factory-config-v1', workItems: seeded.workItems, boards: createTriageWorkRegistry() },
         } as never,
       );
 

@@ -95,6 +95,13 @@ describe('sandboxToModelOutput', () => {
     expect(sandboxToModelOutput(envelope)).toEqual({ type: 'error-json', value: envelope });
   });
 
+  it('tags an { error: string } result as error-text', () => {
+    expect(sandboxToModelOutput({ error: 'Blocked by test hook' })).toEqual({
+      type: 'error-text',
+      value: 'Blocked by test hook',
+    });
+  });
+
   it('does not tag an object with error: true but no validationErrors', () => {
     const output = { error: true, message: 'something failed' };
     expect(sandboxToModelOutput(output)).toBe(output);

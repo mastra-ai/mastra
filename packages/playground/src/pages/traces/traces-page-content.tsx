@@ -1,61 +1,66 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { TracesExplorer, useTracesConfig } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
-import {
-  TracesSpansSwitch,
-  TracesSpansSwitchSkeleton,
-} from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
-import type { ObservabilityView } from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
+import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import type {
+  TracesExplorerCapabilities,
+  TracesExplorerTraces,
+  TracesFilters,
+  TracesMetricsSupport,
+  TracesSelection,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import type { TraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { memo } from 'react';
-import { useNavigate } from 'react-router';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
-import { navCrumb } from '@/domains/navigation/crumbs';
-import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
-import { traceScoreLink } from '@/lib/app-routing';
+import { TracesChart } from './traces-chart';
+import { TracesList } from './traces-list';
+import { TracesPanel } from './traces-panel';
+import { TracesToolbar } from './traces-toolbar';
 
-const crumbs = [navCrumb('/traces')];
+type TracesPageContentProps = {
+  isScoped: boolean;
+  selection: TracesSelection;
+  filters: TracesFilters;
+  capabilities: TracesExplorerCapabilities;
+  columns: TraceColumnPreferences;
+  metricsSupport: TracesMetricsSupport;
+  traces: Pick<TracesExplorerTraces, 'rows' | 'isLoading'>;
+};
 
-// Memoized so a URL change (trace click, filter edit) re-renders only the explorer parts whose
-// context slice changed, not the whole tree.
-export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
-  const navigate = useNavigate();
-  const { withSpanQuery, withThreadQuery, isCapabilitiesLoading } = useTracesConfig();
+// Memoized so a list refresh (a poll tick) re-renders only the explorer parts whose context slice changed,
+// not the whole tree. Each Studio part below loads its own records once the body shows it.
+export const TracesPageContent = memo(function TracesPageContent({
+  isScoped,
+  selection,
+  filters,
+  capabilities,
+  columns,
+  metricsSupport,
+  traces,
+}: TracesPageContentProps) {
+  const toolbar = <TracesToolbar filters={filters} capabilities={capabilities} />;
+  const chart = <TracesChart filters={filters} capabilities={capabilities} />;
+  const content = (
+    <>
+      <TracesList rows={traces.rows} />
+      <TracesPanel
+        selection={selection}
+        traces={traces}
+        capabilities={capabilities}
+        columns={columns}
+        metricsSupport={metricsSupport}
+      />
+    </>
+  );
 
-  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
-  let tabs;
-  if (!isScoped) {
-    if (isCapabilitiesLoading) tabs = <TracesSpansSwitchSkeleton />;
-    else if (withSpanQuery || withThreadQuery) {
-      const views: ObservabilityView[] = ['traces'];
-      if (withSpanQuery) views.push('spans');
-      if (withThreadQuery) views.push('threads');
-      tabs = <TracesSpansSwitch current="traces" views={views} onViewChange={view => navigate(`/${view}`)} />;
-    }
-  }
+  // Scoped instances render inside another page (e.g. the agent Traces tab) whose header has no
+  // breadcrumbs or view switch; /traces gets both from the shared observability layout.
+  if (isScoped)
+    return (
+      <TracesExplorer.Layout toolbar={toolbar} chart={chart}>
+        {content}
+      </TracesExplorer.Layout>
+    );
 
   return (
-    <TracesExplorer.Layout
-      breadcrumbs={isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />}
-      tabs={tabs}
-      toolbar={
-        <ActionRow>
-          <ActionRow.Start>
-            <TracesExplorer.FilterBar />
-          </ActionRow.Start>
-          <ActionRow.End>
-            <TracesExplorer.ColumnsMenu />
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
-      <TracesExplorer.List />
-      <TracesExplorer.Panel
-        headerActionsSlot={({ traceId, spans }) => (
-          <LiveKitRecordingReview key={traceId} traceId={traceId} spans={spans} />
-        )}
-        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
-        renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
-      />
-    </TracesExplorer.Layout>
+    <TracesExplorer.Body toolbar={toolbar} chart={chart}>
+      {content}
+    </TracesExplorer.Body>
   );
 });

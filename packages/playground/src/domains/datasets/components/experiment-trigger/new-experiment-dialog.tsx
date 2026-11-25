@@ -43,8 +43,8 @@ const optionalText = (text: string) => text.trim() || undefined;
 const optionalList = (list: string[]) => (list.length > 0 ? list : undefined);
 
 /**
- * New experiment: pick what to run, on which data, and how to score it. Everything else has a default
- * and sits under Advanced, whose toggle shows in the footer while closed and stays in place as the
+ * New experiment: name it, pick what to run (and, for an agent, on which model), on which data, and how to
+ * score it. Everything else has a default and sits under Advanced, whose toggle shows in the footer while closed and stays in place as the
  * section's header row once opened.
  */
 export function NewExperimentDialog({
@@ -65,8 +65,8 @@ export function NewExperimentDialog({
   const datasetChoice = useDatasetChoice({ initialDatasetId, initialDatasetVersion });
   const scorerChoice = useScorerChoice({ datasetId: datasetChoice.datasetId, initialScorerIds });
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
-  const agentModelChoice = useAgentModelChoice();
   const { target } = targetChoice;
+  const agentModelChoice = useAgentModelChoice(target?.defaultModel);
   const isAgentTarget = target?.type === 'agent';
   const agentModel = isAgentTarget ? agentModelChoice.agentModel : undefined;
   // Runs on different models would otherwise share a name, so the picked model joins the default one.
@@ -82,6 +82,12 @@ export function NewExperimentDialog({
   const requestContextKey = requestContextInput.schema ? datasetId : undefined;
   // Wait for the targets to load, so a rerun is named after the display name, not the raw id.
   const canRun = Boolean(datasetId && target) && !targetChoice.isLoading && !isRunning;
+
+  // A model picked for one agent means nothing for the next, which starts on its own model.
+  const handleTargetValueChange = (targetValue: string) => {
+    targetChoice.setTargetValue(targetValue);
+    agentModelChoice.reset();
+  };
 
   const handleDatasetChange = (nextDatasetId: string) => {
     datasetChoice.selectDataset(nextDatasetId);
@@ -136,13 +142,33 @@ export function NewExperimentDialog({
           {/* A plain block, so the closed Advanced panel adds no gap below the toggle. */}
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="py-3">
             <div className="space-y-6">
-              <TargetField
-                options={targetChoice.options}
-                isLoading={targetChoice.isLoading}
-                target={target}
-                onTargetValueChange={targetChoice.setTargetValue}
-                container={contentRef}
+              <ExperimentNameField
+                name={experimentName.name}
+                defaultName={experimentName.defaultName}
+                onNameChange={experimentName.setName}
+                disabled={isRunning}
               />
+              <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-4">
+                <TargetField
+                  options={targetChoice.options}
+                  isLoading={targetChoice.isLoading}
+                  target={target}
+                  onTargetValueChange={handleTargetValueChange}
+                  container={contentRef}
+                  className="min-w-0 flex-1"
+                />
+                {isAgentTarget && (
+                  <AgentModelField
+                    provider={agentModelChoice.provider}
+                    modelId={agentModelChoice.modelId}
+                    canReset={agentModelChoice.canReset}
+                    onProviderChange={agentModelChoice.setProvider}
+                    onModelIdChange={agentModelChoice.setModelId}
+                    onReset={agentModelChoice.reset}
+                    container={contentRef}
+                  />
+                )}
+              </div>
               <DatasetField
                 datasets={datasetChoice.datasets}
                 datasetId={datasetId}
@@ -171,22 +197,6 @@ export function NewExperimentDialog({
                   container={contentRef}
                 />
               )}
-              {isAgentTarget && (
-                <AgentModelField
-                  provider={agentModelChoice.provider}
-                  modelId={agentModelChoice.modelId}
-                  onProviderChange={agentModelChoice.setProvider}
-                  onModelIdChange={agentModelChoice.setModelId}
-                  onReset={agentModelChoice.reset}
-                  container={contentRef}
-                />
-              )}
-              <ExperimentNameField
-                name={experimentName.name}
-                defaultName={experimentName.defaultName}
-                onNameChange={experimentName.setName}
-                disabled={isRunning}
-              />
               <ExperimentDescriptionField
                 description={description}
                 onDescriptionChange={setDescription}

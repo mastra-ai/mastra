@@ -83,19 +83,21 @@ STRICT EVALUATION CRITERIA:
 - If the user asked for "A", only tools that provide "A" should be marked appropriate
 - Additional tools the agent decided to call without being asked should be marked inappropriate
 
-Evaluate each tool that was called, or if no tools were called, evaluate whether that was the right decision.
+If tools were called, return exactly one evaluation per entry in TOOLS THE AGENT ACTUALLY CALLED, including repeated calls, in the same order. Repeated calls with different arguments can each be appropriate when they address the request. If no tools were called, evaluate whether that was the right decision.
 `;
 };
 
 export const createReasonPrompt = ({
   userInput,
   score,
-  evaluations,
+  actualTools,
+  matchedEvaluations,
   missingTools,
 }: {
   userInput: string;
   score: number;
-  evaluations: Array<{ toolCalled: string; wasAppropriate: boolean; reasoning: string }>;
+  actualTools: string[];
+  matchedEvaluations: Array<{ toolCalled: string; wasAppropriate: boolean; reasoning: string }>;
   missingTools: string[];
 }): string => {
   return `
@@ -103,8 +105,10 @@ Explain this tool selection evaluation in ONE SENTENCE.
 
 User Request: "${userInput}"
 Score: ${score}/1
-Tools Evaluated: ${JSON.stringify(evaluations)}
+Actual Tool Calls: ${JSON.stringify(actualTools)}
+Matched Tool Evaluations: ${JSON.stringify(matchedEvaluations)}
 Missing Tools: ${JSON.stringify(missingTools)}
+For called tools, the score counts appropriate matched evaluations divided by actual tool calls plus missing tools. Calls without evaluations lower the score. With no calls, the score is 0 if tools were missing and 1 otherwise.
 
 Provide a single, concise sentence explaining why this score was given.
 `;

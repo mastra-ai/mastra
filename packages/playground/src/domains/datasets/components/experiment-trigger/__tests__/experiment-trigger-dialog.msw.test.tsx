@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import type { BuilderSettingsResponse, DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
+import { datasetVersionsResponse } from '@mastra/playground-ui/domains/datasets';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import {
@@ -143,7 +143,7 @@ async function pickAgentOne() {
 
 async function openAdvanced() {
   fireEvent.click(advancedToggle());
-  return screen.findByLabelText<HTMLInputElement>('Experiment name');
+  return screen.findByLabelText<HTMLTextAreaElement>('Description');
 }
 
 describe('ExperimentTriggerDialog', () => {
@@ -153,7 +153,8 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
-      expect(await screen.findByText('3 items · latest')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('latest')).toBeDefined();
       expect(runButton().disabled).toBe(true);
 
       await pickAgentOne();
@@ -208,7 +209,8 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(targetField().value).toBe('Agent One'));
       expect(datasetField().value).toBe('Dataset 1');
-      expect(await screen.findByText('3 items · v11')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('v11')).toBeDefined();
       await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
       // The pinned version shows in the dataset hint; Advanced stays closed.
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
@@ -260,7 +262,7 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
-      expect(screen.queryByLabelText('Experiment name')).toBeNull();
+      expect(screen.queryByLabelText('Description')).toBeNull();
       expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
 
       await openAdvanced();
@@ -308,11 +310,21 @@ describe('ExperimentTriggerDialog', () => {
 
     async function openModelOverride() {
       await pickAgentOne();
-      await openAdvanced();
       await screen.findByRole('combobox', { name: 'Model provider' });
     }
 
     describe('when an agent is the target', () => {
+      it("shows the agent's own provider and model without opening Advanced", async () => {
+        setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
+      });
+
       it('runs the agent on the picked provider and model', async () => {
         const { triggerCalls } = setupHandlers();
         renderDialog();
@@ -366,7 +378,7 @@ describe('ExperimentTriggerDialog', () => {
         renderDialog();
         await openModelOverride();
 
-        await pick(providerField(), 'OpenAI');
+        await pick(providerField(), 'Anthropic');
         fireEvent.click(runButton());
 
         await waitFor(() => expect(triggerCalls).toHaveLength(1));
@@ -391,11 +403,43 @@ describe('ExperimentTriggerDialog', () => {
         renderDialog();
         await openModelOverride();
 
-        await pickModel('OpenAI', 'gpt-4o-mini');
+        await pickModel('OpenAI', 'gpt-4o');
         fireEvent.click(screen.getByRole('button', { name: "Use the agent's model" }));
+        await waitFor(() => expect(modelField().textContent).toContain('gpt-4o-mini'));
         fireEvent.click(runButton());
 
         await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("sends no override when the agent's own model is picked back", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await pickModel('OpenAI', 'gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^agent-one-[0-9a-f]{4}$/);
+      });
+
+      it("drops the picked model when another agent is picked, so it runs on that agent's own model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await choose(targetField(), 'Agent Two');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
       });
     });
@@ -404,9 +448,7 @@ describe('ExperimentTriggerDialog', () => {
       it('offers no model and sends none', async () => {
         const { triggerCalls } = setupHandlers({ scorers: itemScorers });
         renderDialog();
-        await pickAgentOne();
-        await openAdvanced();
-        await screen.findByRole('combobox', { name: 'Model provider' });
+        await openModelOverride();
         await pickModel('OpenAI', 'gpt-4o');
 
         await choose(targetField(), 'Quality scorer');
@@ -425,7 +467,6 @@ describe('ExperimentTriggerDialog', () => {
         const { triggerCalls } = setupHandlers({ builderSettings: lockedModelPolicySettings });
         renderDialog();
         await pickAgentOne();
-        await openAdvanced();
 
         expect(await screen.findByText('Locked by admin')).toBeDefined();
         expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull();
@@ -449,18 +490,25 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
       expect(targetField().value).toBe('');
-      expect(screen.queryByLabelText('Experiment name')).toBeNull();
-      await openAdvanced();
       expect(nameInput().value).toBe('');
+      expect(screen.queryByLabelText('Description')).toBeNull();
     });
   });
 
   describe('experiment name and description', () => {
+    it('shows the name first, above the target, without opening Advanced', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(nameInput().compareDocumentPosition(targetField()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('shows the target name plus a short id as the placeholder and runs with it', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog();
       await pickAgentOne();
-      await openAdvanced();
 
       expect(nameInput().value).toBe('');
       expect(nameInput().placeholder).toMatch(/^agent-one-[0-9a-f]{4}$/);
@@ -474,7 +522,6 @@ describe('ExperimentTriggerDialog', () => {
       setupHandlers();
       renderDialog();
       await pickAgentOne();
-      await openAdvanced();
       const suffix = nameInput().placeholder.slice(-4);
 
       await choose(targetField(), 'Agent Two');
@@ -486,7 +533,6 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
       await waitFor(() => expect(targetField().disabled).toBe(false));
       await choose(targetField(), 'agent-unnamed');
-      await openAdvanced();
 
       expect(nameInput().placeholder).toMatch(/^agent-unnamed-[0-9a-f]{4}$/);
     });
@@ -505,14 +551,14 @@ describe('ExperimentTriggerDialog', () => {
       expect(triggerCalls[0].body).not.toHaveProperty('description');
     });
 
-    it('pre-fills name and description from a rerun behind a closed Advanced', async () => {
+    it('pre-fills name, and description behind a closed Advanced, from a rerun', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog({ initialName: 'Baseline', initialDescription: 'First pass' });
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(nameInput().value).toBe('Baseline');
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
       await openAdvanced();
-      expect(nameInput().value).toBe('Baseline');
       expect(descriptionInput().value).toBe('First pass');
 
       await pickAgentOne();

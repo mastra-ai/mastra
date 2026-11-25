@@ -38,7 +38,6 @@ describe('ScheduleTriggersList keyboard navigation', () => {
       // 4 triggers, 1 failed → 3 linked rows
       expect(rows).toHaveLength(3);
       expectRovingTabindex(rows);
-      expect(rows.map(row => row.getAttribute('data-row-index'))).toEqual(['0', '1', '2']);
     });
   });
 

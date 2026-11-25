@@ -33,7 +33,7 @@ Validate the deterministic counts. Never classify severity, summarize, plan, or 
   });
 }
 
-export const correlationAnalyst = createCorrelationAnalyst(process.env.MASTRA_MODEL ?? 'openai/gpt-4o-mini');
+export const correlationAnalyst = createCorrelationAnalyst(process.env.MASTRA_MODEL ?? 'openai/gpt-6-luna');
 
 export const CorrelationAnalystOutputSchema = z
   .object({

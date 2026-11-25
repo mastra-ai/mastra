@@ -182,6 +182,35 @@ export function buildTenancyQuery(tenancy?: { organizationId?: string; projectId
 }
 
 /**
+ * Merges header records case-insensitively; later layers win and keep their casing.
+ * Spreading would keep `Authorization` and `authorization` apart, and fetch joins them into "a, b".
+ */
+export function mergeHeaders(...layers: Array<Record<string, string> | undefined>): Record<string, string> {
+  const merged: Record<string, string> = {};
+  const namesByLowercase = new Map<string, string>();
+
+  for (const layer of layers) {
+    if (!layer) {
+      continue;
+    }
+
+    for (const [name, value] of Object.entries(layer)) {
+      const lowercase = name.toLowerCase();
+      const previous = namesByLowercase.get(lowercase);
+
+      if (previous !== undefined) {
+        delete merged[previous];
+      }
+
+      namesByLowercase.set(lowercase, name);
+      merged[name] = value;
+    }
+  }
+
+  return merged;
+}
+
+/**
  * Merges multiple optional abort signals into one. Returns `undefined` when no
  * signals are provided, the single signal when only one is provided, and a
  * combined signal otherwise. Uses `AbortSignal.any` when available and falls

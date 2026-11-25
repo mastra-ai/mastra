@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
-import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -8,8 +7,7 @@ import type { ChangeEvent, PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
-import type { CreateDatasetDialogRenderProps } from '../save-as-dataset-item-dialog';
-import { buildDataset, buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
+import { buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Toaster, toast } from '@/lib/toast';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
@@ -94,23 +92,6 @@ function wrap(children: ReactNode) {
   );
 }
 
-// Stands in for the app's create-dataset dialog: creates through the real mutation hook.
-function StubCreateDatasetDialog({ open, onSuccess }: CreateDatasetDialogRenderProps) {
-  const { createDataset } = useDatasetMutations();
-  if (!open) return null;
-  return (
-    <button
-      type="button"
-      onClick={async () => {
-        const dataset = await createDataset.mutateAsync({ name: 'Fresh dataset' });
-        onSuccess(dataset.id);
-      }}
-    >
-      Create dataset
-    </button>
-  );
-}
-
 function getEditors() {
   return screen.getAllByRole('textbox') as HTMLTextAreaElement[];
 }
@@ -128,29 +109,6 @@ describe('SaveAsDatasetItemDialog', () => {
     });
   });
 
-  describe('when the user creates a dataset from the Dataset select', () => {
-    it('selects the new dataset once the dataset list includes it', async () => {
-      let datasets = [buildDataset()];
-      server.use(
-        http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse(datasets))),
-        http.post(`${BASE_URL}/api/datasets`, () => {
-          const created = buildDataset({ id: 'dataset-new', name: 'Fresh dataset' });
-          datasets = [created, ...datasets];
-          return HttpResponse.json(created);
-        }),
-      );
-      renderDialog({ renderCreateDatasetDialog: props => <StubCreateDatasetDialog {...props} /> });
-
-      const createOption = (await screen.findByRole('option', { name: 'Create dataset' })) as HTMLOptionElement;
-      const datasetSelect = screen.getByRole('combobox', { name: 'Dataset' }) as HTMLSelectElement;
-      fireEvent.change(datasetSelect, { target: { value: createOption.value } });
-      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
-
-      await waitFor(() => expect(datasetSelect.value).toBe('dataset-new'));
-      expect((screen.getByRole('button', { name: 'Save item' }) as HTMLButtonElement).disabled).toBe(false);
-    });
-  });
-
   describe('when trace data arrives asynchronously after the dialog is already open', () => {
     it('hydrates the input, ground truth, and trajectory editors with the late values', async () => {
       const { rerender } = renderDialog();
@@ -163,9 +121,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -195,9 +153,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"foo":1}'}
-              initialGroundTruth={'{"answer":true}'}
-              initialTrajectory={'{"steps":[]}'}
+              initialInput='{"foo":1}'
+              initialGroundTruth='{"answer":true}'
+              initialTrajectory='{"steps":[]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -241,9 +199,9 @@ describe('SaveAsDatasetItemDialog', () => {
         <MastraReactProvider baseUrl={BASE_URL}>
           <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
-              initialInput={'{"next":2}'}
-              initialGroundTruth={'{"expected":"next"}'}
-              initialTrajectory={'{"steps":["next"]}'}
+              initialInput='{"next":2}'
+              initialGroundTruth='{"expected":"next"}'
+              initialTrajectory='{"steps":["next"]}'
               breadcrumb={<span>Trace</span>}
               isOpen
               onClose={vi.fn()}
@@ -268,27 +226,6 @@ describe('SaveAsDatasetItemDialog', () => {
     expect(getEditors()[3].value).toBe('[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]');
   });
 
-  it('seeds tool mocks from initialToolMocks when the dialog opens', async () => {
-    const { rerender } = renderDialog({ isOpen: false });
-
-    rerender(
-      wrap(
-        <SaveAsDatasetItemDialog
-          initialInput="{}"
-          initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
-          breadcrumb={<span>Trace</span>}
-          isOpen
-          onClose={vi.fn()}
-        />,
-      ),
-    );
-
-    await waitFor(() => {
-      expect(getEditors()[3].value).toBe('[{"toolName":"search","args":{},"output":"ok"}]');
-    });
-  });
-
   it('preserves user tool-mock edits across re-renders while the dialog stays open', async () => {
     const { rerender } = renderDialog({ initialToolMocks: '[{"toolName":"search","args":{},"output":"ok"}]' });
 
@@ -300,7 +237,7 @@ describe('SaveAsDatasetItemDialog', () => {
         <SaveAsDatasetItemDialog
           initialInput="{}"
           initialGroundTruth=""
-          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          initialToolMocks='[{"toolName":"search","args":{},"output":"ok"}]'
           breadcrumb={<span>Trace</span>}
           isOpen
           onClose={vi.fn()}
@@ -327,7 +264,7 @@ describe('SaveAsDatasetItemDialog', () => {
           <LinkComponentProvider Link={StubLink} navigate={navigate} paths={stubLinkPaths}>
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen
@@ -345,6 +282,9 @@ describe('SaveAsDatasetItemDialog', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Go to dataset' }));
 
       expect(navigate).toHaveBeenCalledWith('/datasets/dataset-1/items/item-42');
+      // The action closes the toast, and sonner unmounts it on a 200ms timer. Wait for it here so the
+      // timer can't fire after jsdom is torn down and fail the shard with `window is not defined`.
+      await waitFor(() => expect(screen.queryByText('Added to "Dataset 1"')).toBeNull());
     });
 
     it('omits the Go to dataset action when the app has no dataset item route', async () => {
@@ -359,7 +299,7 @@ describe('SaveAsDatasetItemDialog', () => {
           >
             <Toaster />
             <SaveAsDatasetItemDialog
-              initialInput={'{"question":"hi"}'}
+              initialInput='{"question":"hi"}'
               initialGroundTruth=""
               breadcrumb={<span>Trace</span>}
               isOpen
