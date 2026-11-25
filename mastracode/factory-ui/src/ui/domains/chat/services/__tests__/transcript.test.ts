@@ -2621,6 +2621,42 @@ describe('sent messages the server has not stored yet', () => {
     expect(userTexts(storedNow)).toEqual(['first', 'follow up']);
   });
 
+  it('shows a follow-up queued behind the running reply after that reply on reload', () => {
+    const reloaded = transcriptReducer(createInitialTranscript({ messages: [stored[0]] }), {
+      type: 'event',
+      event: {
+        type: 'display_state_changed',
+        displayState: {
+          isRunning: true,
+          currentMessage: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'reply' }]),
+          pendingUserMessages: [{ id: 'sig-2', content: 'follow up', kind: 'follow-up' }],
+        },
+      },
+    });
+
+    expect(reloaded.entries.map(entry => (entry.kind === 'message' ? entry.message.id : entry.kind))).toEqual([
+      'user-1',
+      'assistant-1',
+      'sig-2',
+    ]);
+  });
+
+  it('shows two pending messages with the same text when only one was sent from this page', () => {
+    const sent = transcriptReducer(createInitialTranscript({ messages: stored }), {
+      type: 'localUser',
+      text: 'hello',
+    });
+    const listed = transcriptReducer(
+      sent,
+      snapshot([
+        { id: 'sig-3', content: 'hello', kind: 'message' },
+        { id: 'sig-4', content: 'hello', kind: 'message' },
+      ]),
+    );
+
+    expect(userTexts(listed)).toEqual(['first', 'hello', 'hello']);
+  });
+
   it('removes a pending message the server dropped without storing it', () => {
     const listed = transcriptReducer(
       createInitialTranscript({ messages: stored }),

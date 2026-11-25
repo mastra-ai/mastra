@@ -310,10 +310,12 @@ function applyEvent(
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
     case 'display_state_changed': {
-      const shown = showPendingUserMessages(state, event.displayState.pendingUserMessages);
-      const { isRunning, currentMessage } = event.displayState;
-      if (!isRunning || !currentMessage) return shown;
-      return followLiveRow(shown, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId);
+      const { isRunning, currentMessage, pendingUserMessages } = event.displayState;
+      return showPendingUserMessages(state, pendingUserMessages, shown =>
+        isRunning && currentMessage
+          ? followLiveRow(shown, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId)
+          : shown,
+      );
     }
 
     case 'tool_input_start':
@@ -1210,30 +1212,46 @@ type PendingUserMessages = NonNullable<
 >;
 
 // A sent message waits a moment before the run stores it. A reload in that gap
-// only knows it from the server's pending list, so draw it after history.
-function showPendingUserMessages(state: TranscriptState, pending: PendingUserMessages | undefined): TranscriptState {
-  if (!pending) return state;
+// only knows it from the server's pending list, so draw it after history. A queued
+// follow-up waits behind the running reply, so it goes after that reply's live row.
+function showPendingUserMessages(
+  state: TranscriptState,
+  pending: PendingUserMessages | undefined,
+  followLive: (state: TranscriptState) => TranscriptState,
+): TranscriptState {
+  if (!pending) return followLive(state);
   const listed = new Set(pending.map(message => message.id));
   const kept = state.entries.filter(entry => entry.kind !== 'message' || !entry.pendingSend || listed.has(entry.id));
-  const added = pending.flatMap(({ id, content, kind }) => {
+  // Each optimistic copy stands in for one pending message only.
+  const claimed = new Set<number>();
+  const beforeLive: TimelineEntry[] = [];
+  const afterLive: TimelineEntry[] = [];
+  for (const { id, content, kind } of pending) {
     const message: MastraDBMessage = {
       id,
       role: 'user',
       createdAt: new Date(),
       content: { format: 2, parts: [{ type: 'text', text: content }] },
     };
-    const onScreen = kept.some(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id));
-    if (onScreen || indexOfUnclaimedOptimisticCopy(kept, message) !== -1) return [];
+    if (kept.some(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id))) continue;
+    const texts = new Set(drawableTexts(message));
+    const copy = kept.findIndex((entry, at) => !claimed.has(at) && isUnclaimedOptimisticCopy(entry, texts));
+    if (copy !== -1) {
+      claimed.add(copy);
+      continue;
+    }
     const steer = kind === 'steer';
-    return [
-      {
-        ...toMessageEntry(message, { steer, deliveryStatus: steer ? 'pending' : undefined }),
-        pendingSend: true as const,
-      },
-    ];
-  });
-  if (added.length === 0 && kept.length === state.entries.length) return state;
-  return { ...state, entries: [...kept, ...added] };
+    (kind === 'follow-up' ? afterLive : beforeLive).push({
+      ...toMessageEntry(message, { steer, deliveryStatus: steer ? 'pending' : undefined }),
+      pendingSend: true as const,
+    });
+  }
+  const shown =
+    beforeLive.length === 0 && kept.length === state.entries.length
+      ? state
+      : { ...state, entries: [...kept, ...beforeLive] };
+  const live = followLive(shown);
+  return afterLive.length === 0 ? live : { ...live, entries: [...live.entries, ...afterLive] };
 }
 
 // The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
