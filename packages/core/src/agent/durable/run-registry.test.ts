@@ -12,8 +12,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
 import { createDurableAgent } from './create-durable-agent';
+import { createEventedAgent } from './create-evented-agent';
 import {
   endRunSpansWithError,
   ExtendedRunRegistry,
@@ -342,5 +344,32 @@ describe('globalRunRegistry missing-key lookups', () => {
     expect(() => endRunSpansWithError(runId, new Error('test error'))).not.toThrow();
     expect(globalRunRegistry.has(runId)).toBe(false);
     expect([...globalRunRegistry.keys()]).not.toContain(runId);
+  });
+
+  it.each([
+    { where: 'in one process', deliversAcrossProcesses: false, concurrentUpdates: true, ends: 1 },
+    {
+      where: 'behind a broker, where a worker ends it',
+      deliversAcrossProcesses: true,
+      concurrentUpdates: true,
+      ends: 0,
+    },
+    { where: 'on the in-process fallback', deliversAcrossProcesses: true, concurrentUpdates: false, ends: 1 },
+  ])('ends the open model step $ends times $where', async ({ deliversAcrossProcesses, concurrentUpdates, ends }) => {
+    const pubsub = new EventEmitterPubSub();
+    vi.spyOn(pubsub, 'deliversAcrossProcesses', 'get').mockReturnValue(deliversAcrossProcesses);
+    const storage = new InMemoryStore();
+    vi.spyOn((await storage.getStore('workflows'))!, 'supportsConcurrentUpdates').mockReturnValue(concurrentUpdates);
+    const agent = createEventedAgent({
+      agent: new Agent({ id: 'evented', name: 'evented', instructions: '', model: 'openai/gpt-4o' }),
+    });
+    new Mastra({ agents: { agent }, pubsub, storage, logger: false });
+    const openStepSpan = { error: vi.fn() };
+    globalRunRegistry.set('failed-run', makeEntry({ openStepSpan }));
+
+    await (agent as any).emitError('failed-run', new Error('run failed'));
+
+    globalRunRegistry.delete('failed-run');
+    expect(openStepSpan.error).toHaveBeenCalledTimes(ends);
   });
 });

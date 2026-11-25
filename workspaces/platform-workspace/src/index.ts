@@ -1,6 +1,7 @@
 export {
   PlatformClient,
   PlatformApiError,
+  type PlatformAccessToken,
   type PlatformClientOptions,
   type PlatformProxyError,
   type SandboxProvider,

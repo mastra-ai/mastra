@@ -49,4 +49,4 @@ export {
   storeMessageListState,
 } from './message-list-state';
 
-export { resolveDurableToolCallConcurrency } from './tool-call-concurrency';
+export { resolveDurableToolCallConcurrency, toolCallsRunSideBySide } from './tool-call-concurrency';

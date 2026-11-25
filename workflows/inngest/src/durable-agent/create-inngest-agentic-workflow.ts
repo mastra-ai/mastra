@@ -338,14 +338,27 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
     .then(llmExecutionStep)
     // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+        const toolCalls = llmOutput.toolCalls ?? [];
+        const state = getInitData() as IterationState | undefined;
+        // More than one of these calls can suspend at once, on workers that share no memory, so
+        // none of them reports the step's model usage. The last execution of the run does.
+        const sideBySide =
+          toolCalls.length > 1 &&
+          resolveDurableToolCallConcurrency({
+            options: state?.options,
+            toolsMetadata: state?.toolsMetadata,
+            toolCalls,
+          }) > 1;
+        return toolCalls.map(toolCall => ({
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
           timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
+          response: llmOutput.response,
+          ...(sideBySide ? { sideBySide } : {}),
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -474,6 +487,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
               outputTokens: 0,
               totalTokens: 0,
             },
+            generationReportedUsage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
             lastStepResult: undefined,
             agentSpanData,
             modelSpanData,
@@ -854,6 +868,7 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 `[InngestDurableAgent] Run ${state.runId} has no recorded stop cause; its span outcome is unknown`,
               );
           }
+          const runTripwire = tripwire ?? state.lastStepResult?.tripwire ?? initData.inputTripwire;
           const termination = deadlineTermination
             ? deadlineTermination
             : ['tripwire', 'error'].includes(finishReason ?? '') && recordedTermination
@@ -862,13 +877,15 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                   stopCause,
                   delegationFailure: state.tracingDelegationFailure ?? registry?.tracingDelegationFailure,
                   finishReason,
-                  tripwire: tripwire ?? state.lastStepResult?.tripwire,
+                  tripwire: runTripwire,
                   maxSteps: state.options?.maxSteps ?? maxSteps,
                 });
           if (modelSpanData) {
             const modelSpan =
               liveSegmentSpan(modelSpanData, registry?.resumeModelSpan, registry?.modelSpan) ??
               (observability?.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined);
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -876,30 +893,57 @@ function createAgenticLoopWorkflow(options: InngestDurableAgenticWorkflowOptions
                 args: tc.args,
               })),
             );
-            const { usageIncomplete, usage } = generationUsage(state.accumulatedUsage, state.accumulatedSteps);
+            const { usageIncomplete, usage } = generationUsage(
+              state.accumulatedUsage,
+              state.accumulatedSteps,
+              state.generationReportedUsage,
+            );
+            // The span was opened for the run's first model, maybe on another worker. Name the
+            // model that answered, so the generation and its cost are not booked on a model that failed.
+            const servedBy = state.lastResponse?.servedBy;
+            const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+            if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
             modelSpan?.createTracker()?.endGeneration({
               ...termination,
-              output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
+              output: { text: finalText, object: finishResult.object, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
                 ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 ...clocks,
                 responseId: state.lastResponse?.id,
                 responseModel: state.lastResponse?.modelId,
+                ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
               },
               usage,
+              // Cost the provider reported itself is used in place of an estimate.
+              stepProviderMetadata: state.reportedCosts
+                ?.slice(state.generationReportedSteps ?? 0)
+                .map(cost => cost ?? undefined),
             });
           }
 
           // End AGENT_RUN span with final output
           if (agentSpanData) {
-            const agentSpan =
-              liveSegmentSpan(agentSpanData, registry?.resumeAgentSpan, registry?.agentSpan) ??
-              observability?.rebuildSpan(agentSpanData);
             agentSpan?.end({
               ...termination,
-              output: { text: finalText },
-              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
+              output: {
+                text: finalText,
+                object: finishResult.object,
+                ...(runTripwire ? { tripwire: runTripwire } : {}),
+              },
+              attributes: {
+                ...clocks,
+                ...(runTripwire
+                  ? {
+                      tripwireAbort: {
+                        reason: runTripwire.reason,
+                        processorId: runTripwire.processorId,
+                        retry: runTripwire.retry,
+                        metadata: runTripwire.metadata,
+                      },
+                    }
+                  : {}),
+              },
             });
           }
 

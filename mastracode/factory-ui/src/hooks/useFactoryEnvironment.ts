@@ -1,3 +1,4 @@
+import type { EnvironmentBuild } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
@@ -10,11 +11,7 @@ import {
   patchFactoryEnvironment,
   requestEnvironmentBuild,
 } from '../ui/domains/workspaces/services/environment';
-import type {
-  FactoryEnvironmentBuild,
-  FactoryEnvironmentPatch,
-  FactoryEnvironmentPayload,
-} from '../ui/domains/workspaces/services/environment';
+import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../ui/domains/workspaces/services/environment';
 
 /**
  * A Factory's environment (resources, ordered repositories and setup) through
@@ -68,7 +65,7 @@ const ACTIVE_BUILD_POLL_MS = 10_000;
 const PIN_WAIT_POLL_MS = 5_000;
 const PIN_WAIT_MAX_POLLS = 12;
 
-function isActive(build: FactoryEnvironmentBuild | undefined) {
+function isActive(build: EnvironmentBuild | undefined) {
   return build?.status === 'pending' || build?.status === 'building';
 }
 
@@ -83,7 +80,7 @@ export function useEnvironmentBuildQuery(factoryId: string | undefined, buildId:
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const pinPolls = useRef(0);
-  const awaitingPin = (build: FactoryEnvironmentBuild | undefined) => {
+  const awaitingPin = (build: EnvironmentBuild | undefined) => {
     if (build?.status !== 'ready' || !build.templateId) return false;
     const environment = queryClient.getQueryData<FactoryEnvironmentPayload>(queryKeys.factoryEnvironment(factoryId));
     return environment !== undefined && environment.activeTemplateId !== build.templateId;
@@ -91,7 +88,7 @@ export function useEnvironmentBuildQuery(factoryId: string | undefined, buildId:
   return useQuery({
     queryKey: queryKeys.factoryEnvironmentBuild(factoryId, buildId),
     queryFn: async () => {
-      const previous = queryClient.getQueryData<FactoryEnvironmentBuild>(
+      const previous = queryClient.getQueryData<EnvironmentBuild>(
         queryKeys.factoryEnvironmentBuild(factoryId, buildId),
       );
       const build = await getEnvironmentBuild(baseUrl, factoryId!, buildId!);

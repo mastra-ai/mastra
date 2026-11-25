@@ -1,0 +1,32 @@
+.starter-enter {
+  animation:
+    starter-rise 760ms cubic-bezier(0.16, 1, 0.3, 1) backwards,
+    starter-fade 340ms linear backwards;
+  animation-delay: calc(80ms + var(--i, 0) * 50ms);
+}
+
+@keyframes starter-rise {
+  from {
+    transform: translateY(1.25rem);
+  }
+
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes starter-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .starter-enter {
+    animation: none;
+  }
+}

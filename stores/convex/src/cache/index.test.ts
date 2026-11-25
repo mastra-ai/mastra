@@ -160,27 +160,6 @@ describe('ConvexServerCache', () => {
     expect(client.calls).toEqual([expect.objectContaining({ op: 'listPushIndexed', expiresAt: null })]);
   });
 
-  it('falls back to increment + listPush when the deployed handler lacks listPushIndexed', async () => {
-    client.rawResponses = [
-      new Error('Unsupported operation listPushIndexed'),
-      { result: 1 },
-      { result: undefined },
-      { result: 2 },
-      { result: undefined },
-    ];
-
-    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-1' })).resolves.toBe(0);
-    await expect(cache.listPushIndexed('log', 'log:counter', { id: 'evt-2' })).resolves.toBe(1);
-
-    expect(client.calls.map(call => call.op)).toEqual([
-      'listPushIndexed',
-      'increment',
-      'listPush',
-      'increment',
-      'listPush',
-    ]);
-  });
-
   it('propagates other listPushIndexed failures', async () => {
     client.rawResponses = [new Error('Convex cache request timed out after 30000 ms.')];
 

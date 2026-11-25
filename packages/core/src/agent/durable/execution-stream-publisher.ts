@@ -17,7 +17,7 @@ import {
   setExecutionClaim,
 } from './execution-fence';
 import type { DurableExecutionClaim } from './execution-fence';
-import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import { deleteRunRegistryEntry, getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
@@ -45,9 +45,11 @@ function resolveExecutionPublisher({
 }: ExecutionPublisherOptions) {
   // Workers can attach with a claim before a local reader registers the run.
   if (!entry && !claim) return;
+  let createdPlaceholder = false;
   if (!entry) {
     entry = { isPlaceholder: true } as RunRegistryEntry;
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
+    createdPlaceholder = true;
   }
 
   // Keep the captured wrapper ahead of registry lookups: the same agent ID can use another bus.
@@ -68,20 +70,58 @@ function resolveExecutionPublisher({
   const memoryInfo = owner.__getRunOwner(runId);
 
   const publisher = getRunStreamPublisher(runId, entry, mastra);
-  return { publisher, publisherId, runBus, bus, usesSharedRunLog, executionClaim, requestContext, memoryInfo, entry };
+  return {
+    publisher,
+    publisherId,
+    runBus,
+    bus,
+    usesSharedRunLog,
+    executionClaim,
+    requestContext,
+    memoryInfo,
+    entry,
+    createdPlaceholder,
+  };
 }
 
 /** Worker output keeps its captured execution authority and cannot settle or clean up the run. */
 export function getExecutionStreamProducer(options: ExecutionPublisherOptions): AgentStreamProducer | undefined {
   const context = resolveExecutionPublisher(options);
   if (!context) return;
-  const { publisher, publisherId, runBus, requestContext } = context;
+  const { publisher, publisherId, runBus, requestContext, entry, createdPlaceholder } = context;
   const { runId, agentId, mastra } = options;
-  return publisher.attachEventProducer({
+  const producer = publisher.attachEventProducer({
     publisherId,
     pubsub: runBus.pubsub,
     assertOwnership: () => assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext }),
   });
+  if (!createdPlaceholder) return producer;
+  return {
+    async publishEvent(event, transport, publishOptions) {
+      try {
+        return await producer.publishEvent(event, transport, publishOptions);
+      } catch (error) {
+        // This resolution registered a placeholder entry so the claim's
+        // publisher had somewhere to live. A publish refused for lost
+        // ownership proves the claim is superseded: retract the placeholder,
+        // or a late publish after run cleanup re-registers the run.
+        //
+        // Identity alone is not enough to retract. A sibling execution adopts
+        // a placeholder by filling it in *in place* (see resolve-runtime's
+        // `Object.assign(globalEntry, rebuilt)`), so the registry can still
+        // hold this very object while it now carries another execution's live
+        // tools, model and cleanup. Only an entry that is still an unadopted
+        // placeholder is ours to delete; anything else is bounded by the
+        // registry's own sliding TTL and entry cap.
+        const current = getRunRegistryEntry(runId, mastra);
+        if (isExecutionFenceError(error) && current === entry && entry.isPlaceholder === true) {
+          deleteRunRegistryEntry(runId, mastra);
+        }
+        throw error;
+      }
+    },
+    detach: () => producer.detach(),
+  };
 }
 
 /** Owning readers settle and clean up using the authority of their captured execution. */

@@ -956,6 +956,125 @@ describe('BackgroundTaskManager: non-agent owners', () => {
   });
 });
 
+// A worker that has been up for a while has already run its startup recovery
+// scan, so only its periodic sweep can see a task whose worker died later.
+// (#31305)
+describe('BackgroundTaskManager: a running task whose worker dies after startup', () => {
+  async function worker(globalConcurrency = 10) {
+    const mgr = await makeManager({
+      globalConcurrency,
+      perAgentConcurrency: globalConcurrency,
+      leaseDurationMs: LEASE_MS,
+      recoverStaleTasksOnStart: true,
+    });
+    const execute = vi.fn(async () => 'recovered');
+    mgr.registerStaticExecutor('tool', { execute });
+    return { mgr, execute };
+  }
+
+  async function seedRunning(overrides: Partial<BackgroundTask>) {
+    const store = (await storage.getStore('backgroundTasks'))!;
+    await store.createTask({
+      ...foreignRunningRow('orphaned'),
+      toolName: 'tool',
+      agentId: 'agent-1',
+      ownerId: 'dead-worker',
+      leaseExpiresAt: new Date(Date.now() - 1_000),
+      ...overrides,
+    });
+  }
+
+  it('retries it without a restart, spending a retry, even when it held the only slot', async () => {
+    const { mgr, execute } = await worker(1);
+    await seedRunning({ maxRetries: 1 });
+
+    await vi.waitFor(async () => expect((await mgr.getTask('orphaned'))?.status).toBe('completed'), {
+      timeout: 5_000,
+      interval: 100,
+    });
+    const done = await mgr.getTask('orphaned');
+    expect(done).toMatchObject({ result: 'recovered', retryCount: 1 });
+    expect(done!.ownerId).toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails it without running it again once it has used its retries', async () => {
+    const { mgr, execute } = await worker();
+    await seedRunning({ maxRetries: 0 });
+
+    await vi.waitFor(async () => expect((await mgr.getTask('orphaned'))?.status).toBe('failed'), {
+      timeout: 5_000,
+      interval: 100,
+    });
+    const failed = await mgr.getTask('orphaned');
+    expect(failed?.error?.message).toBe('Worker process terminated before task completed');
+    expect(failed!.ownerId).toBeUndefined();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('finds it on the next sweep behind more live tasks than the default page, when the limit allows them', async () => {
+    const { mgr, execute } = await worker(150);
+    const store = (await storage.getStore('backgroundTasks'))!;
+    const old = Date.now() - 60_000;
+    for (let i = 0; i < 120; i++) {
+      await store.createTask({
+        ...foreignRunningRow(`live-${i}`),
+        ownerId: 'live-worker',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(old + i),
+      });
+    }
+    await seedRunning({ maxRetries: 0 });
+
+    // One lease plus a little: the sweep that runs after the lease must already find it.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS + HEARTBEAT_MS));
+    expect((await mgr.getTask('orphaned'))?.status).toBe('failed');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('checks every running task on each sweep when they exactly fill one page', async () => {
+    const { mgr, execute } = await worker(100);
+    const store = (await storage.getStore('backgroundTasks'))!;
+    for (let i = 0; i < 99; i++) {
+      await store.createTask({
+        ...foreignRunningRow(`live-${i}`),
+        ownerId: 'live-worker',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(Date.now() - 60_000 + i),
+      });
+    }
+    await seedRunning({ maxRetries: 0, leaseExpiresAt: new Date(Date.now() + 60_000) });
+    const sweepReads: number[] = [];
+    const listTasks = store.listTasks.bind(store);
+    vi.spyOn(store, 'listTasks').mockImplementation(async filter => {
+      const result = await listTasks(filter);
+      if (filter?.status === 'running' && filter.page != null) sweepReads.push(result.tasks.length);
+      return result;
+    });
+
+    // Several sweeps over the 100 running rows: none may read an empty page.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS * 3));
+    expect(sweepReads.length).toBeGreaterThanOrEqual(2);
+    expect(sweepReads.every(read => read === 100)).toBe(true);
+
+    // Its owner dies: the next sweep finds it.
+    await store.updateTask('orphaned', { leaseExpiresAt: new Date(Date.now() - 1_000) });
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS + HEARTBEAT_MS));
+    expect((await mgr.getTask('orphaned'))?.status).toBe('failed');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('leaves it alone while its owner keeps the lease', async () => {
+    const { mgr, execute } = await worker();
+    await seedRunning({ maxRetries: 1, ownerId: 'live-worker', leaseExpiresAt: new Date(Date.now() + 60_000) });
+
+    // Several sweeps, one per lease.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS * 3));
+    expect(await mgr.getTask('orphaned')).toMatchObject({ status: 'running', ownerId: 'live-worker', retryCount: 0 });
+    expect(execute).not.toHaveBeenCalled();
+  });
+});
+
 // The process that dispatched a task records its open request on the tool call through
 // its task context. Another process can cancel that task, so the owner has to hear about
 // it to drop the request. (#28986)
