@@ -152,6 +152,37 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     expect(page.result.current.isRunning).toBe(true);
   });
 
+  // Another run took the thread over while the stream was down (a queued follow-up, another device). Its start is
+  // stored, so only the history names it.
+  const handedOver = historyOf(
+    [
+      question,
+      stored('a1', 'assistant', 'Half, then whole.'),
+      stored('u2', 'user', 'And then?'),
+      stored('a2', 'assistant', 'Then'),
+    ],
+    'run-2',
+  );
+
+  it.each([
+    { retained: true, chunks: [handedOver, ended('run-1')] },
+    { retained: false, chunks: [handedOver] },
+  ])(
+    'follows the run that took over meanwhile until it ends (first run outcome retained: $retained)',
+    async ({ chunks }) => {
+      const { send, page } = await givenReplyCut();
+
+      await send(1, ...chunks);
+
+      await waitFor(() =>
+        expect(texts(page.result.current.messages)).toEqual(['Tell me more', 'Half, then whole.', 'And then?', 'Then']),
+      );
+      expect(page.result.current.isRunning).toBe(true);
+      await send(1, ended('run-2'));
+      await waitFor(() => expect(page.result.current.isRunning).toBe(false));
+    },
+  );
+
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
     const threads = givenThreadStreams();
     const page = followThread();
