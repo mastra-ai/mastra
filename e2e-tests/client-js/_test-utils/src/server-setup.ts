@@ -40,6 +40,44 @@ function createMockModel(mockText: string) {
 }
 
 /**
+ * Partial text the failing model streams before its upstream connection errors.
+ */
+export const MID_STREAM_FAILURE_PARTIAL_TEXT = 'Here is the first half of';
+export const MID_STREAM_FAILURE_MESSAGE = 'upstream 529 overloaded';
+
+/**
+ * A mock model that streams one text delta and then fails, like a provider
+ * that drops the connection or returns an overload error mid-response.
+ */
+function createMidStreamFailureModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const parts: unknown[] = [
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: MID_STREAM_FAILURE_PARTIAL_TEXT },
+      ];
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        // Error from pull, after the text has been read: erroring a stream discards anything still queued.
+        stream: new ReadableStream({
+          pull(controller) {
+            const part = parts.shift();
+            if (part) {
+              controller.enqueue(part);
+            } else {
+              controller.error(new Error(MID_STREAM_FAILURE_MESSAGE));
+            }
+          },
+        }),
+      };
+    },
+  });
+}
+
+/**
  * Configuration for the test server setup factory
  */
 export interface TestServerSetupConfig {
@@ -224,8 +262,15 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     });
 
     // Create Mastra instance with observability configured
+    const midStreamFailureAgent = new Agent({
+      id: 'midStreamFailureAgent',
+      name: 'midStreamFailureAgent',
+      instructions: 'You are a test assistant whose model fails mid-response.',
+      model: createMidStreamFailureModel(),
+    });
+
     const mastra = new Mastra({
-      agents: { testAgent },
+      agents: { testAgent, midStreamFailureAgent },
       storage,
       vectors: { testVector },
       workflows: { 'add-workflow': addWorkflow },

@@ -8,6 +8,12 @@ import { exitedWithFailure, isTaskTool } from '@/ds/components/ai/tool-call';
 
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
 export type ToolPart = Extract<MessagePart, { type: 'tool-invocation' }>;
+export type DataMessagePart = Extract<MessagePart, { type: `data-${string}` }>;
+export type DrawsDataPart = (part: DataMessagePart) => boolean;
+
+function isDataPart(part: MessagePart): part is DataMessagePart {
+  return part.type.startsWith('data-');
+}
 
 /**
  * Whether text shows anything. Models told to end a turn with an empty message
@@ -32,8 +38,8 @@ export function terminalInvocationStatus(
   return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
 }
 
-export function renderableParts(entry: MessageEntry): MessagePart[] {
-  return mergeProse((entry.message.content.parts ?? []).filter(part => isRecord(part) && keepsSlot(part)));
+export function renderableParts(entry: MessageEntry, drawsData?: DrawsDataPart): MessagePart[] {
+  return mergeProse((entry.message.content.parts ?? []).filter(part => isRecord(part) && keepsSlot(part, drawsData)));
 }
 
 function mergeProse(parts: MessagePart[]): MessagePart[] {
@@ -51,7 +57,8 @@ function mergeProse(parts: MessagePart[]): MessagePart[] {
   return merged;
 }
 
-function keepsSlot(part: MessagePart): boolean {
+function keepsSlot(part: MessagePart, drawsData: DrawsDataPart | undefined): boolean {
+  if (isDataPart(part)) return drawsData?.(part) ?? false;
   switch (part.type) {
     case 'text':
     case 'reasoning':
@@ -74,8 +81,10 @@ export function draws(
   part: MessagePart,
   entry: MessageEntry,
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  drawsData?: DrawsDataPart,
 ): boolean {
   if (!isRecord(part)) return false;
+  if (isDataPart(part)) return drawsData?.(part) ?? false;
 
   switch (part.type) {
     case 'text':

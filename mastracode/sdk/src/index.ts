@@ -30,7 +30,6 @@ import {
   CyberRefusalHandler,
   isBadRequestError,
   ProviderHistoryCompat,
-  StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -71,6 +70,7 @@ import {
   getDynamicModel,
   getGoalJudgeModel,
   resolveModel,
+  setHostModelRoute,
 } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -93,7 +93,6 @@ import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
   isStreamCutAfterResponse,
-  MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
@@ -109,6 +108,8 @@ import { createKnowledgeInspector as createScopedKnowledgeInspector } from './kn
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
+import { MODEL_FALLBACK_STATE_KEY } from './model-fallback.js';
+import type { ModelFallback } from './model-fallback.js';
 import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableOmPacks, resolveAutoOMModelId } from './onboarding/packs.js';
 import {
@@ -123,6 +124,7 @@ import { PluginManager } from './plugins/manager.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
+import { RouteAwareStreamErrorRetryProcessor } from './processors/route-aware-stream-error-retry.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
@@ -411,6 +413,10 @@ export interface MastraCodeConfig {
   resolveDefaultThinkingLevel?: (ctx: {
     requestContext: RequestContext;
   }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
+  /** Host-owned model route for the current request, called on every model resolution. */
+  resolveModelRoute?: (ctx: {
+    requestContext: RequestContext;
+  }) => readonly ModelFallback[] | Promise<readonly ModelFallback[]>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
@@ -1399,6 +1405,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
       | undefined;
     const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+    setHostModelRoute(ctx.requestContext, await config?.resolveModelRoute?.(ctx));
     return getDynamicModel(ctx, config?.settingsPath, {
       modeless,
       defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
@@ -1597,7 +1604,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // 5xx errors, and a blind retry would resend the request without the
       // `continue` nudge and spend the one retry this handler allows.
       new CyberRefusalHandler(),
-      new StreamErrorRetryProcessor({
+      new RouteAwareStreamErrorRetryProcessor({
         matchers: [
           // Account rotation owns a stream the provider cut after accepting the
           // request, with its own per-step budget. The matcher walk stops at the

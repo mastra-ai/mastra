@@ -1,8 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 
-import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
-import type { RunEndCaptureSession } from '../session/run-audit.js';
 import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
@@ -117,37 +115,6 @@ export function observeSessionRunReports(
     since = new Date(Date.now() + 1);
     settle(report(outcome, runSince));
   });
-}
-
-/**
- * Renew a kicked-off run's open-run entry until the run ends, like the
- * dispatcher's heartbeat, so no dispatcher starts the role again meanwhile.
- * `endReason` is how that run ended, once it has; `stop` is for a kickoff that fails.
- */
-export function heartbeatOpenRunUntilEnd(
-  session: RunEndCaptureSession,
-  kickoffId: string,
-): { endReason: () => RunEndReason; stop: () => void } {
-  let endReason: RunEndReason;
-  let unsubscribe = () => {};
-  const timer = setInterval(
-    () => void heartbeatSessionOpenRun(session, kickoffId),
-    Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
-  );
-  timer.unref?.();
-  let stopped = false;
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    clearInterval(timer);
-    unsubscribe();
-  };
-  unsubscribe = session.subscribe(event => {
-    if (event.type !== 'agent_end') return;
-    endReason ??= event.reason;
-    stop();
-  });
-  return { endReason: () => endReason, stop };
 }
 
 /**

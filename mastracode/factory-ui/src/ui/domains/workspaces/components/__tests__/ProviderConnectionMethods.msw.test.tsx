@@ -15,7 +15,7 @@ beforeEach(() => {
     ),
     // A connected personal lane starts on the caller's saved default model, when there is one.
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
   );
 });

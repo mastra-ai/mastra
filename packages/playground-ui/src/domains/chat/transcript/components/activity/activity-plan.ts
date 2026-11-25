@@ -3,7 +3,7 @@ import type { MessageEntry, SuspensionPrompt, TimelineEntry, ToolCall } from '..
 
 import { messageEntryView } from '../message-entry-view';
 import { draws, hasVisibleText, renderableParts, toolFromInvocationPart } from '../transcript-parts';
-import type { MessagePart, ToolPart } from '../transcript-parts';
+import type { DrawsDataPart, MessagePart, ToolPart } from '../transcript-parts';
 import { groupConsecutive } from '@/ds/components/ai/tool-call';
 
 const TOOLS_DRAWN_AS_MESSAGES = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
@@ -59,6 +59,7 @@ function classifyPart(
   part: MessagePart,
   entry: MessageEntry,
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  drawsData: DrawsDataPart | undefined,
 ): PartRole {
   switch (part.type) {
     case 'text':
@@ -73,7 +74,7 @@ function classifyPart(
       return TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';
     }
     default:
-      return 'ignored';
+      return draws(part, entry, suspensions, drawsData) ? 'ends' : 'ignored';
   }
 }
 
@@ -100,21 +101,25 @@ function messageTime(entry: MessageEntry): number | undefined {
   return Number.isNaN(time) ? undefined : time;
 }
 
-function entryItems(entry: TimelineEntry, suspensions: ReadonlyMap<string, SuspensionPrompt>): PlanItem[] {
+function entryItems(
+  entry: TimelineEntry,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  drawsData: DrawsDataPart | undefined,
+): PlanItem[] {
   if (entry.kind !== 'message') return [{ key: entry.id, entryId: entry.id }];
 
-  const parts = renderableParts(entry);
+  const parts = renderableParts(entry, drawsData);
   const view = messageEntryView(entry, parts);
   if (view.kind === 'hidden') return [];
   const at = messageTime(entry);
   if (view.kind !== 'parts') return [{ key: entry.id, entryId: entry.id, at }];
   if (entry.message.role !== 'assistant') {
-    const drawsAny = parts.some(part => draws(part, entry, suspensions));
+    const drawsAny = parts.some(part => draws(part, entry, suspensions, drawsData));
     return drawsAny ? [{ key: entry.id, entryId: entry.id, at }] : [];
   }
 
   return parts.flatMap((part, index): PlanItem[] => {
-    const role = classifyPart(part, entry, suspensions);
+    const role = classifyPart(part, entry, suspensions, drawsData);
     if (role === 'ignored') return [];
     return [
       {
@@ -152,8 +157,9 @@ export function planTurnActivity(
   entries: readonly TimelineEntry[],
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runningTurn: boolean,
+  drawsData?: DrawsDataPart,
 ): ReadonlyMap<string, EntryActivity> {
-  const items = entries.flatMap(entry => entryItems(entry, suspensions));
+  const items = entries.flatMap(entry => entryItems(entry, suspensions, drawsData));
   const runs = groupConsecutive<PlanItem, JoinItem>(items, {
     key: item => item.key,
     joins: (item): item is JoinItem => item.member !== undefined,

@@ -3,6 +3,8 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TimelineEntry } from '../../services/transcript';
+import { TranscriptSlotsProvider } from '../slots';
+import type { TranscriptSlots } from '../slots';
 import { TranscriptEntries } from '../transcript-entries';
 
 afterEach(cleanup);
@@ -184,5 +186,46 @@ describe('a transcript drawn by a host that plugs in no slots', () => {
 
     expect(screen.getByRole('textbox', { name: 'Which branch should I deploy?' })).toBeTruthy();
     expect(screen.queryByRole('group', { name: /^Waiting for input/ })).toBeNull();
+  });
+});
+
+describe('a transcript drawn by a host that draws its own data parts', () => {
+  const slots: TranscriptSlots = {
+    DataPart: {
+      draws: part => part.type === 'data-model-switch',
+      Component: ({ part }) => <p>{part.type}</p>,
+    },
+  };
+
+  it('shows the parts the host claims, in place, and keeps every other data part hidden', () => {
+    const parts: MastraDBMessage['content']['parts'] = [
+      { type: 'data-model-switch', data: {} },
+      { type: 'data-usage', data: {} },
+      { type: 'text', text: 'Reviewed on the fallback' },
+    ];
+    render(
+      <TranscriptSlotsProvider slots={slots}>
+        <TranscriptEntries
+          entries={[
+            {
+              kind: 'message',
+              id: 'assistant-1',
+              message: {
+                id: 'assistant-1',
+                role: 'assistant',
+                createdAt: new Date('2026-07-15T10:00:00.000Z'),
+                content: { format: 2, parts },
+              },
+            },
+          ]}
+          onApprove={noop}
+          onRespond={noop}
+        />
+      </TranscriptSlotsProvider>,
+    );
+
+    expect(screen.getByText('data-model-switch')).toBeTruthy();
+    expect(screen.queryByText('data-usage')).toBeNull();
+    expect(screen.getByText('Reviewed on the fallback')).toBeTruthy();
   });
 });

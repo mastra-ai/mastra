@@ -63,6 +63,7 @@ export function TranscriptEntries({
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: TranscriptTail;
 }) {
+  const drawsData = useTranscriptSlots().DataPart?.draws;
   const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
   // Keyed by the prompts on screen, not by the array holding them: a delta hands this
   // component a new `entries` every token, and a map rebuilt each time would be a new
@@ -82,7 +83,7 @@ export function TranscriptEntries({
 
   // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => draws(part, entry, suspensions));
+    entry.message.content.parts.some(part => draws(part, entry, suspensions, drawsData));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
   // A steer interjects into a reply still being written: it keeps its turn for the
@@ -110,7 +111,7 @@ export function TranscriptEntries({
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
         const reply = turnReply(steps, runningTurn);
-        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
+        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn, drawsData);
 
         return (
           <ChatShell.Turn

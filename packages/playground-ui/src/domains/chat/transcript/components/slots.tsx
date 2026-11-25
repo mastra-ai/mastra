@@ -1,5 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import type { DataPart } from '@mastra/react/ui';
 import { createContext, useContext } from 'react';
 import type { ComponentType, ReactNode } from 'react';
 
@@ -10,6 +11,7 @@ import type {
   SubagentEntry,
   SuspensionPrompt,
 } from '../services/transcript';
+import type { DrawsDataPart } from './transcript-parts';
 import { ActivityItem } from '@/ds/components/ai/activity';
 import { ToolApproval } from '@/ds/components/ai/tool-approval';
 import { presentTool } from '@/ds/components/ai/tool-call';
@@ -20,6 +22,11 @@ import { Notice } from '@/ds/components/Notice';
 export interface TranscriptRunErrorProps {
   error: MastraErrorPart['error'];
   entryId: string;
+}
+
+export interface TranscriptDataPartSlot {
+  draws: DrawsDataPart;
+  Component: ComponentType<{ part: DataPart }>;
 }
 
 export interface TranscriptSubmitPlanProps {
@@ -41,6 +48,7 @@ export interface TranscriptSubmitPlanProps {
  *   no way to answer. A paused call inside a message that asks a question keeps its inline answer form.
  * - `Subagent`: nothing; the tool call that started the subagent already names it in the message.
  * - `SubmitPlan`: the generic tool row, with no way to approve or revise the plan.
+ * - `DataPart`: nothing; every `data-*` part stays hidden and leaves the activity line whole.
  */
 export interface TranscriptSlots {
   RunError?: ComponentType<TranscriptRunErrorProps>;
@@ -58,6 +66,7 @@ export interface TranscriptSlots {
   }>;
   Subagent?: ComponentType<{ entry: SubagentEntry }>;
   SubmitPlan?: ComponentType<TranscriptSubmitPlanProps>;
+  DataPart?: TranscriptDataPartSlot;
 }
 
 const TranscriptSlotsContext = createContext<TranscriptSlots>({});

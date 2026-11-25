@@ -1,16 +1,19 @@
 import { capPersistedText, readRequestedModel, readRequestId } from '../loop/shared/provider-error-details';
 
-export type ProviderFailureKind =
-  | 'auth'
-  | 'quota'
-  | 'rate_limited'
-  | 'context_overflow'
-  | 'model_rejected'
-  | 'tool_history_rejected'
-  | 'timeout'
-  | 'unavailable'
-  | 'invalid_request'
-  | 'unknown';
+export const PROVIDER_FAILURE_KINDS = [
+  'auth',
+  'quota',
+  'rate_limited',
+  'context_overflow',
+  'model_rejected',
+  'tool_history_rejected',
+  'timeout',
+  'unavailable',
+  'invalid_request',
+  'unknown',
+] as const;
+
+export type ProviderFailureKind = (typeof PROVIDER_FAILURE_KINDS)[number];
 
 export interface ProviderErrorFacts {
   statusCode?: number;

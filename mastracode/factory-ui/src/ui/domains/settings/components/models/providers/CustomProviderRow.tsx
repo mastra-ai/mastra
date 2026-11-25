@@ -3,6 +3,8 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 import type { CustomProviderInfo } from '../../../../../../api/types';
 import { useRemoveCustomProvider } from '../../../../../../hooks/use-custom-providers';
@@ -70,8 +72,13 @@ export function CustomProviderRow({
           }
         />
         <DropdownMenu.Content align="end">
-          <DropdownMenu.Item onClick={onEdit}>Edit</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={remove}>Remove</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={onEdit}>
+            <IconPencil /> Edit
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive" onClick={remove}>
+            <TrashIcon /> Remove
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
     </ConnectedRow>
