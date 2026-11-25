@@ -9,7 +9,7 @@ import type { EntryActivity } from './activity/activity-plan';
 import { MessageBubble } from './MessageBubble';
 
 import { agentWorkingDirectory, isTurnDivider } from './signals';
-import { ApprovalCard, DefaultNotification, DefaultRunError, useTranscriptSlots } from './slots';
+import { ApprovalCard, DefaultNotification, DefaultRunError, DefaultSuspension, useTranscriptSlots } from './slots';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { turnGaps } from './turn-gaps';
@@ -229,8 +229,11 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
     case 'notification_summary':
       return NotificationSummary ? <NotificationSummary entry={entry} /> : <DefaultNotification entry={entry} />;
     case 'suspension':
-      return redundantSuspension || !Suspension ? null : (
+      if (redundantSuspension) return null;
+      return Suspension ? (
         <Suspension prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+      ) : (
+        <DefaultSuspension prompt={entry} />
       );
     case 'subagent':
       return Subagent ? <Subagent entry={entry} /> : null;

@@ -29,10 +29,7 @@ import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
-import { isRecord } from './transcript-shared';
-import { signalPartsText } from './TranscriptSignals';
+import type { NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
 import { IconBell2 } from '@mastra/playground-ui/icons/central/IconBell2';
 
 /** Where a notification's "Open on …" link points; GitHub and GitLab name the provider. */
