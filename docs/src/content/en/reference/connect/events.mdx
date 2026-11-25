@@ -1,20 +1,21 @@
 ---
 title: 'Reference: ConnectEvents | Connect'
-description: 'API reference for ConnectEvents and isConnectEvent() in @mastra/connect: receive provider webhook events for a project, resume from a stored cursor, and narrow payloads to typed provider contracts.'
+description: 'API reference for ConnectEvents in @mastra/connect: receive a project''s provider webhook events, choose providers and event types, resume from a cursor, and get typed payloads.'
 packages:
   - '@mastra/connect'
 ---
 
 # ConnectEvents
 
-Subscribes to a project's provider events: the webhooks the platform receives for the project's connections, such as a GitHub pull request opening or a Linear issue changing. Iterate it to receive each event as a `ConnectEvent`, and narrow events with `isConnectEvent()` to get a payload typed from the provider's published contract.
+Subscribes to a project's provider events: the webhooks the platform receives for the project's connections, such as a GitHub pull request opening or a Linear issue changing. Iterate it to receive each event as a `ConnectEvent`. Choose providers and event types with `events`, then check `provider` and `eventType` to get a payload typed from the provider's published contract.
 
 ## Usage example
 
 ```typescript title="src/events.ts"
-import { ConnectEvents, isConnectEvent } from '@mastra/connect'
+import { ConnectEvents } from '@mastra/connect'
 
 const events = new ConnectEvents({
+  events: { github: ['pull_request.opened'], linear: ['Issue.create', 'Issue.update'] },
   cursorStore: {
     load: () => db.get('connect-events-cursor'),
     save: cursor => db.set('connect-events-cursor', cursor),
@@ -23,10 +24,9 @@ const events = new ConnectEvents({
 })
 
 for await (const event of events) {
-  if (isConnectEvent(event, 'github', 'pull_request.opened')) {
+  if (event.provider === 'github') {
     await reviewPullRequest(event.payload.repository.full_name, event.payload.pull_request.number)
-  }
-  if (isConnectEvent(event, 'linear', ['Issue.create', 'Issue.update'])) {
+  } else {
     await syncIssue(event.payload.data.id)
   }
 }
@@ -40,6 +40,20 @@ Delivery is at-least-once: an event whose handling throws, or that you break out
 
 <PropertiesTable
   content={[
+  {
+    name: 'events',
+    type: 'Record<string, true | string[]>',
+    description:
+      'Which providers and event types to receive: `true` for a provider, or a list of its event types. Providers you leave out are skipped. Omit it to receive every provider. See [Choosing events](#choosing-events).',
+    isOptional: true,
+  },
+  {
+    name: 'includeUnverified',
+    type: 'boolean',
+    description: "Receive events whose signature the platform couldn't verify. Their payloads may be forged.",
+    isOptional: true,
+    defaultValue: 'false',
+  },
   {
     name: 'cursorStore',
     type: '{ load(): EventCursor | null | undefined | Promise<...>; save(cursor: EventCursor): void | Promise<void> }',
@@ -131,11 +145,11 @@ Ends the subscription. A pending iteration finishes without an error.
 
 ### `[Symbol.asyncIterator]()`
 
-Returns an iterator of `ConnectEvent`. A `ConnectEvents` can be iterated once. Create a new one to subscribe again. The subscription reconnects after server closes, network failures and 5xx responses, resuming after the last delivered event.
+Returns an iterator of `ConnectEvent`. Skipped events still move the cursor. A `ConnectEvents` can be iterated once. Create a new one to subscribe again. The subscription reconnects after server closes, network failures and 5xx responses, resuming after the last delivered event.
 
 ## ConnectEvent
 
-Each event carries these fields. Until you narrow it, `provider` and `eventType` are strings and `payload` is `unknown`.
+Each event carries these fields. For a provider with [typed payloads](#typed-payloads), checking `provider` and `eventType` narrows `payload` to the provider's type. Other providers' payloads are `unknown`.
 
 <PropertiesTable
   content={[
@@ -181,15 +195,13 @@ Each event carries these fields. Until you narrow it, `provider` and `eventType`
 ]}
 />
 
-## isConnectEvent()
+## Choosing events
 
-```typescript
-function isConnectEvent(event, provider, eventType): boolean
-```
+`ConnectEvents`, [`ConnectEventSignals`](/reference/connect/event-signals) and each [`ConnectEventWorker`](/reference/connect/event-worker) trigger choose events the same way:
 
-Returns `true` when `event` is a verified, parsed event of `provider` whose `eventType` is `eventType`, or one of them when you pass an array. TypeScript then narrows `event.payload` to the provider's documented shape. Unverified events and payloads that weren't JSON never match.
-
-When you pass several event types, check `event.eventType` to narrow `event.payload` to one of them. A provider or event type without typed payloads is a compile error.
+- **Unverified events** are skipped unless `includeUnverified` is set. Their payloads aren't typed, so check `event.unverified` before using one.
+- **A listed event type** is received when its payload is JSON. For a provider with typed payloads, an event type the provider doesn't send is a compile error.
+- **`true`, or no `events` at all**, receives every event of a provider without typed payloads. For a provider with typed payloads, it receives only the event types in [Typed payloads](#typed-payloads), with JSON payloads. Every event it delivers has a typed payload. To receive another event type of such a provider, type it and list it.
 
 Payloads aren't validated at runtime. The types describe what the provider documents it sends, so a provider can still send a field the types don't list, or omit one.
 
@@ -229,7 +241,7 @@ import type { GithubWebhookPayloads } from '@mastra/connect'
 type PullRequestOpened = GithubWebhookPayloads['pull_request.opened']
 ```
 
-To type events of another provider, extend `ConnectEventPayloads`. To type more events of a typed provider, extend its map:
+To type events of another provider, extend `ConnectEventPayloads`. To type more events of a typed provider, extend its map, then list the event type in `events`:
 
 ```typescript title="src/connect-events.d.ts"
 import type { SlackEventCallback } from '@mastra/connect'

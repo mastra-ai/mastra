@@ -80,7 +80,7 @@ Creates a trigger that starts a workflow for the events it selects.
     name: 'events',
     type: 'Record<string, true | string[]>',
     description:
-      'Which providers and event types start the workflow: `true` for every event of a provider, or a list of its event types. Providers you leave out are skipped. Omit it to start the workflow for every event. Listing event types also skips events whose payload wasn’t JSON.',
+      'Which providers and event types start the workflow: `true` for a provider, or a list of its event types. Providers you leave out are skipped. Omit it to start the workflow for every provider. See [Choosing events](/reference/connect/events#choosing-events).',
     isOptional: true,
   },
   {
@@ -96,7 +96,7 @@ Creates a trigger that starts a workflow for the events it selects.
 
 ### Typed events
 
-`inputData` receives the events `events` selects. For a provider with [typed payloads](/reference/connect/events#typed-payloads), listing its event types gives the payload its provider's type, so checking `event.eventType` narrows `event.payload`. With `true`, the provider may send event types without typed payloads, so narrow the event with [`isConnectEvent()`](/reference/connect/events#isconnectevent). With `includeUnverified`, check `event.unverified` before trusting the payload.
+`inputData` receives the events `events` selects. For a provider with [typed payloads](/reference/connect/events#typed-payloads), every event it sends has a typed payload, so checking `event.provider` and `event.eventType` narrows `event.payload`. With `includeUnverified`, check `event.unverified` first: unverified payloads aren't typed.
 
 An event type that the provider doesn't send is a compile error, and so is an input that doesn't match the workflow's input.
 
