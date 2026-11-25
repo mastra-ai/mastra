@@ -92,3 +92,18 @@ new ConnectEventWorker({
     }),
   ],
 });
+
+// The docs' Linear example.
+const triageIssue = createWorkflow({
+  id: 'triage-issue',
+  inputSchema: z.object({ issueId: z.string() }),
+  outputSchema: z.object({}),
+})
+  .then(record)
+  .commit();
+
+onConnectEvent({
+  events: { linear: ['Issue.create'] },
+  workflow: triageIssue,
+  inputData: event => ({ issueId: event.payload.data.id }),
+});
