@@ -2264,24 +2264,14 @@ export class AgentThreadStreamRuntime {
         if (!answersTo(runId)) {
           return;
         }
-        const queues = data.preRun
-          ? state.signalQueues.preRunSignalsByThread
-          : state.signalQueues.pendingSignalsByThread;
-        if (
-          [state.signalQueues.preRunSignalsByThread.get(key), state.signalQueues.pendingSignalsByThread.get(key)].some(
-            queue => queue?.some(signal => signal.id === data.signal.id),
-          )
-        )
-          return;
+        if (state.signalQueues.includes(key, data.signal.id)) return;
         const signal = createSignal(data.signal);
         // Not awaited: if the run ended while this runtime waited on the publish, the forwarder would settle its copy
         // on this event while this runtime never queued it, losing the message.
         if (this.#pendingUserMessageChunk(runId, signal, 'pending')) {
           this.#publish(pubsub, key, { type: 'user-message-admitted', signalId: signal.id, admittedRunId: runId });
         }
-        const queue = queues.get(key) ?? [];
-        queue.push(signal);
-        queues.set(key, queue);
+        state.signalQueues.enqueue(data.preRun ? 'pre-run' : 'pending', key, signal);
         subscription.admittedSignalIds.add(data.signal.id);
         this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
         this.#notifyPendingSignals(state, key, signal);
@@ -3328,9 +3318,7 @@ export class AgentThreadStreamRuntime {
         if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
           // The owner has reserved the thread for a run that has not started yet. Hand
           // it the input for its first model request, as a local send does.
-          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
-          queue.push(joinSignal ?? signal);
-          state.signalQueues.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.enqueue('pre-run', key, joinSignal ?? signal);
           const queued: ClaimedQueuedMessage = { identity: messageIdentity };
           state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
@@ -4801,9 +4789,7 @@ export class AgentThreadStreamRuntime {
     record: AgentThreadRunRecord<any>,
     signal: CreatedAgentSignal,
   ) {
-    const queue = state.signalQueues.pendingSignalsByThread.get(key) ?? [];
-    queue.push(signal);
-    state.signalQueues.pendingSignalsByThread.set(key, queue);
+    state.signalQueues.enqueue('pending', key, signal);
     this.#recordLocallyQueuedSignal(state, key, signal.id);
     this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
     this.#notifyPendingSignals(state, key, signal);
@@ -8362,9 +8348,7 @@ export class AgentThreadStreamRuntime {
         if (scopeMismatch(runId)) return refuseScopes(runId);
         if (pendingAdmission?.runId === runId) {
           const pendingKey = key;
-          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
-          queue.push(signal);
-          state.signalQueues.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.enqueue('pre-run', key, signal);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#notifyPendingSignals(state, key, signal);
           const accepted = pendingAdmission.outcome.then(async admission => {
@@ -8427,9 +8411,7 @@ export class AgentThreadStreamRuntime {
           return { signal, accepted };
         }
         if (isLocalReservedRun) {
-          const queue = state.signalQueues.preRunSignalsByThread.get(key) ?? [];
-          queue.push(signal);
-          state.signalQueues.preRunSignalsByThread.set(key, queue);
+          state.signalQueues.enqueue('pre-run', key, signal);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key, signal);
