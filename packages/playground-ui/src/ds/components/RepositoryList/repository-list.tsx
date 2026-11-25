@@ -237,7 +237,7 @@ function RepositoryRow({
             <span className="min-w-0 truncate" title={label}>
               {label}
             </span>
-            <DisclosureChevron className="size-icon-md" />
+            <DisclosureChevron open={expanded} className="size-icon-md" />
           </button>
         }
         description={repository.preClone ? undefined : 'Skipped'}

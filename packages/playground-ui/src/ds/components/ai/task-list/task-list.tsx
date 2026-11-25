@@ -278,7 +278,7 @@ export const TaskList = ({
             !open && 'group-hover/task-list:text-foreground',
           )}
         >
-          <DisclosureChevron className={cn('size-icon-sm', taskGraphMotion)} />
+          <DisclosureChevron open={open} className={cn('size-icon-sm', taskGraphMotion)} />
         </button>
       </div>
     </TaskListContainer>
