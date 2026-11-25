@@ -437,7 +437,13 @@ describe("Editing a phase's outcomes", () => {
     const label = screen.getByRole('textbox', { name: 'Fixing outcome 2 label' });
     await user.clear(label);
     await user.type(label, 'Fix shipped');
-    // Every move already has an outcome, so a new one reuses the first under a free key; it goes again.
+    // A target is picked from the phase's allowed moves.
+    await user.click(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' }));
+    await user.click(await screen.findByRole('option', { name: 'Fixed' }));
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Fixing outcome reported goes to' })).toHaveTextContent('Fixed'),
+    );
+    // No outcome goes to Reported now, so a new one does, under a key that is free; it goes again.
     await user.click(screen.getByRole('button', { name: 'Add outcome' }));
     expect(screen.getByRole('textbox', { name: 'Fixing outcome 3 key' })).toHaveValue('reported-2');
     await user.click(screen.getByRole('button', { name: 'Remove outcome reported-2' }));
@@ -447,7 +453,7 @@ describe("Editing a phase's outcomes", () => {
     await waitForMutationsIdle(client);
     const body = saved.mock.calls[0]?.[1];
     expect(body?.phases.find(phase => phase.key === 'fixing')?.outcomes).toEqual([
-      { key: 'reported', label: 'Reported', to: 'reported' },
+      { key: 'reported', label: 'Reported', to: 'fixed' },
       { key: 'ship', label: 'Fix shipped', to: 'fixed' },
     ]);
     // The board compiles the way the server will compile it.
