@@ -7,7 +7,7 @@ description: "Browse Together AI model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/togetherai.svg" alt="Together AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Together AI
 
-Access 25 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
+Access 27 Together AI models through Mastra's model router. Authentication is handled automatically using the `TOGETHER_API_KEY` environment variable.
 
 Learn more in the [Together AI documentation](https://docs.together.ai/docs/serverless-models).
 
@@ -184,6 +184,18 @@ for await (const chunk of stream) {
     "outputCost": 0.6
   },
   {
+    "model": "togetherai/Prism-ML/Ternary-Bonsai-27B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "togetherai/Qwen/Qwen3.5-9B",
     "imageInput": true,
     "audioInput": false,
@@ -266,6 +278,18 @@ for await (const chunk of stream) {
     "maxOutput": 131072,
     "inputCost": 0.4,
     "outputCost": 1.2
+  },
+  {
+    "model": "togetherai/ricursive-ai/Ripple-65B-Preview",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.2,
+    "outputCost": 0.6
   },
   {
     "model": "togetherai/tencent/Hy4",

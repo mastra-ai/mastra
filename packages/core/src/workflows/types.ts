@@ -604,6 +604,11 @@ export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
    * whose side effects must not be re-driven by a blanket restart — durable
    * agent workflows set this to false because their recovery is owned by the
    * dedicated opt-in path (`recovery.durableAgents: 'auto'`).
+   *
+   * It also decides whether a default-engine run holds a storage run lease while
+   * it executes. On storage with run fencing, a leased run's saves carry that
+   * lease, so once another process takes the run over, storage refuses this
+   * process's saves and its call rejects with `STORAGE_RUN_FENCE_CONFLICT`.
    */
   autoRestartActiveRuns?: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;

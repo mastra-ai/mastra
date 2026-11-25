@@ -38,6 +38,12 @@ export interface RunKnowledgeImportOptions {
   maxPasses?: number;
   /** Ops per flush. Default 200. */
   bufferSize?: number;
+  /**
+   * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
+   * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive
+   * number of milliseconds, at most 2147483647. Default 30 seconds.
+   */
+  flushAfterMs?: number;
   /** Default 30 seconds. */
   heartbeatMs?: number;
   /** Resends of one flush or finish after a 5xx or network error. Default 8. */
@@ -94,7 +100,7 @@ const isRetryable = (error: unknown) =>
 
 /** The run ended for a reason that decides its outcome; buffered ops after it are dropped. */
 class RunStop extends Error {
-  constructor(readonly reason: 'canceled' | 'stopped' | 'host') {
+  constructor(readonly reason: 'canceled' | 'stopped' | 'flush') {
     super(`importer run ${reason}`);
   }
 }
@@ -123,11 +129,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     graceMs = 3 * 60_000,
     maxPasses = 200,
     bufferSize = 200,
+    flushAfterMs = 30_000,
     heartbeatMs = 30_000,
     maxRetries = 8,
     hostCallTimeoutMs = 60_000,
     retryDelayMs = (attempt: number) => Math.min(250 * 2 ** attempt, 10_000),
   } = options;
+  // setTimeout treats a delay above 2^31 - 1 ms (about 24.8 days) as 1 ms.
+  if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0 || flushAfterMs > 2 ** 31 - 1) {
+    throw new TypeError(`flushAfterMs must be a positive number of milliseconds up to 2147483647, got ${flushAfterMs}`);
+  }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's
   // liveness check reclaims.
@@ -146,7 +157,14 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let state: KnowledgeImporterState = { ...started.state };
   let buffer: KnowledgeImporterOp[] = [];
   let stop: RunStop | undefined;
-  let hostFailure: KnowledgeImporterRunError | undefined;
+  /** Armed while the buffer holds ops; sends them once the oldest has waited `flushAfterMs`. */
+  let flushTimer: ReturnType<typeof setTimeout> | undefined;
+  const disarm = () => {
+    clearTimeout(flushTimer);
+    flushTimer = undefined;
+  };
+  /** Why a flush ended the run. Every later flush is refused, so no cursor is saved past its ops. */
+  let flushFailure: KnowledgeImporterRunError | undefined;
   const controller = new AbortController();
   let deadlineHit!: () => void;
   /** Settles at the hard deadline; never otherwise. */
@@ -157,6 +175,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   const halt = (reason: RunStop['reason']) => {
     if (reason === 'stopped') deadlineHit();
     stop ??= new RunStop(reason);
+    disarm();
     controller.abort(stop);
     wake();
   };
@@ -188,6 +207,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let flushing: Promise<void> = Promise.resolve();
   /** `settle` sends an empty flush, which only runs the host's next settle slice. */
   function flush(staged?: KnowledgeImporterState, settle = false): Promise<void> {
+    disarm();
     const ops = buffer;
     buffer = [];
     const next = flushing.then(async () => {
@@ -195,7 +215,16 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       if (ops.length === 0 && !staged && !settle) return;
       const body = { ops, ...(staged ? { state: staged } : {}) };
       const seq = lastSeq + 1;
-      const digest = await knowledgeImporterFlushDigest(body);
+      let digest: string;
+      try {
+        digest = await knowledgeImporterFlushDigest(body);
+      } catch (error) {
+        // Ops the host can't take are dropped from the buffer: end the run here, however the flush
+        // was triggered and whether or not the importer catches the error.
+        flushFailure = { code: 'importer_error' };
+        halt('flush');
+        throw error;
+      }
       // A stop that arrived while the digest was computed: send nothing.
       if (stop) throw stop;
       const request = { runId, generation, seq, digest, ...body };
@@ -207,8 +236,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       } catch (error) {
         // A refusal (409) or a 4xx means nothing was applied; a retryable failure may have committed.
         if (!isRetryable(error)) unsettledSeq = undefined;
-        hostFailure = { code: 'importer_error', retryable: isRetryable(error) };
-        halt('host');
+        flushFailure = { code: 'importer_error', retryable: isRetryable(error) };
+        halt('flush');
         throw stop;
       }
       unsettledSeq = undefined;
@@ -223,6 +252,13 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     if (stop) throw stop;
     buffer.push(op);
     if (buffer.length >= bufferSize) await flush();
+    // Queued behind any flush in flight, like every flush. A failure halts the run, which the
+    // importer sees on its next call.
+    else if (!flushTimer) {
+      flushTimer = setTimeout(() => flush().catch(() => {}), flushAfterMs);
+      // A pending timed flush doesn't keep the process alive; the run's own awaits do.
+      flushTimer.unref?.();
+    }
   };
 
   const finish = async (request: Omit<KnowledgeImporterFinishRequest, 'runId' | 'generation' | 'lastSeq'>) => {
@@ -347,6 +383,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     }
   } finally {
     clearInterval(heartbeat);
+    disarm();
   }
   // Wait for a flush in flight, but not past the hard deadline (which halts the run and so wakes
   // `stopped`): if it is still unanswered then, its seq stays unsettled and the finish names
@@ -356,7 +393,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
 
   if (stop?.reason === 'canceled') return finish({ outcome: 'canceled', backlog: false });
   if (stop?.reason === 'stopped') return finish({ outcome: 'failed', backlog: false, error: { code: 'stopped' } });
-  const error = stop?.reason === 'host' ? hostFailure : failure;
+  const error = stop?.reason === 'flush' ? flushFailure : failure;
   if (error) return finish({ outcome: 'failed', backlog: false, error });
   return finish({ outcome: 'succeeded', backlog });
 }
