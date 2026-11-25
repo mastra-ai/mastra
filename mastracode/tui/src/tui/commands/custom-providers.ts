@@ -1,9 +1,9 @@
-import { listCustomProviderModels, testCustomProviderModel } from '@mastra/code-sdk/agents/custom-provider-check';
+import { listCustomProviderModels } from '@mastra/code-sdk/agents/custom-provider-check';
 import type {
   CustomProviderCheckFailure,
+  CustomProviderCheckOptions,
   CustomProviderConnection,
   CustomProviderModelsResult,
-  CustomProviderModelTestResult,
 } from '@mastra/code-sdk/agents/custom-provider-check';
 import {
   CONTROL_CHARACTER_PATTERN,
@@ -309,7 +309,8 @@ async function editProviderFlow(ctx: SlashCommandContext, providerId: string): P
   }
 }
 
-async function addProviderModelFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+/** Ask for one model ID and add it to the provider. */
+async function typeModelIdFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const settings = loadSettings();
   const provider = settings.customProviders.find(entry => getCustomProviderId(entry.name) === providerId);
   if (!provider) {
@@ -390,30 +391,16 @@ function showCheckFailure(ctx: SlashCommandContext, failure: CustomProviderCheck
   ctx.showError(detail ? `${message}\n${detail}` : message);
 }
 
-/**
- * Menu action values, prefixed with NUL so no model ID or header name can equal them.
- * Labels must still be unique, since askSelect matches by label.
- */
-const ADD_ALL = '\u0000add-all';
-const DONE = '\u0000done';
+/** The "Add header" action value, prefixed with NUL so no header name can equal it. */
 const ADD_HEADER = '\u0000add-header';
 
-/** Labels of the actions in the "Add models from endpoint" list. A model ID with one of these labels is not offered. */
+/**
+ * Labels of the actions in the "Add model" picker. The picker matches answers
+ * by label, so a listed model ID equal to one of them is not offered.
+ */
 const ADD_ALL_LABEL = 'Add all';
 const DONE_LABEL = 'Done';
-
-/** The longest model reply shown after a model test. */
-const MAX_SHOWN_REPLY_LENGTH = 200;
-
-/**
- * A model reply as one short line. The SDK already redacts the reply and
- * replaces its control characters, but keeps line breaks and up to 4,000
- * characters, which is too long for one chat message.
- */
-function shownReply(reply: string): string {
-  const text = printableText(reply);
-  return text.length > MAX_SHOWN_REPLY_LENGTH ? `${text.slice(0, MAX_SHOWN_REPLY_LENGTH)}...` : text;
-}
+const RESERVED_MODEL_LABELS = [ADD_ALL_LABEL, DONE_LABEL];
 
 /** `1 model` or `N models`. */
 function modelCount(count: number): string {
@@ -434,27 +421,19 @@ function loadProvider(
   return { settings, provider };
 }
 
-/**
- * Ask the endpoint for its model list, with a spinner labelled `progressLabel`
- * while the call runs. Shows the failure and returns undefined when the call fails.
- */
+/** Ask the endpoint for its model list, with a spinner labelled `progressLabel` while the call runs. */
 async function listModelsWithProgress(
   ctx: SlashCommandContext,
   provider: CustomProviderSetting,
   progressLabel: string,
-): Promise<{ models: string[]; latencyMs: number } | undefined> {
+  options: CustomProviderCheckOptions = {},
+): Promise<CustomProviderModelsResult> {
   const stopProgress = showProgress(ctx.state, progressLabel);
-  let result: CustomProviderModelsResult;
   try {
-    result = await listCustomProviderModels(savedConnection(provider));
+    return await listCustomProviderModels(savedConnection(provider), options);
   } finally {
     stopProgress();
   }
-  if (!result.ok) {
-    showCheckFailure(ctx, result.failure);
-    return undefined;
-  }
-  return result;
 }
 
 /** Call the endpoint's model list and show the model count and latency, or the failure. */
@@ -462,62 +441,34 @@ async function testConnectionFlow(ctx: SlashCommandContext, providerId: string):
   const loaded = loadProvider(ctx, providerId);
   if (!loaded) return;
   const result = await listModelsWithProgress(ctx, loaded.provider, `Testing connection to ${loaded.provider.url}`);
-  if (!result) return;
+  if (!result.ok) {
+    showCheckFailure(ctx, result.failure);
+    return;
+  }
   ctx.showInfo(
     `${loaded.provider.name} answered in ${result.latencyMs} ms and lists ${modelCount(result.models.length)}.`,
   );
 }
 
-/** Send the test message to one configured model and show its reply or the failure. */
-async function testModelFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
-  const loaded = loadProvider(ctx, providerId);
-  if (!loaded) return;
-  const { provider } = loaded;
-  if (provider.models.length === 0) {
-    ctx.showInfo(`No custom models configured for ${provider.name}.`);
-    return;
-  }
-
-  const modelName = await askSelect(
-    ctx,
-    `Test a model on ${provider.name}`,
-    provider.models.map(model => ({ label: model, value: model })),
-  );
-  if (!modelName) return;
-
-  const stopProgress = showProgress(ctx.state, `Sending a test message to ${modelName}`);
-  let result: CustomProviderModelTestResult;
-  try {
-    result = await testCustomProviderModel({ providerId, connection: savedConnection(provider), modelId: modelName });
-  } finally {
-    stopProgress();
-  }
-  if (!result.ok) {
-    showCheckFailure(ctx, result.failure);
-    return;
-  }
-  const reply = shownReply(result.reply);
-  if (reply) {
-    ctx.showInfo(`${modelName} replied in ${result.latencyMs} ms: ${reply}`);
-    return;
-  }
-  // Some models answer with no text, for example when they stop on a length
-  // limit, so the finish reason is the only thing left to show.
-  const finish = result.finishReason ? ` (finish reason: ${result.finishReason})` : '';
-  ctx.showInfo(`${modelName} answered in ${result.latencyMs} ms with an empty reply${finish}.`);
-}
+/** How long "Add model" waits for the endpoint's model list before asking for a typed ID. */
+const ADD_MODEL_LIST_TIMEOUT_MS = 3_000;
 
 /**
- * Offer the models the endpoint lists that are not configured yet. Picking one
- * adds it and shows the rest again, so several can be added in one visit.
+ * Add model IDs to a provider. When the endpoint lists models that are not
+ * configured yet, they are offered in a picker, and its "Custom response" row
+ * takes a typed ID. Picking one adds it and shows the rest again. When the
+ * list call fails, times out or offers nothing new, the user types the ID with
+ * no error shown: "Test connection" is where the reason is shown.
  */
-async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
+async function addProviderModelFlow(ctx: SlashCommandContext, providerId: string): Promise<void> {
   const loaded = loadProvider(ctx, providerId);
   if (!loaded) return;
-  const listed = await listModelsWithProgress(ctx, loaded.provider, `Listing models from ${loaded.provider.url}`);
-  if (!listed) return;
-  if (listed.models.length === 0) {
-    ctx.showInfo(`${loaded.provider.name} lists no models.`);
+  const listed = await listModelsWithProgress(ctx, loaded.provider, `Listing models from ${loaded.provider.url}`, {
+    timeoutMs: ADD_MODEL_LIST_TIMEOUT_MS,
+  });
+  const listedModels = listed.ok ? listed.models : [];
+  if (endpointModelsToOffer(listedModels, loaded.provider, RESERVED_MODEL_LABELS).length === 0) {
+    await typeModelIdFlow(ctx, providerId);
     return;
   }
 
@@ -527,32 +478,31 @@ async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: s
     const current = loadProvider(ctx, providerId);
     if (!current) return;
     const { provider } = current;
-    const available = endpointModelsToOffer(listed.models, provider, [ADD_ALL_LABEL, DONE_LABEL]);
-    if (available.length === 0) {
-      ctx.showInfo(`All models ${provider.name} lists are already added.`);
-      return;
-    }
+    const available = endpointModelsToOffer(listedModels, provider, RESERVED_MODEL_LABELS);
+    if (available.length === 0) return;
 
-    const choice = await askSelect(
-      ctx,
-      `Add models from ${provider.name}`,
-      [
-        { label: ADD_ALL_LABEL, value: ADD_ALL, description: `Add the ${modelCount(available.length)} below` },
-        { label: DONE_LABEL, value: DONE, description: 'Stop adding models' },
-        ...available.map(model => ({ label: model, value: model })),
+    const answer = await askModalQuestion(ctx.state.ui, {
+      question: `Add a model to ${provider.name}`,
+      options: [
+        { label: ADD_ALL_LABEL, description: `Add the ${modelCount(available.length)} below` },
+        { label: DONE_LABEL, description: 'Stop adding models' },
+        ...available.map(model => ({ label: model })),
       ],
-      cursorLabel,
-    );
-    if (!choice || choice === DONE) return;
+      allowCustomResponse: true,
+      selectedOptionLabel: cursorLabel,
+    });
+    // An answer that matches no option label was typed through the "Custom response" row.
+    const choice = answer?.trim();
+    if (!choice || choice === DONE_LABEL) return;
 
-    const picked = choice === ADD_ALL ? available : [choice];
+    const picked = choice === ADD_ALL_LABEL ? available : [choice];
     // Read settings again: the list stayed open while another process may have
     // renamed or deleted the provider, or added some of these models already.
     const latest = loadProvider(ctx, providerId);
     if (!latest) return;
     const added = addModelsToCustomProviderInSettings(latest.settings, providerId, picked);
     if (added > 0) saveSettings(latest.settings);
-    if (choice === ADD_ALL) {
+    if (choice === ADD_ALL_LABEL) {
       ctx.showInfo(
         added > 0
           ? `Added ${modelCount(added)} to ${provider.name}.`
@@ -566,9 +516,9 @@ async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: s
         : `No model added: ${provider.name} already has ${choice}.`,
     );
     // Keep the cursor where the user was: on the model that followed the one just added,
-    // or the one before it when the last model was picked.
+    // or the one before it when the last model was picked. A typed ID leaves it in place.
     const index = available.indexOf(choice);
-    cursorLabel = available[index + 1] ?? available[index - 1];
+    if (index >= 0) cursorLabel = available[index + 1] ?? available[index - 1];
   }
 }
 
@@ -708,17 +658,11 @@ async function manageProviderFlow(ctx: SlashCommandContext, providerId: string):
   }
 
   const action = await askSelect(ctx, `Manage provider: ${provider.name}`, [
-    { label: 'Add model', value: 'add-model', description: 'Attach a model ID to this provider' },
+    { label: 'Add model', value: 'add-model', description: 'Pick a model the endpoint lists or type a model ID' },
     { label: 'Remove model', value: 'remove-model', description: 'Remove a model ID from this provider' },
     { label: 'Edit provider', value: 'edit-provider', description: 'Rename, change URL, or update API key' },
     { label: 'Delete provider', value: 'delete-provider', description: 'Remove provider and all its model IDs' },
     { label: 'Test connection', value: 'test-connection', description: 'Ask the endpoint for its model list' },
-    { label: 'Test model', value: 'test-model', description: 'Send a short message to one model' },
-    {
-      label: 'Add models from endpoint',
-      value: 'add-models-from-endpoint',
-      description: 'Pick model IDs from the list the endpoint returns',
-    },
     { label: 'Headers', value: 'headers', description: 'Add or remove headers sent on every call' },
     { label: 'Auth scheme', value: 'auth-scheme', description: 'Choose how the API key is sent' },
   ]);
@@ -726,12 +670,6 @@ async function manageProviderFlow(ctx: SlashCommandContext, providerId: string):
   switch (action) {
     case 'test-connection':
       await testConnectionFlow(ctx, providerId);
-      break;
-    case 'test-model':
-      await testModelFlow(ctx, providerId);
-      break;
-    case 'add-models-from-endpoint':
-      await addModelsFromEndpointFlow(ctx, providerId);
       break;
     case 'headers':
       await headersFlow(ctx, providerId);

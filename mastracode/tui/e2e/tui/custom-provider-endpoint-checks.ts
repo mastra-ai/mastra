@@ -16,9 +16,10 @@ async function openManageItem(terminal: McE2eTerminal, runtime: McE2eScenarioRun
 
 export const customProviderEndpointChecksScenario = {
   name: 'custom-provider-endpoint-checks',
-  description: 'tests a custom endpoint, adds a listed model, adds a secret header and sends a test message',
+  description: 'tests a custom endpoint, adds a listed model, adds a secret header and chats through the endpoint',
   testName: 'tests a custom endpoint and manages its models and headers through /custom-providers',
   useOpenAIModel: true,
+  env: () => ({ MASTRACODE_MODEL_ID: 'mock-endpoint/gpt-4o' }),
   // AIMock lists the fixture models on GET /v1/models: acme-large and gpt-4o.
   aimockFixture: 'custom-provider-endpoint-checks.json',
   prepare({ appDataDir, aimockUrl }) {
@@ -35,17 +36,17 @@ export const customProviderEndpointChecksScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     // Manage menu rows: Add model, Remove model, Edit provider, Delete provider,
-    // Test connection, Test model, Add models from endpoint, Headers, Auth scheme.
+    // Test connection, Headers, Auth scheme.
     await openManageItem(terminal, runtime, 4);
     await runtime.waitForScreenText(/Mock Endpoint answered in \d+ ms and lists 2 models/i, terminal, 8_000);
 
-    await openManageItem(terminal, runtime, 6);
-    await runtime.waitForScreenText(/Add models from Mock Endpoint/i, terminal, 8_000);
+    await openManageItem(terminal, runtime, 0);
+    await runtime.waitForScreenText(/Add a model to Mock Endpoint/i, terminal, 8_000);
     // Rows: Add all, Done, acme-large.
     terminal.write(`${down(2)}\r`);
     await runtime.waitForScreenText(/Added model: mock-endpoint\/acme-large/i, terminal, 8_000);
 
-    await openManageItem(terminal, runtime, 7);
+    await openManageItem(terminal, runtime, 5);
     await runtime.waitForScreenText(/Headers for Mock Endpoint/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Header name/i, terminal, 8_000);
@@ -61,10 +62,9 @@ export const customProviderEndpointChecksScenario = {
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Headers for Mock Endpoint/i, terminal, 8_000);
 
-    await openManageItem(terminal, runtime, 5);
-    await runtime.waitForScreenText(/Test a model on Mock Endpoint/i, terminal, 8_000);
-    terminal.write('\r');
-    await runtime.waitForScreenText(/gpt-4o replied in \d+ ms: yes/i, terminal, 15_000);
+    // The session runs on mock-endpoint/gpt-4o, so a chat message goes to the custom endpoint.
+    terminal.submit('Say hello from the mock endpoint.');
+    await runtime.waitForScreenText(/Hello from the mock endpoint\./, terminal, 15_000);
 
     terminal.keyCtrlC();
   },
@@ -73,7 +73,7 @@ export const customProviderEndpointChecksScenario = {
       request => request.path === '/v1/chat/completions',
     );
     if (chats[0]?.headers?.['x-org-secret'] !== secretValue) {
-      throw new Error('Expected the test message to carry the secret header');
+      throw new Error('Expected the chat message to carry the secret header');
     }
   },
 } satisfies McE2eScenario;
