@@ -96,7 +96,6 @@ type StreamChunk =
   | StreamDataChunk<'data-om-buffering-failed'>
   | StreamDataChunk<'data-signal'>
   | StreamDataChunk<'data-user-message'>
-  | StreamDataChunk<'data-user-message-cancelled'>
   | StreamDataChunk<'data-system-reminder'>
   | StreamDataChunk<'data-om-activation'>
   | StreamDataChunk<'data-om-thread-update'>
@@ -1505,11 +1504,6 @@ export class SessionRunEngine {
           this.#session.emit({ type: 'message_start', message });
           this.#session.emit({ type: 'message_end', id: message.id });
         }
-        break;
-      }
-      case 'data-user-message-cancelled': {
-        const id = getString(getDataRecord(chunk)?.id);
-        if (id) this.#session.forgetPendingUserMessages([id]);
         break;
       }
       // Back-compat: persisted streams may still contain data-system-reminder parts

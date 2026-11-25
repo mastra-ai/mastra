@@ -40,7 +40,6 @@ export type {
   CustomModelCatalogProvider,
   AgentControllerConfig,
   AgentControllerDisplayState,
-  PendingUserMessage,
   AgentControllerEvent,
   AgentControllerEventListener,
   AgentControllerMode,

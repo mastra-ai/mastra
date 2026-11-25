@@ -35,10 +35,6 @@ export interface MessageEntry {
   streaming?: boolean;
   steer?: boolean;
   deliveryStatus?: 'pending' | 'delivered' | 'failed';
-  /** Drawn from the server's list of sent messages it has not stored yet; leaves when the list drops it. */
-  pendingSend?: true;
-  /** A pending follow-up queued behind the running reply; it does not start a turn until its own run takes it. */
-  queuedFollowUp?: true;
 }
 
 export interface NoticeEntry {
@@ -312,12 +308,9 @@ function applyEvent(
       return entry.message.role === 'assistant' ? { ...state, entries, pending: false } : { ...state, entries };
     }
     case 'display_state_changed': {
-      const { isRunning, currentMessage, pendingUserMessages } = event.displayState;
-      return showPendingUserMessages(state, pendingUserMessages, shown =>
-        isRunning && currentMessage
-          ? followLiveRow(shown, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId)
-          : shown,
-      );
+      const { isRunning, currentMessage } = event.displayState;
+      if (!isRunning || !currentMessage) return state;
+      return followLiveRow(state, { ...currentMessage, createdAt: new Date(currentMessage.createdAt) }, viewerId);
     }
 
     case 'tool_input_start':
@@ -668,7 +661,7 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   if (messages.length === 0) return state;
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
-  const confirmed = confirmPendingUserMessages(storedPendingSends(state, onScreenIndex), onScreenIndex);
+  const confirmed = confirmPendingUserMessages(state, onScreenIndex);
   const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
   const unclaimed = messages.filter(message => !onScreenIndex.has(message));
@@ -908,22 +901,6 @@ function claimOnScreenEntries(
   }
 
   return anchors;
-}
-
-// A stored row now backs the entry, so the pending list no longer decides whether it shows.
-function storedPendingSends(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
-  const claimed = new Set(anchors.values());
-  if (!state.entries.some((entry, index) => claimed.has(index) && entry.kind === 'message' && entry.pendingSend)) {
-    return state;
-  }
-  return {
-    ...state,
-    entries: state.entries.map((entry, index) => {
-      if (!claimed.has(index) || entry.kind !== 'message' || !entry.pendingSend) return entry;
-      const { pendingSend: _, queuedFollowUp: __, ...rest } = entry;
-      return rest;
-    }),
-  };
 }
 
 function isUnconfirmedSteer(entry: MessageEntry): boolean {
@@ -1209,66 +1186,6 @@ function upsertMessage(
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
 }
 
-type PendingUserMessages = NonNullable<
-  Extract<AgentControllerEvent, { type: 'display_state_changed' }>['displayState']['pendingUserMessages']
->;
-
-// A sent message waits a moment before the run stores it. A reload in that gap
-// only knows it from the server's pending list, so draw it after history. A queued
-// follow-up waits behind the running reply, so it goes after that reply's live row.
-function showPendingUserMessages(
-  state: TranscriptState,
-  pending: PendingUserMessages | undefined,
-  followLive: (state: TranscriptState) => TranscriptState,
-): TranscriptState {
-  if (!pending) return followLive(state);
-  const listed = new Set(pending.map(message => message.id));
-  const kept = state.entries.filter(entry => entry.kind !== 'message' || !entry.pendingSend || listed.has(entry.id));
-  // Each optimistic copy stands in for one pending message only.
-  const claimed = new Set<number>();
-  let marked = false;
-  const beforeLive: TimelineEntry[] = [];
-  const afterLive: TimelineEntry[] = [];
-  for (const { id, content, kind } of pending) {
-    const message: MastraDBMessage = {
-      id,
-      role: 'user',
-      createdAt: new Date(),
-      content: { format: 2, parts: [{ type: 'text', text: content }] },
-    };
-    let shownAt = kept.findIndex(entry => entry.kind === 'message' && (entry.id === id || entry.message.id === id));
-    if (shownAt === -1) {
-      const texts = new Set(drawableTexts(message));
-      shownAt = kept.findIndex((entry, at) => !claimed.has(at) && isUnclaimedOptimisticCopy(entry, texts));
-    }
-    if (shownAt !== -1) {
-      claimed.add(shownAt);
-      // The server says whether a follow-up still waits behind a reply or its own run has started.
-      const shown = kept[shownAt];
-      const queued = kind === 'follow-up';
-      if (shown.kind === 'message' && Boolean(shown.queuedFollowUp) !== queued) {
-        const { queuedFollowUp: _, ...rest } = shown;
-        kept[shownAt] = queued ? { ...rest, queuedFollowUp: true } : rest;
-        marked = true;
-      }
-      continue;
-    }
-    const steer = kind === 'steer';
-    const entry = {
-      ...toMessageEntry(message, { steer, deliveryStatus: steer ? 'pending' : undefined }),
-      pendingSend: true as const,
-    };
-    if (kind === 'follow-up') afterLive.push({ ...entry, queuedFollowUp: true as const });
-    else beforeLive.push(entry);
-  }
-  const shown =
-    beforeLive.length === 0 && !marked && kept.length === state.entries.length
-      ? state
-      : { ...state, entries: [...kept, ...beforeLive] };
-  const live = followLive(shown);
-  return afterLive.length === 0 ? live : { ...live, entries: [...live.entries, ...afterLive] };
-}
-
 // The stream sends no backlog: each new stream opens on the row in flight, indexed as the stream indexes its parts.
 function followLiveRow(state: TranscriptState, live: MastraDBMessage, viewerId?: string): TranscriptState {
   if (live.role !== 'assistant') return state;
@@ -1421,7 +1338,7 @@ function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.message.role === 'assistant') return i;
-    if (entry.message.role === 'user' && !entry.steer && !entry.queuedFollowUp) return -1;
+    if (entry.message.role === 'user' && !entry.steer) return -1;
   }
   return -1;
 }

@@ -8,7 +8,6 @@ import type {
   CreatedAgentSignal,
   MessageAuthor,
 } from '../agent/signals';
-import { onThreadMessagesSaved } from '../agent/thread-saves';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type {
   AgentSignalActiveBehavior,
@@ -56,7 +55,6 @@ import type {
   AgentControllerThread,
   ModelUseCountTracker,
   OMModel,
-  PendingUserMessage,
   PermissionPolicy,
   PermissionRules,
   TokenUsage,
@@ -380,8 +378,6 @@ export interface ThreadDataStore {
   getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
   listMessages(input: { threadId: string; limit?: number }): Promise<StorageListMessagesOutput>;
-  /** The ids, among the given ones, of messages stored on the thread. */
-  storedMessageIds(input: { threadId: string; messageIds: string[] }): Promise<Set<string>>;
   /** The first user message for each given thread id. */
   firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, MastraDBMessage>>;
   /** Read a value from a thread's metadata. */
@@ -853,12 +849,6 @@ export class SessionThread {
     // Only expose messages for threads this session owns.
     await this.#requireOwnedThread({ threadId });
     return (await this.#store.listMessages({ threadId, limit })).messages;
-  }
-
-  /** The ids, among the given ones, of messages stored on the active thread. */
-  async storedMessageIds(messageIds: string[]): Promise<Set<string>> {
-    if (!this.#store || this.#threadId === null || messageIds.length === 0) return new Set();
-    return this.#store.storedMessageIds({ threadId: this.#threadId, messageIds });
   }
 
   /** List messages for the session's active thread (empty when not bound). */
@@ -3547,13 +3537,8 @@ class SessionState<TState = unknown> {
  * active thread id (to decide whether a `thread_deleted` clears the view). Those
  * are injected at construction so the reducer stays self-contained.
  */
-/** A send listed in `pendingUserMessages`; `id` follows the signal of the current attempt. */
-type PendingSend = { id: string; handedToRun: boolean };
-
 export class SessionDisplayState {
   #state: AgentControllerDisplayState = defaultDisplayState();
-  /** The run each pending message was handed to, once known. */
-  #pendingUserMessageRuns = new Map<string, string>();
 
   constructor(
     private readonly deps: {
@@ -3585,53 +3570,6 @@ export class SessionDisplayState {
    */
   clearPendingSuspensions(): void {
     this.#state.pendingSuspensions.clear();
-  }
-
-  /** List a sent message as pending. The caller dispatches `display_state_changed`. */
-  addPendingUserMessage(message: PendingUserMessage): void {
-    this.#state.pendingUserMessages = [...this.#state.pendingUserMessages, message];
-  }
-
-  /** Give a pending message the id of its next send attempt, keeping its place. */
-  renamePendingUserMessage(id: string, nextId: string): void {
-    this.#state.pendingUserMessages = this.#state.pendingUserMessages.map(message =>
-      message.id === id ? { ...message, id: nextId } : message,
-    );
-    this.#pendingUserMessageRuns.delete(id);
-  }
-
-  /** Record the run a pending message was handed to; that run's end drops it. */
-  setPendingUserMessageRun(id: string, runId: string): boolean {
-    if (!this.#state.pendingUserMessages.some(message => message.id === id)) return false;
-    this.#pendingUserMessageRuns.set(id, runId);
-    return this.#state.isRunning && this.#startPendingFollowUps();
-  }
-
-  /**
-   * A follow-up whose own run is the one now running no longer waits behind a reply, so list it as
-   * that run's message. Other runs, such as a resumed suspended tool, leave queued follow-ups alone.
-   * Returns whether any follow-up changed.
-   */
-  #startPendingFollowUps(): boolean {
-    const runId = this.deps.getRunId();
-    if (!runId) return false;
-    let changed = false;
-    this.#state.pendingUserMessages = this.#state.pendingUserMessages.map(message => {
-      if (message.kind !== 'follow-up' || this.#pendingUserMessageRuns.get(message.id) !== runId) return message;
-      changed = true;
-      return { ...message, kind: 'message' };
-    });
-    return changed;
-  }
-
-  /** Drop pending messages; true when any was listed. The caller dispatches `display_state_changed`. */
-  removePendingUserMessages(ids: Iterable<string>): boolean {
-    const drop = new Set(ids);
-    for (const id of drop) this.#pendingUserMessageRuns.delete(id);
-    const remaining = this.#state.pendingUserMessages.filter(message => !drop.has(message.id));
-    if (remaining.length === this.#state.pendingUserMessages.length) return false;
-    this.#state.pendingUserMessages = remaining;
-    return true;
   }
 
   /**
@@ -3702,8 +3640,6 @@ export class SessionDisplayState {
     ds.currentMessage = null;
     this.deps.clearFollowUps();
     ds.queuedFollowUps = 0;
-    ds.pendingUserMessages = [];
-    this.#pendingUserMessageRuns.clear();
     ds.modifiedFiles = new Map();
     ds.tasks = [];
     ds.previousTasks = [];
@@ -3733,12 +3669,11 @@ export class SessionDisplayState {
 
     switch (event.type) {
       // ── Agent lifecycle ────────────────────────────────────────────────
-      case 'agent_start': {
+      case 'agent_start':
         ds.isRunning = true;
         ds.activeTools = new Map();
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
-        this.#startPendingFollowUps();
         // Parked approvals are deliberately NOT cleared here either: a run on
         // another thread may still be waiting on one, and resuming a parked tool
         // restarts the run (a fresh agent_start) whose own gate must stay armed
@@ -3747,17 +3682,9 @@ export class SessionDisplayState {
         // one parked tool restarts the run (a fresh agent_start) and the other
         // parallel prompts must stay rendered until they are resolved.
         break;
-      }
 
-      case 'agent_end': {
+      case 'agent_end':
         ds.isRunning = false;
-        // The run is over: what it took is stored by now, or was rejected and never will be.
-        const endedRunId = this.deps.getRunId();
-        if (endedRunId) {
-          this.removePendingUserMessages(
-            [...this.#pendingUserMessageRuns].filter(([, runId]) => runId === endedRunId).map(([id]) => id),
-          );
-        }
         // A suspended run keeps its pending tool suspensions alive so the UI can
         // still render the prompts (e.g. `ask_user`, which pauses via the native
         // tool-suspension primitive). When the run ends for any other reason its
@@ -3780,7 +3707,6 @@ export class SessionDisplayState {
         }
         ds.activeSubagents = new Map();
         break;
-      }
 
       // ── Message streaming ──────────────────────────────────────────────
       case 'message_start':
@@ -4418,10 +4344,6 @@ export class Session<TState = unknown> {
   readonly #preparingFollowUps = new Set<{ generation: number; controller: AbortController }>();
   /** Invalidates asynchronous follow-up preparation when the session unbinds. */
   #followUpGeneration = 0;
-  /** Kind of the next `sendMessage` call's pending entry; read once at its start. */
-  #nextSendKind: PendingUserMessage['kind'] = 'message';
-  /** Listens for saves of the thread whose sent messages are listed as pending. */
-  #pendingSaveWatch?: { threadId: string; unsubscribe: () => void };
   /** The interactive tool-approval gate the current run parks on. */
   readonly approval = new SessionApproval();
   /** The session's identity: the memory resourceId it reads/writes under. */
@@ -4539,8 +4461,6 @@ export class Session<TState = unknown> {
 
   /** @internal Reset state fields whose durable source is the active thread. */
   resetThreadDerivedState(): void {
-    // A refresh of the same thread keeps watching; a switch or clear leaves nothing to watch.
-    if (this.#pendingSaveWatch?.threadId !== this.thread.getId()) this.#releasePendingSaveWatch();
     (this.state as SessionState<TState>).rebind(THREAD_DERIVED_STATE_KEYS);
   }
 
@@ -4698,9 +4618,6 @@ export class Session<TState = unknown> {
    */
   emit(event: AgentControllerEvent): void {
     this.#bus.emit(event);
-    if (this.#pendingSaveWatch && this.displayState.get().pendingUserMessages.length === 0) {
-      this.#releasePendingSaveWatch();
-    }
   }
 
   /**
@@ -5395,8 +5312,6 @@ export class Session<TState = unknown> {
           requestContext?: RequestContext;
           untilIdle?: boolean | { maxIdleMs?: number };
           author?: MessageAuthor;
-          /** The message id; generated when omitted. */
-          id?: string;
           /**
            * Scopes for this message. A run's scopes are fixed when it starts, so a message
            * whose scopes differ from the active run's does not join it (`scope-mismatch`).
@@ -5486,7 +5401,6 @@ export class Session<TState = unknown> {
     const submitted = createSignal(
       'content' in input
         ? {
-            ...(input.id ? { id: input.id } : {}),
             type: 'user',
             tagName: 'user',
             contents: input.content,
@@ -5819,31 +5733,15 @@ export class Session<TState = unknown> {
     author?: MessageAuthor;
     scopes?: string[];
   }): Promise<void> {
-    const kind = this.#nextSendKind;
-    this.#nextSendKind = 'message';
-    // Scoped sends start in call order, so the slot is taken before anything awaits.
     let admitted = () => {};
-    let previous: Promise<void> | undefined;
     if (scopes) {
-      previous = this.#scopedSendTail;
-      const own = new Promise<void>(resolve => {
+      const previous = this.#scopedSendTail;
+      this.#scopedSendTail = new Promise(resolve => {
         admitted = resolve;
       });
-      // A send that fails early still releases its slot, but later sends keep waiting on the ones before it.
-      this.#scopedSendTail = previous.then(() => own);
+      await previous;
     }
-    let pending: PendingSend | undefined;
     try {
-      if (this.thread.getId() === null) {
-        // Creating the thread resets the live projection, so list the message only once it exists.
-        const abortGeneration = this.#abortGeneration;
-        await this.machinery.authorizeExecute?.(requestContextInput);
-        await this.thread.ensureId({ requestContext: requestContextInput });
-        // A Stop while the thread was created cancels this send, as it does once the send is submitted.
-        if (this.#abortGeneration !== abortGeneration) throw new SessionStartupCancelledError();
-      }
-      pending = this.#addPendingUserMessage(content, kind);
-      if (previous) await previous;
       await this.#sendMessageUntilAdmitted(
         {
           content,
@@ -5856,11 +5754,9 @@ export class Session<TState = unknown> {
           scopes,
         },
         () => admitted(),
-        pending,
       );
     } finally {
       admitted();
-      if (pending && !pending.handedToRun) this.#dropPendingUserMessages([pending.id]);
     }
   }
 
@@ -5876,21 +5772,13 @@ export class Session<TState = unknown> {
       scopes?: string[];
     },
     onAdmitted: () => void,
-    pending: PendingSend,
   ): Promise<void> {
     const { content, files, scopes } = input;
     let lastBlockingRunId: string | undefined;
     while (true) {
-      if (lastBlockingRunId !== undefined) {
-        // Each attempt is a new signal; the listed message follows it.
-        const nextId = crypto.randomUUID();
-        this.displayState.renamePendingUserMessage(pending.id, nextId);
-        pending.id = nextId;
-      }
       const wasActive = this.stream.isActive();
       const signal = this.sendSignal(
         {
-          id: pending.id,
           content: this.createMessageInput({ content, files }),
           tracingContext: input.tracingContext,
           tracingOptions: input.tracingOptions,
@@ -5908,9 +5796,6 @@ export class Session<TState = unknown> {
       let blocked: { reason: 'thread-blocked' | 'scope-mismatch'; runId: string } | undefined;
       const accepted = signal.accepted.then(settled => {
         if (settled.action !== 'blocked') {
-          if ((settled.action === 'wake' || settled.action === 'deliver') && settled.runId) {
-            this.#handPendingUserMessageToRun(pending, settled.runId);
-          }
           onAdmitted();
           return settled;
         }
@@ -6092,7 +5977,6 @@ export class Session<TState = unknown> {
     scopes?: string[];
   }): Promise<void> {
     this.abort();
-    this.#nextSendKind = 'steer';
     await this.sendMessage({ content, files, requestContext, author, ...(scopes?.length ? { scopes } : {}) });
   }
 
@@ -6130,67 +6014,6 @@ export class Session<TState = unknown> {
     }
   }
 
-  #addPendingUserMessage(content: string, kind: PendingUserMessage['kind']): PendingSend {
-    const pending: PendingSend = { id: crypto.randomUUID(), handedToRun: false };
-    this.displayState.addPendingUserMessage({ id: pending.id, content, kind });
-    this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
-    return pending;
-  }
-
-  #handPendingUserMessageToRun(pending: PendingSend, runId: string): void {
-    pending.handedToRun = true;
-    if (this.displayState.setPendingUserMessageRun(pending.id, runId)) {
-      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
-    }
-    this.#watchPendingSaves();
-  }
-
-  #dropPendingUserMessages(ids: Iterable<string>): void {
-    if (this.displayState.removePendingUserMessages(ids)) {
-      this.emit({ type: 'display_state_changed', displayState: this.displayState.get() });
-    }
-  }
-
-  /** @internal The run engine reports pending input the runtime cancelled. */
-  forgetPendingUserMessages(ids: string[]): void {
-    this.#dropPendingUserMessages(ids);
-  }
-
-  /** While messages are pending, drop each one as soon as a save of the thread stores it. */
-  #watchPendingSaves(): void {
-    const threadId = this.thread.getId();
-    if (!threadId || this.#pendingSaveWatch?.threadId === threadId) return;
-    this.#pendingSaveWatch?.unsubscribe();
-    this.#pendingSaveWatch = {
-      threadId,
-      unsubscribe: onThreadMessagesSaved({ threadId, resourceId: this.identity.getResourceId() }, () => {
-        void this.#dropStoredPendingUserMessages(threadId);
-      }),
-    };
-    // A save may have landed before this listener.
-    void this.#dropStoredPendingUserMessages(threadId);
-  }
-
-  /** The listener holds the session, so it goes as soon as nothing pending needs it. */
-  #releasePendingSaveWatch(): void {
-    this.#pendingSaveWatch?.unsubscribe();
-    this.#pendingSaveWatch = undefined;
-  }
-
-  async #dropStoredPendingUserMessages(threadId: string): Promise<void> {
-    const ids = this.displayState.get().pendingUserMessages.map(message => message.id);
-    if (ids.length === 0 || this.thread.getId() !== threadId) {
-      if (this.#pendingSaveWatch?.threadId === threadId) this.#releasePendingSaveWatch();
-      return;
-    }
-    try {
-      const stored = await this.thread.storedMessageIds(ids);
-      if (this.thread.getId() === threadId) this.#dropPendingUserMessages(stored);
-    } catch {
-      // The run's end drops the message anyway.
-    }
-  }
-
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
   async followUp({
     content,
@@ -6201,30 +6024,7 @@ export class Session<TState = unknown> {
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
   }): Promise<void> {
-    if (!this.run.isRunning()) {
-      this.#nextSendKind = 'follow-up';
-      return this.sendMessage({ content, files, requestContext });
-    }
-    const pending = this.#addPendingUserMessage(content, 'follow-up');
-    try {
-      await this.#queueFollowUp({ content, files, requestContext }, pending);
-    } finally {
-      if (!pending.handedToRun) this.#dropPendingUserMessages([pending.id]);
-    }
-  }
-
-  async #queueFollowUp(
-    {
-      content,
-      files,
-      requestContext,
-    }: {
-      content: string;
-      files?: Array<{ data: string; mediaType: string; filename?: string }>;
-      requestContext?: RequestContext;
-    },
-    pending: PendingSend,
-  ): Promise<void> {
+    if (!this.run.isRunning()) return this.sendMessage({ content, files, requestContext });
     await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
@@ -6242,7 +6042,7 @@ export class Session<TState = unknown> {
       if (operation.controller.signal.aborted || operation.generation !== this.#followUpGeneration) return;
       // Once submitted, the Agent owns this work independently of the Session.
       this.#preparingFollowUps.delete(operation);
-      const queued = agent.queueMessage(
+      await agent.queueMessage(
         {
           contents: this.createMessageInput({ content, files }),
           providerOptions: withMessageAuthor(undefined, readMessageAuthor(requestContext)),
@@ -6252,15 +6052,7 @@ export class Session<TState = unknown> {
           threadId,
           ifIdle: { streamOptions: streamOptions as any },
         },
-      );
-      if (queued.signal?.id && queued.signal.id !== pending.id) {
-        this.displayState.renamePendingUserMessage(pending.id, queued.signal.id);
-        pending.id = queued.signal.id;
-      }
-      const settled = await queued.accepted;
-      if ((settled.action === 'wake' || settled.action === 'deliver') && settled.runId) {
-        this.#handPendingUserMessageToRun(pending, settled.runId);
-      }
+      ).accepted;
     } finally {
       this.#preparingFollowUps.delete(operation);
     }
