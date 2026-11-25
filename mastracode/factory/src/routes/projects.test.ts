@@ -78,6 +78,56 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("still creates an organization's second project, warning once per process that it is deprecated", async () => {
+    vi.resetModules();
+    const { ProjectRoutes: FreshProjectRoutes } = await import('./projects.js');
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      const organizationId = context.req.header('x-org') ?? 'org-1';
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new FreshProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+      }).routes(),
+    );
+    const create = (name: string, org = 'org-1') =>
+      app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-org': org },
+        body: JSON.stringify({ name }),
+      });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const deprecations = () =>
+      warn.mock.calls.filter(([message]) => String(message).includes('more than one Factory project'));
+
+    try {
+      expect((await create('Platform')).status).toBe(201);
+      expect((await create('Acme', 'org-2')).status).toBe(201);
+      expect(deprecations()).toEqual([]);
+
+      expect((await create('Payments')).status).toBe(201);
+      expect((await create('Growth')).status).toBe(201);
+      expect(deprecations()).toEqual([
+        [
+          '[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.',
+        ],
+      ]);
+
+      const listed = (await (await app.request('/web/factory/projects')).json()) as {
+        projects: Array<{ name: string }>;
+      };
+      expect(listed.projects.map(project => project.name).sort()).toEqual(['Growth', 'Payments', 'Platform']);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
     const seed = await createFactoryStorageForTests();
     const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });

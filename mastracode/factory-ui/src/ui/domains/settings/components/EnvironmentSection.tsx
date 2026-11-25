@@ -9,8 +9,7 @@ import {
   useRequestEnvironmentBuildMutation,
 } from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPayload } from '../../workspaces/services/environment';
-import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
-import { BuildStatusBlock } from './environment/BuildStatusBlock';
+import { EnvironmentBuildHistory, EnvironmentBuildStatus } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
@@ -106,7 +105,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
     );
 
   return (
-    <BuildStatusBlock
+    <EnvironmentBuildStatus
       lastBuild={environment.build}
       build={buildQuery.data}
       requesting={requestBuild.isPending}
@@ -118,7 +117,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
 function BuildHistory({ factoryId }: { factoryId: string }) {
   const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
   return (
-    <BuildHistoryBlock
+    <EnvironmentBuildHistory
       builds={buildsQuery.data}
       error={
         buildsQuery.isError

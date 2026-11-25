@@ -1,3 +1,9 @@
+import type {
+  EnvironmentBuild,
+  EnvironmentBuildState,
+  EnvironmentLastBuild,
+} from '@mastra/playground-ui/components/EnvironmentBuild';
+
 /**
  * Browser-side helpers for a Factory's environment: the sandbox resources, the
  * ordered repository list with per-repository setup and the workspace setup
@@ -43,25 +49,6 @@ export interface FactoryEnvironmentBuildTriggers {
   push: { enabled: boolean; debounceMinutes: number };
 }
 
-/** The last build factory asked the provider for; its status is read live by id. */
-export interface FactoryEnvironmentLastBuild {
-  buildId: string;
-  attemptedAt: string | null;
-}
-
-export type FactoryEnvironmentBuildStatus = 'pending' | 'building' | 'ready' | 'failed' | 'unknown';
-
-export interface FactoryEnvironmentBuild {
-  buildId: string;
-  status: FactoryEnvironmentBuildStatus;
-  templateId?: string;
-  startedAt?: string;
-  finishedAt?: string;
-  error?: string;
-  /** Log lines, as the provider streams them. */
-  logs?: string[];
-}
-
 export interface FactoryEnvironmentBuildStart {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
@@ -79,7 +66,7 @@ export interface FactoryEnvironmentPayload {
   activeTemplateHeads: Record<string, string> | null;
   repositories: FactoryEnvironmentRepository[];
   buildTriggers?: FactoryEnvironmentBuildTriggers;
-  build?: FactoryEnvironmentLastBuild | null;
+  build?: EnvironmentLastBuild | null;
 }
 
 export interface FactoryEnvironmentResponse {
@@ -150,15 +137,12 @@ export async function requestEnvironmentBuild(
   return readJsonOrThrow<FactoryEnvironmentBuildStart>(res, 'Failed to start the build');
 }
 
-export async function listEnvironmentBuilds(
-  baseUrl: string,
-  factoryProjectId: string,
-): Promise<FactoryEnvironmentBuild[]> {
+export async function listEnvironmentBuilds(baseUrl: string, factoryProjectId: string): Promise<EnvironmentBuild[]> {
   const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { builds } = await readJsonOrThrow<{ builds: FactoryEnvironmentBuild[] }>(res, 'Failed to load builds');
+  const { builds } = await readJsonOrThrow<{ builds: EnvironmentBuild[] }>(res, 'Failed to load builds');
   return builds;
 }
 
@@ -167,11 +151,11 @@ export async function getEnvironmentBuild(
   baseUrl: string,
   factoryProjectId: string,
   buildId: string,
-): Promise<FactoryEnvironmentBuild> {
+): Promise<EnvironmentBuild> {
   const res = await fetch(`${environmentUrl(baseUrl, factoryProjectId)}/builds/${encodeURIComponent(buildId)}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  const { build } = await readJsonOrThrow<{ build: FactoryEnvironmentBuild }>(res, 'Failed to load the build');
+  const { build } = await readJsonOrThrow<{ build: EnvironmentBuild }>(res, 'Failed to load the build');
   return build;
 }
