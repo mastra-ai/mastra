@@ -1,8 +1,11 @@
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
+import { createSubmitPlanTool } from '@mastra/code-sdk/tools/submit-plan';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
@@ -2510,6 +2513,59 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
     expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
     expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+  });
+
+  it('pins the controller root when a cold remote workspace first resolves its workdir, so submit_plan accepts the plan', async () => {
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-cold-plan-'));
+    onTestFinished(() => fs.rm(home, { recursive: true, force: true }));
+    await fs.mkdir(path.join(home, 'hello'), { recursive: true });
+    const resolver = createWorkspaceFactory({
+      sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+      github: fakeGithubIntegration() as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
+    });
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = requestContext.get('controller') as any;
+
+    const workspace = (await resolver({ requestContext }))!;
+    // Cold remote sandbox: the checkout root is unknown until the VM runs.
+    expect(controller.getState().projectPath).toBeUndefined();
+    const sandbox = mocks.createSandbox.mock.results[0]!.value as any;
+    // Run the VM's commands for real in a local home dir, so `pwd` answers it.
+    sandbox.exec.mockImplementation(async (command: string, args?: string[]) => {
+      await sandbox.ensureRunning();
+      try {
+        const result = await promisify(execFile)(args ? command : 'sh', args ?? ['-c', command], { cwd: home });
+        return { exitCode: 0, ...result };
+      } catch (error: any) {
+        return { exitCode: error.code, stdout: error.stdout ?? '', stderr: error.stderr ?? '' };
+      }
+    });
+
+    const relative = '.artifacts/plans/issue-80.md';
+    const absolute = path.join(home, 'hello', relative);
+    const plan = '# First remote plan\n\nBuild and verify the requested change.\n';
+    await workspace.filesystem!.writeFile(relative, plan);
+    expect(await fs.readFile(absolute, 'utf8')).toBe(plan);
+    // The first file operation pinned the root without a second resolution.
+    expect(controller.getState().projectPath).toBe(path.join(home, 'hello'));
+    expect(controller.getState().projectName).toBe('octocat/hello');
+
+    const tool = createSubmitPlanTool({ plansDir: '.artifacts/plans' });
+    for (const submittedPath of [relative, absolute]) {
+      const suspend = vi.fn();
+      const result = await tool.execute!({ path: submittedPath }, {
+        requestContext,
+        workspace,
+        agent: { suspend },
+      } as never);
+      expect(result).not.toMatchObject({ isError: true });
+      expect(suspend).toHaveBeenCalledTimes(1);
+      expect(suspend.mock.calls[0]?.[0]).toMatchObject({ toolId: 'submit_plan', title: 'First remote plan' });
+    }
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
   });
 
   function createRemoteFactory() {
