@@ -22,6 +22,7 @@ import {
   extractLatestTasksFromMessages,
   extractTasksFromSignalChunk,
   extractTasksFromToolResultChunk,
+  findLatestTasksInMessages,
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { catchUpWithHistory, mergeHistoryIntoConversation } from './merge-history';
@@ -728,7 +729,16 @@ export const useChat = ({
                   );
                   // A catch-up is applied once, here: the page's hydration stays the first history's, which merging
                   // the catch-up again would undo.
-                  if (catchingUp) return;
+                  if (catchingUp) {
+                    // The newest task list the page can know of, as live results follow it: unless the list lies in
+                    // messages older than the history page.
+                    const storedTasks = findLatestTasksInMessages(history);
+                    if (storedTasks) {
+                      liveTasks.current = storedTasks;
+                      setTasks(storedTasks);
+                    }
+                    return;
+                  }
                   setSubscriptionHistory({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,

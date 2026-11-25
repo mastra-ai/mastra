@@ -304,6 +304,65 @@ describe('useChat once its thread stream broke (a phone locked, the network gone
     expect(threads.streams[1]!.body).toMatchObject({ withInitialHistory: { perPage: 2 } });
   });
 
+  const task = (id: string, content: string) => ({ id, content, status: 'in_progress', activeForm: content });
+  // A task list the agent wrote: a task tool's result, stored in its reply.
+  const taskList = (id: string, ...contents: string[]): MastraDBMessage => ({
+    ...stored(id, 'assistant', ''),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: `call-${id}`,
+            toolName: 'task_write',
+            args: {},
+            result: { tasks: contents.map((content, index) => task(`t${index}`, content)) },
+          },
+        },
+      ],
+    },
+  });
+
+  // The page shows a task list the agent wrote live, then loses the stream.
+  async function givenTasksShownThenCut(withInitialHistory: boolean) {
+    const threads = givenThreadStreams();
+    const page = followThread({ initialMessages: opened, withInitialHistory });
+    unmount = page.unmount;
+    await threads.followedAgain(1);
+    if (withInitialHistory) await threads.send(0, historyOf([question]));
+    await threads.send(
+      0,
+      chunk('start', { messageId: 'a1' }),
+      chunk('tool-result', { toolCallId: 'call-1', toolName: 'task_write', result: { tasks: [task('t0', 'Plan')] } }),
+    );
+    await waitFor(() => expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan']));
+    threads.breakStream(0);
+    await threads.followedAgain(2);
+    return { ...threads, page };
+  }
+
+  it.each([{ withInitialHistory: false }, { withInitialHistory: true }])(
+    'shows the task list stored while the stream was down (withInitialHistory: $withInitialHistory)',
+    async ({ withInitialHistory }) => {
+      const { send, page } = await givenTasksShownThenCut(withInitialHistory);
+
+      await send(1, historyOf([question, taskList('a1', 'Plan', 'Cook')]));
+
+      await waitFor(() => expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan', 'Cook']));
+    },
+  );
+
+  it('keeps the task list the page shows when the catch-up history holds none, as it lies in older messages', async () => {
+    const { send, page } = await givenTasksShownThenCut(false);
+
+    await send(1, historyOf([stored('u2', 'user', 'And then?'), stored('a2', 'assistant', 'Then.')], null, true));
+
+    await waitFor(() => expect(texts(page.result.current.messages)).toContain('Then.'));
+    expect(page.result.current.tasks.map(t => t.content)).toEqual(['Plan']);
+  });
+
   it('follows the thread no more once the page leaves, though it followed it again before', async () => {
     const threads = givenThreadStreams();
     const page = followThread();
