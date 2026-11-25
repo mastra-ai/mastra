@@ -64,10 +64,14 @@ export function createDurableGoalStep() {
         goalConfig = (mastra as any)?.getAgentById?.(initData.agentId)?.__getGoalConfig?.();
       }
 
-      const liveRequestContext = registryEntry?.requestContext ?? params.requestContext;
-      const requestContext =
-        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, params.requestContext);
-      const customContext = restoreCustomContext(initData.requestContextEntries, liveRequestContext);
+      const liveRunContext = registryEntry?.requestContext;
+      const currentRequestContext = liveRunContext ?? params.requestContext;
+      const requestContext = restoreRequestContext(
+        initData.requestContextEntries,
+        params.requestContext,
+        liveRunContext,
+      );
+      const customContext = restoreCustomContext(initData.requestContextEntries, currentRequestContext);
 
       // No goal configured on the agent → nothing to judge.
       if (!goalConfig) return state;

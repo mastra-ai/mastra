@@ -259,7 +259,7 @@ async function runMemory(params: RunParams, run: RunIdentity): Promise<MastraMem
   if (entry?.memory || !params.mastra || !run.agentId) return entry?.memory;
   const agent = params.mastra.getAgentById(run.agentId);
   return agent.getMemory({
-    requestContext: entry?.requestContext ?? restoreRequestContext(run.requestContextEntries, params.requestContext),
+    requestContext: restoreRequestContext(run.requestContextEntries, params.requestContext, entry?.requestContext),
   });
 }
 

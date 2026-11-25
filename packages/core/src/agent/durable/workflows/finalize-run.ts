@@ -96,10 +96,12 @@ export interface DurableFinishSideEffectsResult {
   };
 }
 
-function restoreRequestContext(
+function mergeRequestContextForFinalization(
   entries: Record<string, unknown> | undefined,
   fallback: RequestContext | undefined,
+  liveRunContext: RequestContext | undefined,
 ): RequestContext {
+  if (liveRunContext) return liveRunContext;
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
@@ -182,8 +184,11 @@ export async function runDurableFinishSideEffects({
     }
   }
 
-  const effectiveRequestContext =
-    registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+  const effectiveRequestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    requestContext,
+    registryEntry?.requestContext,
+  );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
   if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
@@ -630,7 +635,11 @@ export async function runDurableDeadlineOutputPass({
   logger: IMastraLogger;
 }): Promise<void> {
   const durableState = initData.state;
-  const requestContext = entry.requestContext ?? restoreRequestContext(initData.requestContextEntries, undefined);
+  const requestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    undefined,
+    entry.requestContext,
+  );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {
       thread: { id: durableState.threadId },
