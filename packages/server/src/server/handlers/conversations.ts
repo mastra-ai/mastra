@@ -205,7 +205,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
         threadId: conversationId,
         resourceId: match.thread.resourceId,
         page: 0,
-        perPage: false,
+        perPage: 1000,
         orderBy: { field: 'createdAt', direction: 'ASC' },
       });
 
