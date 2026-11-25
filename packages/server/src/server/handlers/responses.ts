@@ -35,6 +35,7 @@ import {
   findResponseTurnRecord,
   findResponseTurnRecordAcrossAgents,
   getAgentMemoryStore,
+  listReachableMessageIds,
   persistResponseTurnRecord,
   resolveResponseTurnMessagesForStorage,
 } from './responses.storage';
@@ -186,12 +187,12 @@ async function authorizeResponseTurnRecord({
     effectiveResourceId: getEffectiveResourceId(requestContext, undefined),
     permission,
   });
-  const { messages } = await record.memory.recall({
-    threadId: record.thread.id,
-    resourceId: record.thread.resourceId,
-    perPage: false,
+  const reachableIds = await listReachableMessageIds({
+    memory: record.memory,
+    thread: record.thread,
+    messages: [record.message],
   });
-  if (!messages.some(message => message.id === record.message.id)) {
+  if (!reachableIds.has(record.message.id)) {
     throwThreadBranchNotFound();
   }
 }
@@ -263,12 +264,12 @@ async function resolveThreadExecutionContext({
       permission: MastraFGAPermissions.MEMORY_WRITE,
     });
     if (previousResponseTurnRecord) {
-      const { messages } = await memory.recall({
-        threadId: existingThread.id,
-        resourceId: existingThread.resourceId,
-        perPage: false,
+      const reachableIds = await listReachableMessageIds({
+        memory,
+        thread: existingThread,
+        messages: [previousResponseTurnRecord.message],
       });
-      if (!messages.some(message => message.id === previousResponseTurnRecord.message.id)) {
+      if (!reachableIds.has(previousResponseTurnRecord.message.id)) {
         throwThreadBranchNotFound();
       }
     }

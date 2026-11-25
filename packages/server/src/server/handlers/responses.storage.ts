@@ -222,20 +222,50 @@ export async function findResponseTurnRecord({
   }
 
   const messageIds = metadata.messageIds.length > 0 ? metadata.messageIds : [message.id];
-  const { messages: reachableMessages } = await memory.recall({
-    threadId: thread.id,
-    resourceId: thread.resourceId,
-    perPage: false,
-  });
-  const messagesById = new Map(reachableMessages.map(storedMessage => [storedMessage.id, storedMessage] as const));
+  const { messages: responseMessages } = await memoryStore.listMessagesById({ messageIds });
+  const reachableIds = await listReachableMessageIds({ memory, thread, messages: [message, ...responseMessages] });
+  const messagesById = new Map(
+    responseMessages
+      .filter(storedMessage => reachableIds.has(storedMessage.id))
+      .map(storedMessage => [storedMessage.id, storedMessage] as const),
+  );
   const orderedMessages = messageIds
     .map(messageId => messagesById.get(messageId))
     .filter((storedMessage): storedMessage is MastraDBMessage => Boolean(storedMessage));
-  if (orderedMessages.length !== messageIds.length || !messagesById.has(message.id)) {
+  if (orderedMessages.length !== messageIds.length || !reachableIds.has(message.id)) {
     return null;
   }
 
   return { metadata, message, messages: orderedMessages, thread, memory, memoryStore };
+}
+
+const REACHABLE_MESSAGE_WINDOW_LIMIT = 1000;
+
+/**
+ * Returns which of the given stored messages the thread can read, including messages a branch
+ * inherits from its ancestors. Reads only the time window the messages span, so the cost is
+ * bounded by the turn rather than the thread's history; an overfull window fails closed.
+ */
+export async function listReachableMessageIds({
+  memory,
+  thread,
+  messages,
+}: {
+  memory: MastraMemory;
+  thread: StorageThreadType;
+  messages: MastraDBMessage[];
+}): Promise<Set<string>> {
+  if (messages.length === 0) return new Set();
+  const times = messages.map(storedMessage => new Date(storedMessage.createdAt).getTime());
+  const { messages: windowMessages } = await memory.recall({
+    threadId: thread.id,
+    resourceId: thread.resourceId,
+    filter: { dateRange: { start: new Date(Math.min(...times)), end: new Date(Math.max(...times)) } },
+    page: 0,
+    perPage: REACHABLE_MESSAGE_WINDOW_LIMIT,
+    includeTotal: false,
+  });
+  return new Set(windowMessages.map(storedMessage => storedMessage.id));
 }
 
 export async function findResponseTurnRecordAcrossAgents({
