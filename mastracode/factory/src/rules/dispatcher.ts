@@ -5,6 +5,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { cardRuleFacts } from '../boards/card-facts.js';
@@ -42,7 +44,6 @@ import type { IntakeRoutesReader, SkippedEventRoute } from '../boards/intake-rou
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -90,7 +91,12 @@ import { endPhaseGoal, PHASE_GOAL_METADATA_KEY, phaseGoalOf, startPhaseGoal } fr
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
+import type {
+  FactoryCommitDecision,
+  FactoryRuleActor,
+  FactoryRuleCausalEntry,
+  FactoryRuleRejectionCode,
+} from './types.js';
 import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
 import { eventRouteIngress, foldUpdate, updateGroup } from './update-fold.js';
 import {
@@ -534,6 +540,8 @@ export interface FactoryDecisionDispatcherOptions {
   audit?: AuditRecorder;
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
+  /** The engine the dispatcher's own stage moves go through; defaults to one over `transitionService`. */
+  boardEngine?: FactoryBoardEngine;
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
   boards?: BoardRegistry | ProjectBoardSource;
@@ -787,7 +795,7 @@ function linkFacts(card: Card, trusted: boolean, trustKey: string): LinkFacts {
 export class FactoryDecisionDispatcher {
   readonly #audit?: AuditRecorder;
   readonly #controller: FactoryController;
-  readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
+  readonly #boardEngine: FactoryBoardEngine;
   readonly #boards: ProjectBoardSource;
   readonly #intakeRoutes?: IntakeRoutesReader;
   /** Forced on every project; undefined: each project's own setting. */
@@ -853,7 +861,8 @@ export class FactoryDecisionDispatcher {
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#audit = options.audit;
     this.#controller = options.controller;
-    this.#transitionService = options.transitionService;
+    this.#boardEngine =
+      options.boardEngine ?? new DispatcherBoardEngine({ transitionService: options.transitionService });
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
     this.#intakeEvaluator = options.intakeEvaluator;
@@ -2099,10 +2108,16 @@ export class FactoryDecisionDispatcher {
     }
     if (!existing && requested.closesIssue && (await this.#linkClosedIssue(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    // Filing the card *was* the placement, so a retry of the same decision has
-    // nothing left to apply — and must not drag a card that has since moved
-    // back down to the stage this decision filed it at.
-    if (materializedHere && requested.skipRules === true) return;
+    // Filing the card *was* the placement, so a retry of the same decision must not drag a card
+    // that has since moved back down to the stage this decision filed it at. A card still where
+    // this decision filed it goes on below, so the board engine answers for it even when an
+    // earlier attempt stopped before asking.
+    if (
+      materializedHere &&
+      requested.skipRules === true &&
+      !(existing.board === requested.board && existing.stages.length === 1 && existing.stages[0] === requested.stage)
+    )
+      return;
     const boards = await this.#boards.load(record);
     // A Linear identifier changes when its issue moves teams; the card filed
     // under the old one is still this issue's card.
@@ -2228,15 +2243,16 @@ export class FactoryDecisionDispatcher {
       }
     }
     if (skipRules) {
-      // Creation already filed the card at `stage`. An existing card — one a
-      // reconcile pass files again, say — is placed there the same way, through
-      // a cross-board relocation, so no phase rule runs for it and no transition
-      // is recorded.
+      // Creation already filed the card at `stage`; the engine still answers for it, and the
+      // default engine finds it where it belongs. An existing card — one a reconcile pass files
+      // again, say — is placed there the same way, through a cross-board relocation, so no phase
+      // rule runs for it and no transition is recorded.
       // Another decision of the same delivery (a pull request attaching to this card, say) can
       // change the card in between; a placement skipped for that reason is retried on a fresh read.
-      let item: Card | null = result.created ? null : result.item;
+      let item: Card | null = result.item;
+      let outcome: Awaited<ReturnType<FactoryBoardEngine['requestPlacement']>> = 'skipped';
       for (let attempt = 0; item && attempt < 3; attempt += 1) {
-        const outcome = await moveCardToBoard({
+        outcome = await this.#boardEngine.requestPlacement({
           workItems: this.#storage,
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
@@ -2247,6 +2263,23 @@ export class FactoryDecisionDispatcher {
         if (outcome !== 'skipped') break;
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
         item = fresh && fresh.revision !== item.revision ? fresh : null;
+      }
+      // A card this decision created and the engine would not file is not left filed, unless
+      // something else changed it since; the refusal stands either way.
+      const filedHere =
+        result.created || result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
+      if (filedHere && outcome === 'skipped') {
+        // Guarded by the card as this decision filed it. A retry no longer has that read, so it
+        // deletes only a card untouched since creation: first revision, never updated.
+        await this.#storage.delete({
+          orgId: record.orgId,
+          id: result.item.id,
+          purgeRuleState: false,
+          ...(result.created
+            ? { expectedRevision: result.item.revision, expectedUpdatedAt: result.item.updatedAt }
+            : { expectedRevision: 1, expectedUpdatedAt: result.item.createdAt }),
+        });
+        throw new FactoryRuleRejectedError('forbidden', `The board engine refused to file the card on ${board}.`);
       }
       await filed();
       return;
@@ -2259,7 +2292,7 @@ export class FactoryDecisionDispatcher {
 
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
-      const initial = await this.#transitionService.transition({
+      const initial = await this.#boardEngine.requestMove({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
         workItemId: result.item.id,
@@ -2282,7 +2315,7 @@ export class FactoryDecisionDispatcher {
     await filed();
     if (decision.stage === initialPhase) return;
 
-    const moved = await this.#transitionService.transition({
+    const moved = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: result.item.id,
@@ -2368,7 +2401,7 @@ export class FactoryDecisionDispatcher {
       );
       return true;
     }
-    const moved = await this.#transitionService.transition({
+    const moved = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: card.id,
@@ -2649,7 +2682,13 @@ export class FactoryDecisionDispatcher {
       `decision:${record.idempotencyKey}`,
     );
     if (!replay) assertFactoryDecisionTarget(decision, await this.#boards.load(record), item.board ?? undefined);
-    const result = await this.#transitionService.transition({
+    // A refusal already recorded for this decision (the engine refused the tool-result move that
+    // queued it, say) stands: the engine is not asked again under another cause.
+    if (replay?.status === 'rejected') {
+      const code = replay.code as FactoryRuleRejectionCode;
+      throw new FactoryRuleRejectedError(code, String(replay.reason), code !== 'stale');
+    }
+    const result = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
@@ -2772,7 +2811,7 @@ export class FactoryDecisionDispatcher {
     }
     const { item, board, route } = first;
     const crossesBoards = route.board !== board.id;
-    const result = await this.#transitionService.transition({
+    const result = await this.#boardEngine.requestMove({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,

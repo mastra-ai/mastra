@@ -9,6 +9,7 @@ import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -46,6 +47,7 @@ import type { FactoryBindingPreparationInput, FactoryReviewStatusEvent } from '.
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import type { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
+import type { FactoryTransitionRequest } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -3174,6 +3176,60 @@ describe('FactoryDecisionDispatcher', () => {
     emitAgentEnd();
     await first;
     expect(getAgentEndListenerCount()).toBe(0);
+  });
+
+  it("leaves a queued rule move undone when the host's board engine refuses it", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const item = await createItem(storage, 'github-issue:7');
+    const before = (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'tool-result-1' },
+      expectedRevision: item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', board: 'work', stage: 'done', idempotencyKey: 'refused-move' }],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    const inputs: FactoryTransitionRequest[] = [];
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
+      boardEngine: {
+        requestMove: async input => {
+          inputs.push(input);
+          return {
+            status: 'rejected',
+            transitionId: 'refused',
+            itemId: input.workItemId,
+            code: 'forbidden',
+            reason: 'This host keeps cards out of Done.',
+          };
+        },
+        requestPlacement: async () => 'skipped',
+      },
+      storage,
+      audit: seed.audit,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(inputs).toEqual([
+      expect.objectContaining({
+        workItemId: item.id,
+        stage: 'done',
+        ingress: { type: 'rule', identity: 'decision:refused-move' },
+      }),
+    ]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(before);
+    expect(
+      (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'refused-move'),
+    ).toMatchObject({ status: 'failed', lastError: expect.stringContaining('This host keeps cards out of Done.') });
   });
 
   it('waits for an open run on the same binding before sending another kickoff', async () => {
@@ -8199,12 +8255,14 @@ describe('custom-board deferred targets', () => {
     storage: WorkItemsStorage,
     boards: ReturnType<typeof createBoardRegistry>,
     configVersion = 'custom-v1',
+    boardEngine?: FactoryBoardEngine,
   ) {
     return new FactoryDecisionDispatcher({
       controller: createSession().controller as never,
       storage,
       boards: autoStartingBoards(boards),
       transitionService: new FactoryTransitionService({ storage, boards, configVersion }),
+      ...(boardEngine ? { boardEngine } : {}),
       // No intake rules to read: the route list, as before intake order.
       intakeEvaluator: 'route-list',
       ownerId: 'custom-worker',
@@ -8328,6 +8386,190 @@ describe('custom-board deferred targets', () => {
     ]);
     // Planning's entry rule never fired, so the placement is the only decision.
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
+  });
+
+  it("leaves an existing card where it is when the host's board engine refuses its placement", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'work',
+        title: 'Needs planning',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:refused-placement' },
+      },
+    });
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'refused-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:refused-placement',
+      skipRules: true,
+    });
+    const placements: FactoryCardPlacement[] = [];
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async placement => {
+        placements.push(placement);
+        return 'skipped';
+      },
+    };
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine).runOnce();
+
+    expect(placements).toEqual([
+      expect.objectContaining({
+        item: expect.objectContaining({ id: item.id }),
+        targetBoard: 'work',
+        targetStage: 'planning',
+      }),
+    ]);
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'work', stages: ['intake'] });
+  });
+
+  it("asks the host's board engine again when its placement of a new card threw", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'retried-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:retried-placement',
+      skipRules: true,
+    });
+    let calls = 0;
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('host engine unavailable');
+        return 'skipped';
+      },
+    };
+    const dispatcher = dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine);
+
+    await dispatcher.runOnce();
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(1);
+    await dispatcher.runOnce(new Date(Date.now() + 3_600_000));
+
+    expect(calls).toBe(2);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([]);
+  });
+
+  it("keeps a new card changed before the retry when the host's board engine refuses it on that retry", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'changed-before-retry',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:changed-before-retry',
+      skipRules: true,
+    });
+    let calls = 0;
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('host engine unavailable');
+        return 'skipped';
+      },
+    };
+    const dispatcher = dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine);
+
+    await dispatcher.runOnce();
+    const [card] = await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID });
+    await storage.update({ orgId: 'org-1', id: card!.id, userId: 'user-1', patch: { metadata: { note: 'kept' } } });
+    await dispatcher.runOnce(new Date(Date.now() + 3_600_000));
+
+    expect(calls).toBe(2);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([
+      expect.objectContaining({ id: card!.id, metadata: expect.objectContaining({ note: 'kept' }) }),
+    ]);
+  });
+
+  it("keeps a new card something else changed when the host's board engine refuses its placement", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'changed-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:changed-placement',
+      skipRules: true,
+    });
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      // Someone changes the card while the engine decides, every time it is asked.
+      requestPlacement: async placement => {
+        await storage.update({
+          orgId: 'org-1',
+          id: placement.item.id,
+          userId: 'user-1',
+          patch: { metadata: { note: `Changed at ${placement.item.revision}` } },
+        });
+        return 'skipped';
+      },
+    };
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine).runOnce();
+
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([
+      expect.objectContaining({ metadata: expect.objectContaining({ note: expect.stringMatching(/^Changed at/) }) }),
+    ]);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({
+        lastError: expect.stringContaining('The board engine refused to file the card on work.'),
+      }),
+    ]);
+  });
+
+  it("files no new card when the host's board engine refuses its placement", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'refused-new-placement',
+      board: 'work',
+      stage: 'planning',
+      sourceKey: 'github-issue:refused-new-placement',
+      skipRules: true,
+    });
+    const placements: FactoryCardPlacement[] = [];
+    const engine: FactoryBoardEngine = {
+      requestMove: async () => {
+        throw new Error('A skipRules placement is not a transition.');
+      },
+      requestPlacement: async placement => {
+        placements.push(placement);
+        return 'skipped';
+      },
+    };
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({}), 'custom-v1', engine).runOnce();
+
+    expect(placements).toEqual([
+      expect.objectContaining({ item: expect.objectContaining({ stages: ['planning'] }), targetStage: 'planning' }),
+    ]);
+    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toEqual([]);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([
+      expect.objectContaining({
+        idempotencyKey: 'refused-new-placement',
+        lastError: expect.stringContaining('The board engine refused to file the card on work.'),
+      }),
+    ]);
   });
 
   it('places a pull request card its project keeps on the retired Review board where it sits', async () => {

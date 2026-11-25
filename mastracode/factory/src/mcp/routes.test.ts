@@ -7,6 +7,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -93,11 +94,13 @@ async function setup() {
     workItems: seed.workItems,
     audit: seed.audit,
     boards,
-    transitionService: new FactoryTransitionService({
-      configVersion: 'mcp-test',
-      boards,
-      storage: seed.workItems,
-      audit: auditDomain,
+    boardEngine: new DispatcherBoardEngine({
+      transitionService: new FactoryTransitionService({
+        configVersion: 'mcp-test',
+        boards,
+        storage: seed.workItems,
+        audit: auditDomain,
+      }),
     }),
     auditRecorder: auditDomain,
     sessions: createSourceControlSessionLookup([sourceControl]),

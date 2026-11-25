@@ -281,8 +281,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         const workItemTools = createFactoryWorkItemTools(scope, {
           workItems: seeded.workItems,
           boards: createBoardRegistry(),
-          transitionService: {
-            transition: async request => ({
+          boardEngine: {
+            requestMove: async request => ({
               status: 'accepted',
               transitionId: randomUUID(),
               itemId: request.workItemId,

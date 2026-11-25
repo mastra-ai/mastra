@@ -57,6 +57,8 @@ import {
   getFactoryAuthUserId,
 } from './auth.js';
 import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
+import { createDispatcherBoardEngine } from './board-engine/engine.js';
+import type { FactoryBoardEngineFactory } from './board-engine/engine.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
@@ -422,6 +424,13 @@ export interface MastraFactoryConfig {
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
+  /**
+   * Builds the board engine every stage move goes through: a person's move, the chat move tool,
+   * card creation, a run start, an agent's move or verdict and tool-result rules. Defaults to
+   * `createDispatcherBoardEngine`, which commits each move at once and runs its follow-up work on
+   * the decision dispatcher.
+   */
+  boardEngine?: FactoryBoardEngineFactory;
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -1593,6 +1602,9 @@ export class MastraFactory {
             : {}),
         })
       : undefined;
+    const boardEngine = transitionService
+      ? (this.#config.boardEngine ?? createDispatcherBoardEngine)({ transitionService })
+      : undefined;
     // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
     let liveSessions: LiveSessions | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
@@ -1607,7 +1619,7 @@ export class MastraFactory {
             intakeRoutes: storedBoardsStorage,
           }
         : {}),
-      transitionService,
+      boardEngine,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
       sessionModel: {
@@ -1817,7 +1829,7 @@ export class MastraFactory {
           onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           isThreadRunning: threadId =>
             this.#prepared?.base.controller.listActiveThreadRuns().some(run => run.threadId === threadId) ?? false,
-          ...(transitionService ? { transitionService } : {}),
+          ...(boardEngine ? { boardEngine } : {}),
           ...(githubIntegration
             ? {
                 recordPullRequestProvenance: (input: Parameters<typeof recordFactoryPullRequestProvenance>[4]) =>
@@ -2163,13 +2175,13 @@ export class MastraFactory {
               }),
             );
           }
-          if (workItemsStorage && transitionService) {
+          if (workItemsStorage && boardEngine) {
             mergeTools(
               'factory',
               await createFactoryTransitionTools({
                 requestContext,
                 storage: workItemsStorage,
-                transitionService,
+                boardEngine,
                 boards: boards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
@@ -2419,11 +2431,17 @@ export class MastraFactory {
                 }
               : {}),
             factoryTransitionService: transitionService,
+            factoryBoardEngine: boardEngine,
             runSlots: () => this.#dispatcher?.runSlots(),
-            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+            onFactoryRuntime: ({
+              transitionService: runtimeTransitionService,
+              boardEngine: runtimeBoardEngine,
+              prepareBinding,
+            }) => {
               this.#dispatcher ??= new FactoryDecisionDispatcher({
                 controller,
                 transitionService: runtimeTransitionService,
+                boardEngine: runtimeBoardEngine,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: boards,
