@@ -138,9 +138,22 @@ describe('Creating a board', () => {
       name: 'Bug Triage',
       description: null,
       phases: [
-        { key: 'backlog', name: 'Backlog', kind: 'resting', nextPhases: ['doing'] },
-        { key: 'doing', name: 'Doing', kind: 'working', runner: { context: 'work' }, nextPhases: ['done'] },
-        { key: 'done', name: 'Done', kind: 'terminal', nextPhases: [] },
+        {
+          key: 'backlog',
+          name: 'Backlog',
+          description: 'Cards wait here until someone starts them.',
+          kind: 'resting',
+          nextPhases: ['doing'],
+        },
+        {
+          key: 'doing',
+          name: 'Doing',
+          description: 'An agent works on the card.',
+          kind: 'working',
+          runner: { context: 'work' },
+          nextPhases: ['done'],
+        },
+        { key: 'done', name: 'Done', description: 'Finished cards.', kind: 'terminal', nextPhases: [] },
       ],
     });
     expect(await screen.findByRole('textbox', { name: 'Board name' })).toHaveValue('Bug Triage');

@@ -408,11 +408,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Work phase desc
 
   it('leaves a phase a person turned to another kind or skill without seed text that would describe it wrongly', async () => {
     const { boards, scope } = await setup(
-      editPhase(
-        editPhase(UNDESCRIBED, 'execute', { runner: { skill: 'my-build', context: 'work' } }),
-        'canceled',
-        { kind: 'resting', nextPhases: ['intake'] },
-      ),
+      editPhase(editPhase(UNDESCRIBED, 'execute', { runner: { skill: 'my-build', context: 'work' } }), 'canceled', {
+        kind: 'resting',
+        nextPhases: ['intake'],
+      }),
     );
 
     await boards.applyBoardMigrations(scope, [WORK_PHASE_DESCRIPTIONS_MIGRATION]);

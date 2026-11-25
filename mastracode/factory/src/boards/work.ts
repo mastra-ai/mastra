@@ -89,8 +89,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     canceled: {
       name: 'Canceled',
-      description:
-        'Dropped or closed without completing. A card can be revived into Intake.',
+      description: 'Dropped or closed without completing. A card can be revived into Intake.',
       kind: 'terminal',
       // Revived into Intake; a pull request closed without merging and then reopened goes back to Review.
       nextPhases: ['intake', 'pr-review'],
