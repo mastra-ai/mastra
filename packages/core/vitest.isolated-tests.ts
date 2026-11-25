@@ -70,6 +70,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/restart-agreement.test.ts', // reset-modules
   'src/agent/durable/__tests__/restart-harness.test.ts', // reset-modules
   'src/agent/durable/__tests__/resume-claim-loser.test.ts', // env,reset-modules
+  'src/agent/durable/__tests__/stored-signal-hint.test.ts', // reset-modules
   'src/agent/durable/__tests__/workflow-restart-shapes.test.ts', // reset-modules
   'src/agent/durable/workflows/__tests__/finalize-run.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/llm-mapping-background-race.test.ts', // vi.mock
