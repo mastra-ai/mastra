@@ -69,7 +69,8 @@ function rowDetail(provider: CustomProviderInfo) {
   return (
     <>
       {provider.url}
-      <span className="block">{failure}</span>
+      {/* Clamped so a long upstream message can't stretch the row; the status description keeps the full text. */}
+      <span className="line-clamp-2">{failure}</span>
     </>
   );
 }
@@ -108,7 +109,7 @@ export function CustomProviderRow({
             toast.error(`${provider.name} failed the connection test. ${check.models.failure.message}`);
           }
         },
-        onError: error => toast.error(error.message || 'Could not test the endpoint'),
+        onError: error => toast.error(error.message || "Couldn't test the endpoint."),
       },
     );
   };
