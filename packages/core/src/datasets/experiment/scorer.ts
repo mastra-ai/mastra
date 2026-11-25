@@ -533,6 +533,7 @@ async function runScorerSafe(
       groundTruth: item.groundTruth,
       expectedTrajectory: item.expectedTrajectory,
       scoreSource: 'experiment',
+      ...(pinnedScorerVersionIds.has(scorer) ? { scorerVersion: pinnedScorerVersionIds.get(scorer) } : {}),
       targetScope: effectiveScope,
       targetEntityType: toScorerTargetEntityType(targetType),
       targetTraceId,

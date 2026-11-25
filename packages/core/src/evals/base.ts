@@ -81,7 +81,11 @@ type ScorerTypeShortcuts = {
  * judge still returns the step's structured output at the end.
  */
 export interface ScorerJudgeConfig {
-  model: MastraModelConfig;
+  /**
+   * The judge model, or a function of `requestContext` returning one. A function
+   * resolves on every judge call, e.g. to look up credentials at run time.
+   */
+  model: DynamicArgument<MastraModelConfig>;
   /**
    * System instructions for the judge. Accepts the same forms as `Agent` instructions:
    * text, system messages (which can carry `providerOptions` such as a cache setting),
@@ -234,6 +238,9 @@ interface ScorerRun<TInput = any, TOutput = any> {
 
   /** What kind of scoring flow produced this score, such as live runs, trace scoring, or experiments. */
   scoreSource?: ScorerScoreSource;
+
+  /** Version of the scorer definition that produced this score, e.g. a pinned stored-scorer version. */
+  scorerVersion?: string;
 
   /**
    * How the scorer interpreted the target data.
@@ -1230,6 +1237,7 @@ class MastraScorer<
           score: {
             scorerId: this.id,
             scorerName: this.name,
+            ...(input.scorerVersion ? { scorerVersion: input.scorerVersion } : {}),
             ...(input.scoreSource ? { scoreSource: input.scoreSource } : {}),
             score: scorerResult.score,
             // A judge's reason routinely quotes the data it scored.
@@ -1497,8 +1505,9 @@ class MastraScorer<
 
     const prompt = await originalStep.createPrompt(context);
     const judgeRequestContext = this.mergeJudgeRequestContext(context.run.requestContext);
-    const modelConfig: WidenedMastraModelConfig | undefined =
-      (originalStep.judge?.model as WidenedMastraModelConfig | undefined) ?? this.config.judge?.model;
+    const modelConfig: DynamicArgument<WidenedMastraModelConfig> | undefined =
+      (originalStep.judge?.model as DynamicArgument<WidenedMastraModelConfig> | undefined) ??
+      (this.config.judge?.model as DynamicArgument<WidenedMastraModelConfig> | undefined);
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
     const jsonPromptInjection =
       originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection ?? 'auto';

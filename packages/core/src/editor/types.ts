@@ -55,6 +55,7 @@ import type {
   StorageListSkillsResolvedOutput,
 } from '../storage/types';
 import type { ToolProvider } from '../tool-provider';
+import type { DynamicArgument } from '../types';
 import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 import type { WorkspaceSandbox } from '../workspace/sandbox/sandbox';
 import type { Workspace } from '../workspace/workspace';
@@ -266,6 +267,16 @@ export interface MastraEditorConfig {
    * unavailable.
    */
   sourceControlProvider?: SourceControlProvider;
+  /** Options for stored scorers. */
+  scorers?: {
+    /**
+     * Builds the judge model of a stored LLM-judge scorer. Defaults to the stored
+     * `provider/name`, routed through the Mastra instance's gateways. Use it to give
+     * each judge its own credentials, e.g. return a function that looks up an API key
+     * when the judge runs.
+     */
+    judgeModel?: (scorer: StorageResolvedScorerDefinitionType) => DynamicArgument<MastraModelConfig>;
+  };
 }
 
 export interface GetByIdOptions {

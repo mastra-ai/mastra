@@ -128,7 +128,7 @@ export class EditorScorerNamespace extends CrudEditorNamespace<
         return null;
       }
 
-      const model = `${modelConfig.provider}/${modelConfig.name}`;
+      const model = this.editor.__scorerJudgeModel?.(storedScorer) ?? `${modelConfig.provider}/${modelConfig.name}`;
       const min = storedScorer.scoreRange?.min ?? 0;
       const max = storedScorer.scoreRange?.max ?? 1;
 
