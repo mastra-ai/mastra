@@ -90,6 +90,7 @@ const TRACKED_COMMANDS = new Set([
 /** Commands that open a menu when run without arguments. */
 const MENU_COMMANDS = new Set([
   'settings',
+  'model',
   'models',
   'packs',
   'threads',
