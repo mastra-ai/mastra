@@ -41,6 +41,8 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
 
 /** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
 const PIN_SWEEP_PAGE_SIZE = 100;
+// Bounds one running-row read even when `globalConcurrency` is unlimited.
+const RUNNING_SWEEP_MAX_PAGE_SIZE = 1_000;
 
 /** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
 function minLeaseOverride(): number | undefined {
@@ -2500,15 +2502,21 @@ export class BackgroundTaskManager {
     try {
       const storage = await this.getStorage();
       const now = Date.now();
-      // One page per tick, so many running tasks don't make every worker read every row each lease.
+      // One page per tick. `globalConcurrency` caps how many tasks run at once, so a
+      // page that large normally holds every running row and a lapsed one is found
+      // on the next tick; rows past it (peers with a higher limit) wait for later pages.
+      const runningPageSize = Math.min(
+        Math.max(PIN_SWEEP_PAGE_SIZE, this.config.globalConcurrency),
+        RUNNING_SWEEP_MAX_PAGE_SIZE,
+      );
       const { tasks: running } = await storage.listTasks({
         status: 'running',
         orderBy: 'createdAt',
         orderDirection: 'asc',
         page: this.runningSweepPage,
-        perPage: PIN_SWEEP_PAGE_SIZE,
+        perPage: runningPageSize,
       });
-      this.runningSweepPage = running.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.runningSweepPage + 1;
+      this.runningSweepPage = running.length < runningPageSize ? 0 : this.runningSweepPage + 1;
       for (const task of running) {
         if (this.shuttingDown) return;
         if (isLiveRunning(task, now)) continue;

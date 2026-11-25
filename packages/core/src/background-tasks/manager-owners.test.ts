@@ -1012,6 +1012,26 @@ describe('BackgroundTaskManager: a running task whose worker dies after startup'
     expect(execute).not.toHaveBeenCalled();
   });
 
+  it('finds it on the next sweep behind more live tasks than the default page, when the limit allows them', async () => {
+    const { mgr, execute } = await worker(150);
+    const store = (await storage.getStore('backgroundTasks'))!;
+    const old = Date.now() - 60_000;
+    for (let i = 0; i < 120; i++) {
+      await store.createTask({
+        ...foreignRunningRow(`live-${i}`),
+        ownerId: 'live-worker',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(old + i),
+      });
+    }
+    await seedRunning({ maxRetries: 0 });
+
+    // One lease plus a little: the sweep that runs after the lease must already find it.
+    await new Promise(resolve => setTimeout(resolve, LEASE_MS + HEARTBEAT_MS));
+    expect((await mgr.getTask('orphaned'))?.status).toBe('failed');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('leaves it alone while its owner keeps the lease', async () => {
     const { mgr, execute } = await worker();
     await seedRunning({ maxRetries: 1, ownerId: 'live-worker', leaseExpiresAt: new Date(Date.now() + 60_000) });
