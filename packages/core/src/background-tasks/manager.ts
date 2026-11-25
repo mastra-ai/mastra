@@ -276,7 +276,12 @@ export class BackgroundTaskManager {
     this.resultCallback = async (event: Event, ack?: () => Promise<void>) => {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         try {
-          await this.handleResult(event);
+          // Tracked so shutdown waits for the result's hooks, including a
+          // failure it reported itself, before storage closes.
+          const handling = this.handleResult(event);
+          // Its errors still reach the pubsub through the await below.
+          this.#trackSettlingRun(handling.catch(() => {}));
+          await handling;
         } finally {
           await ack?.();
         }

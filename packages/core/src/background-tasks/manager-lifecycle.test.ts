@@ -380,6 +380,48 @@ describe('BackgroundTaskManager lifecycle', () => {
     }
   });
 
+  it('waits for onTaskFailed of a task it fails before shutdown returns and storage closes', async () => {
+    let reported = false;
+    const store = new ClosableStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: {
+        enabled: true,
+        onTaskFailed: async () => {
+          await new Promise(resolve => setTimeout(resolve, 300));
+          reported = true;
+        },
+      },
+    });
+    const manager = mastra.backgroundTaskManager!;
+    const started = Promise.withResolvers<void>();
+    manager.registerStaticExecutor('wait', {
+      execute: (args: unknown, options: { abortSignal?: AbortSignal }) => {
+        started.resolve();
+        return waitUntilAborted(args, options);
+      },
+    });
+
+    try {
+      await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+        maxRetries: 0,
+      });
+      await started.promise;
+
+      await manager.shutdown();
+
+      expect(reported).toBe(true);
+    } finally {
+      mastra.__unregisterHooks();
+    }
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
