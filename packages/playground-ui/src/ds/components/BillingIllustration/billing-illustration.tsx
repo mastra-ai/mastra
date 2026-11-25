@@ -44,12 +44,13 @@ const inkByTone = {
   faded: 'fill-fill-strong',
 } satisfies Record<BillingIllustrationTone, string>;
 
+/** Grays, not white with an opacity: overlapping opacities add up to a brighter spot. */
 const maskPaintByStroke = {
-  solid: { fill: 'black', stroke: 'white', strokeOpacity: 0.7 },
-  edge: { stroke: 'white', strokeOpacity: 0.35 },
+  solid: { fill: 'black', stroke: 'rgb(70% 70% 70%)' },
+  edge: { stroke: 'rgb(35% 35% 35%)' },
   line: { stroke: 'white' },
   light: { fill: 'white', stroke: 'white' },
-  idle: { fill: 'white', stroke: 'white' },
+  idle: { fill: 'white' },
 } satisfies Record<BillingArtStroke, SVGProps<SVGPathElement>>;
 
 const hoverTransition = 'motion-safe:duration-slow motion-safe:ease-out-custom';
@@ -57,11 +58,14 @@ const hoverTransition = 'motion-safe:duration-slow motion-safe:ease-out-custom';
 const staggerMs = 50;
 
 const classByStroke: Partial<Record<BillingArtStroke, string>> = {
+  // The brighter line shows where a dim one crosses it.
+  edge: 'mix-blend-lighten',
   idle: cn(
-    '[fill-opacity:0] [stroke-opacity:0.35]',
-    'group-hover/billing-illustration:[fill-opacity:1] group-hover/billing-illustration:[stroke-opacity:1]',
-    'group-focus-within/billing-illustration:[fill-opacity:1] group-focus-within/billing-illustration:[stroke-opacity:1]',
-    'motion-safe:transition-[fill-opacity,stroke-opacity]',
+    'mix-blend-lighten',
+    '[stroke:rgb(35%_35%_35%)] [fill-opacity:0]',
+    'group-hover/billing-illustration:[stroke:white] group-hover/billing-illustration:[fill-opacity:1]',
+    'group-focus-within/billing-illustration:[stroke:white] group-focus-within/billing-illustration:[fill-opacity:1]',
+    'motion-safe:transition-[fill-opacity,stroke]',
     hoverTransition,
   ),
 };

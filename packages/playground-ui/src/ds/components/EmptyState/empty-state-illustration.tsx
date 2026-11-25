@@ -66,7 +66,7 @@ export function EmptyStateIllustration({ name }: { name: EmptyStateIllustrationN
         fill="none"
         aria-hidden="true"
         data-illustration={name}
-        className="block aspect-square h-auto w-full"
+        className="line-art block aspect-square h-auto w-full"
       >
         <mask id={`${id}-frame`} maskUnits="userSpaceOnUse" x="0" y="0" width="120" height="120">
           <circle cx="60" cy="60" r="60" fill="white" />

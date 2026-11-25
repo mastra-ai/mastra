@@ -120,6 +120,39 @@
   border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
 }
 
+/* For an SVG line drawing on opaque `fill-background` plates. Its dim lines come as an opacity of the ink; painted
+   that way, two of them add up to a brighter spot where they cross or meet. The utility swaps each step for its opaque
+   twin over the plates, so a line keeps its color and crossings stay even. A crease (0.35) that runs along an outline
+   gives way to it. The steps are the only ones a drawing may use (see `illustration-paint.test.tsx`). */
+@utility line-art {
+  isolation: isolate;
+  & [stroke-opacity='0.35'] {
+    --line-art-ink: color-mix(in srgb, currentColor 35%, var(--background));
+    mix-blend-mode: lighten;
+  }
+  .light & [stroke-opacity='0.35'] {
+    mix-blend-mode: darken;
+  }
+  & :is([stroke-opacity='0.5'], [opacity='0.5']) {
+    --line-art-ink: color-mix(in srgb, currentColor 50%, var(--background));
+  }
+  & [stroke-opacity='0.7'] {
+    --line-art-ink: color-mix(in srgb, currentColor 70%, var(--background));
+  }
+  & [opacity='0.75'] {
+    --line-art-ink: color-mix(in srgb, currentColor 75%, var(--background));
+  }
+  & [stroke]:is([stroke-opacity], [opacity]) {
+    stroke: var(--line-art-ink);
+    stroke-opacity: 1;
+    opacity: 1;
+  }
+  & [fill='currentColor'][opacity] {
+    fill: var(--line-art-ink);
+    opacity: 1;
+  }
+}
+
 @layer utilities {
   /* Syntax roles from `syntaxHighlighter`, shared by the <Code> viewer and every CodeMirror editor. */
   .syntax-comment {

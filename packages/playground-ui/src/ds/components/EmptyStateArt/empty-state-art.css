@@ -12,18 +12,43 @@
   overflow: visible;
   pointer-events: none;
   user-select: none;
-  --line: var(--color-border-strong);
+  /* Opaque twins of the border colors: where two translucent lines meet, they add up to a brighter spot. A line
+     runs along an edge, half on the face and half off it; a detail sits on the face. */
   --face: var(--color-card);
-  --detail: var(--color-border);
   --hole: var(--color-background);
+  --edge: color-mix(in srgb, var(--face), var(--hole));
+  --line: color-mix(in srgb, oklch(var(--fill-tint) 0 0) var(--border-strong-alpha), var(--edge));
+  --detail: color-mix(in srgb, oklch(var(--fill-tint) 0 0) var(--border-alpha), var(--face));
   --packet: var(--color-muted-foreground);
   --logo: var(--line);
-  --smoke: var(--color-border-strong);
+  --smoke: var(--line);
+}
+/* These draw their details in holes as much as on faces. */
+[data-slot='empty-state-art'] .art:is([data-illustration='memory'], [data-illustration='widgets']) {
+  --detail: color-mix(in srgb, oklch(var(--fill-tint) 0 0) var(--border-alpha), var(--edge));
+}
+/* A detail that runs along an outline gives way to it. Not while the drawing plays: every blend is one more layer. */
+[data-slot='empty-state-art']:not([data-live], [data-state='working']) .art {
+  isolation: isolate;
+}
+[data-slot='empty-state-art']:not([data-live], [data-state='working']) .art [stroke='var(--detail)'][fill='none'] {
+  mix-blend-mode: lighten;
+}
+.light
+  [data-slot='empty-state-art']:not([data-live], [data-state='working'])
+  .art
+  [stroke='var(--detail)'][fill='none'] {
+  mix-blend-mode: darken;
+}
+/* The ground hatching is a shadow on whatever the drawing stands on, so it stays translucent. */
+[data-slot='empty-state-art'] .art pattern {
+  --detail: var(--color-border);
 }
 [data-slot='empty-state-art']:is([data-live], [data-state='working'], [data-state='failed']) .acc {
   --line: var(--art-hue);
   --face: color-mix(in oklab, var(--art-hue) 10%, var(--color-card));
   --hole: color-mix(in oklab, var(--art-hue) 6%, var(--color-background));
+  --detail: color-mix(in srgb, oklch(var(--fill-tint) 0 0) var(--border-alpha), var(--face));
 }
 [data-slot='empty-state-art']:is([data-live], [data-state='working'], [data-state='failed']) .art {
   --packet: var(--art-hue);

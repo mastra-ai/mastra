@@ -43,6 +43,16 @@ export function RequestsArt() {
       />
       <circle
         opacity="0.5"
+        cx="11.154"
+        cy="11.154"
+        r="11.154"
+        transform="matrix(0.85 -0.527 0.85 0.527 32.198 57.308)"
+        stroke="currentColor"
+        strokeWidth="1.279"
+        strokeDasharray="2.56 2.56"
+      />
+      <circle
+        opacity="0.5"
         cx="6.541"
         cy="6.541"
         r="5.902"
@@ -59,16 +69,6 @@ export function RequestsArt() {
           fill="currentColor"
         />
       </g>
-      <circle
-        opacity="0.5"
-        cx="11.154"
-        cy="11.154"
-        r="11.154"
-        transform="matrix(0.85 -0.527 0.85 0.527 32.198 57.308)"
-        stroke="currentColor"
-        strokeWidth="1.279"
-        strokeDasharray="2.56 2.56"
-      />
     </>
   );
 }

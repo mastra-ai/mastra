@@ -74,10 +74,12 @@
    *                matching dark's 40% in light would drop it under the floor,
    *                and raising dark to 50% reads as a highlight, not a focus.
    */
-  --border: oklch(var(--fill-tint) 0 0 / 8%);
+  --border-alpha: 8%;
+  --border-strong-alpha: 19%;
+  --border: oklch(var(--fill-tint) 0 0 / var(--border-alpha));
   /* The line between rows of the same kind, inset to their content. */
   --separator: oklch(var(--fill-tint) 0 0 / 6%);
-  --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
+  --border-strong: oklch(var(--fill-tint) 0 0 / var(--border-strong-alpha));
   --border-hover: oklch(var(--fill-tint) 0 0 / 25%);
   --border-focus: oklch(var(--fill-tint) 0 0 / 40%);
 

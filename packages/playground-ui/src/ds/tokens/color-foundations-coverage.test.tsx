@@ -19,7 +19,7 @@ const themeVariables = themeFiles.flatMap(file =>
 const isBrandColor = (token: string) => token.startsWith('color-brand-') && !themeVariables.includes(token.slice(6));
 
 /** Numbers the colors are built from, not colors. */
-const COLOR_INPUTS = new Set(['fill-tint', 'chart-series-l', 'chart-series-c']);
+const COLOR_INPUTS = new Set(['fill-tint', 'border-alpha', 'border-strong-alpha', 'chart-series-l', 'chart-series-c']);
 
 /** Images drawn from theme variables, not colors. */
 const THEME_IMAGES = new Set(['time-field-icon']);
