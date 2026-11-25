@@ -148,7 +148,7 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
     expect(await producer.getTask('pending-row')).toMatchObject({ status: 'pending' });
     expect(await producer.getTask('suspended-row')).toMatchObject({ status: 'suspended' });
 
-    // Portable work still reaches the worker, and the refusals took no capacity.
+    // Portable work still reaches the worker.
     const { task } = await producer.enqueue({ ...payload, toolCallId: 'portable' });
     await vi.waitFor(
       async () => {

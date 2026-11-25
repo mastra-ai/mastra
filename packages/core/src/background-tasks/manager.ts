@@ -1390,7 +1390,8 @@ export class BackgroundTaskManager {
     throw new Error(
       `Cannot ${action} a background task with an in-process executor: this process doesn't run background tasks ` +
         `(workers are disabled or MASTRA_WORKERS excludes backgroundTasks), and other processes can't run its executor. ` +
-        `Enqueue without a task context to let a dedicated worker run the tool by name, or start the backgroundTasks worker here.`,
+        `Run the backgroundTasks worker on this process, or pass \`disableBackgroundTasks: true\` to agent runs here so their tools run inline. ` +
+        `Tasks enqueued directly can omit the task context to let a dedicated worker run the tool by name.`,
     );
   }
 
