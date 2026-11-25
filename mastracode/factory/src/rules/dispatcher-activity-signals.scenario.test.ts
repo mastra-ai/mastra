@@ -175,6 +175,31 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     return store!.listNotifications({ threadId, source: 'factory' });
   };
   const decisions = () => storage.listDeferredDecisions('org-1', PROJECT_ID);
+  const reviewFeedback = async () => {
+    const card = await storage.get({ orgId: 'org-1', id: item.id });
+    await storage.commitRuleEvaluation({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'github:review-99', triggerType: 'github.pullRequestReviewSubmitted' },
+      configVersion: 'rules-v1',
+      expectedRevision: card!.revision,
+      actor: { type: 'github', login: 'reviewer', trusted: true, factoryAuthored: false },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'sendMessage',
+          role: 'work',
+          priority: 'high',
+          message: 'Review requested changes: read the PR comments, fix and push.',
+          idempotencyKey: 'github:review-99:address-review-feedback',
+        },
+      ],
+      causalChain: [],
+      now: new Date('2030-01-01T00:00:00Z'),
+    });
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+  };
   /** One pass of core's notification dispatcher, which delivers scheduled records and summaries. */
   const dispatchNotifications = async () => {
     const store = await memoryStorage.getStore('notifications');
@@ -198,6 +223,8 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     session,
     item,
     signal,
+    reviewFeedback,
+    currentCard: () => storage.get({ orgId: 'org-1', id: item.id }),
     notifications,
     decisions,
     dispatchNotifications,
@@ -210,6 +237,22 @@ async function mountFactory({ bound = true }: { bound?: boolean } = {}) {
     releaseBusyRun: () => releaseBusyRun(),
   };
 }
+
+describe('scenario: review feedback with no author session binding', () => {
+  it('marks the handoff succeeded without waking an author or advancing the card', async () => {
+    const factory = await mountFactory({ bound: false });
+
+    await factory.reviewFeedback();
+
+    expect((await factory.decisions())[0]).toMatchObject({
+      status: 'succeeded',
+      decision: { type: 'sendMessage', role: 'work' },
+    });
+    expect((await factory.currentCard())?.stages).toEqual(['execute']);
+    expect(factory.prompts).toEqual([]);
+    expect(await factory.notifications()).toEqual([]);
+  });
+});
 
 describe('scenario: source activity reaches the card session as pointers', () => {
   it('wakes an idle session with who commented and where, and nothing they wrote', async () => {
