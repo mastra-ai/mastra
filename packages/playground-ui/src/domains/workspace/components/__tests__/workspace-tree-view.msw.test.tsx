@@ -290,6 +290,18 @@ describe('WorkspaceTreeView', () => {
     });
   });
 
+  describe('when a markdown file shows images', () => {
+    it('loads images next to it from the workspace and leaves web images as they are', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'docs/guides/images.md' });
+
+      const logo = await screen.findByRole('img', { name: 'Logo' });
+      await waitFor(() => expect(logo.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo='));
+      expect(screen.getByRole('img', { name: 'Badge' }).getAttribute('src')).toBe('https://example.com/badge.svg');
+      expect(await screen.findByText('Missing')).toBeTruthy();
+    });
+  });
+
   describe('when a markdown file starts with frontmatter', () => {
     it('shows the frontmatter as YAML above the rendered markdown', async () => {
       server.use(listHandler({ '.': rootListing }), readHandler());
@@ -343,6 +355,19 @@ describe('WorkspaceTreeView', () => {
       expect(editor.getAttribute('contenteditable')).toBe('false');
       expect(editor.textContent).toContain('"id": "row-0",');
       expect(editor.textContent).not.toContain('"id": "row-999",');
+      expect(document.querySelector('figure pre')).toBeNull();
+    });
+  });
+
+  describe('when the active file is source code too large to color in a code block', () => {
+    it('shows it in a read-only editor that draws only part of the file', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'src/large.ts' });
+
+      const editor = await screen.findByRole('textbox', { name: 'src/large.ts' });
+      expect(editor.getAttribute('contenteditable')).toBe('false');
+      expect(editor.textContent).toContain('export const value0 = compute(0, "row 0");');
+      expect(editor.textContent).not.toContain('value1999');
       expect(document.querySelector('figure pre')).toBeNull();
     });
   });

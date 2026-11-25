@@ -7,8 +7,8 @@ import {
 } from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
 import { useWorkspaceContext } from './use-workspace-context';
+import { WorkspaceCode } from './workspace-code';
 import { WorkspaceError } from './workspace-error';
-import { WorkspaceFileCode } from './workspace-file-code';
 import { WorkspaceFileSkeleton } from './workspace-file-skeleton';
 import { WorkspaceJsonPreview } from './workspace-json-preview';
 import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
@@ -73,7 +73,7 @@ function DefaultPreview({ path, content, mimeType }: WorkspaceFilePreview) {
   }
   const lang = languageForPath(path);
   if (lang === 'json') return <WorkspaceJsonPreview key={path} path={path} content={content} />;
-  return <WorkspaceFileCode code={content} lang={lang} />;
+  return <WorkspaceCode path={path} code={content} lang={lang} />;
 }
 
 export function WorkspaceActiveFileContent({ renderPreview }: { renderPreview?: WorkspacePreviewFactory }) {

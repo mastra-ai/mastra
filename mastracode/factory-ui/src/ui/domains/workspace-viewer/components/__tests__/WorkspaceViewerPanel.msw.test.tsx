@@ -11,6 +11,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 import {
   htmlFile,
+  largeTypescriptFile,
   markdownFile,
   typescriptFile,
   unknownLanguageFile,
@@ -169,6 +170,25 @@ describe('WorkspaceViewerPanel', () => {
       expect(viewer.querySelector('pre span[style]')).toBeNull();
       expect(viewer.querySelector('pre')?.textContent).toBe(file.content);
       expect(viewer.querySelector('script')).toBeNull();
+    });
+
+    it('opens a file too large to color in a read-only editor that draws only part of it', async () => {
+      installHandlers();
+      server.use(
+        treeHolding(largeTypescriptFile.path),
+        http.get(FILE_URL, () => HttpResponse.json(largeTypescriptFile)),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await openFiles(user);
+      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByText(largeTypescriptFile.name));
+
+      const editor = await screen.findByRole('textbox', { name: largeTypescriptFile.path });
+      expect(editor).toHaveAttribute('contenteditable', 'false');
+      expect(editor.textContent).toContain('export const value0 = compute(0, "row 0");');
+      expect(editor.textContent).not.toContain('value1999');
+      expect(screen.getByLabelText('Workspace file viewer').querySelector('pre')).toBeNull();
     });
 
     it('shows unknown languages as literal plain text', async () => {

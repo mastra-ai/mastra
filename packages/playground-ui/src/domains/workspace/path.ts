@@ -14,3 +14,18 @@ export const parentOf = (path: string) => {
   const index = path.lastIndexOf('/');
   return index === -1 ? ROOT_PATH : path.slice(0, index);
 };
+
+/**
+ * The workspace path a link in `fromFile` points to, or `undefined` for a web URL, an absolute
+ * path, or a path that climbs out of the workspace.
+ */
+export const resolveRelativePath = (fromFile: string, link: string): string | undefined => {
+  if (!link || /^[a-z][a-z0-9+.-]*:|^\/|^#/i.test(link)) return undefined;
+  const parts = parentOf(fromFile) === ROOT_PATH ? [] : parentOf(fromFile).split('/');
+  for (const part of decodeURI(link.split(/[?#]/)[0] ?? '').split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part !== '..') parts.push(part);
+    else if (parts.pop() === undefined) return undefined;
+  }
+  return parts.length > 0 ? parts.join('/') : undefined;
+};
