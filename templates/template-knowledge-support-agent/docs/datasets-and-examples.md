@@ -62,9 +62,10 @@ Use `open` for unresolved observations and `approved` for verified outcomes. Add
 
 ## Try the software integration example
 
-Stop Studio and run these commands from the project directory.
+Stop Studio and run these commands from the project directory in a local shell. Unset `MASTRA_ENVIRONMENT_ID` if it is set.
 
 ```sh
+export SUPPORT_MODE=local DATABASE_PROVIDER=local
 export SUPPORT_EXAMPLE=software-integration
 export SUPPORT_DATABASE_URL="file:$PWD/.local/integration.db"
 npm run knowledge:seed
@@ -75,9 +76,10 @@ Use the `integration-team` token. Ask **Support**, “Our HTTP integration retur
 
 ## Try the IT helpdesk example
 
-Stop Studio and run these commands from the project directory.
+Stop Studio and run these commands from the project directory in a local shell. Unset `MASTRA_ENVIRONMENT_ID` if it is set.
 
 ```sh
+export SUPPORT_MODE=local DATABASE_PROVIDER=local
 export SUPPORT_EXAMPLE=it-helpdesk
 export SUPPORT_DATABASE_URL="file:$PWD/.local/helpdesk.db"
 npm run knowledge:seed
