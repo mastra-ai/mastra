@@ -2235,7 +2235,21 @@ describe('Agent signals: pending cancellation', () => {
         topic: string;
         pubsub: ControlledLeasePubSub;
       }) => Promise<void>,
-      { keepWatching = false } = {},
+      {
+        keepWatching = false,
+        afterProbe,
+      }: {
+        keepWatching?: boolean;
+        /** Runs once the held probes reached the follower, before it is reset. */
+        afterProbe?: (ctx: {
+          key: string;
+          runId: string;
+          pubsub: ControlledLeasePubSub;
+          model: ReturnType<typeof createTextStreamModel>;
+          tick: () => Promise<void>;
+          probeHandlings: Array<Promise<unknown>>;
+        }) => Promise<void>;
+      } = {},
     ) {
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
       const pubsub = new ControlledLeasePubSub();
@@ -2246,11 +2260,12 @@ describe('Agent signals: pending cancellation', () => {
       const model = createTextStreamModel('recovered');
       const agent = new Agent({ id: name, name, instructions: 'Test', model, memory: new MockMemory(), pubsub });
       const heldProbes: Array<() => void> = [];
+      const probeHandlings: Array<Promise<unknown>> = [];
       const subscribe = pubsub.subscribe.bind(pubsub);
       pubsub.subscribe = async (subscribedTopic, cb) =>
         subscribe(subscribedTopic, event => {
           if (subscribedTopic === topic && event.data?.type === 'forwarded-lease-probe') {
-            heldProbes.push(() => void cb(event));
+            heldProbes.push(() => void probeHandlings.push(Promise.resolve(cb(event))));
             return;
           }
           return cb(event);
@@ -2300,6 +2315,7 @@ describe('Agent signals: pending cancellation', () => {
         for (const deliver of heldProbes.splice(0)) deliver();
         await pubsub.flush();
         await nextTick();
+        await afterProbe?.({ key, runId, pubsub, model, tick, probeHandlings });
         return { model, pubsub, key };
       } finally {
         observer.unsubscribe();
@@ -2341,6 +2357,83 @@ describe('Agent signals: pending cancellation', () => {
       await nextTick();
       expect(pubsub.owners.get(key)).toBe('reacquired-remote-run');
       expect(model.doStreamCalls).toHaveLength(0);
+      // A wrongly queued copy would lose a fresh acquire to the run and be forwarded to it a second time.
+      expect(
+        pubsub.publishedData.filter(data => data.type === 'signal-enqueued' && data.runId === 'reacquired-remote-run'),
+      ).toHaveLength(1);
+    });
+
+    it('keeps a forward held when its run took the lease back while the returned probe read the lease', async () => {
+      let releaseRead!: () => void;
+      const readHeld = new Promise<void>(resolve => {
+        releaseRead = resolve;
+      });
+      let readStarted = false;
+      const { model, pubsub } = await recoverWithProbeHeld(
+        'regained-during-read',
+        async ({ pubsub }) => {
+          // The next lease read is the returned probe's: it samples the lease (still free) and then stalls.
+          const readOwner = pubsub.getLeaseOwner.bind(pubsub);
+          let holdNext = true;
+          pubsub.getLeaseOwner = async (leaseKey: string) => {
+            const owner = await readOwner(leaseKey);
+            if (!holdNext) return owner;
+            holdNext = false;
+            readStarted = true;
+            await readHeld;
+            return owner;
+          };
+        },
+        {
+          afterProbe: async ({ key, runId, pubsub, model, tick }) => {
+            expect(readStarted).toBe(true);
+            // During that read the run takes the lease back (a check sees it), may admit the forward, then loses the
+            // lease again for one check only. The stale sample must not queue the forward.
+            pubsub.owners.set(key, runId);
+            await tick();
+            pubsub.owners.delete(key);
+            await tick();
+            releaseRead();
+            await pubsub.flush();
+            await nextTick();
+            // A wrongly queued forward runs here on the free thread; give it the time it takes to start.
+            await new Promise(resolve => setTimeout(resolve, 50));
+            expect(model.doStreamCalls).toHaveLength(0);
+            expect(
+              pubsub.publishedData.filter(data => data.type === 'signal-enqueued' && data.runId === runId),
+            ).toHaveLength(1);
+          },
+        },
+      );
+      expect(pubsub.publishedData.filter(data => data.type === 'signal-enqueued')).toHaveLength(1);
+      expect(model.doStreamCalls).toHaveLength(0);
+    });
+
+    it('finishes handling a probe whose recovered forward goes to another run on a pubsub that awaits delivery', async () => {
+      await recoverWithProbeHeld(
+        'recovered-to-other-run',
+        async ({ key, pubsub }) => {
+          // Another run took the free thread, so the recovered message is forwarded to it, and publishing that forward
+          // returns only once this runtime's own control reader has handled it.
+          pubsub.owners.set(key, 'run-b');
+          pubsub.awaitDelivery = true;
+        },
+        {
+          afterProbe: async ({ pubsub, probeHandlings }) => {
+            await vi.waitFor(() =>
+              expect(pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'run-b')).toBe(
+                true,
+              ),
+            );
+            const outcome = await Promise.race([
+              Promise.all(probeHandlings).then(() => 'handled'),
+              new Promise(resolve => setTimeout(() => resolve('stuck'), 200)),
+            ]);
+            pubsub.awaitDelivery = false;
+            expect(outcome).toBe('handled');
+          },
+        },
+      );
     });
 
     it('does not queue a forward again on the probe of a lease loss it has missed only one check of', async () => {
@@ -2397,6 +2490,17 @@ describe('Agent signals: pending cancellation', () => {
         await pubsub.flush();
       };
       const prompts = () => model.doStreamCalls.map(call => JSON.stringify(call.prompt));
+      let holdProbes = false;
+      const heldProbes: Array<() => void> = [];
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      pubsub.subscribe = async (subscribedTopic, cb) =>
+        subscribe(subscribedTopic, event => {
+          if (holdProbes && subscribedTopic === topic && event.data?.type === 'forwarded-lease-probe') {
+            heldProbes.push(() => void cb(event));
+            return;
+          }
+          return cb(event);
+        });
       const follower = new AgentThreadStreamRuntime();
       const observer = await follower.subscribeToThread(agent, scope, pubsub);
       try {
@@ -2413,16 +2517,33 @@ describe('Agent signals: pending cancellation', () => {
         // The second forward is still held, so the next check, its second miss, probes for it; a wrongly queued copy
         // would have stopped the watcher instead.
         const probes = () => pubsub.publishedData.filter(data => data.type === 'forwarded-lease-probe').length;
+        // The first message's own run has finished here, so nothing but the second probe holds the second message.
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.filter(data => data.type === 'run-completed')).toHaveLength(3),
+        );
+        await pubsub.flush();
+        await nextTick();
         const probesBefore = probes();
+        holdProbes = true;
         await tick();
         expect(probes()).toBeGreaterThan(probesBefore);
-        // The first message ran once and nothing ran the second ahead of its own probe.
+        // The first message ran once and, with its own probe still held, nothing ran the second.
         const turns = (contents: string) =>
           model.doStreamCalls.filter(call =>
             JSON.stringify((call.prompt as any[]).filter(message => message.role === 'user').at(-1)).includes(contents),
           ).length;
+        await vi.waitFor(() => expect(heldProbes.length).toBeGreaterThan(0));
         expect(turns('first message')).toBe(1);
         expect(turns('second message')).toBe(0);
+        // Its probe coming back takes it out of the held forwards: with nothing held the watcher stops, so no retry
+        // probe follows, where a forward still held would be probed again within a few checks.
+        holdProbes = false;
+        const probesHeld = probes();
+        for (const deliver of heldProbes.splice(0)) deliver();
+        for (let i = 0; i < 8; i++) await tick();
+        expect(probes()).toBe(probesHeld);
+        expect(turns('first message')).toBe(1);
+        expect(turns('first message')).toBe(1);
       } finally {
         observer.unsubscribe();
         follower.resetForTests();
@@ -2993,6 +3114,73 @@ describe('Agent signals: pending cancellation', () => {
         expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
       } finally {
         pubsub.publish = publish;
+        cleanup();
+      }
+    });
+
+    it('retries a probe stuck behind an earlier append without queueing another behind it', async () => {
+      vi.useFakeTimers({
+        toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+        shouldAdvanceTime: true,
+      });
+      const { scope, pubsub, agent, model, follower, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('probe-behind-append', { silentRunEnds: true });
+      const publish = pubsub.publish.bind(pubsub);
+      const doStream = model.doStream.bind(model);
+      let releaseAppend!: () => void;
+      const appendReleased = new Promise<void>(resolve => {
+        releaseAppend = resolve;
+      });
+      let releaseC!: () => void;
+      const cReleased = new Promise<void>(resolve => {
+        releaseC = resolve;
+      });
+      let held = false;
+      const probeSeqs: number[] = [];
+      try {
+        // The follower's own run of a second message keeps the thread; the admission of a third message into it
+        // (its pending announcement) retries its append until the test lets it land, and the probes the follower sends meanwhile wait behind it.
+        let cStarted = false;
+        model.doStream = async options => {
+          if (!cStarted) {
+            cStarted = true;
+            await cReleased;
+          }
+          return doStream(options);
+        };
+        pubsub.publish = async (topic, event, options) => {
+          if (
+            event.data?.type === 'user-message-presentation' &&
+            event.data.chunk?.type === 'data-user-message-pending'
+          ) {
+            held = true;
+            await appendReleased;
+          }
+          if (event.data?.type === 'forwarded-lease-probe') probeSeqs.push(event.data.seq);
+          return publish(topic, event, options);
+        };
+        releaseFollowUp();
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        deliver();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(getStreamCount()).toBe(2);
+        void follower.queueMessage(agent, 'idle C', scope, pubsub).accepted.catch(() => {});
+        await vi.waitFor(() => expect(cStarted).toBe(true));
+        void follower
+          .sendSignal(agent, { type: 'user-message', contents: 'idle D' }, scope, pubsub)
+          .accepted.catch(() => {});
+        await vi.waitFor(() => expect(held).toBe(true));
+        for (let tick = 0; tick < 6; tick++) await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        expect(probeSeqs).toEqual([]);
+        releaseAppend();
+        await vi.waitFor(() => expect(probeSeqs.length).toBeGreaterThan(0));
+        // Every retry behind the append waited on the one probe already there, so the first to leave is the first made.
+        expect(probeSeqs[0]).toBe(1);
+      } finally {
+        releaseAppend();
+        releaseC();
+        pubsub.publish = publish;
+        model.doStream = doStream;
         cleanup();
       }
     });

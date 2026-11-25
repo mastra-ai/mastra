@@ -77,6 +77,8 @@ export class AsyncCallbackPubSub extends PubSub {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #pending = new Set<Promise<void>>();
+  /** When true, `publish` waits for every subscriber callback instead of delivering on a later tick. */
+  awaitDelivery = false;
   /** Callback rejections, which a real backend turns into a nack and redelivery. */
   subscriptionFailures: unknown[] = [];
 
@@ -127,6 +129,8 @@ export class RetainedAsyncCallbackPubSub extends PubSub {
   #history = new Map<string, any[]>();
   #pending = new Set<Promise<void>>();
   #index = 0;
+  /** When true, `publish` waits for every subscriber callback instead of delivering on a later tick. */
+  awaitDelivery = false;
   /** Callback rejections, which a real backend turns into a nack and redelivery. */
   subscriptionFailures: unknown[] = [];
 
@@ -136,6 +140,11 @@ export class RetainedAsyncCallbackPubSub extends PubSub {
     history.push(envelope);
     this.#history.set(topic, history);
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
+    // Like a transport whose publish returns once every subscriber has handled the event.
+    if (this.awaitDelivery) {
+      for (const subscriber of subscribers) await subscriber(envelope);
+      return;
+    }
     const pending = new Promise<void>(resolve => {
       setTimeout(() => {
         for (const subscriber of subscribers) {

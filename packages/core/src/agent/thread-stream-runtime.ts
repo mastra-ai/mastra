@@ -697,16 +697,22 @@ type ForwardedIdleSignal = {
   runId: string;
   /** The last lease check found the lease no longer naming `runId`. */
   leaseGone?: boolean;
+  /**
+   * Bumped whenever a lease check sees `runId` hold the lease again after missing it, which ends the lease loss an
+   * episode recorded. An episode only queues a forward again while this still matches what it recorded.
+   */
+  regains: number;
 };
 
 /** One lease loss. Every probe published during it carries `id`; any coming back proves the reader caught up. */
 type ForwardedIdleLeaseEpisode = {
   id: string;
   /**
-   * The forwards whose run had lost the lease on two checks when the episode started. Held by entry, not signal id:
-   * a message queued again and re-forwarded under the same id is a new forward this episode does not cover.
+   * The forwards whose run had lost the lease on two checks when the episode started, each with its `regains` then.
+   * Held by entry, not signal id: a message queued again and re-forwarded under the same id is a new forward this
+   * episode does not cover.
    */
-  entries: Set<ForwardedIdleSignal>;
+  entries: Map<ForwardedIdleSignal, number>;
   /** The lease check that published the latest probe, or `undefined` until one publishes. */
   publishedAtCheck: number | undefined;
   /** Probes published so far; carried on each probe for tracing. */
@@ -758,6 +764,11 @@ type AgentThreadRuntimeState = {
    * reader reads one back (see `#watchForwardedIdleLease`).
    */
   forwardedIdleLeaseEpisodes: Map<string, ForwardedIdleLeaseEpisode>;
+  /**
+   * Per thread key, the lease probe still waiting behind an earlier append on the thread topic, resolving to the
+   * episode it was sent for (see `#watchForwardedIdleLease`).
+   */
+  forwardedLeaseProbesWaiting: Map<string, Promise<ForwardedIdleLeaseEpisode | undefined>>;
   /**
    * Runs the suspended-run TTL sweep evicted, mapped to when their lease was last
    * known to be extended. The sweep keeps their lease, so until it lapses an idle
@@ -1057,6 +1068,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     forwardedIdleSignalsByThread: new Map(),
     forwardedIdleLeaseChecks: new Map(),
     forwardedIdleLeaseEpisodes: new Map(),
+    forwardedLeaseProbesWaiting: new Map(),
     sweptLeasedRunIds: new Map(),
     pendingLeaseRenewals: new Map(),
     drainingIdleSignalsByThread: new Map(),
@@ -3607,16 +3619,18 @@ export class AgentThreadStreamRuntime {
       const holder = owner === undefined ? undefined : forwardedSignalRunId(owner);
       checks++;
       const episode = state.forwardedIdleLeaseEpisodes.get(key);
-      const ended = new Set<ForwardedIdleSignal>();
+      const ended = new Map<ForwardedIdleSignal, number>();
       for (const entry of forwarded.values()) {
         if (entry.runId === holder) {
+          // Ends the lease loss for every episode that recorded it, including one whose probe is being handled.
+          if (entry.leaseGone) entry.regains++;
           entry.leaseGone = false;
           // The run holds the lease again and may admit the forward after the probe, which the reader would then
           // read first. That lease loss is over, so its probes must not queue anything.
           if (episode?.entries.has(entry) && state.forwardedIdleLeaseEpisodes.get(key) === episode) {
             state.forwardedIdleLeaseEpisodes.delete(key);
           }
-        } else if (entry.leaseGone) ended.add(entry);
+        } else if (entry.leaseGone) ended.set(entry, entry.regains);
         else entry.leaseGone = true;
       }
       if (ended.size === 0) return;
@@ -3636,19 +3650,31 @@ export class AgentThreadStreamRuntime {
         };
         state.forwardedIdleLeaseEpisodes.set(key, current);
       }
-      const episodeNow = current;
-      const seq = ++current.seq;
+      // While a probe still waits behind an earlier append, a retry waits on that same probe rather than queueing
+      // another behind the append. It is built when it leaves, for the lease loss current then; once handed to the
+      // pubsub it no longer waits, so a retry after that publishes anew.
+      let waiting = state.forwardedLeaseProbesWaiting.get(key);
+      if (!waiting) {
+        let left = false;
+        let sentFor: ForwardedIdleLeaseEpisode | undefined;
+        // Assigned after the call: with no earlier append in flight the builder below runs inside it.
+        let probe: Promise<ForwardedIdleLeaseEpisode | undefined> | undefined;
+        probe = this.#publishAndWait(pubsub, key, () => {
+          // From here a publish that hangs is the pubsub's own, and a retry publishes anew.
+          left = true;
+          if (probe && state.forwardedLeaseProbesWaiting.get(key) === probe)
+            state.forwardedLeaseProbesWaiting.delete(key);
+          sentFor = state.forwardedIdleLeaseEpisodes.get(key);
+          return sentFor && { type: 'forwarded-lease-probe', episodeId: sentFor.id, seq: ++sentFor.seq };
+        }).then(() => sentFor);
+        if (!left) state.forwardedLeaseProbesWaiting.set(key, probe);
+        waiting = probe;
+      }
       // Bounded like the lease read, so a publish that never settles frees the in-flight guard. Running out counts as
       // a failed publish: the episode stays as it was and a later check publishes again.
       let giveUp: ReturnType<typeof setTimeout> | undefined;
-      await Promise.race([
-        // An attempt that ran out waiting behind an earlier append and was followed by a newer one is not sent.
-        this.#publishAndWait(
-          pubsub,
-          key,
-          { type: 'forwarded-lease-probe', episodeId: current.id, seq },
-          () => state.forwardedIdleLeaseEpisodes.get(key) === episodeNow && episodeNow.seq === seq,
-        ),
+      const sentFor = await Promise.race([
+        waiting,
         new Promise<never>((_, reject) => {
           giveUp = setTimeout(
             () => reject(new Error('Thread pubsub did not publish the lease probe')),
@@ -3656,9 +3682,7 @@ export class AgentThreadStreamRuntime {
           );
         }),
       ]).finally(() => clearTimeout(giveUp));
-      if (state.forwardedIdleLeaseEpisodes.get(key) === current && current.seq === seq) {
-        current.publishedAtCheck = checks;
-      }
+      if (sentFor && state.forwardedIdleLeaseEpisodes.get(key) === sentFor) sentFor.publishedAtCheck = checks;
     };
     // A slow lease read must not overlap the next tick: two overlapping reads would count as two checks.
     const check = setInterval(() => {
@@ -3686,7 +3710,7 @@ export class AgentThreadStreamRuntime {
   ) {
     const covered = new Set(
       [...(state.forwardedIdleSignalsByThread.get(key)?.values() ?? [])]
-        .filter(entry => episode.entries.has(entry) && entry.leaseGone)
+        .filter(entry => episode.entries.get(entry) === entry.regains && entry.leaseGone)
         .map(entry => entry.runId),
     );
     // The episode started from lease checks that may be many ticks old; what the lease says now decides. A run it
@@ -3705,7 +3729,9 @@ export class AgentThreadStreamRuntime {
     const forwarded = state.forwardedIdleSignalsByThread.get(key);
     if (!forwarded) return;
     const lapsed = [...forwarded].filter(
-      ([, entry]) => episode.entries.has(entry) && entry.leaseGone && gone.has(entry.runId),
+      // Decided after the read: a check that saw the run hold the lease again during it bumped `regains`, so that
+      // loss is over even though this episode already left the map, and the read may predate the regain.
+      ([, entry]) => episode.entries.get(entry) === entry.regains && entry.leaseGone && gone.has(entry.runId),
     );
     if (lapsed.length === 0) return;
     for (const [signalId] of lapsed) forwarded.delete(signalId);
@@ -3724,8 +3750,11 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(key);
         state.activeThreadStreamIds.delete(key);
       }
-      await this.#drainPendingIdleSignals(state, pubsub, key);
     }
+    // This runs inside the ordered control callback, and the drain can publish to the thread topic that callback reads;
+    // on a pubsub whose publish waits for delivery, awaiting it here would wait on itself. The forwards are already
+    // queued, so a drain that fails leaves them for the next drain trigger.
+    void this.#drainPendingIdleSignals(state, pubsub, key).catch(() => {});
   }
 
   /** Whether the thread lease may still name `runId`: it does, or the backend could not say. */
@@ -3788,15 +3817,14 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Publish `event` to the thread topic after any admission or pending announcement still in flight there. When
-   * given, `stillWanted` is asked once that wait is over, at the moment the event would leave; returning false skips
-   * the publish, for callers whose reason to send can lapse during the wait.
+   * Publish `event` to the thread topic after any admission or pending announcement still in flight there. `event`
+   * may be a function, called once that wait is over at the moment the event would leave, for callers whose event
+   * depends on what happened during the wait; returning `undefined` skips the publish. Such an event never orders.
    */
   async #publishAndWait(
     pubsub: PubSub | undefined,
     key: string,
-    event: AgentThreadStreamRuntimeEvent,
-    stillWanted?: () => boolean,
+    eventOrBuild: AgentThreadStreamRuntimeEvent | (() => AgentThreadStreamRuntimeEvent | undefined),
   ) {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
@@ -3804,7 +3832,8 @@ export class AgentThreadStreamRuntime {
     const previous = ordered?.get(topic);
     const published = (async () => {
       if (previous) await previous;
-      if (stillWanted && !stillWanted()) return;
+      const event = typeof eventOrBuild === 'function' ? eventOrBuild() : eventOrBuild;
+      if (!event) return;
       await resolvedPubSub.publish(topic, {
         type: event.type,
         // Events tied to a run carry its ID so that run's trim removes them; thread-scoped
@@ -3815,9 +3844,10 @@ export class AgentThreadStreamRuntime {
     })();
     // A forwarder settles on the admission, and a run's end trims the pending announcement, so while the backend
     // retries either append, nothing this runtime publishes to the thread afterwards may reach the stream ahead of it.
+    const event = typeof eventOrBuild === 'function' ? undefined : eventOrBuild;
     const orders =
-      event.type === 'user-message-admitted' ||
-      (event.type === 'user-message-presentation' && event.chunk.type === 'data-user-message-pending');
+      event?.type === 'user-message-admitted' ||
+      (event?.type === 'user-message-presentation' && event.chunk.type === 'data-user-message-pending');
     if (!orders) return published;
     const settled = published.catch(() => {});
     if (!ordered) {
@@ -3895,25 +3925,24 @@ export class AgentThreadStreamRuntime {
             releaseReplyTopic(pubsub, replyTopic, onReply);
             return;
           }
-          return this.#publishAndWait(
-            pubsub,
-            key,
-            {
-              type: 'idle-signal-enqueued',
-              runId,
-              signal: this.#serializeSignal(signal),
-              sourceId: this.#getSourceId(),
-              requestId,
-              replyTopic,
-              targetSourceId,
-              expiresAt,
-              ...(waitForIdle ? {} : { joinActiveRun: true }),
-              ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
-              ...(requestContextEntries ? { requestContextEntries } : {}),
-            },
-            // The publish can wait behind an admission still being appended; if the acceptance timeout settled the
-            // request meanwhile, the caller already has its error, so the request must not go out.
-            () => !settled,
+          // The publish can wait behind an admission still being appended; if the acceptance timeout settled the
+          // request meanwhile, the caller already has its error, so the request must not go out.
+          return this.#publishAndWait(pubsub, key, () =>
+            settled
+              ? undefined
+              : {
+                  type: 'idle-signal-enqueued',
+                  runId,
+                  signal: this.#serializeSignal(signal),
+                  sourceId: this.#getSourceId(),
+                  requestId,
+                  replyTopic,
+                  targetSourceId,
+                  expiresAt,
+                  ...(waitForIdle ? {} : { joinActiveRun: true }),
+                  ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
+                  ...(requestContextEntries ? { requestContextEntries } : {}),
+                },
           );
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -4834,6 +4863,7 @@ export class AgentThreadStreamRuntime {
     for (const check of state.forwardedIdleLeaseChecks.values()) clearInterval(check);
     state.forwardedIdleLeaseChecks.clear();
     state.forwardedIdleLeaseEpisodes.clear();
+    state.forwardedLeaseProbesWaiting.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
     state.leaseRetakes.clear();
@@ -6287,7 +6317,7 @@ export class AgentThreadStreamRuntime {
       if (owns.owner && ownerRunId && this.#pendingUserMessageChunk(ownerRunId, pendingIdle.signal, 'pending')) {
         const forwarded = state.forwardedIdleSignalsByThread.get(key) ?? new Map();
         // The owner presents it under the run ID it resolves the address to, which drops a legacy retake marker.
-        forwarded.set(pendingIdle.signal.id, { pendingIdle, runId: forwardedSignalRunId(owns.owner) });
+        forwarded.set(pendingIdle.signal.id, { pendingIdle, runId: forwardedSignalRunId(owns.owner), regains: 0 });
         state.forwardedIdleSignalsByThread.set(key, forwarded);
         this.#ensureThreadControlSubscription(state, pubsub, key);
         this.#watchForwardedIdleLease(state, pubsub, key);
