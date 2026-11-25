@@ -18,4 +18,3 @@ export {
   providerRequestId,
 } from './provider-error';
 export type { ProviderFailureKind } from './provider-error';
-export { getRetryAfterMs } from '../utils/retry-after';
