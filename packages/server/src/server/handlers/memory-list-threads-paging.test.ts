@@ -30,8 +30,8 @@ async function setup({ withAgentMemory, branching = false }: { withAgentMemory: 
       thread: {
         id: `thread-${index}`,
         resourceId: 'resource',
-        createdAt: new Date(createdAt.getTime() + index),
-        updatedAt: new Date(createdAt.getTime() + index),
+        createdAt: new Date(createdAt.getTime() + index * 10),
+        updatedAt: new Date(createdAt.getTime() + index * 10),
         metadata: {},
       },
     });
@@ -67,8 +67,10 @@ async function setup({ withAgentMemory, branching = false }: { withAgentMemory: 
     storage,
     ...(withAgentMemory ? { agents: { 'test-agent': agent } } : {}),
   });
-  const listThreads = vi.spyOn(withAgentMemory ? memory : memoryStore, 'listThreads');
-  return { memoryStore, listThreads, mastra };
+  const listTarget = withAgentMemory ? memory : memoryStore;
+  const originalListThreads = listTarget.listThreads.bind(listTarget);
+  const listThreads = vi.spyOn(listTarget, 'listThreads');
+  return { memoryStore, listThreads, originalListThreads, mastra };
 }
 
 function listPage(mastra: Mastra, withAgentMemory: boolean) {
@@ -139,6 +141,45 @@ describe.each([
 
     expect(result).toMatchObject({ total: 5, page: 1, perPage: 2 });
     expect((result as any).threads.map((thread: { id: string }) => thread.id)).toEqual(['thread-2', 'thread-3']);
+  });
+
+  // A branch committed after the one-row probes but before the page read must still be caught.
+  it.each([
+    { state: 'ready' as const, expectRefusal: true },
+    { state: 'pending' as const, expectRefusal: false },
+  ])('checks the page rows for a $state branch committed after the probes', async ({ state, expectRefusal }) => {
+    const { memoryStore, listThreads, originalListThreads, mastra } = await setup({ withAgentMemory });
+    listThreads.mockImplementation(async (args: Parameters<typeof originalListThreads>[0]) => {
+      if (args?.perPage === 2) {
+        await memoryStore.saveThread({
+          thread: {
+            id: 'child',
+            resourceId: 'resource',
+            // Sorts between thread-2 and thread-3, so it lands on the requested page.
+            createdAt: new Date(createdAt.getTime() + 25),
+            updatedAt: createdAt,
+            metadata: branchMetadata('thread-0', state),
+          },
+        });
+      }
+      return originalListThreads(args);
+    });
+
+    let error: { res?: Response } | undefined;
+    let result: any;
+    try {
+      result = await listPage(mastra, withAgentMemory);
+    } catch (caught) {
+      error = caught as typeof error;
+    }
+
+    if (expectRefusal) {
+      await expect(error?.res?.json()).resolves.toMatchObject({ error: { code: 'BRANCHING_UNSUPPORTED' } });
+      return;
+    }
+    expect(error).toBeUndefined();
+    expect(result).toMatchObject({ total: 5, page: 1, perPage: 2 });
+    expect(result.threads.map((thread: { id: string }) => thread.id)).toEqual(['thread-2', 'thread-3']);
   });
 });
 

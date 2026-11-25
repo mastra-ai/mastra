@@ -256,8 +256,10 @@ export async function listLegacyThreadsPageOrThrow({
 
   if (await hasBranchRow('pending')) return null;
 
+  // A branch can be committed between the probes and this read, so check the page rows too.
   const result = await store.listThreads({ filter, page, perPage, orderBy });
-  return { ...result, threads: result.threads.map(sanitizeThreadForResponse) };
+  if (result.threads.some(thread => readStoredBranchMarker(thread)?.state === 'pending')) return null;
+  return { ...result, threads: sanitizeLegacyThreadListOrThrow(result.threads) };
 }
 
 function isAccessDenied(error: unknown): boolean {
