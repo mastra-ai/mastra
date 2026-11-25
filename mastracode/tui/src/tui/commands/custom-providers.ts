@@ -551,14 +551,14 @@ async function addModelsFromEndpointFlow(ctx: SlashCommandContext, providerId: s
       ctx.showInfo(
         added > 0
           ? `Added ${modelCount(added)} to ${provider.name}.`
-          : `No models added: ${provider.name} already has them.`,
+          : `No models added: ${provider.name} already has every listed model.`,
       );
       return;
     }
     ctx.showInfo(
       added > 0
         ? `Added model: ${toCustomProviderModelId(provider.name, choice)}`
-        : `No models added: ${provider.name} already has ${choice}.`,
+        : `No model added: ${provider.name} already has ${choice}.`,
     );
     // Keep the cursor where the user was: on the model that followed the one just added,
     // or the one before it when the last model was picked.
