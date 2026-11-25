@@ -5,6 +5,7 @@ import { createRunScopeKey } from '../../mastra/run-scope';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import { RequestContext } from '../../request-context';
 import { matchesRunFence } from '../../storage/run-fencing';
+import { isWorkflowStepConflictError } from '../../storage/workflow-step-guard';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds } from './constants';
 import {
@@ -17,7 +18,13 @@ import {
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
-import { carrySegmentSpans, claimSegmentEnd, endFailedSegmentSpans, segmentSpanData } from './segment-spans';
+import {
+  carrySegmentSpans,
+  claimSegmentEnd,
+  endFailedSegmentSpans,
+  segmentEndedBySuspension,
+  segmentSpanData,
+} from './segment-spans';
 import { emitErrorEvent } from './stream-adapter';
 
 type Participant = { fence: Promise<ExecutionFence | undefined>; stop: (interrupt?: boolean) => Promise<void> };
@@ -200,9 +207,12 @@ export async function carryEndedSegment(mastra: Mastra, event: Event): Promise<v
   if (event.type !== 'workflow.fail' || workflowId !== DurableStepIds.AGENTIC_EXECUTION || !state?.runId) return;
   if (calls?.status !== 'failed' || (Array.isArray(calls.payload) && !calls.payload[0]?.sideBySide)) return;
   const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
-  if (segmentSpanData(context, state.runId, state).carried) return;
+  const segment = segmentSpanData(context, state.runId, state);
+  if (segment.carried) return;
   const { runId, iterationCount } = state;
-  if (await claimSegmentEnd({ mastra, requestContext: context, runId, iterationCount, outcome: 'fail' })) return;
+  const claimed = await claimSegmentEnd({ mastra, requestContext: context, runId, iterationCount, outcome: 'fail' });
+  // Without a claim, the failed iteration shows a suspension that was stored before it.
+  if (claimed ?? !segmentEndedBySuspension(segment, stepResults)) return;
   event.data.requestContext = { ...requestContext };
   carrySegmentSpans(event.data.requestContext, runId, null);
 }
@@ -227,9 +237,10 @@ function endFailedSpans(mastra: Mastra, event: Event): void {
 
 /** End the MODEL_STEP of a failed iteration. Only the iteration's own event still carries it. */
 export function endFailedIteration(mastra: Mastra, event: Event): void {
-  if (event.type === 'workflow.fail' && event.data?.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
-    endFailedSpans(mastra, event);
-  }
+  if (event.type !== 'workflow.fail' || event.data?.workflowId !== DurableStepIds.AGENTIC_EXECUTION) return;
+  // A late step of a run that already failed: the failure itself ends the spans.
+  if (isWorkflowStepConflictError(event.data.prevResult?.error)) return;
+  endFailedSpans(mastra, event);
 }
 
 /** Called only after the root terminal handler has persisted and published its outcome. */

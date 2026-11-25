@@ -546,18 +546,23 @@ export function createDurableToolCallStep() {
           // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const segment = segmentSpanData(requestContext, runId, initData, reg);
-          if (
-            typedInput.sideBySide &&
-            !segment.carried &&
-            !(await claimSegmentEnd({
+          if (typedInput.sideBySide && !segment.carried) {
+            const claimed = await claimSegmentEnd({
               mastra: mastra as Mastra,
               requestContext,
               runId,
               iterationCount: initData.iterationCount,
               outcome: 'suspend',
-            }))
-          )
-            return;
+            });
+            // Without a claim, a run this execution no longer owns has failed, which ended its spans.
+            const owned =
+              claimed ??
+              (await assertOwned().then(
+                () => true,
+                error => !isExecutionFenceError(error),
+              ));
+            if (!owned) return;
+          }
           const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first

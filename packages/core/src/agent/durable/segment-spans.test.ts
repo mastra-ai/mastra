@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { RequestContext } from '../../request-context';
+import { WorkflowStepConflictError } from '../../storage/workflow-step-guard';
+import { endFailedIteration } from './evented-execution';
 import { setExecutionClaim } from './execution-fence';
 import { claimSegmentEnd, endFailedSegmentSpans } from './segment-spans';
 
@@ -31,6 +33,33 @@ describe('endFailedSegmentSpans', () => {
     });
 
     expect(error.mock.calls.flat()).toEqual(ended);
+  });
+});
+
+describe('endFailedIteration', () => {
+  it.each([
+    { failure: 'a step that fails', error: new Error('step failed'), ends: 1 },
+    { failure: 'a late step of a run that failed before', error: new WorkflowStepConflictError('missing'), ends: 0 },
+  ])('ends the model step $ends times for $failure', ({ error, ends }) => {
+    const rebuildSpan = vi.fn(() => ({ error: vi.fn() }));
+    const mastra: any = { observability: { getSelectedInstance: () => ({ rebuildSpan }) } };
+    const stepSpanData = { id: 'step' };
+    const stepResults = {
+      input: { runId: 'run', iterationCount: 0 },
+      'durable-llm-execution': { status: 'success', output: { stepSpanData } },
+    };
+
+    endFailedIteration(mastra, {
+      type: 'workflow.fail',
+      runId: 'nested',
+      data: {
+        workflowId: 'durable-agentic-execution',
+        stepResults,
+        prevResult: { status: 'failed', error: JSON.parse(JSON.stringify({ ...error, message: error.message })) },
+      },
+    } as any);
+
+    expect(rebuildSpan).toHaveBeenCalledTimes(ends);
   });
 });
 
@@ -82,9 +111,9 @@ describe('claimSegmentEnd', () => {
         return { claim };
       },
     ],
-  ])('leaves the spans to the suspension when %s', async (_, setup) => {
+  ])('makes no claim when %s', async (_, setup) => {
     const { claim } = setup();
-    expect(await claim('fail')).toBe(false);
-    expect(await claim('suspend')).toBe(true);
+    expect(await claim('fail')).toBeUndefined();
+    expect(await claim('suspend')).toBeUndefined();
   });
 });

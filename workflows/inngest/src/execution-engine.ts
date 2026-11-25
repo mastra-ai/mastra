@@ -797,7 +797,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           __mastraSegmentEnded: segmentEnded,
           ...publicResult
         } = errorCause as Record<string, unknown>;
-        this.segmentEnded = !!segmentEnded;
+        this.segmentEnded ||= !!segmentEnded;
         result = publicResult as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId =
           'runId' in errorCause && typeof errorCause.runId === 'string'

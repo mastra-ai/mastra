@@ -148,7 +148,7 @@ const SEGMENT_END_TTL_MS = 24 * 60 * 60 * 1000;
 /**
  * Whether `outcome` ends the spans of the run's first segment. Behind a broker, a tool call that suspends and one
  * beside it that fails the run are in different processes, and both end the same spans, so the first one to claim
- * them does. Without an answer only the suspension ends them.
+ * them does. Undefined when no claim can be made, and in one process only the suspension asks.
  */
 export async function claimSegmentEnd({
   mastra,
@@ -162,19 +162,18 @@ export async function claimSegmentEnd({
   runId: string;
   iterationCount: number | undefined;
   outcome: 'suspend' | 'fail';
-}): Promise<boolean> {
-  const withoutAnswer = outcome === 'suspend';
+}): Promise<boolean | undefined> {
   try {
+    if (!mastra || !reachesOtherProcesses(mastra.pubsub)) return true;
     const claim = getExecutionClaim(requestContext, runId);
-    // Only workers behind a broker end the spans of a failure, and only of a storage-fenced run.
-    if (claim?.generation === undefined || !mastra || !reachesOtherProcesses(mastra.pubsub)) return withoutAnswer;
     const leases = resolveLeaseProvider(mastra.pubsub);
-    if (leases === NoopLeaseProvider) return withoutAnswer;
+    // Only a storage-fenced run has a worker that ends the spans of its failure.
+    if (claim?.generation === undefined || leases === NoopLeaseProvider) return undefined;
     const key = `mastra:durable-segment-end:v1:${JSON.stringify([runId, claim.executionId, iterationCount])}`;
     const { acquired, owner } = await leases.acquireLease(key, outcome, SEGMENT_END_TTL_MS);
-    return acquired || (withoutAnswer && owner !== 'fail');
+    return acquired || (owner ? false : undefined);
   } catch {
-    return withoutAnswer;
+    return undefined;
   }
 }
 

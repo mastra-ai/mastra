@@ -147,7 +147,7 @@ describeForAllEngines('run and generation span fields', engine => {
 describe('run and generation span fields on a worker in another process', () => {
   const getMock = useLoopScenarioAimock();
 
-  const lookup = (options: { toModelOutput?: () => never; requireApproval?: boolean } = {}) =>
+  const lookup = (options: { id?: string; toModelOutput?: () => never; requireApproval?: boolean } = {}) =>
     createTool({
       id: 'lookup',
       description: 'Look up an order.',
@@ -171,7 +171,10 @@ describe('run and generation span fields on a worker in another process', () => 
     });
 
   /** The process that streams, and the worker process that executes the run. */
-  async function split(agentOptions: Record<string, unknown>, fga?: unknown, fenced = true) {
+  async function split(
+    agentOptions: Record<string, unknown>,
+    { fga, fenced = true, leases = true }: { fga?: unknown; fenced?: boolean; leases?: boolean } = {},
+  ) {
     const directory = await mkdtemp(join(tmpdir(), 'run-span-fields-'));
     const storage = new InMemoryStore();
     vi.spyOn((await storage.getStore('workflows'))!, 'supportsRunFencing').mockReturnValue(fenced);
@@ -183,6 +186,7 @@ describe('run and generation span fields on a worker in another process', () => 
       const { Mastra } = await import('../../../../mastra');
       const { UnixSocketPubSub } = await import('../../../../events/unix-socket-pubsub');
       const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+      if (!leases) Object.assign(pubsub, { getLeaseProvider: () => undefined });
       const captured = capture();
       const agent = new Agent({
         id: 'support',
@@ -248,11 +252,7 @@ describe('run and generation span fields on a worker in another process', () => 
     'ends every span once when the run fails, with storage fencing %s',
     async fenced => {
       getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
-      const { api, worker, unbalanced } = await split(
-        { tools: { lookup: lookup({ toModelOutput }) } },
-        undefined,
-        fenced,
-      );
+      const { api, worker, unbalanced } = await split({ tools: { lookup: lookup({ toModelOutput }) } }, { fenced });
 
       const { fullStream } = await api.agent.stream('Where is my order?');
       for await (const _ of fullStream);
@@ -284,25 +284,32 @@ describe('run and generation span fields on a worker in another process', () => 
     await expect.poll(unbalanced).toEqual({ open: [], endedTwice: [] });
   }, 15_000);
 
+  const deny = (ms = 0) => ({
+    require: async (user: any, { resource, permission }: any) => {
+      if (!resource.id.includes('lookup')) return;
+      await setTimeout(ms);
+      throw new FGADeniedError(user, resource, permission);
+    },
+  });
+  const withoutLeases = { leases: false };
+  const withoutFencing = { fenced: false };
+
   it.each([
     { pause: 'before', deniedAfter: 150, pausedAfter: 0 },
     { pause: 'with', deniedAfter: 0, pausedAfter: 0 },
     { pause: 'after', deniedAfter: 0, pausedAfter: 400 },
     { pause: 'for an approval after', deniedAfter: 0, pausedAfter: 400, options: { requireToolApproval: true } },
+    { pause: 'before', deniedAfter: 150, pausedAfter: 0, setup: withoutLeases },
+    { pause: 'after', deniedAfter: 0, pausedAfter: 400, setup: withoutLeases },
+    { pause: 'after', deniedAfter: 0, pausedAfter: 400, setup: withoutFencing },
   ])(
-    'ends spans once when a tool call pauses $pause a denied one',
-    async times => {
+    'ends spans once when a tool call pauses $pause a denied one ($setup)',
+    async ({ setup, ...times }) => {
       const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
       getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('lookup')] });
       const { api, worker } = await split(
         { tools: { pause: pauseAfter(times.pausedAfter, times.options), lookup: lookup() } },
-        {
-          require: async (user: any, { resource, permission }: any) => {
-            if (!resource.id.includes('lookup')) return;
-            await setTimeout(times.deniedAfter);
-            throw new FGADeniedError(user, resource, permission);
-          },
-        },
+        { fga: deny(times.deniedAfter), ...setup },
       );
 
       const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
@@ -313,6 +320,28 @@ describe('run and generation span fields on a worker in another process', () => 
       for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
         expect([...worker.ended(type), ...api.ended(type)]).toHaveLength(1);
       }
+    },
+    15_000,
+  );
+
+  it.each([{}, withoutLeases, withoutFencing])(
+    'ends every span once when a tool call is denied beside one that succeeds (%j)',
+    async setup => {
+      const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
+      getMock().on({ endpoint: 'chat' }, { toolCalls: [call('other'), call('lookup')] });
+      const { api, worker, unbalanced } = await split(
+        { tools: { other: lookup({ id: 'other' }), lookup: lookup() } },
+        { fga: deny(), ...setup },
+      );
+
+      const requestContext = new RequestContext([['user', { id: 'user-1' }]]);
+      const { fullStream } = await api.agent.stream('Where is my order?', { requestContext });
+      for await (const _ of fullStream);
+
+      for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+        await expect.poll(() => [...worker.ended(type), ...api.ended(type)]).toHaveLength(1);
+      }
+      expect(unbalanced()).toMatchObject({ endedTwice: [] });
     },
     15_000,
   );
