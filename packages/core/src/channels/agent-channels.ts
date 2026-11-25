@@ -59,6 +59,7 @@ import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
+import { annotateSlackMentions } from './slack-mention-labels';
 import { MastraStateAdapter } from './state-adapter';
 import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -1800,7 +1801,7 @@ export class AgentChannels {
       }
     }
 
-    const messageTexts = batch.map(m => messageText(m));
+    const messageTexts = await Promise.all(batch.map(m => this.agentMessageText(m, platform, chatThread)));
     const text = [legacyHistoryBlock, ...messageTexts].filter(Boolean).join('\n\n');
     const attachments = batch.flatMap(m => m.attachments ?? []).filter(a => a.url || a.fetchData);
     this.log('debug', 'Attachments', {
@@ -2099,6 +2100,20 @@ export class AgentChannels {
    * attribution the live path emits plus `source: 'thread-history'`, its
    * platform timestamp, and its attachments routed like live attachments.
    */
+  /**
+   * The text the agent sees for a message. On Slack, mentions are restored to
+   * `<@U123|Name>` so the agent can mention those people back (see
+   * {@link annotateSlackMentions}).
+   */
+  private async agentMessageText(message: Message, platform: string, chatThread: Thread): Promise<string> {
+    const text = messageText(message);
+    if (platform !== 'slack' || !text) return text;
+    // The Slack adapter scopes its user cache by installation in multi-workspace mode.
+    const adapter = chatThread.adapter as { installationCacheScope?: () => string };
+    const cacheScope = typeof adapter.installationCacheScope === 'function' ? adapter.installationCacheScope() : '';
+    return annotateSlackMentions({ state: this.stateAdapter, raw: message.raw, text, cacheScope });
+  }
+
   private async buildThreadHistorySignals(args: {
     history: ThreadHistoryWindow;
     chatThread: Thread;
@@ -2132,7 +2147,7 @@ export class AgentChannels {
 
     for (const { message, gapAfter } of ordered) {
       const createdAt = resolveCreatedAt(message);
-      const text = messageText(message);
+      const text = await this.agentMessageText(message, platform, chatThread);
       const parts: Exclude<AgentSignalContents, string> = [
         ...(text ? [{ type: 'text' as const, text }] : []),
         ...(await this.attachmentsToParts(message.attachments ?? [], requestContext)),
