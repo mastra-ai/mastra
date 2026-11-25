@@ -421,7 +421,7 @@ describe('getDynamicModel model route', () => {
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
   });
 
-  it('starts a host route on the session model even when an earlier request left a pending hop', () => {
+  it('starts a host route on its first model even when an earlier request left a pending hop', () => {
     const request = requestWithSession('anthropic/claude-fable-5', {
       threadId: 'thread-1',
       pending: {
@@ -433,7 +433,10 @@ describe('getDynamicModel model route', () => {
         at: '2026-10-05T00:00:00.000Z',
       },
     });
-    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [{ modelId: 'openai/gpt-5.6-sol' }]);
+    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [
+      { modelId: 'anthropic/claude-fable-5' },
+      { modelId: 'openai/gpt-5.6-sol' },
+    ]);
 
     const model = getDynamicModel(request);
 
@@ -443,7 +446,7 @@ describe('getDynamicModel model route', () => {
     ]);
   });
 
-  it('starts on the session model when the host has no usable fallback, even with a pending hop', () => {
+  it('runs the session model alone when the host route is empty, even with a pending hop', () => {
     const request = requestWithSession('anthropic/claude-fable-5', {
       threadId: 'thread-1',
       pending: {
@@ -461,6 +464,21 @@ describe('getDynamicModel model route', () => {
 
     expect(Array.isArray(model)).toBe(false);
     expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
+  });
+
+  it("runs a host route's first model instead of the session model", () => {
+    const request = requestWithSession('anthropic/claude-fable-5');
+    setHostModelRoute(request.requestContext, 'anthropic/claude-fable-5', [
+      { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+      { modelId: 'anthropic/claude-fable-5' },
+    ]);
+
+    const model = getDynamicModel(request);
+
+    expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual([
+      'openai/gpt-5.6-sol',
+      'anthropic/claude-fable-5',
+    ]);
   });
 });
 

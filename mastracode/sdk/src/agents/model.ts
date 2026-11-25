@@ -497,47 +497,67 @@ const HOST_MODEL_ROUTE_CONTEXT_KEY = 'mastracodeHostModelRoute';
 
 export function setHostModelRoute(
   requestContext: RequestContext,
-  primaryModelId: string | undefined,
-  fallbacks: readonly ModelFallback[] | undefined,
+  sessionModelId: string | undefined,
+  route: readonly ModelFallback[] | undefined,
 ): void {
-  if (!fallbacks) {
+  if (!route) {
     requestContext.delete(HOST_MODEL_ROUTE_CONTEXT_KEY);
     return;
   }
-  const route: ModelRouteEntry[] = primaryModelId
+  const [primary = sessionModelId ? { modelId: sessionModelId } : undefined, ...fallbacks] = route;
+  const entries: ModelRouteEntry[] = primary
     ? [
-        { id: primaryModelId, label: primaryModelId, modelId: primaryModelId },
+        hostRouteEntry(primary),
         ...modelFallbacksToTry(
-          primaryModelId,
+          primary.modelId,
           fallbacks,
           modelId => canAuthenticateModel(modelId, requestContext),
           MODEL_ROUTE_MAX_ENTRIES - 1,
-        ).map(({ modelId, thinkingLevel }) => ({
-          id: modelId,
-          label: modelId,
-          modelId,
-          ...(thinkingLevel ? { thinkingLevel } : {}),
-        })),
+        ).map(hostRouteEntry),
       ]
     : [];
-  requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, route);
+  requestContext.set(HOST_MODEL_ROUTE_CONTEXT_KEY, entries);
+}
+
+function hostRouteEntry({ modelId, thinkingLevel }: ModelFallback): ModelRouteEntry {
+  return { id: modelId, label: modelId, modelId, ...(thinkingLevel ? { thinkingLevel } : {}) };
 }
 
 export function hostModelRoute(requestContext: RequestContextReader | undefined): ModelRouteEntry[] | undefined {
   return requestContext?.get(HOST_MODEL_ROUTE_CONTEXT_KEY) as ModelRouteEntry[] | undefined;
 }
 
+export interface RequestModelRoute {
+  entries: ModelRouteEntry[] | undefined;
+  pending: PendingModelFallback | null;
+  modelId: string | undefined;
+  thinkingLevel: ThinkingLevelSetting | undefined;
+}
+
 export function requestModelRoute(
   requestContext: RequestContextReader | undefined,
-  controller: { getState?: () => Record<string, unknown> | undefined; threadId?: unknown } | undefined,
-): { entries: ModelRouteEntry[] | undefined; pending: PendingModelFallback | null } {
+  controller:
+    | { getState?: () => Record<string, unknown> | undefined; threadId?: unknown; session?: { modelId?: unknown } }
+    | undefined,
+): RequestModelRoute {
+  const sessionModelId = typeof controller?.session?.modelId === 'string' ? controller.session.modelId : undefined;
   const hostRoute = hostModelRoute(requestContext);
-  if (hostRoute) return { entries: hostRoute, pending: null };
+  if (hostRoute) {
+    return {
+      entries: hostRoute,
+      pending: null,
+      modelId: hostRoute[0]?.modelId ?? sessionModelId,
+      thinkingLevel: hostRoute[0]?.thinkingLevel,
+    };
+  }
   const state = controller?.getState?.();
   const entries = (state?.modelRoute as ModelRoute | undefined)?.entries;
+  const pending = pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId);
   return {
     entries: Array.isArray(entries) ? entries.slice(0, MODEL_ROUTE_MAX_ENTRIES) : undefined,
-    pending: pendingModelFallbackForThread(state?.[MODEL_FALLBACK_STATE_KEY], controller?.threadId),
+    pending,
+    modelId: pending?.toModelId ?? sessionModelId,
+    thinkingLevel: undefined,
   };
 }
 
@@ -552,10 +572,11 @@ function canAuthenticateModel(modelId: string, requestContext: RequestContext): 
 
 /**
  * Dynamic model function that reads the current model and optional ordered
- * fallback route: the host's route for this request, else the session route in
- * controller state. Route entry ids are opaque host-owned identifiers; repeated
- * ids receive occurrence suffixes because core tracks the active fallback index
- * by id across agentic steps.
+ * fallback route: the host's route for this request (whose first entry is the
+ * primary, at its own thinking level), else the session route in controller
+ * state. Route entry ids are opaque host-owned identifiers; repeated ids
+ * receive occurrence suffixes because core tracks the active fallback index by
+ * id across agentic steps.
  */
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
@@ -563,8 +584,12 @@ export function getDynamicModel(
   { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
-  const { entries: route, pending: pendingFallback } = requestModelRoute(requestContext, controller);
-  const modelId = pendingFallback?.toModelId ?? controller?.session?.modelId;
+  const {
+    entries: route,
+    pending: pendingFallback,
+    modelId,
+    thinkingLevel: primaryThinkingLevel,
+  } = requestModelRoute(requestContext, controller);
   if (!modelId) {
     if (!controller) {
       throw new Error(
@@ -582,7 +607,10 @@ export function getDynamicModel(
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.
-  const primary = identifyModel(modelId, resolveModel(modelId, resolveOptions));
+  const primary = identifyModel(
+    modelId,
+    resolveModel(modelId, { ...resolveOptions, thinkingLevel: primaryThinkingLevel ?? thinkingLevel }),
+  );
   const startIndex = pendingFallback ? route?.findIndex(entry => entry.id === pendingFallback.toEntryId) : 0;
   const activeRoute = route && startIndex !== undefined && startIndex >= 0 ? route.slice(startIndex) : undefined;
   if (!activeRoute || activeRoute.length < 2 || findRouteModelIndex(activeRoute, modelId) !== 0) return primary;

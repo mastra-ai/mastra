@@ -30,7 +30,6 @@ import {
   CyberRefusalHandler,
   isBadRequestError,
   ProviderHistoryCompat,
-  StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
 import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
@@ -125,6 +124,7 @@ import { PluginManager } from './plugins/manager.js';
 import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
+import { RouteAwareStreamErrorRetryProcessor } from './processors/route-aware-stream-error-retry.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { createGitHubCopilotGateway } from './providers/github-copilot-gateway.js';
@@ -414,16 +414,18 @@ export interface MastraCodeConfig {
     requestContext: RequestContext;
   }) => ThinkingLevelSetting | Promise<ThinkingLevelSetting>;
   /**
-   * Host-owned fallback models, tried in order for the current request when
-   * the session model is rate-limited, out of credits, unauthorized or
-   * unavailable. Each fallback runs at its own thinking level, else the
-   * request's level. A tenant credential store that disallows environment keys
-   * skips the fallbacks it holds no key for. Called on every model resolution;
-   * the next request starts on the session model again.
-   * When set, this route replaces the session's `modelRoute` packs and the
-   * pending-hop stickiness on every request, even when it returns `[]`.
+   * Host-owned model route for the current request, called on every model
+   * resolution. A non-empty list runs its first model as the request's primary,
+   * at that entry's thinking level when set (it wins over the session's level),
+   * and tries the rest in order when that model is rate-limited, out of
+   * credits, unauthorized, unavailable or not found. Each fallback runs at its
+   * own thinking level, else the request's level. A tenant credential store that
+   * disallows environment keys skips the fallbacks it holds no key for. An empty
+   * list runs the session model at the session thinking level, with no
+   * fallbacks. When set, this route replaces the session's `modelRoute` packs
+   * and the pending-hop stickiness on every request.
    */
-  resolveModelFallbacks?: (ctx: {
+  resolveModelRoute?: (ctx: {
     requestContext: RequestContext;
   }) => readonly ModelFallback[] | Promise<readonly ModelFallback[]>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
@@ -1414,7 +1416,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
       | undefined;
     const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
-    setHostModelRoute(ctx.requestContext, controller?.session?.modelId, await config?.resolveModelFallbacks?.(ctx));
+    setHostModelRoute(ctx.requestContext, controller?.session?.modelId, await config?.resolveModelRoute?.(ctx));
     return getDynamicModel(ctx, config?.settingsPath, {
       modeless,
       defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
@@ -1613,7 +1615,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // 5xx errors, and a blind retry would resend the request without the
       // `continue` nudge and spend the one retry this handler allows.
       new CyberRefusalHandler(),
-      new StreamErrorRetryProcessor({
+      new RouteAwareStreamErrorRetryProcessor({
         matchers: [
           // Account rotation owns a stream the provider cut after accepting the
           // request, with its own per-step budget. The matcher walk stops at the

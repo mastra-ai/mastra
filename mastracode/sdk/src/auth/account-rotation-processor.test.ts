@@ -247,6 +247,13 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(apiError(402))).toEqual({ kind: 'rotate', reason: 'quota-exhausted' });
   });
 
+  it('falls back past a model the provider no longer serves without touching the account pool', () => {
+    expect(
+      classifyRotationError(apiError(404, { message: 'model_not_found: The model `claude-retired` does not exist' })),
+    ).toEqual({ kind: 'model-missing' });
+    expect(classifyRotationError(apiError(404, { message: 'Not Found' }))).toEqual({ kind: 'never' });
+  });
+
   it('rotates on provider usage-limit wording co-occurring with 400 or no status', () => {
     expect(
       classifyRotationError(apiError(400, { message: 'You have exceeded your usage limit for Claude Max' })),

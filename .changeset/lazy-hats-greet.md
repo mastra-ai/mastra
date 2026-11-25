@@ -2,17 +2,22 @@
 '@mastra/code-sdk': minor
 ---
 
-Added `resolveModelFallbacks` to `createMastraCode`. A host can now supply fallback models per request, each with its own thinking level. When the session model is rate-limited, out of credits, unauthorized or unavailable, the request continues on the next fallback. With a tenant credential store, fallbacks the tenant has no key for are skipped. The next request starts on the session model again. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request, even when it returns an empty list.
+Added `resolveModelRoute` to `createMastraCode`. A host can now choose the model route for each request. The first model runs the request at its own thinking level, which wins over the session's. When it is rate-limited, out of credits, unauthorized, unavailable or not found, the request continues on the next model, each at its own thinking level. With a tenant credential store, later models the tenant has no key for are skipped. An empty list runs the session model at the session's thinking level, with no fallbacks. While the hook is set, its list replaces the session's model pack route and sticky fallback on every request.
 
 ```ts
 const code = await createMastraCode({
-  resolveModelFallbacks: async () => [{ modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' }],
+  resolveModelRoute: async () => [
+    { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+    { modelId: 'openai/gpt-5.6-sol', thinkingLevel: 'high' },
+  ],
 });
 ```
 
 An error that does not switch models, such as a prompt that is too long, now ends the run with the provider's own error even when a fallback model is configured. Before, it ended with `Processor "mastracode-account-rotation" stopped the run: …`.
 
-Each model switch now records why it happened (rate limit, out of credits, missing or rejected credentials, provider unavailable or timeout), along with the provider's retry time when it sends one.
+A rate-limited model with another model after it in the route now switches straight away. Before, the request first waited out the provider's `Retry-After` and retried the same model once. A request on a single model still makes that one retry.
+
+Each model switch now records why it happened: rate limit, out of credits, missing or rejected credentials, provider unavailable, timeout, or a model the provider does not serve.
 
 The `info` event sent on a model switch now names the cause first.
 

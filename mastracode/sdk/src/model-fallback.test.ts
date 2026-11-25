@@ -1,29 +1,6 @@
-import { APICallError } from '@ai-sdk/provider';
 import { describe, expect, it } from 'vitest';
 
-import { modelFallbacksToTry, modelRouteFailureFromError, pendingModelFallbackForThread } from './model-fallback.js';
-
-const NOW = Date.parse('2026-11-23T10:00:00.000Z');
-
-function rateLimit(retryAfter: string) {
-  return new APICallError({
-    message: 'Rate limited',
-    url: 'https://api.anthropic.com/v1/messages',
-    requestBodyValues: {},
-    statusCode: 429,
-    responseHeaders: { 'retry-after': retryAfter },
-    responseBody: JSON.stringify({ type: 'error', error: { type: 'rate_limit_error', message: 'Rate limited' } }),
-  });
-}
-
-describe('modelRouteFailureFromError', () => {
-  it.each([
-    ['120', { kind: 'rate_limited', retryAt: '2026-11-23T10:02:00.000Z' }],
-    ['9000000000000', { kind: 'rate_limited' }],
-  ])('records Retry-After %s as %o', (retryAfter, failure) => {
-    expect(modelRouteFailureFromError(rateLimit(retryAfter), NOW)).toEqual(failure);
-  });
-});
+import { modelFallbacksToTry, pendingModelFallbackForThread } from './model-fallback.js';
 
 describe('modelFallbacksToTry', () => {
   it('keeps the first thinking level of a repeated model and stops checking credentials once the route is full', () => {

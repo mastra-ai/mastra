@@ -348,7 +348,7 @@ vi.mock('../agents/model.js', () => ({
   getDynamicModel: vi.fn(),
   getGoalJudgeModel: vi.fn(),
   hostModelRoute: vi.fn(),
-  requestModelRoute: vi.fn(() => ({ entries: undefined, pending: null })),
+  requestModelRoute: vi.fn(() => ({ entries: undefined, pending: null, modelId: undefined, thinkingLevel: undefined })),
   resolveModel: resolveModelMock,
   setHostModelRoute: vi.fn(),
 }));
