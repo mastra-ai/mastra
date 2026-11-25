@@ -45,13 +45,16 @@ function gate() {
 /**
  * Records every workflows save and whether it carried a fence. `holdNext()` holds the next save
  * before it reaches the store, as a request sent just before a network cut lands after it heals.
+ * After `failWrites()`, every save fails as on a lost database connection.
  */
 function recordWrites(store: WorkflowsStorage) {
   const writes: WriteRecord[] = [];
   let held: { arrived: () => void; release: Promise<void> } | undefined;
+  let failing = false;
   for (const method of WRITE_METHODS) {
     const original = (store as any)[method].bind(store);
     vi.spyOn(store as any, method).mockImplementation(async (args: any) => {
+      if (failing) throw new Error('Connection terminated unexpectedly');
       const hold = held;
       held = undefined;
       if (hold) {
@@ -75,6 +78,9 @@ function recordWrites(store: WorkflowsStorage) {
       const release = deferred();
       held = { arrived: arrived.resolve, release: release.promise };
       return { arrived: arrived.promise, release: release.resolve };
+    },
+    failWrites() {
+      failing = true;
     },
   };
 }
@@ -227,6 +233,54 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
       await expect(resumed).rejects.toMatchObject(conflict);
       expect(await loadStatus(store, id, run.runId)).toBe('success');
       expect(logged()).toEqual(LOST_RUN_ONLY);
+    });
+
+    // resumeAsync() returned long before, so its rejection only reaches a log. A takeover is the new
+    // owner's run going on and logs no error; a store failure still does.
+    it.each(['takeover', 'store failure'] as const)('logs a resumeAsync() run that had a %s as such', async how => {
+      const stalled = gate();
+      const reached = gate();
+      const { store, workflow, id, logged, failWrites } = await setup(({ id, options }) =>
+        createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+          .then(
+            createStep({
+              id: 'approve',
+              inputSchema: empty,
+              outputSchema: empty,
+              resumeSchema: empty,
+              execute: async ({ resumeData, suspend }) => {
+                if (!resumeData) return suspend({});
+                reached.open();
+                await stalled.wait();
+                return {};
+              },
+            }),
+          )
+          .commit(),
+      );
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      // Spied after the start, whose own release would resolve it.
+      const released = deferred();
+      const release = store.releaseRunOwnership.bind(store);
+      vi.spyOn(store, 'releaseRunOwnership').mockImplementation(async fence => {
+        await release(fence);
+        released.resolve();
+      });
+      await run.resumeAsync({ step: 'approve', resumeData: {} });
+      await reached.wait();
+      if (how === 'takeover') await takeOverAndFinish(store, id, run.runId);
+      else failWrites();
+      stalled.open();
+      // The resume rejects once it released its lease, with nothing left to wait for but microtasks.
+      await released.promise;
+      await new Promise(resolve => setImmediate(resolve));
+
+      if (how === 'takeover') {
+        expect(logged()).toEqual(LOST_RUN_ONLY);
+      } else {
+        expect(logged().errors).toContainEqual(expect.stringContaining('Background resume failed'));
+      }
     });
 
     // The takeover lands between time travel's lease claim and its first save, so the rollback of its

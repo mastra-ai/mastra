@@ -3988,6 +3988,14 @@ export class Workflow<
           });
           return;
         }
+        // Another process took the run over while this restart drove it; that process finishes it.
+        if (runFenceConflictOf(error)?.runId === runSnapshot.runId) {
+          this.logger.debug('Stopped restarting workflow run another process took over', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+          });
+          return;
+        }
         this.logger.error('Failed to restart workflow run', { workflowId: this.id, runId: runSnapshot.runId, error });
       }
     });
@@ -4513,6 +4521,8 @@ export class Run<
         actor,
       });
     })().catch(error => {
+      // Another process took the parent's run over; the parent's claim already logged that.
+      if (runFenceConflictOf(error)?.runId === parent.runId) return;
       this.#mastra?.getLogger()?.error('Failed to resume parent workflow after nested child completion.', error);
     });
   }
@@ -5538,6 +5548,15 @@ export class Run<
   ): Promise<{ runId: string }> {
     // Fire resume in background, don't await completion
     this._resume(params).catch(err => {
+      // Another process took the run over (or its parent's, whose lease a nested resume holds); the
+      // claim already logged that.
+      const conflictRunId = runFenceConflictOf(err)?.runId;
+      if (
+        conflictRunId !== undefined &&
+        (conflictRunId === this.runId || conflictRunId === this.parentWorkflow?.runId)
+      ) {
+        return;
+      }
       this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background resume failed:`, err);
     });
     return { runId: this.runId };
