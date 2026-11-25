@@ -211,6 +211,34 @@ describe('listing the models of a custom endpoint', () => {
     expect(result).toMatchObject({ ok: false, failure: { status: 403, detail } });
   });
 
+  // Replacing a value this short would mangle ordinary text, so the excerpt is dropped instead.
+  it('drops the detail when it contains a secret too short to redact, and keeps the status', async () => {
+    const endpoint = await startEndpoint(json(401, { error: { message: 'Unknown tenant pin 7q9' } }));
+
+    const result = await listCustomProviderModels({
+      url: endpoint.url,
+      headers: [{ name: 'X-Tenant-Pin', value: '7q9', secret: true }],
+    });
+
+    expect(result).toMatchObject({ ok: false, failure: { kind: 'http', status: 401 } });
+    expect(result.ok ? 'ok' : result.failure.detail).toBeUndefined();
+  });
+
+  // JSON escapes and HTML entities spell the tab out, so only the decoded text shows the secret.
+  it.each([
+    ['a JSON error', json(401, { error: { message: 'bad token tenant\ttoken-1' } })],
+    ['an HTML page', text(401, '<html><title>bad token tenant&#9;token-1</title></html>', 'text/html')],
+  ])('redacts a secret with a tab that %s spells out', async (_, respond) => {
+    const endpoint = await startEndpoint(respond);
+
+    const result = await listCustomProviderModels({
+      url: endpoint.url,
+      headers: [{ name: 'X-Tenant', value: 'tenant\ttoken-1', secret: true }],
+    });
+
+    expect(result).toMatchObject({ ok: false, failure: { status: 401, detail: 'bad token [redacted]' } });
+  });
+
   // The body is cut and its whitespace collapsed before the final redaction.
   it('redacts a key that sits across the read limit or is echoed with its spacing collapsed', async () => {
     const key = 'sk-SUPERSECRETVALUE1234';

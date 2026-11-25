@@ -107,34 +107,49 @@ const MIN_REDACTED_LENGTH = 4;
 /** The cause message undici gives a fetch made with `redirect: 'error'` that met a redirect. */
 const REDIRECT_CAUSE_MESSAGE = 'unexpected redirect';
 
+/** The secret values a check sends, sorted by how they are kept out of failure text. */
+interface SentSecrets {
+  /** Replaced with `[redacted]`, longest first so a value that contains another is replaced whole. */
+  redacted: string[];
+  /** Too short to replace without mangling ordinary text. A detail that contains one is dropped instead. */
+  tooShort: string[];
+}
+
 /**
- * The key and secret header values a check sends, longest first so a value
- * that contains another is replaced whole. A header without a `secret` flag
- * counts as secret.
+ * The key and secret header values a check sends. A header without a
+ * `secret` flag counts as secret. Each value is listed as sent and in the
+ * form `oneLine` turns it into, so a value with a tab or a double space still
+ * matches after the text was collapsed.
  */
-function secretsSent(connection: CustomProviderConnection): string[] {
+function secretsSent(connection: CustomProviderConnection): SentSecrets {
   const values = [
     connection.apiKey?.trim(),
     ...(connection.headers ?? []).filter(header => header.secret !== false).map(header => header.value),
-  ];
-  return values
-    .filter((value): value is string => typeof value === 'string' && value.length >= MIN_REDACTED_LENGTH)
-    .sort((a, b) => b.length - a.length);
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const forms = [...new Set(values.flatMap(value => [value, oneLine(value)]))].filter(Boolean);
+  return {
+    redacted: forms.filter(form => form.length >= MIN_REDACTED_LENGTH).sort((a, b) => b.length - a.length),
+    tooShort: forms.filter(form => form.length < MIN_REDACTED_LENGTH),
+  };
 }
 
 /** Replace every sent secret in `text`. Endpoints echo request headers in error pages often enough to matter. */
-function redact(text: string, secrets: string[]): string {
-  return secrets.reduce((redacted, secret) => redacted.split(secret).join('[redacted]'), text);
+function redact(text: string, secrets: SentSecrets): string {
+  return secrets.redacted.reduce((redacted, secret) => redacted.split(secret).join('[redacted]'), text);
 }
 
 /**
  * Redact the failure text and cut `detail` to its limit. Redaction runs first
  * so a cut never leaves part of a secret. The detail builders also redact the
- * raw upstream text, because their own cuts and collapses come earlier.
+ * upstream text before their own cuts and collapses. A detail that still
+ * contains a secret too short to redact is dropped.
  */
-function finishFailure(failure: CustomProviderCheckFailure, secrets: string[]): CustomProviderCheckFailure {
+function finishFailure(failure: CustomProviderCheckFailure, secrets: SentSecrets): CustomProviderCheckFailure {
   const { detail: rawDetail, ...rest } = failure;
-  const detail = rawDetail === undefined ? undefined : redact(rawDetail, secrets).slice(0, MAX_DETAIL_LENGTH);
+  const redactedDetail = rawDetail === undefined ? '' : redact(rawDetail, secrets);
+  // Checked before the cut, so a short secret split by it is caught too.
+  const leaksShortSecret = secrets.tooShort.some(secret => redactedDetail.includes(secret));
+  const detail = leaksShortSecret ? '' : redactedDetail.slice(0, MAX_DETAIL_LENGTH);
   return { ...rest, message: redact(failure.message, secrets), ...(detail ? { detail } : {}) };
 }
 
@@ -206,14 +221,16 @@ function decodeHtmlEntities(text: string): string {
  * or ends the scan, so the work stays linear on tags that never close. An
  * unclosed comment, tag or non-text element ends the text there.
  */
-function htmlDetail(html: string, summaryOnly: boolean): string | undefined {
+function htmlDetail(html: string, summaryOnly: boolean, secrets: SentSecrets): string | undefined {
+  // Entities can spell out a secret, so decoded text is redacted before `oneLine` changes its spacing.
+  const readable = (text: string) => oneLine(redact(decodeHtmlEntities(text), secrets));
   // ASCII-only lower case keeps every index valid in `html`; `toLowerCase` can change the length.
   const lower = html.replace(/[A-Z]/g, letter => letter.toLowerCase());
   let title = '';
   const titleStart = lower.indexOf('<title');
   const titleOpenEnd = titleStart < 0 ? -1 : lower.indexOf('>', titleStart);
   const titleClose = titleOpenEnd < 0 ? -1 : lower.indexOf('</title', titleOpenEnd);
-  if (titleClose >= 0) title = oneLine(decodeHtmlEntities(html.slice(titleOpenEnd + 1, titleClose)));
+  if (titleClose >= 0) title = readable(html.slice(titleOpenEnd + 1, titleClose));
   if (summaryOnly) return title || undefined;
 
   const parts: string[] = [];
@@ -240,7 +257,7 @@ function htmlDetail(html: string, summaryOnly: boolean): string | undefined {
     if (resume < 0) break;
     cursor = resume;
   }
-  const text = oneLine(decodeHtmlEntities(parts.join('')));
+  const text = readable(parts.join(''));
   return [title, text].filter(Boolean).join(': ') || undefined;
 }
 
@@ -248,14 +265,15 @@ function htmlDetail(html: string, summaryOnly: boolean): string | undefined {
  * Plain text from an upstream body for {@link CustomProviderCheckFailure.detail}.
  * A body that cannot be read gives no detail, so a check still returns its failure.
  *
- * Secrets are redacted in the raw body, before any cut or whitespace collapse
- * could split one or change its spacing, and again on the final text.
+ * Secrets are redacted in the raw body, again in the decoded JSON message or
+ * HTML text, both before any cut or whitespace collapse could split one or
+ * change its spacing, and once more on the final text.
  */
 function upstreamDetail(
   body: string,
   contentType: string | undefined,
   summaryOnly: boolean,
-  secrets: string[],
+  secrets: SentSecrets,
 ): string | undefined {
   try {
     const trimmed = redact(body, secrets).trim();
@@ -267,10 +285,11 @@ function upstreamDetail(
       parsed = undefined;
     }
     const message = jsonErrorMessage(parsed);
-    if (message !== undefined) return oneLine(message.slice(0, DETAIL_SCAN_CHARS)) || undefined;
+    // JSON escapes can spell out a secret, so the parsed message is redacted again.
+    if (message !== undefined) return oneLine(redact(message, secrets).slice(0, DETAIL_SCAN_CHARS)) || undefined;
     const head = trimmed.slice(0, DETAIL_SCAN_CHARS);
     if (contentType?.toLowerCase().includes('text/html') || /^<(!doctype html|html)\b/i.test(head)) {
-      return htmlDetail(head, summaryOnly);
+      return htmlDetail(head, summaryOnly, secrets);
     }
     return summaryOnly ? undefined : oneLine(head);
   } catch {
@@ -289,7 +308,7 @@ function httpFailure(args: {
   body: string;
   contentType?: string;
   summaryOnly: boolean;
-  secrets: string[];
+  secrets: SentSecrets;
 }): CustomProviderCheckFailure {
   const statusText = STATUS_CODES[args.status] ?? '';
   return {
@@ -489,7 +508,7 @@ function modelTestFailure(args: {
   chatUrl: string;
   abort: AbortState;
   summaryOnly: boolean;
-  secrets: string[];
+  secrets: SentSecrets;
 }): CustomProviderCheckFailure {
   const error = RetryError.isInstance(args.error) ? args.error.lastError : args.error;
   if (APICallError.isInstance(error)) {
@@ -527,7 +546,7 @@ function modelTestFailure(args: {
  * chunk in `value`, which is read the same way an HTTP error body is.
  * Secrets are redacted before the text is cut or collapsed.
  */
-function streamErrorDetail(error: unknown, summaryOnly: boolean, secrets: string[]): string | undefined {
+function streamErrorDetail(error: unknown, summaryOnly: boolean, secrets: SentSecrets): string | undefined {
   const clean = (text: string) => oneLine(redact(text, secrets).slice(0, DETAIL_SCAN_CHARS)) || undefined;
   let reported: string | undefined;
   if (StreamProviderError.isInstance(error)) reported = error.message;
