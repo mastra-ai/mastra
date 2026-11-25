@@ -76,4 +76,26 @@ describe('resource-scoped observational-memory authorization', () => {
       } as any),
     ).rejects.toMatchObject({ status: 404 });
   });
+
+  it('refuses both routes without a user when FGA is configured', async () => {
+    const { mastra, listThreads } = await setup();
+    const require = vi.fn().mockResolvedValue(undefined);
+    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+
+    await expect(
+      GET_OBSERVATIONAL_MEMORY_ROUTE.handler({ ...createTestServerContext({ mastra }), ...omArgs } as any),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      AWAIT_BUFFER_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent',
+        resourceId: 'resource',
+      } as any),
+    ).rejects.toMatchObject({ status: 403 });
+
+    expect(require).not.toHaveBeenCalled();
+    for (const [args] of listThreads.mock.calls) {
+      expect(args?.perPage).not.toBe(false);
+    }
+  });
 });
