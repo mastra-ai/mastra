@@ -1,12 +1,16 @@
-import { AgentControllerChannels, ChannelThreadLinkProcessor } from '@mastra/core/channels';
+import {
+  AgentControllerChannels,
+  ChannelReplyReminderProcessor,
+  ChannelReplyStreamProcessor,
+  ChannelThreadLinkProcessor,
+  REPLY_TOOL_NAME,
+} from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { SlackIntegration } from './integration.js';
-import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
-import { FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
 
 type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<unknown> };
 
@@ -114,11 +118,11 @@ describe('Slack channel tools', () => {
 
     expect(slack.processors.input.map(p => p.constructor)).toEqual([
       FactoryChannelReplyProcessor,
-      FactoryReplyReminderProcessor,
+      ChannelReplyReminderProcessor,
     ]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([
       ChannelThreadLinkProcessor,
-      FactoryReplyStreamProcessor,
+      ChannelReplyStreamProcessor,
     ]);
   });
 });

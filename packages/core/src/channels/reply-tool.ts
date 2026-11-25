@@ -1,21 +1,19 @@
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
-import type { ChatChannelRenderContext } from '@mastra/core/channels';
-import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
-import type { ChunkType } from '@mastra/core/stream';
-import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../base.js';
-import { SESSION_LINK_LABEL } from './channel-reply-processor.js';
-import { sessionLinkFromRequest } from './channel-session-link-processor.js';
-import { postTarget, resolveRenderContext } from './share-file-tool.js';
-import type { ShareFileToolDeps } from './share-file-tool.js';
+import { parseMemoryRequestContext } from '../memory/types';
+import type { Processor, ProcessOutputStreamArgs } from '../processors';
+import type { RequestContext } from '../request-context';
+import type { ChunkType } from '../stream';
+import { createTool } from '../tools';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import type { ChatChannelRenderContext } from './output-processor';
+import { NEW_CHANNEL_THREAD_KEY } from './thread-link-processor';
+import type { ChannelThreadLinkProcessorOptions } from './thread-link-processor';
 
 export const REPLY_TOOL_NAME = 'reply_in_thread';
 
 /** Set once the first reply of a new session carried the session link. */
-const LINKED_KEY = 'factory__replyLinked';
+const LINKED_KEY = 'mastra__channelReplyLinked';
 
 const replyInput = z
   .object({
@@ -31,7 +29,24 @@ const replyInput = z
  * linked to Slack; with text shown the reply stream already posts and this
  * tool would double every message.
  */
-export function createReplyTool(requestContext: RequestContext, deps: ShareFileToolDeps = {}): IntegrationTools {
+export interface ChannelReplyOptions {
+  /**
+   * Finds the chat thread to post to. Defaults to the thread the run came in on; pass one that
+   * rebuilds it from the run's thread id so runs started elsewhere (web UI, signals) can post too.
+   */
+  resolveRender?: (requestContext: RequestContext) => Promise<ChatChannelRenderContext | undefined>;
+  /** Link to the thread in the host's web UI, appended to the first reply of a new channel thread. */
+  link?: ChannelThreadLinkProcessorOptions;
+}
+
+const DEFAULT_LINK_LABEL = 'Open thread ↗';
+
+async function stashedRender(requestContext: RequestContext): Promise<ChatChannelRenderContext | undefined> {
+  return requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+}
+
+export function createChannelReplyTool(requestContext: RequestContext, options: ChannelReplyOptions = {}) {
+  const resolveRender = options.resolveRender ?? stashedRender;
   return {
     [REPLY_TOOL_NAME]: createTool({
       id: REPLY_TOOL_NAME,
@@ -39,15 +54,16 @@ export function createReplyTool(requestContext: RequestContext, deps: ShareFileT
         'Post a message in this chat thread. Nothing you write outside this tool reaches the thread, so use it for anything the people there should see: a short note that you are starting a longer job, a question you need answered, and the outcome when you finish. Post when you have something new; do not repeat yourself or post that nothing changed. To stay quiet, do not call it.',
       inputSchema: replyInput,
       execute: async (input, context) => {
-        const link = firstReplyLink(requestContext);
-        const suffix = link ? `\n\n[${SESSION_LINK_LABEL}](${link})` : '';
-        // FactoryReplyStreamProcessor may already be streaming this call's text
+        const link = firstReplyLink(requestContext, options.link);
+        const suffix = link ? `\n\n[${options.link?.label ?? DEFAULT_LINK_LABEL}](${link})` : '';
+        // ChannelReplyStreamProcessor may already be streaming this call's text
         // into the thread; finish that post rather than posting it again.
         const toolCallId = context?.agent?.toolCallId;
         const streamed = toolCallId ? replyStreams(requestContext).get(toolCallId) : undefined;
         if (toolCallId) replyStreams(requestContext).delete(toolCallId);
         if (!streamed || !(await streamed.finish(input.text, suffix))) {
-          const render = await postTarget(requestContext, deps);
+          const render = await resolveRender(requestContext);
+          if (!render) throw new Error('This session is no longer linked to a chat thread.');
           await render.chatThread.post({ markdown: `${input.text}${suffix}` });
         }
         // Marked only once posted, so a failed first post still gets the link on the retry.
@@ -63,13 +79,17 @@ export function createReplyTool(requestContext: RequestContext, deps: ShareFileT
  * text hidden, the session-link processor's text delta never
  * reaches the thread, so the tool carries the link instead.
  */
-function firstReplyLink(requestContext: RequestContext): string | undefined {
-  if (!requestContext.get(NEW_CHANNEL_THREAD_KEY) || requestContext.get(LINKED_KEY)) return undefined;
-  return sessionLinkFromRequest(requestContext);
+function firstReplyLink(
+  requestContext: RequestContext,
+  link: ChannelThreadLinkProcessorOptions | undefined,
+): string | undefined {
+  if (!link || !requestContext.get(NEW_CHANNEL_THREAD_KEY) || requestContext.get(LINKED_KEY)) return undefined;
+  const memory = parseMemoryRequestContext(requestContext);
+  return link.link({ requestContext, threadId: memory?.thread?.id, resourceId: memory?.resourceId });
 }
 
 /** Live posts of `reply_in_thread` calls whose text is still streaming in, by tool call id. */
-const STREAMS_KEY = 'factory__replyStreams';
+const STREAMS_KEY = 'mastra__channelReplyStreams';
 
 interface ReplyStream {
   /** Show the text decoded from the args so far. */
@@ -113,7 +133,7 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
     done ??= chatThread.post(chunks()).then(
       () => true,
       error => {
-        console.warn('[factory] streamed reply failed; posting it whole', { error });
+        console.warn('[channels] streamed reply failed; posting it whole', { error });
         return false;
       },
     );
@@ -150,10 +170,13 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
  * text. Runs whose adapter doesn't stream, or that show reply text, are left
  * alone.
  */
-export class FactoryReplyStreamProcessor implements Processor {
-  readonly id = 'factory-reply-stream';
+export class ChannelReplyStreamProcessor implements Processor {
+  readonly id = 'channel-reply-stream';
+  readonly #resolveRender: NonNullable<ChannelReplyOptions['resolveRender']>;
 
-  constructor(private readonly deps: ShareFileToolDeps = {}) {}
+  constructor(options: Pick<ChannelReplyOptions, 'resolveRender'> = {}) {
+    this.#resolveRender = options.resolveRender ?? stashedRender;
+  }
 
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
     if (!requestContext) return part;
@@ -161,7 +184,7 @@ export class FactoryReplyStreamProcessor implements Processor {
     if (part.type === 'tool-call-input-streaming-start' && part.payload.toolName === REPLY_TOOL_NAME) {
       // Resolve the thread the same way the tool does, so a run started from
       // the web UI or woken by a signal streams too, not only a Slack-started one.
-      const render = await resolveRenderContext(requestContext, this.deps);
+      const render = await this.#resolveRender(requestContext);
       // A static adapter (`streaming: false`) posts each reply whole, so the tool does too.
       if (render?.textDisplay !== 'hidden' || !render.streaming?.enabled) return part;
       args[part.payload.toolCallId] = '';

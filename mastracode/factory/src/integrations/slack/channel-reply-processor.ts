@@ -1,8 +1,6 @@
+import { REPLY_TOOL_NAME as REPLY_TOOL } from '@mastra/core/channels';
 import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
 import { factorySettingsUrl, factoryUiOrigin } from '../../links.js';
-
-/** Mirrors `REPLY_TOOL_NAME` in `reply-tool.ts`, which imports this module. */
-const REPLY_TOOL = 'reply_in_thread';
 
 const ID = 'factory-channel-reply';
 

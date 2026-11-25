@@ -1,5 +1,10 @@
 import { Agent } from '@mastra/core/agent';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, markNewChannelThread, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
+import {
+  CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+  ChannelThreadLinkProcessor,
+  markNewChannelThread,
+  NEW_CHANNEL_THREAD_KEY,
+} from '@mastra/core/channels';
 import { MockMemory } from '@mastra/core/memory';
 import { ProcessorRunner } from '@mastra/core/processors';
 import type { Processor } from '@mastra/core/processors';
@@ -8,7 +13,14 @@ import type { ChunkType } from '@mastra/core/stream';
 import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { factorySessionLinkProcessor } from './channel-session-link-processor.js';
+import { SESSION_LINK_LABEL } from './channel-reply-processor.js';
+import { sessionLinkFromRequest } from './channel-session-link-processor.js';
+
+const factorySessionLinkProcessor = () =>
+  new ChannelThreadLinkProcessor({
+    label: SESSION_LINK_LABEL,
+    link: ({ requestContext }) => sessionLinkFromRequest(requestContext),
+  });
 
 const LINK = 'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1';
 // Own paragraph, so it closes the message rather than tailing the last sentence.
