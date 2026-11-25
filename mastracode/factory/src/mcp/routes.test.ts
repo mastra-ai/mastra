@@ -472,14 +472,21 @@ describe('Factory MCP server', () => {
     expect(accepted.status).toBe(200);
   });
 
-  it('asks an organization with several projects to pick one', async () => {
+  it("serves an organization's first project when it has created others since", async () => {
     const { url, projects } = await setup();
-    await projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Second' } });
+    const second = await projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Second' } });
+    // The newest-updated project would come first if the endpoint went by list order.
+    await projects.update({ orgId: 'org-1', id: second.id, input: { name: 'Second, renamed' } });
 
-    const response = await claudeRequest(url, 'tools/list', {}, 'token-alice');
+    const response = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'search', arguments: { query: 'login' } },
+      'token-alice',
+    );
 
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ error: 'multiple_projects' });
+    expect(response.status).toBe(200);
+    expect(toolText(response.body!.result).results).toEqual([expect.objectContaining({ title: 'Fix the login page' })]);
   });
 
   it('someone removed from the organization loses access at once, though their token has not expired', async () => {

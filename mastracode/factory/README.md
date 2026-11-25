@@ -1618,7 +1618,7 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/mcp
 ```
 
-The endpoint serves the organization's Factory project. An organization with more than one project gets `409 multiple_projects`. The Factory UI does not show this URL yet.
+The endpoint serves the organization's Factory project. An organization that created more than one (deprecated, see [One project per Factory](#one-project-per-factory)) gets its first. The Factory UI does not show this URL yet.
 
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 

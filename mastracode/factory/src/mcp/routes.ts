@@ -240,13 +240,14 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
     return c.json({ error: 'organization_forbidden' }, 403);
   }
 
-  // The endpoint URL names no project, so it serves the org's only one.
+  // The endpoint URL names no project, so it serves the org's first one:
+  // an organization has one Factory project, and extra ones are deprecated.
   const projects = await deps.projects.list({ orgId: tenant.orgId });
-  if (projects.length === 0) return c.json({ error: 'not_found' }, 404);
-  if (projects.length > 1) {
-    return c.json({ error: 'multiple_projects', message: 'This organization has more than one Factory project.' }, 409);
-  }
-  const project = projects[0]!;
+  const project = projects.reduce<(typeof projects)[number] | undefined>(
+    (first, next) => (!first || next.createdAt < first.createdAt ? next : first),
+    undefined,
+  );
+  if (!project) return c.json({ error: 'not_found' }, 404);
   const factoryProjectId = project.id;
 
   const { sessionId, persisted } = await ensureConnectorSession(deps, {
