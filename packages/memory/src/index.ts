@@ -513,12 +513,19 @@ function hasConfiguredProcessorId(processors: readonly unknown[], id: string): b
   const matchesStep = (step: unknown): boolean => {
     if (!step || typeof step !== 'object' || seen.has(step)) return false;
     seen.add(step);
-    const { processorId, id: stepId } = step as { processorId?: unknown; id?: unknown };
+    const {
+      processorId,
+      id: stepId,
+      stepGraph,
+    } = step as {
+      processorId?: unknown;
+      id?: unknown;
+      stepGraph?: ProcessorGraphEntry[];
+    };
+    // A workflow counts only through its steps; its own id names the workflow, not a processor.
+    if (Array.isArray(stepGraph)) return stepGraph.some(matchesEntry);
     // `processorId` is authoritative; older core versions only carry the step id `processor:<id>`.
-    if (processorId !== undefined ? processorId === id : stepId === `processor:${id}`) return true;
-    // Plain steps also pass `isProcessorWorkflow`; only nested workflows have a step graph.
-    const graph = (step as { stepGraph?: ProcessorGraphEntry[] }).stepGraph;
-    return Array.isArray(graph) && graph.some(matchesEntry);
+    return processorId !== undefined ? processorId === id : stepId === `processor:${id}`;
   };
 
   // `loop` and `foreach` wrap a nested graph entry in `step` rather than a step.
