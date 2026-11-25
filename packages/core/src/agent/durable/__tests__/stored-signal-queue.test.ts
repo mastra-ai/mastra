@@ -109,6 +109,13 @@ class ObservedMemory extends InMemoryMemory {
   }
 }
 
+/** The recording memory storage, reporting itself shared by every process, as Postgres and a LibSQL file are. */
+class SharedObservedMemory extends ObservedMemory {
+  override get pendingSignalsSharedAcrossProcesses(): boolean {
+    return true;
+  }
+}
+
 /** Memory storage that keeps no pending signals, as stores other than Postgres, LibSQL and in-memory. */
 class NoPendingSignalsMemory extends InMemoryMemory {
   override readonly supportsPendingSignals = false;
@@ -899,33 +906,49 @@ describe('signals a run consumed and memory never saved', () => {
     );
   });
 
-  it("closes a failed run with what it consumed, and the signal it never took is the thread's next turn", async () => {
-    const memoryStore = new ObservedMemory();
-    const { agent, scope, prompts, toolGate, start, afterFollowUps } = setup({
-      memoryStore,
-      stopWhen: () => {
-        throw new Error('stop condition failed');
-      },
-    });
-    const { stream, done } = await start();
-    // Taken by the drain after the tool, then the stop condition fails the run.
-    const consumed = agent.sendSignal({ type: 'user', contents: 'CONSUMED_BEFORE_FAILURE' }, scope);
-    await consumed.accepted;
-    const followUpsDone = afterFollowUps();
-    toolGate.release();
-    await expect(done).rejects.toThrow('stop condition failed');
-    await followUpsDone;
+  it.each([
+    // The process that started the run settles it from the workflow's result.
+    ['a pubsub inside the process', () => ({ memoryStore: new ObservedMemory(), pubsub: new EventEmitterPubSub() })],
+    // The process's worker settles it from the failure event, as any worker does.
+    [
+      'a pubsub that reaches other processes',
+      () => ({ memoryStore: new SharedObservedMemory(), pubsub: new BrokerLikePubSub() }),
+    ],
+  ] as const)(
+    'closes a run that failed in the process that started it once, with what it consumed (%s)',
+    async (_case, options) => {
+      const { memoryStore, pubsub } = options();
+      const { agent, scope, prompts, toolGate, start, afterFollowUps, savedMessages } = setup({
+        memoryStore,
+        pubsub,
+        stopWhen: () => {
+          throw new Error('stop condition failed');
+        },
+      });
+      const { stream, done } = await start();
+      // Taken by the drain after the tool, then the stop condition fails the run.
+      const consumed = agent.sendSignal({ type: 'user', contents: 'CONSUMED_BEFORE_FAILURE' }, scope);
+      await consumed.accepted;
+      const followUpsDone = afterFollowUps();
+      toolGate.release();
+      await expect(done).rejects.toThrow('stop condition failed');
+      await followUpsDone;
 
-    expect(memoryStore.calls.filter(call => call.op === 'close' && call.runId === stream.runId)).toEqual([
-      { op: 'close', runId: stream.runId, consumedIds: [consumed.signal.id] },
-    ]);
-    // The failed run's transcript was never saved, so the close deleted the row it took.
-    expect(prompts.filter(prompt => !textOf(prompt).includes(BARRIER)).slice(1)).toEqual([]);
-    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
-    expect(
-      await memoryStore.claimPendingSignals({ threadId: scope.threadId, runId: 'later-run', consumedIds: [] }),
-    ).toEqual([]);
-  });
+      expect(memoryStore.calls.filter(call => call.op === 'close' && call.runId === stream.runId)).toEqual([
+        { op: 'close', runId: stream.runId, consumedIds: [consumed.signal.id] },
+      ]);
+      // The failed run's transcript was never saved, so the close deleted the row it took: no turn repeats it.
+      expect(prompts.filter(prompt => !textOf(prompt).includes(BARRIER)).slice(1)).toEqual([]);
+      expect((await savedMessages()).some(message => message.id === consumed.signal.id)).toBe(false);
+      expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+      expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).not.toBe(stream.runId);
+      // Nothing the run claimed is left hidden: a claim by the thread's next signal run returns nothing.
+      await memoryStore.setSignalRun({ threadId: scope.threadId, runId: 'later-run' });
+      expect(
+        await memoryStore.claimPendingSignals({ threadId: scope.threadId, runId: 'later-run', consumedIds: [] }),
+      ).toEqual([]);
+    },
+  );
 });
 
 describe('a run whose total deadline fires in the process that executes its steps', () => {
