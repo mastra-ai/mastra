@@ -139,10 +139,6 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
     return this.#upsert({ orgId, userId }, () => ({ modelPacks, defaultModelPackId }));
   }
 
-  async clear({ orgId, userId }: { orgId: string; userId: string }): Promise<boolean> {
-    return (await this.#db.deleteMany('user_default_models', { org_id: orgId, user_id: userId })) > 0;
-  }
-
   async #upsert(
     { orgId, userId }: { orgId: string; userId: string },
     change: ModelPackSetChange,
@@ -169,5 +165,9 @@ export class ModelDefaultsStorage extends FactoryStorageDomain {
       if (!row) throw error;
       return toRecord(row);
     }
+  }
+
+  async clear({ orgId, userId }: { orgId: string; userId: string }): Promise<boolean> {
+    return (await this.#db.deleteMany('user_default_models', { org_id: orgId, user_id: userId })) > 0;
   }
 }
