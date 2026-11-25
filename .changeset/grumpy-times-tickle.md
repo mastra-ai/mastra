@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed storage-fenced evented agent runs being canceled when Redis pauses longer than the thread lease, even though the worker still owns the run.
+Fixed an issue where a temporary Redis pause could cancel an evented agent run even though its workflow storage was still available.
