@@ -13,6 +13,7 @@ import {
 } from '@mastra/core/storage';
 import type { KnowledgePageStore } from '@mastra/core/storage';
 import type { PlatformAccessToken } from '@mastra/platform-workspace';
+import { handleImporterRun } from './importer-run';
 
 /**
  * The part of a core importer class (`class X extends KnowledgeImporter({ ... })`) that
@@ -253,6 +254,8 @@ const DEFAULT_API_URL = 'https://knowledge-api.mastra.ai';
 export class PlatformKnowledge extends Knowledge {
   readonly #importerClasses: readonly PlatformKnowledgeImporterClass[];
   #importerWarnings: string[] = [];
+  readonly #apiUrl: string;
+  readonly #instanceId: string;
 
   constructor(options: PlatformKnowledgeOptions = {}) {
     // `MASTRA_KNOWLEDGE_ACCESS_TOKEN` is a Knowledge-only credential, narrower than the general
@@ -299,6 +302,8 @@ export class PlatformKnowledge extends Knowledge {
       scopes: {},
       storage,
     });
+    this.#apiUrl = apiUrl;
+    this.#instanceId = instanceId;
     // Older cores in the peer range have no importers on Knowledge: Platform could list the classes but
     // never run them, so refuse rather than start half-working.
     if (importers.length > 0 && !('importers' in Knowledge.prototype)) {
@@ -343,6 +348,24 @@ export class PlatformKnowledge extends Knowledge {
    */
   get importerClasses(): readonly PlatformKnowledgeImporterClass[] {
     return this.#importerClasses;
+  }
+
+  /**
+   * Answers Mastra Platform's trigger for one importer run (`POST /_mastra/knowledge-importers/run`,
+   * which Platform's deploy mounts). The request's run token is the only input: the run is claimed
+   * from this instance's Knowledge API, its credentials are read from the app's environment, and it
+   * runs one of `importerClasses` in the background. Answers 202 once started, 401 without a run
+   * token, 404 for another instance's run.
+   *
+   * @experimental
+   */
+  handleImporterRun(request: Request): Promise<Response> {
+    return handleImporterRun(request, {
+      apiUrl: this.#apiUrl,
+      instanceId: this.#instanceId,
+      importers: this.#importerClasses,
+      onError: error => this.logger.error('Knowledge importer run failed', { error }),
+    });
   }
 }
 
