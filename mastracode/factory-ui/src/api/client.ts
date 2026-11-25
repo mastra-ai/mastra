@@ -45,7 +45,7 @@ export class ApiError extends Error {
 async function extractError(res: Response): Promise<ApiError> {
   let body: unknown;
   try {
-    body = await res.clone().json();
+    body = await res.json();
   } catch {
     // Non-JSON body — fall through to the status-based message.
   }
