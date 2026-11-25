@@ -878,8 +878,40 @@ export class ExecutionFence implements RunFenceScope {
         return true;
       }
     };
+    let threadRenewal: Promise<void> | undefined;
+    let threadConfirmedAt = -Infinity;
+    let participant: ExecutionFence | undefined;
+    const verifyThread = (threadId: string): Promise<void> => {
+      if (threadRenewal) return threadRenewal;
+      const sentAt = Date.now();
+      threadRenewal = (async () => {
+        if (!(await holdsThreadLease(threadId))) {
+          if (claim.generation !== undefined) {
+            // Another run owns the thread. Release only this claim so the API's ownership watch reports an error.
+            void ExecutionFence.releaseSharedClaim(mastra, runId, claim, 'abandoned').catch(() => {});
+          }
+          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+            agentId: claim.agentId!,
+            runId,
+            executionId: claim.executionId,
+          });
+        }
+        threadConfirmedAt = sentAt;
+      })().finally(() => (threadRenewal = undefined));
+      return threadRenewal;
+    };
     const backend: OwnershipBackend = {
       ...executionBackend,
+      verify: async (current, details) => {
+        if (
+          claim.generation !== undefined &&
+          claim.threadId &&
+          Date.now() >= threadConfirmedAt + EXECUTION_LEASE_RENEW_INTERVAL_MS
+        ) {
+          await verifyThread(claim.threadId);
+        }
+        await executionBackend.verify(current, details);
+      },
       renew: async current => {
         const result = await executionBackend.renew(current);
         if (!result.renewed) {
@@ -892,12 +924,14 @@ export class ExecutionFence implements RunFenceScope {
           }
           return result;
         }
-        if (claim.threadId && !(await holdsThreadLease(claim.threadId))) {
-          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
-            agentId: claim.agentId!,
-            runId,
-            executionId: claim.executionId,
-          });
+        if (claim.threadId) {
+          if (claim.generation === undefined || !participant) await verifyThread(claim.threadId);
+          else {
+            // A silent broker must not prevent the next storage heartbeat. New work still verifies the thread.
+            void verifyThread(claim.threadId).catch(error => {
+              if (participant && error instanceof DurableExecutionFenceError) participant.#markLost(error);
+            });
+          }
         }
         return result;
       },
@@ -937,14 +971,14 @@ export class ExecutionFence implements RunFenceScope {
     } finally {
       if (deadline) clearTimeout(deadline);
     }
-    const fence = new ExecutionFence({
+    const fence = (participant = new ExecutionFence({
       ...details,
       backend,
       generation: claim.generation,
       workflowsStore: await mastra.getStorage()?.getStore('workflows'),
       leaseExpiresAt: startedAt + EXECUTION_LEASE_TTL_MS,
       logger: mastra.getLogger(),
-    });
+    }));
     if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
     if (backend.expires) fence.#startHeartbeat();
     return fence;

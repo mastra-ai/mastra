@@ -612,7 +612,7 @@ afterEach(async () => {
   vi.useRealTimers();
 });
 
-async function createExecution(storageBacked = true) {
+async function createExecution(storageBacked = true, coordinatorRenews = false) {
   const storage = new InMemoryStore();
   const workflowsStore = (await storage.getStore('workflows'))!;
   const pubsub = new EventEmitterPubSub();
@@ -625,7 +625,7 @@ async function createExecution(storageBacked = true) {
     runId: 'run',
     mode: 'acquire',
   });
-  coordinator.stopHeartbeat();
+  if (!coordinatorRenews) coordinator.stopHeartbeat();
   const event: Event = {
     id: 'delivery',
     type: 'workflow.step.run',
@@ -1848,7 +1848,7 @@ it.each(['expired', 'foreign'] as const)(
 
 it('stops admitting work after losing the captured thread lease', async () => {
   vi.useFakeTimers();
-  const { pubsub, mastra, event, coordinator } = await createExecution();
+  const { pubsub, mastra, event, coordinator } = await createExecution(true, true);
   await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
   event.data.requestContext[MASTRA_DURABLE_EXECUTIONS_KEY].run = {
     ...coordinator.claim,
@@ -1861,8 +1861,10 @@ it('stops admitting work after losing the captured thread lease', async () => {
   await pubsub.transferLease(key, owner!, 'another-run', EXECUTION_LEASE_TTL_MS * 3);
   await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1);
   await expect(participateInDurableExecution(mastra, event, async () => {})).rejects.toMatchObject({
-    id: EXECUTION_UNVERIFIED_ERROR_ID,
+    id: EXECUTION_SUPERSEDED_ERROR_ID,
   });
+  await expect(coordinator.callerLossError()).resolves.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+  expect(await pubsub.getLeaseOwner(key)).toBe('another-run');
 });
 
 it('releases lease-backed executions when the terminal worker settles them', async () => {

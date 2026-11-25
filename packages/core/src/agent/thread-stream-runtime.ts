@@ -1629,13 +1629,18 @@ export class AgentThreadStreamRuntime {
       this.#stopLeaseRenewal(pubsub, runId);
     }
     const leaseProvider = this.#getLeaseProvider(pubsub);
+    // Workers holding a storage-backed execution claim verify and reclaim the thread lease themselves.
+    // The API can renew it while waiting for dispatch, but cannot infer worker loss from a silent broker.
+    const workerFenced = parseThreadLeaseOwner(owner)?.[1] === 'generation';
     const timer = setInterval(() => {
+      if (workerFenced && state.pendingLeaseRenewals.has(runId)) return;
       const sentAt = Date.now();
       state.pendingLeaseRenewals.set(runId, (state.pendingLeaseRenewals.get(runId) ?? 0) + 1);
       void leaseProvider
         .renewLease(key, owner, AGENT_THREAD_LEASE_TTL_MS)
         .then(renewed => {
           if (!renewed) {
+            if (workerFenced) return;
             // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
             // leave a rejecting fence behind for a later run with this id.
             if (state.leaseRenewalTimers.get(runId) !== timer) return;
@@ -1653,7 +1658,9 @@ export class AgentThreadStreamRuntime {
               this.#abortLeaseLostRun(state, runId);
             });
           } else {
-            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+            if (!workerFenced && state.leaseRenewalTimers.get(runId) === timer) {
+              this.#armLeaseDeadline(pubsub, key, runId, sentAt);
+            }
             if (state.sweptLeasedRunIds.has(runId)) {
               // A renewal in flight when the sweep stopped this timer still extended the lease.
               state.sweptLeasedRunIds.set(runId, Date.now());
@@ -1675,6 +1682,7 @@ export class AgentThreadStreamRuntime {
     }
     state.leaseRenewalTimers.set(runId, timer);
     state.leaseOwners.set(runId, owner);
+    if (workerFenced) return;
     // The lease was acquired or transferred just before this call.
     this.#armLeaseDeadline(pubsub, key, runId, Date.now());
     // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
