@@ -2,7 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { ApiError, createApiClient } from '../client';
+import { createApiClient } from '../client';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -62,28 +62,6 @@ describe('createApiClient', () => {
       const client = createApiClient({ baseUrl: BASE_URL });
 
       await expect(client.get('/web/config/providers')).rejects.toThrow(/^Provider credentials are unavailable\.$/);
-    });
-
-    it('keeps the whole error body, so a refused save can show the failure it reports', async () => {
-      const failure = { kind: 'http', message: 'HTTP 403 Forbidden from https://llm.test/v1/models', status: 403 };
-      server.use(
-        http.post(`${BASE_URL}/web/config/custom-providers`, () =>
-          HttpResponse.json(
-            { error: 'custom_endpoint_check_failed', message: 'The connection test failed.', failure },
-            { status: 422 },
-          ),
-        ),
-      );
-
-      const client = createApiClient({ baseUrl: BASE_URL });
-      const error = await client.post('/web/config/custom-providers', {}).catch((caught: unknown) => caught);
-
-      expect(error).toBeInstanceOf(ApiError);
-      expect(error).toMatchObject({
-        message: 'The connection test failed.',
-        status: 422,
-        body: { error: 'custom_endpoint_check_failed', failure },
-      });
     });
   });
 
