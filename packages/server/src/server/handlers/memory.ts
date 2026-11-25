@@ -399,6 +399,7 @@ async function authorizeResourceMemoryAccess({
   // Per-user FGA must clear every thread in the resource. Offset pages can skip rows whose sort keys
   // tie, so this reads the whole resource, as listing threads with FGA already does.
   const { threads } = await memory.listThreads({ filter: { resourceId }, perPage: false });
+  if (threads.length === 0) throwThreadBranchNotFound();
   for (const thread of threads) {
     await authorizeMemoryThreadAccess({
       mastra,
