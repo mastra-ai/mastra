@@ -1,6 +1,6 @@
 import EventEmitter from 'node:events';
 import {
-  endIterationSpans,
+  endFailedIteration,
   participateInDurableExecution,
   retrySettledDurableExecution,
   stopAbandonedDurableExecution,
@@ -5284,7 +5284,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
     if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) {
       const result = await this.#handleDelivery(event);
-      if (result.ok) endIterationSpans(this.mastra, event);
+      if (result.ok) endFailedIteration(this.mastra, event);
       return result;
     }
     try {
@@ -5292,7 +5292,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       const execute = async () => {
         const result = await this.#handleDelivery(event);
         if (result.ok) {
-          endIterationSpans(this.mastra, event);
+          endFailedIteration(this.mastra, event);
           await settleEventedDurableExecution(this.mastra, event);
         }
         // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.

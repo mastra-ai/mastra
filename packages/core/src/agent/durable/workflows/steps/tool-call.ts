@@ -3,7 +3,6 @@ import { MastraFGAPermissions } from '../../../../auth/ee';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
-import { reachesOtherProcesses } from '../../../../events/reach';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
 import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcome';
@@ -41,7 +40,14 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import type { ExportedSpan, ObservabilityContext, SpanTermination } from '../../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityContext,
+  SpanTermination,
+} from '../../../../observability';
+import { compactStopReasonContext } from '../../../../observability/outcome-schema';
+import { extractUsageMetrics, isUsageIncomplete, subtractReportedUsage } from '../../../../observability/usage';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { isProcessorWorkflow } from '../../../../processors/is-processor-workflow';
@@ -89,8 +95,6 @@ import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
-import { endSuspendedSpans } from '../../suspended-spans';
-import type { SuspendInfo } from '../../suspended-spans';
 import type {
   DurableToolCallInput,
   DurableToolCallOutput,
@@ -108,6 +112,7 @@ import {
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 import { recordBackgroundResult } from '../shared/background-results';
+import { calculateAccumulatedUsage, carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
 import { responseRecordSchema } from '../shared/schemas';
 import type { AccumulatedUsage, BaseIterationState } from '../shared/schemas';
@@ -437,7 +442,7 @@ async function processChunkThroughOutputProcessors(
  * this step and resumes with the decision/result — so none of main's
  * pending-tool plumbing applies here.
  */
-export function createDurableToolCallStep(options: { evented?: boolean } = {}) {
+export function createDurableToolCallStep() {
   return createStep({
     id: DurableStepIds.TOOL_CALL,
     inputSchema: durableToolCallInputSchema,
@@ -526,20 +531,115 @@ export function createDurableToolCallStep(options: { evented?: boolean } = {}) {
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
       // pausing — stores persist only span-end events, so an un-ended root is dropped if
       // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
-      const endSpansAsSuspended = (info: SuspendInfo) => {
-        // Behind a broker, a call that runs beside this one can still fail the run, so the worker that handles how
-        // the iteration ends does it. A resumed or recovered pair has no such worker.
-        const endsWithIteration =
-          !!options.evented && typedInput.sideBySide && !!mastra && reachesOtherProcesses((mastra as Mastra).pubsub);
-        const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (endsWithIteration && !segmentSpanData(requestContext, runId, initData, reg).carried) return;
-        endSuspendedSpans({
-          mastra: mastra as Mastra | undefined,
-          requestContext,
-          state: initData,
-          call: typedInput,
-          info,
-        });
+      const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
+        try {
+          const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          if (!obs) return;
+          const output = {
+            status: 'suspended' as const,
+            reason: info.reason,
+            toolName: info.toolName,
+            toolCallId: info.toolCallId,
+          };
+          // The pair this execution reports under: the run's first, or the one a resume or
+          // recovery carried on the request context.
+          const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+          const segment = segmentSpanData(requestContext, runId, initData, reg);
+          const { agentSpanData, modelSpanData } = segment;
+          // Rebuilt spans come from the run-start snapshot, so end them with the clocks
+          // their segment captured: the loop state's (or this step's, on the first
+          // iteration) for the originals.
+          const attributes = carriedSpanClocks(
+            reg,
+            initData.completionStartTime
+              ? { completionStartTime: initData.completionStartTime, timeToFirstTokenMs: initData.timeToFirstTokenMs }
+              : {
+                  completionStartTime: typedInput.completionStartTime,
+                  timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
+                },
+            segment.carried,
+          );
+          // This segment made the suspended step's model call only when it owns the step; a later
+          // suspension of the same step, after a resume, made none. The generation records the
+          // run total so far less what earlier suspensions recorded, like the regular agent.
+          // Tool calls that run side by side can each suspend here, so none of them records it.
+          // A total the provider left partly unknown is not recorded either: its known detail
+          // counts would be reported without the total they are part of.
+          const ownsStep = !!typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData);
+          const reported = initData.generationReportedUsage;
+          const total = calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage);
+          const usage =
+            reported && ownsStep && !typedInput.sideBySide && !isUsageIncomplete(total)
+              ? subtractReportedUsage(total, reported)
+              : undefined;
+          if (ownsStep) {
+            const stepSpanData = typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>;
+            (liveSegmentSpan(stepSpanData, reg?.openStepSpan) ?? obs.rebuildSpan(stepSpanData))?.end({
+              output,
+              ...(reported ? { attributes: { usage: extractUsageMetrics(typedInput.stepUsage) } } : {}),
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
+            });
+          }
+          const agentSpan = agentSpanData && obs.rebuildSpan(agentSpanData);
+          if (modelSpanData) {
+            const end = {
+              output,
+              attributes,
+              outcome: 'suspend' as const,
+              stopReason: info.reason === 'approval' ? ('approval_required' as const) : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
+            };
+            const modelSpan = obs.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined;
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
+            if (usage) {
+              // As at the end of the run: the model that answered, and the cost its provider reported.
+              const servedBy = typedInput.response?.servedBy;
+              const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+              if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
+              const costs = initData.reportedCosts?.slice(initData.generationReportedSteps ?? 0) ?? [];
+              modelSpan?.createTracker()?.endGeneration({
+                ...end,
+                attributes: {
+                  ...attributes,
+                  ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
+                },
+                usage,
+                stepProviderMetadata: [...costs, typedInput.response?.reportedCost].map(cost => cost ?? undefined),
+              });
+            } else modelSpan?.end(end);
+          }
+          agentSpan?.end({
+            output,
+            attributes,
+            outcome: 'suspend',
+            stopReason: info.reason === 'approval' ? 'approval_required' : null,
+            stopReasonContext:
+              info.reason === 'approval'
+                ? compactStopReasonContext('approval_required', {
+                    toolCallId: info.toolCallId,
+                    toolName: info.toolName,
+                  })
+                : null,
+          });
+        } catch (error) {
+          // Span bookkeeping must never break suspension.
+          logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
+        }
       };
 
       // Provider-executed tools are handled entirely by the stream path
@@ -1758,7 +1858,14 @@ export function createDurableToolCallStep(options: { evented?: boolean } = {}) {
           await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
         }
 
-        endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+        // A call that runs beside this one can have failed the run already, which ended its spans.
+        const runFailed =
+          typedInput.sideBySide &&
+          (await assertOwned().then(
+            () => false,
+            error => isExecutionFenceError(error),
+          ));
+        if (!runFailed) endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
         return suspend(
           {

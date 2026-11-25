@@ -385,7 +385,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
 
   /** Each tool call runs as its own step with suspend support. */
   protected override toolCallStep() {
-    return createDurableToolCallStep({ evented: this.#options?.engine === 'evented' });
+    return createDurableToolCallStep();
   }
 
   protected override llmMappingStep() {

@@ -310,23 +310,6 @@ describe('run and generation span fields on a worker in another process', () => 
     15_000,
   );
 
-  it('ends every span once when two tool calls suspend', async () => {
-    const call = (name: string) => ({ id: `${name}-1`, name, arguments: {} });
-    getMock().on({ endpoint: 'chat' }, { toolCalls: [call('pause'), call('wait')] });
-    const { api, worker, unbalanced } = await split({
-      tools: { pause: pauseAfter('pause', 0), wait: pauseAfter('wait', 50) },
-    });
-
-    const { fullStream } = await api.agent.stream('Where is my order?');
-    let suspended = 0;
-    for await (const chunk of fullStream) if (chunk.type === 'tool-call-suspended' && ++suspended === 2) break;
-
-    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
-      await expect.poll(() => worker.ended(type)).toMatchObject([{ outcome: 'suspend' }]);
-    }
-    expect(unbalanced()).toMatchObject({ endedTwice: [] });
-  }, 15_000);
-
   it('ends every span once when the run fails after an approval', async () => {
     getMock().on({ endpoint: 'chat' }, { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] });
     const { api, worker, unbalanced } = await split({
