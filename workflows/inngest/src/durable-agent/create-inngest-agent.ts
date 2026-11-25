@@ -61,7 +61,6 @@ import {
   publishAbortRequest,
   requestAcknowledgedAbort,
   RUN_DEADLINE_KEY,
-  DURABLE_CONTEXT_SEGMENT_KEY,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -129,6 +128,10 @@ import {
   setLoopStatus,
 } from './create-inngest-agentic-workflow';
 import { keepSuspendedRunScopes } from './resume-scopes';
+
+// Matches Core's DURABLE_CONTEXT_SEGMENT_KEY. Inlined rather than imported because the peer range
+// admits Core releases that predate that export; older Core ignores the key.
+const DURABLE_CONTEXT_SEGMENT_KEY = '__mastra_durableContextSegment';
 
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
