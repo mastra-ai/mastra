@@ -61,7 +61,7 @@ export type FilteredConnectEvent<
     ? ConnectEvent
     : KnownConnectEvent | (UntypedConnectEvent & { unverified: false });
 
-/** The filter options shared by `ConnectEvents`, `ConnectEventSignals` and `ConnectEventWorker` triggers. */
+/** The filter options shared by `ConnectEvents` and `ConnectEventSignals`. */
 export interface ConnectEventFilterOptions<
   F extends ConnectEventFilter | undefined = undefined,
   U extends boolean = false,

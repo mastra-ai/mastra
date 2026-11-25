@@ -18,11 +18,11 @@
  * With --cache-dir, contracts already in the directory are read from it, and
  * downloaded ones are saved to it.
  */
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import prettier from 'prettier';
 import { parse as parseYaml } from 'yaml';
 
 const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -279,10 +279,16 @@ function header(sources: string[]): string {
   ].join('\n');
 }
 
+/** Formats a file the way the repo's `lint:format` check expects. */
+function formatWithOxfmt(path: string): void {
+  execFileSync('pnpm', ['exec', 'oxfmt', path], { stdio: 'inherit' });
+}
+
 async function emit(file: string, code: string): Promise<void> {
-  const config = await prettier.resolveConfig(join(OUT_DIR, file));
-  const formatted = await prettier.format(code, { ...config, parser: 'typescript' });
-  await writeFile(join(OUT_DIR, file), formatted);
+  const path = join(OUT_DIR, file);
+  await writeFile(path, code);
+  formatWithOxfmt(path);
+  const formatted = await readFile(path, 'utf8');
   console.info(`wrote src/event-payloads/${file} (${formatted.split('\n').length} lines)`);
 }
 

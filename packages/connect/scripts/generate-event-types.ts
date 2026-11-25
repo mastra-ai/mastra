@@ -14,8 +14,6 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import prettier from 'prettier';
-
 const PACKAGE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT_FILE = join(PACKAGE_DIR, 'src/event-payloads/event-types.generated.ts');
 const PROBE_FILE = join(PACKAGE_DIR, 'type-tests/event-types-probe.ts');
@@ -89,10 +87,12 @@ export const connectEventTypes = {
 ${entries.join('\n')}
 } as const satisfies { readonly [P in keyof ConnectEventPayloads]: readonly Extract<keyof ConnectEventPayloads[P], string>[] };
 `;
-  const config = await prettier.resolveConfig(OUT_FILE);
-  const formatted = await prettier.format(code, { ...config, parser: 'typescript' });
   const previous = await readFile(OUT_FILE, 'utf8').catch(() => undefined);
-  await writeFile(OUT_FILE, formatted);
+  await writeFile(OUT_FILE, code);
+  // Formatted the way the repo's `lint:format` check expects.
+  const format = spawnSync('pnpm', ['exec', 'oxfmt', OUT_FILE], { stdio: 'inherit' });
+  if (format.status !== 0) throw new Error('oxfmt failed on the generated event types');
+  const formatted = await readFile(OUT_FILE, 'utf8');
   console.info(
     `${previous === formatted ? 'unchanged' : 'wrote'} src/event-payloads/event-types.generated.ts (${providers.length} providers)`,
   );
