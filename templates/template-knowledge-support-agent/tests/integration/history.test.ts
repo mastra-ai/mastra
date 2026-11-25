@@ -208,7 +208,7 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
   try {
     const scope = 'customer:north:store-1';
     const path = 'cases/fallback-match';
-    await f.supportKnowledge.upsertPage({
+    const { page: match } = await f.supportKnowledge.upsertPage({
       scope,
       path,
       name: 'Fallback match',
@@ -231,11 +231,27 @@ test('a complete fallback finds matches beyond the search query cap', { timeout:
       body: historyRecord('UNKEYED_ANCESTOR', ['late-match']),
       provenance: { author: 'fixture' },
     });
+    const queries: string[] = [];
+    const enumerated = new Set<string>();
+    observeDiscovery(f.supportKnowledge, storage => ({
+      ...storage,
+      async search(scope, query, limit) {
+        queries.push(query);
+        return storage.search(scope, query, limit);
+      },
+      async list(...args) {
+        const pages = await storage.list(...args);
+        for (const page of pages) enumerated.add(page.id);
+        return pages;
+      },
+    }));
     const result = await prepareHistory(
       f.supportKnowledge,
       profile,
       'one two three four five six seven eight nine ten eleven twelve late-match',
     );
+    assert.ok(queries.length && !queries.includes('late-match'));
+    assert.ok(enumerated.has(match.id));
     assert.equal(result.status, 'ready');
     assert.deepEqual(
       result.records.map(record => record.ref),
