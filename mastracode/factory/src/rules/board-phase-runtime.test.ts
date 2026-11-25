@@ -3,12 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { LLMock } from '@copilotkit/aimock';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
 import type { InlineSkill } from '@mastra/core/skills';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +21,10 @@ import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
+import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import type { RuleGroup } from './rule-group.js';
 
 class TestSandbox extends MastraSandbox {
@@ -32,7 +38,13 @@ class TestSandbox extends MastraSandbox {
   }
 
   async executeCommand(command: string) {
-    return { exitCode: 0, stdout: command === 'pwd' ? '/home/test\n' : '', stderr: '' };
+    return {
+      exitCode: 0,
+      stdout: command === 'pwd' ? '/home/test\n' : '',
+      stderr: '',
+      success: true,
+      executionTimeMs: 0,
+    };
   }
 }
 
@@ -158,10 +170,17 @@ function publisher(): (text: string) => ToolCall | undefined {
   };
 }
 
-/** A real Factory on in-memory storage with one linked GitHub repository, driven over HTTP. */
-async function startFactory(board: ReturnType<typeof defineBoard>, landing: string, skills?: InlineSkill[]) {
+/** A real Factory with one linked GitHub repository, driven over HTTP. */
+async function startFactory(
+  board: ReturnType<typeof defineBoard>,
+  landing: string,
+  skills?: InlineSkill[],
+  evented?: { postgresUrl: string; pubsub: RedisStreamsPubSub },
+) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
-  const storage = new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
+  const storage = evented
+    ? await createIsolatedFactoryPostgresForTests(evented.postgresUrl)
+    : new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
   const github = new GithubIntegration({
     appId: '123',
     privateKey: 'test-key',
@@ -171,6 +190,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   });
   const factory = new MastraFactory({
     storage,
+    ...(evented ? { pubsub: evented.pubsub } : {}),
     auth: null,
     integrations: [github],
     sandbox: () => new TestSandbox(),
@@ -183,8 +203,8 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   const args = await factory.prepare();
   const mastra = new Mastra(args);
   const close = async () => {
-    await mastra.shutdown().catch(() => undefined);
-    await factory.close?.().catch(() => undefined);
+    await factory.shutdown();
+    await mastra.shutdown();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   };
@@ -194,7 +214,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
     c.set('factoryAuthUser', { workosId: 'phase-user', organizationId: ORG });
     await next();
   });
-  mountApiRoutes(app, args.server?.apiRoutes ?? []);
+  mountApiRoutes(app, args.server?.apiRoutes?.flat() ?? []);
   await storage
     .getDomain<ModelCredentialsStorage>('model-credentials')
     .setCredential({ orgId: ORG }, 'openai', { type: 'api_key', key: 'sk-phase-test' });
@@ -222,7 +242,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
     installationId: installation.id,
     createdByUserId: 'phase-user',
   });
-  await sourceControl.projectRepositories.link({
+  const projectRepository = await sourceControl.projectRepositories.link({
     orgId: ORG,
     connectionId: connection.id,
     repositoryId: repository.id,
@@ -249,8 +269,71 @@ async function startFactory(board: ReturnType<typeof defineBoard>, landing: stri
   const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
   const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
-  return { project, workItems, card, read, decisionsFor, close };
+  return { project, workItems, card, read, decisionsFor, close, storage, mastra, send, projectRepository };
 }
+
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+const redisUrl = process.env.FACTORY_TEST_REDIS_URL;
+
+it.skipIf(!postgresUrl || !redisUrl)(
+  'persists a generated title for an evented Factory session over Redis Streams',
+  async () => {
+    const title = 'Repair the Login Flow';
+    const model = new LLMock({ port: 0 });
+    const pubsub = new RedisStreamsPubSub({ url: redisUrl!, keyPrefix: `factory-title-${randomUUID()}` });
+    const appData = mkdtempSync(join(tmpdir(), 'factory-evented-title-'));
+    vi.stubEnv('MASTRA_APP_DATA_DIR', appData);
+    vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+    vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '1');
+    vi.stubEnv('MASTRACODE_DISABLE_TITLE_GENERATION', '0');
+    model.on({ systemMessage: 'the title must be 3 to 5 words long' }, { content: title });
+    model.onMessage(/.*/, { content: 'The login flow is repaired.' });
+
+    try {
+      await model.start();
+      vi.stubEnv('OPENAI_BASE_URL', `${model.url.replace(/\/+$/, '')}/v1`);
+      const runtime = await startFactory(release, 'build', [publishSkill], { postgresUrl: postgresUrl!, pubsub });
+      try {
+        await runtime.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+          orgId: ORG,
+          userId: factoryProjectSettingsUserId(runtime.project.id),
+          patch: { observerModelId: 'openai/gpt-5.4-mini' },
+        });
+        const sessionId = randomUUID();
+        const response = await runtime.send(
+          'POST',
+          `/web/source-control/projects/${runtime.projectRepository.id}/sessions`,
+          {
+            sessionId,
+          },
+        );
+        expect(response.status, await response.text()).toBe(200);
+        const [controller] = Object.values(runtime.mastra.listAgentControllers());
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: 'phase-user', organizationId: ORG });
+        const session = await controller?.getSession(sessionId, requestContext);
+        expect(session).toBeDefined();
+        await session!.sendMessage({ content: 'Repair the broken login flow.', requestContext });
+        const memory = await runtime.storage.getMastraStorage().getStore('memory');
+        expect(memory).toBeDefined();
+        await expect
+          .poll(async () => (await memory!.getThreadById({ threadId: sessionId }))?.title, {
+            timeout: 15_000,
+          })
+          .toBe(title);
+      } finally {
+        await runtime.close();
+      }
+    } finally {
+      await pubsub.close();
+      await model.stop();
+      vi.unstubAllEnvs();
+      rmSync(appData, { recursive: true, force: true });
+    }
+  },
+  60_000,
+);
 
 /**
  * Planning and Building run in one `builder` context, like Work's Planning and Building. The

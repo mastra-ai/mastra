@@ -83,7 +83,7 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
 import {
   createStepStartChunk,
@@ -301,7 +301,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     inputSchema: durableLLMInputSchema,
     outputSchema: durableLLMOutputSchema,
     execute: withStepLifetime(async (params: LLMExecutionParams, stepLifetime) => {
-      const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
+      const { inputData, mastra, tracingContext, abortSignal } = params;
       const ownership = getExecutionOwnershipGuard(params);
 
       // Access pubsub via symbol
@@ -310,6 +310,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const typedInput = inputData as DurableAgenticWorkflowInput & z.infer<typeof durableLLMInputSchema>;
       const { agentId, messageId, options: execOptions } = typedInput;
       const runId = typedInput.runId;
+      const requestContext =
+        getLiveRunRequestContext(getRunRegistryEntry(runId, mastra as Mastra | undefined)) ?? params.requestContext;
       const logger = mastra?.getLogger?.();
       if (pubsub) await emitIterationStartEvent(pubsub, runId, inputData.stepIndex ?? 0);
 
@@ -380,7 +382,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(requestContext));
+          // The deadline belongs to this execution segment, not the cached run context.
+          await ensureRemoteAbortListener(pubsub, runId, mastra, readRunDeadline(params.requestContext));
         } catch (error) {
           ownership?.throwIfLost();
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {

@@ -15568,12 +15568,6 @@ export class Agent<
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
-    entry.requestContext = resumeRequestContext;
-    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
-    if (globalEntryForContext) {
-      globalEntryForContext.requestContext = resumeRequestContext;
-    }
-
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
     // call (and subsequent agent.stream([]) continuations) don't recurse.
@@ -15625,6 +15619,78 @@ export class Agent<
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
+    // Claimed before the abort controller and timeout are replaced, so a
+    // conflicting resume leaves the executing segment's state untouched.
+    // Memory is covered only once the run is known to be resumable below, so a
+    // resume that lost the race never raises the memory fence past the winner.
+    const executionFence = await this.#claimExecution(runId, 'acquire');
+    let initialToolCalls: ToolCallChunk[];
+    let resumedText: { priorText: string; stepText: string } | undefined;
+    let resumeOffset: number | 'latest';
+    let persistedInput: DurableAgenticWorkflowInput | undefined;
+    let suspendedToolCallIds: string[] = [];
+    try {
+      // A concurrent resume of the same suspension may have claimed and run it while this one
+      // waited for the execution claim. Report that as a lost race, not a generic failure.
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const current = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      // The row is gone once a run finishes (possibly in another process). When
+      // this process already ran a segment of the run (settled above), a missing
+      // row means there is nothing left to resume; resuming anyway would write a
+      // fresh `pending` row. A run that was only prepared has no row yet.
+      if (workflowsStore && !current && priorExecution) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) could not find a suspended run for this runId. The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid.`,
+          details: { agentName: this.name, runId },
+        });
+      }
+      // Only a settled run counts: a just-suspended run's row can still read `running`
+      // briefly, because the suspension chunk is emitted before the row is durable.
+      if (current && !['suspended', 'running', 'pending', 'waiting'].includes(current.status)) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
+          details: { agentName: this.name, runId },
+        });
+      }
+      if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
+      ({ toolCalls: initialToolCalls, resumedText } = await this.#loadSuspendedIteration(runId));
+      // Skip events already broadcast by the original run (e.g. the SUSPENDED
+      // chunk that paused it). Without this, a resume that closes on suspend
+      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+      resumeOffset = await this.executionEngine.getPubsubOffset(
+        this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
+        runId,
+      );
+      persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
+      suspendedToolCallIds = Object.keys(current?.resumeLabels ?? {});
+      // A parked run that lost its thread lease must hold it again before the segment runs. Later
+      // registration fails open, so take it here: a successor that now holds the thread refuses this
+      // resume instead of running beside it, and the run stays parked.
+      await agentThreadStreamRuntime.reacquireParkedRunLease(runId, this.getPubSub());
+
+      // A rejected resume must not replace the context of the active segment.
+      entry.requestContext = resumeRequestContext;
+      entry.requestContextRebuilt = false;
+      const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
+      if (globalEntryForContext) {
+        globalEntryForContext.requestContext = resumeRequestContext;
+        globalEntryForContext.requestContextRebuilt = false;
+      }
+      await this.loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
+    } catch (error) {
+      // The segment never started: release the run so it can be resumed again.
+      await executionFence.settle(async () => {});
+      throw error;
+    }
     // A warm resume reuses the tools built for the first request, which close
     // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
@@ -15677,69 +15743,6 @@ export class Agent<
       } catch (error) {
         this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
       }
-    }
-    // Claimed before the abort controller and timeout are replaced, so a
-    // conflicting resume leaves the executing segment's state untouched.
-    // Memory is covered only once the run is known to be resumable below, so a
-    // resume that lost the race never raises the memory fence past the winner.
-    const executionFence = await this.#claimExecution(runId, 'acquire');
-    let initialToolCalls: ToolCallChunk[];
-    let resumedText: { priorText: string; stepText: string } | undefined;
-    let resumeOffset: number | 'latest';
-    let persistedInput: DurableAgenticWorkflowInput | undefined;
-    let suspendedToolCallIds: string[] = [];
-    try {
-      // A concurrent resume of the same suspension may have claimed and run it while this one
-      // waited for the execution claim. Report that as a lost race, not a generic failure.
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const current = await workflowsStore?.loadWorkflowSnapshot({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
-        runId,
-      });
-      // The row is gone once a run finishes (possibly in another process). When
-      // this process already ran a segment of the run (settled above), a missing
-      // row means there is nothing left to resume; resuming anyway would write a
-      // fresh `pending` row. A run that was only prepared has no row yet.
-      if (workflowsStore && !current && priorExecution) {
-        throw new MastraError({
-          id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) could not find a suspended run for this runId. The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-      // Only a settled run counts: a just-suspended run's row can still read `running`
-      // briefly, because the suspension chunk is emitted before the row is durable.
-      if (current && !['suspended', 'running', 'pending', 'waiting'].includes(current.status)) {
-        throw new MastraError({
-          id: 'AGENT_RESUME_ALREADY_CLAIMED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because another resume of it already ran.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-      if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
-      await this.loadRecalledMessages(runId, coldSnapshot, resumeRequestContext);
-      ({ toolCalls: initialToolCalls, resumedText } = await this.#loadSuspendedIteration(runId));
-      // Skip events already broadcast by the original run (e.g. the SUSPENDED
-      // chunk that paused it). Without this, a resume that closes on suspend
-      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
-      resumeOffset = await this.executionEngine.getPubsubOffset(
-        this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
-        runId,
-      );
-      persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
-      suspendedToolCallIds = Object.keys(current?.resumeLabels ?? {});
-      // A parked run that lost its thread lease must hold it again before the segment runs. Later
-      // registration fails open, so take it here: a successor that now holds the thread refuses this
-      // resume instead of running beside it, and the run stays parked.
-      await agentThreadStreamRuntime.reacquireParkedRunLease(runId, this.getPubSub());
-    } catch (error) {
-      // The segment never started: release the run so it can be resumed again.
-      await executionFence.settle(async () => {});
-      throw error;
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
     for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {

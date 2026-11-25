@@ -68,6 +68,10 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
   return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
 }
 
+export function getLiveRunRequestContext(entry: RunRegistryEntry | undefined) {
+  return entry?.requestContextRebuilt ? undefined : entry?.requestContext;
+}
+
 /**
  * Publish an entry for `runId`, owned by `mastra`, unless the slot holds
  * another Mastra instance's live run. Returns whether the entry was stored.
