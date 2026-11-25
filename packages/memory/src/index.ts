@@ -83,7 +83,6 @@ import xxhash from 'xxhash-wasm';
 import {
   compareMessageTuples,
   hasChildThread,
-  listChildThreadPage,
   listChildThreads,
   parseThreadBranchMetadata,
   resolveThreadLineage,
@@ -2051,18 +2050,15 @@ export class Memory extends MastraMemory {
         branch: toPublicThreadBranchMetadata(parseThreadBranchMetadata(thread)!),
       };
     };
-    if (perPage === false) {
-      const children = await listChildThreads(memoryStore, parent, 'ready');
-      const branches = await Promise.all(children.map(toBranch));
-      return { branches, total: branches.length, page, perPage, hasMore: false };
-    }
-    const result = await listChildThreadPage(memoryStore, parent, 'ready', page, perPage);
+    const children = await listChildThreads(memoryStore, parent, 'ready');
+    const offset = perPage === false ? 0 : page * perPage;
+    const selected = perPage === false ? children : children.slice(offset, offset + perPage);
     return {
-      branches: await Promise.all(result.threads.map(toBranch)),
-      total: result.total,
+      branches: await Promise.all(selected.map(toBranch)),
+      total: children.length,
       page,
       perPage,
-      hasMore: result.hasMore,
+      hasMore: offset + selected.length < children.length,
     };
   }
 

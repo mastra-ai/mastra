@@ -47,7 +47,6 @@ describe('branch bookkeeping uses targeted thread lookups', () => {
       const metadata = input.filter?.metadata ?? {};
       const targeted =
         input.filter?.resourceId !== undefined &&
-        input.perPage !== false &&
         (MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY in metadata || MASTRA_THREAD_BRANCH_STATE_METADATA_KEY in metadata);
       if (!targeted) untargetedListCalls.push(input);
       return listThreads(input);
@@ -117,6 +116,31 @@ describe('branch bookkeeping uses targeted thread lookups', () => {
       }),
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
     expect(untargetedListCalls).toEqual([]);
+  });
+
+  it('pages branches created in the same millisecond in creation-then-ID order', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-02-01T00:00:00.000Z') });
+    try {
+      const ids: string[] = [];
+      for (let index = 0; index < 12; index += 1) {
+        ids.push((await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' })).thread.id);
+      }
+      ids.sort((left, right) => left.localeCompare(right));
+
+      const pages = [];
+      for (let page = 0; page < 3; page += 1) {
+        pages.push(await memory.listBranches({ threadId: 'root', page, perPage: 5 }));
+      }
+
+      expect(pages.flatMap(result => result.branches.map(branch => branch.thread.id))).toEqual(ids);
+      expect(pages.map(result => [result.total, result.hasMore])).toEqual([
+        [12, true],
+        [12, true],
+        [12, false],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stores the indexed keys on branches and strips them from returned threads', async () => {
