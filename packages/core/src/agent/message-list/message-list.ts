@@ -2435,8 +2435,8 @@ export class MessageList {
   }
 
   /**
-   * Sealing is not optional for this run's messages: a moved id whose boundary is missing folds the next response
-   * into the previous row. Without an id, the fallback never seals a memory or context tail, because that would pull an earlier turn into this response.
+   * Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row.
+   * Without an id, the latest assistant message is sealed wherever it came from.
    */
   public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
@@ -2447,15 +2447,6 @@ export class MessageList {
     const message = messageId
       ? this.messages.find(message => message.id === messageId)
       : this.messages.findLast(message => message.role === 'assistant');
-
-    // Without an id, a recalled or context tail belongs to an earlier turn: sealing it would pull it into this turn's response.
-    if (
-      !messageId &&
-      message &&
-      (this.stateManager.isMemoryMessage(message) || this.stateManager.isContextMessage(message))
-    ) {
-      return false;
-    }
 
     if (!message || message.role !== 'assistant') {
       return false;
@@ -2469,7 +2460,9 @@ export class MessageList {
       },
     };
 
-    if (!this.stateManager.isResponseMessage(message)) {
+    // Only a named message joins this run's response. The fallback can land on a recalled, context or input message,
+    // which needs the boundary for ordering but is not part of this run's response.
+    if (messageId && !this.stateManager.isResponseMessage(message)) {
       this.stateManager.removeMessage(message);
       this.stateManager.addToSource(message, 'response');
     }

@@ -59,10 +59,9 @@ describe('MessageList response message rotation with recalled history (#28565)',
     return messageList;
   }
 
-  it('Given a recalled assistant reply and no response yet, When a signal rotates the id, Then the recalled reply stays in memory untouched and the response gets its own row', () => {
+  it('Given a recalled assistant reply and no response yet, When a signal rotates the id, Then the recalled reply stays in memory unsaved and the response gets its own row', () => {
     const messageList = listWithRecalledReply();
 
-    expect(messageList.markResponseMessageBoundary()).toBe(false);
     const nextMessageId = messageList.rotateResponseMessageId('response-not-created-yet');
     messageList.addSignal(createSignal({ type: 'state', contents: 'state 1' }));
     messageList.add({ ...assistantMessage(nextMessageId, 'this turn'), threadId: 'thread-1' }, 'response');
@@ -70,11 +69,28 @@ describe('MessageList response message rotation with recalled history (#28565)',
     expect(messageList.get.response.db().map(message => message.id)).toEqual([nextMessageId]);
     expect(messageList.get.remembered.db().map(message => message.id)).toContain('previous-reply');
     const previousReply = messageList.get.all.db().find(message => message.id === 'previous-reply');
-    expect(previousReply?.content.metadata).toBeUndefined();
     expect(previousReply?.content.parts).toEqual([{ type: 'text', text: 'from an earlier turn' }]);
+    expect(messageList.drainUnsavedMessages().map(message => message.id)).not.toContain('previous-reply');
   });
 
-  it('Given a response from this run that went through serialization, When the id rotates without a seal target, Then that response is sealed and the recalled reply is not', () => {
+  it('Given a recalled assistant reply at the end of the list, When the id rotates with nothing between, Then the next response still gets its own row after it', () => {
+    const messageList = new MessageList({
+      threadId: 'thread-1',
+      generateMessageId: context => (context?.role === 'assistant' ? 'response-1' : 'user-1'),
+    });
+    messageList.add({ role: 'user', content: 'earlier question' }, 'memory');
+    messageList.add({ ...assistantMessage('previous-reply', 'from an earlier turn'), threadId: 'thread-1' }, 'memory');
+
+    const nextMessageId = messageList.rotateResponseMessageId('response-not-created-yet');
+    messageList.add({ ...assistantMessage(nextMessageId, 'this turn'), threadId: 'thread-1' }, 'response');
+
+    const assistants = messageList.get.all.db().filter(message => message.role === 'assistant');
+    expect(assistants.map(message => message.id)).toEqual(['previous-reply', 'response-1']);
+    expect(assistants[0]?.content.parts).toEqual([{ type: 'text', text: 'from an earlier turn' }]);
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
+  });
+
+  it('Given a response from this run that went through serialization, When the id rotates without a seal target, Then that response is sealed and the recalled reply stays out of the response', () => {
     const original = listWithRecalledReply();
     original.add({ ...assistantMessage('response-1', 'this turn'), threadId: 'thread-1' }, 'response');
     const messageList = new MessageList({
@@ -93,13 +109,12 @@ describe('MessageList response message rotation with recalled history (#28565)',
     ).toEqual(['response-1', 'response-2']);
     const byId = (id: string) => messageList.get.all.db().find(message => message.id === id);
     expect(byId('response-1')?.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
-    expect(byId('previous-reply')?.content.metadata).toBeUndefined();
     expect(messageList.get.remembered.db().map(message => message.id)).toContain('previous-reply');
   });
 });
 
 describe('MessageList response message rotation with an assistant-ending input', () => {
-  it('Given input that ends with an assistant message and no response yet, When the id rotates, Then the next response still gets its own row', () => {
+  it('Given input that ends with an assistant message and no response yet, When the id rotates, Then the input message stays input and the next response gets its own row', () => {
     const messageList = new MessageList({
       threadId: 'thread-1',
       generateMessageId: context => (context?.role === 'assistant' ? 'response-1' : 'user-1'),
@@ -117,34 +132,14 @@ describe('MessageList response message rotation with an assistant-ending input',
       .map(message => message.id);
     expect(assistantIds).toEqual(['recalled-reply', 'prefill', 'response-1']);
     const prefill = messageList.get.all.db().find(message => message.id === 'prefill');
-    expect(prefill?.content.metadata?.mastra).toMatchObject({ responseBoundary: true });
     expect(prefill?.content.parts).toMatchObject([{ type: 'text', text: 'partial answer' }]);
-    expect(messageList.get.response.db().map(message => message.id)).toEqual(['prefill', 'response-1']);
-    const recalled = messageList.get.all.db().find(message => message.id === 'recalled-reply');
-    expect(recalled?.content.metadata).toBeUndefined();
+    expect(messageList.get.input.db().map(message => message.id)).toContain('prefill');
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
   });
 });
 
-describe('MessageList response message rotation with an earlier-turn assistant tail', () => {
-  it('Given a memory assistant sorted after this run’s response, When the id rotates without a seal target, Then neither message is sealed', () => {
-    const messageList = new MessageList({ threadId: 'thread-1' });
-    messageList.add({ role: 'user', content: 'hi' }, 'input');
-    messageList.add({ ...assistantMessage('response-1', 'this turn'), threadId: 'thread-1' }, 'response');
-    messageList.add(
-      { ...assistantMessage('recalled', 'earlier'), threadId: 'thread-1', createdAt: new Date(Date.now() + 60_000) },
-      'memory',
-    );
-    expect(messageList.get.all.db().at(-1)?.id).toBe('recalled');
-
-    expect(messageList.markResponseMessageBoundary()).toBe(false);
-
-    const byId = (id: string) => messageList.get.all.db().find(message => message.id === id);
-    expect(byId('response-1')?.content.metadata).toBeUndefined();
-    expect(byId('recalled')?.content.metadata).toBeUndefined();
-    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response-1']);
-  });
-
-  it('Given a context assistant and no live assistant, When the id rotates without a seal target, Then it is not sealed or moved into the response', () => {
+describe('MessageList response message rotation with a context assistant tail', () => {
+  it('Given a context assistant and no live assistant, When the id rotates without a seal target, Then it is not moved into the response', () => {
     const messageList = new MessageList({ threadId: 'thread-1' });
     messageList.add({ ...assistantMessage('context-reply', 'context'), threadId: 'thread-1' }, 'context');
     messageList.add({ role: 'user', content: 'hi' }, 'input');
@@ -152,7 +147,6 @@ describe('MessageList response message rotation with an earlier-turn assistant t
     messageList.rotateResponseMessageId('response-not-created-yet');
 
     expect(messageList.get.response.db()).toEqual([]);
-    const contextReply = messageList.get.all.db().find(message => message.id === 'context-reply');
-    expect(contextReply?.content.metadata).toBeUndefined();
+    expect(messageList.drainUnsavedMessages().map(message => message.id)).not.toContain('context-reply');
   });
 });
