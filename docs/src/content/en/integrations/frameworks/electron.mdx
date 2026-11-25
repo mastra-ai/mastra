@@ -420,7 +420,7 @@ Mastra loads earlier messages from memory on the server. The transport only need
 A request body is under the client's control. In production, set the resource ID on the server from the authenticated user instead, as described in [Reserved keys](/docs/server/request-context#reserved-keys).
 :::
 
-After a restart, the chat starts empty even though the agent remembers the conversation. To show earlier messages, fetch them from `GET http://localhost:4111/api/memory/threads/<thread>/messages?agentId=weather-agent`, convert them with [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages), and pass the result to `useChat()` as `messages`.
+After a restart, the chat starts empty even though the agent remembers the conversation. To show earlier messages, fetch them from `GET http://localhost:4111/api/memory/threads/<thread>/messages?agentId=weather-agent`, read the `messages` array from the response, convert that array with [`toAISdkMessages()`](/reference/ai-sdk/to-ai-sdk-messages), and pass the result to `useChat()` as `messages`.
 
 ## Test your agent
 
