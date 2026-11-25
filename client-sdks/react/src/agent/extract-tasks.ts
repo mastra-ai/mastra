@@ -89,8 +89,7 @@ const extractTasksFromSignalMessage = (message: MastraDBMessage): TaskItem[] | u
   return extractTasksFromSignalData(metadata.signal);
 };
 
-/** The newest task list the messages hold, or `undefined` when none of them holds one. */
-export const findLatestTasksInMessages = (messages: MastraDBMessage[]): TaskItem[] | undefined => {
+export const extractLatestTasksFromMessages = (messages: MastraDBMessage[]): TaskItem[] => {
   let latest: TaskItem[] | undefined;
 
   for (const message of messages) {
@@ -108,8 +107,5 @@ export const findLatestTasksInMessages = (messages: MastraDBMessage[]): TaskItem
     }
   }
 
-  return latest;
+  return latest ?? [];
 };
-
-export const extractLatestTasksFromMessages = (messages: MastraDBMessage[]): TaskItem[] =>
-  findLatestTasksInMessages(messages) ?? [];
