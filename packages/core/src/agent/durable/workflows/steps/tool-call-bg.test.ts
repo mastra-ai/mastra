@@ -73,6 +73,7 @@ function makeMessageList() {
     add: vi.fn(),
     get: {
       all: { db: vi.fn().mockReturnValue([]) },
+      response: { db: vi.fn().mockReturnValue([]) },
       input: { aiV5: { model: vi.fn().mockReturnValue([]) } },
     },
   };
@@ -114,6 +115,7 @@ function executeStep(pubsub: any, initData: any, input?: any, resumeData?: any) 
     suspend: vi.fn(),
     resumeData,
     requestContext: new Map(),
+    getState: async () => ({}),
     getInitData: () => initData,
     [PUBSUB_SYMBOL]: pubsub,
   });
@@ -1262,7 +1264,11 @@ describe('durable tool-call background task dispatch', () => {
 
   it('onExecution hook updates message metadata with startedAt/taskId', async () => {
     const pubsub = mockPubsub();
-    const { messageList } = setupRegistry();
+    const { messageList, saveQueueManager } = setupRegistry();
+    // The update is applied inside the save queue, just before the drain.
+    saveQueueManager.flushMessages.mockImplementation(async (...args: any[]) => {
+      await args[3]?.beforePersist?.();
+    });
     const initData = makeInitData();
 
     let capturedOnExecution: any;

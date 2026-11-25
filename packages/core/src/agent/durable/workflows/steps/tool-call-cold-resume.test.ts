@@ -243,7 +243,7 @@ describe('cold durable tool-call resume (#25978)', () => {
     });
     vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
       tools: { ask: { id: 'ask', execute } as any },
-      memory: { recall: vi.fn() } as any,
+      memory: { recall: vi.fn().mockResolvedValue({ messages: [] }) } as any,
       saveQueueManager: { flushMessages } as any,
     });
 

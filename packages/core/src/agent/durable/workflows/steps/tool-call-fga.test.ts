@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { IFGAProvider } from '../../../../auth/ee/interfaces/fga';
 import { MessageList } from '../../../message-list';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../../execution-fence';
 import { globalRunRegistry } from '../../run-registry';
 import * as resolveRuntime from '../../utils/resolve-runtime';
 import { createDurableToolCallStep } from './tool-call';
@@ -82,7 +83,7 @@ describe('durable tool-call FGA error propagation', () => {
     globalRunRegistry.set(runId, {
       tools: { secureTool: { execute: vi.fn() } },
       saveQueueManager: { flushMessages },
-      memory: {},
+      memory: { recall: async () => ({ messages: [] }) },
       messageList,
     } as any);
 
@@ -118,6 +119,76 @@ describe('durable tool-call FGA error propagation', () => {
     }
   });
 
+  it('denies reading the thread to recover a cross-process tool call before storage (#30123)', async () => {
+    const runId = 'durable-tool-memory-read-denied';
+    const denial = new Error('memory read denied');
+    denial.name = 'FGADeniedError';
+    const require = vi.fn(async (_user: unknown, { permission }: { permission: unknown }) => {
+      if (permission === 'memory:read') throw denial;
+    });
+    const fgaProvider: IFGAProvider = {
+      check: vi.fn(),
+      require,
+      filterAccessible: vi.fn(),
+    };
+    const recall = vi.fn().mockResolvedValue({ messages: [] });
+    const flushMessages = vi.fn();
+    toolRequiresApproval.mockResolvedValueOnce(true);
+    // A live list without the assistant tool call, as in a worker other than the LLM step's.
+    globalRunRegistry.set(runId, {
+      tools: { secureTool: { execute: vi.fn() } },
+      saveQueueManager: { flushMessages },
+      memory: { recall },
+      messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
+    } as any);
+    // The LLM step's transcript, which carries the assistant tool call.
+    const messageListState = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' })
+      .add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          createdAt: new Date(),
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'secureTool', args: {} },
+              },
+            ],
+          },
+        },
+        'response',
+      )
+      .serialize();
+
+    try {
+      await expect(
+        (createDurableToolCallStep() as any).execute(
+          makeParams(runId, {
+            getState: async () => ({ messageListState }),
+            mastra: { getLogger: () => undefined, getServer: () => ({ fga: fgaProvider }) },
+            getInitData: () => ({
+              runId,
+              agentId: 'agent-1',
+              options: { actor: { actorKind: 'user' } },
+              requestContextEntries: { user: { id: 'user-1' } },
+              state: { threadId: 'thread-1', resourceId: 'resource-1', threadExists: true },
+            }),
+          }),
+        ),
+      ).rejects.toBe(denial);
+
+      expect(require.mock.calls.map(([, { permission }]) => permission)).toEqual(['memory:write', 'memory:read']);
+      expect(recall).not.toHaveBeenCalled();
+      expect(flushMessages).not.toHaveBeenCalled();
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('denies suspension-time message flushing for a system actor before storage', async () => {
     const runId = 'durable-tool-memory-write-denied-system-actor';
     const denial = new Error('memory write denied');
@@ -137,7 +208,7 @@ describe('durable tool-call FGA error propagation', () => {
     globalRunRegistry.set(runId, {
       tools: { secureTool: { execute: vi.fn() } },
       saveQueueManager: { flushMessages },
-      memory: {},
+      memory: { recall: async () => ({ messages: [] }) },
       messageList,
     } as any);
 
@@ -171,5 +242,153 @@ describe('durable tool-call FGA error propagation', () => {
     } finally {
       globalRunRegistry.delete(runId);
     }
+  });
+
+  describe('when recovering the tool call message cannot read storage (#30123)', () => {
+    // A live list without the assistant tool call, as in a worker other than the LLM step's,
+    // and the LLM step's transcript, which carries it.
+    async function runApproval(
+      runId: string,
+      recall: () => Promise<unknown>,
+      getState?: (keys?: string[]) => Promise<unknown>,
+      // A tool that suspends while it runs; without one the call waits for approval first.
+      execute?: (input: unknown, context: any) => Promise<unknown>,
+    ) {
+      const flushMessages = vi.fn();
+      const suspend = vi.fn();
+      if (!execute) toolRequiresApproval.mockResolvedValueOnce(true);
+      globalRunRegistry.set(runId, {
+        tools: { secureTool: { execute: execute ?? vi.fn() } },
+        saveQueueManager: { flushMessages },
+        memory: { recall: vi.fn(recall) },
+        messageList: new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' }),
+      } as any);
+      const messageListState = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' })
+        .add(
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            createdAt: new Date(),
+            threadId: 'thread-1',
+            resourceId: 'resource-1',
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'secureTool', args: {} },
+                },
+              ],
+            },
+          },
+          'response',
+        )
+        .serialize();
+      const run = (createDurableToolCallStep() as any).execute(
+        makeParams(runId, {
+          suspend,
+          mastra: { getLogger: () => undefined, getServer: () => undefined },
+          getState: getState ?? (async () => ({ messageListState })),
+          getInitData: () => ({
+            runId,
+            agentId: 'agent-1',
+            options: {},
+            state: { threadId: 'thread-1', resourceId: 'resource-1', threadExists: true },
+          }),
+        }),
+      );
+      return { run, suspend, flushMessages };
+    }
+
+    it('still suspends for approval when the recall fails, without annotating a copy of the message', async () => {
+      const runId = 'durable-tool-recovery-recall-fails';
+      try {
+        const { run, suspend, flushMessages } = await runApproval(runId, async () => {
+          throw new Error('storage unavailable');
+        });
+        await run;
+        expect(suspend).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'approval', toolCallId: 'call-1' }),
+          expect.anything(),
+        );
+        // Nothing to save: the only copy at hand may be stale against storage.
+        for (const [list] of flushMessages.mock.calls) {
+          expect(list.get.all.db().some((m: any) => m.content.metadata?.pendingToolApprovals)).toBe(false);
+        }
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    });
+
+    it('still suspends for approval when the transcript cannot be read', async () => {
+      const runId = 'durable-tool-recovery-transcript-fails';
+      try {
+        const { run, suspend } = await runApproval(
+          runId,
+          async () => ({ messages: [] }),
+          async (keys?: string[]) => {
+            if (keys?.includes('messageListState')) throw new Error('storage unavailable');
+            return {};
+          },
+        );
+        await run;
+        expect(suspend).toHaveBeenCalledWith(expect.objectContaining({ type: 'approval' }), expect.anything());
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    });
+
+    it('stops without suspending when the recall hits the execution fence', async () => {
+      const runId = 'durable-tool-recovery-recall-fenced';
+      const fenced = new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+        agentId: 'agent-1',
+        runId,
+        executionId: 'execution-1',
+      });
+      try {
+        const { run, suspend } = await runApproval(runId, async () => {
+          throw fenced;
+        });
+        await expect(run).rejects.toBe(fenced);
+        expect(suspend).not.toHaveBeenCalled();
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    });
+
+    it.each([
+      [
+        'lets the rejection propagate',
+        async (_input: unknown, context: any) => context.suspend({ question: 'Favourite colour?' }),
+      ],
+      [
+        'catches the rejection and returns',
+        async (_input: unknown, context: any) => {
+          await context.suspend({ question: 'Favourite colour?' }).catch(() => {});
+          return { colour: 'unknown' };
+        },
+      ],
+    ] as const)('stops the step when a suspending tool hits the execution fence and %s', async (_name, execute) => {
+      const runId = 'durable-tool-recovery-recall-fenced-in-execution';
+      const fenced = new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+        agentId: 'agent-1',
+        runId,
+        executionId: 'execution-1',
+      });
+      try {
+        const { run, suspend } = await runApproval(
+          runId,
+          async () => {
+            throw fenced;
+          },
+          undefined,
+          execute,
+        );
+        await expect(run).rejects.toBe(fenced);
+        expect(suspend).not.toHaveBeenCalled();
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    });
   });
 });

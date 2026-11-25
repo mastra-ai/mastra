@@ -150,7 +150,11 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
       const execute = vi.fn().mockResolvedValue(RAW_RESULT);
       const agent = {
         getToolsForExecution: vi.fn().mockResolvedValue({ [TOOL_NAME]: { execute } }),
-        getMemory: vi.fn().mockResolvedValue(registryState === 'persistence-only' ? {} : undefined),
+        getMemory: vi
+          .fn()
+          .mockResolvedValue(
+            registryState === 'persistence-only' ? { recall: async () => ({ messages: [] }) } : undefined,
+          ),
         getWorkspace: vi.fn().mockResolvedValue(undefined),
         listInputProcessors: vi.fn().mockResolvedValue([]),
         listOutputProcessors: vi.fn().mockResolvedValue([outputProcessor]),

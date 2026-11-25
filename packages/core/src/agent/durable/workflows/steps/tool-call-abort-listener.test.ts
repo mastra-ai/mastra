@@ -184,6 +184,7 @@ describe('durable tool-call remote abort listener', () => {
               mastra,
               suspend: vi.fn(),
               requestContext,
+              getState: async () => ({}),
               getInitData: () => ({
                 runId: RUN_ID,
                 agentId: 'waiter',
