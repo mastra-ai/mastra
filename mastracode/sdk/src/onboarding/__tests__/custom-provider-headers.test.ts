@@ -62,6 +62,7 @@ describe('customProviderHeaderProblem', () => {
     ['a value above U+00FF', [{ name: 'X-A', value: 'Ā' }], undefined, /printable characters/],
     ['a value with an emoji', [{ name: 'X-A', value: 'ok 👍' }], undefined, /printable characters/],
     ['an empty value', [{ name: 'X-A', value: '' }], undefined, /no value/],
+    ['a value of only spaces and tabs', [{ name: 'X-A', value: '  \t ' }], undefined, /no value/],
     ['a value over 4,096 characters', [{ name: 'X-A', value: 'a'.repeat(4097) }], undefined, /longer than 4096/],
     ['21 headers', Array.from({ length: 21 }, (_, i) => ({ name: `X-H${i}`, value: 'v' })), undefined, /at most 20/],
   ])('refuses %s', (_, headers, scheme, problem) => {

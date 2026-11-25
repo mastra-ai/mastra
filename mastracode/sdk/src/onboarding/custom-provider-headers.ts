@@ -108,7 +108,8 @@ export function customProviderHeaderProblem(
     if (typeof value !== 'string') {
       return `The ${name} header value must be text.`;
     }
-    if (value.length === 0) {
+    // Saving trims the value, so a value of only spaces would be saved empty and then dropped on reload.
+    if (value.trim().length === 0) {
       return `The ${name} header has no value.`;
     }
     if (value.length > MAX_CUSTOM_PROVIDER_HEADER_VALUE_LENGTH) {
