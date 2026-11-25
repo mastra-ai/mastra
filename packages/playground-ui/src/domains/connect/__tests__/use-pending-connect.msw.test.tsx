@@ -236,6 +236,45 @@ describe('usePendingConnect', () => {
     });
   });
 
+  describe('when the server returns an absolute launch URL', () => {
+    // A server mounted behind a proxy can only know the public URL of its
+    // launch gate, which need not sit under the client's base URL.
+    const absoluteLaunchUrl = `https://api.example.com/v1/projects/p1/connect/connections/${connectPromptSession.connectionId}/launch`;
+    const absoluteSessionHandler = http.post(`${BASE_URL}/connect/linear/sessions`, () =>
+      HttpResponse.json({ ...connectPromptSession, launchUrl: absoluteLaunchUrl }),
+    );
+
+    it('opens the hosted popup at that URL as is', async () => {
+      const popup = stubPopup();
+      server.use(
+        absoluteSessionHandler,
+        http.get(statusPath, () => HttpResponse.json(connectPromptStatusActive)),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect(hostedProvider));
+
+      await waitFor(() => expect(result.current.settled?.status).toBe('active'));
+      expect(popup.location.href).toBe(absoluteLaunchUrl);
+    });
+
+    it('redeems the launch token from that URL as is', async () => {
+      server.use(
+        absoluteSessionHandler,
+        http.get(absoluteLaunchUrl, () =>
+          HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+        ),
+        http.get(statusPath, () => HttpResponse.json(connectPromptStatusActive)),
+      );
+
+      const { result } = renderPendingConnect();
+      act(() => result.current.connect(oauthProvider));
+
+      await waitFor(() => expect(result.current.settled).toEqual({ provider: 'linear', status: 'active' }));
+      expect(nangoMocks.constructorOptions).toContainEqual({ connectSessionToken: 'nango_connect_session_t1' });
+    });
+  });
+
   describe('when the status poll fails', () => {
     it('clears the pending flow so Connect can be retried', async () => {
       stubPopup();
