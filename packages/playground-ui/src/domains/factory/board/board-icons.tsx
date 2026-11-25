@@ -1,3 +1,4 @@
+import { BOARD_LIST_GROUP_HEADER_SURFACE_CLASS } from './board-layout';
 import { IntakeIcon } from './intake-icon';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
@@ -195,7 +196,8 @@ export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
 // eslint-disable-next-line react-refresh/only-export-components -- helper intentionally co-located with the components that use it
 export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
   return cn(
-    'bg-fill-subtle bg-linear-to-r to-transparent dark:bg-card',
+    BOARD_LIST_GROUP_HEADER_SURFACE_CLASS,
+    'bg-linear-to-r to-transparent',
     TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom,
   );
 }

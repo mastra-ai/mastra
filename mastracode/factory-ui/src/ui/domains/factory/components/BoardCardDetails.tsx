@@ -84,14 +84,20 @@ export function useSourceDescription(
     : { issue, pull, gitlab, 'gitlab-pr': gitlabPull, linear, jira, incidentio }[source];
 }
 
+export function SourceDescriptionLines() {
+  return (
+    <div aria-hidden className="px-2">
+      <SkeletonText line="text-caption" className="w-full motion-reduce:before:animate-none" />
+      <SkeletonText line="text-caption" className="w-4/5 motion-reduce:before:animate-none" />
+      <SkeletonText line="text-caption" className="w-2/3 motion-reduce:before:animate-none" />
+    </div>
+  );
+}
+
 export function SourceDescriptionLoading() {
   return (
     <div role="status" aria-label="Loading description">
-      <div aria-hidden>
-        <SkeletonText line="text-caption" className="w-full motion-reduce:before:animate-none" />
-        <SkeletonText line="text-caption" className="w-4/5 motion-reduce:before:animate-none" />
-        <SkeletonText line="text-caption" className="w-2/3 motion-reduce:before:animate-none" />
-      </div>
+      <SourceDescriptionLines />
     </div>
   );
 }

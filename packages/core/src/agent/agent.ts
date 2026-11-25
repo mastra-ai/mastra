@@ -14674,6 +14674,27 @@ export class Agent<
           executionFence.generation,
           executionFence.executionId,
         );
+        // A takeover can supersede this execution while the thread lease is contended.
+        try {
+          await executionFence.verify();
+        } catch (error) {
+          await agentThreadStreamRuntime
+            .abandonDurableThreadLease(
+              pubsub,
+              runId,
+              threadId,
+              resourceId,
+              executionFence.generation,
+              executionFence.executionId,
+            )
+            .catch(releaseError =>
+              this.logger.warn('Failed to release thread lease after losing execution ownership', {
+                runId,
+                error: releaseError,
+              }),
+            );
+          throw error;
+        }
         setExecutionClaim(entry.requestContext, runId, {
           ...executionFence.claim,
           threadId,
