@@ -126,6 +126,7 @@ export const KNOWLEDGE_IMPORTER_ERROR_CODES = [
   'credential_missing',
   'importer_missing_from_deploy',
   'importer_error',
+  'flush_too_large',
   'stopped',
   'lease_expired',
   'deadline_exceeded',

@@ -39,6 +39,14 @@ export interface RunKnowledgeImportOptions {
   /** Ops per flush. Default 200. */
   bufferSize?: number;
   /**
+   * Largest flush request, in bytes of the request encoded as JSON (`runId`, `generation`, `seq`,
+   * `digest`, `ops` and `state`): the buffer is sent before an op or a saved state would take it
+   * over. An op or a state too big for a request on its own ends the run `flush_too_large` before
+   * anything more is sent. A host that wraps the request, or limits its whole HTTP body, sets this
+   * a little under its limit. A positive whole number. Default no limit.
+   */
+  maxFlushBytes?: number;
+  /**
    * How long the oldest buffered op may wait before it is sent without waiting for a full buffer.
    * A timed flush sends items only; the cursor is still saved only by `ctx.state.set`. A positive
    * number of milliseconds, at most 2147483647. Default 30 seconds.
@@ -129,6 +137,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     graceMs = 3 * 60_000,
     maxPasses = 200,
     bufferSize = 200,
+    maxFlushBytes = Infinity,
     flushAfterMs = 30_000,
     heartbeatMs = 30_000,
     maxRetries = 8,
@@ -138,6 +147,10 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   // setTimeout treats a delay above 2^31 - 1 ms (about 24.8 days) as 1 ms.
   if (!Number.isFinite(flushAfterMs) || flushAfterMs <= 0 || flushAfterMs > 2 ** 31 - 1) {
     throw new TypeError(`flushAfterMs must be a positive number of milliseconds up to 2147483647, got ${flushAfterMs}`);
+  }
+
+  if (maxFlushBytes !== Infinity && !(Number.isInteger(maxFlushBytes) && maxFlushBytes > 0)) {
+    throw new TypeError(`maxFlushBytes must be a positive whole number of bytes, got ${maxFlushBytes}`);
   }
 
   // Bounded but never resent: a start that timed out may have opened a run, which the host's
@@ -156,6 +169,8 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
   let unsettledSeq: number | undefined;
   let state: KnowledgeImporterState = { ...started.state };
   let buffer: KnowledgeImporterOp[] = [];
+  /** Encoded bytes of the ops in `buffer`, without the commas between them. */
+  let bufferBytes = 0;
   let stop: RunStop | undefined;
   /** Armed while the buffer holds ops; sends them once the oldest has waited `flushAfterMs`. */
   let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -210,6 +225,7 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     disarm();
     const ops = buffer;
     buffer = [];
+    bufferBytes = 0;
     const next = flushing.then(async () => {
       if (stop) throw stop;
       if (ops.length === 0 && !staged && !settle) return;
@@ -248,9 +264,51 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
     return next;
   }
 
+  /** The request around the ops, at the longest `seq` it can have; `ops` empty, no `state`. */
+  const envelopeBytes = encodedBytes({
+    runId,
+    generation,
+    seq: Number.MAX_SAFE_INTEGER,
+    digest: '0'.repeat(64),
+    ops: [],
+  });
+  /** Bytes of a request holding the buffer plus `extra` more ops' bytes over `more` ops, and a state. */
+  const requestBytes = (extra: number, more: number, stateBytes?: number) => {
+    const count = buffer.length + more;
+    const commas = Math.max(count - 1, 0);
+    // `,"state":` before the state's own JSON.
+    const state = stateBytes === undefined ? 0 : 9 + stateBytes;
+    return envelopeBytes + bufferBytes + extra + commas + state;
+  };
+  /** Measures what the importer hands over; anything unencodable or too big ends the run here. */
+  const measure = (value: unknown, alone: (bytes: number) => number) => {
+    let bytes: number;
+    try {
+      bytes = encodedBytes(value);
+    } catch (error) {
+      flushFailure = { code: 'importer_error' };
+      halt('flush');
+      throw error;
+    }
+    if (alone(bytes) > maxFlushBytes) {
+      flushFailure = { code: 'flush_too_large' };
+      halt('flush');
+      throw stop;
+    }
+    return bytes;
+  };
+
   const push = async (op: KnowledgeImporterOp) => {
     if (stop) throw stop;
+    let sending: Promise<void> | undefined;
+    if (maxFlushBytes !== Infinity) {
+      const bytes = measure(op, opBytes => envelopeBytes + opBytes);
+      // Taken now, with the op added after, so ops pushed meanwhile keep their order.
+      if (buffer.length > 0 && requestBytes(bytes, 1) > maxFlushBytes) sending = flush();
+      bufferBytes += bytes;
+    }
     buffer.push(op);
+    if (sending) await sending;
     if (buffer.length >= bufferSize) await flush();
     // Queued behind any flush in flight, like every flush. A failure halts the run, which the
     // importer sees on its next call.
@@ -325,7 +383,14 @@ export async function runKnowledgeImport(options: RunKnowledgeImportOptions): Pr
       get: async key => state[key],
       set: async (key, value) => {
         if (stop) throw stop;
-        await flush({ [key]: value });
+        const staged = { [key]: value };
+        if (maxFlushBytes !== Infinity) {
+          const bytes = measure(staged, stateBytes => envelopeBytes + 9 + stateBytes);
+          // The ops go first on their own; the state follows in the next flush, so it still lands
+          // only once they have.
+          if (requestBytes(0, 0, bytes) > maxFlushBytes) void flush().catch(() => {});
+        }
+        await flush(staged);
       },
     },
     items: {
@@ -422,4 +487,8 @@ async function finishRun(
     }
   }
   return { status: 'unfinished', runId: request.runId, lastSeq };
+}
+
+function encodedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }

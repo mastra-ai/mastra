@@ -206,6 +206,144 @@ describe('runKnowledgeImport', () => {
     expect(host.finish).toMatchObject({ outcome: 'succeeded', lastSeq: 4, backlog: false });
   });
 
+  describe('maxFlushBytes', () => {
+    const bytes = (flush: KnowledgeImporterFlush) => new TextEncoder().encode(JSON.stringify(flush)).byteLength;
+    const big = (n: number, chars: number, char = 'a') => ({ ...item(n), body: char.repeat(chars) });
+
+    it('sends the buffer before an item would take the request over the bound, so every request fits', async () => {
+      const host = new RecordingHost();
+      const receipt = await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            for (let i = 1; i <= 10; i++) await ctx.items.upsert(big(i, 3_000));
+            await ctx.state.set('cursor', 'c10');
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      expect(receipt).toMatchObject({ outcome: 'succeeded' });
+      expect(host.flushes.length).toBeGreaterThan(1);
+      for (const flush of host.attempts) expect(bytes(flush)).toBeLessThanOrEqual(10_000);
+      expect(host.flushes.flatMap(f => f.ops.map(op => (op.op === 'upsert' ? op.item.sourceId : '')))).toEqual(
+        Array.from({ length: 10 }, (_, i) => `e${i + 1}`),
+      );
+      expect(host.state).toEqual({ cursor: 'c10' });
+      // The cursor lands with or after the last item, never before it.
+      expect(host.flushes.at(-1)!.state).toEqual({ cursor: 'c10' });
+    });
+
+    it('packs each request as full as the bound allows, counting every byte of the request', async () => {
+      const host = new RecordingHost();
+      await runKnowledgeImport({
+        // Small ops, many to a request: the commas between them add up to more than one op.
+        importers: [
+          importer(
+            async ctx => void (await Promise.all(Array.from({ length: 600 }, (_, i) => ctx.items.remove(`e${i}`)))),
+          ),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 2_000,
+        bufferSize: 1_000,
+      });
+      expect(host.flushes.flatMap(f => f.ops)).toHaveLength(600);
+      for (const [i, flush] of host.flushes.entries()) {
+        expect(bytes(flush)).toBeLessThanOrEqual(2_000);
+        // The runner counts `seq` at its longest (16 digits), so a request may end up to 15 bytes short.
+        const next = host.flushes[i + 1]?.ops[0];
+        if (next) expect(bytes({ ...flush, ops: [...flush.ops, next] })).toBeGreaterThan(2_000 - 15);
+      }
+    });
+
+    it('counts multibyte text by its encoded bytes, not its length', async () => {
+      const host = new RecordingHost();
+      await runKnowledgeImport({
+        importers: [
+          importer(async ctx => void (await Promise.all([1, 2, 3].map(i => ctx.items.upsert(big(i, 2_000, '€')))))),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      // Each body is 2,000 characters but 6,000 bytes: two don't fit in one request.
+      expect(host.flushes.map(f => f.ops.length)).toEqual([1, 1, 1]);
+      for (const flush of host.attempts) expect(bytes(flush)).toBeLessThanOrEqual(10_000);
+    });
+
+    it('sends the saved state on its own when it no longer fits beside the buffer', async () => {
+      const host = new RecordingHost();
+      await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(big(1, 6_000));
+            await ctx.state.set('cursor', 'c'.repeat(6_000));
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      expect(host.flushes.map(f => [f.ops.length, f.state === undefined])).toEqual([
+        [1, true],
+        [0, false],
+      ]);
+      for (const flush of host.attempts) expect(bytes(flush)).toBeLessThanOrEqual(10_000);
+    });
+
+    it('fails the run flush_too_large before sending an item that cannot fit on its own, keeping the cursor', async () => {
+      const host = new RecordingHost();
+      host.state = { cursor: 'old' };
+      let thrown: unknown;
+      const receipt = await runKnowledgeImport({
+        importers: [
+          importer(async ctx => {
+            await ctx.items.upsert(item(1));
+            try {
+              await ctx.items.upsert(big(2, 20_000));
+            } catch (error) {
+              thrown = error;
+            }
+            await ctx.state.set('cursor', 'new').catch(() => {});
+          }),
+        ],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      expect(thrown).toBeDefined();
+      expect(host.attempts).toEqual([]);
+      expect(host.state).toEqual({ cursor: 'old' });
+      expect(receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
+    it('fails the run flush_too_large when the saved state cannot fit on its own', async () => {
+      const host = new RecordingHost();
+      const receipt = await runKnowledgeImport({
+        importers: [importer(async ctx => void (await ctx.state.set('cursor', 'c'.repeat(20_000)).catch(() => {})))],
+        host,
+        bindingId: 'b1',
+        maxFlushBytes: 10_000,
+      });
+      expect(host.attempts).toEqual([]);
+      expect(receipt).toMatchObject({ outcome: 'failed', error: { code: 'flush_too_large' } });
+    });
+
+    it('refuses a bound that is not a positive number of bytes', async () => {
+      for (const maxFlushBytes of [0, -1, Number.NaN, 1.5]) {
+        await expect(
+          runKnowledgeImport({
+            importers: [importer(async () => {})],
+            host: new RecordingHost(),
+            bindingId: 'b1',
+            maxFlushBytes,
+          }),
+        ).rejects.toThrow(TypeError);
+      }
+    });
+  });
+
   it('reads back the state the last committed flush left', async () => {
     const host = new RecordingHost();
     host.state = { cursor: 'old' };
